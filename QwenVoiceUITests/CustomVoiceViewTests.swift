@@ -57,21 +57,26 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
     // MARK: - Speaker Buttons
 
     func testSpeakerButtonsExist() {
-        // Check that at least one speaker button exists
-        let vivian = app.buttons["customVoice_speaker_Vivian"]
+        // Check that at least one speaker button exists (vivian appears in English group)
+        let vivian = app.buttons["customVoice_speaker_English_vivian"]
         XCTAssertTrue(vivian.waitForExistence(timeout: 5), "Vivian speaker button should exist")
     }
 
     func testMultipleSpeakersPresent() {
-        let speakers = ["Aiden", "Chelsie", "Ryan", "Serena"]
-        for speaker in speakers {
-            let button = app.buttons["customVoice_speaker_\(speaker)"]
+        let speakers = [
+            ("English", "aiden"),
+            ("English", "ryan"),
+            ("English", "serena"),
+            ("Chinese", "uncle_fu"),
+        ]
+        for (language, speaker) in speakers {
+            let button = app.buttons["customVoice_speaker_\(language)_\(speaker)"]
             XCTAssertTrue(button.waitForExistence(timeout: 3), "\(speaker) speaker button should exist")
         }
     }
 
     func testSpeakerButtonClickable() {
-        let aiden = app.buttons["customVoice_speaker_Aiden"]
+        let aiden = app.buttons["customVoice_speaker_English_aiden"]
         XCTAssertTrue(aiden.waitForExistence(timeout: 5))
         aiden.click()
         // Verify Aiden is now selected (button state change)
