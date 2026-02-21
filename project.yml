@@ -16,10 +16,16 @@ targets:
     type: application
     platform: macOS
     sources:
-      - QwenVoice
+      - path: QwenVoice
+        excludes:
+          - "Resources/python/**"
+          - "Resources/ffmpeg"
     resources:
       - path: QwenVoice/Resources
         buildPhase: resources
+        excludes:
+          - "python/**"
+          - "ffmpeg"
       - path: QwenVoice/Assets.xcassets
         buildPhase: resources
     settings:

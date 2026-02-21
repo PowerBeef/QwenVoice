@@ -89,6 +89,7 @@ else
     xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
         CODE_SIGN_IDENTITY="-" \
+        CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         build | tail -5
 
     echo ""
@@ -133,8 +134,28 @@ else
     mkdir -p "$BUILD_DIR"
     rm -rf "$BUILD_DIR/Qwen Voice.app"
     cp -a "$APP_SOURCE" "$BUILD_DIR/Qwen Voice.app"
-    echo "[4/6] Copy .app — done ($(step_time $STEP_START))"
 fi
+
+# Inject bundled Python and ffmpeg into the .app (excluded from Xcode build to avoid conflicts)
+RESOURCES_SRC="$PROJECT_DIR/QwenVoice/Resources"
+APP_RESOURCES="$BUILD_DIR/Qwen Voice.app/Contents/Resources"
+
+if [ -d "$RESOURCES_SRC/python" ]; then
+    echo "[4/6] Copying bundled Python into .app..."
+    rm -rf "$APP_RESOURCES/python"
+    cp -a "$RESOURCES_SRC/python" "$APP_RESOURCES/python"
+else
+    echo "Warning: No bundled Python found at $RESOURCES_SRC/python"
+fi
+
+if [ -f "$RESOURCES_SRC/ffmpeg" ]; then
+    echo "[4/6] Copying bundled ffmpeg into .app..."
+    cp -f "$RESOURCES_SRC/ffmpeg" "$APP_RESOURCES/ffmpeg"
+else
+    echo "Warning: No bundled ffmpeg found at $RESOURCES_SRC/ffmpeg"
+fi
+
+echo "[4/6] Copy .app + deps — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------

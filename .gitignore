@@ -16,3 +16,10 @@ xcuserdata/
 
 # Dependencies
 Packages/
+
+# Bundled runtime dependencies (downloaded by scripts/)
+QwenVoice/Resources/python/
+QwenVoice/Resources/ffmpeg
+
+# Release build output
+build/

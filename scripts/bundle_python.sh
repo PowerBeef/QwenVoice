@@ -8,11 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_DIR/QwenVoice/Resources"
 PYTHON_BUNDLE="$RESOURCES_DIR/python"
-REQUIREMENTS="$SCRIPT_DIR/../../../Qwen-Voice/requirements.txt"
+REQUIREMENTS="$PROJECT_DIR/../Qwen-Voice/requirements.txt"
 
-PYTHON_VERSION="3.12"
-PYTHON_BUILD_STANDALONE_VERSION="20241219"
-PYTHON_BUILD_STANDALONE_URL="https://github.com/indygreg/python-build-standalone/releases/download/${PYTHON_BUILD_STANDALONE_VERSION}/cpython-${PYTHON_VERSION}.8+${PYTHON_BUILD_STANDALONE_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
+PYTHON_VERSION="3.13"
+PYTHON_BUILD_STANDALONE_VERSION="20260211"
+PYTHON_BUILD_STANDALONE_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_STANDALONE_VERSION}/cpython-${PYTHON_VERSION}.12+${PYTHON_BUILD_STANDALONE_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
 
 echo "=== Qwen Voice: Bundle Python ==="
 echo ""
@@ -58,9 +58,9 @@ find "$PYTHON_BUNDLE" -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
 find "$PYTHON_BUNDLE" -type d -name "doc" -exec rm -rf {} + 2>/dev/null || true
 
 # Remove pip/setuptools/wheel (not needed at runtime)
-rm -rf "$PYTHON_BUNDLE/lib/python${PYTHON_VERSION}/site-packages/pip" 2>/dev/null || true
-rm -rf "$PYTHON_BUNDLE/lib/python${PYTHON_VERSION}/site-packages/setuptools" 2>/dev/null || true
-rm -rf "$PYTHON_BUNDLE/lib/python${PYTHON_VERSION}/site-packages/wheel" 2>/dev/null || true
+rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/pip" 2>/dev/null || true
+rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/setuptools" 2>/dev/null || true
+rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/wheel" 2>/dev/null || true
 
 # Remove share/man directories
 rm -rf "$PYTHON_BUNDLE/share" 2>/dev/null || true
