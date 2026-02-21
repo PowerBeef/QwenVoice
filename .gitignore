@@ -1,0 +1,18 @@
+# Xcode
+QwenVoice.xcodeproj/xcuserdata/
+QwenVoice.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Dependencies
+Packages/
