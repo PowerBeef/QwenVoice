@@ -4,117 +4,117 @@ A native macOS text-to-speech application powered by Qwen TTS models. QwenVoice 
 
 ## Features
 
-- **Custom Voice** – Generate speech using pre-built or downloaded voice profiles
-- - **Voice Design** – Create voices from a text description
-  - - **Voice Cloning** – Enroll your own voice from a reference audio clip
-    - - **Model Manager** – Download and manage multiple Qwen TTS models (stored in `~/Library/Application Support/QwenVoice/models/`)
-      - - **Generation History** – SQLite-backed history of all generations
-        - - **Apple Silicon native** – Optimised for arm64 / macOS 14.0+
-         
-          - ## Requirements
-         
-          - - macOS 14.0 or later (Apple Silicon)
-            - - Xcode 15+
-              - - Python 3.13 (bundled for distribution; dev venv also supported)
-                - - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for regenerating the `.xcodeproj`)
-                 
-                  - ## Getting Started
-                 
-                  - ### 1. Clone the repository
-                 
-                  - ```bash
-                    git clone https://github.com/PowerBeef/QwenVoice.git
-                    cd QwenVoice
-                    ```
+- **Custom Voice** - Generate speech using pre-built or downloaded voice profiles
+- **Voice Design** - Create voices from a text description
+- **Voice Cloning** - Enroll your own voice from a reference audio clip
+- **Model Manager** - Download and manage multiple Qwen TTS models (stored in `~/Library/Application Support/QwenVoice/models/`)
+- **Generation History** - SQLite-backed history of all generations
+- **Apple Silicon native** - Optimised for arm64 / macOS 14.0+
 
-                    ### 2. Set up the Python environment (development)
+## Requirements
 
-                    ```bash
-                    cd Qwen-Voice
-                    python3 -m venv .venv
-                    source .venv/bin/activate
-                    pip install -r requirements.txt
-                    ```
+- macOS 14.0 or later (Apple Silicon)
+- Xcode 15+
+- Python 3.13 (bundled for distribution; dev venv also supported)
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (for regenerating the `.xcodeproj`)
 
-                    ### 3. Build and run
+## Getting Started
 
-                    ```bash
-                    # Build
-                    xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+### 1. Clone the repository
 
-                    # Launch
-                    open "/Users/$USER/Library/Developer/Xcode/DerivedData/QwenVoice-*/Build/Products/Debug/Qwen Voice.app"
-                    ```
+```bash
+git clone https://github.com/PowerBeef/QwenVoice.git
+cd QwenVoice
+```
 
-                    Or simply open `QwenVoice.xcodeproj` in Xcode and press **Run**.
+### 2. Set up the Python environment (development)
 
-                    ### 4. Download a model
+```bash
+cd Qwen-Voice
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-                    On first launch, go to the **Models** tab inside the app and download a Qwen TTS model. Models are fetched via `huggingface-cli` and stored at:
+### 3. Build and run
 
-                    ```
-                    ~/Library/Application Support/QwenVoice/models/
-                    ```
+```bash
+# Build
+xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 
-                    ## Architecture
+# Launch
+open "/Users/$USER/Library/Developer/Xcode/DerivedData/QwenVoice-*/Build/Products/Debug/Qwen Voice.app"
+```
 
-                    QwenVoice uses a two-process design:
+Or simply open `QwenVoice.xcodeproj` in Xcode and press **Run**.
 
-                    | Layer | Technology | Role |
-                    |-------|-----------|------|
-                    | Frontend | SwiftUI (Swift 5.9) | UI, navigation, model management |
-                    | Backend | Python 3.13 + server.py | ML inference via JSON-RPC 2.0 |
-                    | IPC | stdin/stdout pipes | Newline-delimited JSON-RPC messages |
-                    | Storage | SQLite via GRDB | Generation history |
+### 4. Download a model
 
-                    The Swift frontend spawns `server.py` as a subprocess on launch. All TTS inference (custom voice, voice design, voice cloning) is handled by the Python process and results are streamed back as JSON-RPC responses.
+On first launch, go to the **Models** tab inside the app and download a Qwen TTS model. Models are fetched via `huggingface-cli` and stored at:
 
-                    ## Project Structure
+```
+~/Library/Application Support/QwenVoice/models/
+```
 
-                    ```
-                    QwenVoice/
-                    ├── QwenVoice/
-                    │   ├── Resources/backend/server.py   # Python JSON-RPC server & ML inference
-                    │   ├── Services/PythonBridge.swift   # Swift JSON-RPC client
-                    │   ├── Services/DatabaseService.swift# GRDB SQLite history store
-                    │   ├── Models/TTSModel.swift         # Model registry & enums
-                    │   ├── ViewModels/                   # View models (model manager, etc.)
-                    │   └── ContentView.swift             # Root navigation (SidebarItem + NavigationSplitView)
-                    ├── QwenVoiceUITests/                 # XCUITest end-to-end tests (58 tests)
-                    ├── scripts/
-                    │   ├── bundle_python.sh              # Bundle standalone Python for distribution
-                    │   ├── regenerate_project.sh         # Safely regenerate .xcodeproj via XcodeGen
-                    │   └── run_tests.sh                  # Convenience test runner
-                    └── project.yml                       # XcodeGen configuration
-                    ```
+## Architecture
 
-                    ## Testing
+QwenVoice uses a two-process design:
 
-                    All 58 UI tests run without requiring downloaded models (model-dependent tests use `XCTSkip`).
+| Layer | Technology | Role |
+|-------|-----------|------|
+| Frontend | SwiftUI (Swift 5.9) | UI, navigation, model management |
+| Backend | Python 3.13 + server.py | ML inference via JSON-RPC 2.0 |
+| IPC | stdin/stdout pipes | Newline-delimited JSON-RPC messages |
+| Storage | SQLite via GRDB | Generation history |
 
-                    ```bash
-                    # Run all UI tests
-                    ./scripts/run_tests.sh
+The Swift frontend spawns `server.py` as a subprocess on launch. All TTS inference (custom voice, voice design, voice cloning) is handled by the Python process and results are streamed back as JSON-RPC responses.
 
-                    # Run a single test class
-                    ./scripts/run_tests.sh SidebarNavigation
+## Project Structure
 
-                    # List available test classes
-                    ./scripts/run_tests.sh --list
-                    ```
+```
+QwenVoice/
+├── QwenVoice/
+│   ├── Resources/backend/server.py    # Python JSON-RPC server & ML inference
+│   ├── Services/PythonBridge.swift    # Swift JSON-RPC client
+│   ├── Services/DatabaseService.swift # GRDB SQLite history store
+│   ├── Models/TTSModel.swift          # Model registry & enums
+│   ├── ViewModels/                    # View models (model manager, etc.)
+│   └── ContentView.swift              # Root navigation (SidebarItem + NavigationSplitView)
+├── QwenVoiceUITests/                  # XCUITest end-to-end tests (58 tests)
+├── scripts/
+│   ├── bundle_python.sh               # Bundle standalone Python for distribution
+│   ├── regenerate_project.sh          # Safely regenerate .xcodeproj via XcodeGen
+│   └── run_tests.sh                   # Convenience test runner
+└── project.yml                        # XcodeGen configuration
+```
 
-                    Test coverage spans: sidebar navigation, custom voice, voice design, voice cloning, models, history, voices, preferences, generation flow, and debug views.
+## Testing
 
-                    ## Distribution
+All 58 UI tests run without requiring downloaded models (model-dependent tests use `XCTSkip`).
 
-                    To bundle a self-contained Python environment for distribution:
+```bash
+# Run all UI tests
+./scripts/run_tests.sh
 
-                    ```bash
-                    ./scripts/bundle_python.sh
-                    ```
+# Run a single test class
+./scripts/run_tests.sh SidebarNavigation
 
-                    This packages a standalone Python 3.13 runtime into `QwenVoice/Resources/python/`, which the app uses automatically in production builds.
+# List available test classes
+./scripts/run_tests.sh --list
+```
 
-                    ## License
+Test coverage spans: sidebar navigation, custom voice, voice design, voice cloning, models, history, voices, preferences, generation flow, and debug views.
 
-                    See [LICENSE](LICENSE) for details.
+## Distribution
+
+To bundle a self-contained Python environment for distribution:
+
+```bash
+./scripts/bundle_python.sh
+```
+
+This packages a standalone Python 3.13 runtime into `QwenVoice/Resources/python/`, which the app uses automatically in production builds.
+
+## License
+
+See [LICENSE](LICENSE) for details.
