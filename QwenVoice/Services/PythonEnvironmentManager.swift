@@ -161,11 +161,13 @@ final class PythonEnvironmentManager: ObservableObject {
 
         // Check versioned Homebrew paths first (most likely on macOS)
         let versionedPaths = [
-            "/opt/homebrew/bin/python3.12",
             "/opt/homebrew/bin/python3.13",
+            "/opt/homebrew/bin/python3.14",
+            "/opt/homebrew/bin/python3.12",
             "/opt/homebrew/bin/python3.11",
-            "/usr/local/bin/python3.12",
             "/usr/local/bin/python3.13",
+            "/usr/local/bin/python3.14",
+            "/usr/local/bin/python3.12",
             "/usr/local/bin/python3.11",
         ]
         for path in versionedPaths {
@@ -217,7 +219,7 @@ final class PythonEnvironmentManager: ObservableObject {
               components[0] == "3",
               let minor = Int(components[1]) else { return false }
 
-        return minor >= 11 && minor <= 13
+        return minor >= 11 && minor <= 14
     }
 
     // MARK: - Process Helpers
