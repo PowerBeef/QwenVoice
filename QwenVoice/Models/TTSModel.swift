@@ -110,6 +110,9 @@ extension TTSModel {
         all.first { $0.mode == mode && $0.tier == tier }
     }
 
+    /// Deterministic display order for languages (Swift dictionaries are unordered)
+    static let languageOrder = ["English", "Chinese", "Japanese", "Korean"]
+
     /// All speakers grouped by language
     static let speakerMap: [String: [String]] = [
         "English": ["ryan", "aiden", "serena", "vivian"],

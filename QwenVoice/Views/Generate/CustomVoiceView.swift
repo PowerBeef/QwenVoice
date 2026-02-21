@@ -84,24 +84,33 @@ struct CustomVoiceView: View {
                 }
 
                 // Speaker picker
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Speaker").font(.headline)
-                    FlowLayout(spacing: 8) {
-                        ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                            Button {
-                                selectedSpeaker = speaker
-                            } label: {
-                                Text(speaker)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(selectedSpeaker == speaker ? Color.accentColor : Color.gray.opacity(0.15))
-                                    )
-                                    .foregroundColor(selectedSpeaker == speaker ? .white : .primary)
+                    ForEach(TTSModel.languageOrder, id: \.self) { language in
+                        if let speakers = TTSModel.speakerMap[language] {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(language)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                FlowLayout(spacing: 8) {
+                                    ForEach(speakers, id: \.self) { speaker in
+                                        Button {
+                                            selectedSpeaker = speaker
+                                        } label: {
+                                            Text(speaker)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(selectedSpeaker == speaker ? Color.accentColor : Color.gray.opacity(0.15))
+                                                )
+                                                .foregroundColor(selectedSpeaker == speaker ? .white : .primary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier("customVoice_speaker_\(language)_\(speaker)")
+                                    }
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("customVoice_speaker_\(speaker)")
                         }
                     }
                 }
