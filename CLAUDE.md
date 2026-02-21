@@ -103,6 +103,17 @@ All three generate views (`CustomVoiceView`, `VoiceDesignView`, `VoiceCloningVie
 
 The `generate` method handles all three modes via parameter presence: `ref_audio` → clone, `voice` → custom, `instruct` only → design.
 
+## Distribution
+
+- **GitHub repo:** PowerBeef/QwenVoice
+- The app is unsigned — users must run `xattr -cr "/Applications/Qwen Voice.app"` after installing from the DMG
+- Release build: `./scripts/release.sh` (bundles Python 3.13 + ffmpeg, creates DMG)
+
+## Data Corrections
+
+- Only 5 models are exposed in the Swift UI — `lite_design` (Voice Design Lite 0.6B) does not exist on HuggingFace
+- There are 9 unique preset speakers across 4 languages (some like `vivian`/`serena` appear in both English and Chinese)
+
 ## Gotchas
 
 - **SourceKit false errors** on cross-file Swift references are expected until the project is opened in Xcode — the build still succeeds.
