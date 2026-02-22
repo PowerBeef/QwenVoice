@@ -18,6 +18,7 @@ final class PythonEnvironmentManager: ObservableObject {
         case findingPython
         case creatingVenv
         case installingDependencies(installed: Int, total: Int)
+        case updatingDependencies
     }
 
     @Published private(set) var state: State = .checking
@@ -55,10 +56,34 @@ final class PythonEnvironmentManager: ObservableObject {
         ensureEnvironment()
     }
 
+    func resetEnvironment() {
+        let fm = FileManager.default
+        let venvDir = Self.venvDir
+        if fm.fileExists(atPath: venvDir.path) {
+            try? fm.removeItem(at: venvDir)
+        }
+        ensureEnvironment()
+    }
+
     // MARK: - Setup Logic
 
     private func runSetup() async {
         let fm = FileManager.default
+
+        // 0. Architecture check — MLX requires Apple Silicon
+        var sysInfo = utsname()
+        uname(&sysInfo)
+        let machine = withUnsafePointer(to: &sysInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(cString: $0)
+            }
+        }
+        if !machine.starts(with: "arm64") {
+            await MainActor.run {
+                state = .failed(message: "Qwen Voice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
+            }
+            return
+        }
 
         // 1. Check for bundled Python (production build)
         if let bundledPython = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
@@ -74,13 +99,38 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
+        // 2b. Venv exists but marker is stale — try incremental update first
+        if fm.fileExists(atPath: venvPython),
+           let reqPath = resolveRequirementsPath() {
+            await MainActor.run { state = .settingUp(.updatingDependencies) }
+
+            let pipPath = Self.venvDir.appendingPathComponent("bin/pip").path
+            let totalPackages = countPackages(in: reqPath)
+            do {
+                try await runPipInstallWithRetry(
+                    pipPath: pipPath,
+                    requirementsPath: reqPath,
+                    totalPackages: totalPackages
+                )
+                try await validateImports(pythonPath: venvPython)
+                writeMarker(requirementsPath: reqPath)
+                await MainActor.run { state = .ready(pythonPath: venvPython) }
+                return
+            } catch {
+                // Incremental update failed — fall through to full recreate
+            }
+        }
+
         // 3. Need to set up — find system Python
         await MainActor.run { state = .settingUp(.findingPython) }
 
         guard let systemPython = findSystemPython() else {
-            await MainActor.run {
-                state = .failed(message: "Python 3.11+ not found. Install it via:\n  brew install python@3.12")
-            }
+            let brewExists = FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew") ||
+                             FileManager.default.fileExists(atPath: "/usr/local/bin/brew")
+            let message = brewExists
+                ? "Python 3.11+ not found. Install it via:\n  brew install python@3.13"
+                : "Python 3.11+ not found.\n\nFirst install Homebrew:\n  /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/homebrew/install/HEAD/install.sh)\"\n\nThen install Python:\n  brew install python@3.13"
+            await MainActor.run { state = .failed(message: message) }
             return
         }
 
@@ -106,16 +156,7 @@ final class PythonEnvironmentManager: ObservableObject {
         }
 
         // 5. Install dependencies
-        guard let requirementsPath = Bundle.main.path(forResource: "requirements", ofType: "txt") else {
-            // Fallback: try development path
-            let devPath = URL(fileURLWithPath: #file)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Resources/requirements.txt").path
-            if fm.fileExists(atPath: devPath) {
-                await installDependencies(venvPython: venvPython, requirementsPath: devPath)
-                return
-            }
+        guard let requirementsPath = resolveRequirementsPath() else {
             await MainActor.run {
                 state = .failed(message: "Cannot find requirements.txt in app bundle.")
             }
@@ -134,7 +175,7 @@ final class PythonEnvironmentManager: ObservableObject {
         let pipPath = Self.venvDir.appendingPathComponent("bin/pip").path
 
         do {
-            try await runPipInstall(
+            try await runPipInstallWithRetry(
                 pipPath: pipPath,
                 requirementsPath: requirementsPath,
                 totalPackages: totalPackages
@@ -142,6 +183,17 @@ final class PythonEnvironmentManager: ObservableObject {
         } catch {
             await MainActor.run {
                 state = .failed(message: "Failed to install dependencies:\n\(error.localizedDescription)")
+            }
+            return
+        }
+
+        // Validate core imports before marking setup complete
+        let pythonForValidation = venvPython.isEmpty ? Self.venvPython : venvPython
+        do {
+            try await validateImports(pythonPath: pythonForValidation)
+        } catch {
+            await MainActor.run {
+                state = .failed(message: "Dependencies installed but import validation failed:\n\(error.localizedDescription)\n\nSetup will retry on next launch.")
             }
             return
         }
@@ -176,11 +228,12 @@ final class PythonEnvironmentManager: ObservableObject {
             }
         }
 
-        // Check generic python3 with version validation
+        // Check generic python3 with version validation.
+        // /usr/bin/python3 is intentionally excluded — on macOS 14+ it's a stub
+        // that may pop a GUI dialog when invoked outside a terminal.
         let genericPaths = [
             "/opt/homebrew/bin/python3",
             "/usr/local/bin/python3",
-            "/usr/bin/python3",
         ]
         for path in genericPaths {
             if fm.fileExists(atPath: path), validatePythonVersion(path) {
@@ -307,6 +360,32 @@ final class PythonEnvironmentManager: ObservableObject {
         }
     }
 
+    private func runPipInstallWithRetry(pipPath: String, requirementsPath: String, totalPackages: Int) async throws {
+        let maxAttempts = 3
+        for attempt in 1...maxAttempts {
+            do {
+                try await runPipInstall(
+                    pipPath: pipPath,
+                    requirementsPath: requirementsPath,
+                    totalPackages: totalPackages
+                )
+                return
+            } catch {
+                if attempt == maxAttempts {
+                    throw SetupError.commandFailed("Failed to install dependencies after \(maxAttempts) attempts:\n\(error.localizedDescription)")
+                }
+                try await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    // MARK: - Import Validation
+
+    private func validateImports(pythonPath: String) async throws {
+        let importScript = "import mlx; import mlx_audio; import transformers; import numpy; import soundfile"
+        try await runProcess(pythonPath, arguments: ["-c", importScript])
+    }
+
     // MARK: - Marker / Hashing
 
     private func isMarkerValid() -> Bool {
@@ -333,11 +412,10 @@ final class PythonEnvironmentManager: ObservableObject {
         try? hash.write(to: Self.markerFile, atomically: true, encoding: .utf8)
     }
 
-    private func bundledRequirementsPath() -> String? {
+    private func resolveRequirementsPath() -> String? {
         if let path = Bundle.main.path(forResource: "requirements", ofType: "txt") {
             return path
         }
-        // Development fallback
         let devPath = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -346,6 +424,10 @@ final class PythonEnvironmentManager: ObservableObject {
             return devPath
         }
         return nil
+    }
+
+    private func bundledRequirementsPath() -> String? {
+        resolveRequirementsPath()
     }
 
     private func countPackages(in path: String) -> Int {

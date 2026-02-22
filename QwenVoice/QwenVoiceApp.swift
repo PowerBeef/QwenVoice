@@ -14,6 +14,7 @@ struct QwenVoiceApp: App {
                     ContentView()
                         .environmentObject(pythonBridge)
                         .environmentObject(audioPlayer)
+                        .environmentObject(envManager)
                         .frame(minWidth: 780, minHeight: 520)
                         .onAppear {
                             startBackend(pythonPath: pythonPath)

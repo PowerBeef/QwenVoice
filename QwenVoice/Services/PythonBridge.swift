@@ -374,10 +374,15 @@ final class PythonBridge: ObservableObject {
             return appSupportVenv
         }
 
-        // 3. Dev project venv
-        let venvPath = NSHomeDirectory() + "/Coding_Projects/QwenVoice/Qwen-Voice/.venv/bin/python3"
-        if fm.fileExists(atPath: venvPath) {
-            return venvPath
+        // 3. Dev project venv (relative to source file)
+        let devVenvPath = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()  // Services/
+            .deletingLastPathComponent()  // QwenVoice/
+            .deletingLastPathComponent()  // QwenVoice/
+            .deletingLastPathComponent()  // QwenVoice/ (project root)
+            .appendingPathComponent("Qwen-Voice/.venv/bin/python3").path
+        if fm.fileExists(atPath: devVenvPath) {
+            return devVenvPath
         }
 
         // 4. System Python

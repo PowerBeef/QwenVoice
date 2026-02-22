@@ -82,6 +82,13 @@ struct SetupView: View {
                         .foregroundColor(.secondary)
                         .accessibilityIdentifier("setup_progressHint")
                 }
+
+            case .updatingDependencies:
+                ProgressView()
+                    .controlSize(.large)
+                Text("Updating dependencies...")
+                    .foregroundColor(.secondary)
+                    .accessibilityIdentifier("setup_updatingDepsLabel")
             }
         }
     }

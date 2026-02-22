@@ -20,7 +20,18 @@ mkdir -p "$DOWNLOAD_DIR"
 ZIPFILE="$DOWNLOAD_DIR/ffmpeg.zip"
 if [ ! -f "$ZIPFILE" ]; then
     echo "[1/3] Downloading static ffmpeg (arm64)..."
-    curl -L -o "$ZIPFILE" "$FFMPEG_URL"
+    if ! curl --fail --retry 3 --retry-delay 5 -L -o "$ZIPFILE" "$FFMPEG_URL"; then
+        rm -f "$ZIPFILE"
+        echo "Error: Failed to download ffmpeg after retries"
+        exit 1
+    fi
+    # Sanity check: ffmpeg zip should be >1MB
+    ZIPFILE_SIZE=$(stat -f%z "$ZIPFILE" 2>/dev/null || echo 0)
+    if [ "$ZIPFILE_SIZE" -lt 1048576 ]; then
+        rm -f "$ZIPFILE"
+        echo "Error: Downloaded ffmpeg zip is too small (${ZIPFILE_SIZE} bytes) — likely a failed download"
+        exit 1
+    fi
 else
     echo "[1/3] Using cached ffmpeg download"
 fi
