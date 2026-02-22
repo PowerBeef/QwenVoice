@@ -91,6 +91,8 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
+        let vendorDir = resolveVendorDir()
+
         // 2. Check existing venv with valid marker
         let venvPython = Self.venvPython
         if fm.fileExists(atPath: venvPython),
@@ -110,7 +112,8 @@ final class PythonEnvironmentManager: ObservableObject {
                 try await runPipInstallWithRetry(
                     pipPath: pipPath,
                     requirementsPath: reqPath,
-                    totalPackages: totalPackages
+                    totalPackages: totalPackages,
+                    vendorDir: vendorDir
                 )
                 try await validateImports(pythonPath: venvPython)
                 writeMarker(requirementsPath: reqPath)
@@ -163,10 +166,10 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        await installDependencies(venvPython: venvPython, requirementsPath: requirementsPath)
+        await installDependencies(venvPython: venvPython, requirementsPath: requirementsPath, vendorDir: vendorDir)
     }
 
-    private func installDependencies(venvPython: String, requirementsPath: String) async {
+    private func installDependencies(venvPython: String, requirementsPath: String, vendorDir: String?) async {
         let totalPackages = countPackages(in: requirementsPath)
         await MainActor.run {
             state = .settingUp(.installingDependencies(installed: 0, total: totalPackages))
@@ -178,7 +181,8 @@ final class PythonEnvironmentManager: ObservableObject {
             try await runPipInstallWithRetry(
                 pipPath: pipPath,
                 requirementsPath: requirementsPath,
-                totalPackages: totalPackages
+                totalPackages: totalPackages,
+                vendorDir: vendorDir
             )
         } catch {
             await MainActor.run {
@@ -304,14 +308,19 @@ final class PythonEnvironmentManager: ObservableObject {
         }
     }
 
-    private func runPipInstall(pipPath: String, requirementsPath: String, totalPackages: Int) async throws {
+    private func runPipInstall(pipPath: String, requirementsPath: String, totalPackages: Int, vendorDir: String?) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let proc = Process()
             let stdout = Pipe()
             let stderr = Pipe()
 
             proc.executableURL = URL(fileURLWithPath: pipPath)
-            proc.arguments = ["install", "--progress-bar", "off", "-r", requirementsPath]
+            var pipArgs = ["install", "--progress-bar", "off"]
+            if let vendorDir {
+                pipArgs += ["--find-links", vendorDir]
+            }
+            pipArgs += ["-r", requirementsPath]
+            proc.arguments = pipArgs
             proc.standardOutput = stdout
             proc.standardError = stderr
 
@@ -360,14 +369,15 @@ final class PythonEnvironmentManager: ObservableObject {
         }
     }
 
-    private func runPipInstallWithRetry(pipPath: String, requirementsPath: String, totalPackages: Int) async throws {
+    private func runPipInstallWithRetry(pipPath: String, requirementsPath: String, totalPackages: Int, vendorDir: String?) async throws {
         let maxAttempts = 3
         for attempt in 1...maxAttempts {
             do {
                 try await runPipInstall(
                     pipPath: pipPath,
                     requirementsPath: requirementsPath,
-                    totalPackages: totalPackages
+                    totalPackages: totalPackages,
+                    vendorDir: vendorDir
                 )
                 return
             } catch {
@@ -420,6 +430,26 @@ final class PythonEnvironmentManager: ObservableObject {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/requirements.txt").path
+        if FileManager.default.fileExists(atPath: devPath) {
+            return devPath
+        }
+        return nil
+    }
+
+    private func resolveVendorDir() -> String? {
+        // Production bundle — Bundle has no path(forResource:) API for directories,
+        // so resourceURL is used directly (unlike resolveRequirementsPath which uses path(forResource:)).
+        if let resourceURL = Bundle.main.resourceURL {
+            let bundledVendor = resourceURL.appendingPathComponent("vendor").path
+            if FileManager.default.fileExists(atPath: bundledVendor) {
+                return bundledVendor
+            }
+        }
+        // Development: relative to this source file
+        let devPath = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/vendor").path
         if FileManager.default.fileExists(atPath: devPath) {
             return devPath
         }

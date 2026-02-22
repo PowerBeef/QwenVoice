@@ -9,10 +9,20 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_DIR/QwenVoice/Resources"
 PYTHON_BUNDLE="$RESOURCES_DIR/python"
 REQUIREMENTS="$PROJECT_DIR/../Qwen-Voice/requirements.txt"
+VENDOR_DIR="$RESOURCES_DIR/vendor"
 
 PYTHON_VERSION="3.13"
 PYTHON_BUILD_STANDALONE_VERSION="20260211"
 PYTHON_BUILD_STANDALONE_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_STANDALONE_VERSION}/cpython-${PYTHON_VERSION}.12+${PYTHON_BUILD_STANDALONE_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
+
+# --- How to update the Python standalone URL ---
+# The URL above points to a specific release from astral-sh/python-build-standalone.
+# If this release is removed or you want a newer Python patch version:
+#   1. Visit https://github.com/astral-sh/python-build-standalone/releases
+#   2. Find the latest release tag (e.g. 20260301)
+#   3. Look for the asset named: cpython-3.13.X+YYYYMMDD-aarch64-apple-darwin-install_only.tar.gz
+#   4. Update PYTHON_BUILD_STANDALONE_VERSION and the minor version in the URL above
+# The "install_only" variant is a pre-built, relocatable Python — no compilation needed.
 
 echo "=== Qwen Voice: Bundle Python ==="
 echo ""
@@ -24,21 +34,50 @@ mkdir -p "$DOWNLOAD_DIR"
 TARBALL="$DOWNLOAD_DIR/python-standalone.tar.gz"
 if [ ! -f "$TARBALL" ]; then
     echo "[1/5] Downloading Python ${PYTHON_VERSION} (arm64 standalone)..."
-    curl -L -o "$TARBALL" "$PYTHON_BUILD_STANDALONE_URL"
+    if ! curl --fail --retry 3 --retry-delay 5 -L -o "$TARBALL" "$PYTHON_BUILD_STANDALONE_URL"; then
+        rm -f "$TARBALL"
+        echo "Error: Failed to download Python standalone after retries"
+        exit 1
+    fi
+    # Sanity check: Python tarball should be >10MB
+    TARBALL_SIZE=$(stat -f%z "$TARBALL" 2>/dev/null || echo 0)
+    if [ "$TARBALL_SIZE" -lt 10485760 ]; then
+        rm -f "$TARBALL"
+        echo "Error: Downloaded Python tarball is too small (${TARBALL_SIZE} bytes) — likely a failed download"
+        exit 1
+    fi
 else
     echo "[1/5] Using cached Python download"
 fi
 
-# Step 2: Extract
+# Step 2: Extract and verify
 echo "[2/5] Extracting Python..."
 rm -rf "$PYTHON_BUNDLE"
 mkdir -p "$PYTHON_BUNDLE"
 tar xzf "$TARBALL" -C "$PYTHON_BUNDLE" --strip-components=1
 
+if [ ! -x "$PYTHON_BUNDLE/bin/python3" ]; then
+    rm -f "$TARBALL"
+    echo "Error: python3 binary not found after extraction — deleting cached tarball"
+    exit 1
+fi
+
+EXTRACTED_VERSION=$("$PYTHON_BUNDLE/bin/python3" --version 2>&1)
+echo "    Extracted: $EXTRACTED_VERSION"
+
 # Step 3: Install required packages
 echo "[3/5] Installing pip packages..."
 "$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --upgrade pip
-"$PYTHON_BUNDLE/bin/python3" -m pip install --quiet -r "$REQUIREMENTS"
+"$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --find-links "$VENDOR_DIR" -r "$REQUIREMENTS"
+
+# Validate core imports
+echo "    Validating core imports..."
+if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx; import mlx_audio; import transformers; import numpy; import soundfile" 2>&1; then
+    rm -f "$TARBALL"
+    echo "Error: Core import validation failed — one or more packages did not install correctly"
+    exit 1
+fi
+echo "    All core imports OK"
 
 # Step 4: Strip unnecessary files to reduce size
 echo "[4/5] Stripping unnecessary files..."
