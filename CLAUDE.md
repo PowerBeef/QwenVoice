@@ -79,16 +79,26 @@ Models are downloaded via `huggingface-cli` spawned as a subprocess in `ModelMan
 | `QwenVoice/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `Notification.Name.navigateToModels` handled here |
 | `project.yml` | XcodeGen config — edit this instead of `.xcodeproj` |
 
+### Python environment setup
+`PythonEnvironmentManager.swift` handles first-boot venv creation. On launch, the app shows `SetupView` until the venv is ready, then switches to `ContentView`.
+
+- **Marker file:** `~/Library/Application Support/QwenVoice/python/.setup-complete` stores a SHA256 hash of `requirements.txt`. If missing or stale, the app recreates the venv from scratch.
+- **Python discovery order:** Prefers 3.13 → 3.14 → 3.12 → 3.11 (requirements target 3.13; `audioop-lts` has a `python_version >= "3.13"` marker).
+- **Accepted versions:** Python 3.11–3.14.
+- **If tests fail across the board** (all sidebar items not found), the venv is likely broken or the marker is missing — the app is stuck on `SetupView`. Fix: recreate the venv, install deps, write the marker hash.
+
 ### App Support directory layout
 ```
 ~/Library/Application Support/QwenVoice/
-  models/          ← downloaded model folders
+  python/            ← venv (created by PythonEnvironmentManager)
+    .setup-complete  ← SHA256 hash of requirements.txt
+  models/            ← downloaded model folders
   outputs/
-    CustomVoice/   ← generated .wav files
+    CustomVoice/     ← generated .wav files
     VoiceDesign/
     Clones/
-  voices/          ← enrolled voice .wav + .txt transcript pairs
-  history.sqlite   ← GRDB generation history
+  voices/            ← enrolled voice .wav + .txt transcript pairs
+  history.sqlite     ← GRDB generation history
 ```
 
 ### Generate views pattern
@@ -119,3 +129,5 @@ The `generate` method handles all three modes via parameter presence: `ref_audio
 - **SourceKit false errors** on cross-file Swift references are expected until the project is opened in Xcode — the build still succeeds.
 - The compiled binary is tiny (~58KB); the actual Swift code compiles into `Qwen Voice.debug.dylib` in debug builds.
 - macOS 14.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
+- **Changing `requirements.txt` invalidates the venv marker** — the app will redo full setup on next launch. After editing requirements, either let the app rebuild the venv or manually: recreate the venv, `pip install -r requirements.txt`, and write `shasum -a 256 requirements.txt | awk '{print $1}'` to `python/.setup-complete`.
+- **`audioop-lts` is 3.13+ only** — it backports the `audioop` stdlib module removed in 3.13. The environment marker in `requirements.txt` ensures pip skips it on 3.12 where `audioop` is built-in.
