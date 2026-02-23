@@ -30,6 +30,7 @@
 		4BCD3AABC202FA8EF7E7E411 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEEF9C210A0A7073935D5573 /* PythonBridge.swift */; };
 		502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */; };
 		5DEC2C340273F733DE7DFE96 /* PythonEnvironmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81EE9546E9971EB847A0B8AC /* PythonEnvironmentManager.swift */; };
+		65A7D297035D3E0E3040D8CC /* mlx_audio-0.3.1-py3-none-any.whl in Resources */ = {isa = PBXBuildFile; fileRef = 42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */; };
 		709DB664DB72A545A9C7A4BB /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE1603036CD7416D5D992618 /* ModelManagerViewModel.swift */; };
 		7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */; };
 		78299687FEE6E110510B6CAA /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47556371509635C604724750 /* DatabaseService.swift */; };
@@ -72,6 +73,7 @@
 		3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesViewTests.swift; sourceTree = "<group>"; };
 		3ADE213695C11F46205AE6DC /* QwenVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QwenVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D905B8E1DC7FC16CF981E2E /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
+		42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */ = {isa = PBXFileReference; path = "mlx_audio-0.3.1-py3-none-any.whl"; sourceTree = "<group>"; };
 		46F50CDC0ACCD3BB87BD90FD /* Voice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice.swift; sourceTree = "<group>"; };
 		47556371509635C604724750 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
 		4848C7D9A6BE4355F31237DC /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 			children = (
 				31C7F7D75B6E475126FD086D /* requirements.txt */,
 				678B657CD1E230C390CA8221 /* backend */,
+				78657D74829AEA746B6204B4 /* vendor */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -229,6 +232,14 @@
 				2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		78657D74829AEA746B6204B4 /* vendor */ = {
+			isa = PBXGroup;
+			children = (
+				42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */,
+			);
+			path = vendor;
 			sourceTree = "<group>";
 		};
 		8E419F21B4ECB7B71CC1EC69 = {
@@ -371,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DE270A3D49245A009F75489A /* Assets.xcassets in Resources */,
+				65A7D297035D3E0E3040D8CC /* mlx_audio-0.3.1-py3-none-any.whl in Resources */,
 				383D19F6BFBB3E2F0D62A420 /* requirements.txt in Resources */,
 				3B204D5F341EB47F7F43AD28 /* server.py in Resources */,
 			);
