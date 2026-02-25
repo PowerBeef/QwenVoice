@@ -228,6 +228,8 @@ struct VoiceCloningView: View {
                 }
                 .glassCard()
 
+                AudioPlayerBar()
+
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")
                         .foregroundColor(.red)

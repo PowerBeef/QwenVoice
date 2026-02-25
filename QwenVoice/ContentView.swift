@@ -54,12 +54,10 @@ struct ContentView: View {
         NavigationSplitView {
             SidebarView(selection: $selectedItem)
         } detail: {
-            ZStack(alignment: .bottom) {
-                // Vibrant underlying background
+            ZStack {
                 AuroraBackground()
                     .ignoresSafeArea()
-                
-                // Main content area
+
                 Group {
                     switch selectedItem {
                     case .customVoice:
@@ -79,9 +77,6 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                // Persistent floating audio player bar
-                AudioPlayerBar()
             }
         }
         .navigationSplitViewStyle(.balanced)

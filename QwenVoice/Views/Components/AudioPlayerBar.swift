@@ -1,91 +1,75 @@
 import SwiftUI
 
-/// Persistent audio player bar at the bottom of the window.
+/// Slim, full-width audio player bar at the bottom of the window.
 struct AudioPlayerBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
     var body: some View {
         if audioPlayer.hasAudio {
-            VStack(spacing: 0) {
-                // Waveform
-                WaveformView(samples: audioPlayer.waveformSamples, progress: audioPlayer.progress)
-                    .frame(height: 32)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-
-                // Controls & Scrubber Info
-                HStack(spacing: 16) {
-                    // Play / Pause
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            audioPlayer.togglePlayPause()
-                        }
-                    } label: {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(AppTheme.accent)
-                            .symbolEffect(.bounce, value: audioPlayer.isPlaying)
+            HStack(spacing: 10) {
+                // Play / Pause
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        audioPlayer.togglePlayPause()
                     }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.space, modifiers: [])
-                    .accessibilityIdentifier("audioPlayer_playPause")
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(audioPlayer.currentTitle)
-                            .font(.headline)
-                            .lineLimit(1)
-                            .accessibilityIdentifier("audioPlayer_title")
-                        
-                        HStack(spacing: 8) {
-                            Text(audioPlayer.formattedCurrentTime)
-                                .font(.caption2.monospacedDigit().weight(.medium))
-                                .foregroundColor(.secondary)
-                            
-                            Slider(
-                                value: Binding(
-                                    get: { audioPlayer.progress },
-                                    set: { audioPlayer.seek(to: $0) }
-                                ),
-                                in: 0...1
-                            )
-                            .tint(AppTheme.customVoice)
-                            .controlSize(.mini)
-                            .accessibilityIdentifier("audioPlayer_seekSlider")
-                            
-                            Text(audioPlayer.formattedDuration)
-                                .font(.caption2.monospacedDigit().weight(.medium))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    // Stop
-                    Button {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            audioPlayer.stop()
-                        }
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.secondary.opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("audioPlayer_stop")
+                } label: {
+                    Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(AppTheme.accent)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
-                .padding(.top, 8)
+                .buttonStyle(.plain)
+                .keyboardShortcut(.space, modifiers: [])
+                .accessibilityIdentifier("audioPlayer_playPause")
+
+                Text(audioPlayer.currentTitle)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("audioPlayer_title")
+
+                Spacer()
+
+                Text(audioPlayer.formattedCurrentTime)
+                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .foregroundColor(.secondary)
+
+                Text("/")
+                    .font(.caption2)
+                    .foregroundColor(.secondary.opacity(0.6))
+
+                Text(audioPlayer.formattedDuration)
+                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .foregroundColor(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { audioPlayer.progress },
+                        set: { audioPlayer.seek(to: $0) }
+                    ),
+                    in: 0...1
+                )
+                .tint(AppTheme.accent)
+                .controlSize(.mini)
+                .frame(width: 120)
+                .accessibilityIdentifier("audioPlayer_seekSlider")
+
+                // Dismiss
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        audioPlayer.dismiss()
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("audioPlayer_dismiss")
             }
-            .frame(width: 460)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: Color.black.opacity(0.12), radius: 20, y: 10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-            .padding(.bottom, 24)
-            .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
-            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: audioPlayer.hasAudio)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .glassCard()
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
             .accessibilityIdentifier("audioPlayer_bar")
         }
     }

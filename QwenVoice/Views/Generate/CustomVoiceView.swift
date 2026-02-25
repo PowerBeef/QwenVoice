@@ -200,6 +200,8 @@ struct CustomVoiceView: View {
                 }
                 .glassCard()
 
+                AudioPlayerBar()
+
                 // Error display
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")
