@@ -41,15 +41,17 @@ struct CustomVoiceView: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Text to Speech")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
+                            .tracking(1.5)
                         
                         Text("Custom Voice")
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .font(.system(size: 38, weight: .heavy, design: .rounded))
                             .foregroundStyle(
-                                LinearGradient(colors: [AppTheme.customVoice, AppTheme.customVoice.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                LinearGradient(colors: [AppTheme.customVoice, AppTheme.customVoice.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
+                            .shadow(color: AppTheme.customVoice.opacity(0.3), radius: 10, y: 5)
                             .accessibilityIdentifier("customVoice_title")
                     }
                     
@@ -125,21 +127,23 @@ struct CustomVoiceView: View {
                                         .font(.caption)
                                     Text("Custom")
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(isCustomSpeaker ? AppTheme.customVoice : AppTheme.customVoice.opacity(0.10))
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(isCustomSpeaker ? AppTheme.customVoice : Color.primary.opacity(0.06))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .strokeBorder(
                                             isCustomSpeaker ? Color.white.opacity(0.3) : AppTheme.customVoice.opacity(0.5),
                                             style: StrokeStyle(lineWidth: 1, dash: isCustomSpeaker ? [] : [4, 4])
                                         )
                                 )
                                 .foregroundStyle(isCustomSpeaker ? .white : AppTheme.customVoice)
-                                .shadow(color: isCustomSpeaker ? AppTheme.customVoice.opacity(0.35) : .clear, radius: isCustomSpeaker ? 6 : 0, y: isCustomSpeaker ? 2 : 0)
+                                .shadow(color: isCustomSpeaker ? AppTheme.customVoice.opacity(0.5) : .clear, radius: 10, y: 4)
+                                .scaleEffect(isCustomSpeaker ? 1.05 : 1.0)
+                                .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isCustomSpeaker)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -150,15 +154,7 @@ struct CustomVoiceView: View {
                         // Voice description field (visible only in custom speaker mode)
                         if isCustomSpeaker {
                             TextField("Describe the voice you want, e.g. 'A warm, deep male voice with a British accent'", text: $voiceDescription, axis: .vertical)
-                                .textFieldStyle(.plain)
-                                .font(.title3)
-                                .padding(16)
-                                .background(Color.primary.opacity(0.04))
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                                )
+                                .textFieldStyle(.roundedBorder)
                                 .lineLimit(2...4)
                                 .accessibilityIdentifier("customVoice_voiceDescriptionField")
                         }

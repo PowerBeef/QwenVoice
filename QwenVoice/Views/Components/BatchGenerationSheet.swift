@@ -28,8 +28,11 @@ struct BatchGenerationSheet: View {
     var body: some View {
         VStack(spacing: 20) {
             Text("Batch Generation")
-                .font(.title2.bold())
-                .foregroundStyle(themeColor)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(
+                    LinearGradient(colors: [themeColor, themeColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .shadow(color: themeColor.opacity(0.3), radius: 8, y: 4)
 
             Text("Enter one text per line, or drag a .txt file")
                 .font(.caption)
@@ -38,15 +41,19 @@ struct BatchGenerationSheet: View {
             TextEditor(text: $batchText)
                 .font(.body)
                 .frame(minHeight: 200)
-                .padding(4)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.primary.opacity(0.03))
-                )
+                .padding(8)
+                .scrollContentBackground(.hidden)
+                .background(Color.primary.opacity(0.02))
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(themeColor.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(colors: [themeColor.opacity(0.4), themeColor.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1
+                        )
                 )
+                .shadow(color: themeColor.opacity(0.05), radius: 10, y: 5)
                 .disabled(isProcessing)
 
             if isProcessing {

@@ -55,6 +55,10 @@ struct ContentView: View {
             SidebarView(selection: $selectedItem)
         } detail: {
             ZStack(alignment: .bottom) {
+                // Vibrant underlying background
+                AuroraBackground()
+                    .ignoresSafeArea()
+                
                 // Main content area
                 Group {
                     switch selectedItem {

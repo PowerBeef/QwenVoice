@@ -18,14 +18,28 @@ extension Color {
 extension View {
     func glassCard() -> some View {
         self
-            .padding(20)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white.opacity(0.02))
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.4), Color.white.opacity(0.05), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
             )
+            .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
+            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -166,19 +180,18 @@ extension View {
 
 struct GlowingGradientButtonStyle: ButtonStyle {
     let baseColor: Color
-    @State private var pulse: CGFloat = 1.0
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.title3.weight(.bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 32)
-            .padding(.vertical, 14)
+            .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [baseColor.opacity(0.8), baseColor],
+                            colors: [baseColor.opacity(1.2), baseColor.opacity(0.8)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -186,11 +199,18 @@ struct GlowingGradientButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.6), Color.white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
             )
-            .shadow(color: baseColor.opacity(0.6), radius: configuration.isPressed ? 5 : 15, y: configuration.isPressed ? 2 : 5)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .shadow(color: baseColor.opacity(0.6), radius: configuration.isPressed ? 10 : 20, y: configuration.isPressed ? 5 : 10)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
 }
 
@@ -201,22 +221,23 @@ struct CompactGenerateButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.body.weight(.bold))
             .foregroundStyle(.white)
-            .padding(10)
+            .padding(12)
             .background(
                 Circle()
                     .fill(LinearGradient(
-                        colors: [baseColor.opacity(0.85), baseColor],
+                        colors: [baseColor.opacity(1.1), baseColor.opacity(0.8)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     ))
             )
-            .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
-            .shadow(color: baseColor.opacity(configuration.isPressed ? 0.2 : 0.4),
-                    radius: configuration.isPressed ? 2 : 6,
-                    y: configuration.isPressed ? 1 : 3)
-            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .overlay(
+                Circle()
+                    .stroke(LinearGradient(colors: [Color.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+            )
+            .shadow(color: baseColor.opacity(0.5), radius: configuration.isPressed ? 5 : 10, y: configuration.isPressed ? 2 : 5)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
 }
 
@@ -228,14 +249,62 @@ struct ChipStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .font(.caption.weight(.bold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? color : color.opacity(0.10))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? color : Color.primary.opacity(0.06))
             )
             .foregroundStyle(isSelected ? .white : color)
-            .shadow(color: isSelected ? color.opacity(0.35) : .clear, radius: isSelected ? 6 : 0, y: isSelected ? 2 : 0)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.primary.opacity(0.04), lineWidth: 1)
+            )
+            .shadow(color: isSelected ? color.opacity(0.5) : .clear, radius: 10, y: 4)
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isSelected)
+    }
+}
+
+// MARK: - Aurora Background
+
+struct AuroraBackground: View {
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+            
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let height = geometry.size.height
+                
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.customVoice.opacity(0.3))
+                        .frame(width: width * 0.8)
+                        .blur(radius: 120)
+                        .offset(x: animate ? width * 0.2 : -width * 0.2, y: animate ? height * 0.2 : -height * 0.2)
+
+                    Circle()
+                        .fill(AppTheme.voiceDesign.opacity(0.3))
+                        .frame(width: width * 0.9)
+                        .blur(radius: 150)
+                        .offset(x: animate ? -width * 0.1 : width * 0.3, y: animate ? -height * 0.3 : height * 0.1)
+
+                    Circle()
+                        .fill(AppTheme.voiceCloning.opacity(0.25))
+                        .frame(width: width * 0.7)
+                        .blur(radius: 100)
+                        .offset(x: animate ? width * 0.4 : -width * 0.3, y: animate ? height * 0.3 : -height * 0.4)
+                }
+            }
+            .animation(.easeInOut(duration: 15).repeatForever(autoreverses: true), value: animate)
+            .onAppear {
+                animate = true
+            }
+        }
     }
 }
 
