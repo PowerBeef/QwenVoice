@@ -13,7 +13,7 @@ struct PreferencesView: View {
                     .accessibilityIdentifier("preferences_autoPlayToggle")
             } header: {
                 Label("Playback", systemImage: "play.circle")
-                    .foregroundStyle(AppTheme.preferences)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -44,7 +44,7 @@ struct PreferencesView: View {
                 }
             } header: {
                 Label("Output", systemImage: "folder")
-                    .foregroundStyle(AppTheme.preferences)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -58,7 +58,7 @@ struct PreferencesView: View {
                 }
             } header: {
                 Label("Storage", systemImage: "internaldrive")
-                    .foregroundStyle(AppTheme.preferences)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -77,7 +77,7 @@ struct PreferencesView: View {
                 }
             } header: {
                 Label("Python", systemImage: "terminal")
-                    .foregroundStyle(AppTheme.preferences)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

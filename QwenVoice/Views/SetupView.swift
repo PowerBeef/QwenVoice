@@ -10,24 +10,12 @@ struct SetupView: View {
 
             Image(systemName: "waveform.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [AppTheme.customVoice, AppTheme.voiceDesign, AppTheme.voiceCloning],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .foregroundStyle(AppTheme.accent)
                 .accessibilityIdentifier("setup_icon")
 
             Text("Qwen Voice")
                 .font(.largeTitle.bold())
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [AppTheme.customVoice, AppTheme.voiceDesign],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .foregroundStyle(AppTheme.accent)
                 .accessibilityIdentifier("setup_title")
 
             switch envManager.state {

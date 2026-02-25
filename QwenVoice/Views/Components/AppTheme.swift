@@ -31,15 +31,14 @@ extension View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.4), Color.white.opacity(0.05), Color.clear],
+                            colors: [Color.white.opacity(0.25), Color.white.opacity(0.05)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 1
+                        lineWidth: 0.5
                     )
             )
-            .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
-            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
     }
 }
 
@@ -49,42 +48,37 @@ enum AppTheme {
 
     // MARK: Section Colors
 
-    static let customVoice = Color(light: Color(red: 0.549, green: 0.239, blue: 0.859),
-                                    dark: Color(red: 0.690, green: 0.463, blue: 0.973))
-    static let voiceDesign = Color(light: Color(red: 0.0, green: 0.604, blue: 0.620),
-                                    dark: Color(red: 0.2, green: 0.780, blue: 0.800))
-    static let voiceCloning = Color(light: Color(red: 0.902, green: 0.522, blue: 0.078),
-                                     dark: Color(red: 1.0, green: 0.682, blue: 0.278))
-    static let history = Color(light: Color(red: 0.349, green: 0.341, blue: 0.839),
-                                dark: Color(red: 0.522, green: 0.522, blue: 0.949))
-    static let voices = Color(light: Color(red: 0.843, green: 0.278, blue: 0.651),
-                               dark: Color(red: 0.949, green: 0.478, blue: 0.651))
-    static let models = Color(light: Color(red: 0.780, green: 0.600, blue: 0.098),
-                               dark: Color(red: 0.949, green: 0.780, blue: 0.278))
-    static let preferences = Color(light: Color(red: 0.420, green: 0.478, blue: 0.580),
-                                    dark: Color(red: 0.620, green: 0.678, blue: 0.780))
+    static let accent = Color(light: Color(red: 0.33, green: 0.40, blue: 0.65),
+                               dark: Color(red: 0.50, green: 0.58, blue: 0.85))
+    static let customVoice  = accent
+    static let voiceDesign  = accent
+    static let voiceCloning = accent
+    static let history      = accent
+    static let voices       = accent
+    static let models       = accent
+    static let preferences  = accent
 
     // MARK: Emotion Colors
 
     static func emotionColor(for emotionID: String) -> Color {
         switch emotionID {
-        case "neutral":  return Color(light: .gray, dark: .gray)
-        case "happy":    return Color(light: Color(red: 0.878, green: 0.698, blue: 0.118),
-                                       dark: Color(red: 0.980, green: 0.820, blue: 0.220))
-        case "sad":      return Color(light: Color(red: 0.259, green: 0.518, blue: 0.878),
-                                       dark: Color(red: 0.400, green: 0.620, blue: 0.960))
-        case "angry":    return Color(light: Color(red: 0.878, green: 0.220, blue: 0.220),
-                                       dark: Color(red: 0.960, green: 0.380, blue: 0.380))
-        case "fearful":  return Color(light: Color(red: 0.608, green: 0.318, blue: 0.878),
-                                       dark: Color(red: 0.740, green: 0.478, blue: 0.960))
-        case "whisper":  return Color(light: Color(red: 0.620, green: 0.557, blue: 0.800),
-                                       dark: Color(red: 0.761, green: 0.710, blue: 0.918))
-        case "dramatic": return Color(light: Color(red: 0.698, green: 0.118, blue: 0.220),
-                                       dark: Color(red: 0.878, green: 0.278, blue: 0.380))
-        case "calm":     return Color(light: Color(red: 0.380, green: 0.639, blue: 0.420),
-                                       dark: Color(red: 0.518, green: 0.780, blue: 0.557))
-        case "excited":  return Color(light: Color(red: 0.918, green: 0.498, blue: 0.118),
-                                       dark: Color(red: 0.980, green: 0.620, blue: 0.278))
+        case "neutral":  return Color.secondary
+        case "happy":    return Color(light: Color(red: 0.75, green: 0.62, blue: 0.25),
+                                       dark: Color(red: 0.82, green: 0.72, blue: 0.35))
+        case "sad":      return Color(light: Color(red: 0.35, green: 0.48, blue: 0.72),
+                                       dark: Color(red: 0.45, green: 0.56, blue: 0.80))
+        case "angry":    return Color(light: Color(red: 0.72, green: 0.32, blue: 0.32),
+                                       dark: Color(red: 0.80, green: 0.42, blue: 0.42))
+        case "fearful":  return Color(light: Color(red: 0.52, green: 0.38, blue: 0.72),
+                                       dark: Color(red: 0.62, green: 0.48, blue: 0.80))
+        case "whisper":  return Color(light: Color(red: 0.54, green: 0.50, blue: 0.66),
+                                       dark: Color(red: 0.64, green: 0.60, blue: 0.76))
+        case "dramatic": return Color(light: Color(red: 0.58, green: 0.25, blue: 0.32),
+                                       dark: Color(red: 0.72, green: 0.35, blue: 0.42))
+        case "calm":     return Color(light: Color(red: 0.40, green: 0.56, blue: 0.42),
+                                       dark: Color(red: 0.48, green: 0.66, blue: 0.50))
+        case "excited":  return Color(light: Color(red: 0.75, green: 0.50, blue: 0.25),
+                                       dark: Color(red: 0.82, green: 0.58, blue: 0.35))
         default:         return .accentColor
         }
     }
@@ -92,69 +86,31 @@ enum AppTheme {
     // MARK: Sidebar Color
 
     static func sidebarColor(for item: SidebarItem) -> Color {
-        switch item {
-        case .customVoice: return customVoice
-        case .voiceCloning: return voiceCloning
-        case .history: return history
-        case .voices: return voices
-        case .models: return models
-        case .preferences: return preferences
-        }
+        accent
     }
 
     // MARK: Mode Color
 
     static func modeColor(for mode: String) -> Color {
-        switch mode.lowercased() {
-        case "custom": return customVoice
-        case "design": return voiceDesign
-        case "clone":  return voiceCloning
-        default:       return .accentColor
-        }
+        accent
     }
 
     static func modeColor(for mode: GenerationMode) -> Color {
-        switch mode {
-        case .custom: return customVoice
-        case .design: return voiceDesign
-        case .clone:  return voiceCloning
-        }
+        accent
     }
 
     // MARK: Waveform Gradient
 
     static let waveformGradient = LinearGradient(
-        colors: [
-            Color(red: 0.549, green: 0.239, blue: 0.859),  // purple
-            Color(red: 0.259, green: 0.518, blue: 0.878),  // blue
-            Color(red: 0.0, green: 0.604, blue: 0.620),    // teal
-        ],
+        colors: [accent.opacity(0.6), accent],
         startPoint: .leading,
         endPoint: .trailing
     )
 
-    /// Interpolates through purple→blue→teal for a given position (0...1).
+    /// Returns a monochrome accent ramp for a given position (0...1).
     static func waveformColor(at position: Double) -> Color {
-        let purple = (r: 0.549, g: 0.239, b: 0.859)
-        let blue   = (r: 0.259, g: 0.518, b: 0.878)
-        let teal   = (r: 0.0,   g: 0.604, b: 0.620)
-
         let t = max(0, min(1, position))
-        if t < 0.5 {
-            let f = t / 0.5
-            return Color(
-                red: purple.r + (blue.r - purple.r) * f,
-                green: purple.g + (blue.g - purple.g) * f,
-                blue: purple.b + (blue.b - purple.b) * f
-            )
-        } else {
-            let f = (t - 0.5) / 0.5
-            return Color(
-                red: blue.r + (teal.r - blue.r) * f,
-                green: blue.g + (teal.g - blue.g) * f,
-                blue: blue.b + (teal.b - blue.b) * f
-            )
-        }
+        return accent.opacity(0.6 + 0.4 * t)
     }
 }
 
@@ -166,7 +122,7 @@ struct SectionHeaderStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(color)
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -191,7 +147,7 @@ struct GlowingGradientButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [baseColor.opacity(1.2), baseColor.opacity(0.8)],
+                            colors: [baseColor, baseColor.opacity(0.8)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -199,16 +155,9 @@ struct GlowingGradientButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.6), Color.white.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
+                    .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
             )
-            .shadow(color: baseColor.opacity(0.6), radius: configuration.isPressed ? 10 : 20, y: configuration.isPressed ? 5 : 10)
+            .shadow(color: baseColor.opacity(0.25), radius: configuration.isPressed ? 6 : 12, y: configuration.isPressed ? 3 : 6)
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
@@ -227,15 +176,15 @@ struct CompactGenerateButtonStyle: ButtonStyle {
             .background(
                 Circle()
                     .fill(LinearGradient(
-                        colors: [baseColor.opacity(1.1), baseColor.opacity(0.8)],
+                        colors: [baseColor, baseColor.opacity(0.8)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     ))
             )
             .overlay(
                 Circle()
-                    .stroke(LinearGradient(colors: [Color.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
             )
-            .shadow(color: baseColor.opacity(0.5), radius: configuration.isPressed ? 5 : 10, y: configuration.isPressed ? 2 : 5)
+            .shadow(color: baseColor.opacity(0.2), radius: configuration.isPressed ? 4 : 8, y: configuration.isPressed ? 2 : 4)
             .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
             .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
@@ -254,15 +203,14 @@ struct ChipStyle: ViewModifier {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? color : Color.primary.opacity(0.06))
+                    .fill(isSelected ? color.opacity(0.15) : Color.primary.opacity(0.06))
             )
-            .foregroundStyle(isSelected ? .white : color)
+            .foregroundStyle(isSelected ? color : color.opacity(0.8))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.primary.opacity(0.04), lineWidth: 1)
+                    .stroke(isSelected ? color.opacity(0.3) : Color.primary.opacity(0.04), lineWidth: 0.5)
             )
-            .shadow(color: isSelected ? color.opacity(0.5) : .clear, radius: 10, y: 4)
-            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .scaleEffect(isSelected ? 1.02 : 1.0)
             .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isSelected)
     }
 }
@@ -275,32 +223,18 @@ struct AuroraBackground: View {
     var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
-            
+
             GeometryReader { geometry in
                 let width = geometry.size.width
                 let height = geometry.size.height
-                
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.customVoice.opacity(0.3))
-                        .frame(width: width * 0.8)
-                        .blur(radius: 120)
-                        .offset(x: animate ? width * 0.2 : -width * 0.2, y: animate ? height * 0.2 : -height * 0.2)
 
-                    Circle()
-                        .fill(AppTheme.voiceDesign.opacity(0.3))
-                        .frame(width: width * 0.9)
-                        .blur(radius: 150)
-                        .offset(x: animate ? -width * 0.1 : width * 0.3, y: animate ? -height * 0.3 : height * 0.1)
-
-                    Circle()
-                        .fill(AppTheme.voiceCloning.opacity(0.25))
-                        .frame(width: width * 0.7)
-                        .blur(radius: 100)
-                        .offset(x: animate ? width * 0.4 : -width * 0.3, y: animate ? height * 0.3 : -height * 0.4)
-                }
+                Circle()
+                    .fill(AppTheme.accent.opacity(0.06))
+                    .frame(width: width * 0.8)
+                    .blur(radius: 150)
+                    .offset(x: animate ? width * 0.15 : -width * 0.15, y: animate ? height * 0.1 : -height * 0.1)
             }
-            .animation(.easeInOut(duration: 15).repeatForever(autoreverses: true), value: animate)
+            .animation(.easeInOut(duration: 20).repeatForever(autoreverses: true), value: animate)
             .onAppear {
                 animate = true
             }
@@ -321,13 +255,7 @@ struct EmptyStateStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [color, color.opacity(0.5)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .foregroundStyle(.secondary.opacity(0.5))
     }
 }
 

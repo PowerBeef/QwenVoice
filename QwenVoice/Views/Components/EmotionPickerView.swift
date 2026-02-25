@@ -39,14 +39,13 @@ struct EmotionPickerView: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(isSelected ? chipColor : Color.primary.opacity(0.04))
+                                .fill(isSelected ? chipColor.opacity(0.12) : Color.primary.opacity(0.04))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(isSelected ? Color.white.opacity(0.3) : Color.primary.opacity(0.08), lineWidth: 1)
+                                .stroke(isSelected ? chipColor.opacity(0.3) : Color.primary.opacity(0.08), lineWidth: 0.5)
                         )
-                        .foregroundColor(isSelected ? .white : .primary.opacity(0.8))
-                        .shadow(color: isSelected ? chipColor.opacity(0.4) : .clear, radius: 8, y: 4)
+                        .foregroundColor(isSelected ? chipColor : .primary.opacity(0.8))
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
                     }
                     .buttonStyle(.plain)
@@ -67,17 +66,16 @@ struct EmotionPickerView: View {
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(isCustomMode ? AppTheme.customVoice : Color.primary.opacity(0.04))
+                            .fill(isCustomMode ? AppTheme.accent.opacity(0.12) : Color.primary.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(
-                                isCustomMode ? Color.white.opacity(0.3) : Color.secondary.opacity(0.3),
-                                style: StrokeStyle(lineWidth: 1, dash: isCustomMode ? [] : [4, 4])
+                                isCustomMode ? AppTheme.accent.opacity(0.3) : Color.secondary.opacity(0.3),
+                                style: StrokeStyle(lineWidth: 0.5, dash: isCustomMode ? [] : [4, 4])
                             )
                     )
-                    .foregroundColor(isCustomMode ? .white : .secondary)
-                    .shadow(color: isCustomMode ? AppTheme.customVoice.opacity(0.4) : .clear, radius: 8, y: 4)
+                    .foregroundColor(isCustomMode ? AppTheme.accent : .secondary)
                     .contentShape(Rectangle())
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isCustomMode)
                 }
@@ -105,7 +103,14 @@ struct EmotionPickerView: View {
 
             if isCustomMode {
                 TextField("e.g. Excited and happy, speaking very fast", text: $customText)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .padding(16)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
                     .accessibilityIdentifier("customVoice_emotionField")
                     .onChange(of: customText) { _, newValue in
                         emotion = newValue

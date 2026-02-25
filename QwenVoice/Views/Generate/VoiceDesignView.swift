@@ -33,10 +33,8 @@ struct VoiceDesignView: View {
                         
                         Text("Voice Design")
                             .font(.system(size: 38, weight: .heavy, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(colors: [AppTheme.voiceDesign, AppTheme.voiceDesign.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
-                            .shadow(color: AppTheme.voiceDesign.opacity(0.3), radius: 10, y: 5)
+                            .foregroundStyle(.white)
+                            .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
                             .accessibilityIdentifier("voiceDesign_title")
                     }
                     
@@ -83,7 +81,15 @@ struct VoiceDesignView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("PROMPT").sectionHeader(color: AppTheme.voiceDesign)
                     TextField("Describe the voice you want, e.g. 'A warm, deep male voice with a British accent'", text: $voiceDescription, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .font(.title3)
+                        .padding(16)
+                        .background(Color.primary.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
                         .lineLimit(2...4)
                         .accessibilityIdentifier("voiceDesign_descriptionField")
                 }

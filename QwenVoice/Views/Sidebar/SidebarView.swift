@@ -13,7 +13,7 @@ struct SidebarView: View {
                             Text(item.rawValue)
                         } icon: {
                             Image(systemName: item.iconName)
-                                .foregroundStyle(AppTheme.sidebarColor(for: item))
+                                .foregroundStyle(.secondary)
                                 .symbolRenderingMode(.hierarchical)
                         }
                         .tag(item)

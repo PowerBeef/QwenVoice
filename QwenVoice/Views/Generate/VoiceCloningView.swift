@@ -38,10 +38,8 @@ struct VoiceCloningView: View {
 
                         Text("Voice Cloning")
                             .font(.system(size: 38, weight: .heavy, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(colors: [AppTheme.voiceCloning, AppTheme.voiceCloning.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
-                            .shadow(color: AppTheme.voiceCloning.opacity(0.3), radius: 10, y: 5)
+                            .foregroundStyle(.white)
+                            .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
                             .accessibilityIdentifier("voiceCloning_title")
                     }
                     
@@ -117,7 +115,7 @@ struct VoiceCloningView: View {
                                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                                     .stroke(selectedVoice?.id == voice.id ? AppTheme.voiceCloning : Color.primary.opacity(0.08), lineWidth: 1)
                                             )
-                                            .shadow(color: selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.3) : .clear, radius: 8, y: 4)
+                                            .shadow(color: selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.1) : .clear, radius: 4, y: 2)
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -146,7 +144,7 @@ struct VoiceCloningView: View {
                                     AppTheme.voiceCloning.opacity(isDragOver ? 0.8 : 0.4),
                                     style: StrokeStyle(lineWidth: isDragOver ? 2 : 1.5, dash: [8, 8])
                                 )
-                                .shadow(color: isDragOver ? AppTheme.voiceCloning.opacity(0.4) : .clear, radius: 15, y: 5)
+                                .shadow(color: isDragOver ? AppTheme.voiceCloning.opacity(0.15) : .clear, radius: 8, y: 3)
                                 .frame(height: 120)
 
                             if let path = referenceAudioPath {
@@ -206,7 +204,15 @@ struct VoiceCloningView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("TRANSCRIPT").sectionHeader(color: AppTheme.voiceCloning)
                         TextField("Type exactly what the reference audio says (improves quality)", text: $referenceTranscript)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain)
+                            .font(.title3)
+                            .padding(16)
+                            .background(Color.primary.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
                             .accessibilityIdentifier("voiceCloning_transcriptField")
                     }
 

@@ -23,9 +23,7 @@ struct AudioPlayerBar: View {
                     } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundStyle(
-                                LinearGradient(colors: [AppTheme.customVoice, AppTheme.voiceDesign], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
+                            .foregroundStyle(AppTheme.accent)
                             .symbolEffect(.bounce, value: audioPlayer.isPlaying)
                     }
                     .buttonStyle(.plain)
@@ -80,7 +78,7 @@ struct AudioPlayerBar: View {
             .frame(width: 460)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: Color.black.opacity(0.2), radius: 30, y: 15)
+            .shadow(color: Color.black.opacity(0.12), radius: 20, y: 10)
             .overlay(
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .stroke(Color.white.opacity(0.15), lineWidth: 1)

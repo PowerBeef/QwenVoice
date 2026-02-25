@@ -29,10 +29,7 @@ struct BatchGenerationSheet: View {
         VStack(spacing: 20) {
             Text("Batch Generation")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(colors: [themeColor, themeColor.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .shadow(color: themeColor.opacity(0.3), radius: 8, y: 4)
+                .foregroundStyle(.primary)
 
             Text("Enter one text per line, or drag a .txt file")
                 .font(.caption)
@@ -48,12 +45,8 @@ struct BatchGenerationSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(colors: [themeColor.opacity(0.4), themeColor.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: 1
-                        )
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                 )
-                .shadow(color: themeColor.opacity(0.05), radius: 10, y: 5)
                 .disabled(isProcessing)
 
             if isProcessing {
