@@ -23,3 +23,6 @@ QwenVoice/Resources/ffmpeg
 
 # Release build output
 build/
+
+# Git worktrees
+.worktrees/
