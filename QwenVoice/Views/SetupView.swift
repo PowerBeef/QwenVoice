@@ -10,11 +10,24 @@ struct SetupView: View {
 
             Image(systemName: "waveform.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.tint)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [AppTheme.customVoice, AppTheme.voiceDesign, AppTheme.voiceCloning],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .accessibilityIdentifier("setup_icon")
 
             Text("Qwen Voice")
                 .font(.largeTitle.bold())
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [AppTheme.customVoice, AppTheme.voiceDesign],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .accessibilityIdentifier("setup_title")
 
             switch envManager.state {
@@ -71,6 +84,7 @@ struct SetupView: View {
                     ProgressView(value: Double(installed), total: Double(max(total, 1)))
                         .progressViewStyle(.linear)
                         .frame(maxWidth: 300)
+                        .tint(AppTheme.customVoice)
                         .accessibilityIdentifier("setup_progressBar")
 
                     Text("Installing dependencies (\(installed)/\(total))")
@@ -115,7 +129,7 @@ struct SetupView: View {
             Button("Try Again") {
                 envManager.retry()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.customVoice))
             .controlSize(.large)
             .accessibilityIdentifier("setup_retryButton")
         }

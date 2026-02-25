@@ -8,45 +8,49 @@ struct VoiceDesignView: View {
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
-    @State private var selectedTier: ModelTier = .pro
     @State private var showingBatch = false
 
     private var isModelDownloaded: Bool {
-        guard let model = TTSModel.model(for: .design, tier: selectedTier) else { return false }
+        guard let model = TTSModel.model(for: .design) else { return false }
         let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
         return FileManager.default.fileExists(atPath: modelDir.path)
     }
 
     private var modelDisplayName: String {
-        TTSModel.model(for: .design, tier: selectedTier)?.displayName ?? "Unknown"
+        TTSModel.model(for: .design)?.name ?? "Unknown"
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Text("Voice Design")
-                        .font(.title2.bold())
-                        .accessibilityIdentifier("voiceDesign_title")
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Text to Speech")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        
+                        Text("Voice Design")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(colors: [AppTheme.voiceDesign, AppTheme.voiceDesign.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .accessibilityIdentifier("voiceDesign_title")
+                    }
+                    
                     Spacer()
 
                     Button {
                         showingBatch = true
                     } label: {
-                        Label("Batch", systemImage: "list.bullet.rectangle")
+                        Label("Batch", systemImage: "square.grid.2x2.fill")
                     }
+                    .buttonStyle(.bordered)
+                    .tint(AppTheme.voiceDesign)
                     .disabled(!pythonBridge.isReady || voiceDescription.isEmpty || !isModelDownloaded)
                     .accessibilityIdentifier("voiceDesign_batchButton")
-
-                    Picker("Model", selection: $selectedTier) {
-                        ForEach(ModelTier.allCases, id: \.self) { tier in
-                            Text(tier.displayName).tag(tier)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .accessibilityIdentifier("voiceDesign_tierPicker")
                 }
+                .padding(.bottom, 8)
 
                 if !isModelDownloaded {
                     HStack(spacing: 10) {
@@ -74,17 +78,27 @@ struct VoiceDesignView: View {
                     .accessibilityIdentifier("voiceDesign_modelBanner")
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Voice Description").font(.headline)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("PROMPT").sectionHeader(color: AppTheme.voiceDesign)
                     TextField("Describe the voice you want, e.g. 'A warm, deep male voice with a British accent'", text: $voiceDescription, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .font(.title3)
+                        .padding(16)
+                        .background(Color.primary.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
                         .lineLimit(2...4)
                         .accessibilityIdentifier("voiceDesign_descriptionField")
                 }
+                .glassCard()
 
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
+                    buttonColor: AppTheme.voiceDesign,
                     onGenerate: generate
                 )
                 .disabled(!pythonBridge.isReady || !isModelDownloaded)
@@ -111,11 +125,11 @@ struct VoiceDesignView: View {
                 }
             }
             .padding(24)
+            .contentColumn()
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .design,
-                tier: selectedTier,
                 voiceDescription: voiceDescription
             )
             .environmentObject(pythonBridge)
@@ -126,10 +140,10 @@ struct VoiceDesignView: View {
     private func generate() {
         guard !text.isEmpty, !voiceDescription.isEmpty, pythonBridge.isReady else { return }
 
-        if let model = TTSModel.model(for: .design, tier: selectedTier) {
+        if let model = TTSModel.model(for: .design) {
             let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
             if !FileManager.default.fileExists(atPath: modelDir.path) {
-                errorMessage = "Model '\(model.displayName)' is not downloaded. Go to Settings > Models to download it."
+                errorMessage = "Model '\(model.name)' is not downloaded. Go to Settings > Models to download it."
                 return
             }
         }
@@ -139,7 +153,7 @@ struct VoiceDesignView: View {
 
         Task {
             do {
-                guard let model = TTSModel.model(for: .design, tier: selectedTier) else {
+                guard let model = TTSModel.model(for: .design) else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
                     return
@@ -157,7 +171,7 @@ struct VoiceDesignView: View {
                 var gen = Generation(
                     text: text,
                     mode: "design",
-                    modelTier: selectedTier.rawValue,
+                    modelTier: "pro",
                     voice: voiceDescription,
                     emotion: nil,
                     speed: nil,

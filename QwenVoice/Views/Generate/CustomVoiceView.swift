@@ -10,17 +10,16 @@ struct CustomVoiceView: View {
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
-    @State private var selectedTier: ModelTier = .pro
     @State private var showingBatch = false
 
     private var isModelDownloaded: Bool {
-        guard let model = TTSModel.model(for: .custom, tier: selectedTier) else { return false }
+        guard let model = TTSModel.model(for: .custom) else { return false }
         let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
         return FileManager.default.fileExists(atPath: modelDir.path)
     }
 
     private var modelDisplayName: String {
-        TTSModel.model(for: .custom, tier: selectedTier)?.displayName ?? "Unknown"
+        TTSModel.model(for: .custom)?.name ?? "Unknown"
     }
 
     private let speeds: [(String, Double)] = [
@@ -33,29 +32,34 @@ struct CustomVoiceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Header with model picker and batch button
-                HStack {
-                    Text("Custom Voice")
-                        .font(.title2.bold())
-                        .accessibilityIdentifier("customVoice_title")
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Text to Speech")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        
+                        Text("Custom Voice")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(colors: [AppTheme.customVoice, AppTheme.customVoice.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .accessibilityIdentifier("customVoice_title")
+                    }
+                    
                     Spacer()
 
                     Button {
                         showingBatch = true
                     } label: {
-                        Label("Batch", systemImage: "list.bullet.rectangle")
+                        Label("Batch", systemImage: "square.grid.2x2.fill")
                     }
+                    .buttonStyle(.bordered)
+                    .tint(AppTheme.customVoice)
                     .disabled(!pythonBridge.isReady || !isModelDownloaded)
                     .accessibilityIdentifier("customVoice_batchButton")
-
-                    Picker("Model", selection: $selectedTier) {
-                        ForEach(ModelTier.allCases, id: \.self) { tier in
-                            Text(tier.displayName).tag(tier)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .accessibilityIdentifier("customVoice_tierPicker")
                 }
+                .padding(.bottom, 8)
 
                 if !isModelDownloaded {
                     HStack(spacing: 10) {
@@ -83,63 +87,57 @@ struct CustomVoiceView: View {
                     .accessibilityIdentifier("customVoice_modelBanner")
                 }
 
-                // Speaker picker
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Speaker").font(.headline)
-                    ForEach(TTSModel.languageOrder, id: \.self) { language in
-                        if let speakers = TTSModel.speakerMap[language] {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(language)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                FlowLayout(spacing: 8) {
-                                    ForEach(speakers, id: \.self) { speaker in
-                                        Button {
-                                            selectedSpeaker = speaker
-                                        } label: {
-                                            Text(speaker)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .fill(selectedSpeaker == speaker ? Color.accentColor : Color.gray.opacity(0.15))
-                                                )
-                                                .foregroundColor(selectedSpeaker == speaker ? .white : .primary)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityIdentifier("customVoice_speaker_\(language)_\(speaker)")
+                // Controls card
+                VStack(alignment: .leading, spacing: 24) {
+                    // Speaker picker
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("SPEAKER").sectionHeader(color: AppTheme.customVoice)
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(TTSModel.speakers, id: \.self) { speaker in
+                                Button {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        selectedSpeaker = speaker
                                     }
+                                } label: {
+                                    Text(speaker)
+                                        .chipStyle(isSelected: selectedSpeaker == speaker, color: AppTheme.customVoice)
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("customVoice_speaker_\(speaker)")
                             }
                         }
+                        .padding(.vertical, 8)
                     }
-                }
 
-                // Emotion
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Emotion / Instruction").font(.headline)
-                    TextField("e.g. Excited and happy, speaking very fast", text: $emotion)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("customVoice_emotionField")
-                }
+                    Divider().opacity(0.5)
 
-                // Speed
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Speed").font(.headline)
-                    Picker("Speed", selection: $speed) {
-                        ForEach(speeds, id: \.1) { label, value in
-                            Text(label).tag(value)
+                    // Emotion
+                    EmotionPickerView(emotion: $emotion)
+                    
+                    Divider().opacity(0.5)
+
+                    // Speed
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("SPEED").sectionHeader(color: AppTheme.customVoice)
+                        Picker("Speed", selection: $speed) {
+                            ForEach(speeds, id: \.1) { label, value in
+                                Text(label).tag(value)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 380)
+                        .accessibilityIdentifier("customVoice_speedPicker")
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 350)
-                    .accessibilityIdentifier("customVoice_speedPicker")
                 }
+                .glassCard()
 
                 // Text input + Generate
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
+                    buttonColor: AppTheme.customVoice,
                     onGenerate: generate
                 )
                 .disabled(!pythonBridge.isReady || !isModelDownloaded)
@@ -168,11 +166,11 @@ struct CustomVoiceView: View {
                 }
             }
             .padding(24)
+            .contentColumn()
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .custom,
-                tier: selectedTier,
                 voice: selectedSpeaker,
                 emotion: emotion,
                 speed: speed
@@ -186,10 +184,10 @@ struct CustomVoiceView: View {
         guard !text.isEmpty, pythonBridge.isReady else { return }
 
         // Check if model folder exists
-        if let model = TTSModel.model(for: .custom, tier: selectedTier) {
+        if let model = TTSModel.model(for: .custom) {
             let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
             if !FileManager.default.fileExists(atPath: modelDir.path) {
-                errorMessage = "Model '\(model.displayName)' is not downloaded. Go to Settings > Models to download it."
+                errorMessage = "Model '\(model.name)' is not downloaded. Go to Settings > Models to download it."
                 return
             }
         }
@@ -199,7 +197,7 @@ struct CustomVoiceView: View {
 
         Task {
             do {
-                guard let model = TTSModel.model(for: .custom, tier: selectedTier) else {
+                guard let model = TTSModel.model(for: .custom) else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
                     return
@@ -220,7 +218,7 @@ struct CustomVoiceView: View {
                 var gen = Generation(
                     text: text,
                     mode: "custom",
-                    modelTier: selectedTier.rawValue,
+                    modelTier: "pro",
                     voice: selectedSpeaker,
                     emotion: emotion,
                     speed: speed,
@@ -236,44 +234,5 @@ struct CustomVoiceView: View {
             }
             isGenerating = false
         }
-    }
-}
-
-/// Simple flow layout for wrapping speaker buttons.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = layout(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = layout(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
-            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
-        }
-    }
-
-    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
-        let maxWidth = proposal.width ?? .infinity
-        var positions: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth && x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            positions.append(CGPoint(x: x, y: y))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-        }
-
-        return (CGSize(width: maxWidth, height: y + rowHeight), positions)
     }
 }

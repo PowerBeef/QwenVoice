@@ -48,40 +48,52 @@ from huggingface_hub import snapshot_download
 snapshot_download(repo_id='\(model.huggingFaceRepo)', local_dir='\(targetDir.path)', repo_type='model')
 """
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: pythonPath)
-        process.arguments = ["-c", script]
-        process.currentDirectoryURL = modelsDir
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        let pollTask = Task {
+            while !Task.isCancelled {
+                try await Task.sleep(for: .seconds(2))
+                let currentSize = Self.directorySize(url: targetDir)
+                let estimatedTotal = 800_000_000
+                let progress = min(0.95, Double(currentSize) / Double(estimatedTotal))
+                statuses[model.id] = .downloading(progress: progress)
+            }
+        }
 
         do {
-            try process.run()
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: pythonPath)
+                process.arguments = ["-c", script]
+                process.currentDirectoryURL = modelsDir
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = pipe
 
-            // Poll for progress by checking directory size
-            let pollTask = Task {
-                while process.isRunning {
-                    try await Task.sleep(for: .seconds(2))
-                    let currentSize = Self.directorySize(url: targetDir)
-                    // Estimate ~800MB for a typical model
-                    let estimatedTotal = 800_000_000
-                    let progress = min(0.95, Double(currentSize) / Double(estimatedTotal))
-                    statuses[model.id] = .downloading(progress: progress)
+                nonisolated(unsafe) var resumed = false
+
+                process.terminationHandler = { proc in
+                    guard !resumed else { return }
+                    resumed = true
+                    if proc.terminationStatus == 0 {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: NSError(domain: "ModelDownload", code: Int(proc.terminationStatus)))
+                    }
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    guard !resumed else { return }
+                    resumed = true
+                    continuation.resume(throwing: error)
                 }
             }
 
-            process.waitUntilExit()
             pollTask.cancel()
-
-            if process.terminationStatus == 0 {
-                let size = Self.directorySize(url: targetDir)
-                statuses[model.id] = .downloaded(sizeBytes: size)
-            } else {
-                statuses[model.id] = .notDownloaded
-            }
+            let size = Self.directorySize(url: targetDir)
+            statuses[model.id] = .downloaded(sizeBytes: size)
         } catch {
+            pollTask.cancel()
             statuses[model.id] = .notDownloaded
         }
     }

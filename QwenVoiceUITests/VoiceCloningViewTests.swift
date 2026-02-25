@@ -15,13 +15,6 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
         assertElementExists("voiceCloning_title")
     }
 
-    // MARK: - Tier Picker
-
-    func testTierPickerExists() {
-        let picker = app.descendants(matching: .any).matching(identifier: "voiceCloning_tierPicker").firstMatch
-        XCTAssertTrue(picker.waitForExistence(timeout: 5), "Tier picker should exist")
-    }
-
     // MARK: - Batch Button
 
     func testBatchButtonExists() {

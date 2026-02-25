@@ -5,56 +5,59 @@ struct TextInputView: View {
     @Binding var text: String
     var isGenerating: Bool
     var placeholder: String = "Enter text to synthesize..."
+    var buttonColor: Color = AppTheme.customVoice
     var onGenerate: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Text").font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("PROMPT").sectionHeader(color: buttonColor)
 
             ZStack(alignment: .bottomTrailing) {
                 TextEditor(text: $text)
-                    .font(.body)
-                    .frame(minHeight: 100, maxHeight: 200)
-                    .padding(4)
+                    .font(.title3)
+                    .frame(minHeight: 120, maxHeight: LayoutConstants.textEditorMaxHeight)
+                    .padding(12)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
                     .accessibilityIdentifier("textInput_textEditor")
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-                    .overlay(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text(placeholder)
-                                .foregroundColor(.gray.opacity(0.5))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 12)
-                                .allowsHitTesting(false)
-                        }
-                    }
+
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(.title3)
+                        .foregroundColor(.secondary.opacity(0.5))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
 
                 Button(action: onGenerate) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         if isGenerating {
                             ProgressView()
                                 .controlSize(.small)
+                                .tint(.white)
                         } else {
-                            Image(systemName: "play.fill")
+                            Image(systemName: "sparkles")
                         }
                         Text(isGenerating ? "Generating..." : "Generate")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GlowingGradientButtonStyle(baseColor: buttonColor))
                 .disabled(text.isEmpty || isGenerating)
-                .padding(8)
+                .padding(12)
                 .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityIdentifier("textInput_generateButton")
             }
+            .glassCard()
 
-            Text("\(text.count) characters")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .accessibilityIdentifier("textInput_charCount")
+            HStack {
+                Spacer()
+                Text("\(text.count) characters")
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(text.count > 500 ? .orange : .secondary.opacity(0.6))
+                    .accessibilityIdentifier("textInput_charCount")
+            }
         }
     }
 }

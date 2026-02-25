@@ -21,7 +21,9 @@ struct WaveformView: View {
                     let progressFraction = barCount > 0 ? Double(index) / Double(barCount) : 0
 
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(progressFraction <= progress ? Color.accentColor : Color.gray.opacity(0.3))
+                        .fill(progressFraction <= progress
+                              ? AppTheme.waveformColor(at: Double(index) / Double(max(barCount - 1, 1)))
+                              : Color.primary.opacity(0.12))
                         .frame(width: barWidth, height: height)
                 }
             }

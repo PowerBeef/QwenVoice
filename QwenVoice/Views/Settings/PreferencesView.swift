@@ -8,12 +8,15 @@ struct PreferencesView: View {
 
     var body: some View {
         Form {
-            Section("Playback") {
+            Section {
                 Toggle("Auto-play generated audio", isOn: $autoPlay)
                     .accessibilityIdentifier("preferences_autoPlayToggle")
+            } header: {
+                Label("Playback", systemImage: "play.circle")
+                    .foregroundStyle(AppTheme.preferences)
             }
 
-            Section("Output") {
+            Section {
                 HStack {
                     TextField("Output directory", text: $outputDirectory)
                         .textFieldStyle(.roundedBorder)
@@ -39,9 +42,12 @@ struct PreferencesView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+            } header: {
+                Label("Output", systemImage: "folder")
+                    .foregroundStyle(AppTheme.preferences)
             }
 
-            Section("Storage") {
+            Section {
                 HStack {
                     Text("App Support Directory")
                     Spacer()
@@ -50,9 +56,12 @@ struct PreferencesView: View {
                     }
                     .accessibilityIdentifier("preferences_openFinderButton")
                 }
+            } header: {
+                Label("Storage", systemImage: "internaldrive")
+                    .foregroundStyle(AppTheme.preferences)
             }
 
-            Section("Python Environment") {
+            Section {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Reset Python Environment")
@@ -66,11 +75,15 @@ struct PreferencesView: View {
                     }
                     .accessibilityIdentifier("preferences_resetEnvButton")
                 }
+            } header: {
+                Label("Python", systemImage: "terminal")
+                    .foregroundStyle(AppTheme.preferences)
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Preferences")
         .padding(24)
+        .contentColumn()
         .alert("Reset Python Environment?", isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {

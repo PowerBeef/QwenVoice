@@ -66,35 +66,10 @@ MODELS = {
         "tier": "pro",
         "output_subfolder": "Clones",
     },
-    # Lite (0.6B)
-    "lite_custom": {
-        "name": "Custom Voice (Lite)",
-        "folder": "Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
-        "mode": "custom",
-        "tier": "lite",
-        "output_subfolder": "CustomVoice",
-    },
-    "lite_design": {
-        "name": "Voice Design (Lite)",
-        "folder": "Qwen3-TTS-12Hz-0.6B-VoiceDesign-8bit",
-        "mode": "design",
-        "tier": "lite",
-        "output_subfolder": "VoiceDesign",
-    },
-    "lite_clone": {
-        "name": "Voice Cloning (Lite)",
-        "folder": "Qwen3-TTS-12Hz-0.6B-Base-8bit",
-        "mode": "clone",
-        "tier": "lite",
-        "output_subfolder": "Clones",
-    },
 }
 
 SPEAKER_MAP = {
     "English": ["ryan", "aiden", "serena", "vivian"],
-    "Chinese": ["vivian", "serena", "uncle_fu", "dylan", "eric"],
-    "Japanese": ["ono_anna"],
-    "Korean": ["sohee"],
 }
 
 # ---------------------------------------------------------------------------

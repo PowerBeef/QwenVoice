@@ -9,63 +9,85 @@ struct AudioPlayerBar: View {
             VStack(spacing: 0) {
                 // Waveform
                 WaveformView(samples: audioPlayer.waveformSamples, progress: audioPlayer.progress)
-                    .frame(height: 40)
+                    .frame(height: 32)
                     .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
-                // Controls
+                // Controls & Scrubber Info
                 HStack(spacing: 16) {
                     // Play / Pause
                     Button {
-                        audioPlayer.togglePlayPause()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            audioPlayer.togglePlayPause()
+                        }
                     } label: {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.title3)
+                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundStyle(
+                                LinearGradient(colors: [AppTheme.customVoice, AppTheme.voiceDesign], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .symbolEffect(.bounce, value: audioPlayer.isPlaying)
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.space, modifiers: [])
                     .accessibilityIdentifier("audioPlayer_playPause")
 
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(audioPlayer.currentTitle)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("audioPlayer_title")
+                        
+                        HStack(spacing: 8) {
+                            Text(audioPlayer.formattedCurrentTime)
+                                .font(.caption2.monospacedDigit().weight(.medium))
+                                .foregroundColor(.secondary)
+                            
+                            Slider(
+                                value: Binding(
+                                    get: { audioPlayer.progress },
+                                    set: { audioPlayer.seek(to: $0) }
+                                ),
+                                in: 0...1
+                            )
+                            .tint(AppTheme.customVoice)
+                            .controlSize(.mini)
+                            .accessibilityIdentifier("audioPlayer_seekSlider")
+                            
+                            Text(audioPlayer.formattedDuration)
+                                .font(.caption2.monospacedDigit().weight(.medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
                     // Stop
                     Button {
-                        audioPlayer.stop()
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            audioPlayer.stop()
+                        }
                     } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.title3)
+                        Image(systemName: "stop.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.secondary.opacity(0.8))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("audioPlayer_stop")
-
-                    // Seek slider
-                    Slider(
-                        value: Binding(
-                            get: { audioPlayer.progress },
-                            set: { audioPlayer.seek(to: $0) }
-                        ),
-                        in: 0...1
-                    )
-                    .accessibilityIdentifier("audioPlayer_seekSlider")
-
-                    // Time display
-                    Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.formattedDuration)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
-                        .frame(width: 90, alignment: .trailing)
-                        .accessibilityIdentifier("audioPlayer_timeDisplay")
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-
-                // Title
-                Text(audioPlayer.currentTitle)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 6)
-                    .accessibilityIdentifier("audioPlayer_title")
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+                .padding(.top, 8)
             }
-            .background(.bar)
+            .frame(width: 460)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .shadow(color: Color.black.opacity(0.2), radius: 30, y: 15)
+            .overlay(
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+            .padding(.bottom, 24)
+            .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)))
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: audioPlayer.hasAudio)
             .accessibilityIdentifier("audioPlayer_bar")
         }
     }

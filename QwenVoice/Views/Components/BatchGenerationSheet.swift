@@ -7,7 +7,6 @@ struct BatchGenerationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let mode: GenerationMode
-    let tier: ModelTier
     var voice: String?
     var emotion: String?
     var speed: Double?
@@ -22,10 +21,15 @@ struct BatchGenerationSheet: View {
     @State private var errorMessage: String?
     @State private var cancelled = false
 
+    private var themeColor: Color {
+        AppTheme.modeColor(for: mode)
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Batch Generation")
                 .font(.title2.bold())
+                .foregroundStyle(themeColor)
 
             Text("Enter one text per line, or drag a .txt file")
                 .font(.caption)
@@ -34,12 +38,21 @@ struct BatchGenerationSheet: View {
             TextEditor(text: $batchText)
                 .font(.body)
                 .frame(minHeight: 200)
-                .border(Color.gray.opacity(0.3))
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.primary.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(themeColor.opacity(0.3), lineWidth: 1)
+                )
                 .disabled(isProcessing)
 
             if isProcessing {
                 VStack(spacing: 8) {
                     ProgressView(value: Double(currentIndex), total: Double(totalItems))
+                        .tint(themeColor)
                     Text("Generating \(currentIndex)/\(totalItems)...")
                         .font(.caption)
                 }
@@ -66,7 +79,7 @@ struct BatchGenerationSheet: View {
                 Button(isProcessing ? "Processing..." : "Generate All") {
                     startBatch()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GlowingGradientButtonStyle(baseColor: themeColor))
                 .disabled(batchText.isEmpty || isProcessing)
                 .keyboardShortcut(.defaultAction)
             }
@@ -103,7 +116,7 @@ struct BatchGenerationSheet: View {
         errorMessage = nil
 
         Task {
-            guard let model = TTSModel.model(for: mode, tier: tier) else {
+            guard let model = TTSModel.model(for: mode) else {
                 errorMessage = "Model not found"
                 isProcessing = false
                 return
@@ -151,7 +164,7 @@ struct BatchGenerationSheet: View {
                     var gen = Generation(
                         text: line,
                         mode: mode.rawValue,
-                        modelTier: tier.rawValue,
+                        modelTier: "pro",
                         voice: voice ?? voiceDescription,
                         emotion: emotion,
                         speed: speed,

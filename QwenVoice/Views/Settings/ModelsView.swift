@@ -8,31 +8,17 @@ struct ModelsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Models")
                     .font(.title2.bold())
+                    .foregroundStyle(AppTheme.models)
                     .accessibilityIdentifier("models_title")
 
-                // Pro models
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Pro (1.7B) — Best Quality")
-                        .font(.headline)
-                        .accessibilityIdentifier("models_proSection")
-                    ForEach(TTSModel.all.filter { $0.tier == .pro }) { model in
-                        ModelCard(model: model, viewModel: viewModel)
-                    }
-                }
-
-                Divider()
-
-                // Lite models
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Lite (0.6B) — Faster")
-                        .font(.headline)
-                        .accessibilityIdentifier("models_liteSection")
-                    ForEach(TTSModel.all.filter { $0.tier == .lite }) { model in
+                    ForEach(TTSModel.all) { model in
                         ModelCard(model: model, viewModel: viewModel)
                     }
                 }
             }
             .padding(24)
+            .contentColumn()
         }
         .task {
             await viewModel.refresh()
@@ -48,11 +34,15 @@ struct ModelCard: View {
         viewModel.statuses[model.id] ?? .notDownloaded
     }
 
+    private var modeColor: Color {
+        AppTheme.modeColor(for: model.mode)
+    }
+
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: model.mode.iconName)
                 .font(.title2)
-                .foregroundColor(.accentColor)
+                .foregroundColor(modeColor)
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -69,11 +59,12 @@ struct ModelCard: View {
                         .foregroundColor(.secondary)
                 case .downloading(let progress):
                     ProgressView(value: progress)
-                        .frame(width: 200)
+                        .frame(maxWidth: 200)
+                        .tint(modeColor)
                 case .downloaded(let sizeBytes):
                     Text("Ready — \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
                         .font(.caption)
-                        .foregroundColor(.green)
+                        .foregroundColor(modeColor)
                 }
             }
 
@@ -85,6 +76,7 @@ struct ModelCard: View {
                     Task { await viewModel.download(model) }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(modeColor)
                 .controlSize(.small)
                 .accessibilityIdentifier("models_download_\(model.id)")
             case .downloading:
@@ -103,7 +95,14 @@ struct ModelCard: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.06)))
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(modeColor.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(modeColor.opacity(0.12), lineWidth: 1)
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("models_card_\(model.id)")
     }

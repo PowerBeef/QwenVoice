@@ -10,48 +10,52 @@ struct VoiceCloningView: View {
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
-    @State private var selectedTier: ModelTier = .pro
     @State private var savedVoices: [Voice] = []
     @State private var selectedVoice: Voice?
     @State private var isDragOver = false
     @State private var showingBatch = false
 
     private var isModelDownloaded: Bool {
-        guard let model = TTSModel.model(for: .clone, tier: selectedTier) else { return false }
+        guard let model = TTSModel.model(for: .clone) else { return false }
         let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
         return FileManager.default.fileExists(atPath: modelDir.path)
     }
 
     private var modelDisplayName: String {
-        TTSModel.model(for: .clone, tier: selectedTier)?.displayName ?? "Unknown"
+        TTSModel.model(for: .clone)?.name ?? "Unknown"
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Text("Voice Cloning")
-                        .font(.title2.bold())
-                        .accessibilityIdentifier("voiceCloning_title")
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Text to Speech")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        
+                        Text("Voice Cloning")
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(colors: [AppTheme.voiceCloning, AppTheme.voiceCloning.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            )
+                            .accessibilityIdentifier("voiceCloning_title")
+                    }
+                    
                     Spacer()
 
                     Button {
                         showingBatch = true
                     } label: {
-                        Label("Batch", systemImage: "list.bullet.rectangle")
+                        Label("Batch", systemImage: "square.grid.2x2.fill")
                     }
+                    .buttonStyle(.bordered)
+                    .tint(AppTheme.voiceCloning)
                     .disabled(!pythonBridge.isReady || referenceAudioPath == nil || !isModelDownloaded)
                     .accessibilityIdentifier("voiceCloning_batchButton")
-
-                    Picker("Model", selection: $selectedTier) {
-                        ForEach(ModelTier.allCases, id: \.self) { tier in
-                            Text(tier.displayName).tag(tier)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .accessibilityIdentifier("voiceCloning_tierPicker")
                 }
+                .padding(.bottom, 8)
 
                 if !isModelDownloaded {
                     HStack(spacing: 10) {
@@ -79,96 +83,140 @@ struct VoiceCloningView: View {
                     .accessibilityIdentifier("voiceCloning_modelBanner")
                 }
 
-                // Saved voices picker
-                if !savedVoices.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Saved Voices").font(.headline)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(savedVoices) { voice in
-                                    Button {
-                                        selectSavedVoice(voice)
-                                    } label: {
-                                        VStack(spacing: 4) {
-                                            Image(systemName: "waveform.circle.fill")
-                                                .font(.title2)
-                                            Text(voice.name)
-                                                .font(.caption)
+                // Controls card
+                VStack(alignment: .leading, spacing: 24) {
+                    // Saved voices picker
+                    if !savedVoices.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("SAVED VOICES").sectionHeader(color: AppTheme.voiceCloning)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(savedVoices) { voice in
+                                        Button {
+                                            withAnimation(.spring()) {
+                                                selectSavedVoice(voice)
+                                            }
+                                        } label: {
+                                            VStack(spacing: 8) {
+                                                Image(systemName: "waveform")
+                                                    .font(.title2)
+                                                    .foregroundStyle(AppTheme.voiceCloning)
+                                                Text(voice.name)
+                                                    .font(.caption.weight(.medium))
+                                            }
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 12)
+                                            .frame(minWidth: 100)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                    .fill(selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.15) : Color.primary.opacity(0.04))
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                    .stroke(selectedVoice?.id == voice.id ? AppTheme.voiceCloning : Color.primary.opacity(0.08), lineWidth: 1)
+                                            )
+                                            .shadow(color: selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.3) : .clear, radius: 8, y: 4)
                                         }
-                                        .padding(10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(selectedVoice?.id == voice.id ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.1))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .stroke(selectedVoice?.id == voice.id ? Color.accentColor : Color.clear, lineWidth: 2)
-                                        )
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 4)
+                            }
+                        }
+                        
+                        Divider().opacity(0.5)
+                    }
+
+                    // Reference audio drop zone
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("REFERENCE AUDIO").sectionHeader(color: AppTheme.voiceCloning)
+
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(isDragOver ? AppTheme.voiceCloning.opacity(0.1) : Color.primary.opacity(0.02))
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(
+                                    isDragOver ? AppTheme.voiceCloning : Color.primary.opacity(0.15),
+                                    style: StrokeStyle(lineWidth: isDragOver ? 2 : 1.5, dash: isDragOver ? [] : [8])
+                                )
+                                .frame(height: 120)
+
+                            if let path = referenceAudioPath {
+                                HStack(spacing: 16) {
+                                    Image(systemName: "waveform.circle.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(AppTheme.voiceCloning)
+                                        .symbolEffect(.bounce, value: referenceAudioPath)
+                                        
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(URL(fileURLWithPath: path).lastPathComponent)
+                                            .font(.headline)
+                                            .lineLimit(1)
+                                        Text("Ready for cloning")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Button {
+                                        withAnimation {
+                                            clearReference()
+                                        }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.title2)
+                                            .foregroundColor(.secondary)
                                     }
                                     .buttonStyle(.plain)
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // Reference audio drop zone
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Reference Audio").font(.headline)
-
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
-                            .foregroundColor(isDragOver ? .accentColor : .gray.opacity(0.4))
-                            .frame(height: 100)
-
-                        if let path = referenceAudioPath {
-                            HStack {
-                                Image(systemName: "waveform")
-                                    .foregroundColor(.accentColor)
-                                Text(URL(fileURLWithPath: path).lastPathComponent)
-                                    .lineLimit(1)
-                                Spacer()
-                                Button {
-                                    clearReference()
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
+                                .padding(.horizontal, 24)
+                            } else {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "waveform.badge.plus")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(AppTheme.voiceCloning.opacity(0.6))
+                                    Text("Drop reference audio file here, or click to browse")
+                                        .font(.callout.weight(.medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal, 16)
-                        } else {
-                            VStack(spacing: 6) {
-                                Image(systemName: "arrow.down.doc")
-                                    .font(.title2)
-                                    .foregroundColor(.secondary)
-                                Text("Drop reference audio file here, or click to browse")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
                             }
                         }
+                        .frame(height: 120)
+                        .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
+                            handleDrop(providers)
+                        }
+                        .onTapGesture {
+                            browseForAudio()
+                        }
+                        .accessibilityIdentifier("voiceCloning_dropZone")
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragOver)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: referenceAudioPath)
                     }
-                    .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
-                        handleDrop(providers)
-                    }
-                    .onTapGesture {
-                        browseForAudio()
-                    }
-                    .accessibilityIdentifier("voiceCloning_dropZone")
-                }
 
-                // Transcript
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Transcript").font(.headline)
-                    TextField("Type exactly what the reference audio says (improves quality)", text: $referenceTranscript)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("voiceCloning_transcriptField")
+                    // Transcript
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("TRANSCRIPT").sectionHeader(color: AppTheme.voiceCloning)
+                        TextField("Type exactly what the reference audio says (improves quality)", text: $referenceTranscript)
+                            .textFieldStyle(.plain)
+                            .font(.title3)
+                            .padding(16)
+                            .background(Color.primary.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                            .accessibilityIdentifier("voiceCloning_transcriptField")
+                    }
                 }
+                .glassCard()
 
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
+                    buttonColor: AppTheme.voiceCloning,
                     onGenerate: generate
                 )
                 .disabled(!pythonBridge.isReady || !isModelDownloaded)
@@ -195,6 +243,7 @@ struct VoiceCloningView: View {
                 }
             }
             .padding(24)
+            .contentColumn()
         }
         .task {
             await loadSavedVoices()
@@ -202,7 +251,6 @@ struct VoiceCloningView: View {
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .clone,
-                tier: selectedTier,
                 refAudio: referenceAudioPath,
                 refText: referenceTranscript.isEmpty ? nil : referenceTranscript
             )
@@ -216,10 +264,10 @@ struct VoiceCloningView: View {
     private func generate() {
         guard !text.isEmpty, let refPath = referenceAudioPath, pythonBridge.isReady else { return }
 
-        if let model = TTSModel.model(for: .clone, tier: selectedTier) {
+        if let model = TTSModel.model(for: .clone) {
             let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
             if !FileManager.default.fileExists(atPath: modelDir.path) {
-                errorMessage = "Model '\(model.displayName)' is not downloaded. Go to Settings > Models to download it."
+                errorMessage = "Model '\(model.name)' is not downloaded. Go to Settings > Models to download it."
                 return
             }
         }
@@ -229,7 +277,7 @@ struct VoiceCloningView: View {
 
         Task {
             do {
-                guard let model = TTSModel.model(for: .clone, tier: selectedTier) else {
+                guard let model = TTSModel.model(for: .clone) else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
                     return
@@ -249,7 +297,7 @@ struct VoiceCloningView: View {
                 var gen = Generation(
                     text: text,
                     mode: "clone",
-                    modelTier: selectedTier.rawValue,
+                    modelTier: "pro",
                     voice: voiceName,
                     emotion: nil,
                     speed: nil,

@@ -19,11 +19,12 @@ struct HistoryView: View {
             HStack {
                 Text("History")
                     .font(.title2.bold())
+                    .foregroundStyle(AppTheme.history)
                     .accessibilityIdentifier("history_title")
                 Spacer()
                 TextField("Search...", text: $searchText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
+                    .frame(minWidth: 150, maxWidth: 240)
                     .accessibilityIdentifier("history_searchField")
             }
             .padding(.horizontal, 24)
@@ -34,9 +35,13 @@ struct HistoryView: View {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "clock")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 48))
+                        .emptyStateStyle(color: AppTheme.history)
                     Text(generations.isEmpty ? "No generations yet" : "No results found")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Text(generations.isEmpty ? "Generate some audio to see it here" : "Try a different search term")
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .accessibilityIdentifier("history_emptyState")
@@ -59,6 +64,7 @@ struct HistoryView: View {
                 .listStyle(.inset)
             }
         }
+        .contentColumn()
         .task {
             await loadHistory()
         }
@@ -90,10 +96,14 @@ struct HistoryView: View {
 struct HistoryRow: View {
     let generation: Generation
 
+    private var modeColor: Color {
+        AppTheme.modeColor(for: generation.mode)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: generation.audioFileExists ? "waveform" : "exclamationmark.triangle")
-                .foregroundColor(generation.audioFileExists ? .accentColor : .orange)
+                .foregroundColor(generation.audioFileExists ? modeColor : .orange)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -102,10 +112,11 @@ struct HistoryRow: View {
                     .lineLimit(1)
                 HStack(spacing: 8) {
                     Text(generation.mode.capitalized)
-                        .font(.caption)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        .background(Capsule().fill(modeColor))
                     if let voice = generation.voice, !voice.isEmpty {
                         Text(voice)
                             .font(.caption)

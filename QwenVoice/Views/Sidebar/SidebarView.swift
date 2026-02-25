@@ -7,31 +7,58 @@ struct SidebarView: View {
     var body: some View {
         List(selection: $selection) {
             ForEach(SidebarItem.Section.allCases, id: \.self) { section in
-                Section(section.rawValue) {
+                Section {
                     ForEach(section.items) { item in
-                        Label(item.rawValue, systemImage: item.iconName)
-                            .tag(item)
-                            .accessibilityIdentifier(item.accessibilityID)
+                        Label {
+                            Text(item.rawValue)
+                        } icon: {
+                            Image(systemName: item.iconName)
+                                .foregroundStyle(AppTheme.sidebarColor(for: item))
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .tag(item)
+                        .accessibilityIdentifier(item.accessibilityID)
                     }
+                } header: {
+                    Text(section.rawValue)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.8)
                 }
             }
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 260)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 280)
+        .scrollContentBackground(.hidden)
+        .background(
+            Material.thinMaterial
+        )
         .safeAreaInset(edge: .bottom) {
             // Backend status indicator
             HStack(spacing: 6) {
                 Circle()
                     .fill(pythonBridge.isReady ? .green : .orange)
                     .frame(width: 8, height: 8)
+                    .shadow(color: pythonBridge.isReady ? .green.opacity(0.5) : .orange.opacity(0.5), radius: 4)
                 Text(pythonBridge.isReady ? "Backend Ready" : "Starting...")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .accessibilityIdentifier("sidebar_backendStatus")
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.1))
+                    .overlay(
+                         RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.2), lineWidth: 1)
+                    )
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 16)
         }
     }
 }

@@ -22,6 +22,7 @@ final class PythonEnvironmentManager: ObservableObject {
     }
 
     @Published private(set) var state: State = .checking
+    @Published var needsBackendRestart = false
 
     // MARK: - Paths
 
@@ -62,6 +63,7 @@ final class PythonEnvironmentManager: ObservableObject {
         if fm.fileExists(atPath: venvDir.path) {
             try? fm.removeItem(at: venvDir)
         }
+        needsBackendRestart = true
         ensureEnvironment()
     }
 
@@ -290,7 +292,11 @@ final class PythonEnvironmentManager: ObservableObject {
             proc.standardOutput = FileHandle.nullDevice
             proc.standardError = stderr
 
+            nonisolated(unsafe) var resumed = false
+
             proc.terminationHandler = { process in
+                guard !resumed else { return }
+                resumed = true
                 if process.terminationStatus == 0 {
                     continuation.resume()
                 } else {
@@ -303,6 +309,8 @@ final class PythonEnvironmentManager: ObservableObject {
             do {
                 try proc.run()
             } catch {
+                guard !resumed else { return }
+                resumed = true
                 continuation.resume(throwing: error)
             }
         }
@@ -392,7 +400,7 @@ final class PythonEnvironmentManager: ObservableObject {
     // MARK: - Import Validation
 
     private func validateImports(pythonPath: String) async throws {
-        let importScript = "import mlx; import mlx_audio; import transformers; import numpy; import soundfile"
+        let importScript = "import mlx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub"
         try await runProcess(pythonPath, arguments: ["-c", importScript])
     }
 

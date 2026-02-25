@@ -17,6 +17,10 @@ struct QwenVoiceApp: App {
                         .environmentObject(envManager)
                         .frame(minWidth: 780, minHeight: 520)
                         .onAppear {
+                            if envManager.needsBackendRestart {
+                                pythonBridge.stop()
+                                envManager.needsBackendRestart = false
+                            }
                             startBackend(pythonPath: pythonPath)
                         }
                 default:

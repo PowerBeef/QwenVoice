@@ -14,6 +14,7 @@ struct VoicesView: View {
             HStack {
                 Text("Voices")
                     .font(.title2.bold())
+                    .foregroundStyle(AppTheme.voices)
                     .accessibilityIdentifier("voices_title")
                 Spacer()
                 Button {
@@ -21,6 +22,7 @@ struct VoicesView: View {
                 } label: {
                     Label("Enroll Voice", systemImage: "plus")
                 }
+                .tint(AppTheme.voices)
                 .accessibilityIdentifier("voices_enrollButton")
             }
             .padding(.horizontal, 24)
@@ -31,9 +33,10 @@ struct VoicesView: View {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "waveform.badge.plus")
-                        .font(.largeTitle)
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 48))
+                        .emptyStateStyle(color: AppTheme.voices)
                     Text("No enrolled voices")
+                        .font(.headline)
                         .foregroundColor(.secondary)
                     Text("Enroll a voice to use it for voice cloning")
                         .font(.caption)
@@ -47,7 +50,7 @@ struct VoicesView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "waveform.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(.accentColor)
+                                .foregroundColor(AppTheme.voices)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(voice.name)
@@ -69,6 +72,7 @@ struct VoicesView: View {
                             } label: {
                                 Image(systemName: "play.circle")
                                     .font(.title3)
+                                    .foregroundColor(AppTheme.voices)
                             }
                             .buttonStyle(.plain)
 
@@ -86,6 +90,7 @@ struct VoicesView: View {
                 .listStyle(.inset)
             }
         }
+        .contentColumn()
         .task {
             await loadVoices()
         }

@@ -56,7 +56,7 @@ struct ContentView: View {
         NavigationSplitView {
             SidebarView(selection: $selectedItem)
         } detail: {
-            VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
                 // Main content area
                 Group {
                     switch selectedItem {
@@ -80,9 +80,7 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Divider()
-
-                // Persistent audio player bar
+                // Persistent floating audio player bar
                 AudioPlayerBar()
             }
         }
