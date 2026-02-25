@@ -148,7 +148,7 @@ def make_output_path(subfolder, text_snippet):
     save_dir = os.path.join(OUTPUTS_DIR, subfolder)
     os.makedirs(save_dir, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%H-%M-%S")
+    timestamp = datetime.now().strftime("%H-%M-%S-%f")
     clean_text = (
         re.sub(r"[^\w\s-]", "", text_snippet)[:FILENAME_MAX_LEN].strip().replace(" ", "_")
         or "audio"
@@ -298,7 +298,7 @@ def handle_generate(params):
     ref_text = params.get("ref_text")
 
     # Create temp dir for generation
-    temp_dir = f"temp_{int(time.time())}_{id(text) % 10000}"
+    temp_dir = os.path.join(OUTPUTS_DIR, f"temp_{int(time.time())}_{os.getpid()}")
     os.makedirs(temp_dir, exist_ok=True)
 
     send_progress(20, "Generating audio...")

@@ -34,6 +34,21 @@ struct SidebarView: View {
         .background(
             Material.thinMaterial
         )
+        .task {
+            // Give the sidebar focus on launch so macOS shows the
+            // accent-colored selection instead of grey
+            try? await Task.sleep(for: .milliseconds(300))
+            if let window = NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+                func findOutlineView(_ view: NSView) -> NSOutlineView? {
+                    if let ov = view as? NSOutlineView { return ov }
+                    return view.subviews.lazy.compactMap { findOutlineView($0) }.first
+                }
+                if let contentView = window.contentView,
+                   let outlineView = findOutlineView(contentView) {
+                    window.makeFirstResponder(outlineView)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             // Backend status indicator
             HStack(spacing: 6) {

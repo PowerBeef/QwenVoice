@@ -134,9 +134,10 @@ struct BatchGenerationSheet: View {
                         text: line
                     )
 
+                    var result: GenerationResult?
                     switch mode {
                     case .custom:
-                        _ = try await pythonBridge.generateCustom(
+                        result = try await pythonBridge.generateCustom(
                             text: line,
                             voice: voice ?? "vivian",
                             emotion: emotion ?? "Normal tone",
@@ -144,14 +145,14 @@ struct BatchGenerationSheet: View {
                             outputPath: outputPath
                         )
                     case .design:
-                        _ = try await pythonBridge.generateDesign(
+                        result = try await pythonBridge.generateDesign(
                             text: line,
                             voiceDescription: voiceDescription ?? "",
                             outputPath: outputPath
                         )
                     case .clone:
                         if let refAudio {
-                            _ = try await pythonBridge.generateClone(
+                            result = try await pythonBridge.generateClone(
                                 text: line,
                                 refAudio: refAudio,
                                 refText: refText,
@@ -169,7 +170,7 @@ struct BatchGenerationSheet: View {
                         emotion: emotion,
                         speed: speed,
                         audioPath: outputPath,
-                        duration: nil,
+                        duration: result?.durationSeconds,
                         createdAt: Date()
                     )
                     try? DatabaseService.shared.saveGeneration(&gen)

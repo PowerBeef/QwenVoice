@@ -123,7 +123,12 @@ final class PythonBridge: ObservableObject {
 
         return try await withCheckedThrowingContinuation { continuation in
             pendingRequests[id] = continuation
-            stdinPipe?.fileHandleForWriting.write(lineData)
+            guard let pipe = stdinPipe else {
+                pendingRequests.removeValue(forKey: id)
+                continuation.resume(throwing: PythonBridgeError.processNotRunning)
+                return
+            }
+            pipe.fileHandleForWriting.write(lineData)
         }
     }
 

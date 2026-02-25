@@ -82,14 +82,17 @@ struct HistoryView: View {
         let toDelete = indices.map { filtered[$0] }
         for gen in toDelete {
             if let id = gen.id {
-                try? DatabaseService.shared.deleteGeneration(id: id)
-            }
-            // Optionally delete audio file
-            if gen.audioFileExists {
-                try? FileManager.default.removeItem(atPath: gen.audioPath)
+                do {
+                    try DatabaseService.shared.deleteGeneration(id: id)
+                    if gen.audioFileExists {
+                        try? FileManager.default.removeItem(atPath: gen.audioPath)
+                    }
+                    generations.removeAll { $0.id == id }
+                } catch {
+                    // Database delete failed — don't remove from UI
+                }
             }
         }
-        generations.removeAll { gen in toDelete.contains(where: { $0.id == gen.id }) }
     }
 }
 
