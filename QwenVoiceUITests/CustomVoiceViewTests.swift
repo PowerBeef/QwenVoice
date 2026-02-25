@@ -174,6 +174,62 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         XCTAssertTrue(picker.waitForExistence(timeout: 5), "Speed picker should exist")
     }
 
+    // MARK: - Custom Speaker
+
+    func testCustomSpeakerChipExists() {
+        let chip = app.buttons["customVoice_speaker_custom"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "Custom speaker chip should exist")
+    }
+
+    func testCustomSpeakerRevealsDescriptionField() {
+        let chip = app.buttons["customVoice_speaker_custom"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.click()
+
+        let field = app.textFields["customVoice_voiceDescriptionField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Voice description field should appear after clicking Custom speaker")
+    }
+
+    func testCustomSpeakerHidesEmotionAndSpeed() {
+        let chip = app.buttons["customVoice_speaker_custom"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.click()
+
+        let speedPicker = app.descendants(matching: .any).matching(identifier: "customVoice_speedPicker").firstMatch
+        XCTAssertFalse(speedPicker.waitForExistence(timeout: 2), "Speed picker should be hidden when Custom speaker is selected")
+    }
+
+    func testPresetSpeakerRestoresControls() {
+        // First select Custom
+        let custom = app.buttons["customVoice_speaker_custom"]
+        XCTAssertTrue(custom.waitForExistence(timeout: 5))
+        custom.click()
+
+        // Verify speed is hidden
+        let speedPicker = app.descendants(matching: .any).matching(identifier: "customVoice_speedPicker").firstMatch
+        XCTAssertFalse(speedPicker.waitForExistence(timeout: 2), "Speed picker should be hidden")
+
+        // Click a preset speaker
+        let vivian = app.buttons["customVoice_speaker_vivian"]
+        XCTAssertTrue(vivian.waitForExistence(timeout: 5))
+        vivian.click()
+
+        // Speed picker should reappear
+        XCTAssertTrue(speedPicker.waitForExistence(timeout: 5), "Speed picker should reappear after selecting a preset speaker")
+    }
+
+    func testCustomSpeakerDescriptionFieldAcceptsInput() {
+        let chip = app.buttons["customVoice_speaker_custom"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.click()
+
+        let field = app.textFields["customVoice_voiceDescriptionField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        field.typeText("A warm British accent")
+        XCTAssertTrue((field.value as? String)?.contains("warm") ?? false)
+    }
+
     // MARK: - Text Input (shared component)
 
     func testTextEditorExists() {

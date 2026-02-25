@@ -43,7 +43,7 @@ XCUITest end-to-end tests live in `QwenVoiceUITests/`. All tests work without do
 xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoiceUITests -destination 'platform=macOS'
 ```
 
-**55 tests** across 10 files: sidebar navigation (10), custom voice (12), voice design (8), voice cloning (8), models (4), history (3), voices (3), preferences (3), generation flow (1, skipped without model), debug (2).
+**51 tests** across 9 files: sidebar navigation (9), custom voice (17), voice cloning (8), models (4), history (3), voices (3), preferences (3), generation flow (1, skipped without model), debug (2). Voice Design functionality is accessed via the "Custom" chip in the Custom Voice tab.
 
 ### Accessibility identifiers
 All UI elements have `accessibilityIdentifier` values following the pattern `"{viewScope}_{elementName}"`. When adding new UI elements, follow this convention so tests can find them.
@@ -104,11 +104,11 @@ Models are downloaded via `huggingface-cli` spawned as a subprocess in `ModelMan
 ```
 
 ### Generate views pattern
-All three generate views (`CustomVoiceView`, `VoiceDesignView`, `VoiceCloningView`) share the same structure:
+Two generate views (`CustomVoiceView`, `VoiceCloningView`) share the same structure. Voice Design is accessed via the "Custom" chip in `CustomVoiceView` (no separate view).
 - `isModelDownloaded` computed property checks `QwenVoiceApp.modelsDir/<model.folder>` on disk
 - Orange warning banner + disabled Generate/Batch buttons when model not present
 - "Go to Models" posts `Notification.Name.navigateToModels` → `ContentView` switches sidebar
-- `TextInputView` is the shared text entry + Generate button component
+- `TextInputView` is the shared chat-style input bar (text field + circular generate button), embedded inside each view's controls glass card
 
 ### RPC methods (server.py ↔ PythonBridge.swift)
 `ping`, `init`, `load_model`, `unload_model`, `generate`, `convert_audio`, `list_voices`, `enroll_voice`, `delete_voice`, `get_model_info`, `get_speakers`

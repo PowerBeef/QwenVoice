@@ -9,30 +9,26 @@ struct TextInputView: View {
     var onGenerate: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("PROMPT").sectionHeader(color: buttonColor)
-
-            ZStack(alignment: .bottomTrailing) {
-                TextEditor(text: $text)
+        VStack(alignment: .trailing, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 12) {
+                // Recessed text field
+                TextField("", text: $text, prompt: Text(placeholder)
+                    .foregroundColor(.secondary.opacity(0.5)), axis: .vertical)
+                    .textFieldStyle(.plain)
                     .font(.title3)
-                    .frame(minHeight: 120, maxHeight: LayoutConstants.textEditorMaxHeight)
+                    .lineLimit(2...8)
                     .padding(12)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
                     .accessibilityIdentifier("textInput_textEditor")
 
-                if text.isEmpty {
-                    Text(placeholder)
-                        .font(.title3)
-                        .foregroundColor(.secondary.opacity(0.5))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 20)
-                        .allowsHitTesting(false)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-
+                // Circular generate button
                 Button(action: onGenerate) {
-                    HStack(spacing: 8) {
+                    Group {
                         if isGenerating {
                             ProgressView()
                                 .controlSize(.small)
@@ -40,24 +36,20 @@ struct TextInputView: View {
                         } else {
                             Image(systemName: "sparkles")
                         }
-                        Text(isGenerating ? "Generating..." : "Generate")
                     }
+                    .frame(width: 20, height: 20)
                 }
-                .buttonStyle(GlowingGradientButtonStyle(baseColor: buttonColor))
+                .buttonStyle(CompactGenerateButtonStyle(baseColor: buttonColor))
                 .disabled(text.isEmpty || isGenerating)
-                .padding(12)
                 .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityIdentifier("textInput_generateButton")
             }
-            .glassCard()
 
-            HStack {
-                Spacer()
-                Text("\(text.count) characters")
-                    .font(.caption.weight(.medium))
-                    .foregroundColor(text.count > 500 ? .orange : .secondary.opacity(0.6))
-                    .accessibilityIdentifier("textInput_charCount")
-            }
+            // Character count
+            Text("\(text.count) characters")
+                .font(.caption.weight(.medium))
+                .foregroundColor(text.count > 500 ? .orange : .secondary.opacity(0.6))
+                .accessibilityIdentifier("textInput_charCount")
         }
     }
 }

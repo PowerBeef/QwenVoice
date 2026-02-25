@@ -68,7 +68,7 @@ struct EmotionPickerView: View {
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(isCustomMode ? AppTheme.customVoice : Color.clear)
+                            .fill(isCustomMode ? AppTheme.customVoice : Color.primary.opacity(0.04))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -79,6 +79,7 @@ struct EmotionPickerView: View {
                     )
                     .foregroundColor(isCustomMode ? .white : .secondary)
                     .shadow(color: isCustomMode ? AppTheme.customVoice.opacity(0.4) : .clear, radius: 8, y: 4)
+                    .contentShape(Rectangle())
                     .scaleEffect(isCustomMode ? 1.05 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isCustomMode)
                 }
@@ -139,7 +140,8 @@ struct EmotionPickerView: View {
             selectedPreset = nil
             isCustomMode = true
         }
-        customText = emotion
+        customText = ""
+        emotion = ""
     }
 
     private func syncSelectionFromText() {

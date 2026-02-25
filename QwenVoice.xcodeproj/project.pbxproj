@@ -53,7 +53,6 @@
 		D407ABD3F761A9C31B2CC97C /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54C8758BCF0CFD967599AE3 /* AudioService.swift */; };
 		DE270A3D49245A009F75489A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7A32E5E19B1960FA7F68E20C /* Assets.xcassets */; };
 		EBE3516D85583DE92EE74401 /* AudioPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1ECDF509CFB89F65CFA444 /* AudioPlayerBar.swift */; };
-		F1765EDC9FF7FC4205AE7D44 /* VoiceDesignViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */; };
 		FD813E1CAC86D0ED53F1553B /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F976BD028300C2D6849EBD5 /* EmotionPickerView.swift */; };
 /* End PBXBuildFile section */
 
@@ -68,7 +67,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignViewTests.swift; sourceTree = "<group>"; };
 		1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewTests.swift; sourceTree = "<group>"; };
 		2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationFlowTests.swift; sourceTree = "<group>"; };
 		2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QwenVoiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -211,7 +209,6 @@
 				6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */,
 				61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */,
 				AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */,
-				0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */,
 				5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */,
 			);
 			path = QwenVoiceUITests;
@@ -455,7 +452,6 @@
 				0C44B4243F2AFE09B2B2899E /* QwenVoiceUITestBase.swift in Sources */,
 				297B74A5A5D3A5FB7C1EB7CE /* SidebarNavigationTests.swift in Sources */,
 				502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */,
-				F1765EDC9FF7FC4205AE7D44 /* VoiceDesignViewTests.swift in Sources */,
 				2A689847327A7165F6E2A2E6 /* VoicesViewTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -80,7 +80,6 @@ enum AppTheme {
     static func sidebarColor(for item: SidebarItem) -> Color {
         switch item {
         case .customVoice: return customVoice
-        case .voiceDesign: return voiceDesign
         case .voiceCloning: return voiceCloning
         case .history: return history
         case .voices: return voices
@@ -192,6 +191,32 @@ struct GlowingGradientButtonStyle: ButtonStyle {
             .shadow(color: baseColor.opacity(0.6), radius: configuration.isPressed ? 5 : 15, y: configuration.isPressed ? 2 : 5)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Compact Generate Button Style
+
+struct CompactGenerateButtonStyle: ButtonStyle {
+    let baseColor: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(10)
+            .background(
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [baseColor.opacity(0.85), baseColor],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ))
+            )
+            .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+            .shadow(color: baseColor.opacity(configuration.isPressed ? 0.2 : 0.4),
+                    radius: configuration.isPressed ? 2 : 6,
+                    y: configuration.isPressed ? 1 : 3)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 

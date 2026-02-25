@@ -210,16 +210,18 @@ struct VoiceCloningView: View {
                             )
                             .accessibilityIdentifier("voiceCloning_transcriptField")
                     }
+
+                    Divider().opacity(0.5)
+
+                    TextInputView(
+                        text: $text,
+                        isGenerating: isGenerating,
+                        buttonColor: AppTheme.voiceCloning,
+                        onGenerate: generate
+                    )
+                    .disabled(!pythonBridge.isReady || !isModelDownloaded)
                 }
                 .glassCard()
-
-                TextInputView(
-                    text: $text,
-                    isGenerating: isGenerating,
-                    buttonColor: AppTheme.voiceCloning,
-                    onGenerate: generate
-                )
-                .disabled(!pythonBridge.isReady || !isModelDownloaded)
 
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")

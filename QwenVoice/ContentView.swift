@@ -7,7 +7,6 @@ extension Notification.Name {
 enum SidebarItem: String, CaseIterable, Identifiable {
     // Generate
     case customVoice = "Custom Voice"
-    case voiceDesign = "Voice Design"
     case voiceCloning = "Voice Cloning"
     // Library
     case history = "History"
@@ -23,7 +22,6 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .customVoice: return "person.wave.2"
-        case .voiceDesign: return "paintbrush"
         case .voiceCloning: return "doc.on.doc"
         case .history: return "clock"
         case .voices: return "waveform"
@@ -39,7 +37,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
         var items: [SidebarItem] {
             switch self {
-            case .generate: return [.customVoice, .voiceDesign, .voiceCloning]
+            case .generate: return [.customVoice, .voiceCloning]
             case .library: return [.history, .voices]
             case .settings: return [.models, .preferences]
             }
@@ -62,8 +60,6 @@ struct ContentView: View {
                     switch selectedItem {
                     case .customVoice:
                         CustomVoiceView()
-                    case .voiceDesign:
-                        VoiceDesignView()
                     case .voiceCloning:
                         VoiceCloningView()
                     case .history:

@@ -16,11 +16,6 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         assertElementExists("customVoice_title")
     }
 
-    func testNavigateToVoiceDesign() {
-        navigateToSidebar("voiceDesign")
-        assertElementExists("voiceDesign_title")
-    }
-
     func testNavigateToVoiceCloning() {
         navigateToSidebar("voiceCloning")
         assertElementExists("voiceCloning_title")
