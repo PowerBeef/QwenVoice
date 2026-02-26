@@ -25,6 +25,9 @@ struct QwenVoiceApp: App {
                             }
                             startBackend(pythonPath: pythonPath)
                         }
+                case .idle:
+                    Color.clear
+                        .frame(minWidth: 500, minHeight: 400)
                 default:
                     SetupView(envManager: envManager)
                         .frame(minWidth: 500, minHeight: 400)

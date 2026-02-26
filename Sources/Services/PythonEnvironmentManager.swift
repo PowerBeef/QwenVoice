@@ -8,6 +8,7 @@ final class PythonEnvironmentManager: ObservableObject {
     // MARK: - State
 
     enum State: Equatable {
+        case idle
         case checking
         case settingUp(SetupPhase)
         case ready(pythonPath: String)
@@ -21,7 +22,7 @@ final class PythonEnvironmentManager: ObservableObject {
         case updatingDependencies
     }
 
-    @Published private(set) var state: State = .checking
+    @Published private(set) var state: State = .idle
     @Published var needsBackendRestart = false
 
     // MARK: - Paths
@@ -46,10 +47,42 @@ final class PythonEnvironmentManager: ObservableObject {
     // MARK: - Public
 
     func ensureEnvironment() {
-        state = .checking
+        // Don't re-check if already resolved
+        if case .ready = state { return }
 
+        // --- Synchronous fast path (no Task, no dispatch) ---
+
+        // Architecture check (instant)
+        var sysInfo = utsname()
+        uname(&sysInfo)
+        let machine = withUnsafePointer(to: &sysInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(cString: $0)
+            }
+        }
+        guard machine.starts(with: "arm64") else {
+            state = .failed(message: "Qwen Voice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
+            return
+        }
+
+        // Check for bundled Python (production build)
+        if let bundledPython = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
+            state = .ready(pythonPath: bundledPython)
+            return
+        }
+
+        // Check existing venv with valid marker (dev fast path)
+        let venvPython = Self.venvPython
+        if FileManager.default.fileExists(atPath: venvPython),
+           isMarkerValid() {
+            state = .ready(pythonPath: venvPython)
+            return
+        }
+
+        // --- Slow path: needs async work ---
+        state = .checking
         Task.detached(priority: .userInitiated) { [weak self] in
-            await self?.runSetup()
+            await self?.runSetupSlowPath()
         }
     }
 
@@ -69,41 +102,12 @@ final class PythonEnvironmentManager: ObservableObject {
 
     // MARK: - Setup Logic
 
-    private func runSetup() async {
+    private func runSetupSlowPath() async {
         let fm = FileManager.default
-
-        // 0. Architecture check — MLX requires Apple Silicon
-        var sysInfo = utsname()
-        uname(&sysInfo)
-        let machine = withUnsafePointer(to: &sysInfo.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
-                String(cString: $0)
-            }
-        }
-        if !machine.starts(with: "arm64") {
-            await MainActor.run {
-                state = .failed(message: "Qwen Voice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
-            }
-            return
-        }
-
-        // 1. Check for bundled Python (production build)
-        if let bundledPython = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
-            await MainActor.run { state = .ready(pythonPath: bundledPython) }
-            return
-        }
-
         let vendorDir = resolveVendorDir()
 
-        // 2. Check existing venv with valid marker
+        // Venv exists but marker is stale — try incremental update first
         let venvPython = Self.venvPython
-        if fm.fileExists(atPath: venvPython),
-           isMarkerValid() {
-            await MainActor.run { state = .ready(pythonPath: venvPython) }
-            return
-        }
-
-        // 2b. Venv exists but marker is stale — try incremental update first
         if fm.fileExists(atPath: venvPython),
            let reqPath = resolveRequirementsPath() {
             await MainActor.run { state = .settingUp(.updatingDependencies) }

@@ -19,6 +19,9 @@ struct SetupView: View {
                 .accessibilityIdentifier("setup_title")
 
             switch envManager.state {
+            case .idle:
+                EmptyView()
+
             case .checking:
                 checkingView
 
