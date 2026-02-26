@@ -24,7 +24,7 @@ The project is cleanly separated into a two-process design, delineating the Swif
 ```plaintext
 .
 ├── QwenVoice/               # Swift Native macOS Frontend
-│   ├── QwenVoice/           # Application source code (SwiftUI)
+│   ├── Sources/           # Application source code (SwiftUI)
 │   │   ├── Views/           # SwiftUI Views (ContentView, SetupView, Generate, Library, Settings)
 │   │   │   └── Components/  # UI Components & AppTheme (Glassmorphism design system)
 │   │   ├── ViewModels/      # ViewModels (AudioPlayerViewModel, etc.)
@@ -55,7 +55,7 @@ The project is cleanly separated into a two-process design, delineating the Swif
 - **Language**: Swift 5.9
 - **Target**: macOS 14.0+ (Sonoma)
 - **Framework**: SwiftUI
-- **UI/UX Design**: Premium glassmorphism aesthetic with vibrant gradients, translucent materials, and fluid micro-animations driven by a centralized `AppTheme`.
+- **UI/UX Design**: Premium monochromatic liquid glass aesthetic with a single soft blue-indigo accent, single ambient glow aurora background, tinted-glass chip style, and fluid micro-animations driven by a centralized `AppTheme`. AudioPlayerBar is embedded as a scrollable glass card.
 - **Project Generation**: XcodeGen (`project.yml`)
 - **Key Dependencies**: 
   - `GRDB.swift` (v7.0.0): Used to provide a SQLite-backed generation history with instant playback capabilities.
@@ -86,4 +86,4 @@ Users pass descriptions like:
 - `"Speak in an incredulous tone, but with a hint of panic beginning to creep into your voice."`
 - `"A composed middle-aged male announcer with a deep, rich and magnetic voice..."`
 
-The underlying discrete multi-codebook language model interprets these prompts to accurately modulate breath, pitch, resonance, and emotional delivery. Be aware that **only 1.7B parameter models** support the `instruct` parameter control, while the **0.6B models** lack this feature entirely in exchange for smaller RAM usage natively optimized for Apple Silicon natively.
+The underlying discrete multi-codebook language model interprets these prompts to accurately modulate breath, pitch, resonance, and emotional delivery.
