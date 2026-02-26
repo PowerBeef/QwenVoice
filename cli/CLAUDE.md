@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Qwen3-TTS Manager — a CLI tool for running Qwen3-TTS text-to-speech locally on Apple Silicon Macs using the MLX framework. Supports three modes: **Custom Voice** (preset speakers with emotion/speed control), **Voice Design** (create voices from text descriptions), and **Voice Cloning** (clone voices from reference audio). Each mode has Pro (1.7B) and Lite (0.6B) model variants.
+Qwen3-TTS Manager — a CLI tool for running Qwen3-TTS text-to-speech locally on Apple Silicon Macs using the MLX framework. Supports three modes: **Custom Voice** (preset speakers with emotion/speed control), **Voice Design** (create voices from text descriptions), and **Voice Cloning** (clone voices from reference audio). Each mode uses a Pro (1.7B) model.
 
 This CLI is the standalone predecessor to the macOS GUI app in `../QwenVoice/`. The GUI app's `server.py` backend is a JSON-RPC refactor of this `main.py`.
 
@@ -28,7 +28,7 @@ Repeat for each model. Folder names must match exactly. **Note:** `lite_design` 
 
 Single-file app (`main.py`) with no tests or build system. Key structure:
 
-- **Model registry** (`MODELS` dict, line ~36): Maps menu choices 1-6 to model folders and modes (`custom`, `design`, `clone_manager`)
+- **Model registry** (`MODELS` dict, line ~36): Maps menu choices 1-3 to model folders and modes (`custom`, `design`, `clone_manager`)
 - **Session runners**: `run_custom_session()`, `run_design_session()`, `run_clone_manager()` — each loads a model via `mlx_audio`, enters a generate loop, and saves output
 - **Speakers**: 9 preset voices across 4 languages — English (ryan, aiden, serena, vivian), Chinese (vivian, serena, uncle_fu, dylan, eric), Japanese (ono_anna), Korean (sohee)
 - **Audio pipeline**: `generate_audio()` from `mlx_audio` writes to a temp dir → `save_audio_file()` moves to `outputs/<subfolder>/` → auto-plays via `afplay`
@@ -55,6 +55,5 @@ Single-file app (`main.py`) with no tests or build system. Key structure:
 
 ## Data Corrections
 
-- The `MODELS` dict lists 6 entries but only 5 models exist on HuggingFace — `lite_design` (Voice Design 0.6B, choice "5") has no published model
-- Emotion/tone instructions only work on 1.7B models (CustomVoice and VoiceDesign); 0.6B models silently ignore the `instruct` parameter
+- Emotion/tone instructions work on 1.7B models (CustomVoice and VoiceDesign)
 - See `qwen_tone.md` in the project root for detailed guidance on writing effective emotion instructions

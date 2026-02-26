@@ -34,14 +34,9 @@ FILENAME_MAX_LEN = 20
 
 # Model Definitions
 MODELS = {
-    # Pro (1.7B)
     "1": {"name": "Custom Voice", "folder": "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit", "mode": "custom", "output_subfolder": "CustomVoice"},
     "2": {"name": "Voice Design", "folder": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit", "mode": "design", "output_subfolder": "VoiceDesign"},
     "3": {"name": "Voice Cloning", "folder": "Qwen3-TTS-12Hz-1.7B-Base-8bit", "mode": "clone_manager", "output_subfolder": "Clones"},
-    # Lite (0.6B)
-    "4": {"name": "Custom Voice", "folder": "Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit", "mode": "custom", "output_subfolder": "CustomVoice"},
-    "5": {"name": "Voice Design", "folder": "Qwen3-TTS-12Hz-0.6B-VoiceDesign-8bit", "mode": "design", "output_subfolder": "VoiceDesign"},
-    "6": {"name": "Voice Cloning", "folder": "Qwen3-TTS-12Hz-0.6B-Base-8bit", "mode": "clone_manager", "output_subfolder": "Clones"},
 }
 
 SPEAKER_MAP = {
@@ -396,18 +391,10 @@ def main_menu():
     print(" Qwen3-TTS Manager")
     print("=" * 40)
     
-    print("\n  Pro Models (1.7B - Best Quality)")
-    print("  ---------------------------------")
-    print("  1. Custom Voice")
+    print("\n  1. Custom Voice")
     print("  2. Voice Design")
     print("  3. Voice Cloning")
-    
-    print("\n  Lite Models (0.6B - Faster)")
-    print("  ---------------------------")
-    print("  4. Custom Voice")
-    print("  5. Voice Design")
-    print("  6. Voice Cloning")
-    
+
     print("\n  q. Exit")
 
     choice = input("\nSelect: ").strip().lower()

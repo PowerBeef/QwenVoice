@@ -56,14 +56,6 @@ Pick the models you need from the table below. Click the link, then click "Downl
 | VoiceDesign | Create voices from text description | [Download](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit) |
 | Base | Voice cloning from audio | [Download](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit) |
 
-**Lite Models (0.6B) - Faster, Less RAM**
-
-| Model | Use Case | Download |
-|-------|----------|----------|
-| CustomVoice | Preset voices + emotion control | [Download](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit) |
-| VoiceDesign | Create voices from text description | [Download](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-VoiceDesign-8bit) |
-| Base | Voice cloning from audio | [Download](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit) |
-
 Put downloaded folders in `models/`:
 ```
 models/
@@ -88,21 +80,13 @@ python main.py
  Qwen3-TTS Manager
 ========================================
 
-  Pro Models (1.7B - Best Quality)
-  ---------------------------------
   1. Custom Voice
   2. Voice Design
   3. Voice Cloning
 
-  Lite Models (0.6B - Faster)
-  ---------------------------
-  4. Custom Voice
-  5. Voice Design
-  6. Voice Cloning
-
   q. Exit
 
-Select: 
+Select:
 ```
 
 - **Custom Voice**: Pick from preset speakers, set emotion and speed
@@ -124,7 +108,7 @@ Select:
 
 - macOS with Apple Silicon (M1/M2/M3/M4)
 - Python 3.10+
-- RAM: ~3GB for Lite models, ~6GB for Pro models
+- RAM: ~6GB for Pro models
 
 ---
 

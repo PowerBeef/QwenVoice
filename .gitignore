@@ -34,3 +34,6 @@ cli/voices/
 
 # Stale build logs
 build_log*.txt
+
+# Code coverage artifacts
+*.profraw

@@ -67,7 +67,7 @@ All UI elements have `accessibilityIdentifier` values following the pattern `"{v
 4. System Python at `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, `/usr/bin/python3`
 
 ### Model download
-Models are downloaded via `huggingface-cli` spawned as a subprocess in `ModelManagerViewModel.swift`. They land in `~/Library/Application Support/QwenVoice/models/<folder-name>/`. The `get_smart_path()` function in `server.py` handles the `snapshots/` subdirectory that HuggingFace Hub sometimes creates. There are 3 models (all Pro 1.7B 8-bit): Custom Voice, Voice Design, Voice Cloning.
+Models are downloaded via `HuggingFaceDownloader.swift` using native URLSession (no external CLI tools). `ModelManagerViewModel.swift` manages download/delete state. Models land in `~/Library/Application Support/QwenVoice/models/<folder-name>/`. The `get_smart_path()` function in `server.py` handles the `snapshots/` subdirectory that HuggingFace Hub sometimes creates. There are 3 models (all Pro 1.7B 8-bit): Custom Voice, Voice Design, Voice Cloning.
 
 ### Key files
 | File | Role |
@@ -76,7 +76,8 @@ Models are downloaded via `huggingface-cli` spawned as a subprocess in `ModelMan
 | `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations |
 | `Sources/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum |
 | `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history at `history.sqlite` |
-| `Sources/ViewModels/ModelManagerViewModel.swift` | Download/delete model state via `huggingface-cli` |
+| `Sources/ViewModels/ModelManagerViewModel.swift` | Download/delete model state |
+| `Sources/Services/HuggingFaceDownloader.swift` | Native URLSession model downloader (replaces huggingface-cli) |
 | `Sources/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `Notification.Name.navigateToModels` handled here |
 | `project.yml` | XcodeGen config — edit this instead of `.xcodeproj` |
 
