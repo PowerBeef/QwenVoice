@@ -36,8 +36,8 @@ MLX runs natively on the Apple Neural Engine and GPU, meaning better performance
 ### 1. Clone and setup
 
 ```bash
-git clone https://github.com/kapi2800/qwen3-tts-apple-silicon.git
-cd qwen3-tts-apple-silicon
+git clone https://github.com/PowerBeef/QwenVoice.git
+cd QwenVoice/QwenVoice/cli
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -107,7 +107,7 @@ Select:
 ## Requirements
 
 - macOS with Apple Silicon (M1/M2/M3/M4)
-- Python 3.10+
+- Python 3.11+ (prefers 3.13)
 - RAM: ~6GB for Pro models
 
 ---

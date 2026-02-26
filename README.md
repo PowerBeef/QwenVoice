@@ -28,7 +28,7 @@ Built natively for Apple Silicon using Apple's MLX framework for highly optimize
 ## Features
 
 ### Custom Voice
-Generate speech with 9 preset speakers across 4 languages (English, Chinese, Japanese, Korean). Control emotion and delivery dynamically with natural language instructions.
+Generate speech with 4 English preset speakers (Ryan, Aiden, Serena, Vivian). Control emotion and delivery dynamically with natural language instructions.
 
 ### Voice Design
 Create entirely new voice identities by describing them (e.g., "deep narrator", "excited child") and generate speech with your custom persona.

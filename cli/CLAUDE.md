@@ -22,15 +22,15 @@ Models are downloaded from `mlx-community` on HuggingFace:
 ```bash
 huggingface-cli download mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit --local-dir models/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
 ```
-Repeat for each model. Folder names must match exactly. **Note:** `lite_design` (0.6B VoiceDesign, choice "5") is defined in `MODELS` but does not exist on HuggingFace.
+Repeat for each model. Folder names must match exactly.
 
 ## Architecture
 
 Single-file app (`main.py`) with no tests or build system. Key structure:
 
-- **Model registry** (`MODELS` dict, line ~36): Maps menu choices 1-3 to model folders and modes (`custom`, `design`, `clone_manager`)
+- **Model registry** (`MODELS` dict, line ~36): Maps menu choices 1–3 to model folders and modes (`custom`, `design`, `clone_manager`). Only 3 Pro (1.7B) models — the Lite tier was removed.
 - **Session runners**: `run_custom_session()`, `run_design_session()`, `run_clone_manager()` — each loads a model via `mlx_audio`, enters a generate loop, and saves output
-- **Speakers**: 9 preset voices across 4 languages — English (ryan, aiden, serena, vivian), Chinese (vivian, serena, uncle_fu, dylan, eric), Japanese (ono_anna), Korean (sohee)
+- **Speakers**: 9 preset voices across 4 languages — English (ryan, aiden, serena, vivian), Chinese (vivian, serena, uncle_fu, dylan, eric), Japanese (ono_anna), Korean (sohee). Note: the GUI app only exposes the 4 English speakers.
 - **Audio pipeline**: `generate_audio()` from `mlx_audio` writes to a temp dir → `save_audio_file()` moves to `outputs/<subfolder>/` → auto-plays via `afplay`
 - **Voice persistence**: Enrolled voices stored as paired `.wav`/`.txt` files in `voices/`
 
