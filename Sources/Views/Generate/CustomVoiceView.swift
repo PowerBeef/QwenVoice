@@ -74,11 +74,18 @@ struct CustomVoiceView: View {
                         Text("Model \"\(modelDisplayName)\" is not downloaded.")
                             .font(.callout)
                         Spacer()
-                        Button("Go to Models") {
+                        Button {
                             NotificationCenter.default.post(name: .navigateToModels, object: nil)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text("Go to Models")
+                                Image(systemName: "chevron.right")
+                                    .imageScale(.small)
+                            }
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(Color.orange)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("customVoice_goToModels")
                     }
                     .padding(12)
@@ -176,15 +183,20 @@ struct CustomVoiceView: View {
                         // Speed
                         VStack(alignment: .leading, spacing: 12) {
                             Text("SPEED").sectionHeader(color: AppTheme.customVoice)
-                            Picker("Speed", selection: $speed) {
+                            HStack(spacing: 8) {
                                 ForEach(speeds, id: \.1) { label, value in
-                                    Text(label).tag(value)
+                                    Button {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            speed = value
+                                        }
+                                    } label: {
+                                        Text(label)
+                                            .chipStyle(isSelected: speed == value, color: AppTheme.customVoice)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("customVoice_speed_\(label.split(separator: " ").first?.lowercased() ?? "")")
                                 }
                             }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 380)
-                            .accessibilityIdentifier("customVoice_speedPicker")
                         }
                     }
 

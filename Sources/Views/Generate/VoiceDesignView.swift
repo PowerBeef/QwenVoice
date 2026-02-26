@@ -59,11 +59,18 @@ struct VoiceDesignView: View {
                         Text("Model \"\(modelDisplayName)\" is not downloaded.")
                             .font(.callout)
                         Spacer()
-                        Button("Go to Models") {
+                        Button {
                             NotificationCenter.default.post(name: .navigateToModels, object: nil)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text("Go to Models")
+                                Image(systemName: "chevron.right")
+                                    .imageScale(.small)
+                            }
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(Color.orange)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("voiceDesign_goToModels")
                     }
                     .padding(12)

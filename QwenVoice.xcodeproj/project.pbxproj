@@ -12,6 +12,7 @@
 		0C44B4243F2AFE09B2B2899E /* QwenVoiceUITestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */; };
 		0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */; };
 		0FD1F6EE2257C0314EFAA6F4 /* HistoryViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */; };
+		102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */; };
 		13462F046FE8C8196DE2BD97 /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A539A647083CC4810F72FE /* WaveformService.swift */; };
 		1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281629E0EE8593C8F69031A6 /* ModelsView.swift */; };
 		1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */; };
@@ -99,6 +100,7 @@
 		9BF0A4CFC64A4D46B9332080 /* DebugHierarchyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHierarchyTests.swift; sourceTree = "<group>"; };
 		A6529F131AAB6D76EF97AA1B /* server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = server.py; sourceTree = "<group>"; };
 		AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningViewTests.swift; sourceTree = "<group>"; };
+		AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceDownloader.swift; sourceTree = "<group>"; };
 		B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B62852B52626359D53D76C11 /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
 		B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceView.swift; sourceTree = "<group>"; };
@@ -241,6 +243,7 @@
 			children = (
 				006AC6BD98420562AC6A931C /* AudioService.swift */,
 				0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */,
+				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
 				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
 				D2A539A647083CC4810F72FE /* WaveformService.swift */,
@@ -418,6 +421,7 @@
 				1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */,
 				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
 				4FA8BAF34BBC53CA11FC026F /* HistoryViewModel.swift in Sources */,
+				102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */,
 				2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */,
 				0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */,
 				1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */,
