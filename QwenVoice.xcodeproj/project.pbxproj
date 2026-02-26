@@ -7,53 +7,53 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */; };
 		02BEE0FA37C826AA2E83A2DF /* DebugHierarchyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF0A4CFC64A4D46B9332080 /* DebugHierarchyTests.swift */; };
-		04BF41BE6A69BB0F8C022874 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F82FC179A47CAA72CF5B41D /* FlowLayout.swift */; };
-		0887BED5BA8DA563D1FCF7A0 /* VoiceCloningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A75A4E09036C5090203F61D3 /* VoiceCloningView.swift */; };
-		0945BE85ED75AD4C9ECFBE9B /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B7D1ED4DC7C62406478384 /* WaveformView.swift */; };
-		0BB2369F46A7B303955A1CDE /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC178C0CC93346FC796C4E47 /* PreferencesView.swift */; };
 		0C44B4243F2AFE09B2B2899E /* QwenVoiceUITestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */; };
-		0F6DD5B02EDFFDC5C8738B01 /* TextInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F3A9FBAAF79966E2437D61A /* TextInputView.swift */; };
+		0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */; };
 		0FD1F6EE2257C0314EFAA6F4 /* HistoryViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */; };
-		11574BAA79A730C612D74A4C /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682A496A543F04FEE0241CE1 /* SidebarView.swift */; };
-		1BAB5091FC8E79A68819608D /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4848C7D9A6BE4355F31237DC /* AudioPlayerViewModel.swift */; };
-		1E597F8DAD4BFA92F578C1A6 /* TTSModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511D4342EF25C9841188B6A6 /* TTSModel.swift */; };
-		1E663310BE754122ED108A04 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B027FEC908882C6DAE71C3FA /* HistoryView.swift */; };
-		22AD07D3DED8611BC63BD409 /* LayoutConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3EF38EFAA6433E31CA54F2E /* LayoutConstants.swift */; };
-		24F9BD89450B9E2496D70221 /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E69118E5C0F84A3AA1EE96 /* VoiceDesignView.swift */; };
+		13462F046FE8C8196DE2BD97 /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A539A647083CC4810F72FE /* WaveformService.swift */; };
+		1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281629E0EE8593C8F69031A6 /* ModelsView.swift */; };
+		1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */; };
+		1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BA97E899E616829A78233A /* Generation.swift */; };
 		297B74A5A5D3A5FB7C1EB7CE /* SidebarNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */; };
-		29C7D76EB3326E290DCD11B7 /* ModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C13CAEDADBEBC9CEAB7798 /* ModelsView.swift */; };
 		2A689847327A7165F6E2A2E6 /* VoicesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */; };
-		383D19F6BFBB3E2F0D62A420 /* requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = 31C7F7D75B6E475126FD086D /* requirements.txt */; };
-		3B204D5F341EB47F7F43AD28 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = 924E1846B40C163E66B106D5 /* server.py */; };
-		3CC837CE8F281B405BF710E3 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF39FCD147F9FC33ABF2E139 /* AppTheme.swift */; };
-		41508648F1925A5226E738CD /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F50CDC0ACCD3BB87BD90FD /* Voice.swift */; };
-		42C3726D34B2288B226D960B /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E005BFDB81CA8BCEC5FAB5 /* CustomVoiceView.swift */; };
-		43CA7D14B0A2F76C2E7AFA37 /* RPCMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D194734617D412F65EA1B183 /* RPCMessage.swift */; };
-		4BCD3AABC202FA8EF7E7E411 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEEF9C210A0A7073935D5573 /* PythonBridge.swift */; };
-		4C073E5E83DAB560260501BA /* EmotionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = F593ABBE9B620FFADFDE908B /* EmotionPreset.swift */; };
+		2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = E876590A12FADBE38100CD17 /* LayoutConstants.swift */; };
+		369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */; };
+		4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D22F70AB025CF59B428113 /* HistoryView.swift */; };
+		4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */; };
+		4FA8BAF34BBC53CA11FC026F /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EAE4C2BD1C594DD564ABBB /* HistoryViewModel.swift */; };
 		502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */; };
-		5DEC2C340273F733DE7DFE96 /* PythonEnvironmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81EE9546E9971EB847A0B8AC /* PythonEnvironmentManager.swift */; };
-		65A7D297035D3E0E3040D8CC /* mlx_audio-0.3.1-py3-none-any.whl in Resources */ = {isa = PBXBuildFile; fileRef = 42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */; };
-		709DB664DB72A545A9C7A4BB /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE1603036CD7416D5D992618 /* ModelManagerViewModel.swift */; };
+		5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */; };
+		5E975521FC8B355333145278 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */; };
+		62DF324F58F7731B573FB249 /* mlx_audio-0.3.1-py3-none-any.whl in Resources */ = {isa = PBXBuildFile; fileRef = 696C13B6A195855A65429A13 /* mlx_audio-0.3.1-py3-none-any.whl */; };
+		62ED7E0B7ECDABD98F891479 /* AudioPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E179D96243A63DD1603FFEA7 /* AudioPlayerBar.swift */; };
+		6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */; };
+		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
 		7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */; };
-		78299687FEE6E110510B6CAA /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47556371509635C604724750 /* DatabaseService.swift */; };
+		782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9B899A22B7619F15A40FC99C /* Assets.xcassets */; };
+		7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637866C95AC607A5E0509956 /* SidebarView.swift */; };
+		8D6183A2086E6C2AD0F8E32A /* requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9A5EED3BA5A17E54C8B5E699 /* requirements.txt */; };
+		9506A9366B29D225A10210E7 /* VoiceCloningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */; };
 		9AC67B6FDF9D54F27814423B /* GenerationFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */; };
-		9C0E64232490B24E3D3846DA /* QwenVoiceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F48C0BD539D5BA99FCCFD7 /* QwenVoiceApp.swift */; };
-		A58388AE49BF0AABFF134C50 /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59373DF342B6389336412703 /* BatchGenerationSheet.swift */; };
-		ABA020A16A3C2E61ED699676 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB66A5E5E238E72BA77AB2B8 /* ContentView.swift */; };
-		AD46FD57F4BB30E14D899EFC /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAAE7539090926A723D9210F /* WaveformService.swift */; };
-		B1DE463C4D55BF0E049EEBE0 /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 997848650D65F8278A0989BC /* VoicesView.swift */; };
+		9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */; };
+		A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */; };
+		AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */; };
+		B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3C6777F2ABFE603D026E0D /* VoicesView.swift */; };
+		B25FDE21DB15AAB169D519EA /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */; };
+		B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890E011F57EAC237416DDF0F /* AppTheme.swift */; };
+		B7962EA5C5AE26BE94E09309 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = A6529F131AAB6D76EF97AA1B /* server.py */; };
 		BAFA99B95D495C9303E851D1 /* ModelsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */; };
-		BDA51F8D7101A4F655B68DEE /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86EF5053B0C19CAF6645E9C8 /* HistoryViewModel.swift */; };
-		C0894CEDC830F808228BADF4 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAD80570B0196BD61ABE1B0 /* SetupView.swift */; };
+		BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */; };
+		BFB9538DB6144B9BD8E227DE /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652CF3434A19FF8823B9CCA2 /* WaveformView.swift */; };
 		C48D4D80BF6A0E8A29A6BC0D /* CustomVoiceViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */; };
 		C7614DCEA3F190692321161D /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4BA2E12FB2E8DADF0D68B35C /* GRDB */; };
-		D1E125DB261DC9251F536DE2 /* Generation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EB2964F0441E1CBD45D7F57 /* Generation.swift */; };
-		D407ABD3F761A9C31B2CC97C /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54C8758BCF0CFD967599AE3 /* AudioService.swift */; };
-		DE270A3D49245A009F75489A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7A32E5E19B1960FA7F68E20C /* Assets.xcassets */; };
-		EBE3516D85583DE92EE74401 /* AudioPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1ECDF509CFB89F65CFA444 /* AudioPlayerBar.swift */; };
-		FD813E1CAC86D0ED53F1553B /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F976BD028300C2D6849EBD5 /* EmotionPickerView.swift */; };
+		CD868F54EB56E87BE5F00283 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927B9E942C6EACB0CD15D12D /* PythonBridge.swift */; };
+		D43105145129C9FECE338221 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B9A406B3FB86D1CB132845 /* SetupView.swift */; };
+		EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52130E590A4CD0ED7447B159 /* EmotionPreset.swift */; };
+		F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006AC6BD98420562AC6A931C /* AudioService.swift */; };
+		FDC2379CA4DB15F84DB80A3C /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8DE0E108884A82B4A671FE5 /* Voice.swift */; };
+		FE9FD53DCF750D74B09A37B3 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7282AD0029C4CFDAEF69F9DB /* PreferencesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,56 +67,56 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		006AC6BD98420562AC6A931C /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
+		0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
+		0D3C6777F2ABFE603D026E0D /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
 		1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewTests.swift; sourceTree = "<group>"; };
+		281629E0EE8593C8F69031A6 /* ModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsView.swift; sourceTree = "<group>"; };
 		2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationFlowTests.swift; sourceTree = "<group>"; };
 		2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QwenVoiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		31C7F7D75B6E475126FD086D /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
 		3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesViewTests.swift; sourceTree = "<group>"; };
 		3ADE213695C11F46205AE6DC /* QwenVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QwenVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3D905B8E1DC7FC16CF981E2E /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
-		42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */ = {isa = PBXFileReference; path = "mlx_audio-0.3.1-py3-none-any.whl"; sourceTree = "<group>"; };
-		46F50CDC0ACCD3BB87BD90FD /* Voice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice.swift; sourceTree = "<group>"; };
-		47556371509635C604724750 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
-		4848C7D9A6BE4355F31237DC /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
-		4F3A9FBAAF79966E2437D61A /* TextInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputView.swift; sourceTree = "<group>"; };
+		3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonEnvironmentManager.swift; sourceTree = "<group>"; };
+		4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerViewModel.swift; sourceTree = "<group>"; };
 		5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesViewTests.swift; sourceTree = "<group>"; };
-		511D4342EF25C9841188B6A6 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
-		59373DF342B6389336412703 /* BatchGenerationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationSheet.swift; sourceTree = "<group>"; };
-		5EB2964F0441E1CBD45D7F57 /* Generation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Generation.swift; sourceTree = "<group>"; };
+		52130E590A4CD0ED7447B159 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
+		53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
+		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
 		61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarNavigationTests.swift; sourceTree = "<group>"; };
-		682A496A543F04FEE0241CE1 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		637866C95AC607A5E0509956 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		652CF3434A19FF8823B9CCA2 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		696C13B6A195855A65429A13 /* mlx_audio-0.3.1-py3-none-any.whl */ = {isa = PBXFileReference; path = "mlx_audio-0.3.1-py3-none-any.whl"; sourceTree = "<group>"; };
 		6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceUITestBase.swift; sourceTree = "<group>"; };
-		75F48C0BD539D5BA99FCCFD7 /* QwenVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceApp.swift; sourceTree = "<group>"; };
-		79C13CAEDADBEBC9CEAB7798 /* ModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsView.swift; sourceTree = "<group>"; };
-		7A32E5E19B1960FA7F68E20C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		81EE9546E9971EB847A0B8AC /* PythonEnvironmentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonEnvironmentManager.swift; sourceTree = "<group>"; };
-		86E005BFDB81CA8BCEC5FAB5 /* CustomVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceView.swift; sourceTree = "<group>"; };
-		86EF5053B0C19CAF6645E9C8 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
-		8F3D959B28C23462090A4222 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		8F976BD028300C2D6849EBD5 /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
-		924E1846B40C163E66B106D5 /* server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = server.py; sourceTree = "<group>"; };
-		997848650D65F8278A0989BC /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
+		70EAE4C2BD1C594DD564ABBB /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
+		7282AD0029C4CFDAEF69F9DB /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
+		802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
+		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		927B9E942C6EACB0CD15D12D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
+		958B08B9790BD411BEE24FA0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9A5EED3BA5A17E54C8B5E699 /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
+		9B899A22B7619F15A40FC99C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9BF0A4CFC64A4D46B9332080 /* DebugHierarchyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHierarchyTests.swift; sourceTree = "<group>"; };
-		9F82FC179A47CAA72CF5B41D /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
-		A4E69118E5C0F84A3AA1EE96 /* VoiceDesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignView.swift; sourceTree = "<group>"; };
-		A75A4E09036C5090203F61D3 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
+		A6529F131AAB6D76EF97AA1B /* server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = server.py; sourceTree = "<group>"; };
 		AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningViewTests.swift; sourceTree = "<group>"; };
-		AE1603036CD7416D5D992618 /* ModelManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerViewModel.swift; sourceTree = "<group>"; };
-		B027FEC908882C6DAE71C3FA /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
-		BAAE7539090926A723D9210F /* WaveformService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformService.swift; sourceTree = "<group>"; };
-		BF39FCD147F9FC33ABF2E139 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
-		C3EF38EFAA6433E31CA54F2E /* LayoutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConstants.swift; sourceTree = "<group>"; };
+		B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B62852B52626359D53D76C11 /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
+		B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceView.swift; sourceTree = "<group>"; };
+		B8DE0E108884A82B4A671FE5 /* Voice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice.swift; sourceTree = "<group>"; };
+		C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCMessage.swift; sourceTree = "<group>"; };
+		C1BA97E899E616829A78233A /* Generation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Generation.swift; sourceTree = "<group>"; };
 		CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceViewTests.swift; sourceTree = "<group>"; };
-		CEEF9C210A0A7073935D5573 /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
-		D194734617D412F65EA1B183 /* RPCMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCMessage.swift; sourceTree = "<group>"; };
-		D9B7D1ED4DC7C62406478384 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		D2A539A647083CC4810F72FE /* WaveformService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformService.swift; sourceTree = "<group>"; };
+		D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsViewTests.swift; sourceTree = "<group>"; };
-		EB1ECDF509CFB89F65CFA444 /* AudioPlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerBar.swift; sourceTree = "<group>"; };
-		EC178C0CC93346FC796C4E47 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
-		F54C8758BCF0CFD967599AE3 /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
-		F593ABBE9B620FFADFDE908B /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
-		FB66A5E5E238E72BA77AB2B8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		FFAD80570B0196BD61ABE1B0 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		E179D96243A63DD1603FFEA7 /* AudioPlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerBar.swift; sourceTree = "<group>"; };
+		E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationSheet.swift; sourceTree = "<group>"; };
+		E4D22F70AB025CF59B428113 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		E876590A12FADBE38100CD17 /* LayoutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConstants.swift; sourceTree = "<group>"; };
+		E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceApp.swift; sourceTree = "<group>"; };
+		F1B9A406B3FB86D1CB132845 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignView.swift; sourceTree = "<group>"; };
+		F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,70 +131,44 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0442AE323B811622936588E6 /* Views */ = {
+		0D9B30C2AA1A6F6704D6B55A /* backend */ = {
 			isa = PBXGroup;
 			children = (
-				FFAD80570B0196BD61ABE1B0 /* SetupView.swift */,
-				2E17C4FAEA7EF054F8C3D9C6 /* Components */,
-				3092C62119D63CA444BF53CC /* Generate */,
-				0C135306266963E451F56E2F /* Library */,
-				096385DD3460CC71D6C23634 /* Settings */,
-				E30CBCCA016FD12213A90EA7 /* Sidebar */,
+				A6529F131AAB6D76EF97AA1B /* server.py */,
 			);
-			path = Views;
+			path = backend;
 			sourceTree = "<group>";
 		};
-		096385DD3460CC71D6C23634 /* Settings */ = {
+		0DAC412D2DCB346EB874A3C6 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
-				79C13CAEDADBEBC9CEAB7798 /* ModelsView.swift */,
-				EC178C0CC93346FC796C4E47 /* PreferencesView.swift */,
+				281629E0EE8593C8F69031A6 /* ModelsView.swift */,
+				7282AD0029C4CFDAEF69F9DB /* PreferencesView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
 		};
-		0C135306266963E451F56E2F /* Library */ = {
+		393804087C19412BE9764CF4 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				B027FEC908882C6DAE71C3FA /* HistoryView.swift */,
-				997848650D65F8278A0989BC /* VoicesView.swift */,
+				F1B9A406B3FB86D1CB132845 /* SetupView.swift */,
+				9EF4E551B79B35D60032C17C /* Components */,
+				5923E35865DE1169584028DD /* Generate */,
+				C1C590053F5326D33AD9D8A7 /* Library */,
+				0DAC412D2DCB346EB874A3C6 /* Settings */,
+				D04B5DF95506C7083D60178B /* Sidebar */,
 			);
-			path = Library;
+			path = Views;
 			sourceTree = "<group>";
 		};
-		0C503C504A66A0E423A12A9C /* Resources */ = {
+		3E3D5538DEF03E894CE51FA3 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				31C7F7D75B6E475126FD086D /* requirements.txt */,
-				678B657CD1E230C390CA8221 /* backend */,
-				78657D74829AEA746B6204B4 /* vendor */,
+				9A5EED3BA5A17E54C8B5E699 /* requirements.txt */,
+				0D9B30C2AA1A6F6704D6B55A /* backend */,
+				95492ADA14A92F5806116026 /* vendor */,
 			);
 			path = Resources;
-			sourceTree = "<group>";
-		};
-		2E17C4FAEA7EF054F8C3D9C6 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				BF39FCD147F9FC33ABF2E139 /* AppTheme.swift */,
-				EB1ECDF509CFB89F65CFA444 /* AudioPlayerBar.swift */,
-				59373DF342B6389336412703 /* BatchGenerationSheet.swift */,
-				8F976BD028300C2D6849EBD5 /* EmotionPickerView.swift */,
-				9F82FC179A47CAA72CF5B41D /* FlowLayout.swift */,
-				C3EF38EFAA6433E31CA54F2E /* LayoutConstants.swift */,
-				4F3A9FBAAF79966E2437D61A /* TextInputView.swift */,
-				D9B7D1ED4DC7C62406478384 /* WaveformView.swift */,
-			);
-			path = Components;
-			sourceTree = "<group>";
-		};
-		3092C62119D63CA444BF53CC /* Generate */ = {
-			isa = PBXGroup;
-			children = (
-				86E005BFDB81CA8BCEC5FAB5 /* CustomVoiceView.swift */,
-				A75A4E09036C5090203F61D3 /* VoiceCloningView.swift */,
-				A4E69118E5C0F84A3AA1EE96 /* VoiceDesignView.swift */,
-			);
-			path = Generate;
 			sourceTree = "<group>";
 		};
 		4DED610FE952BB74012461B6 /* QwenVoiceUITests */ = {
@@ -214,24 +188,31 @@
 			path = QwenVoiceUITests;
 			sourceTree = "<group>";
 		};
-		5FFFE4ABAEE17E3074AE079E /* Services */ = {
+		4F37CA228E18DE12CE0F1A43 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				F54C8758BCF0CFD967599AE3 /* AudioService.swift */,
-				47556371509635C604724750 /* DatabaseService.swift */,
-				CEEF9C210A0A7073935D5573 /* PythonBridge.swift */,
-				81EE9546E9971EB847A0B8AC /* PythonEnvironmentManager.swift */,
-				BAAE7539090926A723D9210F /* WaveformService.swift */,
+				9B899A22B7619F15A40FC99C /* Assets.xcassets */,
+				B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */,
+				958B08B9790BD411BEE24FA0 /* Info.plist */,
+				B62852B52626359D53D76C11 /* QwenVoice.entitlements */,
+				E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */,
+				778F3C98BAC3F56DDC56D132 /* Models */,
+				3E3D5538DEF03E894CE51FA3 /* Resources */,
+				8A8BFB536C5E94547DDFB8DD /* Services */,
+				FFBBA9EBD7885A6B142B86EF /* ViewModels */,
+				393804087C19412BE9764CF4 /* Views */,
 			);
-			path = Services;
+			path = Sources;
 			sourceTree = "<group>";
 		};
-		678B657CD1E230C390CA8221 /* backend */ = {
+		5923E35865DE1169584028DD /* Generate */ = {
 			isa = PBXGroup;
 			children = (
-				924E1846B40C163E66B106D5 /* server.py */,
+				B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */,
+				53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */,
+				F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */,
 			);
-			path = backend;
+			path = Generate;
 			sourceTree = "<group>";
 		};
 		75A09AA27103DA1825A1703A /* Products */ = {
@@ -243,66 +224,85 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		78657D74829AEA746B6204B4 /* vendor */ = {
+		778F3C98BAC3F56DDC56D132 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				42B1AA627EC7912CFBD2EB44 /* mlx_audio-0.3.1-py3-none-any.whl */,
+				52130E590A4CD0ED7447B159 /* EmotionPreset.swift */,
+				C1BA97E899E616829A78233A /* Generation.swift */,
+				C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */,
+				802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */,
+				B8DE0E108884A82B4A671FE5 /* Voice.swift */,
 			);
-			path = vendor;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		8A8BFB536C5E94547DDFB8DD /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				006AC6BD98420562AC6A931C /* AudioService.swift */,
+				0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */,
+				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
+				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
+				D2A539A647083CC4810F72FE /* WaveformService.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 		8E419F21B4ECB7B71CC1EC69 = {
 			isa = PBXGroup;
 			children = (
-				970D2D2CEA29D46ADBBFA055 /* QwenVoice */,
 				4DED610FE952BB74012461B6 /* QwenVoiceUITests */,
+				4F37CA228E18DE12CE0F1A43 /* Sources */,
 				75A09AA27103DA1825A1703A /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		8FEDBBC14B01D62CF70C76FA /* Models */ = {
+		95492ADA14A92F5806116026 /* vendor */ = {
 			isa = PBXGroup;
 			children = (
-				F593ABBE9B620FFADFDE908B /* EmotionPreset.swift */,
-				5EB2964F0441E1CBD45D7F57 /* Generation.swift */,
-				D194734617D412F65EA1B183 /* RPCMessage.swift */,
-				511D4342EF25C9841188B6A6 /* TTSModel.swift */,
-				46F50CDC0ACCD3BB87BD90FD /* Voice.swift */,
+				696C13B6A195855A65429A13 /* mlx_audio-0.3.1-py3-none-any.whl */,
 			);
-			path = Models;
+			path = vendor;
 			sourceTree = "<group>";
 		};
-		970D2D2CEA29D46ADBBFA055 /* QwenVoice */ = {
+		9EF4E551B79B35D60032C17C /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				7A32E5E19B1960FA7F68E20C /* Assets.xcassets */,
-				FB66A5E5E238E72BA77AB2B8 /* ContentView.swift */,
-				8F3D959B28C23462090A4222 /* Info.plist */,
-				3D905B8E1DC7FC16CF981E2E /* QwenVoice.entitlements */,
-				75F48C0BD539D5BA99FCCFD7 /* QwenVoiceApp.swift */,
-				8FEDBBC14B01D62CF70C76FA /* Models */,
-				0C503C504A66A0E423A12A9C /* Resources */,
-				5FFFE4ABAEE17E3074AE079E /* Services */,
-				E9767C1ACCD6DBCE85019EF5 /* ViewModels */,
-				0442AE323B811622936588E6 /* Views */,
+				890E011F57EAC237416DDF0F /* AppTheme.swift */,
+				E179D96243A63DD1603FFEA7 /* AudioPlayerBar.swift */,
+				E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */,
+				5A9B0840026EFF26202877BF /* EmotionPickerView.swift */,
+				D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */,
+				E876590A12FADBE38100CD17 /* LayoutConstants.swift */,
+				F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */,
+				652CF3434A19FF8823B9CCA2 /* WaveformView.swift */,
 			);
-			path = QwenVoice;
+			path = Components;
 			sourceTree = "<group>";
 		};
-		E30CBCCA016FD12213A90EA7 /* Sidebar */ = {
+		C1C590053F5326D33AD9D8A7 /* Library */ = {
 			isa = PBXGroup;
 			children = (
-				682A496A543F04FEE0241CE1 /* SidebarView.swift */,
+				E4D22F70AB025CF59B428113 /* HistoryView.swift */,
+				0D3C6777F2ABFE603D026E0D /* VoicesView.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		D04B5DF95506C7083D60178B /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				637866C95AC607A5E0509956 /* SidebarView.swift */,
 			);
 			path = Sidebar;
 			sourceTree = "<group>";
 		};
-		E9767C1ACCD6DBCE85019EF5 /* ViewModels */ = {
+		FFBBA9EBD7885A6B142B86EF /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
-				4848C7D9A6BE4355F31237DC /* AudioPlayerViewModel.swift */,
-				86EF5053B0C19CAF6645E9C8 /* HistoryViewModel.swift */,
-				AE1603036CD7416D5D992618 /* ModelManagerViewModel.swift */,
+				78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */,
+				70EAE4C2BD1C594DD564ABBB /* HistoryViewModel.swift */,
+				4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -390,10 +390,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DE270A3D49245A009F75489A /* Assets.xcassets in Resources */,
-				65A7D297035D3E0E3040D8CC /* mlx_audio-0.3.1-py3-none-any.whl in Resources */,
-				383D19F6BFBB3E2F0D62A420 /* requirements.txt in Resources */,
-				3B204D5F341EB47F7F43AD28 /* server.py in Resources */,
+				782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */,
+				62DF324F58F7731B573FB249 /* mlx_audio-0.3.1-py3-none-any.whl in Resources */,
+				8D6183A2086E6C2AD0F8E32A /* requirements.txt in Resources */,
+				B7962EA5C5AE26BE94E09309 /* server.py in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,38 +404,38 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3CC837CE8F281B405BF710E3 /* AppTheme.swift in Sources */,
-				EBE3516D85583DE92EE74401 /* AudioPlayerBar.swift in Sources */,
-				1BAB5091FC8E79A68819608D /* AudioPlayerViewModel.swift in Sources */,
-				D407ABD3F761A9C31B2CC97C /* AudioService.swift in Sources */,
-				A58388AE49BF0AABFF134C50 /* BatchGenerationSheet.swift in Sources */,
-				ABA020A16A3C2E61ED699676 /* ContentView.swift in Sources */,
-				42C3726D34B2288B226D960B /* CustomVoiceView.swift in Sources */,
-				78299687FEE6E110510B6CAA /* DatabaseService.swift in Sources */,
-				FD813E1CAC86D0ED53F1553B /* EmotionPickerView.swift in Sources */,
-				4C073E5E83DAB560260501BA /* EmotionPreset.swift in Sources */,
-				04BF41BE6A69BB0F8C022874 /* FlowLayout.swift in Sources */,
-				D1E125DB261DC9251F536DE2 /* Generation.swift in Sources */,
-				1E663310BE754122ED108A04 /* HistoryView.swift in Sources */,
-				BDA51F8D7101A4F655B68DEE /* HistoryViewModel.swift in Sources */,
-				22AD07D3DED8611BC63BD409 /* LayoutConstants.swift in Sources */,
-				709DB664DB72A545A9C7A4BB /* ModelManagerViewModel.swift in Sources */,
-				29C7D76EB3326E290DCD11B7 /* ModelsView.swift in Sources */,
-				0BB2369F46A7B303955A1CDE /* PreferencesView.swift in Sources */,
-				4BCD3AABC202FA8EF7E7E411 /* PythonBridge.swift in Sources */,
-				5DEC2C340273F733DE7DFE96 /* PythonEnvironmentManager.swift in Sources */,
-				9C0E64232490B24E3D3846DA /* QwenVoiceApp.swift in Sources */,
-				43CA7D14B0A2F76C2E7AFA37 /* RPCMessage.swift in Sources */,
-				C0894CEDC830F808228BADF4 /* SetupView.swift in Sources */,
-				11574BAA79A730C612D74A4C /* SidebarView.swift in Sources */,
-				1E597F8DAD4BFA92F578C1A6 /* TTSModel.swift in Sources */,
-				0F6DD5B02EDFFDC5C8738B01 /* TextInputView.swift in Sources */,
-				41508648F1925A5226E738CD /* Voice.swift in Sources */,
-				0887BED5BA8DA563D1FCF7A0 /* VoiceCloningView.swift in Sources */,
-				24F9BD89450B9E2496D70221 /* VoiceDesignView.swift in Sources */,
-				B1DE463C4D55BF0E049EEBE0 /* VoicesView.swift in Sources */,
-				AD46FD57F4BB30E14D899EFC /* WaveformService.swift in Sources */,
-				0945BE85ED75AD4C9ECFBE9B /* WaveformView.swift in Sources */,
+				B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */,
+				62ED7E0B7ECDABD98F891479 /* AudioPlayerBar.swift in Sources */,
+				B25FDE21DB15AAB169D519EA /* AudioPlayerViewModel.swift in Sources */,
+				F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */,
+				9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */,
+				BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */,
+				369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */,
+				6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */,
+				6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */,
+				EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */,
+				5E975521FC8B355333145278 /* FlowLayout.swift in Sources */,
+				1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */,
+				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
+				4FA8BAF34BBC53CA11FC026F /* HistoryViewModel.swift in Sources */,
+				2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */,
+				0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */,
+				1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */,
+				FE9FD53DCF750D74B09A37B3 /* PreferencesView.swift in Sources */,
+				CD868F54EB56E87BE5F00283 /* PythonBridge.swift in Sources */,
+				5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */,
+				A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */,
+				4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */,
+				D43105145129C9FECE338221 /* SetupView.swift in Sources */,
+				7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */,
+				019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */,
+				1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */,
+				FDC2379CA4DB15F84DB80A3C /* Voice.swift in Sources */,
+				9506A9366B29D225A10210E7 /* VoiceCloningView.swift in Sources */,
+				AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */,
+				B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */,
+				13462F046FE8C8196DE2BD97 /* WaveformService.swift in Sources */,
+				BFB9538DB6144B9BD8E227DE /* WaveformView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -629,11 +629,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = QwenVoice/QwenVoice.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_HARDENED_RUNTIME = YES;
-				INFOPLIST_FILE = QwenVoice/Info.plist;
+				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -652,11 +652,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = QwenVoice/QwenVoice.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_HARDENED_RUNTIME = YES;
-				INFOPLIST_FILE = QwenVoice/Info.plist;
+				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

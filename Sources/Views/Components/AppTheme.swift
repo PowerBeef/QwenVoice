@@ -231,9 +231,10 @@ struct AuroraBackground: View {
                 Circle()
                     .fill(AppTheme.accent.opacity(0.06))
                     .frame(width: width * 0.8)
-                    .blur(radius: 150)
+                    .blur(radius: 80)
                     .offset(x: animate ? width * 0.15 : -width * 0.15, y: animate ? height * 0.1 : -height * 0.1)
             }
+            .drawingGroup()
             .animation(.easeInOut(duration: 20).repeatForever(autoreverses: true), value: animate)
             .onAppear {
                 animate = true

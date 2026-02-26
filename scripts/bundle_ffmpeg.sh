@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-RESOURCES_DIR="$PROJECT_DIR/QwenVoice/Resources"
+RESOURCES_DIR="$PROJECT_DIR/Sources/Resources"
 
 FFMPEG_URL="https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
 DOWNLOAD_DIR="/tmp/qwenvoice-ffmpeg-build"

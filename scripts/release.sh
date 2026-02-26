@@ -137,7 +137,7 @@ else
 fi
 
 # Inject bundled Python and ffmpeg into the .app (excluded from Xcode build to avoid conflicts)
-RESOURCES_SRC="$PROJECT_DIR/QwenVoice/Resources"
+RESOURCES_SRC="$PROJECT_DIR/Sources/Resources"
 APP_RESOURCES="$BUILD_DIR/Qwen Voice.app/Contents/Resources"
 
 if [ -d "$RESOURCES_SRC/python" ]; then

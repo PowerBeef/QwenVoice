@@ -7,6 +7,7 @@ struct TTSModel: Identifiable, Hashable {
     let folder: String      // e.g. "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
     let mode: GenerationMode
     let huggingFaceRepo: String
+    let estimatedSizeBytes: Int
 }
 
 enum GenerationMode: String, CaseIterable, Codable, Hashable {
@@ -41,21 +42,24 @@ extension TTSModel {
             name: "Custom Voice",
             folder: "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
             mode: .custom,
-            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
+            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+            estimatedSizeBytes: 900_000_000
         ),
         TTSModel(
             id: "pro_design",
             name: "Voice Design",
             folder: "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
             mode: .design,
-            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit"
+            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+            estimatedSizeBytes: 900_000_000
         ),
         TTSModel(
             id: "pro_clone",
             name: "Voice Cloning",
             folder: "Qwen3-TTS-12Hz-1.7B-Base-8bit",
             mode: .clone,
-            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit"
+            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+            estimatedSizeBytes: 930_000_000
         ),
     ]
 

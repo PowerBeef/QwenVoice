@@ -1,0 +1,21 @@
+# Large model files (users download separately)
+models/
+
+# Virtual environment
+.venv/
+
+# Temp files
+temp_*/
+temp_convert_*.wav
+
+# User data (keep folder structure)
+voices/*
+!voices/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# System files
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo

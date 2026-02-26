@@ -382,10 +382,9 @@ final class PythonBridge: ObservableObject {
         // 3. Dev project venv (relative to source file)
         let devVenvPath = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()  // Services/
-            .deletingLastPathComponent()  // QwenVoice/
-            .deletingLastPathComponent()  // QwenVoice/
-            .deletingLastPathComponent()  // QwenVoice/ (project root)
-            .appendingPathComponent("Qwen-Voice/.venv/bin/python3").path
+            .deletingLastPathComponent()  // Sources/
+            .deletingLastPathComponent()  // project root
+            .appendingPathComponent("cli/.venv/bin/python3").path
         if fm.fileExists(atPath: devVenvPath) {
             return devVenvPath
         }

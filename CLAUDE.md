@@ -16,7 +16,7 @@ open "/Users/patricedery/Library/Developer/Xcode/DerivedData/QwenVoice-ebuvxlbcx
 
 # Regenerate .xcodeproj after adding/removing Swift files
 xcodegen generate
-# WARNING: XcodeGen overwrites QwenVoice/QwenVoice.entitlements — restore it after regenerating
+# WARNING: XcodeGen overwrites Sources/QwenVoice.entitlements — restore it after regenerating
 
 # Safely regenerate .xcodeproj (backs up + restores entitlements)
 ./scripts/regenerate_project.sh
@@ -63,7 +63,7 @@ All UI elements have `accessibilityIdentifier` values following the pattern `"{v
 `PythonBridge.findPython()` checks in order:
 1. Bundled Python at `Resources/python/bin/python3` (production)
 2. App Support venv at `~/Library/Application Support/QwenVoice/python/bin/python3` (auto-created by `PythonEnvironmentManager`)
-3. Dev project venv relative to source file — resolves to `../Qwen-Voice/.venv/bin/python3`
+3. Dev project venv relative to source file — resolves to `cli/.venv/bin/python3`
 4. System Python at `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, `/usr/bin/python3`
 
 ### Model download
@@ -72,12 +72,12 @@ Models are downloaded via `huggingface-cli` spawned as a subprocess in `ModelMan
 ### Key files
 | File | Role |
 |------|------|
-| `QwenVoice/Resources/backend/server.py` | Python JSON-RPC server; all ML inference happens here |
-| `QwenVoice/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations |
-| `QwenVoice/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum |
-| `QwenVoice/Services/DatabaseService.swift` | GRDB SQLite — stores generation history at `history.sqlite` |
-| `QwenVoice/ViewModels/ModelManagerViewModel.swift` | Download/delete model state via `huggingface-cli` |
-| `QwenVoice/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `Notification.Name.navigateToModels` handled here |
+| `Sources/Resources/backend/server.py` | Python JSON-RPC server; all ML inference happens here |
+| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations |
+| `Sources/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum |
+| `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history at `history.sqlite` |
+| `Sources/ViewModels/ModelManagerViewModel.swift` | Download/delete model state via `huggingface-cli` |
+| `Sources/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `Notification.Name.navigateToModels` handled here |
 | `project.yml` | XcodeGen config — edit this instead of `.xcodeproj` |
 
 ### Python environment setup

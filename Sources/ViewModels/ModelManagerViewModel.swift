@@ -12,7 +12,8 @@ final class ModelManagerViewModel: ObservableObject {
 
     @Published var statuses: [String: ModelStatus] = [:]
 
-    private var downloadTasks: [String: URLSessionDownloadTask] = [:]
+    private var downloadProcesses: [String: Process] = [:]
+    private var pollTasks: [String: Task<Void, Never>] = [:]
 
     func refresh() async {
         let modelsDir = QwenVoiceApp.modelsDir
@@ -48,15 +49,18 @@ from huggingface_hub import snapshot_download
 snapshot_download(repo_id='\(model.huggingFaceRepo)', local_dir='\(targetDir.path)', repo_type='model')
 """
 
+        let estimatedTotal = model.estimatedSizeBytes
+
         let pollTask = Task {
             while !Task.isCancelled {
-                try await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
                 let currentSize = Self.directorySize(url: targetDir)
-                let estimatedTotal = 800_000_000
-                let progress = min(0.95, Double(currentSize) / Double(estimatedTotal))
+                let progress = min(0.99, Double(currentSize) / Double(estimatedTotal))
                 statuses[model.id] = .downloading(progress: progress)
             }
         }
+        pollTasks[model.id] = pollTask
 
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -82,6 +86,11 @@ snapshot_download(repo_id='\(model.huggingFaceRepo)', local_dir='\(targetDir.pat
 
                 do {
                     try process.run()
+                    // Store process reference for cancellation (must dispatch to main actor)
+                    let modelId = model.id
+                    Task { @MainActor in
+                        self.downloadProcesses[modelId] = process
+                    }
                 } catch {
                     guard !resumed else { return }
                     resumed = true
@@ -90,18 +99,37 @@ snapshot_download(repo_id='\(model.huggingFaceRepo)', local_dir='\(targetDir.pat
             }
 
             pollTask.cancel()
+            pollTasks.removeValue(forKey: model.id)
+            downloadProcesses.removeValue(forKey: model.id)
             let size = Self.directorySize(url: targetDir)
             statuses[model.id] = .downloaded(sizeBytes: size)
         } catch {
             pollTask.cancel()
-            statuses[model.id] = .notDownloaded
+            pollTasks.removeValue(forKey: model.id)
+            downloadProcesses.removeValue(forKey: model.id)
+            // Only reset if still downloading (cancel may have already set .notDownloaded)
+            if case .downloading = statuses[model.id] {
+                statuses[model.id] = .notDownloaded
+            }
         }
     }
 
     func cancelDownload(_ model: TTSModel) {
-        downloadTasks[model.id]?.cancel()
-        downloadTasks.removeValue(forKey: model.id)
+        // Terminate the download process
+        if let process = downloadProcesses[model.id], process.isRunning {
+            process.terminate()
+        }
+        downloadProcesses.removeValue(forKey: model.id)
+
+        // Cancel the poll task
+        pollTasks[model.id]?.cancel()
+        pollTasks.removeValue(forKey: model.id)
+
         statuses[model.id] = .notDownloaded
+
+        // Clean up partial download directory
+        let targetDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
+        try? FileManager.default.removeItem(at: targetDir)
     }
 
     func delete(_ model: TTSModel) async {

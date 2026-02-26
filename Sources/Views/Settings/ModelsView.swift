@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ModelsView: View {
-    @StateObject private var viewModel = ModelManagerViewModel()
+    @EnvironmentObject var viewModel: ModelManagerViewModel
 
     var body: some View {
         ScrollView {
@@ -58,9 +58,14 @@ struct ModelCard: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 case .downloading(let progress):
-                    ProgressView(value: progress)
-                        .frame(maxWidth: 200)
-                        .tint(modeColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        ProgressView(value: progress)
+                            .frame(maxWidth: 200)
+                            .tint(modeColor)
+                        Text("\(Int(progress * 100))% downloaded")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 case .downloaded(let sizeBytes):
                     Text("Ready — \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
                         .font(.caption)

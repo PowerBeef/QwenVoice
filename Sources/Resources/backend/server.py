@@ -247,6 +247,10 @@ def handle_load_model(params):
     if not model_path:
         raise ValueError("Must provide model_id or model_path")
 
+    # Skip reload if same model already loaded
+    if _current_model is not None and _current_model_path == model_path:
+        return {"success": True, "model_path": model_path, "cached": True}
+
     # Unload existing model
     if _current_model is not None:
         _current_model = None
@@ -309,6 +313,7 @@ def handle_generate(params):
             "model": _current_model,
             "text": text,
             "output_path": temp_dir,
+            "verbose": False,
         }
 
         if ref_audio:

@@ -71,6 +71,14 @@ final class AudioPlayerViewModel: ObservableObject {
         stopTimer()
     }
 
+    func dismiss() {
+        stop()
+        currentFilePath = nil
+        currentTitle = ""
+        duration = 0
+        waveformSamples = []
+    }
+
     func seek(to fraction: Double) {
         guard let player else { return }
         let time = fraction * duration
@@ -88,7 +96,7 @@ final class AudioPlayerViewModel: ObservableObject {
 
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let player = self.player else { return }
                 self.currentTime = player.currentTime

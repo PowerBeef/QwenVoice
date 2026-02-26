@@ -6,9 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-RESOURCES_DIR="$PROJECT_DIR/QwenVoice/Resources"
+RESOURCES_DIR="$PROJECT_DIR/Sources/Resources"
 PYTHON_BUNDLE="$RESOURCES_DIR/python"
-REQUIREMENTS="$PROJECT_DIR/../Qwen-Voice/requirements.txt"
+REQUIREMENTS="$PROJECT_DIR/cli/requirements.txt"
 VENDOR_DIR="$RESOURCES_DIR/vendor"
 
 PYTHON_VERSION="3.13"

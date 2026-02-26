@@ -9,7 +9,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-ENTITLEMENTS="QwenVoice/QwenVoice.entitlements"
+ENTITLEMENTS="Sources/QwenVoice.entitlements"
 BACKUP="/tmp/QwenVoice.entitlements.backup.$$"
 
 echo "==> Backing up entitlements..."

@@ -5,6 +5,7 @@ struct QwenVoiceApp: App {
     @StateObject private var pythonBridge = PythonBridge()
     @StateObject private var audioPlayer = AudioPlayerViewModel()
     @StateObject private var envManager = PythonEnvironmentManager()
+    @StateObject private var modelManager = ModelManagerViewModel()
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +16,7 @@ struct QwenVoiceApp: App {
                         .environmentObject(pythonBridge)
                         .environmentObject(audioPlayer)
                         .environmentObject(envManager)
+                        .environmentObject(modelManager)
                         .frame(minWidth: 780, minHeight: 520)
                         .onAppear {
                             if envManager.needsBackendRestart {
@@ -47,7 +49,7 @@ struct QwenVoiceApp: App {
                 .disabled(!audioPlayer.hasAudio)
 
                 Button("Stop") {
-                    audioPlayer.stop()
+                    audioPlayer.dismiss()
                 }
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(!audioPlayer.hasAudio)

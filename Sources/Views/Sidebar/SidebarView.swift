@@ -9,15 +9,22 @@ struct SidebarView: View {
             ForEach(SidebarItem.Section.allCases, id: \.self) { section in
                 Section {
                     ForEach(section.items) { item in
+                        let isSelected = selection == item
                         Label {
                             Text(item.rawValue)
+                                .foregroundStyle(isSelected ? AppTheme.accent : .primary)
                         } icon: {
                             Image(systemName: item.iconName)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(isSelected ? AppTheme.accent : .secondary)
                                 .symbolRenderingMode(.hierarchical)
                         }
                         .tag(item)
                         .accessibilityIdentifier(item.accessibilityID)
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isSelected ? AppTheme.accent.opacity(0.15) : Color.clear)
+                                .padding(.horizontal, 4)
+                        )
                     }
                 } header: {
                     Text(section.rawValue)
@@ -29,6 +36,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .tint(AppTheme.accent)
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 280)
         .scrollContentBackground(.hidden)
         .background(
@@ -45,6 +53,7 @@ struct SidebarView: View {
                 }
                 if let contentView = window.contentView,
                    let outlineView = findOutlineView(contentView) {
+                    outlineView.selectionHighlightStyle = .none
                     window.makeFirstResponder(outlineView)
                 }
             }
