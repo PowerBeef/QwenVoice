@@ -1,3 +1,6 @@
+<div align="center">
+  <img src="docs/logo.png" alt="Qwen Voice Logo" width="128">
+
 # Qwen Voice
 
 **Native macOS app for Qwen3-TTS on Apple Silicon**
@@ -7,24 +10,33 @@
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-F05138)
 ![Release](https://img.shields.io/github/v/release/PowerBeef/QwenVoice)
 
+</div>
+
 ## Overview
 
 Qwen Voice brings state-of-the-art text-to-speech to your Mac with three generation modes in a native SwiftUI interface. No Python install, no terminal, no dependencies — just download and run.
 
 Built on [qwen3-tts-apple-silicon](https://github.com/kapi2800/qwen3-tts-apple-silicon) by [@kapi2800](https://github.com/kapi2800).
 
+## Screenshots
+
+<div align="center">
+  <img src="docs/screenshot1.png" alt="Qwen Voice Generation" width="49%">
+  <img src="docs/screenshot2.png" alt="Qwen Voice Models" width="49%">
+</div>
+
 ## Features
 
-### Custom Voice
+### 🎙️ Custom Voice
 Generate speech with preset speakers across 4 languages (English, Chinese, Japanese, Korean). Control emotion and delivery with natural language instructions, and adjust speed.
 
-### Voice Design
+### ✨ Voice Design
 Describe the voice you want in natural language — age, gender, accent, tone — and generate speech with it.
 
-### Voice Cloning
+### 🎭 Voice Cloning
 Clone a voice from a short audio sample (WAV/MP3/AIFF). Save cloned voices for reuse across sessions.
 
-### More
+### 🚀 More
 - **Model Manager** — download and manage models directly from HuggingFace in-app
 - **Generation History** — searchable SQLite-backed log with instant playback
 - **Batch Generation** — generate multiple utterances at once
