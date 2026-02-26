@@ -80,17 +80,20 @@ _current_model = None
 _current_model_path = None
 _load_model_fn = None
 _generate_audio_fn = None
+_mx = None
 
 
 def _ensure_mlx():
     """Lazy-import mlx_audio so we only load it when needed."""
-    global _load_model_fn, _generate_audio_fn
+    global _load_model_fn, _generate_audio_fn, _mx
     if _load_model_fn is None:
         from mlx_audio.tts.utils import load_model
         from mlx_audio.tts.generate import generate_audio
+        import mlx.core as mx
 
         _load_model_fn = load_model
         _generate_audio_fn = generate_audio
+        _mx = mx
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +303,8 @@ def handle_generate(params):
     speed = params.get("speed")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
+    temperature = params.get("temperature", 0.6)
+    max_tokens = params.get("max_tokens")
 
     # Create temp dir for generation
     temp_dir = os.path.join(OUTPUTS_DIR, f"temp_{int(time.time())}_{os.getpid()}")
@@ -314,7 +319,10 @@ def handle_generate(params):
             "text": text,
             "output_path": temp_dir,
             "verbose": False,
+            "temperature": float(temperature),
         }
+        if max_tokens is not None:
+            gen_kwargs["max_tokens"] = int(max_tokens)
 
         if ref_audio:
             # Voice cloning mode
@@ -357,6 +365,9 @@ def handle_generate(params):
             shutil.move(source_file, final_path)
 
         duration = get_audio_duration(final_path)
+
+        # Free MLX GPU memory pool between generations
+        _mx.metal.clear_cache()
 
         send_progress(100, "Done")
 

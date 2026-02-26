@@ -172,29 +172,39 @@ final class PythonBridge: ObservableObject {
     }
 
     /// Generate audio with custom voice mode.
-    func generateCustom(text: String, voice: String, emotion: String, speed: Double, outputPath: String) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
+    func generateCustom(text: String, voice: String, emotion: String, speed: Double,
+                        outputPath: String, temperature: Double? = nil,
+                        maxTokens: Int? = nil) async throws -> GenerationResult {
+        var params: [String: RPCValue] = [
             "text": .string(text),
             "voice": .string(voice),
             "instruct": .string(emotion),
             "speed": .double(speed),
             "output_path": .string(outputPath),
-        ])
+        ]
+        if let temperature { params["temperature"] = .double(temperature) }
+        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
+        let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
 
     /// Generate audio with voice design mode.
-    func generateDesign(text: String, voiceDescription: String, outputPath: String) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
+    func generateDesign(text: String, voiceDescription: String, outputPath: String,
+                        temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
+        var params: [String: RPCValue] = [
             "text": .string(text),
             "instruct": .string(voiceDescription),
             "output_path": .string(outputPath),
-        ])
+        ]
+        if let temperature { params["temperature"] = .double(temperature) }
+        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
+        let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
 
     /// Generate audio with voice cloning mode.
-    func generateClone(text: String, refAudio: String, refText: String?, outputPath: String) async throws -> GenerationResult {
+    func generateClone(text: String, refAudio: String, refText: String?, outputPath: String,
+                       temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
         var params: [String: RPCValue] = [
             "text": .string(text),
             "ref_audio": .string(refAudio),
@@ -203,6 +213,8 @@ final class PythonBridge: ObservableObject {
         if let refText, !refText.isEmpty {
             params["ref_text"] = .string(refText)
         }
+        if let temperature { params["temperature"] = .double(temperature) }
+        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
