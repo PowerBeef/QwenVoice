@@ -212,8 +212,6 @@ struct CustomVoiceView: View {
                 }
                 .glassCard()
 
-                AudioPlayerBar()
-
                 // Error display
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")
@@ -221,21 +219,6 @@ struct CustomVoiceView: View {
                         .font(.callout)
                 }
 
-                // Progress
-                if isGenerating {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(pythonBridge.progressMessage.isEmpty ? "Generating..." : pythonBridge.progressMessage)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                if !pythonBridge.isReady {
-                    Label("Waiting for backend to start...", systemImage: "hourglass")
-                        .foregroundColor(.orange)
-                        .font(.callout)
-                }
             }
             .padding(24)
             .contentColumn()

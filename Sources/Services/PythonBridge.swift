@@ -318,13 +318,19 @@ final class PythonBridge: ObservableObject {
 
         if let error = response.error {
             isProcessing = false
+            progressMessage = ""
+            progressPercent = 0
             lastError = error.message
             continuation.resume(throwing: PythonBridgeError.rpcError(code: error.code, message: error.message))
         } else if let result = response.result {
             isProcessing = false
+            progressMessage = ""
+            progressPercent = 0
             continuation.resume(returning: result)
         } else {
             isProcessing = false
+            progressMessage = ""
+            progressPercent = 0
             continuation.resume(returning: .null)
         }
     }

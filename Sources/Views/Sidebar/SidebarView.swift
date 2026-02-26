@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
     @EnvironmentObject var pythonBridge: PythonBridge
+    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
     var body: some View {
         List(selection: $selection) {
@@ -59,28 +60,45 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            // Backend status indicator
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(pythonBridge.isReady ? .green : .orange)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: pythonBridge.isReady ? .green.opacity(0.5) : .orange.opacity(0.5), radius: 4)
-                Text(pythonBridge.isReady ? "Backend Ready" : "Starting...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                // Audio player
+                SidebarPlayerView()
+                    .animation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
+
+                // Backend status indicator
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(pythonBridge.isReady ? .green : .orange)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: pythonBridge.isReady ? .green.opacity(0.5) : .orange.opacity(0.5), radius: 4)
+                    Text(pythonBridge.isReady ? "Backend Ready" : "Starting...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if pythonBridge.isProcessing {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text(pythonBridge.progressMessage.isEmpty ? "Processing..." : pythonBridge.progressMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
+                .accessibilityIdentifier("sidebar_backendStatus")
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.1))
+                        .overlay(
+                             RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.2), lineWidth: 1)
+                        )
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .accessibilityIdentifier("sidebar_backendStatus")
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.1))
-                    .overlay(
-                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.2), lineWidth: 1)
-                    )
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }

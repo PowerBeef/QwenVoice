@@ -64,9 +64,6 @@ struct HistoryView: View {
                 .listStyle(.inset)
             }
 
-            AudioPlayerBar()
-                .padding(.horizontal, 24)
-                .padding(.bottom, 12)
         }
         .contentColumn()
         .task {
