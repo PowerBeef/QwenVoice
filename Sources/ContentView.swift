@@ -77,6 +77,7 @@ struct ContentView: View {
                         CustomVoiceView()
                     }
                 }
+                .id(selectedItem)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
