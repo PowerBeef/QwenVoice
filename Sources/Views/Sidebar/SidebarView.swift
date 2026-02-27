@@ -65,6 +65,30 @@ struct SidebarView: View {
                 SidebarPlayerView()
                     .animation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
 
+                // Generation status indicator
+                HStack(spacing: 6) {
+                    if pythonBridge.isProcessing {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text(pythonBridge.progressMessage.isEmpty ? "Processing..." : pythonBridge.progressMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.caption)
+                        Text("Ready")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
+                .accessibilityIdentifier("sidebar_generationStatus")
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 // Backend status indicator
                 HStack(spacing: 6) {
                     Circle()
@@ -74,18 +98,7 @@ struct SidebarView: View {
                     Text(pythonBridge.isReady ? "Backend Ready" : "Starting...")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    if pythonBridge.isProcessing {
-                        Spacer()
-                        ProgressView()
-                            .controlSize(.mini)
-                        Text(pythonBridge.progressMessage.isEmpty ? "Processing..." : pythonBridge.progressMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
                 }
-                .animation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
                 .accessibilityIdentifier("sidebar_backendStatus")
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
