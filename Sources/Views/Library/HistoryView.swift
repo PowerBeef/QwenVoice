@@ -79,6 +79,7 @@ struct HistoryView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
 
         }
