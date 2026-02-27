@@ -336,11 +336,22 @@ struct VoiceCloningView: View {
         }
     }
 
+    private static let allowedAudioExtensions: Set<String> = [
+        "wav", "mp3", "aiff", "aif", "m4a", "flac", "ogg"
+    ]
+
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
             guard let data = data as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+            let ext = url.pathExtension.lowercased()
+            guard Self.allowedAudioExtensions.contains(ext) else {
+                Task { @MainActor in
+                    errorMessage = "Unsupported file type '.\(ext)'. Drop an audio file (WAV, MP3, AIFF, M4A, FLAC, or OGG)."
+                }
+                return
+            }
             Task { @MainActor in
                 referenceAudioPath = url.path
                 selectedVoice = nil

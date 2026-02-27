@@ -6,6 +6,7 @@ final class DatabaseService {
     static let shared = DatabaseService()
 
     private var dbQueue: DatabaseQueue?
+    private(set) var initError: String?
 
     private init() {
         do {
@@ -13,7 +14,9 @@ final class DatabaseService {
             dbQueue = try DatabaseQueue(path: dbPath)
             try migrate()
         } catch {
-            print("[DatabaseService] Failed to initialize: \(error)")
+            let message = "Database initialization failed: \(error.localizedDescription)"
+            initError = message
+            print("[DatabaseService] \(message)")
         }
     }
 
@@ -57,13 +60,18 @@ final class DatabaseService {
     // MARK: - CRUD
 
     func saveGeneration(_ generation: inout Generation) throws {
-        guard let dbQueue else { return }
+        guard let dbQueue else {
+            throw DatabaseServiceError.notInitialized(initError ?? "Unknown database error")
+        }
         try dbQueue.write { db in
             try generation.save(db)
         }
     }
 
     func fetchAllGenerations() throws -> [Generation] {
+        if dbQueue == nil {
+            print("[DatabaseService] Warning: database not initialized, returning empty results")
+        }
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
             try Generation.order(Generation.Columns.createdAt.desc).fetchAll(db)
@@ -71,10 +79,17 @@ final class DatabaseService {
     }
 
     func searchGenerations(query: String) throws -> [Generation] {
+        if dbQueue == nil {
+            print("[DatabaseService] Warning: database not initialized, returning empty results")
+        }
         guard let dbQueue else { return [] }
+        let escaped = query
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
         return try dbQueue.read { db in
             try Generation
-                .filter(Generation.Columns.text.like("%\(query)%"))
+                .filter(Generation.Columns.text.like("%\(escaped)%", escape: "\\"))
                 .order(Generation.Columns.createdAt.desc)
                 .fetchAll(db)
         }
@@ -91,6 +106,17 @@ final class DatabaseService {
         guard let dbQueue else { return }
         try dbQueue.write { db in
             _ = try Generation.deleteAll(db)
+        }
+    }
+}
+
+enum DatabaseServiceError: LocalizedError {
+    case notInitialized(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notInitialized(let reason):
+            return "Database unavailable: \(reason)"
         }
     }
 }
