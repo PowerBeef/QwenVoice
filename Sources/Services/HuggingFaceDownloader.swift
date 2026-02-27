@@ -37,6 +37,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     /// Tracks the active download task for cancellation.
     private var activeTask: URLSessionDownloadTask?
 
+    /// Protects concurrent access to continuations, destinations, and progress state
+    /// (written on caller thread, read on URLSession delegate queue).
+    private let lock = NSLock()
+
     /// Bridge from delegate callbacks to async/await.
     /// Keyed by task.taskIdentifier.
     private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
@@ -140,14 +144,18 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         fileSize: Int64,
         progressHandler: @escaping (Int64) -> Void
     ) async throws {
+        lock.lock()
         currentTaskBytesWritten = 0
         currentProgressHandler = progressHandler
+        lock.unlock()
 
         let tempURL: URL = try await withCheckedThrowingContinuation { continuation in
             let task = session.downloadTask(with: url)
             let taskID = task.taskIdentifier
+            lock.lock()
             continuations[taskID] = continuation
             destinations[taskID] = destination
+            lock.unlock()
             activeTask = task
             task.resume()
         }
@@ -160,7 +168,9 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         try fm.moveItem(at: tempURL, to: destination)
 
         activeTask = nil
+        lock.lock()
         currentProgressHandler = nil
+        lock.unlock()
     }
 
     // MARK: - URLSessionDownloadDelegate
@@ -172,8 +182,11 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
+        lock.lock()
         currentTaskBytesWritten = totalBytesWritten
-        currentProgressHandler?(totalBytesWritten)
+        let handler = currentProgressHandler
+        lock.unlock()
+        handler?(totalBytesWritten)
     }
 
     func urlSession(
@@ -185,24 +198,28 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
         // Check HTTP status
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
+            lock.lock()
             let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-            continuations[taskID]?.resume(throwing: DownloadError.httpError(statusCode: http.statusCode, path: path))
-            continuations.removeValue(forKey: taskID)
+            let continuation = continuations.removeValue(forKey: taskID)
             destinations.removeValue(forKey: taskID)
+            lock.unlock()
+            continuation?.resume(throwing: DownloadError.httpError(statusCode: http.statusCode, path: path))
             return
         }
 
         // Move to a safe temp location (the delegate location is deleted after this method returns)
         let safeTmp = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
+        lock.lock()
+        let continuation = continuations.removeValue(forKey: taskID)
+        destinations.removeValue(forKey: taskID)
+        lock.unlock()
         do {
             try FileManager.default.moveItem(at: location, to: safeTmp)
-            continuations[taskID]?.resume(returning: safeTmp)
+            continuation?.resume(returning: safeTmp)
         } catch {
-            continuations[taskID]?.resume(throwing: error)
+            continuation?.resume(throwing: error)
         }
-        continuations.removeValue(forKey: taskID)
-        destinations.removeValue(forKey: taskID)
     }
 
     func urlSession(
@@ -213,13 +230,16 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         let taskID = task.taskIdentifier
         guard let error = error else { return } // Success handled in didFinishDownloadingTo
 
-        if (error as NSError).code == NSURLErrorCancelled {
-            continuations[taskID]?.resume(throwing: DownloadError.cancelled)
-        } else {
-            let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-            continuations[taskID]?.resume(throwing: DownloadError.fileDownloadFailed(path: path, underlying: error))
-        }
-        continuations.removeValue(forKey: taskID)
+        lock.lock()
+        let continuation = continuations.removeValue(forKey: taskID)
+        let path = destinations[taskID]?.lastPathComponent ?? "unknown"
         destinations.removeValue(forKey: taskID)
+        lock.unlock()
+
+        if (error as NSError).code == NSURLErrorCancelled {
+            continuation?.resume(throwing: DownloadError.cancelled)
+        } else {
+            continuation?.resume(throwing: DownloadError.fileDownloadFailed(path: path, underlying: error))
+        }
     }
 }

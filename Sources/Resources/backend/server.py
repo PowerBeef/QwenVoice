@@ -293,7 +293,7 @@ def handle_generate(params):
 
     _ensure_mlx()
 
-    text = params.get("text")
+    text = (params.get("text") or "").strip()
     if not text:
         raise ValueError("Missing required param: text")
 
@@ -351,7 +351,9 @@ def handle_generate(params):
 
         if output_path:
             # Ensure parent dir exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            parent_dir = os.path.dirname(output_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
             shutil.move(source_file, output_path)
             final_path = output_path
         else:
@@ -366,9 +368,6 @@ def handle_generate(params):
 
         duration = get_audio_duration(final_path)
 
-        # Free MLX GPU memory pool between generations
-        _mx.metal.clear_cache()
-
         send_progress(100, "Done")
 
         return {
@@ -377,6 +376,9 @@ def handle_generate(params):
         }
 
     finally:
+        # Free MLX GPU memory pool between generations
+        if _mx is not None:
+            _mx.metal.clear_cache()
         # Clean up temp dir
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -460,8 +462,12 @@ def handle_delete_voice(params):
     if not name:
         raise ValueError("Missing required param: name")
 
-    wav_path = os.path.join(VOICES_DIR, f"{name}.wav")
-    txt_path = os.path.join(VOICES_DIR, f"{name}.txt")
+    safe_name = re.sub(r"[^\w\s-]", "", name).strip().replace(" ", "_")
+    if not safe_name:
+        raise ValueError("Invalid voice name")
+
+    wav_path = os.path.join(VOICES_DIR, f"{safe_name}.wav")
+    txt_path = os.path.join(VOICES_DIR, f"{safe_name}.txt")
 
     deleted = False
     if os.path.exists(wav_path):

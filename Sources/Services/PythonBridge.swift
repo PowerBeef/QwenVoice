@@ -83,7 +83,7 @@ final class PythonBridge: ObservableObject {
 
     /// Stop the Python backend process.
     func stop() {
-        process?.terminate()
+        let proc = process
         process = nil
         stdinPipe = nil
         stdoutPipe = nil
@@ -91,9 +91,20 @@ final class PythonBridge: ObservableObject {
         isReady = false
         isProcessing = false
         cancelAllPending(error: PythonBridgeError.processTerminated)
+
+        if let proc, proc.isRunning {
+            proc.terminate()
+            Task.detached {
+                proc.waitUntilExit()
+            }
+        }
     }
 
     // MARK: - RPC Calls
+
+    /// Default timeout for RPC calls (seconds).
+    private static let defaultTimeout: UInt64 = 300  // 5 minutes for generation
+    private static let pingTimeout: UInt64 = 10
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
     func call(_ method: String, params: [String: RPCValue] = [:]) async throws -> RPCValue {
@@ -121,14 +132,37 @@ final class PythonBridge: ObservableObject {
         progressMessage = ""
         lastError = nil
 
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingRequests[id] = continuation
-            guard let pipe = stdinPipe else {
-                pendingRequests.removeValue(forKey: id)
-                continuation.resume(throwing: PythonBridgeError.processNotRunning)
-                return
+        let timeout = method == "ping" ? Self.pingTimeout : Self.defaultTimeout
+
+        return try await withThrowingTaskGroup(of: RPCValue.self) { group in
+            group.addTask { @MainActor in
+                try await withCheckedThrowingContinuation { continuation in
+                    self.pendingRequests[id] = continuation
+                    guard let pipe = self.stdinPipe else {
+                        self.pendingRequests.removeValue(forKey: id)
+                        continuation.resume(throwing: PythonBridgeError.processNotRunning)
+                        return
+                    }
+                    pipe.fileHandleForWriting.write(lineData)
+                }
             }
-            pipe.fileHandleForWriting.write(lineData)
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeout * 1_000_000_000)
+                throw PythonBridgeError.timeout(seconds: Int(timeout))
+            }
+
+            guard let result = try await group.next() else {
+                throw PythonBridgeError.timeout(seconds: Int(timeout))
+            }
+            group.cancelAll()
+
+            // Clean up pending request on timeout
+            if pendingRequests[id] != nil {
+                pendingRequests.removeValue(forKey: id)
+            }
+
+            return result
         }
     }
 
@@ -435,6 +469,7 @@ enum PythonBridgeError: LocalizedError {
     case processTerminated
     case encodingError
     case rpcError(code: Int, message: String)
+    case timeout(seconds: Int)
 
     var errorDescription: String? {
         switch self {
@@ -446,6 +481,8 @@ enum PythonBridgeError: LocalizedError {
             return "Failed to encode RPC request"
         case .rpcError(_, let message):
             return message
+        case .timeout(let seconds):
+            return "Request timed out after \(seconds) seconds"
         }
     }
 }
