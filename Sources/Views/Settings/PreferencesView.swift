@@ -10,6 +10,7 @@ struct PreferencesView: View {
         Form {
             Section {
                 Toggle("Auto-play generated audio", isOn: $autoPlay)
+                    .tint(AppTheme.preferences)
                     .accessibilityIdentifier("preferences_autoPlayToggle")
             } header: {
                 Label("Playback", systemImage: "play.circle")
@@ -81,6 +82,7 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Preferences")
         .padding(24)
         .contentColumn()
