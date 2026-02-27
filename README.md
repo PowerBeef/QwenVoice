@@ -20,11 +20,6 @@ Built natively for Apple Silicon using Apple's MLX framework for highly optimize
 
 ## Screenshots
 
-<div align="center">
-  <img src="docs/screenshot1.png" alt="Qwen Voice Generation" width="49%">
-  <img src="docs/screenshot2.png" alt="Qwen Voice Models" width="49%">
-</div>
-
 ## Features
 
 ### Custom Voice
