@@ -91,11 +91,11 @@ struct HistoryView: View {
                     ForEach(filtered) { gen in
                         HistoryRow(generation: gen)
                             .contentShape(Rectangle())
-                            .onTapGesture {
+                            .simultaneousGesture(TapGesture().onEnded {
                                 if gen.audioFileExists {
                                     audioPlayer.playFile(gen.audioPath, title: gen.textPreview)
                                 }
-                            }
+                            })
                             .contextMenu {
                                 Button {
                                     if gen.audioFileExists {
