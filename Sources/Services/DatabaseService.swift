@@ -1,6 +1,14 @@
 import Foundation
 import GRDB
 
+enum GenerationSortField: String, CaseIterable {
+    case date, duration, voice, mode, manual
+
+    var label: String {
+        rawValue.capitalized
+    }
+}
+
 /// Manages SQLite database for generation history.
 final class DatabaseService {
     static let shared = DatabaseService()
@@ -39,6 +47,18 @@ final class DatabaseService {
             }
         }
 
+        migrator.registerMigration("v2_add_sortOrder") { db in
+            try db.alter(table: "generations") { t in
+                t.add(column: "sortOrder", .integer).defaults(to: 0)
+            }
+            // Backfill: assign sortOrder matching existing createdAt desc order
+            let rows = try Row.fetchAll(db, sql: "SELECT id FROM generations ORDER BY createdAt DESC")
+            for (index, row) in rows.enumerated() {
+                let id: Int64 = row["id"]
+                try db.execute(sql: "UPDATE generations SET sortOrder = ? WHERE id = ?", arguments: [index, id])
+            }
+        }
+
         try migrator.migrate(dbQueue)
     }
 
@@ -47,6 +67,10 @@ final class DatabaseService {
     func saveGeneration(_ generation: inout Generation) throws {
         guard let dbQueue else { return }
         try dbQueue.write { db in
+            if generation.id == nil {
+                let min = try Int.fetchOne(db, sql: "SELECT MIN(sortOrder) FROM generations") ?? 0
+                generation.sortOrder = min - 1
+            }
             try generation.save(db)
         }
     }
@@ -55,6 +79,31 @@ final class DatabaseService {
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
             try Generation.order(Generation.Columns.createdAt.desc).fetchAll(db)
+        }
+    }
+
+    func fetchGenerations(sortBy: GenerationSortField, ascending: Bool) throws -> [Generation] {
+        guard let dbQueue else { return [] }
+        return try dbQueue.read { db in
+            let ordering: SQLOrderingTerm
+            switch sortBy {
+            case .date:     ordering = ascending ? Generation.Columns.createdAt.asc : Generation.Columns.createdAt.desc
+            case .duration: ordering = ascending ? Generation.Columns.duration.asc : Generation.Columns.duration.desc
+            case .voice:    ordering = ascending ? Generation.Columns.voice.asc : Generation.Columns.voice.desc
+            case .mode:     ordering = ascending ? Generation.Columns.mode.asc : Generation.Columns.mode.desc
+            case .manual:   ordering = ascending ? Generation.Columns.sortOrder.asc : Generation.Columns.sortOrder.desc
+            }
+            return try Generation.order(ordering).fetchAll(db)
+        }
+    }
+
+    func updateSortOrders(_ idOrderPairs: [(id: Int64, sortOrder: Int)]) throws {
+        guard let dbQueue else { return }
+        try dbQueue.write { db in
+            for pair in idOrderPairs {
+                try db.execute(sql: "UPDATE generations SET sortOrder = ? WHERE id = ?",
+                               arguments: [pair.sortOrder, pair.id])
+            }
         }
     }
 

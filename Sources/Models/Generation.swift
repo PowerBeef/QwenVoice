@@ -13,6 +13,7 @@ struct Generation: Identifiable, Codable, Hashable {
     var audioPath: String
     var duration: Double?
     var createdAt: Date
+    var sortOrder: Int = 0
 
     /// Display-friendly date string
     var formattedDate: String {
@@ -40,7 +41,7 @@ extension Generation: TableRecord, FetchableRecord, MutablePersistableRecord {
     static let databaseTableName = "generations"
 
     enum Columns: String, ColumnExpression {
-        case id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
+        case id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt, sortOrder
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
