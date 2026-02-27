@@ -69,6 +69,9 @@ struct HistoryView: View {
         .task {
             await loadHistory()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
+            Task { await loadHistory() }
+        }
     }
 
     private func loadHistory() async {

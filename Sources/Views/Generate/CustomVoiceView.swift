@@ -288,7 +288,8 @@ struct CustomVoiceView: View {
                         duration: result.durationSeconds,
                         createdAt: Date()
                     )
-                    try? DatabaseService.shared.saveGeneration(&gen)
+                    try DatabaseService.shared.saveGeneration(&gen)
+                    NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
                 } else {
@@ -312,7 +313,8 @@ struct CustomVoiceView: View {
                         duration: result.durationSeconds,
                         createdAt: Date()
                     )
-                    try? DatabaseService.shared.saveGeneration(&gen)
+                    try DatabaseService.shared.saveGeneration(&gen)
+                    NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
                 }

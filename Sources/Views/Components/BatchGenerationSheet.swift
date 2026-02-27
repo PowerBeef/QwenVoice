@@ -173,7 +173,8 @@ struct BatchGenerationSheet: View {
                         duration: result?.durationSeconds,
                         createdAt: Date()
                     )
-                    try? DatabaseService.shared.saveGeneration(&gen)
+                    try DatabaseService.shared.saveGeneration(&gen)
+                    NotificationCenter.default.post(name: .generationSaved, object: nil)
                 }
             } catch {
                 errorMessage = error.localizedDescription

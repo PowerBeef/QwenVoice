@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let navigateToModels = Notification.Name("navigateToModels")
+    static let generationSaved = Notification.Name("generationSaved")
 }
 
 enum SidebarItem: String, CaseIterable, Identifiable {
