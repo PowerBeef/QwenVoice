@@ -59,10 +59,6 @@ final class DatabaseService {
     func saveGeneration(_ generation: inout Generation) throws {
         guard let dbQueue else { return }
         try dbQueue.write { db in
-            if generation.id == nil {
-                let min = try Int.fetchOne(db, sql: "SELECT MIN(sortOrder) FROM generations") ?? 0
-                generation.sortOrder = min - 1
-            }
             try generation.save(db)
         }
     }
