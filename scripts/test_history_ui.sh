@@ -1,9 +1,8 @@
 #!/bin/bash
 # Automated History View diagnostic test using AppleScript accessibility probing.
 #
-# Exercises the History tab's sort chips, sort direction toggle, context menu,
-# and full accessibility identifier dump — reports what's found vs. missing
-# to diagnose SwiftUI accessibility issues.
+# Exercises the History tab's context menu and full accessibility identifier dump
+# — reports what's found vs. missing to diagnose SwiftUI accessibility issues.
 #
 # Prerequisites:
 #   - "Qwen Voice" app must be running with backend ready
@@ -69,33 +68,6 @@ tell application \"System Events\"
     end tell
 end tell
 " 2>/dev/null || true
-}
-
-# Find and click a UI element by its SwiftUI accessibilityIdentifier.
-click_element_by_id() {
-    local identifier="$1"
-    local result
-    result=$(osascript -e "
-tell application \"System Events\"
-    tell process \"Qwen Voice\"
-        set frontmost to true
-        delay 0.3
-        set contentArea to group 2 of splitter group 1 of group 1 of window 1
-        set ec to entire contents of contentArea
-        repeat with elem in ec
-            try
-                if value of attribute \"AXIdentifier\" of elem is \"$identifier\" then
-                    click elem
-                    delay 0.3
-                    return \"ok\"
-                end if
-            end try
-        end repeat
-        return \"not_found\"
-    end tell
-end tell
-" 2>/dev/null || echo "error")
-    echo "$result"
 }
 
 # Find a UI element by accessibility identifier without clicking — returns role and name.
@@ -282,65 +254,10 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════════
-# Test 2: Sort Chips Visibility
+# Test 2: Empty State vs. History Rows
 # ══════════════════════════════════════════════════════════════════════════════════
 
-header "Test 2: Sort Chips Visibility"
-
-SORT_CHIPS=("history_sort_date" "history_sort_duration" "history_sort_voice" "history_sort_mode" "history_sort_manual")
-CHIPS_FOUND=0
-CHIPS_MISSING=0
-
-for chip_id in "${SORT_CHIPS[@]}"; do
-    CHIP_RESULT=$(find_element_by_id "$chip_id")
-    if [[ "$CHIP_RESULT" == "not_found" || "$CHIP_RESULT" == "error" ]]; then
-        fail_test "Sort chip '$chip_id' NOT FOUND"
-        CHIPS_MISSING=$((CHIPS_MISSING + 1))
-    else
-        IFS='|' read -r ROLE NAME DESC <<< "$CHIP_RESULT"
-        pass_test "Sort chip '$chip_id' found — role: $ROLE, name: ${NAME:-<empty>}, desc: ${DESC:-<empty>}"
-        CHIPS_FOUND=$((CHIPS_FOUND + 1))
-    fi
-done
-
-info "Sort chips: $CHIPS_FOUND found, $CHIPS_MISSING missing"
-
-# ══════════════════════════════════════════════════════════════════════════════════
-# Test 3: Sort Direction Toggle
-# ══════════════════════════════════════════════════════════════════════════════════
-
-header "Test 3: Sort Direction Toggle"
-
-DIR_RESULT=$(find_element_by_id "history_sortDirection")
-
-if [[ "$DIR_RESULT" == "not_found" || "$DIR_RESULT" == "error" ]]; then
-    fail_test "history_sortDirection element NOT FOUND"
-else
-    IFS='|' read -r ROLE NAME DESC <<< "$DIR_RESULT"
-    pass_test "history_sortDirection found — role: $ROLE, name: ${NAME:-<empty>}, desc: ${DESC:-<empty>}"
-fi
-
-# ══════════════════════════════════════════════════════════════════════════════════
-# Test 4: Click Each Sort Chip
-# ══════════════════════════════════════════════════════════════════════════════════
-
-header "Test 4: Click Each Sort Chip"
-
-for chip_id in "${SORT_CHIPS[@]}"; do
-    CLICK_RESULT=$(click_element_by_id "$chip_id")
-    if [[ "$CLICK_RESULT" == "ok" ]]; then
-        pass_test "Clicked '$chip_id' successfully"
-    else
-        fail_test "Could not click '$chip_id' (result: $CLICK_RESULT)"
-    fi
-    sleep 0.5
-done
-
-# ══════════════════════════════════════════════════════════════════════════════════
-# Test 5: Empty State vs. History Rows
-# ══════════════════════════════════════════════════════════════════════════════════
-
-header "Test 5: Empty State vs. History Rows"
+header "Test 2: Empty State vs. History Rows"
 
 EMPTY_RESULT=$(find_element_by_id "history_emptyState")
 HAS_ROWS=false
@@ -404,10 +321,10 @@ end tell
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════════
-# Test 6: Context Menu (only if rows exist)
+# Test 3: Context Menu (only if rows exist)
 # ══════════════════════════════════════════════════════════════════════════════════
 
-header "Test 6: Context Menu"
+header "Test 3: Context Menu"
 
 if [[ "$HAS_ROWS" == "true" ]]; then
     info "Attempting to right-click first history row..."
@@ -482,18 +399,15 @@ end tell
         # AXShowMenu succeeded; SwiftUI context menus are transient overlays not enumerable
         # via standard accessibility. This is expected — treat trigger success as PASS.
         pass_test "Context menu triggered via AXShowMenu (SwiftUI transient menus not AX-enumerable)"
-        info "  Expected items: Play, Save As, Reveal in Finder, Delete"
+        info "  Expected item: Reveal in Finder"
         info "  Verify manually by right-clicking a row in the app"
     else
         info "Menu items found: $TRIGGER_RESULT"
-        EXPECTED_ITEMS=("Play" "Save As" "Reveal in Finder" "Delete")
-        for item in "${EXPECTED_ITEMS[@]}"; do
-            if echo "$TRIGGER_RESULT" | grep -qi "$item"; then
-                pass_test "Context menu contains '$item'"
-            else
-                fail_test "Context menu missing '$item'"
-            fi
-        done
+        if echo "$TRIGGER_RESULT" | grep -qi "Reveal in Finder"; then
+            pass_test "Context menu contains 'Reveal in Finder'"
+        else
+            fail_test "Context menu missing 'Reveal in Finder'"
+        fi
     fi
 else
     info "No history rows — skipping context menu test"
@@ -501,10 +415,10 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════════
-# Test 7: Full Diagnostic Dump
+# Test 4: Full Diagnostic Dump (history_* identifiers)
 # ══════════════════════════════════════════════════════════════════════════════════
 
-header "Test 7: Full Diagnostic Dump (history_* identifiers)"
+header "Test 4: Full Diagnostic Dump (history_* identifiers)"
 
 DUMP=$(osascript -e '
 tell application "System Events"

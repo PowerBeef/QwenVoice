@@ -5,8 +5,6 @@ struct HistoryView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @State private var generations: [Generation] = []
     @State private var searchText = ""
-    @State private var sortField: GenerationSortField = .date
-    @State private var sortAscending = false
     @State private var showDeleteConfirmation = false
     @State private var generationToDelete: Generation?
 
@@ -34,41 +32,6 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
-            .padding(.bottom, 8)
-
-            // Sort chips
-            HStack(spacing: 8) {
-                ForEach(GenerationSortField.allCases, id: \.self) { field in
-                    Button {
-                        if sortField == field {
-                            sortAscending.toggle()
-                        } else {
-                            sortField = field
-                            sortAscending = false
-                        }
-                        Task { await loadHistory() }
-                    } label: {
-                        Text(field.label)
-                            .chipStyle(isSelected: sortField == field, color: AppTheme.history)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("history_sort_\(field.rawValue)")
-                }
-
-                Button {
-                    sortAscending.toggle()
-                    Task { await loadHistory() }
-                } label: {
-                    Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(AppTheme.history)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("history_sortDirection")
-
-                Spacer()
-            }
-            .padding(.horizontal, 24)
             .padding(.bottom, 12)
 
             if filtered.isEmpty {
@@ -89,51 +52,31 @@ struct HistoryView: View {
             } else {
                 List {
                     ForEach(filtered) { gen in
-                        HistoryRow(generation: gen)
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(TapGesture().onEnded {
-                                if gen.audioFileExists {
-                                    audioPlayer.playFile(gen.audioPath, title: gen.textPreview)
-                                }
-                            })
-                            .contextMenu {
-                                Button {
-                                    if gen.audioFileExists {
-                                        audioPlayer.playFile(gen.audioPath, title: gen.textPreview)
-                                    }
-                                } label: {
-                                    Label("Play", systemImage: "play.fill")
-                                }
-                                .disabled(!gen.audioFileExists)
-
-                                Button {
-                                    exportGeneration(gen)
-                                } label: {
-                                    Label("Save As\u{2026}", systemImage: "square.and.arrow.down")
-                                }
-                                .disabled(!gen.audioFileExists)
-
-                                Button {
-                                    NSWorkspace.shared.selectFile(gen.audioPath, inFileViewerRootedAtPath: "")
-                                } label: {
-                                    Label("Reveal in Finder", systemImage: "folder")
-                                }
-                                .disabled(!gen.audioFileExists)
-
-                                Divider()
-
-                                Button(role: .destructive) {
-                                    generationToDelete = gen
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                        HistoryRow(
+                            generation: gen,
+                            onPlay: {
+                                audioPlayer.playFile(gen.audioPath, title: gen.textPreview)
+                            },
+                            onSaveAs: {
+                                exportGeneration(gen)
+                            },
+                            onDelete: {
+                                generationToDelete = gen
+                                showDeleteConfirmation = true
                             }
+                        )
+                        .contextMenu {
+                            Button {
+                                NSWorkspace.shared.selectFile(gen.audioPath, inFileViewerRootedAtPath: "")
+                            } label: {
+                                Label("Reveal in Finder", systemImage: "folder")
+                            }
+                            .disabled(!gen.audioFileExists)
+                        }
                     }
                     .onDelete { indices in
                         deleteGenerations(at: indices)
                     }
-                    .onMove(perform: sortField == .manual && searchText.isEmpty ? moveGenerations : nil)
                 }
                 .listStyle(.inset)
             }
@@ -171,7 +114,7 @@ struct HistoryView: View {
 
     private func loadHistory() async {
         do {
-            generations = try DatabaseService.shared.fetchGenerations(sortBy: sortField, ascending: sortAscending)
+            generations = try DatabaseService.shared.fetchAllGenerations()
         } catch {
             // Will be empty until database is set up
         }
@@ -194,12 +137,6 @@ struct HistoryView: View {
         }
     }
 
-    private func moveGenerations(from source: IndexSet, to destination: Int) {
-        generations.move(fromOffsets: source, toOffset: destination)
-        let pairs = generations.enumerated().map { (id: $0.element.id!, sortOrder: $0.offset) }
-        try? DatabaseService.shared.updateSortOrders(pairs)
-    }
-
     private func exportGeneration(_ gen: Generation) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = URL(fileURLWithPath: gen.audioPath).lastPathComponent
@@ -213,6 +150,9 @@ struct HistoryView: View {
 
 struct HistoryRow: View {
     let generation: Generation
+    let onPlay: () -> Void
+    let onSaveAs: () -> Void
+    let onDelete: () -> Void
 
     private var modeColor: Color {
         AppTheme.modeColor(for: generation.mode)
@@ -253,6 +193,34 @@ struct HistoryRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
             }
+
+            Button {
+                onPlay()
+            } label: {
+                Image(systemName: "play.circle")
+                    .font(.title3)
+                    .foregroundColor(AppTheme.history)
+            }
+            .buttonStyle(.plain)
+            .disabled(!generation.audioFileExists)
+
+            Button {
+                onSaveAs()
+            } label: {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.title3)
+                    .foregroundColor(AppTheme.history)
+            }
+            .buttonStyle(.plain)
+            .disabled(!generation.audioFileExists)
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
         .opacity(generation.audioFileExists ? 1 : 0.5)
