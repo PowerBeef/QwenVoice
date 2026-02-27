@@ -86,7 +86,15 @@ struct SidebarView: View {
                 .animation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
                 .accessibilityIdentifier("sidebar_generationStatus")
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(pythonBridge.isProcessing ? Color.blue.opacity(0.1) : Color.green.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(pythonBridge.isProcessing ? Color.blue.opacity(0.2) : Color.green.opacity(0.2), lineWidth: 1)
+                        )
+                )
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Backend status indicator
