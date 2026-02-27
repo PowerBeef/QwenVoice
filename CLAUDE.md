@@ -58,6 +58,7 @@ All UI elements have `accessibilityIdentifier` values following the pattern `"{v
 3. The Python process sends a `ready` notification on startup → sets `PythonBridge.isReady = true`
 4. Progress updates arrive as `progress` notifications (no `id` field) before the final response
 5. Only one model lives in GPU memory at a time; `load_model` unloads the previous before loading
+6. RPC calls have timeouts: 300s for generation, 10s for `ping`. On timeout, `PythonBridgeError.timeout` is thrown and the pending request is cleaned up
 
 ### Python path resolution (dev vs. bundled)
 `PythonBridge.findPython()` checks in order:
@@ -73,16 +74,16 @@ Models are downloaded via `HuggingFaceDownloader.swift` using native URLSession 
 | File | Role |
 |------|------|
 | `Sources/Resources/backend/server.py` | Python JSON-RPC server; all ML inference happens here |
-| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations |
+| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations with timeouts |
 | `Sources/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum, speaker list |
 | `Sources/Models/RPCMessage.swift` | JSON-RPC 2.0 codec — `RPCValue` enum for type-safe JSON |
 | `Sources/Models/EmotionPreset.swift` | Predefined emotion/tone presets |
-| `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history at `history.sqlite` |
+| `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history; `DatabaseServiceError` for init failures |
 | `Sources/Services/AudioService.swift` | Audio playback |
 | `Sources/Services/WaveformService.swift` | Waveform data extraction for visualization |
 | `Sources/ViewModels/ModelManagerViewModel.swift` | Download/delete model state, `ModelStatus` enum |
 | `Sources/ViewModels/AudioPlayerViewModel.swift` | Playback state, current file, duration |
-| `Sources/Services/HuggingFaceDownloader.swift` | Native URLSession model downloader (replaces huggingface-cli) |
+| `Sources/Services/HuggingFaceDownloader.swift` | Native URLSession model downloader; NSLock-protected delegate state |
 | `Sources/Services/PythonEnvironmentManager.swift` | First-boot venv creation, SHA256 marker validation |
 | `Sources/QwenVoiceApp.swift` | @main entry point, window setup, app directories, keyboard shortcuts |
 | `Sources/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `Notification.Name.navigateToModels` handled here |
@@ -179,15 +180,15 @@ Two generate views (`CustomVoiceView`, `VoiceCloningView`) share the same struct
 | `init` | `app_support_dir` | Configure paths (called on startup) |
 | `load_model` | `model_id` or `model_path` | Load 1.7B model to GPU (unloads previous) |
 | `unload_model` | — | Free GPU memory |
-| `generate` | `text` + (`voice`\|`instruct`\|`ref_audio`) | Generate audio (mode by param presence) |
+| `generate` | `text` + (`voice`\|`instruct`\|`ref_audio`) | Generate audio (mode by param presence); text is stripped |
 | `convert_audio` | `input_path`, `output_path?` | Convert to 24kHz mono WAV |
 | `list_voices` | — | List enrolled voices |
 | `enroll_voice` | `name`, `audio_path`, `transcript?` | Save voice reference (.wav + .txt) |
-| `delete_voice` | `name` | Delete enrolled voice files |
+| `delete_voice` | `name` | Delete enrolled voice files; name is sanitized |
 | `get_model_info` | — | Model metadata & download status |
 | `get_speakers` | — | Speaker map (4 English speakers) |
 
-**Mode detection in `generate`:** `ref_audio` present → clone, `voice` present → custom, `instruct` only → design. `speed` parameter scales generation speed (Custom Voice only).
+**Mode detection in `generate`:** `ref_audio` present → clone, `voice` present → custom, `instruct` only → design. `speed` parameter scales generation speed (Custom Voice only). `text` is stripped of whitespace; whitespace-only input is rejected. GPU cache (`mx.metal.clear_cache()`) is freed in a `finally` block after every generation attempt.
 
 ### Scripts
 
@@ -228,6 +229,11 @@ Two generate views (`CustomVoiceView`, `VoiceCloningView`) share the same struct
 - macOS 14.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
 - **Changing `requirements.txt` invalidates the venv marker** — the app will redo full setup on next launch. After editing requirements, either let the app rebuild the venv or manually: recreate the venv, `pip install -r requirements.txt`, and write `shasum -a 256 requirements.txt | awk '{print $1}'` to `python/.setup-complete`.
 - **`audioop-lts` is 3.13+ only** — it backports the `audioop` stdlib module removed in 3.13. The environment marker in `requirements.txt` ensures pip skips it on 3.12 where `audioop` is built-in.
-- **No auto-restart on backend crash** — if the Python process terminates, `PythonBridge.isReady` becomes `false` and generation views disable. The user must quit and reopen the app.
+- **No auto-restart on backend crash** — if the Python process terminates, `PythonBridge.isReady` becomes `false` and generation views disable. The user must quit and reopen the app. `stop()` terminates the process and waits for exit in a detached task to avoid zombie processes.
+- **RPC timeout** — `PythonBridge.call()` times out after 300s (generation) or 10s (ping). On timeout the pending request is cleaned up and `PythonBridgeError.timeout` is thrown.
+- **DatabaseService.saveGeneration throws** when `dbQueue` is nil (init failed). Callers must handle errors. Read-only methods return empty arrays with a console warning.
+- **HuggingFaceDownloader thread safety** — `continuations`, `destinations`, and progress state are protected by `NSLock` across caller and URLSession delegate threads.
+- **VoiceCloningView drop handler** validates file extensions against `[wav, mp3, aiff, aif, m4a, flac, ogg]`; non-audio files are rejected with an error message.
+- **Voice name sanitization** — both `enroll_voice` and `delete_voice` in server.py sanitize the name parameter to prevent path traversal.
 - **XcodeGen overwrites entitlements** — always use `scripts/regenerate_project.sh` instead of `xcodegen generate` directly.
 - **Audio sample rate:** 24000 Hz for all generated audio.
