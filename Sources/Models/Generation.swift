@@ -42,6 +42,19 @@ extension Generation: TableRecord, FetchableRecord, MutablePersistableRecord {
         case id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
     }
 
+    init(row: Row) {
+        id = row[Columns.id]
+        text = row[Columns.text]
+        mode = row[Columns.mode]
+        modelTier = row[Columns.modelTier]
+        voice = row[Columns.voice]
+        emotion = row[Columns.emotion]
+        speed = row[Columns.speed]
+        audioPath = row[Columns.audioPath]
+        duration = row[Columns.duration]
+        createdAt = row[Columns.createdAt]
+    }
+
     mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }

@@ -2,6 +2,8 @@
 
 This document provides a comprehensive analysis of the **QwenVoice** project architecture, directory structure, tech stack, and dependencies.
 
+The repo root is `/Users/patricedery/Coding_Projects/QwenVoice`. Older notes that refer to a nested `QwenVoice/QwenVoice` path are stale.
+
 ## 1. Project Overview
 
 **QwenVoice** is a native macOS frontend application dedicated to running [Qwen3-TTS](https://huggingface.co/Qwen) inference locally on Apple Silicon (M1/M2/M3/M4). By leveraging Apple's **MLX** framework, the project delivers highly optimized, low-latency, and low-heat offline text-to-speech generation.
@@ -23,34 +25,33 @@ The project is cleanly separated into a two-process design, delineating the Swif
 
 ```plaintext
 .
-├── QwenVoice/               # Swift Native macOS Frontend
-│   ├── Sources/             # Application source code (SwiftUI)
-│   │   ├── QwenVoiceApp.swift      # @main entry point, window setup, app directories
-│   │   ├── ContentView.swift       # Root NavigationSplitView + sidebar routing
-│   │   ├── Views/                  # SwiftUI Views
-│   │   │   ├── SetupView.swift     # First-boot Python setup UI
-│   │   │   ├── Sidebar/SidebarView.swift
-│   │   │   ├── Generate/           # CustomVoiceView, VoiceCloningView
-│   │   │   ├── Library/            # HistoryView, VoicesView
-│   │   │   ├── Settings/           # ModelsView, PreferencesView
-│   │   │   └── Components/         # AppTheme, TextInputView, AudioPlayerBar, etc.
-│   │   ├── ViewModels/             # ModelManagerViewModel, AudioPlayerViewModel
-│   │   ├── Services/               # PythonBridge, PythonEnvironmentManager, DatabaseService, etc.
-│   │   ├── Models/                 # TTSModel, Generation, Voice, RPCMessage, EmotionPreset
-│   │   └── Resources/
-│   │       └── backend/server.py   # Python JSON-RPC backend (all inference)
-│   ├── QwenVoiceUITests/    # UI testing suite (51 tests across 10 files)
-│   ├── scripts/             # Build and release scripts
-│   │   ├── release.sh       # Full pipeline: bundle Python/ffmpeg → build → DMG
-│   │   ├── bundle_python.sh # Download & install Python 3.13 standalone (arm64)
-│   │   ├── bundle_ffmpeg.sh # Embed ffmpeg binary
-│   │   ├── regenerate_project.sh  # XcodeGen + entitlements backup/restore
-│   │   ├── create_dmg.sh    # Create DMG distribution
-│   │   ├── run_tests.sh     # Run XCUITests
-│   │   └── test_download.sh # Test HuggingFace download flow
-│   ├── project.yml          # XcodeGen configuration file
-│   └── README.md            # User-facing documentation
-│
+├── Sources/                 # Application source code (SwiftUI)
+│   ├── QwenVoiceApp.swift      # @main entry point, window setup, app directories
+│   ├── ContentView.swift       # Root NavigationSplitView + sidebar routing
+│   ├── Views/                  # SwiftUI Views
+│   │   ├── SetupView.swift     # First-boot Python setup UI
+│   │   ├── Sidebar/SidebarView.swift
+│   │   ├── Generate/           # CustomVoiceView, VoiceCloningView
+│   │   ├── Library/            # HistoryView, VoicesView
+│   │   ├── Settings/           # ModelsView, PreferencesView
+│   │   └── Components/         # AppTheme, TextInputView, SidebarPlayerView, etc.
+│   ├── ViewModels/             # ModelManagerViewModel, AudioPlayerViewModel
+│   ├── Services/               # PythonBridge, PythonEnvironmentManager, DatabaseService, etc.
+│   ├── Models/                 # TTSModel, Generation, Voice, RPCMessage, EmotionPreset
+│   ├── Assets.xcassets/        # Current app asset catalog source
+│   └── Resources/
+│       └── backend/server.py   # Python JSON-RPC backend (all inference)
+├── QwenVoiceUITests/        # UI testing suite (54 tests across 9 test files)
+├── scripts/                 # Build and release scripts
+│   ├── release.sh           # Full pipeline: bundle Python/ffmpeg → build → DMG
+│   ├── bundle_python.sh     # Download & install Python 3.13 standalone (arm64)
+│   ├── bundle_ffmpeg.sh     # Embed ffmpeg binary
+│   ├── regenerate_project.sh # XcodeGen + entitlements backup/restore
+│   ├── create_dmg.sh        # Create DMG distribution
+│   ├── run_tests.sh         # Run XCUITests
+│   └── test_download.sh     # Test HuggingFace download flow
+├── project.yml              # XcodeGen configuration file
+├── README.md                # User-facing documentation
 ├── cli/                     # Python CLI tool (standalone predecessor to GUI)
 │   ├── main.py              # Interactive TTS menu (9 speakers across 4 languages)
 │   ├── requirements.txt     # Python dependencies
@@ -82,7 +83,7 @@ The project is cleanly separated into a two-process design, delineating the Swif
 - **Language**: Swift 5.9
 - **Target**: macOS 14.0+ (Sonoma), Apple Silicon only (arm64)
 - **Framework**: SwiftUI
-- **UI/UX Design**: Premium monochromatic liquid glass aesthetic with a single soft blue-indigo accent, single ambient glow aurora background, tinted-glass chip style, and fluid micro-animations driven by a centralized `AppTheme`. AudioPlayerBar is embedded as a scrollable glass card.
+- **UI/UX Design**: Premium monochromatic liquid glass aesthetic with a single soft blue-indigo accent, single ambient glow aurora background, tinted-glass chip style, and fluid micro-animations driven by a centralized `AppTheme`. Playback is currently handled by `SidebarPlayerView` in the sidebar.
 - **Project Generation**: XcodeGen (`project.yml`)
 - **Key Dependencies**:
   - `GRDB.swift` (v7.0.0): SQLite-backed generation history — the only SPM package.
@@ -92,7 +93,7 @@ The project is cleanly separated into a two-process design, delineating the Swif
 - **Environment**: Standalone Python 3.13 (bundled during release); auto-created venv in dev
 - **Audio Processing**: ffmpeg (for WAV/MP3/AIFF conversions)
 - **Key Python Packages** (from `requirements.txt`):
-  - **Apple MLX Ecosystem**: `mlx==0.30.3`, `mlx-audio` (pinned git commit), `mlx-lm==0.30.5`, `mlx-metal` (hardware-accelerated inference)
+  - **Apple MLX Ecosystem**: `mlx==0.30.3`, a repacked `mlx-audio==0.3.1.post1` for the app backend (`Sources/Resources/requirements.txt`), `mlx-audio` pinned to a git commit for the standalone CLI (`cli/requirements.txt`), `mlx-lm==0.30.5`, `mlx-metal` (hardware-accelerated inference)
   - **Transformers & HuggingFace**: `transformers==5.0.0rc3`, `huggingface_hub`, `tokenizers`, `safetensors`
   - **Audio Processing**: `librosa`, `soundfile`, `sounddevice`, `audioread`
   - **Core Utilities**: `numpy`, `scipy`, `scikit-learn`
@@ -147,7 +148,7 @@ The app uses a **Two-Process Architecture**:
 
 ### Build & Run
 ```bash
-# Build (from QwenVoice/ directory)
+# Build (from repo root)
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 
 # Launch the built app (dynamically resolves DerivedData path)
@@ -195,6 +196,7 @@ The underlying discrete multi-codebook language model interprets these prompts t
 - **SourceKit false errors** on cross-file Swift references are expected until the project is opened in Xcode — the build still succeeds.
 - macOS 14.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
 - **XcodeGen overwrites entitlements** — always use `scripts/regenerate_project.sh` instead of `xcodegen generate` directly.
+- **Asset catalogs are in transition** — `project.yml` points at `Sources/Assets.xcassets`, while the checked-in `.xcodeproj` may still reference the top-level `Assets.xcassets`.
 - **Changing `requirements.txt` invalidates the venv marker** — the app will redo full setup on next launch.
 - **`audioop-lts` is 3.13+ only** — environment marker in `requirements.txt` skips it on 3.12 where `audioop` is built-in.
 - **No auto-restart on backend crash** — if the Python process terminates, `PythonBridge.isReady` becomes `false` and generation views disable. User must quit and reopen.

@@ -29,7 +29,32 @@ struct VoicesView: View {
             .padding(.top, 24)
             .padding(.bottom, 12)
 
-            if voices.isEmpty && !isLoading {
+            if !pythonBridge.isReady {
+                Spacer()
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(AppTheme.voices)
+                    Text("Starting backend...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Text("Enrolled voices will appear once the Python service is ready")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else if isLoading {
+                Spacer()
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(AppTheme.voices)
+                    Text("Loading voices...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else if voices.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "waveform.badge.plus")
@@ -92,8 +117,17 @@ struct VoicesView: View {
 
         }
         .contentColumn()
+        .accessibilityIdentifier("screen_voices")
         .task {
-            await loadVoices()
+            if pythonBridge.isReady {
+                await loadVoices()
+            }
+        }
+        .onChange(of: pythonBridge.isReady) { _, isReady in
+            guard isReady else { return }
+            Task {
+                await loadVoices()
+            }
         }
         .sheet(isPresented: $showingEnroll) {
             EnrollVoiceSheet(onComplete: {
@@ -104,6 +138,10 @@ struct VoicesView: View {
     }
 
     private func loadVoices() async {
+        guard pythonBridge.isReady else {
+            isLoading = false
+            return
+        }
         isLoading = true
         do {
             voices = try await pythonBridge.listVoices()

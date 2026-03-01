@@ -44,12 +44,12 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 if $SKIP_DEPS; then
-    echo "[1/6] Bundle Python — skipped (--skip-deps)"
+    echo "[1/7] Bundle Python — skipped (--skip-deps)"
 else
-    echo "[1/6] Bundling Python..."
+    echo "[1/7] Bundling Python..."
     "$SCRIPT_DIR/bundle_python.sh"
     echo ""
-    echo "[1/6] Bundle Python — done ($(step_time $STEP_START))"
+    echo "[1/7] Bundle Python — done ($(step_time $STEP_START))"
 fi
 echo ""
 
@@ -58,12 +58,12 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 if $SKIP_DEPS; then
-    echo "[2/6] Bundle ffmpeg — skipped (--skip-deps)"
+    echo "[2/7] Bundle ffmpeg — skipped (--skip-deps)"
 else
-    echo "[2/6] Bundling ffmpeg..."
+    echo "[2/7] Bundling ffmpeg..."
     "$SCRIPT_DIR/bundle_ffmpeg.sh"
     echo ""
-    echo "[2/6] Bundle ffmpeg — done ($(step_time $STEP_START))"
+    echo "[2/7] Bundle ffmpeg — done ($(step_time $STEP_START))"
 fi
 echo ""
 
@@ -72,7 +72,7 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 if $SKIP_BUILD; then
-    echo "[3/6] Build Release — skipped (--skip-build)"
+    echo "[3/7] Build Release — skipped (--skip-build)"
 else
     # Clean build directory (only when actually building)
     if ! $SKIP_DEPS; then
@@ -80,11 +80,11 @@ else
     fi
     mkdir -p "$BUILD_DIR"
 
-    echo "[3/6] Regenerating Xcode project..."
+    echo "[3/7] Regenerating Xcode project..."
     "$SCRIPT_DIR/regenerate_project.sh"
     echo ""
 
-    echo "[3/6] Building Release with xcodebuild..."
+    echo "[3/7] Building Release with xcodebuild..."
     cd "$PROJECT_DIR"
     xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
@@ -93,7 +93,7 @@ else
         build | tail -5
 
     echo ""
-    echo "[3/6] Build Release — done ($(step_time $STEP_START))"
+    echo "[3/7] Build Release — done ($(step_time $STEP_START))"
 fi
 echo ""
 
@@ -101,7 +101,7 @@ echo ""
 # Step 4: Copy .app from DerivedData
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
-echo "[4/6] Copying .app from DerivedData..."
+echo "[4/7] Copying .app from DerivedData..."
 
 if $SKIP_BUILD; then
     # When skipping build, the .app should already be in build/
@@ -110,7 +110,7 @@ if $SKIP_BUILD; then
         echo "Run without --skip-build first."
         exit 1
     fi
-    echo "[4/6] Copy .app — skipped (using existing build/Qwen Voice.app)"
+        echo "[4/7] Copy .app — skipped (using existing build/Qwen Voice.app)"
 else
     # Resolve BUILT_PRODUCTS_DIR from xcodebuild
     cd "$PROJECT_DIR"
@@ -141,7 +141,7 @@ RESOURCES_SRC="$PROJECT_DIR/Sources/Resources"
 APP_RESOURCES="$BUILD_DIR/Qwen Voice.app/Contents/Resources"
 
 if [ -d "$RESOURCES_SRC/python" ]; then
-    echo "[4/6] Copying bundled Python into .app..."
+    echo "[4/7] Copying bundled Python into .app..."
     rm -rf "$APP_RESOURCES/python"
     cp -a "$RESOURCES_SRC/python" "$APP_RESOURCES/python"
 else
@@ -149,34 +149,50 @@ else
 fi
 
 if [ -f "$RESOURCES_SRC/ffmpeg" ]; then
-    echo "[4/6] Copying bundled ffmpeg into .app..."
+    echo "[4/7] Copying bundled ffmpeg into .app..."
     cp -f "$RESOURCES_SRC/ffmpeg" "$APP_RESOURCES/ffmpeg"
 else
     echo "Warning: No bundled ffmpeg found at $RESOURCES_SRC/ffmpeg"
 fi
 
-echo "[4/6] Copy .app + deps — done ($(step_time $STEP_START))"
+echo "[4/7] Removing build-only resource artifacts..."
+rm -rf "$APP_RESOURCES/vendor" 2>/dev/null || true
+find "$APP_RESOURCES" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$APP_RESOURCES" -name "*.pyc" -delete 2>/dev/null || true
+find "$APP_RESOURCES" -name "*.whl" -delete 2>/dev/null || true
+
+echo "[4/7] Copy .app + deps — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 5: Create DMG
+# Step 5: Verify bundle
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
-echo "[5/6] Creating DMG..."
-"$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/Qwen Voice.app"
+echo "[5/7] Verifying bundled runtime..."
+"$SCRIPT_DIR/verify_release_bundle.sh" "$BUILD_DIR/Qwen Voice.app"
 echo ""
-echo "[5/6] Create DMG — done ($(step_time $STEP_START))"
+echo "[5/7] Verify bundle — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 6: Report
+# Step 6: Create DMG
+# ---------------------------------------------------------------------------
+STEP_START=$(date +%s)
+echo "[6/7] Creating DMG..."
+"$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/Qwen Voice.app"
+echo ""
+echo "[6/7] Create DMG — done ($(step_time $STEP_START))"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 7: Report
 # ---------------------------------------------------------------------------
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 DMG_PATH="$BUILD_DIR/QwenVoice.dmg"
 DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
 APP_SIZE=$(du -sh "$BUILD_DIR/Qwen Voice.app" | cut -f1)
 
-echo "[6/6] Release complete!"
+echo "[7/7] Release complete!"
 echo ""
 echo "  App:  $BUILD_DIR/Qwen Voice.app  ($APP_SIZE)"
 echo "  DMG:  $DMG_PATH  ($DMG_SIZE)"

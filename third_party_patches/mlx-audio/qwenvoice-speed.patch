@@ -1,0 +1,19 @@
+This repository vendors `mlx-audio` as a repacked wheel rather than rebuilding
+the full source tree.
+
+The QwenVoice-specific patch consists of injecting:
+
+- `mlx_audio/qwenvoice_speed_patch.py`
+
+from:
+
+- `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`
+
+and then repacking the upstream `mlx-audio==0.3.1` wheel as
+`mlx-audio==0.3.1.post1`.
+
+Use:
+
+- [build_mlx_audio_wheel.sh](/Users/patricedery/Coding_Projects/QwenVoice/scripts/build_mlx_audio_wheel.sh)
+
+to reproduce the vendored wheel.

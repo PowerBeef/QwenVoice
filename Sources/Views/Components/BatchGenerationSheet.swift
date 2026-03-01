@@ -122,6 +122,18 @@ struct BatchGenerationSheet: View {
                 return
             }
 
+            if mode == .design && (voiceDescription ?? "").isEmpty {
+                errorMessage = "Enter a voice description before starting batch generation."
+                isProcessing = false
+                return
+            }
+
+            if mode == .clone && refAudio == nil {
+                errorMessage = "Select a reference audio file before starting batch generation."
+                isProcessing = false
+                return
+            }
+
             do {
                 try await pythonBridge.loadModel(id: model.id)
 
@@ -161,6 +173,8 @@ struct BatchGenerationSheet: View {
                         }
                     }
 
+                    guard let result else { continue }
+
                     // Save to history
                     var gen = Generation(
                         text: line,
@@ -169,8 +183,8 @@ struct BatchGenerationSheet: View {
                         voice: voice ?? voiceDescription,
                         emotion: emotion,
                         speed: speed,
-                        audioPath: outputPath,
-                        duration: result?.durationSeconds,
+                        audioPath: result.audioPath,
+                        duration: result.durationSeconds,
                         createdAt: Date()
                     )
                     try DatabaseService.shared.saveGeneration(&gen)

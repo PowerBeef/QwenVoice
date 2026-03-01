@@ -1,69 +1,46 @@
 import XCTest
 
 final class VoiceCloningViewTests: QwenVoiceUITestBase {
+    override class var initialScreen: UITestScreen? { .voiceCloning }
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        navigateToSidebar("voiceCloning")
-        let title = app.staticTexts["voiceCloning_title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-    }
-
-    // MARK: - Title & Header
-
-    func testTitleExists() {
+    func testVoiceCloningScreenCoreLayout() {
+        _ = waitForScreen(.voiceCloning)
         assertElementExists("voiceCloning_title")
+        _ = waitForElement("voiceCloning_batchButton", type: .button)
+        _ = waitForElement("voiceCloning_dropZone")
+        _ = waitForElement("voiceCloning_transcriptField", type: .textField)
+        _ = waitForElement("textInput_textEditor")
+        _ = waitForElement("textInput_generateButton", type: .button)
     }
 
-    // MARK: - Batch Button
+    func testVoiceCloningInputControls() {
+        _ = waitForScreen(.voiceCloning)
 
-    func testBatchButtonExists() {
-        let button = app.buttons["voiceCloning_batchButton"]
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "Batch button should exist")
+        let transcript = waitForElement("voiceCloning_transcriptField", type: .textField)
+        transcript.click()
+        transcript.typeText("Reference transcript")
+        XCTAssertTrue((transcript.value as? String)?.contains("Reference") ?? false)
+
+        let editor = waitForElement("textInput_textEditor")
+        editor.click()
+        editor.typeText("Clone this text")
+
+        let generate = waitForElement("textInput_generateButton", type: .button)
+        XCTAssertFalse(generate.isEnabled, "Generate should remain disabled until reference audio is selected")
     }
 
-    // MARK: - Model Banner
+    func testVoiceCloningMissingModelNavigation() {
+        _ = waitForScreen(.voiceCloning)
 
-    func testModelBannerAppearsWhenModelMissing() {
         let banner = app.descendants(matching: .any).matching(identifier: "voiceCloning_modelBanner").firstMatch
-        if banner.waitForExistence(timeout: 3) {
-            XCTAssertTrue(banner.exists, "Model banner should be visible when model is not downloaded")
+        guard banner.waitForExistence(timeout: 2) else {
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "screen_voiceCloning").firstMatch.exists)
+            return
         }
-    }
 
-    func testGoToModelsButtonNavigates() {
-        let goToModels = app.buttons["voiceCloning_goToModels"]
-        guard goToModels.waitForExistence(timeout: 3) else { return }
+        let goToModels = waitForElement("voiceCloning_goToModels", type: .button)
         goToModels.click()
+        _ = waitForScreen(.models)
         assertElementExists("models_title")
-    }
-
-    // MARK: - Drop Zone
-
-    func testDropZoneExists() {
-        let dropZone = app.descendants(matching: .any).matching(identifier: "voiceCloning_dropZone").firstMatch
-        XCTAssertTrue(dropZone.waitForExistence(timeout: 5), "Reference audio drop zone should exist")
-    }
-
-    // MARK: - Transcript Field
-
-    func testTranscriptFieldExists() {
-        let field = app.textFields["voiceCloning_transcriptField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "Transcript field should exist")
-    }
-
-    func testTranscriptFieldAcceptsInput() {
-        let field = app.textFields["voiceCloning_transcriptField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.click()
-        field.typeText("Hello world")
-        XCTAssertTrue((field.value as? String)?.contains("Hello") ?? false)
-    }
-
-    // MARK: - Text Input
-
-    func testTextEditorExists() {
-        let editor = app.descendants(matching: .any).matching(identifier: "textInput_textEditor").firstMatch
-        XCTAssertTrue(editor.waitForExistence(timeout: 5), "Text editor should exist")
     }
 }

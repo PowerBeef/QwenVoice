@@ -1,5 +1,12 @@
 import Foundation
 
+struct GenerationChunkNotification {
+    let requestID: Int
+    let chunkIndex: Int
+    let chunkPath: String
+    let isFinal: Bool
+}
+
 /// Manages a long-lived Python subprocess running server.py,
 /// communicating via JSON-RPC 2.0 over stdin/stdout pipes.
 @MainActor
@@ -21,6 +28,7 @@ final class PythonBridge: ObservableObject {
     private var stderrPipe: Pipe?
     private var requestID = 0
     private var pendingRequests: [Int: CheckedContinuation<RPCValue, Error>] = [:]
+    private var generationChunkHandlers: [Int: (GenerationChunkNotification) -> Void] = [:]
     private var readBuffer = ""
 
     // MARK: - Lifecycle
@@ -55,6 +63,15 @@ final class PythonBridge: ObservableObject {
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
         env["TOKENIZERS_PARALLELISM"] = "false"
+        if let ffmpegPath = Self.findFFmpeg() {
+            env["QWENVOICE_FFMPEG_PATH"] = ffmpegPath
+            let ffmpegDir = URL(fileURLWithPath: ffmpegPath).deletingLastPathComponent().path
+            if let currentPath = env["PATH"], !currentPath.isEmpty {
+                env["PATH"] = "\(ffmpegDir):\(currentPath)"
+            } else {
+                env["PATH"] = ffmpegDir
+            }
+        }
         proc.environment = env
 
         proc.terminationHandler = { [weak self] _ in
@@ -65,17 +82,24 @@ final class PythonBridge: ObservableObject {
             }
         }
 
+        do {
+            try proc.run()
+        } catch {
+            process = nil
+            stdinPipe = nil
+            stdoutPipe = nil
+            stderrPipe = nil
+            isReady = false
+            isProcessing = false
+            lastError = "Failed to start Python: \(error.localizedDescription)"
+            return
+        }
+
+        lastError = nil
         self.process = proc
         self.stdinPipe = stdin
         self.stdoutPipe = stdout
         self.stderrPipe = stderr
-
-        do {
-            try proc.run()
-        } catch {
-            lastError = "Failed to start Python: \(error.localizedDescription)"
-            return
-        }
 
         startReadingOutput(stdout)
         startReadingStderr(stderr)
@@ -90,6 +114,7 @@ final class PythonBridge: ObservableObject {
         stderrPipe = nil
         isReady = false
         isProcessing = false
+        lastError = nil
         cancelAllPending(error: PythonBridgeError.processTerminated)
 
         if let proc, proc.isRunning {
@@ -107,7 +132,11 @@ final class PythonBridge: ObservableObject {
     private static let pingTimeout: UInt64 = 10
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
-    func call(_ method: String, params: [String: RPCValue] = [:]) async throws -> RPCValue {
+    func call(
+        _ method: String,
+        params: [String: RPCValue] = [:],
+        onGenerationChunk: ((GenerationChunkNotification) -> Void)? = nil
+    ) async throws -> RPCValue {
         guard process?.isRunning == true else {
             throw PythonBridgeError.processNotRunning
         }
@@ -138,8 +167,12 @@ final class PythonBridge: ObservableObject {
             group.addTask { @MainActor in
                 try await withCheckedThrowingContinuation { continuation in
                     self.pendingRequests[id] = continuation
+                    if let onGenerationChunk {
+                        self.generationChunkHandlers[id] = onGenerationChunk
+                    }
                     guard let pipe = self.stdinPipe else {
                         self.pendingRequests.removeValue(forKey: id)
+                        self.generationChunkHandlers.removeValue(forKey: id)
                         continuation.resume(throwing: PythonBridgeError.processNotRunning)
                         return
                     }
@@ -152,23 +185,26 @@ final class PythonBridge: ObservableObject {
                 throw PythonBridgeError.timeout(seconds: Int(timeout))
             }
 
+            defer {
+                group.cancelAll()
+                pendingRequests.removeValue(forKey: id)
+                generationChunkHandlers.removeValue(forKey: id)
+            }
+
             guard let result = try await group.next() else {
                 throw PythonBridgeError.timeout(seconds: Int(timeout))
             }
-            group.cancelAll()
-
-            // Clean up pending request on timeout
-            if pendingRequests[id] != nil {
-                pendingRequests.removeValue(forKey: id)
-            }
-
             return result
         }
     }
 
     /// Send a JSON-RPC request expecting a dict result.
-    func callDict(_ method: String, params: [String: RPCValue] = [:]) async throws -> [String: RPCValue] {
-        let result = try await call(method, params: params)
+    func callDict(
+        _ method: String,
+        params: [String: RPCValue] = [:],
+        onGenerationChunk: ((GenerationChunkNotification) -> Void)? = nil
+    ) async throws -> [String: RPCValue] {
+        let result = try await call(method, params: params, onGenerationChunk: onGenerationChunk)
         return result.objectValue ?? [:]
     }
 
@@ -250,6 +286,46 @@ final class PythonBridge: ObservableObject {
         if let temperature { params["temperature"] = .double(temperature) }
         if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
+        return GenerationResult(from: result)
+    }
+
+    /// Generate audio with custom voice mode while streaming chunk previews.
+    func generateCustomStreaming(
+        text: String,
+        voice: String,
+        emotion: String,
+        speed: Double,
+        outputPath: String,
+        streamingInterval: Double = 2.0,
+        onChunk: @escaping (GenerationChunkNotification) -> Void
+    ) async throws -> GenerationResult {
+        let result = try await callDict("generate", params: [
+            "text": .string(text),
+            "voice": .string(voice),
+            "instruct": .string(emotion),
+            "speed": .double(speed),
+            "output_path": .string(outputPath),
+            "stream": .bool(true),
+            "streaming_interval": .double(streamingInterval),
+        ], onGenerationChunk: onChunk)
+        return GenerationResult(from: result)
+    }
+
+    /// Generate audio with voice design mode while streaming chunk previews.
+    func generateDesignStreaming(
+        text: String,
+        voiceDescription: String,
+        outputPath: String,
+        streamingInterval: Double = 2.0,
+        onChunk: @escaping (GenerationChunkNotification) -> Void
+    ) async throws -> GenerationResult {
+        let result = try await callDict("generate", params: [
+            "text": .string(text),
+            "instruct": .string(voiceDescription),
+            "output_path": .string(outputPath),
+            "stream": .bool(true),
+            "streaming_interval": .double(streamingInterval),
+        ], onGenerationChunk: onChunk)
         return GenerationResult(from: result)
     }
 
@@ -378,6 +454,23 @@ final class PythonBridge: ObservableObject {
                 progressPercent = params["percent"]?.intValue ?? 0
                 progressMessage = params["message"]?.stringValue ?? ""
             }
+        case "generation_chunk":
+            guard
+                let params = response.params,
+                let requestID = params["request_id"]?.intValue,
+                let chunkIndex = params["chunk_index"]?.intValue,
+                let chunkPath = params["chunk_path"]?.stringValue,
+                let isFinal = params["is_final"]?.boolValue
+            else { return }
+            guard let handler = generationChunkHandlers[requestID] else { return }
+            handler(
+                GenerationChunkNotification(
+                    requestID: requestID,
+                    chunkIndex: chunkIndex,
+                    chunkPath: chunkPath,
+                    isFinal: isFinal
+                )
+            )
         default:
             break
         }
@@ -388,6 +481,7 @@ final class PythonBridge: ObservableObject {
             continuation.resume(throwing: error)
         }
         pendingRequests.removeAll()
+        generationChunkHandlers.removeAll()
     }
 
     // MARK: - Path Resolution
@@ -409,6 +503,29 @@ final class PythonBridge: ObservableObject {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/backend/server.py").path
+        if FileManager.default.fileExists(atPath: devPath) {
+            return devPath
+        }
+
+        return nil
+    }
+
+    private static func findFFmpeg() -> String? {
+        if let bundlePath = Bundle.main.path(forResource: "ffmpeg", ofType: nil) {
+            return bundlePath
+        }
+
+        if let resourceURL = Bundle.main.resourceURL {
+            let path = resourceURL.appendingPathComponent("ffmpeg").path
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        let devPath = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/ffmpeg").path
         if FileManager.default.fileExists(atPath: devPath) {
             return devPath
         }
@@ -442,7 +559,18 @@ final class PythonBridge: ObservableObject {
         }
 
         // 4. System Python
-        for path in ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"] {
+        for path in [
+            "/opt/homebrew/bin/python3.13",
+            "/opt/homebrew/bin/python3.14",
+            "/opt/homebrew/bin/python3.12",
+            "/opt/homebrew/bin/python3.11",
+            "/usr/local/bin/python3.13",
+            "/usr/local/bin/python3.14",
+            "/usr/local/bin/python3.12",
+            "/usr/local/bin/python3.11",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+        ] {
             if fm.fileExists(atPath: path) {
                 return path
             }

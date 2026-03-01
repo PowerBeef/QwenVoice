@@ -6,6 +6,36 @@ struct PreferencesView: View {
     @EnvironmentObject private var envManager: PythonEnvironmentManager
     @State private var showResetConfirmation = false
 
+    private var usesBundledPython: Bool {
+        Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") != nil
+    }
+
+    private var pythonActionTitle: String {
+        usesBundledPython ? "Restart Python Backend" : "Reset Python Environment"
+    }
+
+    private var pythonActionDescription: String {
+        if usesBundledPython {
+            return "Uses the bundled Python runtime included with the app. This restarts the backend without reinstalling dependencies."
+        }
+        return "Deletes the virtual environment and reinstalls all dependencies."
+    }
+
+    private var pythonActionButtonLabel: String {
+        usesBundledPython ? "Restart Backend" : "Reset Environment"
+    }
+
+    private var pythonActionConfirmationTitle: String {
+        usesBundledPython ? "Restart Python Backend?" : "Reset Python Environment?"
+    }
+
+    private var pythonActionConfirmationMessage: String {
+        if usesBundledPython {
+            return "This will restart the Python backend. The bundled runtime will remain in place and no dependencies will be reinstalled."
+        }
+        return "This will delete the Python virtual environment and recreate it from scratch. The app will need to reinstall all dependencies."
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -67,13 +97,13 @@ struct PreferencesView: View {
                 prefSection(header: "Python", icon: "terminal") {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Reset Python Environment")
-                            Text("Deletes the virtual environment and reinstalls all dependencies.")
+                            Text(pythonActionTitle)
+                            Text(pythonActionDescription)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
-                        Button("Reset Environment") {
+                        Button(pythonActionButtonLabel) {
                             showResetConfirmation = true
                         }
                         .accessibilityIdentifier("preferences_resetEnvButton")
@@ -84,13 +114,14 @@ struct PreferencesView: View {
             .contentColumn()
         }
         .navigationTitle("Preferences")
-        .alert("Reset Python Environment?", isPresented: $showResetConfirmation) {
+        .accessibilityIdentifier("screen_preferences")
+        .alert(pythonActionConfirmationTitle, isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
+            Button(usesBundledPython ? "Restart" : "Reset", role: .destructive) {
                 envManager.resetEnvironment()
             }
         } message: {
-            Text("This will delete the Python virtual environment and recreate it from scratch. The app will need to reinstall all dependencies.")
+            Text(pythonActionConfirmationMessage)
         }
     }
 

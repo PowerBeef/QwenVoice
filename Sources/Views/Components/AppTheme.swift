@@ -40,6 +40,10 @@ extension View {
             )
             .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
     }
+
+    func appAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
+        self.animation(AppLaunchConfiguration.current.animation(animation), value: value)
+    }
 }
 
 // MARK: - AppTheme
@@ -159,7 +163,7 @@ struct GlowingGradientButtonStyle: ButtonStyle {
             )
             .shadow(color: baseColor.opacity(0.25), radius: configuration.isPressed ? 6 : 12, y: configuration.isPressed ? 3 : 6)
             .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
+            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
 }
 
@@ -186,7 +190,7 @@ struct CompactGenerateButtonStyle: ButtonStyle {
             )
             .shadow(color: baseColor.opacity(0.2), radius: configuration.isPressed ? 4 : 8, y: configuration.isPressed ? 2 : 4)
             .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
-            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
+            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
 }
 
@@ -211,7 +215,7 @@ struct ChipStyle: ViewModifier {
                     .stroke(isSelected ? color.opacity(0.3) : Color.primary.opacity(0.04), lineWidth: 0.5)
             )
             .scaleEffect(isSelected ? 1.02 : 1.0)
-            .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isSelected)
+            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: isSelected)
     }
 }
 
@@ -235,7 +239,7 @@ struct AuroraBackground: View {
                     .offset(x: animate ? width * 0.15 : -width * 0.15, y: animate ? height * 0.1 : -height * 0.1)
             }
             .drawingGroup()
-            .animation(.easeInOut(duration: 20).repeatForever(autoreverses: true), value: animate)
+            .appAnimation(.easeInOut(duration: 20).repeatForever(autoreverses: true), value: animate)
             .onAppear {
                 animate = true
             }

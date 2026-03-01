@@ -26,6 +26,7 @@ struct ModelsView: View {
             .padding(24)
             .contentColumn()
         }
+        .accessibilityIdentifier("screen_models")
         .task {
             await viewModel.refresh()
         }

@@ -65,9 +65,13 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        // Check for bundled Python (production build)
-        if let bundledPython = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
-            state = .ready(pythonPath: bundledPython)
+        // Check for bundled Python (production build).
+        // In packaged builds this is the only acceptable runtime.
+        if let bundledPython = bundledPythonPath() {
+            state = .checking
+            Task.detached(priority: .userInitiated) { [weak self] in
+                await self?.validateBundledRuntimeAndUpdateState(bundledPython)
+            }
             return
         }
 
@@ -91,12 +95,25 @@ final class PythonEnvironmentManager: ObservableObject {
     }
 
     func resetEnvironment() {
+        if let bundledPython = bundledPythonPath() {
+            needsBackendRestart = true
+            if case .ready(let pythonPath) = state, pythonPath == bundledPython {
+                return
+            }
+            state = .checking
+            Task.detached(priority: .userInitiated) { [weak self] in
+                await self?.validateBundledRuntimeAndUpdateState(bundledPython)
+            }
+            return
+        }
+
         let fm = FileManager.default
         let venvDir = Self.venvDir
         if fm.fileExists(atPath: venvDir.path) {
             try? fm.removeItem(at: venvDir)
         }
         needsBackendRestart = true
+        state = .idle
         ensureEnvironment()
     }
 
@@ -406,6 +423,29 @@ final class PythonEnvironmentManager: ObservableObject {
     private func validateImports(pythonPath: String) async throws {
         let importScript = "import mlx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub"
         try await runProcess(pythonPath, arguments: ["-c", importScript])
+    }
+
+    private func bundledPythonPath() -> String? {
+        Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin")
+    }
+
+    private func validateBundledRuntime(_ pythonPath: String) async throws {
+        try await validateImports(pythonPath: pythonPath)
+    }
+
+    private func validateBundledRuntimeAndUpdateState(_ pythonPath: String) async {
+        do {
+            try await validateBundledRuntime(pythonPath)
+            await MainActor.run {
+                self.state = .ready(pythonPath: pythonPath)
+            }
+        } catch {
+            await MainActor.run {
+                self.state = .failed(
+                    message: "The bundled Python runtime is present but failed validation.\n\n\(error.localizedDescription)\n\nThis is a packaging issue. Reinstall the app or use a new release build."
+                )
+            }
+        }
     }
 
     // MARK: - Marker / Hashing

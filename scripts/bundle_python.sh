@@ -1,15 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-# Bundle Python 3.12 arm64 + required packages into the app's Resources/python/
+# Bundle Python arm64 + required app packages into the app's Resources/python/
 # Target: QwenVoice.app/Contents/Resources/python/
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_DIR/Sources/Resources"
 PYTHON_BUNDLE="$RESOURCES_DIR/python"
-REQUIREMENTS="$PROJECT_DIR/cli/requirements.txt"
+REQUIREMENTS="$RESOURCES_DIR/requirements.txt"
 VENDOR_DIR="$RESOURCES_DIR/vendor"
+MANIFEST_PATH="$PYTHON_BUNDLE/.qwenvoice-runtime-manifest.json"
 
 PYTHON_VERSION="3.13"
 PYTHON_BUILD_STANDALONE_VERSION="20260211"
@@ -26,6 +27,12 @@ PYTHON_BUILD_STANDALONE_URL="https://github.com/astral-sh/python-build-standalon
 
 echo "=== Qwen Voice: Bundle Python ==="
 echo ""
+
+EXPECTED_MLX_AUDIO_VERSION="$(grep -E '^mlx-audio==' "$REQUIREMENTS" | head -n 1 | sed 's/^mlx-audio==//')"
+if [ -z "$EXPECTED_MLX_AUDIO_VERSION" ]; then
+    echo "Error: Could not determine pinned mlx-audio version from $REQUIREMENTS"
+    exit 1
+fi
 
 # Step 1: Download standalone Python
 DOWNLOAD_DIR="/tmp/qwenvoice-python-build"
@@ -64,6 +71,9 @@ fi
 
 EXTRACTED_VERSION=$("$PYTHON_BUNDLE/bin/python3" --version 2>&1)
 echo "    Extracted: $EXTRACTED_VERSION"
+PYTHON_SHORT_VERSION=$("$PYTHON_BUNDLE/bin/python3" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+SITE_PACKAGES="$PYTHON_BUNDLE/lib/python${PYTHON_SHORT_VERSION}/site-packages"
+REQUIREMENTS_HASH=$(shasum -a 256 "$REQUIREMENTS" | awk '{print $1}')
 
 # Step 3: Install required packages
 echo "[3/5] Installing pip packages..."
@@ -77,7 +87,38 @@ if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx; import mlx_audio; import trans
     echo "Error: Core import validation failed — one or more packages did not install correctly"
     exit 1
 fi
+if ! "$PYTHON_BUNDLE/bin/python3" -c "import huggingface_hub" 2>&1; then
+    rm -f "$TARBALL"
+    echo "Error: huggingface_hub import validation failed"
+    exit 1
+fi
+if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx_audio.qwenvoice_speed_patch as p; import sys; sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)" 2>&1; then
+    rm -f "$TARBALL"
+    echo "Error: mlx_audio.qwenvoice_speed_patch is missing or incomplete"
+    exit 1
+fi
+INSTALLED_MLX_AUDIO_VERSION=$("$PYTHON_BUNDLE/bin/python3" -c "from importlib.metadata import version; print(version('mlx-audio'))")
+if [ "$INSTALLED_MLX_AUDIO_VERSION" != "$EXPECTED_MLX_AUDIO_VERSION" ]; then
+    rm -f "$TARBALL"
+    echo "Error: Expected mlx-audio $EXPECTED_MLX_AUDIO_VERSION but found $INSTALLED_MLX_AUDIO_VERSION"
+    exit 1
+fi
 echo "    All core imports OK"
+echo "    mlx-audio: $INSTALLED_MLX_AUDIO_VERSION"
+
+# Step 3b: Write runtime manifest
+echo "    Writing runtime manifest..."
+cat > "$MANIFEST_PATH" <<EOF
+{
+  "python_version": "$EXTRACTED_VERSION",
+  "python_short_version": "$PYTHON_SHORT_VERSION",
+  "requirements_path": "$REQUIREMENTS",
+  "requirements_sha256": "$REQUIREMENTS_HASH",
+  "mlx_audio_version": "$INSTALLED_MLX_AUDIO_VERSION",
+  "used_vendor_wheels": true,
+  "built_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
 
 # Step 4: Strip unnecessary files to reduce size
 echo "[4/5] Stripping unnecessary files..."
@@ -97,9 +138,9 @@ find "$PYTHON_BUNDLE" -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true
 find "$PYTHON_BUNDLE" -type d -name "doc" -exec rm -rf {} + 2>/dev/null || true
 
 # Remove pip/setuptools/wheel (not needed at runtime)
-rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/pip" 2>/dev/null || true
-rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/setuptools" 2>/dev/null || true
-rm -rf "$PYTHON_BUNDLE/lib/python3/site-packages/wheel" 2>/dev/null || true
+rm -rf "$SITE_PACKAGES/pip" 2>/dev/null || true
+rm -rf "$SITE_PACKAGES/setuptools" 2>/dev/null || true
+rm -rf "$SITE_PACKAGES/wheel" 2>/dev/null || true
 
 # Remove share/man directories
 rm -rf "$PYTHON_BUNDLE/share" 2>/dev/null || true
@@ -110,6 +151,7 @@ echo "[5/5] Done!"
 echo ""
 echo "Python bundle: $PYTHON_BUNDLE"
 echo "Bundle size: $BUNDLE_SIZE"
+echo "Runtime manifest: $MANIFEST_PATH"
 echo ""
 echo "To sign for distribution:"
 echo "  codesign --force --sign 'Developer ID Application: YOUR_NAME' --options runtime '$PYTHON_BUNDLE/bin/python3'"

@@ -5,6 +5,7 @@ struct HistoryView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @State private var generations: [Generation] = []
     @State private var searchText = ""
+    @State private var loadError: String?
     @State private var showDeleteConfirmation = false
     @State private var generationToDelete: Generation?
 
@@ -34,7 +35,24 @@ struct HistoryView: View {
             .padding(.top, 24)
             .padding(.bottom, 12)
 
-            if filtered.isEmpty {
+            if let loadError {
+                Spacer()
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.orange)
+                    Text("Couldn't load history")
+                        .font(.headline)
+                    Text(loadError)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
+                .glassCard()
+                .accessibilityIdentifier("history_errorState")
+                Spacer()
+            } else if filtered.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "clock")
@@ -84,6 +102,7 @@ struct HistoryView: View {
 
         }
         .contentColumn()
+        .accessibilityIdentifier("screen_history")
         .task {
             await loadHistory()
         }
@@ -116,8 +135,9 @@ struct HistoryView: View {
     private func loadHistory() async {
         do {
             generations = try DatabaseService.shared.fetchAllGenerations()
+            loadError = nil
         } catch {
-            // Will be empty until database is set up
+            loadError = error.localizedDescription
         }
     }
 
