@@ -100,7 +100,7 @@ struct VoiceCloningView: View {
                                 HStack(spacing: 12) {
                                     ForEach(savedVoices) { voice in
                                         Button {
-                                            withAnimation(.spring()) {
+                                            AppLaunchConfiguration.performAnimated(.spring()) {
                                                 selectSavedVoice(voice)
                                             }
                                         } label: {
@@ -173,7 +173,7 @@ struct VoiceCloningView: View {
                                     Spacer()
                                     
                                     Button {
-                                        withAnimation {
+                                        AppLaunchConfiguration.performAnimated(.default) {
                                             clearReference()
                                         }
                                     } label: {
@@ -203,8 +203,12 @@ struct VoiceCloningView: View {
                             browseForAudio()
                         }
                         .accessibilityIdentifier("voiceCloning_dropZone")
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragOver)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: referenceAudioPath)
+                        .appAnimation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragOver)
+                        .appAnimation(.spring(response: 0.4, dampingFraction: 0.7), value: referenceAudioPath)
+
+                        Text("Best results usually come from a clean 10-20 second reference clip.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     // Transcript
@@ -231,7 +235,7 @@ struct VoiceCloningView: View {
                         buttonColor: AppTheme.voiceCloning,
                         onGenerate: generate
                     )
-                    .disabled(!pythonBridge.isReady || !isModelDownloaded)
+                    .disabled(!pythonBridge.isReady || !isModelDownloaded || referenceAudioPath == nil)
                 }
                 .glassCard()
 
@@ -245,8 +249,17 @@ struct VoiceCloningView: View {
             .padding(24)
             .contentColumn()
         }
+        .accessibilityIdentifier("screen_voiceCloning")
         .task {
-            await loadSavedVoices()
+            if pythonBridge.isReady {
+                await loadSavedVoices()
+            }
+        }
+        .onChange(of: pythonBridge.isReady) { _, isReady in
+            guard isReady else { return }
+            Task {
+                await loadSavedVoices()
+            }
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
@@ -262,7 +275,12 @@ struct VoiceCloningView: View {
     // MARK: - Actions
 
     private func generate() {
-        guard !text.isEmpty, let refPath = referenceAudioPath, pythonBridge.isReady else { return }
+        guard !text.isEmpty else { return }
+        guard let refPath = referenceAudioPath else {
+            errorMessage = "Select a reference audio file before generating."
+            return
+        }
+        guard pythonBridge.isReady else { return }
 
         if let model = TTSModel.model(for: .clone) {
             let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
@@ -308,7 +326,13 @@ struct VoiceCloningView: View {
                 try DatabaseService.shared.saveGeneration(&gen)
                 NotificationCenter.default.post(name: .generationSaved, object: nil)
 
-                audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+                if AudioService.shouldAutoPlay {
+                    audioPlayer.playFile(
+                        result.audioPath,
+                        title: String(text.prefix(40)),
+                        deferAutoStart: true
+                    )
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }

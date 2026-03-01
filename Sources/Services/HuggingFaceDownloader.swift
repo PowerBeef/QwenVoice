@@ -138,24 +138,30 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     private var currentTaskBytesWritten: Int64 = 0
     private var currentProgressHandler: ((Int64) -> Void)?
 
+    private func withLock<Result>(_ body: () -> Result) -> Result {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
     private func downloadFile(
         from url: URL,
         to destination: URL,
         fileSize: Int64,
         progressHandler: @escaping (Int64) -> Void
     ) async throws {
-        lock.lock()
-        currentTaskBytesWritten = 0
-        currentProgressHandler = progressHandler
-        lock.unlock()
+        withLock {
+            currentTaskBytesWritten = 0
+            currentProgressHandler = progressHandler
+        }
 
         let tempURL: URL = try await withCheckedThrowingContinuation { continuation in
             let task = session.downloadTask(with: url)
             let taskID = task.taskIdentifier
-            lock.lock()
-            continuations[taskID] = continuation
-            destinations[taskID] = destination
-            lock.unlock()
+            withLock {
+                continuations[taskID] = continuation
+                destinations[taskID] = destination
+            }
             activeTask = task
             task.resume()
         }
@@ -168,9 +174,9 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         try fm.moveItem(at: tempURL, to: destination)
 
         activeTask = nil
-        lock.lock()
-        currentProgressHandler = nil
-        lock.unlock()
+        withLock {
+            currentProgressHandler = nil
+        }
     }
 
     // MARK: - URLSessionDownloadDelegate
@@ -182,10 +188,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        lock.lock()
-        currentTaskBytesWritten = totalBytesWritten
-        let handler = currentProgressHandler
-        lock.unlock()
+        let handler = withLock { () -> ((Int64) -> Void)? in
+            currentTaskBytesWritten = totalBytesWritten
+            return currentProgressHandler
+        }
         handler?(totalBytesWritten)
     }
 
@@ -198,11 +204,12 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
         // Check HTTP status
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            lock.lock()
-            let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-            let continuation = continuations.removeValue(forKey: taskID)
-            destinations.removeValue(forKey: taskID)
-            lock.unlock()
+            let (path, continuation) = withLock { () -> (String, CheckedContinuation<URL, Error>?) in
+                let path = destinations[taskID]?.lastPathComponent ?? "unknown"
+                let continuation = continuations.removeValue(forKey: taskID)
+                destinations.removeValue(forKey: taskID)
+                return (path, continuation)
+            }
             continuation?.resume(throwing: DownloadError.httpError(statusCode: http.statusCode, path: path))
             return
         }
@@ -210,10 +217,11 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         // Move to a safe temp location (the delegate location is deleted after this method returns)
         let safeTmp = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-        lock.lock()
-        let continuation = continuations.removeValue(forKey: taskID)
-        destinations.removeValue(forKey: taskID)
-        lock.unlock()
+        let continuation = withLock { () -> CheckedContinuation<URL, Error>? in
+            let continuation = continuations.removeValue(forKey: taskID)
+            destinations.removeValue(forKey: taskID)
+            return continuation
+        }
         do {
             try FileManager.default.moveItem(at: location, to: safeTmp)
             continuation?.resume(returning: safeTmp)
@@ -230,11 +238,12 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         let taskID = task.taskIdentifier
         guard let error = error else { return } // Success handled in didFinishDownloadingTo
 
-        lock.lock()
-        let continuation = continuations.removeValue(forKey: taskID)
-        let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-        destinations.removeValue(forKey: taskID)
-        lock.unlock()
+        let (continuation, path) = withLock { () -> (CheckedContinuation<URL, Error>?, String) in
+            let continuation = continuations.removeValue(forKey: taskID)
+            let path = destinations[taskID]?.lastPathComponent ?? "unknown"
+            destinations.removeValue(forKey: taskID)
+            return (continuation, path)
+        }
 
         if (error as NSError).code == NSURLErrorCancelled {
             continuation?.resume(throwing: DownloadError.cancelled)

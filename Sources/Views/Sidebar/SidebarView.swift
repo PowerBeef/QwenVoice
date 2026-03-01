@@ -46,16 +46,20 @@ struct SidebarView: View {
         .task {
             // Give the sidebar focus on launch so macOS shows the
             // accent-colored selection instead of grey
-            try? await Task.sleep(for: .milliseconds(300))
-            if let window = NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
-                func findOutlineView(_ view: NSView) -> NSOutlineView? {
-                    if let ov = view as? NSOutlineView { return ov }
-                    return view.subviews.lazy.compactMap { findOutlineView($0) }.first
-                }
-                if let contentView = window.contentView,
-                   let outlineView = findOutlineView(contentView) {
-                    outlineView.selectionHighlightStyle = .none
-                    window.makeFirstResponder(outlineView)
+            if !AppLaunchConfiguration.current.fastIdle {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            await MainActor.run {
+                if let window = NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+                    @MainActor func findOutlineView(_ view: NSView) -> NSOutlineView? {
+                        if let ov = view as? NSOutlineView { return ov }
+                        return view.subviews.lazy.compactMap { findOutlineView($0) }.first
+                    }
+                    if let contentView = window.contentView,
+                       let outlineView = findOutlineView(contentView) {
+                        outlineView.selectionHighlightStyle = .none
+                        window.makeFirstResponder(outlineView)
+                    }
                 }
             }
         }
@@ -63,7 +67,7 @@ struct SidebarView: View {
             VStack(spacing: 10) {
                 // Audio player
                 SidebarPlayerView()
-                    .animation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
+                    .appAnimation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
 
                 // Generation status indicator
                 HStack(spacing: 6) {
@@ -83,7 +87,7 @@ struct SidebarView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .animation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
+                .appAnimation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
                 .accessibilityIdentifier("sidebar_generationStatus")
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)

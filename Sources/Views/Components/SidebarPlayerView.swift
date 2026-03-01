@@ -17,7 +17,7 @@ struct SidebarPlayerView: View {
                     Spacer()
 
                     Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
+                        AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.25)) {
                             audioPlayer.dismiss()
                         }
                     } label: {
@@ -44,7 +44,7 @@ struct SidebarPlayerView: View {
                 // Row 3: Play/pause + time
                 HStack(spacing: 8) {
                     Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                             audioPlayer.togglePlayPause()
                         }
                     } label: {
@@ -60,6 +60,15 @@ struct SidebarPlayerView: View {
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+
+                if let playbackError = audioPlayer.playbackError {
+                    Text(playbackError)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("sidebarPlayer_error")
+                }
             }
             .padding(10)
             .background(
@@ -70,7 +79,11 @@ struct SidebarPlayerView: View {
                             .strokeBorder(AppTheme.accent.opacity(0.15), lineWidth: 1)
                     )
             )
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(
+                AppLaunchConfiguration.current.animationsEnabled
+                ? .move(edge: .bottom).combined(with: .opacity)
+                : .identity
+            )
             .accessibilityIdentifier("sidebarPlayer_bar")
         }
     }

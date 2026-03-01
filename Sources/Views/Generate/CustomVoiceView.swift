@@ -109,7 +109,7 @@ struct CustomVoiceView: View {
                         FlowLayout(spacing: 8) {
                             ForEach(TTSModel.speakers, id: \.self) { speaker in
                                 Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedSpeaker = speaker
                                         isCustomSpeaker = false
                                     }
@@ -123,7 +123,7 @@ struct CustomVoiceView: View {
 
                             // Custom speaker chip
                             Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                                     isCustomSpeaker = true
                                 }
                             } label: {
@@ -147,7 +147,7 @@ struct CustomVoiceView: View {
                                 )
                                 .foregroundStyle(isCustomSpeaker ? AppTheme.accent : AppTheme.accent.opacity(0.8))
                                 .scaleEffect(isCustomSpeaker ? 1.02 : 1.0)
-                                .animation(.interpolatingSpring(stiffness: 300, damping: 15), value: isCustomSpeaker)
+                                .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: isCustomSpeaker)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -186,7 +186,7 @@ struct CustomVoiceView: View {
                             HStack(spacing: 8) {
                                 ForEach(speeds, id: \.1) { label, value in
                                     Button {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                                             speed = value
                                         }
                                     } label: {
@@ -197,6 +197,7 @@ struct CustomVoiceView: View {
                                     .accessibilityIdentifier("customVoice_speed_\(label.split(separator: " ").first?.lowercased() ?? "")")
                                 }
                             }
+                            .accessibilityIdentifier("customVoice_speedPicker")
                         }
                     }
 
@@ -223,6 +224,7 @@ struct CustomVoiceView: View {
             .padding(24)
             .contentColumn()
         }
+        .accessibilityIdentifier("screen_customVoice")
         .sheet(isPresented: $showingBatch) {
             if isCustomSpeaker {
                 BatchGenerationSheet(
@@ -291,7 +293,13 @@ struct CustomVoiceView: View {
                     try DatabaseService.shared.saveGeneration(&gen)
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
-                    audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+                    if AudioService.shouldAutoPlay {
+                        audioPlayer.playFile(
+                            result.audioPath,
+                            title: String(text.prefix(40)),
+                            deferAutoStart: true
+                        )
+                    }
                 } else {
                     let outputPath = makeOutputPath(subfolder: "CustomVoice", text: text)
                     let result = try await pythonBridge.generateCustom(
@@ -316,7 +324,13 @@ struct CustomVoiceView: View {
                     try DatabaseService.shared.saveGeneration(&gen)
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
-                    audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+                    if AudioService.shouldAutoPlay {
+                        audioPlayer.playFile(
+                            result.audioPath,
+                            title: String(text.prefix(40)),
+                            deferAutoStart: true
+                        )
+                    }
                 }
             } catch {
                 errorMessage = error.localizedDescription

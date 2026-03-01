@@ -24,7 +24,7 @@ lxml==6.0.2
 MarkupSafe==3.0.3
 miniaudio==1.61
 mlx==0.30.3
-mlx-audio==0.3.1
+mlx-audio==0.3.1.post1
 mlx-lm==0.30.5
 mlx-metal==0.30.3
 msgpack==1.1.2

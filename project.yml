@@ -26,6 +26,11 @@ targets:
         excludes:
           - "python/**"
           - "ffmpeg"
+          - "vendor"
+          - "vendor/**"
+          - "**/*.whl"
+          - "**/__pycache__/**"
+          - "**/*.pyc"
       - path: Sources/Assets.xcassets
         buildPhase: resources
     settings:

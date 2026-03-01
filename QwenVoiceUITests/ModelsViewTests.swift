@@ -1,49 +1,27 @@
 import XCTest
 
 final class ModelsViewTests: QwenVoiceUITestBase {
+    override class var initialScreen: UITestScreen? { .models }
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        navigateToSidebar("models")
-        let title = app.staticTexts["models_title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        // Give the async refresh time to populate model statuses
-        sleep(1)
-    }
-
-    // MARK: - Title
-
-    func testTitleExists() {
+    func testModelsScreenAvailability() {
+        _ = waitForScreen(.models)
         assertElementExists("models_title")
+
+        let firstCard = app.descendants(matching: .any).matching(identifier: "models_card_pro_custom").firstMatch
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 10), "Model cards should load after refresh")
     }
 
-    // MARK: - Sections
+    func testModelCardsAndActionsArePresent() {
+        _ = waitForScreen(.models)
 
-    // MARK: - Model Cards
-
-    func testAllModelCardsExist() {
-        let modelIds = [
-            "pro_custom", "pro_design", "pro_clone"
-        ]
+        let modelIds = ["pro_custom", "pro_design", "pro_clone"]
         for modelId in modelIds {
-            let card = app.descendants(matching: .any).matching(identifier: "models_card_\(modelId)").firstMatch
-            XCTAssertTrue(card.waitForExistence(timeout: 5), "Model card '\(modelId)' should exist")
-        }
-    }
-
-    // MARK: - Download/Delete Buttons
-
-    func testDownloadOrDeleteButtonsExist() {
-        // Each model should have either a download or delete button.
-        // Use broad descendant matching since buttons may be nested in cards.
-        let modelIds = [
-            "pro_custom", "pro_design", "pro_clone"
-        ]
-        for modelId in modelIds {
+            let card = waitForElement("models_card_\(modelId)", timeout: 10)
             let download = app.descendants(matching: .any).matching(identifier: "models_download_\(modelId)").firstMatch
             let delete = app.descendants(matching: .any).matching(identifier: "models_delete_\(modelId)").firstMatch
-            let hasButton = download.waitForExistence(timeout: 3) || delete.exists
-            XCTAssertTrue(hasButton, "Model '\(modelId)' should have a download or delete button")
+            let retry = app.descendants(matching: .any).matching(identifier: "models_retry_\(modelId)").firstMatch
+            let hasAction = download.exists || delete.exists || retry.exists || card.descendants(matching: .button).firstMatch.exists
+            XCTAssertTrue(hasAction, "Model '\(modelId)' should expose at least one action")
         }
     }
 }

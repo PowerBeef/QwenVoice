@@ -1,5 +1,51 @@
 import SwiftUI
 
+struct AppLaunchConfiguration {
+    let isUITest: Bool
+    let disableAnimations: Bool
+    let fastIdle: Bool
+    let initialScreenID: String?
+    let debugCaptureEnabled: Bool
+
+    static let current = AppLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
+
+    init(arguments: [String]) {
+        let inferredUITest = arguments.contains("--uitest")
+            || arguments.contains("--uitest-disable-animations")
+            || arguments.contains("--uitest-fast-idle")
+            || arguments.contains("--uitest-debug-capture")
+            || arguments.contains(where: { $0.hasPrefix("--uitest-screen=") })
+
+        isUITest = inferredUITest
+        disableAnimations = inferredUITest && (
+            arguments.contains("--uitest") || arguments.contains("--uitest-disable-animations")
+        )
+        fastIdle = inferredUITest && (
+            arguments.contains("--uitest") || arguments.contains("--uitest-fast-idle")
+        )
+        debugCaptureEnabled = inferredUITest && arguments.contains("--uitest-debug-capture")
+        initialScreenID = arguments.first(where: { $0.hasPrefix("--uitest-screen=") })?
+            .replacingOccurrences(of: "--uitest-screen=", with: "")
+    }
+
+    var initialSidebarItem: SidebarItem? {
+        guard let initialScreenID else { return nil }
+        return SidebarItem(testScreenID: initialScreenID)
+    }
+
+    var animationsEnabled: Bool {
+        !disableAnimations
+    }
+
+    func animation(_ animation: Animation?) -> Animation? {
+        animationsEnabled ? animation : nil
+    }
+
+    static func performAnimated<Result>(_ animation: Animation?, _ updates: () -> Result) -> Result {
+        withAnimation(current.animation(animation), updates)
+    }
+}
+
 @main
 struct QwenVoiceApp: App {
     @StateObject private var pythonBridge = PythonBridge()
@@ -78,7 +124,7 @@ struct QwenVoiceApp: App {
     }
 
     private func startBackend(pythonPath: String) {
-        guard !pythonBridge.isReady, pythonBridge.lastError == nil else { return }
+        guard !pythonBridge.isReady else { return }
         pythonBridge.start(pythonPath: pythonPath)
         Task {
             try? await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)

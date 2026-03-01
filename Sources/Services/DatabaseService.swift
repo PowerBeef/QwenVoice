@@ -4,6 +4,9 @@ import GRDB
 /// Manages SQLite database for generation history.
 final class DatabaseService {
     static let shared = DatabaseService()
+    private static let generationSelectColumns = """
+        id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
+        """
 
     private var dbQueue: DatabaseQueue?
     private(set) var initError: String?
@@ -74,7 +77,13 @@ final class DatabaseService {
         }
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
-            try Generation.order(Generation.Columns.createdAt.desc).fetchAll(db)
+            let sql = """
+                SELECT \(Self.generationSelectColumns)
+                FROM generations
+                ORDER BY createdAt DESC
+                """
+            let rows = try Row.fetchAll(db, sql: sql)
+            return rows.map(Generation.init(row:))
         }
     }
 
@@ -88,10 +97,16 @@ final class DatabaseService {
             .replacingOccurrences(of: "%", with: "\\%")
             .replacingOccurrences(of: "_", with: "\\_")
         return try dbQueue.read { db in
-            try Generation
-                .filter(Generation.Columns.text.like("%\(escaped)%", escape: "\\"))
-                .order(Generation.Columns.createdAt.desc)
-                .fetchAll(db)
+            let pattern = "%\(escaped)%"
+            let sql = """
+                SELECT \(Self.generationSelectColumns)
+                FROM generations
+                WHERE text LIKE ? ESCAPE '\\'
+                   OR COALESCE(voice, '') LIKE ? ESCAPE '\\'
+                ORDER BY createdAt DESC
+                """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [pattern, pattern])
+            return rows.map(Generation.init(row:))
         }
     }
 

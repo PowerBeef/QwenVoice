@@ -31,6 +31,26 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         }
     }
 
+    init?(testScreenID: String) {
+        let normalized = testScreenID.replacingOccurrences(of: "screen_", with: "")
+        switch normalized {
+        case "customVoice":
+            self = .customVoice
+        case "voiceCloning":
+            self = .voiceCloning
+        case "history":
+            self = .history
+        case "voices":
+            self = .voices
+        case "models":
+            self = .models
+        case "preferences":
+            self = .preferences
+        default:
+            return nil
+        }
+    }
+
     enum Section: String, CaseIterable {
         case generate = "Generate"
         case library = "Library"
@@ -47,9 +67,13 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 }
 
 struct ContentView: View {
-    @State private var selectedItem: SidebarItem? = .customVoice
+    @State private var selectedItem: SidebarItem?
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+
+    init() {
+        _selectedItem = State(initialValue: AppLaunchConfiguration.current.initialSidebarItem ?? .customVoice)
+    }
 
     var body: some View {
         NavigationSplitView {

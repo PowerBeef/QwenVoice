@@ -1,34 +1,25 @@
 import XCTest
 
 final class VoicesViewTests: QwenVoiceUITestBase {
+    override class var initialScreen: UITestScreen? { .voices }
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        navigateToSidebar("voices")
-        let title = app.staticTexts["voices_title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-    }
-
-    // MARK: - Title
-
-    func testTitleExists() {
+    func testVoicesScreenAvailability() {
+        _ = waitForScreen(.voices)
         assertElementExists("voices_title")
+        _ = waitForElement("voices_enrollButton", type: .button)
     }
 
-    // MARK: - Enroll Button
+    func testVoicesControlsAndStates() {
+        _ = waitForScreen(.voices)
 
-    func testEnrollButtonExists() {
-        let button = app.buttons["voices_enrollButton"]
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "Enroll Voice button should exist")
-    }
-
-    // MARK: - Empty State
-
-    func testEmptyStateVisibleWhenNoVoices() {
         let emptyState = app.descendants(matching: .any).matching(identifier: "voices_emptyState").firstMatch
-        // May or may not show depending on enrolled voices
-        if emptyState.waitForExistence(timeout: 3) {
-            XCTAssertTrue(emptyState.exists, "Empty state should be visible when no voices enrolled")
-        }
+        let isLoading = app.staticTexts["Loading voices..."].exists
+        let isStarting = app.staticTexts["Starting backend..."].exists
+        let hasRows = app.tables.firstMatch.exists || app.outlines.firstMatch.exists
+
+        XCTAssertTrue(
+            emptyState.exists || isLoading || isStarting || hasRows,
+            "Voices should show a visible state"
+        )
     }
 }
