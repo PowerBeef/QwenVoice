@@ -37,7 +37,7 @@ _original_stderr = sys.stderr
 
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
-POST_REQUEST_CACHE_CLEAR = False
+POST_REQUEST_CACHE_CLEAR = True
 CLONE_CONTEXT_CACHE_CAPACITY = 8
 DEFAULT_STREAMING_INTERVAL = 2.0
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
@@ -543,7 +543,7 @@ def _generate_streaming_preview(
     else:
         generator = _current_model.generate(**generator_kwargs)
 
-    chunk_audio = []
+    chunk_numpy = []
     chunk_index = 0
 
     for chunk in generator:
@@ -555,17 +555,15 @@ def _generate_streaming_preview(
             chunk_path=chunk_path,
             is_final=bool(getattr(chunk, "is_final_chunk", False)),
         )
-        chunk_audio.append(chunk.audio)
+        chunk_numpy.append(_np.array(chunk.audio))
+        _mx.clear_cache()
         chunk_index += 1
 
-    if not chunk_audio:
+    if not chunk_numpy:
         raise RuntimeError("Generation produced no audio file")
 
-    full_audio = chunk_audio[0]
-    if len(chunk_audio) > 1:
-        full_audio = _mx.concatenate(chunk_audio, axis=0)
-
-    _write_audio_file(final_path, full_audio, _current_model.sample_rate)
+    full_audio = chunk_numpy[0] if len(chunk_numpy) == 1 else _np.concatenate(chunk_numpy, axis=0)
+    _audio_write_fn(final_path, full_audio, _current_model.sample_rate, format="wav")
 
     # Clean up intermediate chunk files
     for ci in range(chunk_index):

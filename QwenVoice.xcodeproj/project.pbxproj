@@ -27,6 +27,7 @@
 		4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */; };
 		502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */; };
 		5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */; };
+		5D23FDB4CC008D1E909414A8 /* SidebarStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16357673B0524D933999409E /* SidebarStatusView.swift */; };
 		5E975521FC8B355333145278 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */; };
 		6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */; };
 		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
@@ -74,6 +75,7 @@
 		03A6FE41E48436C6167180D9 /* mlx_audio_qwen_speed_patch.cpython-313.pyc */ = {isa = PBXFileReference; path = "mlx_audio_qwen_speed_patch.cpython-313.pyc"; sourceTree = "<group>"; };
 		0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
 		0D3C6777F2ABFE603D026E0D /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
+		16357673B0524D933999409E /* SidebarStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarStatusView.swift; sourceTree = "<group>"; };
 		1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewTests.swift; sourceTree = "<group>"; };
 		281629E0EE8593C8F69031A6 /* ModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsView.swift; sourceTree = "<group>"; };
 		2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationFlowTests.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */,
 				E876590A12FADBE38100CD17 /* LayoutConstants.swift */,
 				C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */,
+				16357673B0524D933999409E /* SidebarStatusView.swift */,
 				F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */,
 				652CF3434A19FF8823B9CCA2 /* WaveformView.swift */,
 			);
@@ -448,6 +451,7 @@
 				4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */,
 				D43105145129C9FECE338221 /* SetupView.swift in Sources */,
 				C838C6E3E59717F67F49C45C /* SidebarPlayerView.swift in Sources */,
+				5D23FDB4CC008D1E909414A8 /* SidebarStatusView.swift in Sources */,
 				7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */,
 				019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */,
 				1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */,

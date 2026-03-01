@@ -69,60 +69,7 @@ struct SidebarView: View {
                 SidebarPlayerView()
                     .appAnimation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
 
-                // Generation status indicator
-                HStack(spacing: 6) {
-                    if pythonBridge.isProcessing {
-                        ProgressView()
-                            .controlSize(.mini)
-                        Text(pythonBridge.progressMessage.isEmpty ? "Processing..." : pythonBridge.progressMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.caption)
-                        Text("Ready")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .appAnimation(.easeInOut(duration: 0.2), value: pythonBridge.isProcessing)
-                .accessibilityIdentifier("sidebar_generationStatus")
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(pythonBridge.isProcessing ? Color.blue.opacity(0.1) : Color.green.opacity(0.1))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(pythonBridge.isProcessing ? Color.blue.opacity(0.2) : Color.green.opacity(0.2), lineWidth: 1)
-                        )
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // Backend status indicator
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(pythonBridge.isReady ? .green : .orange)
-                        .frame(width: 8, height: 8)
-                        .shadow(color: pythonBridge.isReady ? .green.opacity(0.5) : .orange.opacity(0.5), radius: 4)
-                    Text(pythonBridge.isReady ? "Backend Ready" : "Starting...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityIdentifier("sidebar_backendStatus")
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.1))
-                        .overlay(
-                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder((pythonBridge.isReady ? Color.green : Color.orange).opacity(0.2), lineWidth: 1)
-                        )
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
+                SidebarStatusView()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
