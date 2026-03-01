@@ -95,7 +95,7 @@ struct VoiceCloningView: View {
                     // Saved voices picker
                     if !savedVoices.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("SAVED VOICES").sectionHeader(color: AppTheme.voiceCloning)
+                            Text("SAVED VOICES").sectionHeader()
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 12) {
                                     ForEach(savedVoices) { voice in
@@ -137,7 +137,7 @@ struct VoiceCloningView: View {
 
                     // Reference audio drop zone
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("REFERENCE AUDIO").sectionHeader(color: AppTheme.voiceCloning)
+                        Text("REFERENCE AUDIO").sectionHeader()
 
                         ZStack {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -213,7 +213,7 @@ struct VoiceCloningView: View {
 
                     // Transcript
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("TRANSCRIPT").sectionHeader(color: AppTheme.voiceCloning)
+                        Text("TRANSCRIPT").sectionHeader()
                         TextField("Type exactly what the reference audio says (improves quality)", text: $referenceTranscript)
                             .textFieldStyle(.plain)
                             .font(.title3)
@@ -327,11 +327,7 @@ struct VoiceCloningView: View {
                 NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                 if AudioService.shouldAutoPlay {
-                    audioPlayer.playFile(
-                        result.audioPath,
-                        title: String(text.prefix(40)),
-                        deferAutoStart: true
-                    )
+                    audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
                 }
             } catch {
                 errorMessage = error.localizedDescription

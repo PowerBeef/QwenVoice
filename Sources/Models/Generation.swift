@@ -13,12 +13,16 @@ struct Generation: Identifiable, Codable, Hashable {
     var audioPath: String
     var duration: Double?
     var createdAt: Date
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
     /// Display-friendly date string
     var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: createdAt)
+        Self.dateFormatter.string(from: createdAt)
     }
 
     /// Short text preview (first 60 chars)

@@ -12,14 +12,19 @@ cd "$PROJECT_DIR"
 ENTITLEMENTS="Sources/QwenVoice.entitlements"
 BACKUP="/tmp/QwenVoice.entitlements.backup.$$"
 
+cleanup() {
+    if [ -f "$BACKUP" ]; then
+        echo "==> Restoring entitlements..."
+        cp "$BACKUP" "$ENTITLEMENTS"
+        rm -f "$BACKUP"
+    fi
+}
+trap cleanup EXIT
+
 echo "==> Backing up entitlements..."
 cp "$ENTITLEMENTS" "$BACKUP"
 
 echo "==> Running xcodegen..."
 xcodegen generate
-
-echo "==> Restoring entitlements..."
-cp "$BACKUP" "$ENTITLEMENTS"
-rm -f "$BACKUP"
 
 echo "==> Done. Project regenerated at QwenVoice.xcodeproj"

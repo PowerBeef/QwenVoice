@@ -104,7 +104,7 @@ struct CustomVoiceView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     // Speaker picker
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("SPEAKER").sectionHeader(color: AppTheme.customVoice)
+                        Text("SPEAKER").sectionHeader()
 
                         FlowLayout(spacing: 8) {
                             ForEach(TTSModel.speakers, id: \.self) { speaker in
@@ -182,7 +182,7 @@ struct CustomVoiceView: View {
 
                         // Speed
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("SPEED").sectionHeader(color: AppTheme.customVoice)
+                            Text("SPEED").sectionHeader()
                             HStack(spacing: 8) {
                                 ForEach(speeds, id: \.1) { label, value in
                                     Button {
@@ -294,11 +294,7 @@ struct CustomVoiceView: View {
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     if AudioService.shouldAutoPlay {
-                        audioPlayer.playFile(
-                            result.audioPath,
-                            title: String(text.prefix(40)),
-                            deferAutoStart: true
-                        )
+                        audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
                     }
                 } else {
                     let outputPath = makeOutputPath(subfolder: "CustomVoice", text: text)
@@ -325,11 +321,7 @@ struct CustomVoiceView: View {
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     if AudioService.shouldAutoPlay {
-                        audioPlayer.playFile(
-                            result.audioPath,
-                            title: String(text.prefix(40)),
-                            deferAutoStart: true
-                        )
+                        audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
                     }
                 }
             } catch {

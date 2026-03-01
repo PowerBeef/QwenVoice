@@ -117,12 +117,18 @@ def _ensure_mlx():
                 try_enable_speech_tokenizer_encoder,
             )
         except ImportError:
-            from mlx_audio.qwenvoice_speed_patch import (
-                can_prepare_icl,
-                generate_with_prepared_icl,
-                prepare_icl_context,
-                try_enable_speech_tokenizer_encoder,
-            )
+            try:
+                from mlx_audio.qwenvoice_speed_patch import (
+                    can_prepare_icl,
+                    generate_with_prepared_icl,
+                    prepare_icl_context,
+                    try_enable_speech_tokenizer_encoder,
+                )
+            except ImportError:
+                can_prepare_icl = None
+                generate_with_prepared_icl = None
+                prepare_icl_context = None
+                try_enable_speech_tokenizer_encoder = None
 
         _load_model_fn = load_model
         _generate_audio_fn = generate_audio
@@ -178,12 +184,12 @@ def convert_audio_if_needed(input_path):
     if ext == ".wav":
         try:
             with wave.open(input_path, "rb") as f:
-                if f.getnchannels() > 0:
+                if f.getnchannels() == 1 and f.getframerate() == SAMPLE_RATE:
                     return input_path
         except wave.Error:
             pass
 
-    temp_wav = os.path.join(OUTPUTS_DIR, f"temp_convert_{int(time.time())}.wav")
+    temp_wav = os.path.join(OUTPUTS_DIR, f"temp_convert_{time.time_ns()}.wav")
     return _convert_audio_to_wav(input_path, temp_wav)
 
 
@@ -192,7 +198,7 @@ def make_output_path(subfolder, text_snippet):
     save_dir = os.path.join(OUTPUTS_DIR, subfolder)
     os.makedirs(save_dir, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%H-%M-%S-%f")
+    timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S-%f")
     clean_text = (
         re.sub(r"[^\w\s-]", "", text_snippet)[:FILENAME_MAX_LEN].strip().replace(" ", "_")
         or "audio"
@@ -380,7 +386,7 @@ def _normalize_audio_with_stable_cache(input_path):
     if ext == ".wav":
         try:
             with wave.open(input_path, "rb") as f:
-                if f.getnchannels() > 0:
+                if f.getnchannels() == 1 and f.getframerate() == SAMPLE_RATE:
                     return input_path
         except wave.Error:
             pass
@@ -399,16 +405,13 @@ def _normalize_audio_with_stable_cache(input_path):
 
 
 def _normalize_clone_reference(ref_audio_path):
-    """Return a normalized WAV path and whether it is temporary.
+    """Return a normalized WAV path suitable for clone conditioning.
 
-    External non-WAV references now normalize into a stable cache path so the
+    Non-WAV references are converted and stored in a stable disk cache so the
     prepared clone-conditioning cache can reuse the same converted reference
     across requests.
     """
-    clean_path = _normalize_audio_with_stable_cache(ref_audio_path)
-    if not clean_path:
-        return None, False
-    return clean_path, False
+    return _normalize_audio_with_stable_cache(ref_audio_path)
 
 
 def _resolve_clone_transcript(clean_ref_audio_path, requested_transcript):
@@ -452,7 +455,7 @@ def _cache_clone_context(cache_key, prepared_context):
         _clone_context_cache.popitem(last=False)
 
 
-def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text, allow_persist):
+def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text):
     """Fetch or build a prepared clone context for repeated requests."""
     if (
         _prepare_icl_context_fn is None
@@ -470,8 +473,7 @@ def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text, allow_persist)
         return cached, True
 
     prepared = _prepare_icl_context_fn(_current_model, clean_ref_audio_path, ref_text)
-    if allow_persist:
-        _cache_clone_context(cache_key, prepared)
+    _cache_clone_context(cache_key, prepared)
     return prepared, False
 
 
@@ -565,6 +567,14 @@ def _generate_streaming_preview(
 
     _write_audio_file(final_path, full_audio, _current_model.sample_rate)
 
+    # Clean up intermediate chunk files
+    for ci in range(chunk_index):
+        cp = os.path.join(target_dir, f"{stem}__chunk_{ci:03d}.wav")
+        try:
+            os.remove(cp)
+        except OSError:
+            pass
+
 
 def handle_load_model(params):
     """Load a model into memory. Unloads any existing model first."""
@@ -594,6 +604,8 @@ def handle_load_model(params):
         _current_model = None
         _clear_clone_context_cache()
         gc.collect()
+        if _mx is not None:
+            _mx.clear_cache()
 
     _ensure_mlx()
     send_progress(10, "Loading model...")
@@ -619,6 +631,8 @@ def handle_unload_model(params):
     _current_model_path = None
     _clear_clone_context_cache()
     gc.collect()
+    if _mx is not None:
+        _mx.clear_cache()
 
     return {"success": True}
 
@@ -648,14 +662,12 @@ def handle_generate(params, request_id=None):
     streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
     benchmark = bool(params.get("benchmark", False))
     benchmark_label = params.get("benchmark_label")
-    temp_ref_audio = None
     benchmark_mode = "clone" if ref_audio else ("custom" if voice else "design")
     benchmark_flags = {
         "label": benchmark_label or benchmark_mode,
         "mode": benchmark_mode,
         "prepared_clone_used": False,
         "clone_cache_hit": None,
-        "used_temp_reference": False,
         "streaming_used": bool(stream and request_id is not None and not ref_audio),
     }
     benchmark_timings = {
@@ -674,20 +686,16 @@ def handle_generate(params, request_id=None):
     try:
         if ref_audio:
             normalize_start = time.perf_counter()
-            clean_ref_audio, is_temp_ref = _normalize_clone_reference(ref_audio)
+            clean_ref_audio = _normalize_clone_reference(ref_audio)
             benchmark_timings["normalize_reference"] = int((time.perf_counter() - normalize_start) * 1000)
             if not clean_ref_audio:
                 raise RuntimeError("Could not process reference audio file")
-            if is_temp_ref:
-                temp_ref_audio = clean_ref_audio
-            benchmark_flags["used_temp_reference"] = bool(is_temp_ref)
 
             resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
             prepare_start = time.perf_counter()
             prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
                 clean_ref_audio,
                 resolved_ref_text,
-                allow_persist=not is_temp_ref,
             )
             benchmark_timings["prepare_clone_context"] = int((time.perf_counter() - prepare_start) * 1000)
             benchmark_flags["clone_cache_hit"] = clone_cache_hit
@@ -805,8 +813,6 @@ def handle_generate(params, request_id=None):
         return result
 
     finally:
-        if temp_ref_audio and os.path.exists(temp_ref_audio):
-            os.remove(temp_ref_audio)
         if POST_REQUEST_CACHE_CLEAR and _mx is not None:
             _mx.clear_cache()
 

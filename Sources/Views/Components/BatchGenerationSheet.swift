@@ -176,11 +176,15 @@ struct BatchGenerationSheet: View {
                     guard let result else { continue }
 
                     // Save to history
+                    let voiceName: String? = voice ?? voiceDescription ?? {
+                        guard let ref = refAudio else { return nil }
+                        return URL(fileURLWithPath: ref).deletingPathExtension().lastPathComponent
+                    }()
                     var gen = Generation(
                         text: line,
                         mode: mode.rawValue,
                         modelTier: "pro",
-                        voice: voice ?? voiceDescription,
+                        voice: voiceName,
                         emotion: emotion,
                         speed: speed,
                         audioPath: result.audioPath,
@@ -195,9 +199,7 @@ struct BatchGenerationSheet: View {
             }
 
             isProcessing = false
-            if !cancelled {
-                dismiss()
-            }
+            dismiss()
         }
     }
 }

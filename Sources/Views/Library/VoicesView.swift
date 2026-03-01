@@ -8,6 +8,7 @@ struct VoicesView: View {
     @State private var voices: [Voice] = []
     @State private var showingEnroll = false
     @State private var isLoading = false
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,7 +60,7 @@ struct VoicesView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "waveform.badge.plus")
                         .font(.system(size: 48))
-                        .emptyStateStyle(color: AppTheme.voices)
+                        .emptyStateStyle()
                     Text("No enrolled voices")
                         .font(.headline)
                         .foregroundColor(.secondary)
@@ -135,6 +136,14 @@ struct VoicesView: View {
             })
             .environmentObject(pythonBridge)
         }
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func loadVoices() async {
@@ -153,7 +162,11 @@ struct VoicesView: View {
 
     private func deleteVoice(_ voice: Voice) {
         Task {
-            try? await pythonBridge.deleteVoice(name: voice.name)
+            do {
+                try await pythonBridge.deleteVoice(name: voice.name)
+            } catch {
+                errorMessage = "Failed to delete voice: \(error.localizedDescription)"
+            }
             await loadVoices()
         }
     }

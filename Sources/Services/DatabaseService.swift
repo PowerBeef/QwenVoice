@@ -87,29 +87,6 @@ final class DatabaseService {
         }
     }
 
-    func searchGenerations(query: String) throws -> [Generation] {
-        if dbQueue == nil {
-            print("[DatabaseService] Warning: database not initialized, returning empty results")
-        }
-        guard let dbQueue else { return [] }
-        let escaped = query
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "%", with: "\\%")
-            .replacingOccurrences(of: "_", with: "\\_")
-        return try dbQueue.read { db in
-            let pattern = "%\(escaped)%"
-            let sql = """
-                SELECT \(Self.generationSelectColumns)
-                FROM generations
-                WHERE text LIKE ? ESCAPE '\\'
-                   OR COALESCE(voice, '') LIKE ? ESCAPE '\\'
-                ORDER BY createdAt DESC
-                """
-            let rows = try Row.fetchAll(db, sql: sql, arguments: [pattern, pattern])
-            return rows.map(Generation.init(row:))
-        }
-    }
-
     func deleteGeneration(id: Int64) throws {
         guard let dbQueue else { return }
         try dbQueue.write { db in

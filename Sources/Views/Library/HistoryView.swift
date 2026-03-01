@@ -8,6 +8,7 @@ struct HistoryView: View {
     @State private var loadError: String?
     @State private var showDeleteConfirmation = false
     @State private var generationToDelete: Generation?
+    @State private var exportError: String?
 
     private var filtered: [Generation] {
         if searchText.isEmpty { return generations }
@@ -57,7 +58,7 @@ struct HistoryView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "clock")
                         .font(.system(size: 48))
-                        .emptyStateStyle(color: AppTheme.history)
+                        .emptyStateStyle()
                     Text(generations.isEmpty ? "No generations yet" : "No results found")
                         .font(.headline)
                         .foregroundColor(.secondary)
@@ -130,6 +131,14 @@ struct HistoryView: View {
         } message: {
             Text("This will permanently delete the generation and its audio file.")
         }
+        .alert("Export Error", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK") { exportError = nil }
+        } message: {
+            Text(exportError ?? "")
+        }
     }
 
     private func loadHistory() async {
@@ -164,7 +173,11 @@ struct HistoryView: View {
         panel.allowedContentTypes = [.wav]
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
-            try? FileManager.default.copyItem(at: URL(fileURLWithPath: gen.audioPath), to: url)
+            do {
+                try FileManager.default.copyItem(at: URL(fileURLWithPath: gen.audioPath), to: url)
+            } catch {
+                exportError = "Export failed: \(error.localizedDescription)"
+            }
         }
     }
 }

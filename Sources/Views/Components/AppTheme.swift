@@ -121,8 +121,6 @@ enum AppTheme {
 // MARK: - Section Header Style
 
 struct SectionHeaderStyle: ViewModifier {
-    let color: Color
-
     func body(content: Content) -> some View {
         content
             .font(.subheadline.weight(.semibold))
@@ -131,8 +129,8 @@ struct SectionHeaderStyle: ViewModifier {
 }
 
 extension View {
-    func sectionHeader(color: Color) -> some View {
-        modifier(SectionHeaderStyle(color: color))
+    func sectionHeader() -> some View {
+        modifier(SectionHeaderStyle())
     }
 }
 
@@ -256,8 +254,6 @@ extension View {
 // MARK: - Empty State Style
 
 struct EmptyStateStyle: ViewModifier {
-    let color: Color
-
     func body(content: Content) -> some View {
         content
             .foregroundStyle(.secondary.opacity(0.5))
@@ -265,7 +261,7 @@ struct EmptyStateStyle: ViewModifier {
 }
 
 extension View {
-    func emptyStateStyle(color: Color) -> some View {
-        modifier(EmptyStateStyle(color: color))
+    func emptyStateStyle() -> some View {
+        modifier(EmptyStateStyle())
     }
 }

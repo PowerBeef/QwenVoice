@@ -18,7 +18,7 @@ final class PythonBridge: ObservableObject {
     @Published private(set) var isProcessing = false
     @Published private(set) var progressPercent: Int = 0
     @Published private(set) var progressMessage: String = ""
-    @Published private(set) var lastError: String?
+    @Published internal(set) var lastError: String?
 
     // MARK: - Private
 
@@ -115,6 +115,7 @@ final class PythonBridge: ObservableObject {
         isReady = false
         isProcessing = false
         lastError = nil
+        readBuffer = ""
         cancelAllPending(error: PythonBridgeError.processTerminated)
 
         if let proc, proc.isRunning {
@@ -130,6 +131,7 @@ final class PythonBridge: ObservableObject {
     /// Default timeout for RPC calls (seconds).
     private static let defaultTimeout: UInt64 = 300  // 5 minutes for generation
     private static let pingTimeout: UInt64 = 10
+    private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio"]
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
     func call(
@@ -156,9 +158,12 @@ final class PythonBridge: ObservableObject {
             throw PythonBridgeError.encodingError
         }
 
-        isProcessing = true
-        progressPercent = 0
-        progressMessage = ""
+        let isLongRunning = Self.longRunningMethods.contains(method)
+        if isLongRunning {
+            isProcessing = true
+            progressPercent = 0
+            progressMessage = ""
+        }
         lastError = nil
 
         let timeout = method == "ping" ? Self.pingTimeout : Self.defaultTimeout
@@ -189,6 +194,9 @@ final class PythonBridge: ObservableObject {
                 group.cancelAll()
                 pendingRequests.removeValue(forKey: id)
                 generationChunkHandlers.removeValue(forKey: id)
+                isProcessing = false
+                progressPercent = 0
+                progressMessage = ""
             }
 
             guard let result = try await group.next() else {

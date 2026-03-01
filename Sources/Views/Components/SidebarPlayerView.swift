@@ -53,7 +53,6 @@ struct SidebarPlayerView: View {
                             .foregroundStyle(AppTheme.accent)
                     }
                     .buttonStyle(.plain)
-                    .keyboardShortcut(.space, modifiers: [])
                     .accessibilityIdentifier("sidebarPlayer_playPause")
 
                     Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.formattedDuration)")

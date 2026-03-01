@@ -171,7 +171,7 @@ Models are downloaded via `HuggingFaceDownloader.swift` using native URLSession 
 | `Sources/Services/HuggingFaceDownloader.swift` | Native URLSession model downloader; `withLock` helper, `DownloadError` enum, LFS size resolution |
 | `Sources/Services/PythonEnvironmentManager.swift` | Venv creation, incremental dep update, pip retry (3 attempts), import validation, bundled Python fast path |
 | `Sources/QwenVoiceApp.swift` | @main entry point, `AppLaunchConfiguration`, window setup, keyboard shortcuts, directory scaffold |
-| `Sources/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `.navigateToModels` + `.generationSaved` notifications |
+| `Sources/ContentView.swift` | `SidebarItem` enum + `NavigationSplitView` root; `.navigateToModels` notification; `.generationSaved` defined here but received by `HistoryView` |
 | `Sources/Views/SetupView.swift` | First-boot Python setup UI (states: checking → settingUp → ready/failed) |
 | `Sources/Views/Components/AppTheme.swift` | Glassmorphism `glassCard()`, monochromatic accent color, `ChipStyle`, `AuroraBackground`, animation gating |
 | `Sources/Views/Components/TextInputView.swift` | Shared chat-style input bar (text field + circular generate button) |

@@ -323,7 +323,7 @@ def generate_with_prepared_icl(
     repetition_penalty: float = 1.5,
 ) -> Generator[GenerationResult, None, None]:
     """Run the clone generation loop using a prepared ICL context."""
-    start_time = time.time()
+    start_time = time.perf_counter()
     input_embeds, tts_pad_embed, ref_codes = prepare_icl_generation_inputs_from_context(
         model, text, prepared
     )
@@ -440,7 +440,7 @@ def generate_with_prepared_icl(
 
     mx.eval(audio)
 
-    elapsed_time = time.time() - start_time
+    elapsed_time = time.perf_counter() - start_time
     samples = audio.shape[0]
     token_count = len(generated_codes)
     duration_seconds = samples / model.sample_rate

@@ -53,6 +53,12 @@ struct QwenVoiceApp: App {
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
 
+    init() {
+        // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
+        // (e.g. Python backend terminates between isRunning check and write)
+        signal(SIGPIPE, SIG_IGN)
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -127,7 +133,11 @@ struct QwenVoiceApp: App {
         guard !pythonBridge.isReady else { return }
         pythonBridge.start(pythonPath: pythonPath)
         Task {
-            try? await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)
+            do {
+                try await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)
+            } catch {
+                pythonBridge.lastError = "Backend initialization failed: \(error.localizedDescription)"
+            }
         }
     }
 

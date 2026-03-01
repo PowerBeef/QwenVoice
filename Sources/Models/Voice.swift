@@ -8,9 +8,9 @@ struct Voice: Identifiable, Hashable {
     let hasTranscript: Bool
 
     var transcript: String? {
-        let txtPath = wavPath.replacingOccurrences(of: ".wav", with: ".txt")
-        guard FileManager.default.fileExists(atPath: txtPath) else { return nil }
-        return try? String(contentsOfFile: txtPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        let txtURL = URL(fileURLWithPath: wavPath).deletingPathExtension().appendingPathExtension("txt")
+        guard FileManager.default.fileExists(atPath: txtURL.path) else { return nil }
+        return try? String(contentsOfFile: txtURL.path, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Initialize from a Python backend response

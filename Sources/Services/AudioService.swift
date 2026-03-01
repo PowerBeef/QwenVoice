@@ -37,7 +37,7 @@ enum AudioService {
 
     private static let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH-mm-ss-SSS"
+        f.dateFormat = "yyyyMMdd_HH-mm-ss-SSS"
         return f
     }()
 }

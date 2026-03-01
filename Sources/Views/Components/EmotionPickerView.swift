@@ -19,7 +19,7 @@ struct EmotionPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Emotion").sectionHeader(color: AppTheme.customVoice)
+            Text("Emotion").sectionHeader()
 
             // Chip grid: presets + Custom
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 12)], spacing: 12) {
@@ -123,7 +123,7 @@ struct EmotionPickerView: View {
     }
 
     private func selectPreset(_ preset: EmotionPreset) {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.2)) {
             isCustomMode = false
             selectedPreset = preset
         }
@@ -131,7 +131,7 @@ struct EmotionPickerView: View {
     }
 
     private func enterCustomMode() {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.2)) {
             selectedPreset = nil
             isCustomMode = true
         }

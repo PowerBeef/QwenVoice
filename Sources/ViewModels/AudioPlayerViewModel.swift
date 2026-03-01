@@ -5,8 +5,6 @@ import Combine
 /// Manages audio playback state for the persistent bottom player bar.
 @MainActor
 final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    private static let autoplayRetryScheduleNs: [UInt64] = [60_000_000, 180_000_000]
-
     @Published var isPlaying = false
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
@@ -17,7 +15,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
-    private var autoplayTask: Task<Void, Never>?
 
     var hasAudio: Bool { currentFilePath != nil }
 
@@ -32,7 +29,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     // MARK: - Playback
 
     func load(filePath: String, title: String = "") {
-        autoplayTask?.cancel()
         stop()
 
         let url = URL(fileURLWithPath: filePath)
@@ -59,8 +55,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func play() {
-        autoplayTask?.cancel()
-        _ = attemptPlay(reportFailure: true)
+        attemptPlay()
     }
 
     func pause() {
@@ -74,7 +69,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func stop() {
-        autoplayTask?.cancel()
         player?.stop()
         player = nil
         isPlaying = false
@@ -95,14 +89,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         currentTime = time
     }
 
-    /// Load a file and optionally defer auto-start to avoid immediate post-write playback races.
-    func playFile(_ path: String, title: String = "", deferAutoStart: Bool = false) {
+    func playFile(_ path: String, title: String = "") {
         load(filePath: path, title: title)
-        if deferAutoStart {
-            scheduleAutoplay(for: path)
-        } else {
-            play()
-        }
+        guard player != nil else { return }
+        play()
     }
 
     // MARK: - Timer
@@ -110,7 +100,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private func startTimer() {
         stopTimer()
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self, let player = self.player else { return }
                 self.currentTime = player.currentTime
                 if !player.isPlaying {
@@ -126,45 +116,45 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         timer = nil
     }
 
-    @discardableResult
-    private func attemptPlay(reportFailure: Bool) -> Bool {
-        guard let player else { return false }
+    private func attemptPlay() {
+        guard var player else { return }
 
-        let didStart = player.play()
-        guard didStart else {
-            isPlaying = false
-            stopTimer()
-            if reportFailure {
-                playbackError = "Playback could not start."
-            }
-            return false
+        // Seek to beginning if playback already finished
+        if player.currentTime >= player.duration, player.duration > 0 {
+            player.currentTime = 0
         }
 
-        playbackError = nil
-        isPlaying = true
-        startTimer()
-        return true
-    }
+        if player.play() {
+            playbackError = nil
+            isPlaying = true
+            currentTime = player.currentTime
+            startTimer()
+            return
+        }
 
-    private func scheduleAutoplay(for path: String) {
-        autoplayTask?.cancel()
-        playbackError = nil
-        autoplayTask = Task { @MainActor [weak self] in
-            guard let self else { return }
+        // Player in bad state — recreate from disk and retry once
+        guard let path = currentFilePath else {
+            playbackError = "Playback could not start."
+            return
+        }
 
-            for delay in Self.autoplayRetryScheduleNs {
-                try? await Task.sleep(nanoseconds: delay)
-                if Task.isCancelled || self.currentFilePath != path {
-                    return
-                }
-                if self.attemptPlay(reportFailure: false) {
-                    return
-                }
-            }
+        let url = URL(fileURLWithPath: path)
+        guard let rebuilt = try? AVAudioPlayer(contentsOf: url) else {
+            playbackError = "Playback could not start."
+            return
+        }
+        rebuilt.delegate = self
+        rebuilt.prepareToPlay()
+        self.player = rebuilt
+        player = rebuilt
 
-            if self.currentFilePath == path {
-                self.playbackError = "Auto-play could not start. Press play to try again."
-            }
+        if player.play() {
+            playbackError = nil
+            isPlaying = true
+            currentTime = player.currentTime
+            startTimer()
+        } else {
+            playbackError = "Playback could not start."
         }
     }
 

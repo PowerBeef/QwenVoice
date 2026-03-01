@@ -31,11 +31,11 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     /// Callback: (bytesDownloaded, bytesTotal)
     var onProgress: ((Int64, Int64) -> Void)?
 
-    private var isCancelled = false
+    private var _isCancelled = false
     private var session: URLSession!
 
     /// Tracks the active download task for cancellation.
-    private var activeTask: URLSessionDownloadTask?
+    private var _activeTask: URLSessionDownloadTask?
 
     /// Protects concurrent access to continuations, destinations, and progress state
     /// (written on caller thread, read on URLSession delegate queue).
@@ -64,7 +64,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         var completedBytes: Int64 = 0
 
         for file in files {
-            guard !isCancelled else { throw DownloadError.cancelled }
+            guard !withLock({ _isCancelled }) else { throw DownloadError.cancelled }
 
             let destURL = targetDir.appendingPathComponent(file.path)
             let parentDir = destURL.deletingLastPathComponent()
@@ -89,8 +89,11 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
     /// Cancel all in-flight downloads.
     func cancel() {
-        isCancelled = true
-        activeTask?.cancel()
+        let task: URLSessionDownloadTask? = withLock {
+            _isCancelled = true
+            return _activeTask
+        }
+        task?.cancel()
     }
 
     // MARK: - Private: List Files
@@ -162,7 +165,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
                 continuations[taskID] = continuation
                 destinations[taskID] = destination
             }
-            activeTask = task
+            withLock { _activeTask = task }
             task.resume()
         }
 
@@ -173,8 +176,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         }
         try fm.moveItem(at: tempURL, to: destination)
 
-        activeTask = nil
         withLock {
+            _activeTask = nil
             currentProgressHandler = nil
         }
     }
