@@ -1,15 +1,5 @@
 <div align="center">
-  <img src="docs/logo.png" alt="Qwen Voice Logo" width="128">
-
-# Qwen Voice
-
-**Native macOS frontend for Qwen3-TTS on Apple Silicon**
-
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
-![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1%2FM2%2FM3%2FM4-orange)
-![Swift 5.9](https://img.shields.io/badge/Swift-5.9-F05138)
-![Release](https://img.shields.io/github/v/release/PowerBeef/QwenVoice)
-
+  <img src="docs/social_preview.png" alt="Qwen Voice — Offline Text-to-Speech for Mac with Voice Cloning">
 </div>
 
 ## Overview
