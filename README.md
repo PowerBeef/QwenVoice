@@ -26,7 +26,7 @@ Generate speech using 4 built-in English speakers (Ryan, Aiden, Serena, Vivian) 
 
 ### Voice Cloning
 
-Clone any voice from a short 5–10 second audio sample (WAV, MP3, or AIFF). Optionally provide a transcript of the reference audio to improve accuracy.
+Clone any voice from a short 5–10 second audio sample (WAV, MP3, AIFF, M4A, FLAC, or OGG). Optionally provide a transcript of the reference audio to improve accuracy.
 
 ### Model Manager
 
@@ -34,7 +34,7 @@ Download and manage MLX models directly from HuggingFace inside the app. No brow
 
 ### Generation History
 
-Every generation is persisted to a local SQLite database (via GRDB). The History view supports sorting by date, duration, voice, mode, or a custom manual drag-reorder. Items can be searched, exported, or deleted via a context menu. Instant in-app playback is available for every entry.
+Every generation is persisted to a local SQLite database (via GRDB). The History view lists generations sorted by date (newest first) and supports text search filtering. Each entry can be played back instantly, revealed in Finder, or deleted.
 
 ### Batch Generation
 
@@ -62,7 +62,7 @@ A standout feature of both Custom Voice and Voice Design modes is the absence of
 |---|---|
 | macOS | 14.0+ (Sonoma) |
 | Chip | Apple Silicon (M1 / M2 / M3 / M4) |
-| RAM | 4–8 GB free depending on model |
+| RAM | 8 GB+ recommended |
 
 ## Install
 
@@ -91,7 +91,7 @@ All models are 8-bit quantised for efficient memory use and natively support nat
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
 cd QwenVoice
-xcodegen generate
+./scripts/regenerate_project.sh
 open QwenVoice.xcodeproj
 ```
 
@@ -113,7 +113,7 @@ Qwen Voice uses a **two-process architecture**:
 - `PythonBridge` — Launches and manages the Python subprocess, sends JSON-RPC 2.0 requests over stdin/stdout, and handles async continuations for each pending call. Exposes typed Swift methods for every backend operation (`generateCustom`, `generateDesign`, `generateClone`, `enrollVoice`, `loadModel`, etc.)
 - `PythonEnvironmentManager` — Handles the full Python environment lifecycle: architecture check, bundled-Python fast path, venv creation, pip dependency installation with retry logic, SHA-256 marker-file validation to avoid reinstalling on every launch, and import validation before marking setup complete.
 - `HuggingFaceDownloader` — A native `URLSession`-based downloader that queries the HuggingFace tree API, resolves LFS sizes, and streams each file to disk with per-file and aggregate progress callbacks. No `huggingface-cli` dependency.
-- `DatabaseService` — SQLite persistence via GRDB with schema migrations, multi-field sort, full-text search, drag-reorder (sortOrder column), and export support.
+- `DatabaseService` — SQLite persistence via GRDB with schema migrations (v2 adds `sortOrder` column) and basic CRUD for generation history.
 - `AudioPlayerViewModel` / `AudioService` — AVFoundation-backed audio player with play/pause/stop and waveform data extraction via vDSP.
 - `ModelManagerViewModel` — Tracks download state for all three models and triggers `PythonBridge.loadModel` on selection.
 
@@ -185,7 +185,7 @@ The `cli/main.py` in this repo is directly derived from kapi2800's project. The 
 ### Swift Dependencies
 
 **[GRDB.swift](https://github.com/groue/GRDB.swift)** — Gwendal Roué ([@groue](https://github.com/groue))  
-The SQLite toolkit used for all generation history persistence, schema migrations, multi-field sorting, full-text search, and drag-reorder. Integrated via Swift Package Manager. Released under the MIT license.
+The SQLite toolkit used for generation history persistence and schema migrations. Integrated via Swift Package Manager. Released under the MIT license.
 
 ### Apple Frameworks (built-in)
 
