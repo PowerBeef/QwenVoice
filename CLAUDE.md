@@ -343,8 +343,7 @@ The player implements path-pinned retry logic for autoplay after generation:
 
 ### DatabaseService
 - **v2 migration** adds `sortOrder` integer column with backfill by `createdAt DESC` order
-- **`generationSelectColumns`** static constant for DRY column lists
-- **`searchGenerations()`** uses LIKE-escaped sanitization (backslash, `%`, `_`) with `COALESCE(voice, '')` for nullable columns
+- **`fetchAllGenerations()`** uses GRDB's type-safe query builder (`Generation.order(...).fetchAll(db)`); do NOT use raw SQL with manual `init(row:)` mapping — it silently returns empty results with GRDB 7.10.0
 - **`deleteAllGenerations()`** batch delete; silently returns if `dbQueue` is nil
 - **Error strategy:** Write operations throw `DatabaseServiceError.notInitialized(reason)`. Read operations return empty arrays with console warning.
 
