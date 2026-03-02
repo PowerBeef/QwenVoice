@@ -866,7 +866,7 @@ def handle_enroll_voice(params):
     os.makedirs(VOICES_DIR, exist_ok=True)
 
     # Convert to WAV if needed
-    clean_wav, is_temp_wav = _normalize_clone_reference(audio_path)
+    clean_wav = _normalize_clone_reference(audio_path)
     if not clean_wav:
         raise RuntimeError("Could not process audio file")
 
@@ -879,10 +879,6 @@ def handle_enroll_voice(params):
     if transcript:
         with open(target_txt, "w", encoding="utf-8") as f:
             f.write(transcript)
-
-    # Clean up temp conversion file
-    if is_temp_wav and os.path.exists(clean_wav):
-        os.remove(clean_wav)
 
     return {"success": True, "name": safe_name, "wav_path": target_wav}
 
