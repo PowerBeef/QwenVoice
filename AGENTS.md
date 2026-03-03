@@ -44,7 +44,7 @@ When there is drift, prefer these sources in this order:
 
 Important drift that exists right now:
 
-- The checked-in `.xcodeproj` and `project.yml` still disagree on asset catalog wiring.
+- Older clones may still have stale generated `.xcodeproj` state. If project metadata looks suspicious, trust `project.yml` and rerun `./scripts/regenerate_project.sh`.
 - Older notes may still describe Voice Design as its own screen, but it is currently folded into `CustomVoiceView`.
 - Older notes may still say `autoPlay` and `outputDirectory` are UI-only, but the live code now uses both settings.
 - Older notes may still describe a bottom playback bar, but the live player is the sidebar inset (`SidebarPlayerView`).
@@ -74,6 +74,7 @@ When in doubt, verify behavior directly in code before trusting prose.
 
 ### Build and release
 
+- `.github/workflows/project-inputs.yml`: CI guard that rejects checked-in `.xcodeproj` references to local-only Python cache files.
 - `project.yml`: XcodeGen source of truth. Prefer editing this over the generated `.xcodeproj`.
 - `QwenVoice.xcodeproj/`: generated project; do not hand-edit unless you are intentionally repairing generated output.
 - `scripts/`: build, test, bundling, release, benchmark, and utility scripts.
@@ -200,6 +201,9 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 # Safe project regeneration (preferred over raw xcodegen)
 ./scripts/regenerate_project.sh
 
+# Validate checked-in Xcode project inputs
+./scripts/check_project_inputs.sh
+
 # Run default smoke UI suite
 ./scripts/run_tests.sh
 
@@ -235,7 +239,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
 ### XcodeGen rule
 
-Use `./scripts/regenerate_project.sh`, not bare `xcodegen generate`, because XcodeGen overwrites `Sources/QwenVoice.entitlements` and the script restores it.
+Use `./scripts/regenerate_project.sh`, not bare `xcodegen generate`, because XcodeGen overwrites `Sources/QwenVoice.entitlements`, the script restores it, and it validates that the generated `.xcodeproj` does not reference local-only `__pycache__` / `.pyc` files.
 
 ### Release packaging rule
 
@@ -332,7 +336,7 @@ If you change backend Python dependencies:
 ## Known Gotchas
 
 - `PythonEnvironmentManager` intentionally avoids `/usr/bin/python3` because macOS can treat it as an installer stub. The live `PythonBridge.findPython()` fallback no longer includes `/usr/bin/python3`.
-- The checked-in `project.yml` references `Sources/Assets.xcassets`, while the checked-in `QwenVoice.xcodeproj/project.pbxproj` still references top-level `Assets.xcassets`. If you touch assets or regenerate the project, verify which catalog is intended to be authoritative and keep the project state coherent.
+- Local `__pycache__` directories and `*.pyc` files under `Sources/Resources/backend/` are machine-generated artifacts and must never be referenced by the checked-in `.xcodeproj`. Use `./scripts/check_project_inputs.sh` or `./scripts/regenerate_project.sh` to validate this before committing.
 - Broad recursive searches can get polluted by generated artifacts in `Sources/Resources/python/`, vendored caches, and `__pycache__`. Prefer search patterns that exclude them (for example `rg -g '!Sources/Resources/python/**' -g '!**/__pycache__/**' ...`) when you want real project sources.
 - Older notes may still refer to legacy `audioPlayer_*` accessibility identifiers, but the live player view uses `sidebarPlayer_*`.
 - Some backend/frontend features are partially wired:
