@@ -2,6 +2,11 @@
   <img src="docs/social_preview.png" alt="Qwen Voice — Offline Text-to-Speech for Mac with Voice Cloning">
 </div>
 
+## Screenshots
+
+<img width="1868" height="1676" alt="qwenvoice-screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
+
+
 ## Overview
 
 Qwen Voice is a native SwiftUI macOS application that brings state-of-the-art text-to-speech to Apple Silicon Macs with no Python install, no terminal, and no dependencies required of the user — just download and run.
