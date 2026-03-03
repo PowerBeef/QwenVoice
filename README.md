@@ -76,7 +76,9 @@ All models are 8-bit quantised for efficient memory use and natively support nat
 
 ## Building from Source
 
-**Source build prerequisites:** Xcode 15+, XcodeGen, macOS 14+
+**Source build prerequisites:** Apple Silicon (M1 or later), macOS 14+, Xcode 15+, XcodeGen
+
+If you do not already have XcodeGen installed, run `brew install xcodegen` first.
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -85,9 +87,13 @@ cd QwenVoice
 open QwenVoice.xcodeproj
 ```
 
-Build and run from Xcode.
+Build and run the `QwenVoice` scheme from Xcode.
 
-**Dev-mode runtime dependencies:** If the bundled runtime under `Sources/Resources/python/` is not present, the app falls back to creating a Python venv at `~/Library/Application Support/QwenVoice/python/`. In that path you must have a local Python 3.11-3.14 install available first (for example `brew install python@3.13`). On first launch, the app installs the backend dependencies into that venv and shows setup progress in `SetupView`.
+If you want to verify the checked-in Xcode project metadata before building, run `./scripts/check_project_inputs.sh`.
+
+**Dev-mode runtime dependencies:** In a clean source checkout, `Sources/Resources/python/` is usually absent, so most source builds will use the local-Python fallback on first launch. Have a local Python 3.11-3.14 install available first (for example `brew install python@3.13`). The app then creates a Python venv at `~/Library/Application Support/QwenVoice/python/`, installs the backend dependencies into it, and shows setup progress in `SetupView`.
+
+For a packaged DMG rather than a normal local Xcode build, use:
 
 **Release build:**
 ```sh
