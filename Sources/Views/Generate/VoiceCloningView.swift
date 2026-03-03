@@ -301,10 +301,9 @@ struct VoiceCloningView: View {
                     return
                 }
 
-                try await pythonBridge.loadModel(id: model.id)
-
                 let outputPath = makeOutputPath(subfolder: "Clones", text: text)
-                let result = try await pythonBridge.generateClone(
+                let result = try await pythonBridge.generateCloneFlow(
+                    modelID: model.id,
                     text: text,
                     refAudio: refPath,
                     refText: referenceTranscript.isEmpty ? nil : referenceTranscript,

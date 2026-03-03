@@ -7,7 +7,7 @@ struct TTSModel: Identifiable, Hashable {
     let folder: String      // e.g. "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
     let mode: GenerationMode
     let huggingFaceRepo: String
-    let estimatedSizeBytes: Int
+    let requiredRelativePaths: [String]
 }
 
 enum GenerationMode: String, CaseIterable, Codable, Hashable {
@@ -35,6 +35,22 @@ enum GenerationMode: String, CaseIterable, Codable, Hashable {
 // MARK: - Model Registry
 
 extension TTSModel {
+    private static let sharedRequiredRelativePaths = [
+        "README.md",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model.safetensors",
+        "model.safetensors.index.json",
+        "preprocessor_config.json",
+        "speech_tokenizer/config.json",
+        "speech_tokenizer/configuration.json",
+        "speech_tokenizer/model.safetensors",
+        "speech_tokenizer/preprocessor_config.json",
+        "tokenizer_config.json",
+        "vocab.json",
+    ]
+
     /// All available models (mirrors server.py MODELS dict)
     static let all: [TTSModel] = [
         TTSModel(
@@ -43,7 +59,7 @@ extension TTSModel {
             folder: "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
             mode: .custom,
             huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
-            estimatedSizeBytes: 900_000_000
+            requiredRelativePaths: sharedRequiredRelativePaths
         ),
         TTSModel(
             id: "pro_design",
@@ -51,7 +67,7 @@ extension TTSModel {
             folder: "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
             mode: .design,
             huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
-            estimatedSizeBytes: 900_000_000
+            requiredRelativePaths: sharedRequiredRelativePaths
         ),
         TTSModel(
             id: "pro_clone",
@@ -59,7 +75,7 @@ extension TTSModel {
             folder: "Qwen3-TTS-12Hz-1.7B-Base-8bit",
             mode: .clone,
             huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
-            estimatedSizeBytes: 930_000_000
+            requiredRelativePaths: sharedRequiredRelativePaths
         ),
     ]
 

@@ -3,54 +3,38 @@ import SwiftUI
 struct SidebarStatusView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
 
-    private enum StatusState {
-        case idle
-        case starting
-        case active(percent: Int, message: String)
-        case error(String)
-        case crashed(String)
-    }
-
-    private var state: StatusState {
-        if let error = pythonBridge.lastError {
-            return pythonBridge.isReady ? .error(error) : .crashed(error)
-        }
-        if !pythonBridge.isReady { return .starting }
-        if pythonBridge.isProcessing {
-            return .active(
-                percent: pythonBridge.progressPercent,
-                message: pythonBridge.progressMessage.isEmpty ? "Processing..." : pythonBridge.progressMessage
-            )
-        }
-        return .idle
-    }
-
     private var stateKey: String {
-        switch state {
+        switch pythonBridge.sidebarStatus {
         case .idle: return "idle"
         case .starting: return "starting"
-        case .active: return "active"
+        case .running: return "active"
         case .error: return "error"
         case .crashed: return "crashed"
         }
     }
 
     var body: some View {
-        statusContent
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                statusContent
+            }
             .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("sidebar_generationStatus")
-            .appAnimation(.easeInOut(duration: 0.25), value: stateKey)
+            .accessibilityIdentifier("sidebar_backendStatus")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebar_generationStatus")
+        .appAnimation(.easeInOut(duration: 0.25), value: stateKey)
     }
 
     @ViewBuilder
     private var statusContent: some View {
-        switch state {
+        switch pythonBridge.sidebarStatus {
         case .idle:
             idleView
         case .starting:
             startingView
-        case .active(let percent, let message):
-            activeView(percent: percent, message: message)
+        case .running(let activity):
+            activeView(activity: activity)
         case .error(let message):
             errorView(message: message)
         case .crashed(let message):
@@ -69,7 +53,7 @@ struct SidebarStatusView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .accessibilityIdentifier("sidebar_backendStatus")
+        .accessibilityIdentifier("sidebar_backendStatus_idle")
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,7 +70,7 @@ struct SidebarStatusView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .accessibilityIdentifier("sidebar_backendStatus")
+        .accessibilityIdentifier("sidebar_backendStatus_starting")
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,20 +79,22 @@ struct SidebarStatusView: View {
 
     // MARK: - Active (with progress bar)
 
-    private func activeView(percent: Int, message: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func activeView(activity: ActivityStatus) -> some View {
+        let percent = Int(((activity.fraction ?? 0.0) * 100.0).rounded())
+
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.mini)
-                Text(message)
+                Text(activity.label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
-            if percent > 0 {
+            if let fraction = activity.fraction {
                 HStack(spacing: 8) {
-                    ProgressView(value: Double(percent), total: 100)
+                    ProgressView(value: min(max(fraction, 0.0), 1.0), total: 1.0)
                         .tint(AppTheme.accent)
                         .scaleEffect(y: 0.6)
                     Text("\(percent)%")
@@ -117,7 +103,7 @@ struct SidebarStatusView: View {
                 }
             }
         }
-        .accessibilityIdentifier("sidebar_backendStatus")
+        .accessibilityIdentifier("sidebar_backendStatus_active")
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -150,7 +136,7 @@ struct SidebarStatusView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
-        .accessibilityIdentifier("sidebar_backendStatus")
+        .accessibilityIdentifier("sidebar_backendStatus_error")
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -173,7 +159,7 @@ struct SidebarStatusView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .accessibilityIdentifier("sidebar_backendStatus")
+        .accessibilityIdentifier("sidebar_backendStatus_crashed")
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)

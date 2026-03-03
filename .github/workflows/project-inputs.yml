@@ -1,0 +1,19 @@
+name: Project Inputs
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  validate-project-inputs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate checked-in Xcode project inputs
+        run: bash ./scripts/check_project_inputs.sh

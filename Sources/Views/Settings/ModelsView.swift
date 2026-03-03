@@ -11,16 +11,10 @@ struct ModelsView: View {
                     .foregroundStyle(AppTheme.models)
                     .accessibilityIdentifier("models_title")
 
-                if viewModel.hasRefreshed {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(TTSModel.all) { model in
-                            ModelCard(model: model, viewModel: viewModel)
-                        }
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(TTSModel.all) { model in
+                        ModelCard(model: model, viewModel: viewModel)
                     }
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 20)
                 }
             }
             .padding(24)
@@ -38,7 +32,7 @@ struct ModelCard: View {
     @ObservedObject var viewModel: ModelManagerViewModel
 
     private var status: ModelManagerViewModel.ModelStatus {
-        viewModel.statuses[model.id] ?? .notDownloaded
+        viewModel.statuses[model.id] ?? .checking
     }
 
     private var modeColor: Color {
@@ -60,35 +54,49 @@ struct ModelCard: View {
                     .foregroundColor(.secondary)
 
                 switch status {
+                case .checking:
+                    VStack(alignment: .leading, spacing: 2) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(maxWidth: 200, alignment: .leading)
+                        Text("Checking local files…")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .accessibilityIdentifier("models_checking_\(model.id)")
                 case .notDownloaded:
                     Text("Not downloaded")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                case .downloading(let progress):
-                    let downloaded = Int64(progress * Double(model.estimatedSizeBytes))
-                    let total = Int64(model.estimatedSizeBytes)
-                    let formattedDL = ByteCountFormatter.string(fromByteCount: downloaded, countStyle: .file)
-                    let formattedTotal = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+                case .downloading(let downloadedBytes, let totalBytes):
                     VStack(alignment: .leading, spacing: 2) {
-                        if progress <= 0 {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(maxWidth: 200, alignment: .leading)
-                        } else {
+                        if let totalBytes, totalBytes > 0 {
+                            let progress = min(max(Double(downloadedBytes) / Double(totalBytes), 0), 1)
+                            let formattedDL = ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)
+                            let formattedTotal = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(modeColor.opacity(0.18))
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(modeColor)
-                                        .frame(width: max(6, geo.size.width * min(progress, 1.0)))
+                                        .frame(width: max(6, geo.size.width * progress))
                                 }
                             }
                             .frame(maxWidth: 200, maxHeight: 6)
+
+                            Text(progress >= 1.0 ? "Finalizing…" : "\(formattedDL) / \(formattedTotal)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: 200, alignment: .leading)
+                            Text("Preparing download…")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                         }
-                        Text(progress >= 1.0 ? "Finalizing…" : progress <= 0 ? "Preparing download…" : "\(formattedDL) / \(formattedTotal)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
                     }
                 case .downloaded(let sizeBytes):
                     Text("Ready — \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
@@ -104,6 +112,8 @@ struct ModelCard: View {
             Spacer()
 
             switch status {
+            case .checking:
+                EmptyView()
             case .notDownloaded:
                 Button("Download") {
                     Task { await viewModel.download(model) }

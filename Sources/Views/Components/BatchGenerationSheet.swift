@@ -53,7 +53,7 @@ struct BatchGenerationSheet: View {
                 VStack(spacing: 8) {
                     ProgressView(value: Double(currentIndex), total: Double(totalItems))
                         .tint(themeColor)
-                    Text("Generating \(currentIndex)/\(totalItems)...")
+                    Text("Generating \(min(currentIndex + 1, max(totalItems, 1)))/\(totalItems)...")
                         .font(.caption)
                 }
             }
@@ -135,11 +135,8 @@ struct BatchGenerationSheet: View {
             }
 
             do {
-                try await pythonBridge.loadModel(id: model.id)
-
                 for (i, line) in lines.enumerated() {
                     if cancelled { break }
-                    currentIndex = i + 1
 
                     let outputPath = makeOutputPath(
                         subfolder: model.mode == .clone ? "Clones" : (model.mode == .design ? "VoiceDesign" : "CustomVoice"),
@@ -149,26 +146,35 @@ struct BatchGenerationSheet: View {
                     var result: GenerationResult?
                     switch mode {
                     case .custom:
-                        result = try await pythonBridge.generateCustom(
+                        result = try await pythonBridge.generateCustomFlow(
+                            modelID: model.id,
                             text: line,
                             voice: voice ?? "vivian",
                             emotion: emotion ?? "Normal tone",
                             speed: speed ?? 1.0,
-                            outputPath: outputPath
+                            outputPath: outputPath,
+                            batchIndex: i + 1,
+                            batchTotal: totalItems
                         )
                     case .design:
-                        result = try await pythonBridge.generateDesign(
+                        result = try await pythonBridge.generateDesignFlow(
+                            modelID: model.id,
                             text: line,
                             voiceDescription: voiceDescription ?? "",
-                            outputPath: outputPath
+                            outputPath: outputPath,
+                            batchIndex: i + 1,
+                            batchTotal: totalItems
                         )
                     case .clone:
                         if let refAudio {
-                            result = try await pythonBridge.generateClone(
+                            result = try await pythonBridge.generateCloneFlow(
+                                modelID: model.id,
                                 text: line,
                                 refAudio: refAudio,
                                 refText: refText,
-                                outputPath: outputPath
+                                outputPath: outputPath,
+                                batchIndex: i + 1,
+                                batchTotal: totalItems
                             )
                         }
                     }
@@ -193,11 +199,15 @@ struct BatchGenerationSheet: View {
                     )
                     try DatabaseService.shared.saveGeneration(&gen)
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
+                    currentIndex = i + 1
                 }
             } catch {
                 errorMessage = error.localizedDescription
             }
 
+            if cancelled {
+                pythonBridge.clearGenerationActivity()
+            }
             isProcessing = false
             dismiss()
         }

@@ -9,6 +9,12 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
+if ! command -v xcodegen >/dev/null 2>&1; then
+    echo "error: xcodegen is required to regenerate the project." >&2
+    echo "Install it with: brew install xcodegen" >&2
+    exit 1
+fi
+
 ENTITLEMENTS="Sources/QwenVoice.entitlements"
 BACKUP="/tmp/QwenVoice.entitlements.backup.$$"
 
@@ -26,5 +32,7 @@ cp "$ENTITLEMENTS" "$BACKUP"
 
 echo "==> Running xcodegen..."
 xcodegen generate
+
+bash "$SCRIPT_DIR/check_project_inputs.sh"
 
 echo "==> Done. Project regenerated at QwenVoice.xcodeproj"

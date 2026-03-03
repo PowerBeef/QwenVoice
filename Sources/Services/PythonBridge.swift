@@ -7,6 +7,19 @@ struct GenerationChunkNotification {
     let isFinal: Bool
 }
 
+struct ActivityStatus: Equatable {
+    let label: String
+    let fraction: Double?
+}
+
+enum SidebarStatus: Equatable {
+    case idle
+    case starting
+    case running(ActivityStatus)
+    case error(String)
+    case crashed(String)
+}
+
 /// Manages a long-lived Python subprocess running server.py,
 /// communicating via JSON-RPC 2.0 over stdin/stdout pipes.
 @MainActor
@@ -14,13 +27,33 @@ final class PythonBridge: ObservableObject {
 
     // MARK: - Published State
 
-    @Published private(set) var isReady = false
+    @Published private(set) var isReady = false {
+        didSet { syncSidebarStatusFromSystemState() }
+    }
     @Published private(set) var isProcessing = false
     @Published private(set) var progressPercent: Int = 0
     @Published private(set) var progressMessage: String = ""
-    @Published internal(set) var lastError: String?
+    @Published private(set) var sidebarStatus: SidebarStatus = .starting
+    @Published var lastError: String? {
+        didSet { syncSidebarStatusFromSystemState() }
+    }
 
     // MARK: - Private
+
+    private struct GenerationSession {
+        var mode: GenerationMode
+        var batchIndex: Int?
+        var batchTotal: Int?
+        var currentPhase: GenerationPhase
+        var currentRequestID: Int?
+    }
+
+    private enum GenerationPhase {
+        case loadingModel
+        case preparing
+        case generating
+        case saving
+    }
 
     private var process: Process?
     private var stdinPipe: Pipe?
@@ -30,6 +63,10 @@ final class PythonBridge: ObservableObject {
     private var pendingRequests: [Int: CheckedContinuation<RPCValue, Error>] = [:]
     private var generationChunkHandlers: [Int: (GenerationChunkNotification) -> Void] = [:]
     private var readBuffer = ""
+    private var activeProgressRequestID: Int?
+    private var activeProgressMethod: String?
+    private var activeGenerationSession: GenerationSession?
+    private var sidebarStatusResetTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
 
@@ -76,9 +113,16 @@ final class PythonBridge: ObservableObject {
 
         proc.terminationHandler = { [weak self] _ in
             Task { @MainActor in
-                self?.isReady = false
-                self?.isProcessing = false
-                self?.cancelAllPending(error: PythonBridgeError.processTerminated)
+                guard let self else { return }
+                let shouldReportCrash = self.process != nil
+                self.isReady = false
+                self.isProcessing = false
+                self.activeGenerationSession = nil
+                self.clearActiveProgressTracking()
+                if shouldReportCrash {
+                    self.lastError = PythonBridgeError.processTerminated.localizedDescription
+                }
+                self.cancelAllPending(error: PythonBridgeError.processTerminated)
             }
         }
 
@@ -116,6 +160,8 @@ final class PythonBridge: ObservableObject {
         isProcessing = false
         lastError = nil
         readBuffer = ""
+        activeGenerationSession = nil
+        clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
 
         if let proc, proc.isRunning {
@@ -159,10 +205,19 @@ final class PythonBridge: ObservableObject {
         }
 
         let isLongRunning = Self.longRunningMethods.contains(method)
+        let tracksSidebarProgress = method == "load_model" || method == "generate"
         if isLongRunning {
             isProcessing = true
             progressPercent = 0
             progressMessage = ""
+        }
+        if tracksSidebarProgress {
+            activeProgressRequestID = id
+            activeProgressMethod = method
+            if var session = activeGenerationSession {
+                session.currentRequestID = id
+                activeGenerationSession = session
+            }
         }
         lastError = nil
 
@@ -197,6 +252,13 @@ final class PythonBridge: ObservableObject {
                 isProcessing = false
                 progressPercent = 0
                 progressMessage = ""
+                if activeProgressRequestID == id {
+                    clearActiveProgressTracking()
+                }
+                if var session = activeGenerationSession, session.currentRequestID == id {
+                    session.currentRequestID = nil
+                    activeGenerationSession = session
+                }
             }
 
             guard let result = try await group.next() else {
@@ -238,8 +300,8 @@ final class PythonBridge: ObservableObject {
     }
 
     /// Load a model by its ID (e.g. "pro_custom").
-    func loadModel(id: String) async throws {
-        _ = try await callDict("load_model", params: [
+    func loadModel(id: String) async throws -> [String: RPCValue] {
+        try await callDict("load_model", params: [
             "model_id": .string(id)
         ])
     }
@@ -295,6 +357,98 @@ final class PythonBridge: ObservableObject {
         if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
+    }
+
+    func generateCustomFlow(
+        modelID: String,
+        text: String,
+        voice: String,
+        emotion: String,
+        speed: Double,
+        outputPath: String,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil
+    ) async throws -> GenerationResult {
+        try await performGenerationFlow(
+            mode: .custom,
+            modelID: modelID,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal
+        ) {
+            try await self.generateCustom(
+                text: text,
+                voice: voice,
+                emotion: emotion,
+                speed: speed,
+                outputPath: outputPath,
+                temperature: temperature,
+                maxTokens: maxTokens
+            )
+        }
+    }
+
+    func generateDesignFlow(
+        modelID: String,
+        text: String,
+        voiceDescription: String,
+        outputPath: String,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil
+    ) async throws -> GenerationResult {
+        try await performGenerationFlow(
+            mode: .design,
+            modelID: modelID,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal
+        ) {
+            try await self.generateDesign(
+                text: text,
+                voiceDescription: voiceDescription,
+                outputPath: outputPath,
+                temperature: temperature,
+                maxTokens: maxTokens
+            )
+        }
+    }
+
+    func generateCloneFlow(
+        modelID: String,
+        text: String,
+        refAudio: String,
+        refText: String?,
+        outputPath: String,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil
+    ) async throws -> GenerationResult {
+        try await performGenerationFlow(
+            mode: .clone,
+            modelID: modelID,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal
+        ) {
+            try await self.generateClone(
+                text: text,
+                refAudio: refAudio,
+                refText: refText,
+                outputPath: outputPath,
+                temperature: temperature,
+                maxTokens: maxTokens
+            )
+        }
+    }
+
+    func clearGenerationActivity() {
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = nil
+        activeGenerationSession = nil
+        clearActiveProgressTracking()
+        syncSidebarStatusFromSystemState()
     }
 
     /// Generate audio with custom voice mode while streaming chunk previews.
@@ -369,6 +523,196 @@ final class PythonBridge: ObservableObject {
         return items.compactMap { $0.objectValue }
     }
 
+    // MARK: - Sidebar Status
+
+    private func performGenerationFlow(
+        mode: GenerationMode,
+        modelID: String,
+        batchIndex: Int?,
+        batchTotal: Int?,
+        generate: () async throws -> GenerationResult
+    ) async throws -> GenerationResult {
+        beginGenerationSession(mode: mode, batchIndex: batchIndex, batchTotal: batchTotal)
+
+        do {
+            let loadResult = try await loadModel(id: modelID)
+            if loadResult["cached"]?.boolValue == true {
+                updateCurrentSession(
+                    phase: .preparing,
+                    message: "Preparing request...",
+                    requestFraction: 0.15
+                )
+            }
+
+            let result = try await generate()
+            completeGenerationSession()
+            return result
+        } catch {
+            failGenerationSession(with: error)
+            throw error
+        }
+    }
+
+    private func beginGenerationSession(mode: GenerationMode, batchIndex: Int?, batchTotal: Int?) {
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = nil
+        activeGenerationSession = GenerationSession(
+            mode: mode,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal,
+            currentPhase: .loadingModel,
+            currentRequestID: nil
+        )
+        lastError = nil
+        updateCurrentSession(
+            phase: .loadingModel,
+            message: "Preparing model...",
+            requestFraction: 0.0
+        )
+    }
+
+    private func completeGenerationSession() {
+        guard var session = activeGenerationSession else {
+            syncSidebarStatusFromSystemState()
+            return
+        }
+
+        clearActiveProgressTracking()
+
+        if let batchIndex = session.batchIndex,
+           let batchTotal = session.batchTotal,
+           batchIndex < batchTotal {
+            session.batchIndex = batchIndex + 1
+            session.currentPhase = .loadingModel
+            session.currentRequestID = nil
+            activeGenerationSession = session
+            updateCurrentSession(
+                phase: .loadingModel,
+                message: "Preparing model...",
+                requestFraction: 0.0
+            )
+            return
+        }
+
+        activeGenerationSession = nil
+        scheduleSidebarStatusReset()
+    }
+
+    private func failGenerationSession(with error: Error) {
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = nil
+        activeGenerationSession = nil
+        clearActiveProgressTracking()
+        if lastError == nil {
+            lastError = error.localizedDescription
+        } else {
+            syncSidebarStatusFromSystemState()
+        }
+    }
+
+    private func syncSidebarStatusFromSystemState() {
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = nil
+        if let error = lastError {
+            sidebarStatus = isReady ? .error(error) : .crashed(error)
+            return
+        }
+        guard activeGenerationSession == nil else { return }
+        sidebarStatus = isReady ? .idle : .starting
+    }
+
+    private func updateSidebarFromProgress(method: String, percent: Int, message: String) {
+        guard let session = activeGenerationSession else { return }
+        let phase = phaseForProgress(method: method, message: message, mode: session.mode)
+        let requestFraction = mappedRequestFraction(method: method, percent: percent)
+        updateCurrentSession(phase: phase, message: message, requestFraction: requestFraction)
+    }
+
+    private func updateCurrentSession(phase: GenerationPhase, message: String, requestFraction: Double?) {
+        guard var session = activeGenerationSession else { return }
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = nil
+        session.currentPhase = phase
+        activeGenerationSession = session
+        let overallFraction = overallFraction(for: session, requestFraction: requestFraction)
+        let label = sidebarLabel(for: session, message: message)
+        sidebarStatus = .running(ActivityStatus(label: label, fraction: overallFraction))
+    }
+
+    private func phaseForProgress(method: String, message: String, mode: GenerationMode) -> GenerationPhase {
+        switch method {
+        case "load_model":
+            return .loadingModel
+        case "generate":
+            let lowercasedMessage = message.lowercased()
+            if lowercasedMessage.contains("saving") || lowercasedMessage.contains("done") {
+                return .saving
+            }
+            if lowercasedMessage.contains("generating") || lowercasedMessage.contains("streaming") {
+                return .generating
+            }
+            if mode == .clone && (lowercasedMessage.contains("normalizing") || lowercasedMessage.contains("voice context")) {
+                return .preparing
+            }
+            return .preparing
+        default:
+            return .preparing
+        }
+    }
+
+    private func mappedRequestFraction(method: String, percent: Int) -> Double? {
+        let clampedPercent = min(max(percent, 0), 100)
+        let normalized = Double(clampedPercent) / 100.0
+
+        switch method {
+        case "load_model":
+            return normalized * 0.15
+        case "generate":
+            return 0.15 + (normalized * 0.85)
+        default:
+            return normalized
+        }
+    }
+
+    private func overallFraction(for session: GenerationSession, requestFraction: Double?) -> Double? {
+        guard let requestFraction else { return nil }
+        guard let batchIndex = session.batchIndex,
+              let batchTotal = session.batchTotal,
+              batchTotal > 0 else {
+            return min(max(requestFraction, 0.0), 1.0)
+        }
+
+        let completedItems = max(batchIndex - 1, 0)
+        let overall = (Double(completedItems) + requestFraction) / Double(batchTotal)
+        return min(max(overall, 0.0), 1.0)
+    }
+
+    private func sidebarLabel(for session: GenerationSession, message: String) -> String {
+        guard let batchIndex = session.batchIndex,
+              let batchTotal = session.batchTotal else {
+            return message
+        }
+        return "Generating \(batchIndex)/\(batchTotal): \(message)"
+    }
+
+    private func clearActiveProgressTracking() {
+        activeProgressRequestID = nil
+        activeProgressMethod = nil
+    }
+
+    private func scheduleSidebarStatusReset() {
+        sidebarStatusResetTask?.cancel()
+        sidebarStatusResetTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self = self else { return }
+                self.sidebarStatusResetTask = nil
+                self.syncSidebarStatusFromSystemState()
+            }
+        }
+    }
+
     // MARK: - Output Reading
 
     private func startReadingOutput(_ pipe: Pipe) {
@@ -435,20 +779,11 @@ final class PythonBridge: ObservableObject {
               let continuation = pendingRequests.removeValue(forKey: id) else { return }
 
         if let error = response.error {
-            isProcessing = false
-            progressMessage = ""
-            progressPercent = 0
             lastError = error.message
             continuation.resume(throwing: PythonBridgeError.rpcError(code: error.code, message: error.message))
         } else if let result = response.result {
-            isProcessing = false
-            progressMessage = ""
-            progressPercent = 0
             continuation.resume(returning: result)
         } else {
-            isProcessing = false
-            progressMessage = ""
-            progressPercent = 0
             continuation.resume(returning: .null)
         }
     }
@@ -458,10 +793,22 @@ final class PythonBridge: ObservableObject {
         case "ready":
             isReady = true
         case "progress":
-            if let params = response.params {
-                progressPercent = params["percent"]?.intValue ?? 0
-                progressMessage = params["message"]?.stringValue ?? ""
+            guard let params = response.params else { return }
+            let notificationRequestID = params["request_id"]?.intValue
+            if let expectedRequestID = activeProgressRequestID,
+               let notificationRequestID,
+               notificationRequestID != expectedRequestID {
+                return
             }
+            progressPercent = params["percent"]?.intValue ?? 0
+            progressMessage = params["message"]?.stringValue ?? ""
+            guard activeGenerationSession != nil,
+                  let activeProgressMethod else { return }
+            updateSidebarFromProgress(
+                method: activeProgressMethod,
+                percent: progressPercent,
+                message: progressMessage
+            )
         case "generation_chunk":
             guard
                 let params = response.params,

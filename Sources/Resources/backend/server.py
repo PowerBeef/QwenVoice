@@ -247,9 +247,12 @@ def send_notification(method, params):
     sys.stdout.flush()
 
 
-def send_progress(percent, message):
+def send_progress(percent, message, request_id=None):
     """Send a progress notification to the frontend."""
-    send_notification("progress", {"percent": percent, "message": message})
+    payload = {"percent": percent, "message": message}
+    if request_id is not None:
+        payload["request_id"] = request_id
+    send_notification("progress", payload)
 
 
 def send_generation_chunk(request_id, chunk_index, chunk_path, is_final):
@@ -574,7 +577,7 @@ def _generate_streaming_preview(
             pass
 
 
-def handle_load_model(params):
+def handle_load_model(params, request_id=None):
     """Load a model into memory. Unloads any existing model first."""
     global _current_model, _current_model_path
 
@@ -606,14 +609,15 @@ def handle_load_model(params):
             _mx.clear_cache()
 
     _ensure_mlx()
-    send_progress(10, "Loading model...")
+    send_progress(5, "Preparing model...", request_id=request_id)
+    send_progress(25, "Loading model...", request_id=request_id)
 
     _current_model = _load_model_fn(model_path)
     if _enable_speech_tokenizer_encoder_fn is not None:
         _enable_speech_tokenizer_encoder_fn(_current_model, model_path)
     _current_model_path = model_path
 
-    send_progress(100, "Model loaded")
+    send_progress(100, "Model ready", request_id=request_id)
 
     return {
         "success": True,
@@ -679,7 +683,10 @@ def handle_generate(params, request_id=None):
     final_path = _resolve_final_output_path(output_path, text, voice=voice, ref_audio=ref_audio)
     target_dir, target_stem, generated_path = _derive_generation_paths(final_path)
 
-    send_progress(20, "Generating audio...")
+    if ref_audio:
+        send_progress(10, "Normalizing reference...", request_id=request_id)
+    else:
+        send_progress(15, "Preparing request...", request_id=request_id)
 
     try:
         if ref_audio:
@@ -698,8 +705,11 @@ def handle_generate(params, request_id=None):
             benchmark_timings["prepare_clone_context"] = int((time.perf_counter() - prepare_start) * 1000)
             benchmark_flags["clone_cache_hit"] = clone_cache_hit
 
+            send_progress(30, "Preparing voice context...", request_id=request_id)
+
             if prepared_context is not None:
                 benchmark_flags["prepared_clone_used"] = True
+                send_progress(60, "Generating audio...", request_id=request_id)
                 generation_start = time.perf_counter()
                 prepared_results = list(
                     _generate_prepared_icl_fn(
@@ -713,7 +723,7 @@ def handle_generate(params, request_id=None):
                 benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
                 if not prepared_results:
                     raise RuntimeError("Generation produced no audio file")
-                send_progress(80, "Saving audio...")
+                send_progress(90, "Saving audio...", request_id=request_id)
                 write_start = time.perf_counter()
                 _write_audio_file(
                     final_path,
@@ -734,11 +744,12 @@ def handle_generate(params, request_id=None):
                 if resolved_ref_text:
                     fallback_kwargs["ref_text"] = resolved_ref_text
 
+                send_progress(60, "Generating audio...", request_id=request_id)
                 fallback_results = list(_current_model.generate(**fallback_kwargs))
                 benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
                 if not fallback_results:
                     raise RuntimeError("Generation produced no audio file")
-                send_progress(80, "Saving audio...")
+                send_progress(90, "Saving audio...", request_id=request_id)
                 write_start = time.perf_counter()
                 _write_audio_file(
                     final_path,
@@ -747,7 +758,7 @@ def handle_generate(params, request_id=None):
                 )
                 benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
         elif stream and request_id is not None:
-            send_progress(40, "Streaming audio...")
+            send_progress(35, "Streaming audio...", request_id=request_id)
             generation_start = time.perf_counter()
             _generate_streaming_preview(
                 request_id=request_id,
@@ -761,7 +772,7 @@ def handle_generate(params, request_id=None):
                 streaming_interval=streaming_interval,
             )
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-            send_progress(80, "Saving audio...")
+            send_progress(85, "Saving audio...", request_id=request_id)
         else:
             gen_kwargs = {
                 "model": _current_model,
@@ -783,9 +794,10 @@ def handle_generate(params, request_id=None):
                 gen_kwargs["instruct"] = instruct
 
             generation_start = time.perf_counter()
+            send_progress(45, "Generating audio...", request_id=request_id)
             _generate_audio_fn(**gen_kwargs)
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-            send_progress(80, "Saving audio...")
+            send_progress(85, "Saving audio...", request_id=request_id)
 
             write_start = time.perf_counter()
             if not os.path.exists(generated_path):
@@ -797,7 +809,7 @@ def handle_generate(params, request_id=None):
         duration = get_audio_duration(final_path)
         benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
 
-        send_progress(100, "Done")
+        send_progress(100, "Done", request_id=request_id)
 
         result = {
             "audio_path": final_path,
@@ -976,7 +988,7 @@ def process_request(line):
         return
 
     try:
-        if method == "generate":
+        if method in {"generate", "load_model"}:
             result = METHODS[method](params, request_id=req_id)
         else:
             result = METHODS[method](params)

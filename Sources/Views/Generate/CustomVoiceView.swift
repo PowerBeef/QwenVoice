@@ -269,11 +269,10 @@ struct CustomVoiceView: View {
                     return
                 }
 
-                try await pythonBridge.loadModel(id: model.id)
-
                 if isCustomSpeaker {
                     let outputPath = makeOutputPath(subfolder: "VoiceDesign", text: text)
-                    let result = try await pythonBridge.generateDesign(
+                    let result = try await pythonBridge.generateDesignFlow(
+                        modelID: model.id,
                         text: text,
                         voiceDescription: voiceDescription,
                         outputPath: outputPath
@@ -298,7 +297,8 @@ struct CustomVoiceView: View {
                     }
                 } else {
                     let outputPath = makeOutputPath(subfolder: "CustomVoice", text: text)
-                    let result = try await pythonBridge.generateCustom(
+                    let result = try await pythonBridge.generateCustomFlow(
+                        modelID: model.id,
                         text: text,
                         voice: selectedSpeaker,
                         emotion: emotion,

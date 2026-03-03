@@ -20,6 +20,12 @@ targets:
         excludes:
           - "Resources/python/**"
           - "Resources/ffmpeg"
+          - "Resources/ffmpeg/**"
+          - "Resources/vendor"
+          - "Resources/vendor/**"
+          - "Resources/**/*.whl"
+          - "Resources/**/__pycache__/**"
+          - "Resources/**/*.pyc"
     resources:
       - path: Sources/Resources
         buildPhase: resources

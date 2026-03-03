@@ -76,7 +76,6 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
             try await downloadFile(
                 from: downloadURL,
                 to: destURL,
-                fileSize: file.size,
                 progressHandler: { [weak self] bytesWritten in
                     self?.onProgress?(finalCompletedBytes + bytesWritten, totalBytes)
                 }
@@ -150,7 +149,6 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     private func downloadFile(
         from url: URL,
         to destination: URL,
-        fileSize: Int64,
         progressHandler: @escaping (Int64) -> Void
     ) async throws {
         withLock {
@@ -158,15 +156,33 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
             currentProgressHandler = progressHandler
         }
 
-        let tempURL: URL = try await withCheckedThrowingContinuation { continuation in
-            let task = session.downloadTask(with: url)
-            let taskID = task.taskIdentifier
-            withLock {
-                continuations[taskID] = continuation
-                destinations[taskID] = destination
+        let tempURL: URL
+        do {
+            tempURL = try await withCheckedThrowingContinuation { continuation in
+                let task = session.downloadTask(with: url)
+                let taskID = task.taskIdentifier
+                withLock {
+                    continuations[taskID] = continuation
+                    destinations[taskID] = destination
+                }
+                withLock { _activeTask = task }
+                task.resume()
             }
-            withLock { _activeTask = task }
-            task.resume()
+        } catch {
+            withLock {
+                _activeTask = nil
+                currentProgressHandler = nil
+            }
+            throw error
+        }
+
+        if withLock({ _isCancelled }) {
+            try? FileManager.default.removeItem(at: tempURL)
+            withLock {
+                _activeTask = nil
+                currentProgressHandler = nil
+            }
+            throw DownloadError.cancelled
         }
 
         // Move downloaded temp file to final destination

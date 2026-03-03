@@ -28,6 +28,9 @@ final class GenerationFlowTests: QwenVoiceUITestBase {
         XCTAssertTrue(generateButton.isEnabled, "Generate button should be enabled when text is entered")
         generateButton.click()
 
+        let activeStatus = waitForElement("sidebar_backendStatus_active", timeout: 10)
+        XCTAssertTrue(activeStatus.exists, "Sidebar status should become active during generation")
+
         let playerBar = waitForElement("sidebarPlayer_bar", timeout: 120)
         XCTAssertTrue(playerBar.exists, "Sidebar player should appear after generation")
 

@@ -76,7 +76,7 @@ All models are 8-bit quantised for efficient memory use and natively support nat
 
 ## Building from Source
 
-**Prerequisites:** Xcode 15+, XcodeGen, macOS 14+
+**Source build prerequisites:** Xcode 15+, XcodeGen, macOS 14+
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -85,14 +85,18 @@ cd QwenVoice
 open QwenVoice.xcodeproj
 ```
 
-Build and run from Xcode. On first launch in dev mode, the app automatically creates a Python venv at `~/Library/Application Support/QwenVoice/python/` and installs all dependencies (mlx, mlx-audio, transformers, soundfile, huggingface-hub). The setup progress is shown in a guided `SetupView` before the main interface appears.
+Build and run from Xcode.
+
+**Dev-mode runtime dependencies:** If the bundled runtime under `Sources/Resources/python/` is not present, the app falls back to creating a Python venv at `~/Library/Application Support/QwenVoice/python/`. In that path you must have a local Python 3.11-3.14 install available first (for example `brew install python@3.13`). On first launch, the app installs the backend dependencies into that venv and shows setup progress in `SetupView`.
 
 **Release build:**
 ```sh
 ./scripts/release.sh
 ```
 
-This bundles Python 3.13 (arm64) + ffmpeg into the app, builds with `xcodebuild`, and produces a DMG at `build/QwenVoice.dmg`.
+**Release packaging dependencies:** `./scripts/release.sh` downloads and bundles Python 3.13 (arm64) into `Sources/Resources/python/` and ffmpeg into `Sources/Resources/ffmpeg/` before building. Those resource directories are generated build assets and are intentionally not tracked in git, so a clean clone will not contain them until the bundle scripts run. The release flow also requires network access to fetch those artifacts.
+
+After bundling those generated assets, the release script builds with `xcodebuild` and produces a DMG at `build/QwenVoice.dmg`.
 
 ## Architecture & Tech Stack
 
