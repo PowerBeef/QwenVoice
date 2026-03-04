@@ -11,6 +11,7 @@ Refactored from main.py.
 import os
 import sys
 import json
+import base64
 import shutil
 import time
 import wave
@@ -38,7 +39,7 @@ _original_stderr = sys.stderr
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
 POST_REQUEST_CACHE_CLEAR = True
-CLONE_CONTEXT_CACHE_CAPACITY = 8
+CLONE_CONTEXT_CACHE_CAPACITY = 16
 DEFAULT_STREAMING_INTERVAL = 2.0
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
@@ -96,6 +97,7 @@ _prepare_icl_context_fn = None
 _generate_prepared_icl_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
+_warm_requests_since_cache_clear = 0
 
 
 def _ensure_mlx():
@@ -255,7 +257,14 @@ def send_progress(percent, message, request_id=None):
     send_notification("progress", payload)
 
 
-def send_generation_chunk(request_id, chunk_index, chunk_path, is_final):
+def send_generation_chunk(
+    request_id,
+    chunk_index,
+    sample_rate,
+    pcm_f32le_base64,
+    frame_count,
+    is_final,
+):
     """Send a generation chunk notification to the frontend."""
     if request_id is None:
         return
@@ -264,7 +273,9 @@ def send_generation_chunk(request_id, chunk_index, chunk_path, is_final):
         {
             "request_id": request_id,
             "chunk_index": chunk_index,
-            "chunk_path": chunk_path,
+            "sample_rate": sample_rate,
+            "pcm_f32le_base64": pcm_f32le_base64,
+            "frame_count": frame_count,
             "is_final": is_final,
         },
     )
@@ -302,6 +313,14 @@ def handle_init(params):
 def _clear_clone_context_cache():
     """Drop all cached clone-conditioning state."""
     _clone_context_cache.clear()
+
+
+def _clear_mx_cache():
+    """Clear the MLX cache and reset the warm-request counter."""
+    global _warm_requests_since_cache_clear
+    if _mx is not None:
+        _mx.clear_cache()
+    _warm_requests_since_cache_clear = 0
 
 
 def _convert_audio_to_wav(input_path, output_path):
@@ -525,8 +544,6 @@ def _generate_streaming_preview(
     streaming_interval=DEFAULT_STREAMING_INTERVAL,
 ):
     """Generate chunk previews while preserving the final output-file contract."""
-    target_dir, stem, _ = _derive_generation_paths(final_path)
-
     generator_kwargs = {
         "text": text,
         "temperature": float(temperature),
@@ -548,33 +565,29 @@ def _generate_streaming_preview(
 
     chunk_numpy = []
     chunk_index = 0
+    final_sample_rate = getattr(_current_model, "sample_rate", SAMPLE_RATE)
 
     for chunk in generator:
-        chunk_path = os.path.join(target_dir, f"{stem}__chunk_{chunk_index:03d}.wav")
-        _write_audio_file(chunk_path, chunk.audio, chunk.sample_rate)
+        chunk_array = _np.asarray(chunk.audio, dtype=_np.float32)
+        chunk_sample_rate = int(getattr(chunk, "sample_rate", final_sample_rate))
+        pcm_bytes = chunk_array.astype(_np.float32, copy=False).tobytes()
         send_generation_chunk(
             request_id=request_id,
             chunk_index=chunk_index,
-            chunk_path=chunk_path,
+            sample_rate=chunk_sample_rate,
+            pcm_f32le_base64=base64.b64encode(pcm_bytes).decode("ascii"),
+            frame_count=int(chunk_array.shape[0]),
             is_final=bool(getattr(chunk, "is_final_chunk", False)),
         )
-        chunk_numpy.append(_np.array(chunk.audio))
-        _mx.clear_cache()
+        chunk_numpy.append(chunk_array)
+        final_sample_rate = chunk_sample_rate
         chunk_index += 1
 
     if not chunk_numpy:
         raise RuntimeError("Generation produced no audio file")
 
     full_audio = chunk_numpy[0] if len(chunk_numpy) == 1 else _np.concatenate(chunk_numpy, axis=0)
-    _audio_write_fn(final_path, full_audio, _current_model.sample_rate, format="wav")
-
-    # Clean up intermediate chunk files
-    for ci in range(chunk_index):
-        cp = os.path.join(target_dir, f"{stem}__chunk_{ci:03d}.wav")
-        try:
-            os.remove(cp)
-        except OSError:
-            pass
+    _audio_write_fn(final_path, full_audio, final_sample_rate, format="wav")
 
 
 def handle_load_model(params, request_id=None):
@@ -603,10 +616,10 @@ def handle_load_model(params, request_id=None):
     # Unload existing model
     if _current_model is not None:
         _current_model = None
+        _current_model_path = None
         _clear_clone_context_cache()
         gc.collect()
-        if _mx is not None:
-            _mx.clear_cache()
+        _clear_mx_cache()
 
     _ensure_mlx()
     send_progress(5, "Preparing model...", request_id=request_id)
@@ -633,15 +646,39 @@ def handle_unload_model(params):
     _current_model_path = None
     _clear_clone_context_cache()
     gc.collect()
-    if _mx is not None:
-        _mx.clear_cache()
+    _clear_mx_cache()
 
     return {"success": True}
 
 
+def handle_prepare_clone_context(params, request_id=None):
+    """Normalize and precompute clone-conditioning state for a reference clip."""
+    if _current_model is None:
+        raise RuntimeError("No model loaded. Call load_model first.")
+
+    ref_audio = params.get("ref_audio")
+    if not ref_audio:
+        raise ValueError("Missing required param: ref_audio")
+
+    ref_text = params.get("ref_text")
+    clean_ref_audio = _normalize_clone_reference(ref_audio)
+    if not clean_ref_audio:
+        raise RuntimeError("Could not process reference audio file")
+
+    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+    _, cache_hit = _get_or_prepare_clone_context(clean_ref_audio, resolved_ref_text)
+
+    return {
+        "success": True,
+        "cached": bool(cache_hit),
+        "normalized_ref_audio": clean_ref_audio,
+        "resolved_ref_text": resolved_ref_text,
+    }
+
+
 def handle_generate(params, request_id=None):
     """Generate audio from text. Requires a model to be loaded."""
-    global _current_model
+    global _current_model, _warm_requests_since_cache_clear
 
     if _current_model is None:
         raise RuntimeError("No model loaded. Call load_model first.")
@@ -682,6 +719,10 @@ def handle_generate(params, request_id=None):
     overall_start = time.perf_counter()
     final_path = _resolve_final_output_path(output_path, text, voice=voice, ref_audio=ref_audio)
     target_dir, target_stem, generated_path = _derive_generation_paths(final_path)
+    force_clear_on_error = bool(ref_audio) or bool(stream and request_id is not None)
+    clear_after_request = False
+    periodic_clear_due = False
+    request_succeeded = False
 
     if ref_audio:
         send_progress(10, "Normalizing reference...", request_id=request_id)
@@ -757,6 +798,7 @@ def handle_generate(params, request_id=None):
                     fallback_results[0].sample_rate,
                 )
                 benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+            clear_after_request = True
         elif stream and request_id is not None:
             send_progress(35, "Streaming audio...", request_id=request_id)
             generation_start = time.perf_counter()
@@ -773,6 +815,7 @@ def handle_generate(params, request_id=None):
             )
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
             send_progress(85, "Saving audio...", request_id=request_id)
+            clear_after_request = True
         else:
             gen_kwargs = {
                 "model": _current_model,
@@ -805,6 +848,8 @@ def handle_generate(params, request_id=None):
             if generated_path != final_path:
                 os.replace(generated_path, final_path)
             benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+            _warm_requests_since_cache_clear += 1
+            periodic_clear_due = _warm_requests_since_cache_clear >= 5
 
         duration = get_audio_duration(final_path)
         benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
@@ -820,11 +865,16 @@ def handle_generate(params, request_id=None):
                 **benchmark_flags,
                 "timings_ms": benchmark_timings,
             }
+        request_succeeded = True
         return result
 
     finally:
-        if POST_REQUEST_CACHE_CLEAR and _mx is not None:
-            _mx.clear_cache()
+        if POST_REQUEST_CACHE_CLEAR:
+            if request_succeeded:
+                if clear_after_request or periodic_clear_due:
+                    _clear_mx_cache()
+            elif force_clear_on_error:
+                _clear_mx_cache()
 
 
 def handle_convert_audio(params):
@@ -956,6 +1006,7 @@ METHODS = {
     "init": handle_init,
     "load_model": handle_load_model,
     "unload_model": handle_unload_model,
+    "prepare_clone_context": handle_prepare_clone_context,
     "generate": handle_generate,
     "convert_audio": handle_convert_audio,
     "list_voices": handle_list_voices,
@@ -988,7 +1039,7 @@ def process_request(line):
         return
 
     try:
-        if method in {"generate", "load_model"}:
+        if method in {"generate", "load_model", "prepare_clone_context"}:
             result = METHODS[method](params, request_id=req_id)
         else:
             result = METHODS[method](params)

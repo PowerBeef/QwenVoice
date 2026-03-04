@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import Combine
 
 /// Manages audio playback state for the persistent bottom player bar.
 @MainActor
@@ -15,8 +14,16 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
+    private var audioEngine: AVAudioEngine?
+    private var playerNode: AVAudioPlayerNode?
+    private var streamFormat: AVAudioFormat?
+    private var isStreamingActive = false
+    private var hasStreamingAudio = false
+    private var pendingStreamBuffers = 0
+    private var streamFinalChunkReceived = false
+    private var streamQueuedDuration: TimeInterval = 0
 
-    var hasAudio: Bool { currentFilePath != nil }
+    var hasAudio: Bool { currentFilePath != nil || isStreamingActive || hasStreamingAudio }
 
     var formattedCurrentTime: String { Self.formatTime(currentTime) }
     var formattedDuration: String { Self.formatTime(duration) }
@@ -30,6 +37,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     func load(filePath: String, title: String = "") {
         stop()
+        hasStreamingAudio = false
 
         let url = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: filePath) else {
@@ -55,10 +63,21 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func play() {
-        attemptPlay()
+        if isStreamingActive {
+            attemptStreamingPlay()
+        } else {
+            attemptPlay()
+        }
     }
 
     func pause() {
+        if isStreamingActive {
+            playerNode?.pause()
+            isPlaying = false
+            stopTimer()
+            return
+        }
+
         player?.pause()
         isPlaying = false
         stopTimer()
@@ -71,6 +90,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     func stop() {
         player?.stop()
         player = nil
+        stopStreamingPlayback(clearBufferedState: currentFilePath == nil)
         isPlaying = false
         currentTime = 0
         stopTimer()
@@ -83,7 +103,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func seek(to fraction: Double) {
-        guard let player else { return }
+        guard !isStreamingActive, let player else { return }
         let time = fraction * duration
         player.currentTime = time
         currentTime = time
@@ -95,13 +115,101 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         play()
     }
 
+    func enqueuePCMChunk(samples: [Float], sampleRate: Int, title: String) {
+        guard !samples.isEmpty else { return }
+        guard ensureStreamingPlayback(sampleRate: sampleRate, title: title) else { return }
+        guard let streamFormat,
+              let playerNode,
+              let buffer = AVAudioPCMBuffer(
+                pcmFormat: streamFormat,
+                frameCapacity: AVAudioFrameCount(samples.count)
+              ) else {
+            playbackError = "Streaming playback could not prepare audio."
+            return
+        }
+
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        if let channelData = buffer.floatChannelData?[0] {
+            for (index, sample) in samples.enumerated() {
+                channelData[index] = sample
+            }
+        }
+
+        let chunkDuration = Double(samples.count) / Double(sampleRate)
+        streamQueuedDuration += chunkDuration
+        duration = max(duration, streamQueuedDuration)
+        pendingStreamBuffers += 1
+        hasStreamingAudio = true
+
+        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.pendingStreamBuffers = max(0, self.pendingStreamBuffers - 1)
+                if self.streamFinalChunkReceived && self.pendingStreamBuffers == 0 {
+                    self.finishStreamingPlayback()
+                }
+            }
+        }
+
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
+        isPlaying = true
+        playbackError = nil
+        startTimer()
+    }
+
+    func markStreamingInputComplete() {
+        streamFinalChunkReceived = true
+        if pendingStreamBuffers == 0 {
+            finishStreamingPlayback()
+        }
+    }
+
+    func finalizeStreamingOutput(filePath: String, title: String) {
+        guard FileManager.default.fileExists(atPath: filePath) else { return }
+        currentFilePath = filePath
+        currentTitle = title.isEmpty ? URL(fileURLWithPath: filePath).lastPathComponent : title
+        hasStreamingAudio = false
+
+        if let audioFile = try? AVAudioFile(forReading: URL(fileURLWithPath: filePath)) {
+            let fileDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+            duration = max(duration, fileDuration)
+        }
+
+        extractWaveform(from: URL(fileURLWithPath: filePath))
+    }
+
+    func cancelStreamingPlayback() {
+        stopStreamingPlayback(clearBufferedState: currentFilePath == nil)
+        if currentFilePath == nil {
+            clearLoadedAudio()
+        }
+        playbackError = nil
+    }
+
     // MARK: - Timer
 
     private func startTimer() {
         stopTimer()
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let player = self.player else { return }
+                guard let self else { return }
+
+                if self.isStreamingActive,
+                   let playerNode = self.playerNode,
+                   let nodeTime = playerNode.lastRenderTime,
+                   let playerTime = playerNode.playerTime(forNodeTime: nodeTime) {
+                    let elapsed = Double(playerTime.sampleTime) / playerTime.sampleRate
+                    self.currentTime = min(self.duration, max(0, elapsed))
+                    if !playerNode.isPlaying && self.pendingStreamBuffers == 0 {
+                        self.isPlaying = false
+                        self.stopTimer()
+                    }
+                    return
+                }
+
+                guard let player = self.player else { return }
                 self.currentTime = player.currentTime
                 if !player.isPlaying {
                     self.isPlaying = false
@@ -158,12 +266,107 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
     }
 
+    private func attemptStreamingPlay() {
+        guard let audioEngine, let playerNode else { return }
+
+        if !audioEngine.isRunning {
+            do {
+                try audioEngine.start()
+            } catch {
+                playbackError = "Streaming playback could not start."
+                return
+            }
+        }
+
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
+        playbackError = nil
+        isPlaying = true
+        startTimer()
+    }
+
+    private func ensureStreamingPlayback(sampleRate: Int, title: String) -> Bool {
+        if isStreamingActive {
+            if let streamFormat,
+               Int(streamFormat.sampleRate.rounded()) == sampleRate,
+               audioEngine != nil,
+               playerNode != nil {
+                if currentTitle.isEmpty {
+                    currentTitle = title
+                }
+                return true
+            }
+            cancelStreamingPlayback()
+        }
+
+        stop()
+        clearLoadedAudio()
+
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1) else {
+            playbackError = "Streaming playback could not configure audio."
+            return false
+        }
+
+        let engine = AVAudioEngine()
+        let node = AVAudioPlayerNode()
+        engine.attach(node)
+        engine.connect(node, to: engine.mainMixerNode, format: format)
+
+        do {
+            try engine.start()
+        } catch {
+            playbackError = "Streaming playback could not start."
+            return false
+        }
+
+        audioEngine = engine
+        playerNode = node
+        streamFormat = format
+        isStreamingActive = true
+        hasStreamingAudio = true
+        pendingStreamBuffers = 0
+        streamFinalChunkReceived = false
+        streamQueuedDuration = 0
+        currentFilePath = nil
+        currentTitle = title
+        waveformSamples = []
+        duration = 0
+        currentTime = 0
+        isPlaying = true
+        playbackError = nil
+        return true
+    }
+
+    private func finishStreamingPlayback() {
+        stopStreamingPlayback(clearBufferedState: currentFilePath == nil)
+        isPlaying = false
+        currentTime = duration
+        stopTimer()
+    }
+
+    private func stopStreamingPlayback(clearBufferedState: Bool) {
+        playerNode?.stop()
+        audioEngine?.stop()
+        playerNode = nil
+        audioEngine = nil
+        streamFormat = nil
+        isStreamingActive = false
+        pendingStreamBuffers = 0
+        streamFinalChunkReceived = false
+        streamQueuedDuration = 0
+        if clearBufferedState {
+            hasStreamingAudio = false
+        }
+    }
+
     private func clearLoadedAudio() {
         currentFilePath = nil
         currentTitle = ""
         duration = 0
         currentTime = 0
         waveformSamples = []
+        hasStreamingAudio = false
     }
 
     // MARK: - Waveform

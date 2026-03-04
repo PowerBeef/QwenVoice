@@ -14,6 +14,7 @@ struct VoiceCloningView: View {
     @State private var selectedVoice: Voice?
     @State private var isDragOver = false
     @State private var showingBatch = false
+    @State private var prewarmTask: Task<Void, Never>?
 
     private var isModelDownloaded: Bool {
         guard let model = TTSModel.model(for: .clone) else { return false }
@@ -339,9 +340,12 @@ struct VoiceCloningView: View {
         selectedVoice = voice
         referenceAudioPath = voice.wavPath
         referenceTranscript = voice.transcript ?? ""
+        scheduleClonePrewarm()
     }
 
     private func clearReference() {
+        prewarmTask?.cancel()
+        prewarmTask = nil
         referenceAudioPath = nil
         referenceTranscript = ""
         selectedVoice = nil
@@ -374,6 +378,7 @@ struct VoiceCloningView: View {
             Task { @MainActor in
                 referenceAudioPath = url.path
                 selectedVoice = nil
+                scheduleClonePrewarm(delayNanoseconds: 250_000_000)
             }
         }
         return true
@@ -386,6 +391,40 @@ struct VoiceCloningView: View {
         if panel.runModal() == .OK, let url = panel.url {
             referenceAudioPath = url.path
             selectedVoice = nil
+            scheduleClonePrewarm(delayNanoseconds: 250_000_000)
+        }
+    }
+
+    private func scheduleClonePrewarm(delayNanoseconds: UInt64 = 0) {
+        prewarmTask?.cancel()
+        prewarmTask = nil
+
+        guard pythonBridge.isReady,
+              let model = TTSModel.model(for: .clone),
+              let refAudio = referenceAudioPath else { return }
+
+        prewarmTask = Task {
+            if delayNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+
+            do {
+                _ = try await pythonBridge.loadModel(id: model.id)
+                guard !Task.isCancelled else { return }
+
+                let transcript = referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+                _ = try await pythonBridge.prepareCloneContext(
+                    refAudio: refAudio,
+                    refText: transcript.isEmpty ? nil : transcript
+                )
+            } catch {
+                // Best-effort prewarm only.
+            }
+
+            await MainActor.run {
+                prewarmTask = nil
+            }
         }
     }
 }

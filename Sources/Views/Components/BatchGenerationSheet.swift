@@ -135,6 +135,14 @@ struct BatchGenerationSheet: View {
             }
 
             do {
+                _ = try await pythonBridge.loadModel(id: model.id)
+                if mode == .clone, let refAudio {
+                    _ = try await pythonBridge.prepareCloneContext(
+                        refAudio: refAudio,
+                        refText: refText
+                    )
+                }
+
                 for (i, line) in lines.enumerated() {
                     if cancelled { break }
 
@@ -153,6 +161,7 @@ struct BatchGenerationSheet: View {
                             emotion: emotion ?? "Normal tone",
                             speed: speed ?? 1.0,
                             outputPath: outputPath,
+                            assumeModelLoaded: true,
                             batchIndex: i + 1,
                             batchTotal: totalItems
                         )
@@ -162,6 +171,7 @@ struct BatchGenerationSheet: View {
                             text: line,
                             voiceDescription: voiceDescription ?? "",
                             outputPath: outputPath,
+                            assumeModelLoaded: true,
                             batchIndex: i + 1,
                             batchTotal: totalItems
                         )
@@ -173,6 +183,7 @@ struct BatchGenerationSheet: View {
                                 refAudio: refAudio,
                                 refText: refText,
                                 outputPath: outputPath,
+                                assumeModelLoaded: true,
                                 batchIndex: i + 1,
                                 batchTotal: totalItems
                             )

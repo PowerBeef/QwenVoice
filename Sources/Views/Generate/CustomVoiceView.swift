@@ -269,14 +269,27 @@ struct CustomVoiceView: View {
                     return
                 }
 
+                let playbackTitle = String(text.prefix(40))
                 if isCustomSpeaker {
                     let outputPath = makeOutputPath(subfolder: "VoiceDesign", text: text)
-                    let result = try await pythonBridge.generateDesignFlow(
-                        modelID: model.id,
-                        text: text,
-                        voiceDescription: voiceDescription,
-                        outputPath: outputPath
-                    )
+                    let result: GenerationResult
+                    if AudioService.shouldAutoPlay {
+                        result = try await pythonBridge.generateDesignStreamingFlow(
+                            modelID: model.id,
+                            text: text,
+                            voiceDescription: voiceDescription,
+                            outputPath: outputPath
+                        ) { chunk in
+                            handleStreamingChunk(chunk, title: playbackTitle)
+                        }
+                    } else {
+                        result = try await pythonBridge.generateDesignFlow(
+                            modelID: model.id,
+                            text: text,
+                            voiceDescription: voiceDescription,
+                            outputPath: outputPath
+                        )
+                    }
 
                     var gen = Generation(
                         text: text,
@@ -293,18 +306,32 @@ struct CustomVoiceView: View {
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     if AudioService.shouldAutoPlay {
-                        audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+                        audioPlayer.finalizeStreamingOutput(filePath: result.audioPath, title: playbackTitle)
                     }
                 } else {
                     let outputPath = makeOutputPath(subfolder: "CustomVoice", text: text)
-                    let result = try await pythonBridge.generateCustomFlow(
-                        modelID: model.id,
-                        text: text,
-                        voice: selectedSpeaker,
-                        emotion: emotion,
-                        speed: speed,
-                        outputPath: outputPath
-                    )
+                    let result: GenerationResult
+                    if AudioService.shouldAutoPlay {
+                        result = try await pythonBridge.generateCustomStreamingFlow(
+                            modelID: model.id,
+                            text: text,
+                            voice: selectedSpeaker,
+                            emotion: emotion,
+                            speed: speed,
+                            outputPath: outputPath
+                        ) { chunk in
+                            handleStreamingChunk(chunk, title: playbackTitle)
+                        }
+                    } else {
+                        result = try await pythonBridge.generateCustomFlow(
+                            modelID: model.id,
+                            text: text,
+                            voice: selectedSpeaker,
+                            emotion: emotion,
+                            speed: speed,
+                            outputPath: outputPath
+                        )
+                    }
 
                     var gen = Generation(
                         text: text,
@@ -321,13 +348,44 @@ struct CustomVoiceView: View {
                     NotificationCenter.default.post(name: .generationSaved, object: nil)
 
                     if AudioService.shouldAutoPlay {
-                        audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+                        audioPlayer.finalizeStreamingOutput(filePath: result.audioPath, title: playbackTitle)
                     }
                 }
             } catch {
+                if AudioService.shouldAutoPlay {
+                    audioPlayer.cancelStreamingPlayback()
+                }
                 errorMessage = error.localizedDescription
             }
             isGenerating = false
         }
+    }
+
+    private func handleStreamingChunk(_ chunk: GenerationChunkNotification, title: String) {
+        guard let samples = decodePCMFloat32Chunk(chunk) else { return }
+        audioPlayer.enqueuePCMChunk(
+            samples: samples,
+            sampleRate: chunk.sampleRate,
+            title: title
+        )
+        if chunk.isFinal {
+            audioPlayer.markStreamingInputComplete()
+        }
+    }
+
+    private func decodePCMFloat32Chunk(_ chunk: GenerationChunkNotification) -> [Float]? {
+        guard let data = Data(base64Encoded: chunk.pcmDataBase64) else { return nil }
+        let stride = MemoryLayout<Float>.stride
+        guard data.count.isMultiple(of: stride) else { return nil }
+
+        var samples = Array<Float>(repeating: 0, count: data.count / stride)
+        _ = samples.withUnsafeMutableBytes { buffer in
+            data.copyBytes(to: buffer)
+        }
+
+        if chunk.frameCount > 0, samples.count > chunk.frameCount {
+            samples.removeLast(samples.count - chunk.frameCount)
+        }
+        return samples
     }
 }

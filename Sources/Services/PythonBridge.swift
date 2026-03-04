@@ -3,8 +3,24 @@ import Foundation
 struct GenerationChunkNotification {
     let requestID: Int
     let chunkIndex: Int
-    let chunkPath: String
+    let sampleRate: Int
+    let pcmDataBase64: String
+    let frameCount: Int
     let isFinal: Bool
+}
+
+struct PrepareCloneContextResult {
+    let success: Bool
+    let cached: Bool
+    let normalizedRefAudio: String
+    let resolvedRefText: String?
+
+    init(from result: [String: RPCValue]) {
+        self.success = result["success"]?.boolValue ?? false
+        self.cached = result["cached"]?.boolValue ?? false
+        self.normalizedRefAudio = result["normalized_ref_audio"]?.stringValue ?? ""
+        self.resolvedRefText = result["resolved_ref_text"]?.stringValue
+    }
 }
 
 struct ActivityStatus: Equatable {
@@ -374,12 +390,14 @@ final class PythonBridge: ObservableObject {
         outputPath: String,
         temperature: Double? = nil,
         maxTokens: Int? = nil,
+        assumeModelLoaded: Bool = false,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
             mode: .custom,
             modelID: modelID,
+            assumeModelLoaded: assumeModelLoaded,
             batchIndex: batchIndex,
             batchTotal: batchTotal
         ) {
@@ -402,12 +420,14 @@ final class PythonBridge: ObservableObject {
         outputPath: String,
         temperature: Double? = nil,
         maxTokens: Int? = nil,
+        assumeModelLoaded: Bool = false,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
             mode: .design,
             modelID: modelID,
+            assumeModelLoaded: assumeModelLoaded,
             batchIndex: batchIndex,
             batchTotal: batchTotal
         ) {
@@ -429,12 +449,14 @@ final class PythonBridge: ObservableObject {
         outputPath: String,
         temperature: Double? = nil,
         maxTokens: Int? = nil,
+        assumeModelLoaded: Bool = false,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
             mode: .clone,
             modelID: modelID,
+            assumeModelLoaded: assumeModelLoaded,
             batchIndex: batchIndex,
             batchTotal: batchTotal
         ) {
@@ -447,6 +469,17 @@ final class PythonBridge: ObservableObject {
                 maxTokens: maxTokens
             )
         }
+    }
+
+    func prepareCloneContext(refAudio: String, refText: String?) async throws -> PrepareCloneContextResult {
+        var params: [String: RPCValue] = [
+            "ref_audio": .string(refAudio)
+        ]
+        if let refText, !refText.isEmpty {
+            params["ref_text"] = .string(refText)
+        }
+        let result = try await callDict("prepare_clone_context", params: params)
+        return PrepareCloneContextResult(from: result)
     }
 
     func clearGenerationActivity() {
@@ -465,9 +498,11 @@ final class PythonBridge: ObservableObject {
         speed: Double,
         outputPath: String,
         streamingInterval: Double = 2.0,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
         onChunk: @escaping (GenerationChunkNotification) -> Void
     ) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
+        var params: [String: RPCValue] = [
             "text": .string(text),
             "voice": .string(voice),
             "instruct": .string(emotion),
@@ -475,7 +510,10 @@ final class PythonBridge: ObservableObject {
             "output_path": .string(outputPath),
             "stream": .bool(true),
             "streaming_interval": .double(streamingInterval),
-        ], onGenerationChunk: onChunk)
+        ]
+        if let temperature { params["temperature"] = .double(temperature) }
+        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
+        let result = try await callDict("generate", params: params, onGenerationChunk: onChunk)
         return GenerationResult(from: result)
     }
 
@@ -485,16 +523,89 @@ final class PythonBridge: ObservableObject {
         voiceDescription: String,
         outputPath: String,
         streamingInterval: Double = 2.0,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
         onChunk: @escaping (GenerationChunkNotification) -> Void
     ) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
+        var params: [String: RPCValue] = [
             "text": .string(text),
             "instruct": .string(voiceDescription),
             "output_path": .string(outputPath),
             "stream": .bool(true),
             "streaming_interval": .double(streamingInterval),
-        ], onGenerationChunk: onChunk)
+        ]
+        if let temperature { params["temperature"] = .double(temperature) }
+        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
+        let result = try await callDict("generate", params: params, onGenerationChunk: onChunk)
         return GenerationResult(from: result)
+    }
+
+    func generateCustomStreamingFlow(
+        modelID: String,
+        text: String,
+        voice: String,
+        emotion: String,
+        speed: Double,
+        outputPath: String,
+        streamingInterval: Double = 2.0,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
+        assumeModelLoaded: Bool = false,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil,
+        onChunk: @escaping (GenerationChunkNotification) -> Void
+    ) async throws -> GenerationResult {
+        try await performGenerationFlow(
+            mode: .custom,
+            modelID: modelID,
+            assumeModelLoaded: assumeModelLoaded,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal
+        ) {
+            try await self.generateCustomStreaming(
+                text: text,
+                voice: voice,
+                emotion: emotion,
+                speed: speed,
+                outputPath: outputPath,
+                streamingInterval: streamingInterval,
+                temperature: temperature,
+                maxTokens: maxTokens,
+                onChunk: onChunk
+            )
+        }
+    }
+
+    func generateDesignStreamingFlow(
+        modelID: String,
+        text: String,
+        voiceDescription: String,
+        outputPath: String,
+        streamingInterval: Double = 2.0,
+        temperature: Double? = nil,
+        maxTokens: Int? = nil,
+        assumeModelLoaded: Bool = false,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil,
+        onChunk: @escaping (GenerationChunkNotification) -> Void
+    ) async throws -> GenerationResult {
+        try await performGenerationFlow(
+            mode: .design,
+            modelID: modelID,
+            assumeModelLoaded: assumeModelLoaded,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal
+        ) {
+            try await self.generateDesignStreaming(
+                text: text,
+                voiceDescription: voiceDescription,
+                outputPath: outputPath,
+                streamingInterval: streamingInterval,
+                temperature: temperature,
+                maxTokens: maxTokens,
+                onChunk: onChunk
+            )
+        }
     }
 
     /// List enrolled voices.
@@ -534,6 +645,7 @@ final class PythonBridge: ObservableObject {
     private func performGenerationFlow(
         mode: GenerationMode,
         modelID: String,
+        assumeModelLoaded: Bool,
         batchIndex: Int?,
         batchTotal: Int?,
         generate: () async throws -> GenerationResult
@@ -541,13 +653,21 @@ final class PythonBridge: ObservableObject {
         beginGenerationSession(mode: mode, batchIndex: batchIndex, batchTotal: batchTotal)
 
         do {
-            let loadResult = try await loadModel(id: modelID)
-            if loadResult["cached"]?.boolValue == true {
+            if assumeModelLoaded {
                 updateCurrentSession(
                     phase: .preparing,
                     message: "Preparing request...",
                     requestFraction: 0.15
                 )
+            } else {
+                let loadResult = try await loadModel(id: modelID)
+                if loadResult["cached"]?.boolValue == true {
+                    updateCurrentSession(
+                        phase: .preparing,
+                        message: "Preparing request...",
+                        requestFraction: 0.15
+                    )
+                }
             }
 
             let result = try await generate()
@@ -834,7 +954,9 @@ final class PythonBridge: ObservableObject {
                 let params = response.params,
                 let requestID = params["request_id"]?.intValue,
                 let chunkIndex = params["chunk_index"]?.intValue,
-                let chunkPath = params["chunk_path"]?.stringValue,
+                let sampleRate = params["sample_rate"]?.intValue,
+                let pcmDataBase64 = params["pcm_f32le_base64"]?.stringValue,
+                let frameCount = params["frame_count"]?.intValue,
                 let isFinal = params["is_final"]?.boolValue
             else { return }
             guard let handler = generationChunkHandlers[requestID] else { return }
@@ -842,7 +964,9 @@ final class PythonBridge: ObservableObject {
                 GenerationChunkNotification(
                     requestID: requestID,
                     chunkIndex: chunkIndex,
-                    chunkPath: chunkPath,
+                    sampleRate: sampleRate,
+                    pcmDataBase64: pcmDataBase64,
+                    frameCount: frameCount,
                     isFinal: isFinal
                 )
             )
