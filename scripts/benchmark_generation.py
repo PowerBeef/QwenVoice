@@ -7,6 +7,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import platform
 import queue
@@ -33,7 +34,7 @@ DEFAULT_BENCH_ROOT = PROJECT_DIR / "build" / "benchmarks"
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "QwenVoice"
 APP_VENV_PYTHON = APP_SUPPORT_DIR / "python" / "bin" / "python3"
 APP_MODELS_DIR = APP_SUPPORT_DIR / "models"
-BENCHMARK_SCRIPT_VERSION = "1.1.0"
+BENCHMARK_SCRIPT_VERSION = "1.2.0"
 
 REFERENCE_TEXT = (
     "Hello, this is the benchmark reference voice speaking clearly for the cloning performance test."
@@ -72,6 +73,13 @@ MODEL_MANIFEST = {
     },
 }
 
+PRIMARY_REPEATABILITY_SCENARIOS = [
+    "custom_short_default_temp_repeatability",
+    "custom_short_temp_zero_repeatability",
+    "custom_medium_default_temp_repeatability",
+    "custom_medium_temp_zero_repeatability",
+]
+
 
 @dataclass(frozen=True)
 class Scenario:
@@ -81,6 +89,8 @@ class Scenario:
     cold_reset: bool = True
     use_streaming: bool = False
     skip_reason: str | None = None
+    precondition_model_id: str | None = None
+    precondition_params: dict[str, Any] | None = None
 
 
 class BackendClient:
@@ -92,11 +102,13 @@ class BackendClient:
         rpc_events_path: Path,
         backend_log_path: Path,
         ffmpeg_path: str | None,
+        cache_clear: bool,
     ) -> None:
         self.python_path = python_path
         self.rpc_events_path = rpc_events_path
         self.backend_log_path = backend_log_path
         self.ffmpeg_path = ffmpeg_path
+        self.cache_clear = cache_clear
         self.proc: subprocess.Popen[str] | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -155,6 +167,7 @@ class BackendClient:
         env["PYTHONUNBUFFERED"] = "1"
         if self.ffmpeg_path:
             env["QWENVOICE_FFMPEG_PATH"] = self.ffmpeg_path
+        env["QWENVOICE_POST_REQUEST_CACHE_CLEAR"] = "1" if self.cache_clear else "0"
         self.proc = subprocess.Popen(
             [self.python_path, str(SERVER_PATH)],
             cwd=str(PROJECT_DIR),
@@ -272,6 +285,10 @@ class BackendClient:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    # Recommended quick recipe:
+    # ./scripts/run_generation_benchmark.sh --runs 7 --cold-runs 2 --no-download-missing --no-streaming --json-only
+    # Stricter repeatability recipe:
+    # ./scripts/run_generation_benchmark.sh --runs 10 --cold-runs 2 --no-download-missing --no-streaming --json-only
     parser.add_argument("--runs", type=int, default=7, help="Measured warm runs per scenario.")
     parser.add_argument("--cold-runs", type=int, default=1, help="Measured cold runs per scenario.")
     parser.add_argument("--output-dir", default="", help="Override the benchmark run directory.")
@@ -288,6 +305,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--json-only", action="store_true", help="Print only machine-readable summary details.")
     parser.add_argument("--keep-sandbox", action="store_true", help="Keep the isolated benchmark sandbox after completion.")
     parser.add_argument("--python", default="", help="Explicit Python interpreter path for the backend runtime.")
+    parser.add_argument("--cache-clear", dest="cache_clear", action="store_true", default=True, help="Clear MLX cache after each request (default).")
+    parser.add_argument("--no-cache-clear", dest="cache_clear", action="store_false", help="Disable post-request MLX cache clearing for experiments.")
     parser.add_argument(
         "--clone-reference-source",
         choices=("synthetic", "kathleen"),
@@ -775,6 +794,21 @@ def summarize_numeric(values: list[float]) -> dict[str, float | None]:
     }
 
 
+def pearson_correlation(x_values: list[float], y_values: list[float]) -> float | None:
+    if len(x_values) < 3 or len(y_values) < 3 or len(x_values) != len(y_values):
+        return None
+
+    mean_x = statistics.mean(x_values)
+    mean_y = statistics.mean(y_values)
+    variance_x = sum((value - mean_x) ** 2 for value in x_values)
+    variance_y = sum((value - mean_y) ** 2 for value in y_values)
+    if variance_x <= 0 or variance_y <= 0:
+        return None
+
+    covariance = sum((x - mean_x) * (y - mean_y) for x, y in zip(x_values, y_values))
+    return covariance / math.sqrt(variance_x * variance_y)
+
+
 def aggregate_samples(cold_samples: list[dict[str, Any]], warm_samples: list[dict[str, Any]]) -> dict[str, Any]:
     def pluck(rows: list[dict[str, Any]], key: str) -> list[float]:
         values: list[float] = []
@@ -785,14 +819,37 @@ def aggregate_samples(cold_samples: list[dict[str, Any]], warm_samples: list[dic
             values.append(float(value))
         return values
 
+    warm_wall = pluck(warm_samples, "total_wall_ms")
+    warm_duration = pluck(warm_samples, "output_duration_seconds")
+    ms_per_output_second: list[float] = []
+    for row in warm_samples:
+        total_wall_ms = row.get("total_wall_ms")
+        output_duration_seconds = row.get("output_duration_seconds")
+        if total_wall_ms is None or output_duration_seconds in (None, 0):
+            continue
+        ms_per_output_second.append(float(total_wall_ms) / float(output_duration_seconds))
+
+    first_after_load_rows = [row for row in (cold_samples + warm_samples) if row.get("first_request_after_load")]
+    steady_warm_rows = [row for row in warm_samples if not row.get("first_request_after_load")]
+    first_after_load_values = pluck(first_after_load_rows, "total_wall_ms")
+    steady_warm_values = pluck(steady_warm_rows, "total_wall_ms")
+    first_after_load_delta_ms = None
+    if first_after_load_values and steady_warm_values:
+        first_after_load_delta_ms = statistics.median(first_after_load_values) - statistics.median(steady_warm_values)
+
     return {
         "cold_total_wall_ms": summarize_numeric(pluck(cold_samples, "total_wall_ms")),
         "warm_total_wall_ms": summarize_numeric(pluck(warm_samples, "total_wall_ms")),
+        "cold_load_model_wall_ms": summarize_numeric(pluck(cold_samples, "load_model_wall_ms")),
+        "warm_load_model_wall_ms": summarize_numeric(pluck(warm_samples, "load_model_wall_ms")),
         "warm_backend_total_ms": summarize_numeric(pluck(warm_samples, "backend_total_ms")),
         "warm_generation_ms": summarize_numeric(pluck(warm_samples, "generation_ms")),
         "warm_write_output_ms": summarize_numeric(pluck(warm_samples, "write_output_ms")),
         "warm_output_duration_seconds": summarize_numeric(pluck(warm_samples, "output_duration_seconds")),
         "warm_first_chunk_ms": summarize_numeric(pluck(warm_samples, "first_chunk_ms")),
+        "warm_ms_per_output_second": summarize_numeric(ms_per_output_second),
+        "warm_total_wall_to_duration_correlation": safe_round(pearson_correlation(warm_wall, warm_duration), 4),
+        "warm_first_after_load_vs_steady_delta_ms": safe_round(first_after_load_delta_ms),
     }
 
 
@@ -830,6 +887,48 @@ def make_scenarios(
                 "voice": "serena",
                 "instruct": "neutral",
                 "speed": 1.0,
+            },
+        ),
+        Scenario(
+            identifier="custom_short_default_temp_repeatability",
+            model_id="pro_custom",
+            params={
+                "text": SHORT_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+            },
+        ),
+        Scenario(
+            identifier="custom_short_temp_zero_repeatability",
+            model_id="pro_custom",
+            params={
+                "text": SHORT_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+                "temperature": 0.0,
+            },
+        ),
+        Scenario(
+            identifier="custom_medium_default_temp_repeatability",
+            model_id="pro_custom",
+            params={
+                "text": MEDIUM_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+            },
+        ),
+        Scenario(
+            identifier="custom_medium_temp_zero_repeatability",
+            model_id="pro_custom",
+            params={
+                "text": MEDIUM_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+                "temperature": 0.0,
             },
         ),
         Scenario(
@@ -884,6 +983,54 @@ def make_scenarios(
             },
         ),
         Scenario(
+            identifier="switch_custom_to_design_first_request",
+            model_id="pro_design",
+            params={
+                "text": SHORT_TEXT,
+                "instruct": VOICE_DESCRIPTION,
+            },
+            cold_reset=False,
+            precondition_model_id="pro_custom",
+            precondition_params={
+                "text": SHORT_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+            },
+        ),
+        Scenario(
+            identifier="switch_design_to_clone_first_request",
+            model_id="pro_clone",
+            params={
+                "text": CLONE_TEXT,
+                "ref_audio": str(seed_wav),
+                "ref_text": reference_text,
+            },
+            cold_reset=False,
+            precondition_model_id="pro_design",
+            precondition_params={
+                "text": SHORT_TEXT,
+                "instruct": VOICE_DESCRIPTION,
+            },
+        ),
+        Scenario(
+            identifier="switch_clone_to_custom_first_request",
+            model_id="pro_custom",
+            params={
+                "text": SHORT_TEXT,
+                "voice": "serena",
+                "instruct": "neutral",
+                "speed": 1.0,
+            },
+            cold_reset=False,
+            precondition_model_id="pro_clone",
+            precondition_params={
+                "text": CLONE_TEXT,
+                "ref_audio": str(seed_wav),
+                "ref_text": reference_text,
+            },
+        ),
+        Scenario(
             identifier="custom_short_streaming",
             model_id="pro_custom",
             params={
@@ -930,6 +1077,7 @@ def run_sample(
     phase: str,
     iteration: int,
     outputs_root: Path,
+    load_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     scenario_output_dir = ensure_directory(outputs_root / scenario.identifier)
     output_path = scenario_output_dir / f"{phase}_{iteration:02d}.wav"
@@ -945,8 +1093,25 @@ def run_sample(
     backend_timings = benchmark.get("timings_ms", {})
     audio_path = Path(result.get("audio_path", str(output_path)))
     output_check = validate_output_file(audio_path)
+    effective_temperature = benchmark.get("request_temperature")
+    if effective_temperature is None:
+        if "temperature" not in params:
+            effective_temperature_bucket = "default"
+        elif float(params["temperature"]) == 0.0:
+            effective_temperature_bucket = "zero"
+        else:
+            effective_temperature_bucket = "custom"
+    elif float(effective_temperature) == 0.0:
+        effective_temperature_bucket = "zero"
+    elif "temperature" not in scenario.params:
+        effective_temperature_bucket = "default"
+    else:
+        effective_temperature_bucket = "custom"
+    ms_per_output_second = None
+    if output_check["duration_seconds"] not in (None, 0):
+        ms_per_output_second = round(metrics["total_wall_ms"] / float(output_check["duration_seconds"]), 4)
 
-    return {
+    row = {
         "scenario_id": scenario.identifier,
         "phase": phase,
         "iteration": iteration,
@@ -958,6 +1123,11 @@ def run_sample(
         "first_chunk_ms": metrics["first_chunk_ms"],
         "progress_count": metrics["progress_count"],
         "chunk_count": metrics["chunk_count"],
+        "load_model_wall_ms": None,
+        "unload_model_wall_ms": None,
+        "load_model_cached": None,
+        "model_changed": False,
+        "first_request_after_load": False,
         "backend_total_ms": backend_timings.get("total_backend"),
         "normalize_reference_ms": backend_timings.get("normalize_reference"),
         "prepare_clone_context_ms": backend_timings.get("prepare_clone_context"),
@@ -968,6 +1138,15 @@ def run_sample(
         "used_temp_reference": benchmark.get("used_temp_reference"),
         "streaming_used": benchmark.get("streaming_used"),
         "duration_seconds": result.get("duration_seconds"),
+        "request_temperature": benchmark.get("request_temperature"),
+        "request_max_tokens": benchmark.get("request_max_tokens"),
+        "benchmark_output_duration_seconds": benchmark.get("output_duration_seconds"),
+        "output_frames": benchmark.get("output_frames"),
+        "benchmark_model_path": benchmark.get("model_path"),
+        "model_already_loaded": benchmark.get("model_already_loaded"),
+        "post_request_cache_clear_enabled": benchmark.get("post_request_cache_clear_enabled"),
+        "effective_temperature_bucket": effective_temperature_bucket,
+        "ms_per_output_second": ms_per_output_second,
         "output_exists": output_check["exists"],
         "output_size_bytes": output_check["size_bytes"],
         "output_sample_rate": output_check["sample_rate"],
@@ -975,16 +1154,54 @@ def run_sample(
         "output_valid_wav": output_check["valid_wav"],
         "output_error": output_check["error"],
     }
+    if load_context:
+        row.update(load_context)
+    return row
 
 
-def ensure_model_loaded(client: BackendClient, state: dict[str, Any], model_id: str, force_reload: bool = False) -> None:
+def ensure_model_loaded(client: BackendClient, state: dict[str, Any], model_id: str, force_reload: bool = False) -> dict[str, Any]:
+    load_context: dict[str, Any] = {
+        "load_model_wall_ms": 0,
+        "unload_model_wall_ms": 0,
+        "load_model_cached": None,
+        "model_changed": False,
+        "first_request_after_load": False,
+    }
     if force_reload and state.get("loaded_model"):
+        unload_start = time.perf_counter()
         client.call("unload_model", {})
+        load_context["unload_model_wall_ms"] = int((time.perf_counter() - unload_start) * 1000)
         state["loaded_model"] = None
 
+    if not force_reload and state.get("loaded_model") == model_id:
+        load_context["load_model_cached"] = True
+
     if state.get("loaded_model") != model_id:
-        client.call("load_model", {"model_id": model_id})
+        response = client.call("load_model", {"model_id": model_id, "benchmark": True})
+        result = response["result"]
+        benchmark = result.get("benchmark", {})
+        timings = benchmark.get("timings_ms", {})
+        load_context["load_model_wall_ms"] = timings.get("load_model_total", response["metrics"]["total_wall_ms"])
+        load_context["load_model_cached"] = result.get("cached", False)
+        load_context["model_changed"] = True
+        load_context["first_request_after_load"] = True
         state["loaded_model"] = model_id
+    return load_context
+
+
+def run_precondition_sample(
+    client: BackendClient,
+    scenario: Scenario,
+    outputs_root: Path,
+) -> None:
+    if not scenario.precondition_model_id or not scenario.precondition_params:
+        return
+
+    scenario_output_dir = ensure_directory(outputs_root / scenario.identifier)
+    precondition_output = scenario_output_dir / "_precondition_switch.wav"
+    params = dict(scenario.precondition_params)
+    params["output_path"] = str(precondition_output)
+    client.call("generate", params)
 
 
 def run_scenario(
@@ -1021,24 +1238,47 @@ def run_scenario(
             "output_checks": {},
         }
 
+    if scenario.precondition_model_id:
+        precondition_info = available_models.get(scenario.precondition_model_id)
+        if not precondition_info or not precondition_info.get("available"):
+            return {
+                "status": "skipped",
+                "reason": f"Precondition model '{scenario.precondition_model_id}' is unavailable",
+                "cold_runs": [],
+                "warm_runs": [],
+                "aggregates": {},
+                "sample_rows": [],
+                "backend_flags": {},
+                "output_checks": {},
+            }
+
     cold_samples: list[dict[str, Any]] = []
     warm_samples: list[dict[str, Any]] = []
 
     try:
-        ensure_model_loaded(client, state, scenario.model_id, force_reload=scenario.cold_reset)
-
         for index in range(cold_runs):
-            if index > 0:
-                ensure_model_loaded(client, state, scenario.model_id, force_reload=True)
-            cold_samples.append(run_sample(client, scenario, "cold", index + 1, outputs_root))
+            if scenario.precondition_model_id and scenario.precondition_params:
+                ensure_model_loaded(client, state, scenario.precondition_model_id, force_reload=True)
+                run_precondition_sample(client, scenario, outputs_root)
+                load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=False)
+            else:
+                force_reload = scenario.cold_reset if index == 0 else True
+                load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=force_reload)
+            cold_samples.append(run_sample(client, scenario, "cold", index + 1, outputs_root, load_context=load_context))
 
         if cold_runs == 0:
-            ensure_model_loaded(client, state, scenario.model_id, force_reload=scenario.cold_reset)
+            if scenario.precondition_model_id and scenario.precondition_params:
+                ensure_model_loaded(client, state, scenario.precondition_model_id, force_reload=True)
+                run_precondition_sample(client, scenario, outputs_root)
+                warm_load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=False)
+            else:
+                warm_load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=scenario.cold_reset)
+        else:
+            warm_load_context = None
 
         for index in range(runs):
-            if index == 0 and cold_runs == 0:
-                ensure_model_loaded(client, state, scenario.model_id, force_reload=False)
-            warm_samples.append(run_sample(client, scenario, "warm", index + 1, outputs_root))
+            load_context = warm_load_context if index == 0 else None
+            warm_samples.append(run_sample(client, scenario, "warm", index + 1, outputs_root, load_context=load_context))
 
         sample_rows = cold_samples + warm_samples
         output_checks = {
@@ -1079,6 +1319,62 @@ def run_scenario(
             "output_checks": {},
             "traceback": traceback.format_exc(),
         }
+
+
+def build_repeatability_highlights(scenarios: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    pairs = [
+        ("custom_short_default_temp_repeatability", "custom_short_temp_zero_repeatability"),
+        ("custom_medium_default_temp_repeatability", "custom_medium_temp_zero_repeatability"),
+    ]
+    comparisons: dict[str, Any] = {}
+
+    for default_id, zero_id in pairs:
+        default_data = scenarios.get(default_id, {})
+        zero_data = scenarios.get(zero_id, {})
+        if default_data.get("status") != "completed" or zero_data.get("status") != "completed":
+            continue
+
+        default_agg = default_data.get("aggregates", {})
+        zero_agg = zero_data.get("aggregates", {})
+        default_cv = default_agg.get("warm_total_wall_ms", {}).get("cv")
+        zero_cv = zero_agg.get("warm_total_wall_ms", {}).get("cv")
+        comparison_key = default_id.replace("_default_temp_repeatability", "")
+        correlation = default_agg.get("warm_total_wall_to_duration_correlation")
+        classification = "insufficient_data"
+        if default_cv is not None:
+            if default_cv > 0.02 and correlation is not None and correlation >= 0.7:
+                classification = "sampling_length_variance"
+            elif default_cv > 0.02:
+                classification = "runtime_instability"
+            else:
+                classification = "stable"
+
+        comparisons[comparison_key] = {
+            "default": {
+                "scenario_id": default_id,
+                "warm_total_wall_cv": default_cv,
+                "warm_output_duration_cv": default_agg.get("warm_output_duration_seconds", {}).get("cv"),
+                "warm_total_wall_to_duration_correlation": correlation,
+                "warm_first_after_load_vs_steady_delta_ms": default_agg.get("warm_first_after_load_vs_steady_delta_ms"),
+            },
+            "temperature_zero": {
+                "scenario_id": zero_id,
+                "warm_total_wall_cv": zero_cv,
+                "warm_output_duration_cv": zero_agg.get("warm_output_duration_seconds", {}).get("cv"),
+                "warm_total_wall_to_duration_correlation": zero_agg.get("warm_total_wall_to_duration_correlation"),
+                "warm_first_after_load_vs_steady_delta_ms": zero_agg.get("warm_first_after_load_vs_steady_delta_ms"),
+            },
+            "cv_delta": safe_round((default_cv or 0.0) - (zero_cv or 0.0), 6),
+            "classification": classification,
+            "temp_zero_within_acceptance_band": bool(
+                zero_cv is not None
+                and zero_cv <= 0.02
+                and (zero_agg.get("warm_output_duration_seconds", {}).get("cv") or 0.0) <= 0.01
+                and (zero_agg.get("warm_first_after_load_vs_steady_delta_ms") or 0.0) <= 500
+            ),
+        }
+
+    return comparisons
 
 
 def build_highlights(scenarios: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -1158,6 +1454,7 @@ def build_highlights(scenarios: dict[str, dict[str, Any]]) -> dict[str, Any]:
             "inactive_scenarios": clone_cache_inactive,
         },
         "streaming_latency": streaming_summary,
+        "repeatability": build_repeatability_highlights(scenarios),
     }
 
 
@@ -1177,6 +1474,7 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append(f"- Warm runs per scenario: {configuration['runs']}")
     lines.append(f"- Cold runs per scenario: {configuration['cold_runs']}")
     lines.append(f"- Streaming enabled: {configuration['streaming_enabled']}")
+    lines.append(f"- Post-request cache clear: {configuration['cache_clear']}")
     lines.append(f"- Clone reference source: {configuration['clone_reference_source']}")
     if highlights.get("fastest_scenario"):
         lines.append(
@@ -1188,6 +1486,13 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
             f"- Slowest warm median: `{highlights['slowest_scenario']['id']}` "
             f"at {highlights['slowest_scenario']['warm_total_wall_median_ms']} ms"
         )
+    completed_repeatability = [
+        scenario_id
+        for scenario_id in PRIMARY_REPEATABILITY_SCENARIOS
+        if scenarios.get(scenario_id, {}).get("status") == "completed"
+    ]
+    if completed_repeatability:
+        lines.append(f"- Primary repeatability scenarios: {', '.join(completed_repeatability)}")
     skipped = [scenario_id for scenario_id, data in scenarios.items() if data.get("status") == "skipped"]
     if skipped:
         lines.append(f"- Skipped scenarios: {', '.join(skipped)}")
@@ -1205,6 +1510,7 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append(f"- Git dirty: {metadata['git']['dirty']}")
     lines.append(f"- Requirements hash: {metadata['requirements_sha256']}")
     lines.append(f"- ffmpeg: {metadata['ffmpeg_path'] or 'unavailable'}")
+    lines.append(f"- Backend cache clear default: {configuration['cache_clear']}")
     reference_setup = setup.get("bootstrap_reference_generation", {})
     if reference_setup:
         lines.append(f"- Clone reference seed source: {reference_setup.get('source', 'unknown')}")
@@ -1216,8 +1522,35 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append("- Cold samples are the first generate call after a model load or cache reset.")
     lines.append("- Warm samples reuse the loaded model and, where possible, the clone-conditioning cache.")
     lines.append("- Clone reference audio is prepared once, then reused for enrolled and external clone scenarios.")
+    lines.append("- Repeatability probes compare the default backend temperature with explicit temperature 0.0.")
     lines.append("- Output files are validated for existence, WAV readability, and 24 kHz sample rate.")
     lines.append("")
+
+    lines.append("## Repeatability Analysis")
+    lines.append("")
+    repeatability = highlights.get("repeatability", {})
+    if repeatability:
+        for key in ("custom_short", "custom_medium"):
+            payload = repeatability.get(key)
+            if not payload:
+                continue
+            lines.append(f"### `{key}`")
+            lines.append("")
+            default = payload["default"]
+            temp_zero = payload["temperature_zero"]
+            lines.append(f"- Default temperature warm CV: {default['warm_total_wall_cv']}")
+            lines.append(f"- Default output-duration CV: {default['warm_output_duration_cv']}")
+            lines.append(f"- Default wall/duration correlation: {default['warm_total_wall_to_duration_correlation']}")
+            lines.append(f"- Temperature 0.0 warm CV: {temp_zero['warm_total_wall_cv']}")
+            lines.append(f"- Temperature 0.0 output-duration CV: {temp_zero['warm_output_duration_cv']}")
+            lines.append(f"- Temperature 0.0 first-after-load delta (ms): {temp_zero['warm_first_after_load_vs_steady_delta_ms']}")
+            lines.append(f"- CV improvement: {payload['cv_delta']}")
+            lines.append(f"- Classification: {payload['classification']}")
+            lines.append(f"- Temp 0.0 within acceptance band: {payload['temp_zero_within_acceptance_band']}")
+            lines.append("")
+    else:
+        lines.append("- Repeatability scenarios were skipped or unavailable.")
+        lines.append("")
 
     lines.append("## Results By Scenario")
     lines.append("")
@@ -1242,6 +1575,9 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
                 f"| Warm p95 total wall (ms) | {aggregates['warm_total_wall_ms']['p95']} |"
             )
             lines.append(
+                f"| Cold mean load model (ms) | {aggregates['cold_load_model_wall_ms']['mean']} |"
+            )
+            lines.append(
                 f"| Warm median backend generation (ms) | {aggregates['warm_generation_ms']['median']} |"
             )
             lines.append(
@@ -1249,6 +1585,15 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
             )
             lines.append(
                 f"| Warm median output duration (s) | {aggregates['warm_output_duration_seconds']['median']} |"
+            )
+            lines.append(
+                f"| Warm median ms per output second | {aggregates['warm_ms_per_output_second']['median']} |"
+            )
+            lines.append(
+                f"| Warm wall/output correlation | {aggregates['warm_total_wall_to_duration_correlation']} |"
+            )
+            lines.append(
+                f"| First-after-load delta (ms) | {aggregates['warm_first_after_load_vs_steady_delta_ms']} |"
             )
             if aggregates["warm_first_chunk_ms"]["median"] is not None:
                 lines.append(
@@ -1383,6 +1728,7 @@ def main() -> int:
         "runs": args.runs,
         "cold_runs": args.cold_runs,
         "streaming_enabled": args.include_streaming,
+        "cache_clear": args.cache_clear,
         "download_missing": args.download_missing,
         "clone_reference_source": args.clone_reference_source,
         "sandbox_path": str(sandbox_dir),
@@ -1418,7 +1764,7 @@ def main() -> int:
                 summary["setup"]["skipped_downloads"].append(result)
         metadata["model_sources"] = available_models
 
-        client = BackendClient(backend_python, rpc_events_path, backend_log_path, ffmpeg_path)
+        client = BackendClient(backend_python, rpc_events_path, backend_log_path, ffmpeg_path, args.cache_clear)
         state = {"loaded_model": None}
         try:
             client.start()

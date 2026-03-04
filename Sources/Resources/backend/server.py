@@ -35,9 +35,18 @@ _original_stderr = sys.stderr
 # Configuration
 # ---------------------------------------------------------------------------
 
+
+def _env_flag(name, default=True):
+    """Read a boolean-ish environment variable with a conservative default."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw not in {"0", "false", "False"}
+
+
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
-POST_REQUEST_CACHE_CLEAR = True
+POST_REQUEST_CACHE_CLEAR = _env_flag("QWENVOICE_POST_REQUEST_CACHE_CLEAR", default=True)
 CLONE_CONTEXT_CACHE_CAPACITY = 8
 DEFAULT_STREAMING_INTERVAL = 2.0
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
@@ -207,15 +216,16 @@ def make_output_path(subfolder, text_snippet):
     return os.path.join(save_dir, filename)
 
 
-def get_audio_duration(wav_path):
-    """Get duration in seconds of a WAV file."""
+def get_audio_metadata(wav_path):
+    """Return frame and duration metadata for a WAV file."""
     try:
         with wave.open(wav_path, "rb") as f:
             frames = f.getnframes()
             rate = f.getframerate()
-            return frames / float(rate) if rate > 0 else 0.0
+            duration = frames / float(rate) if rate > 0 else 0.0
+            return {"frames": frames, "duration_seconds": duration}
     except Exception:
-        return 0.0
+        return {"frames": None, "duration_seconds": 0.0}
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +593,8 @@ def handle_load_model(params, request_id=None):
 
     model_id = params.get("model_id")
     model_path = params.get("model_path")
+    benchmark = bool(params.get("benchmark", False))
+    load_start = time.perf_counter()
 
     # Resolve model path from model_id if not given directly
     if not model_path and model_id:
@@ -598,7 +610,14 @@ def handle_load_model(params, request_id=None):
 
     # Skip reload if same model already loaded
     if _current_model is not None and _current_model_path == model_path:
-        return {"success": True, "model_path": model_path, "cached": True}
+        result = {"success": True, "model_path": model_path, "cached": True}
+        if benchmark:
+            result["benchmark"] = {
+                "timings_ms": {
+                    "load_model_total": int((time.perf_counter() - load_start) * 1000),
+                }
+            }
+        return result
 
     # Unload existing model
     if _current_model is not None:
@@ -619,10 +638,17 @@ def handle_load_model(params, request_id=None):
 
     send_progress(100, "Model ready", request_id=request_id)
 
-    return {
+    result = {
         "success": True,
         "model_path": model_path,
     }
+    if benchmark:
+        result["benchmark"] = {
+            "timings_ms": {
+                "load_model_total": int((time.perf_counter() - load_start) * 1000),
+            }
+        }
+    return result
 
 
 def handle_unload_model(params):
@@ -660,17 +686,26 @@ def handle_generate(params, request_id=None):
     ref_text = params.get("ref_text")
     temperature = params.get("temperature", 0.6)
     max_tokens = params.get("max_tokens")
+    temperature_value = float(temperature)
     stream = bool(params.get("stream", False))
     streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
     benchmark = bool(params.get("benchmark", False))
     benchmark_label = params.get("benchmark_label")
     benchmark_mode = "clone" if ref_audio else ("custom" if voice else "design")
+    effective_max_tokens = int(max_tokens) if max_tokens is not None else None
+    model_was_loaded = _current_model is not None
     benchmark_flags = {
         "label": benchmark_label or benchmark_mode,
         "mode": benchmark_mode,
         "prepared_clone_used": False,
         "clone_cache_hit": None,
         "streaming_used": bool(stream and request_id is not None and not ref_audio),
+        "used_temp_reference": False,
+        "request_temperature": temperature_value,
+        "request_max_tokens": effective_max_tokens,
+        "model_path": _current_model_path,
+        "model_already_loaded": bool(model_was_loaded),
+        "post_request_cache_clear_enabled": bool(POST_REQUEST_CACHE_CLEAR),
     }
     benchmark_timings = {
         "normalize_reference": 0,
@@ -695,6 +730,7 @@ def handle_generate(params, request_id=None):
             benchmark_timings["normalize_reference"] = int((time.perf_counter() - normalize_start) * 1000)
             if not clean_ref_audio:
                 raise RuntimeError("Could not process reference audio file")
+            benchmark_flags["used_temp_reference"] = clean_ref_audio != ref_audio
 
             resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
             prepare_start = time.perf_counter()
@@ -709,6 +745,9 @@ def handle_generate(params, request_id=None):
 
             if prepared_context is not None:
                 benchmark_flags["prepared_clone_used"] = True
+                if effective_max_tokens is None:
+                    effective_max_tokens = 4096
+                    benchmark_flags["request_max_tokens"] = effective_max_tokens
                 send_progress(60, "Generating audio...", request_id=request_id)
                 generation_start = time.perf_counter()
                 prepared_results = list(
@@ -716,8 +755,8 @@ def handle_generate(params, request_id=None):
                         _current_model,
                         text,
                         prepared_context,
-                        temperature=float(temperature),
-                        max_tokens=int(max_tokens) if max_tokens is not None else 4096,
+                        temperature=temperature_value,
+                        max_tokens=effective_max_tokens,
                     )
                 )
                 benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
@@ -735,7 +774,7 @@ def handle_generate(params, request_id=None):
                 generation_start = time.perf_counter()
                 fallback_kwargs = {
                     "text": text,
-                    "temperature": float(temperature),
+                    "temperature": temperature_value,
                     "verbose": False,
                 }
                 if max_tokens is not None:
@@ -767,7 +806,7 @@ def handle_generate(params, request_id=None):
                 voice=voice,
                 instruct=instruct,
                 speed=speed,
-                temperature=temperature,
+                temperature=temperature_value,
                 max_tokens=max_tokens,
                 streaming_interval=streaming_interval,
             )
@@ -780,7 +819,7 @@ def handle_generate(params, request_id=None):
                 "output_path": target_dir,
                 "file_prefix": target_stem,
                 "verbose": False,
-                "temperature": float(temperature),
+                "temperature": temperature_value,
             }
             if max_tokens is not None:
                 gen_kwargs["max_tokens"] = int(max_tokens)
@@ -806,7 +845,8 @@ def handle_generate(params, request_id=None):
                 os.replace(generated_path, final_path)
             benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
 
-        duration = get_audio_duration(final_path)
+        output_metadata = get_audio_metadata(final_path)
+        duration = output_metadata["duration_seconds"]
         benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
 
         send_progress(100, "Done", request_id=request_id)
@@ -818,6 +858,8 @@ def handle_generate(params, request_id=None):
         if benchmark:
             result["benchmark"] = {
                 **benchmark_flags,
+                "output_duration_seconds": round(duration, 4),
+                "output_frames": output_metadata["frames"],
                 "timings_ms": benchmark_timings,
             }
         return result

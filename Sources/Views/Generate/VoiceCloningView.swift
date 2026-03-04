@@ -322,17 +322,38 @@ struct VoiceCloningView: View {
                     duration: result.durationSeconds,
                     createdAt: Date()
                 )
-                try DatabaseService.shared.saveGeneration(&gen)
-                NotificationCenter.default.post(name: .generationSaved, object: nil)
-
-                if AudioService.shouldAutoPlay {
-                    audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
-                }
+                try persistGenerationAndMaybeAutoplay(&gen, result: result)
             } catch {
                 errorMessage = error.localizedDescription
             }
             isGenerating = false
         }
+    }
+
+    private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
+        let saveStart = DispatchTime.now().uptimeNanoseconds
+        try DatabaseService.shared.saveGeneration(&generation)
+        #if DEBUG
+        print("[Performance][VoiceCloningView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
+        #endif
+
+        let notificationStart = DispatchTime.now().uptimeNanoseconds
+        NotificationCenter.default.post(name: .generationSaved, object: nil)
+        #if DEBUG
+        print("[Performance][VoiceCloningView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
+        #endif
+
+        if AudioService.shouldAutoPlay {
+            let autoplayStart = DispatchTime.now().uptimeNanoseconds
+            audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+            #if DEBUG
+            print("[Performance][VoiceCloningView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
+            #endif
+        }
+    }
+
+    private func elapsedMs(since start: UInt64) -> Int {
+        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
     private func selectSavedVoice(_ voice: Voice) {

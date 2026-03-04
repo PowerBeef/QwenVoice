@@ -541,7 +541,12 @@ final class PythonBridge: ObservableObject {
         beginGenerationSession(mode: mode, batchIndex: batchIndex, batchTotal: batchTotal)
 
         do {
+            let loadStart = DispatchTime.now().uptimeNanoseconds
             let loadResult = try await loadModel(id: modelID)
+            let loadElapsedMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart) / 1_000_000)
+            #if DEBUG
+            print("[Performance][PythonBridge] mode=\(mode.rawValue) load_model_client_wall_ms=\(loadElapsedMs) cached=\(loadResult["cached"]?.boolValue == true)")
+            #endif
             if loadResult["cached"]?.boolValue == true {
                 updateCurrentSession(
                     phase: .preparing,
@@ -550,7 +555,12 @@ final class PythonBridge: ObservableObject {
                 )
             }
 
+            let generateStart = DispatchTime.now().uptimeNanoseconds
             let result = try await generate()
+            let generateElapsedMs = Int((DispatchTime.now().uptimeNanoseconds - generateStart) / 1_000_000)
+            #if DEBUG
+            print("[Performance][PythonBridge] mode=\(mode.rawValue) generate_client_wall_ms=\(generateElapsedMs)")
+            #endif
             completeGenerationSession()
             return result
         } catch {
