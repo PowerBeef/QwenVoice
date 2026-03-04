@@ -10,6 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
+APP_BUNDLE_NAME="QwenVoice"
 TOTAL_START=$(date +%s)
 
 SKIP_DEPS=false
@@ -33,7 +34,7 @@ step_time() {
     echo "$((end - start))s"
 }
 
-echo "=== Qwen Voice: Release Build ==="
+echo "=== QwenVoice: Release Build ==="
 echo ""
 if $SKIP_DEPS; then echo "  (skipping dependency bundling)"; fi
 if $SKIP_BUILD; then echo "  (skipping xcodebuild)"; fi
@@ -105,12 +106,12 @@ echo "[4/8] Copying .app from DerivedData..."
 
 if $SKIP_BUILD; then
     # When skipping build, the .app should already be in build/
-    if [ ! -d "$BUILD_DIR/Qwen Voice.app" ]; then
-        echo "Error: No .app found at $BUILD_DIR/Qwen Voice.app"
+    if [ ! -d "$BUILD_DIR/$APP_BUNDLE_NAME.app" ]; then
+        echo "Error: No .app found at $BUILD_DIR/$APP_BUNDLE_NAME.app"
         echo "Run without --skip-build first."
         exit 1
     fi
-        echo "[4/8] Copy .app — skipped (using existing build/Qwen Voice.app)"
+        echo "[4/8] Copy .app — skipped (using existing build/$APP_BUNDLE_NAME.app)"
 else
     # Resolve BUILT_PRODUCTS_DIR from xcodebuild
     cd "$PROJECT_DIR"
@@ -125,20 +126,20 @@ else
         exit 1
     fi
 
-    APP_SOURCE="$BUILT_PRODUCTS_DIR/Qwen Voice.app"
+    APP_SOURCE="$BUILT_PRODUCTS_DIR/$APP_BUNDLE_NAME.app"
     if [ ! -d "$APP_SOURCE" ]; then
         echo "Error: Built .app not found at: $APP_SOURCE"
         exit 1
     fi
 
     mkdir -p "$BUILD_DIR"
-    rm -rf "$BUILD_DIR/Qwen Voice.app"
-    cp -a "$APP_SOURCE" "$BUILD_DIR/Qwen Voice.app"
+    rm -rf "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+    cp -a "$APP_SOURCE" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 fi
 
 # Inject bundled Python and ffmpeg into the .app (excluded from Xcode build to avoid conflicts)
 RESOURCES_SRC="$PROJECT_DIR/Sources/Resources"
-APP_RESOURCES="$BUILD_DIR/Qwen Voice.app/Contents/Resources"
+APP_RESOURCES="$BUILD_DIR/$APP_BUNDLE_NAME.app/Contents/Resources"
 
 if [ -d "$RESOURCES_SRC/python" ]; then
     echo "[4/8] Copying bundled Python into .app..."
@@ -186,7 +187,7 @@ codesign --force --sign - \
     --deep \
     --options runtime \
     --preserve-metadata=entitlements,requirements,flags \
-    "$BUILD_DIR/Qwen Voice.app"
+    "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 
 echo ""
 echo "[5/8] Re-sign final app bundle — done ($(step_time $STEP_START))"
@@ -197,7 +198,7 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 echo "[6/8] Verifying bundled runtime..."
-"$SCRIPT_DIR/verify_release_bundle.sh" "$BUILD_DIR/Qwen Voice.app"
+"$SCRIPT_DIR/verify_release_bundle.sh" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 echo ""
 echo "[6/8] Verify bundle — done ($(step_time $STEP_START))"
 echo ""
@@ -207,7 +208,7 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 echo "[7/8] Creating DMG..."
-"$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/Qwen Voice.app"
+"$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 echo ""
 echo "[7/8] Create DMG — done ($(step_time $STEP_START))"
 echo ""
@@ -218,15 +219,15 @@ echo ""
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 DMG_PATH="$BUILD_DIR/QwenVoice.dmg"
 DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
-APP_SIZE=$(du -sh "$BUILD_DIR/Qwen Voice.app" | cut -f1)
+APP_SIZE=$(du -sh "$BUILD_DIR/$APP_BUNDLE_NAME.app" | cut -f1)
 
 echo "[8/8] Release complete!"
 echo ""
-echo "  App:  $BUILD_DIR/Qwen Voice.app  ($APP_SIZE)"
+echo "  App:  $BUILD_DIR/$APP_BUNDLE_NAME.app  ($APP_SIZE)"
 echo "  DMG:  $DMG_PATH  ($DMG_SIZE)"
 echo ""
 echo "  Total time: ${TOTAL_ELAPSED}s"
 echo ""
 echo "To test:"
-echo "  open '$BUILD_DIR/Qwen Voice.app'"
+echo "  open '$BUILD_DIR/$APP_BUNDLE_NAME.app'"
 echo "  open '$DMG_PATH'"

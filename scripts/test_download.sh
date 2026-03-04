@@ -6,7 +6,7 @@
 # then cleans up by clicking the delete button.
 #
 # Prerequisites:
-#   - "Qwen Voice" app must be running (with window open)
+#   - "QwenVoice" app must be running (with window open)
 #   - Terminal must have Accessibility permissions (System Settings → Privacy & Security → Accessibility)
 #
 # Usage:
@@ -17,7 +17,7 @@ set -euo pipefail
 # ── Config ──────────────────────────────────────────────────────────────────────
 
 BUNDLE_ID="com.qwenvoice.app"
-APP_NAME="Qwen Voice"
+APP_NAME="QwenVoice"
 MODEL_ID="pro_design"
 MODEL_NAME="Voice Design"
 MODEL_FOLDER="Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit"
@@ -88,7 +88,7 @@ ok "$APP_NAME is running"
 # Check window exists
 WIN_COUNT=$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set frontmost to true
         delay 0.3
         return count of windows
@@ -102,7 +102,7 @@ if [[ "$WIN_COUNT" == "0" ]]; then
     sleep 3
     WIN_COUNT=$(osascript -e '
     tell application "System Events"
-        tell process "Qwen Voice"
+        tell process "QwenVoice"
             return count of windows
         end tell
     end tell
@@ -127,7 +127,7 @@ header "Step 1: Navigate to Models Tab"
 info "Clicking Models sidebar item (row 8 in sidebar outline)..."
 osascript <<'APPLESCRIPT'
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set frontmost to true
         delay 0.5
 
@@ -148,7 +148,7 @@ APPLESCRIPT
 # Verify we're on the Models tab by checking the content area
 MODELS_TITLE=$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set contentArea to scroll area 1 of group 2 of splitter group 1 of group 1 of window 1
         return value of static text 1 of contentArea
     end tell
@@ -164,7 +164,7 @@ fi
 # Check current state of the Voice Design card
 VD_STATUS=$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set contentArea to scroll area 1 of group 2 of splitter group 1 of group 1 of window 1
         -- Voice Design = group 2 (second model card)
         set vdCard to group 2 of contentArea
@@ -196,7 +196,7 @@ header "Step 2: Click Download Button"
 info "Clicking Download button on Voice Design card (group 2, button 1)..."
 osascript <<'APPLESCRIPT'
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set frontmost to true
         delay 0.3
 
@@ -354,7 +354,7 @@ fi
 # Check UI shows "Ready" status
 VD_STATUS_AFTER=$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set contentArea to scroll area 1 of group 2 of splitter group 1 of group 1 of window 1
         set vdCard to group 2 of contentArea
         set allTexts to every static text of vdCard
@@ -392,7 +392,7 @@ sleep 3
 info "Clicking delete (trash) button for $MODEL_NAME..."
 osascript <<'APPLESCRIPT'
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set frontmost to true
         delay 0.5
 
@@ -426,7 +426,7 @@ ok "Model directory removed after ${WAITED}s"
 # Verify UI shows "Not downloaded"
 VD_STATUS_FINAL=$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set contentArea to scroll area 1 of group 2 of splitter group 1 of group 1 of window 1
         set vdCard to group 2 of contentArea
         set allTexts to every static text of vdCard

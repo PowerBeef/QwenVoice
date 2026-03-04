@@ -61,7 +61,7 @@ final class PythonEnvironmentManager: ObservableObject {
             }
         }
         guard machine.starts(with: "arm64") else {
-            state = .failed(message: "Qwen Voice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
+            state = .failed(message: "QwenVoice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
             return
         }
 

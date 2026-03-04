@@ -11,7 +11,7 @@ RESOURCES_DIR="$PROJECT_DIR/Sources/Resources"
 FFMPEG_URL="https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
 DOWNLOAD_DIR="/tmp/qwenvoice-ffmpeg-build"
 
-echo "=== Qwen Voice: Bundle ffmpeg ==="
+echo "=== QwenVoice: Bundle ffmpeg ==="
 echo ""
 
 mkdir -p "$DOWNLOAD_DIR"

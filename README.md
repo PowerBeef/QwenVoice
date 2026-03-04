@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/social_preview.png" alt="Qwen Voice — Offline Text-to-Speech for Mac with Voice Cloning">
+  <img src="docs/social_preview.png" alt="QwenVoice — Offline Text-to-Speech for Mac with Voice Cloning">
 </div>
 
 ## Screenshots
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Qwen Voice is a native SwiftUI macOS application that brings state-of-the-art text-to-speech to Apple Silicon Macs with no Python install, no terminal, and no dependencies required of the user — just download and run.
+QwenVoice is a native SwiftUI macOS application that brings state-of-the-art text-to-speech to Apple Silicon Macs with no Python install, no terminal, and no dependencies required of the user — just download and run.
 
 It runs the Qwen3-TTS model family entirely offline via Apple's MLX framework, delivering fast, low-latency, low-heat inference on M-series chips. The app communicates with a Python backend over JSON-RPC 2.0 via stdin/stdout, managed transparently as a background process.
 
@@ -65,7 +65,7 @@ A standout feature of both Custom Voice and Voice Design modes is the absence of
 2. Drag to `/Applications`
 3. Remove the quarantine attribute (the app is unsigned):
    ```sh
-   xattr -cr "/Applications/Qwen Voice.app"
+   xattr -cr "/Applications/QwenVoice.app"
    ```
 4. Open the app → go to the **Models** tab → download a model → start generating
 
@@ -111,7 +111,7 @@ After bundling those generated assets, the release script builds with `xcodebuil
 
 ## Architecture & Tech Stack
 
-Qwen Voice uses a **two-process architecture**:
+QwenVoice uses a **two-process architecture**:
 
 **SwiftUI Frontend** (`Sources/`) manages the UI, SQLite history, model downloads, and audio playback. Key components:
 
@@ -166,7 +166,7 @@ Supports Custom Voice, Voice Design, and Voice Cloning modes interactively.
 
 ## Credits & Open Source Acknowledgements
 
-Qwen Voice is built on the shoulders of the following open source projects:
+QwenVoice is built on the shoulders of the following open source projects:
 
 ### Core Inference & Models
 

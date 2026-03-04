@@ -25,7 +25,7 @@ PYTHON_BUILD_STANDALONE_URL="https://github.com/astral-sh/python-build-standalon
 #   4. Update PYTHON_BUILD_STANDALONE_VERSION and the minor version in the URL above
 # The "install_only" variant is a pre-built, relocatable Python — no compilation needed.
 
-echo "=== Qwen Voice: Bundle Python ==="
+echo "=== QwenVoice: Bundle Python ==="
 echo ""
 
 EXPECTED_MLX_AUDIO_VERSION="$(grep -E '^mlx-audio==' "$REQUIREMENTS" | head -n 1 | sed 's/^mlx-audio==//')"

@@ -633,9 +633,10 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
-				PRODUCT_NAME = "Qwen Voice";
+				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
+				WRAPPER_NAME = QwenVoice.app;
 			};
 			name = Release;
 		};
@@ -656,9 +657,10 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
-				PRODUCT_NAME = "Qwen Voice";
+				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
+				WRAPPER_NAME = QwenVoice.app;
 			};
 			name = Debug;
 		};

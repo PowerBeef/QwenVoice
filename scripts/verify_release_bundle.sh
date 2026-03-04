@@ -11,7 +11,7 @@ fail() {
 }
 
 if [ $# -ne 1 ]; then
-    fail "Usage: $0 /path/to/Qwen Voice.app"
+    fail "Usage: $0 /path/to/QwenVoice.app"
 fi
 
 APP_PATH="$1"
@@ -31,7 +31,7 @@ MANIFEST_PATH="$PYTHON_ROOT/.qwenvoice-runtime-manifest.json"
 
 export PYTHONDONTWRITEBYTECODE=1
 
-echo "=== Qwen Voice: Verify Release Bundle ==="
+echo "=== QwenVoice: Verify Release Bundle ==="
 echo ""
 
 echo "[1/7] Checking required files..."

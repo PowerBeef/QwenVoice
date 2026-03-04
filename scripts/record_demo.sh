@@ -1,5 +1,5 @@
 #!/opt/homebrew/bin/bash
-# record_demo.sh — Record a full promotional demo of Qwen Voice v1.1.0 for X
+# record_demo.sh — Record a full promotional demo of QwenVoice v1.1.0 for X
 #
 # Shows the complete flow: select speaker & emotion, type text, generate audio,
 # listen to playback with waveform, then switch to History.
@@ -7,7 +7,7 @@
 # Output: build/demo.mp4 (1280×720, H.264, yuv420p, silent video)
 #
 # Prerequisites:
-#   - "Qwen Voice" app running, Custom Voice tab visible, window not obscured
+#   - "QwenVoice" app running, Custom Voice tab visible, window not obscured
 #   - Custom Voice model downloaded and loaded
 #   - Terminal has Accessibility + Screen Recording permissions
 #   - Window tall enough to show all controls without scrolling (~700pt+)
@@ -43,18 +43,18 @@ echo "ffmpeg: $FFMPEG"
 
 # ── Pre-flight checks ────────────────────────────────────────────────────────
 
-if ! pgrep -x "Qwen Voice" >/dev/null 2>&1; then
-    echo "ERROR: Qwen Voice is not running. Launch the app first."
+if ! pgrep -x "QwenVoice" >/dev/null 2>&1; then
+    echo "ERROR: QwenVoice is not running. Launch the app first."
     exit 1
 fi
 
-osascript -e 'tell application "Qwen Voice" to activate'
+osascript -e 'tell application "QwenVoice" to activate'
 sleep 0.5
 
 # Window geometry (points)
 read -r WIN_X WIN_Y WIN_W WIN_H <<< "$(osascript -e '
 tell application "System Events"
-    tell process "Qwen Voice"
+    tell process "QwenVoice"
         set {x, y} to position of window 1
         set {w, h} to size of window 1
         return (x as text) & " " & (y as text) & " " & (w as text) & " " & (h as text)
@@ -76,7 +76,7 @@ select_sidebar_row() {
     row_num=$(osascript -l JavaScript <<ROWEOF
 (() => {
     const se = Application('System Events');
-    const proc = se.processes['Qwen Voice'];
+    const proc = se.processes['QwenVoice'];
     const outline = proc.windows[0].groups[0].splitterGroups[0].groups[0].scrollAreas[0].outlines[0];
     const rows = outline.rows();
     for (let i = 0; i < rows.length; i++) {
@@ -98,7 +98,7 @@ ROWEOF
         echo "  WARNING: Sidebar row for $target_id not found"
         return 1
     fi
-    osascript -e "tell application \"System Events\" to tell process \"Qwen Voice\" to tell outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1 of window 1 to select row ${row_num}"
+    osascript -e "tell application \"System Events\" to tell process \"QwenVoice\" to tell outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1 of window 1 to select row ${row_num}"
     sleep 0.8
     echo "  Selected sidebar: $target_id (row $row_num)"
 }
@@ -114,7 +114,7 @@ echo "Scanning accessibility tree for UI elements..."
 ELEMENT_DATA=$(osascript -l JavaScript <<'JSEOF'
 (() => {
     const se = Application('System Events');
-    const proc = se.processes['Qwen Voice'];
+    const proc = se.processes['QwenVoice'];
     const win = proc.windows[0];
 
     const targets = [
@@ -264,7 +264,7 @@ wait_for_player() {
         found=$(osascript -l JavaScript <<'WAITEOF'
 (() => {
     const se = Application('System Events');
-    const proc = se.processes['Qwen Voice'];
+    const proc = se.processes['QwenVoice'];
     const win = proc.windows[0];
     try {
         const all = win.entireContents();
@@ -328,7 +328,7 @@ fi
 
 echo ""
 echo "Resetting UI to clean state..."
-osascript -e 'tell application "Qwen Voice" to activate'
+osascript -e 'tell application "QwenVoice" to activate'
 sleep 0.3
 
 # Click Custom Voice tab first to ensure we're on it
@@ -397,7 +397,7 @@ if ! kill -0 "$FFMPEG_PID" 2>/dev/null; then
     exit 1
 fi
 echo "Recording started (PID $FFMPEG_PID)"
-osascript -e 'tell application "Qwen Voice" to activate'
+osascript -e 'tell application "QwenVoice" to activate'
 
 # ── Scene 1: Clean Custom Voice UI (3s) ──────────────────────────────────────
 

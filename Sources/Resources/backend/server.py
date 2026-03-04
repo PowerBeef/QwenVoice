@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Qwen Voice — Python JSON-RPC backend.
+QwenVoice — Python JSON-RPC backend.
 
 Reads JSON-RPC 2.0 requests from stdin, dispatches to handlers,
 writes JSON-RPC responses to stdout. One model in memory at a time.

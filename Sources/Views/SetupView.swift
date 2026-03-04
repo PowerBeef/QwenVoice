@@ -13,7 +13,7 @@ struct SetupView: View {
                 .foregroundStyle(AppTheme.accent)
                 .accessibilityIdentifier("setup_icon")
 
-            Text("Qwen Voice")
+            Text("QwenVoice")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.accent)
                 .accessibilityIdentifier("setup_title")

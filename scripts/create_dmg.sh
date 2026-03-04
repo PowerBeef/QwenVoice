@@ -1,28 +1,29 @@
 #!/bin/bash
 set -euo pipefail
 
-# Create a distributable .dmg for Qwen Voice
+# Create a distributable .dmg for QwenVoice
 # Expects the .app to be already built and signed
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-APP_NAME="Qwen Voice"
-APP_PATH="${1:-$PROJECT_DIR/build/${APP_NAME}.app}"
+APP_BUNDLE_NAME="QwenVoice"
+DISPLAY_NAME="QwenVoice"
+APP_PATH="${1:-$PROJECT_DIR/build/${APP_BUNDLE_NAME}.app}"
 DMG_NAME="QwenVoice"
 DMG_OUTPUT="$PROJECT_DIR/build/${DMG_NAME}.dmg"
 DMG_TEMP="$PROJECT_DIR/build/${DMG_NAME}-temp.dmg"
-VOLUME_NAME="$APP_NAME"
+VOLUME_NAME="$DISPLAY_NAME"
 DMG_SIZE="500m"
 
-echo "=== Qwen Voice: Create DMG ==="
+echo "=== QwenVoice: Create DMG ==="
 echo ""
 
 # Verify app exists
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: App not found at: $APP_PATH"
     echo ""
-    echo "Usage: $0 [path/to/Qwen Voice.app]"
+    echo "Usage: $0 [path/to/QwenVoice.app]"
     echo ""
     echo "Build the app first:"
     echo "  xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -configuration Release -archivePath build/QwenVoice.xcarchive archive"
