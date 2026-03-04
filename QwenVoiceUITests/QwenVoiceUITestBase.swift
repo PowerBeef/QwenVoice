@@ -183,10 +183,14 @@ class QwenVoiceUITestBase: XCTestCase {
         let existing = app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
         if existing.exists {
             let fallback: UITestScreen = screen == .customVoice ? .models : .customVoice
+            let targetItem = app.descendants(matching: .any).matching(identifier: screen.sidebarIdentifier).firstMatch
             let fallbackItem = app.descendants(matching: .any).matching(identifier: fallback.sidebarIdentifier).firstMatch
-            if fallbackItem.waitForExistence(timeout: 5) {
+            if targetItem.exists && fallbackItem.waitForExistence(timeout: 5) {
                 fallbackItem.click()
                 _ = waitForScreen(fallback, timeout: timeout)
+            } else {
+                _ = waitForScreen(screen, timeout: timeout)
+                return
             }
         }
 

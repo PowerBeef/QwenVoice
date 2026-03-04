@@ -10,8 +10,18 @@ final class HistoryViewTests: QwenVoiceUITestBase {
     func testHistorySearchAndStateElements() {
         _ = waitForScreen(.history)
 
+        let loadingState = app.descendants(matching: .any).matching(identifier: "history_loadingState").firstMatch
         let emptyState = app.descendants(matching: .any).matching(identifier: "history_emptyState").firstMatch
-        let hasRows = app.tables.firstMatch.exists || app.outlines.firstMatch.exists
-        XCTAssertTrue(emptyState.exists || hasRows, "History should show either empty state or rows")
+        let initialHasRows = app.tables.firstMatch.exists || app.outlines.firstMatch.exists
+        let sawLoading = loadingState.exists || loadingState.waitForExistence(timeout: 1)
+
+        XCTAssertTrue(sawLoading || emptyState.exists || initialHasRows, "History should show a loading state, empty state, or rows")
+
+        if sawLoading {
+            _ = loadingState.waitForNonExistence(timeout: 5)
+        }
+
+        let settledHasRows = app.tables.firstMatch.exists || app.outlines.firstMatch.exists
+        XCTAssertTrue(emptyState.exists || settledHasRows, "History should settle into either empty state or rows")
     }
 }

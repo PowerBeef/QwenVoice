@@ -1,21 +1,44 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct HistoryListItem: Identifiable {
+    let generation: Generation
+    let audioFileExists: Bool
+    let textPreview: String
+    let formattedDate: String
+    let searchKey: String
+
+    var id: String {
+        if let generationID = generation.id {
+            return "generation-\(generationID)"
+        }
+        return "generation-\(generation.audioPath)-\(generation.createdAt.timeIntervalSince1970)"
+    }
+
+    init(generation: Generation) {
+        self.generation = generation
+        self.audioFileExists = FileManager.default.fileExists(atPath: generation.audioPath)
+        self.textPreview = generation.textPreview
+        self.formattedDate = generation.formattedDate
+        self.searchKey = "\(generation.text)\n\(generation.voice ?? "")".lowercased()
+    }
+}
+
 struct HistoryView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @State private var generations: [Generation] = []
+    @State private var items: [HistoryListItem] = []
     @State private var searchText = ""
+    @State private var isLoading = false
+    @State private var loadTask: Task<Void, Never>?
     @State private var loadError: String?
     @State private var showDeleteConfirmation = false
-    @State private var generationToDelete: Generation?
+    @State private var itemToDelete: HistoryListItem?
     @State private var exportError: String?
 
-    private var filtered: [Generation] {
-        if searchText.isEmpty { return generations }
-        return generations.filter {
-            $0.text.localizedCaseInsensitiveContains(searchText) ||
-            ($0.voice ?? "").localizedCaseInsensitiveContains(searchText)
-        }
+    private var filtered: [HistoryListItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if query.isEmpty { return items }
+        return items.filter { $0.searchKey.contains(query) }
     }
 
     var body: some View {
@@ -36,7 +59,7 @@ struct HistoryView: View {
             .padding(.top, 24)
             .padding(.bottom, 12)
 
-            if let loadError {
+            if let loadError, items.isEmpty, !isLoading {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
@@ -53,16 +76,21 @@ struct HistoryView: View {
                 .glassCard()
                 .accessibilityIdentifier("history_errorState")
                 Spacer()
+            } else if isLoading && items.isEmpty {
+                Spacer()
+                ProgressView("Loading history...")
+                    .accessibilityIdentifier("history_loadingState")
+                Spacer()
             } else if filtered.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "clock")
                         .font(.system(size: 48))
                         .emptyStateStyle()
-                    Text(generations.isEmpty ? "No generations yet" : "No results found")
+                    Text(items.isEmpty ? "No generations yet" : "No results found")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text(generations.isEmpty ? "Generate some audio to see it here" : "Try a different search term")
+                    Text(items.isEmpty ? "Generate some audio to see it here" : "Try a different search term")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -70,27 +98,27 @@ struct HistoryView: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(filtered) { gen in
+                    ForEach(filtered) { item in
                         HistoryRow(
-                            generation: gen,
+                            item: item,
                             onPlay: {
-                                audioPlayer.playFile(gen.audioPath, title: gen.textPreview)
+                                audioPlayer.playFile(item.generation.audioPath, title: item.textPreview)
                             },
                             onSaveAs: {
-                                exportGeneration(gen)
+                                exportGeneration(item)
                             },
                             onDelete: {
-                                generationToDelete = gen
+                                itemToDelete = item
                                 showDeleteConfirmation = true
                             }
                         )
                         .contextMenu {
                             Button {
-                                NSWorkspace.shared.selectFile(gen.audioPath, inFileViewerRootedAtPath: "")
+                                NSWorkspace.shared.selectFile(item.generation.audioPath, inFileViewerRootedAtPath: "")
                             } label: {
                                 Label("Reveal in Finder", systemImage: "folder")
                             }
-                            .disabled(!gen.audioFileExists)
+                            .disabled(!item.audioFileExists)
                         }
                     }
                     .onDelete { indices in
@@ -105,27 +133,31 @@ struct HistoryView: View {
         .contentColumn()
         .accessibilityIdentifier("screen_history")
         .task {
-            await loadHistory()
+            reloadHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
-            Task { await loadHistory() }
+            reloadHistory()
+        }
+        .onDisappear {
+            loadTask?.cancel()
+            loadTask = nil
         }
         .alert("Delete Generation?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {
-                generationToDelete = nil
+                itemToDelete = nil
             }
             Button("Delete", role: .destructive) {
-                if let gen = generationToDelete, let id = gen.id {
+                if let item = itemToDelete, let id = item.generation.id {
                     do {
                         try DatabaseService.shared.deleteGeneration(id: id)
-                        if gen.audioFileExists {
-                            try? FileManager.default.removeItem(atPath: gen.audioPath)
+                        if item.audioFileExists {
+                            try? FileManager.default.removeItem(atPath: item.generation.audioPath)
                         }
-                        generations.removeAll { $0.id == id }
+                        items.removeAll { $0.id == item.id }
                     } catch {
                         // Database delete failed
                     }
-                    generationToDelete = nil
+                    itemToDelete = nil
                 }
             }
         } message: {
@@ -141,25 +173,47 @@ struct HistoryView: View {
         }
     }
 
-    private func loadHistory() async {
-        do {
-            generations = try DatabaseService.shared.fetchAllGenerations()
-            loadError = nil
-        } catch {
-            loadError = error.localizedDescription
+    private func reloadHistory() {
+        loadTask?.cancel()
+        if items.isEmpty {
+            isLoading = true
+        }
+        loadError = nil
+
+        loadTask = Task {
+            do {
+                let loadedItems = try await Task.detached(priority: .userInitiated) {
+                    try DatabaseService.shared.fetchAllGenerations().map(HistoryListItem.init)
+                }.value
+
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    items = loadedItems
+                    loadError = nil
+                    isLoading = false
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    if items.isEmpty {
+                        loadError = error.localizedDescription
+                    }
+                    isLoading = false
+                }
+            }
         }
     }
 
     private func deleteGenerations(at indices: IndexSet) {
         let toDelete = indices.map { filtered[$0] }
-        for gen in toDelete {
-            if let id = gen.id {
+        for item in toDelete {
+            if let id = item.generation.id {
                 do {
                     try DatabaseService.shared.deleteGeneration(id: id)
-                    if gen.audioFileExists {
-                        try? FileManager.default.removeItem(atPath: gen.audioPath)
+                    if item.audioFileExists {
+                        try? FileManager.default.removeItem(atPath: item.generation.audioPath)
                     }
-                    generations.removeAll { $0.id == id }
+                    items.removeAll { $0.id == item.id }
                 } catch {
                     // Database delete failed — don't remove from UI
                 }
@@ -167,14 +221,14 @@ struct HistoryView: View {
         }
     }
 
-    private func exportGeneration(_ gen: Generation) {
+    private func exportGeneration(_ item: HistoryListItem) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = URL(fileURLWithPath: gen.audioPath).lastPathComponent
+        panel.nameFieldStringValue = URL(fileURLWithPath: item.generation.audioPath).lastPathComponent
         panel.allowedContentTypes = [.wav]
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                try FileManager.default.copyItem(at: URL(fileURLWithPath: gen.audioPath), to: url)
+                try FileManager.default.copyItem(at: URL(fileURLWithPath: item.generation.audioPath), to: url)
             } catch {
                 exportError = "Export failed: \(error.localizedDescription)"
             }
@@ -182,39 +236,39 @@ struct HistoryView: View {
     }
 }
 
-struct HistoryRow: View {
-    let generation: Generation
+private struct HistoryRow: View {
+    let item: HistoryListItem
     let onPlay: () -> Void
     let onSaveAs: () -> Void
     let onDelete: () -> Void
 
     private var modeColor: Color {
-        AppTheme.modeColor(for: generation.mode)
+        AppTheme.modeColor(for: item.generation.mode)
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: generation.audioFileExists ? "waveform" : "exclamationmark.triangle")
-                .foregroundColor(generation.audioFileExists ? modeColor : .orange)
+            Image(systemName: item.audioFileExists ? "waveform" : "exclamationmark.triangle")
+                .foregroundColor(item.audioFileExists ? modeColor : .orange)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(generation.textPreview)
+                Text(item.textPreview)
                     .font(.body)
                     .lineLimit(1)
                 HStack(spacing: 8) {
-                    Text(generation.mode.capitalized)
+                    Text(item.generation.mode.capitalized)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(modeColor))
-                    if let voice = generation.voice, !voice.isEmpty {
+                    if let voice = item.generation.voice, !voice.isEmpty {
                         Text(voice)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    Text(generation.formattedDate)
+                    Text(item.formattedDate)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -222,7 +276,7 @@ struct HistoryRow: View {
 
             Spacer()
 
-            if let duration = generation.duration, duration > 0 {
+            if let duration = item.generation.duration, duration > 0 {
                 Text(String(format: "%.1fs", duration))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
@@ -236,7 +290,7 @@ struct HistoryRow: View {
                     .foregroundColor(AppTheme.history)
             }
             .buttonStyle(.plain)
-            .disabled(!generation.audioFileExists)
+            .disabled(!item.audioFileExists)
 
             Button {
                 onSaveAs()
@@ -246,7 +300,7 @@ struct HistoryRow: View {
                     .foregroundColor(AppTheme.history)
             }
             .buttonStyle(.plain)
-            .disabled(!generation.audioFileExists)
+            .disabled(!item.audioFileExists)
 
             Button(role: .destructive) {
                 onDelete()
@@ -257,6 +311,6 @@ struct HistoryRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
-        .opacity(generation.audioFileExists ? 1 : 0.5)
+        .opacity(item.audioFileExists ? 1 : 0.5)
     }
 }
