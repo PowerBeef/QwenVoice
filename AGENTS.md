@@ -17,7 +17,7 @@ Qwen Voice is a native macOS SwiftUI app for running Qwen3-TTS locally on Apple 
 1. A SwiftUI frontend that owns UI state, model downloads, playback, local persistence, and setup UX.
 2. A long-lived Python backend (`Sources/Resources/backend/server.py`) that runs MLX inference and communicates with Swift over newline-delimited JSON-RPC 2.0 on `stdin`/`stdout`.
 
-The app targets macOS 14+, Apple Silicon only, and uses Swift 5.9.
+The app targets macOS 15+, Apple Silicon only, and uses Swift 5.9.
 
 The current shipped UI exposes six sidebar surfaces:
 

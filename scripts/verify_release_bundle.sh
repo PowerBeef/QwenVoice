@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REQUIREMENTS_PATH="$PROJECT_DIR/Sources/Resources/requirements.txt"
+APP_MIN_MACOS_VERSION="15.0"
 
 fail() {
     echo "Error: $*" >&2
@@ -54,7 +55,7 @@ echo "[2/7] Bundled Python runs"
 echo ""
 
 echo "[3/7] Verifying bundled Python imports..."
-"$PYTHON_BIN" -c "import mlx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub"
+"$PYTHON_BIN" -c "import mlx; import mlx.core as mx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub; x = mx.array([1.0], dtype=mx.float32); mx.eval(x)"
 echo "[3/7] Core imports OK"
 echo ""
 
@@ -70,13 +71,15 @@ echo ""
 
 echo "[6/7] Verifying runtime manifest and native-library linkage..."
 EXPECTED_REQUIREMENTS_HASH="$(shasum -a 256 "$REQUIREMENTS_PATH" | awk '{print $1}')"
-"$PYTHON_BIN" - "$MANIFEST_PATH" "$EXPECTED_REQUIREMENTS_HASH" <<'PY'
+"$PYTHON_BIN" - "$MANIFEST_PATH" "$EXPECTED_REQUIREMENTS_HASH" "$APP_MIN_MACOS_VERSION" <<'PY'
 import json
+import re
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
 expected_hash = sys.argv[2]
+supported_macos = sys.argv[3]
 data = json.loads(manifest_path.read_text(encoding="utf-8"))
 
 required_keys = {
@@ -85,6 +88,10 @@ required_keys = {
     "requirements_path",
     "requirements_sha256",
     "mlx_audio_version",
+    "mlx_wheel_tag",
+    "mlx_metal_wheel_tag",
+    "mlx_core_minos",
+    "supported_minimum_macos",
     "used_vendor_wheels",
     "built_at_utc",
 }
@@ -97,6 +104,89 @@ if data["requirements_sha256"] != expected_hash:
     )
 if not data["used_vendor_wheels"]:
     raise SystemExit("Manifest reports vendor wheels were not used")
+if data["supported_minimum_macos"] != supported_macos:
+    raise SystemExit(
+        f"Manifest minimum macOS mismatch: {data['supported_minimum_macos']} != {supported_macos}"
+    )
+
+def parse_version(value: str) -> tuple[int, int]:
+    parts = value.split(".")
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return major, minor
+
+def parse_tag_version(tag: str) -> tuple[int, int]:
+    match = re.search(r"macosx_(\d+)_(\d+)_arm64", tag)
+    if not match:
+        raise SystemExit(f"Could not parse macOS target from wheel tag: {tag}")
+    return int(match.group(1)), int(match.group(2))
+
+max_version = parse_version(supported_macos)
+for key in ("mlx_wheel_tag", "mlx_metal_wheel_tag"):
+    if parse_tag_version(data[key]) > max_version:
+        raise SystemExit(
+            f"{key} targets newer macOS than supported minimum {supported_macos}: {data[key]}"
+        )
+
+if parse_version(data["mlx_core_minos"]) > max_version:
+    raise SystemExit(
+        f"mlx_core_minos targets newer macOS than supported minimum {supported_macos}: {data['mlx_core_minos']}"
+    )
+PY
+
+"$PYTHON_BIN" - "$PYTHON_ROOT" "$APP_MIN_MACOS_VERSION" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+python_root = Path(sys.argv[1])
+supported_macos = sys.argv[2]
+
+def parse_version(value: str) -> tuple[int, int]:
+    parts = value.split(".")
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return major, minor
+
+def parse_tag_version(tag: str) -> tuple[int, int]:
+    match = re.search(r"macosx_(\d+)_(\d+)_arm64", tag)
+    if not match:
+        raise SystemExit(f"Could not parse macOS target from wheel tag: {tag}")
+    return int(match.group(1)), int(match.group(2))
+
+site_packages_candidates = sorted(python_root.glob("lib/python*/site-packages"))
+if not site_packages_candidates:
+    raise SystemExit(f"Could not locate site-packages under {python_root}")
+site_packages = site_packages_candidates[0]
+
+def read_wheel_tag(prefix: str) -> str:
+    matches = sorted(site_packages.glob(f"{prefix}*.dist-info"))
+    if not matches:
+        raise SystemExit(f"Missing dist-info directory for {prefix}")
+    wheel_path = matches[0] / "WHEEL"
+    for line in wheel_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("Tag: "):
+            return line.split(":", 1)[1].strip()
+    raise SystemExit(f"Missing Tag entry in {wheel_path}")
+
+max_version = parse_version(supported_macos)
+for label, tag in (("mlx", read_wheel_tag("mlx-")), ("mlx-metal", read_wheel_tag("mlx_metal-"))):
+    if parse_tag_version(tag) > max_version:
+        raise SystemExit(f"{label} wheel tag is incompatible with macOS {supported_macos}: {tag}")
+
+core_candidates = sorted((site_packages / "mlx").glob("core.cpython-*-darwin.so"))
+if not core_candidates:
+    raise SystemExit("Could not locate mlx core extension")
+core_path = core_candidates[0]
+otool_output = subprocess.check_output(["otool", "-l", str(core_path)], text=True)
+minos_match = re.search(r"\bminos\s+(\d+\.\d+)", otool_output)
+if not minos_match:
+    raise SystemExit(f"Could not extract minos from {core_path}")
+if parse_version(minos_match.group(1)) > max_version:
+    raise SystemExit(
+        f"mlx core extension minos is incompatible with macOS {supported_macos}: {minos_match.group(1)}"
+    )
 PY
 
 LEAKED_LIBS=0

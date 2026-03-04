@@ -55,7 +55,7 @@ A standout feature of both Custom Voice and Voice Design modes is the absence of
 
 | Requirement | Detail |
 |---|---|
-| macOS | 26.0+ (currently required — macOS 15 support coming soon) |
+| macOS | 15.0+ (Sequoia) |
 | Chip | Apple Silicon (M1 / M2 / M3 / M4) |
 | RAM | 8 GB+ recommended |
 
@@ -81,7 +81,7 @@ All models are 8-bit quantised for efficient memory use and natively support nat
 
 ## Building from Source
 
-**Source build prerequisites:** Apple Silicon (M1 or later), macOS 14+, Xcode 15+, XcodeGen
+**Source build prerequisites:** Apple Silicon (M1 or later), macOS 15+, Xcode 15+, XcodeGen
 
 If you do not already have XcodeGen installed, run `brew install xcodegen` first.
 

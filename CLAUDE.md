@@ -395,7 +395,7 @@ The player implements path-pinned retry logic for autoplay after generation:
 
 - **SourceKit false errors** on cross-file Swift references are expected until the project is opened in Xcode — the build still succeeds.
 - The compiled binary is tiny (~58KB); the actual Swift code compiles into `Qwen Voice.debug.dylib` in debug builds.
-- macOS 14.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
+- macOS 15.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
 - **Changing `requirements.txt` invalidates the venv marker** — the app first tries an incremental `pip install` on the existing venv; on failure it recreates from scratch. After editing requirements manually: recreate the venv, `pip install -r requirements.txt`, and write `shasum -a 256 requirements.txt | awk '{print $1}'` to `python/.setup-complete`.
 - **`audioop-lts` is 3.13+ only** — it backports the `audioop` stdlib module removed in 3.13. The environment marker in `requirements.txt` ensures pip skips it on 3.12 where `audioop` is built-in.
 - **No auto-restart on backend crash** — if the Python process terminates, `PythonBridge.isReady` becomes `false`, `cancelAllPending(error: .processTerminated)` fires for all waiting continuations, and generation views disable. The user must quit and reopen the app. `stop()` terminates the process and waits for exit in a detached task to avoid zombie processes.

@@ -15,6 +15,7 @@ MANIFEST_PATH="$PYTHON_BUNDLE/.qwenvoice-runtime-manifest.json"
 PYTHON_VERSION="3.13"
 PYTHON_BUILD_STANDALONE_VERSION="20260211"
 PYTHON_BUILD_STANDALONE_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_STANDALONE_VERSION}/cpython-${PYTHON_VERSION}.12+${PYTHON_BUILD_STANDALONE_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
+APP_MIN_MACOS_VERSION="15.0"
 
 # --- How to update the Python standalone URL ---
 # The URL above points to a specific release from astral-sh/python-build-standalone.
@@ -82,14 +83,9 @@ echo "[3/5] Installing pip packages..."
 
 # Validate core imports
 echo "    Validating core imports..."
-if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx; import mlx_audio; import transformers; import numpy; import soundfile" 2>&1; then
+if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx; import mlx.core as mx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub; x = mx.array([1.0], dtype=mx.float32); mx.eval(x)" 2>&1; then
     rm -f "$TARBALL"
-    echo "Error: Core import validation failed — one or more packages did not install correctly"
-    exit 1
-fi
-if ! "$PYTHON_BUNDLE/bin/python3" -c "import huggingface_hub" 2>&1; then
-    rm -f "$TARBALL"
-    echo "Error: huggingface_hub import validation failed"
+    echo "Error: Core import/compute validation failed — bundled MLX runtime is not usable"
     exit 1
 fi
 if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx_audio.qwenvoice_speed_patch as p; import sys; sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)" 2>&1; then
@@ -103,8 +99,88 @@ if [ "$INSTALLED_MLX_AUDIO_VERSION" != "$EXPECTED_MLX_AUDIO_VERSION" ]; then
     echo "Error: Expected mlx-audio $EXPECTED_MLX_AUDIO_VERSION but found $INSTALLED_MLX_AUDIO_VERSION"
     exit 1
 fi
+COMPATIBILITY_INFO=$("$PYTHON_BUNDLE/bin/python3" - "$SITE_PACKAGES" "$APP_MIN_MACOS_VERSION" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+site_packages = Path(sys.argv[1])
+max_version = tuple(int(part) for part in sys.argv[2].split(".", 1))
+
+def parse_version(value: str) -> tuple[int, int]:
+    parts = value.split(".")
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return major, minor
+
+def parse_tag_version(tag: str) -> tuple[int, int]:
+    match = re.search(r"macosx_(\d+)_(\d+)_arm64", tag)
+    if not match:
+        raise SystemExit(f"Could not parse macOS target from wheel tag: {tag}")
+    return int(match.group(1)), int(match.group(2))
+
+def read_wheel_tag(prefix: str) -> str:
+    matches = sorted(site_packages.glob(f"{prefix}*.dist-info"))
+    if not matches:
+        raise SystemExit(f"Missing dist-info directory for {prefix} in {site_packages}")
+    wheel_path = matches[0] / "WHEEL"
+    for line in wheel_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("Tag: "):
+            return line.split(":", 1)[1].strip()
+    raise SystemExit(f"Missing Tag entry in {wheel_path}")
+
+mlx_tag = read_wheel_tag("mlx-")
+mlx_metal_tag = read_wheel_tag("mlx_metal-")
+
+for label, tag in (("mlx", mlx_tag), ("mlx-metal", mlx_metal_tag)):
+    tag_version = parse_tag_version(tag)
+    if tag_version > max_version:
+        raise SystemExit(
+            f"{label} wheel targets macOS {tag_version[0]}.{tag_version[1]}, "
+            f"which exceeds supported minimum {max_version[0]}.{max_version[1]}"
+        )
+
+core_candidates = sorted((site_packages / "mlx").glob("core.cpython-*-darwin.so"))
+if not core_candidates:
+    raise SystemExit("Could not locate mlx core extension for min OS validation")
+core_path = core_candidates[0]
+otool_output = subprocess.check_output(["otool", "-l", str(core_path)], text=True)
+minos_match = re.search(r"\bminos\s+(\d+\.\d+)", otool_output)
+if not minos_match:
+    raise SystemExit(f"Could not extract minos from {core_path}")
+mlx_core_minos = minos_match.group(1)
+if parse_version(mlx_core_minos) > max_version:
+    raise SystemExit(
+        f"mlx core extension minos is {mlx_core_minos}, "
+        f"which exceeds supported minimum {max_version[0]}.{max_version[1]}"
+    )
+
+print(f"mlx_wheel_tag={mlx_tag}")
+print(f"mlx_metal_wheel_tag={mlx_metal_tag}")
+print(f"mlx_core_minos={mlx_core_minos}")
+PY
+)
+MLX_WHEEL_TAG=""
+MLX_METAL_WHEEL_TAG=""
+MLX_CORE_MINOS=""
+while IFS='=' read -r key value; do
+    case "$key" in
+        mlx_wheel_tag) MLX_WHEEL_TAG="$value" ;;
+        mlx_metal_wheel_tag) MLX_METAL_WHEEL_TAG="$value" ;;
+        mlx_core_minos) MLX_CORE_MINOS="$value" ;;
+    esac
+done <<< "$COMPATIBILITY_INFO"
+if [ -z "$MLX_WHEEL_TAG" ] || [ -z "$MLX_METAL_WHEEL_TAG" ] || [ -z "$MLX_CORE_MINOS" ]; then
+    rm -f "$TARBALL"
+    echo "Error: Failed to capture bundled MLX compatibility metadata"
+    exit 1
+fi
 echo "    All core imports OK"
 echo "    mlx-audio: $INSTALLED_MLX_AUDIO_VERSION"
+echo "    mlx wheel tag: $MLX_WHEEL_TAG"
+echo "    mlx-metal wheel tag: $MLX_METAL_WHEEL_TAG"
+echo "    mlx core minos: $MLX_CORE_MINOS"
 
 # Step 3b: Write runtime manifest
 echo "    Writing runtime manifest..."
@@ -115,6 +191,10 @@ cat > "$MANIFEST_PATH" <<EOF
   "requirements_path": "$REQUIREMENTS",
   "requirements_sha256": "$REQUIREMENTS_HASH",
   "mlx_audio_version": "$INSTALLED_MLX_AUDIO_VERSION",
+  "mlx_wheel_tag": "$MLX_WHEEL_TAG",
+  "mlx_metal_wheel_tag": "$MLX_METAL_WHEEL_TAG",
+  "mlx_core_minos": "$MLX_CORE_MINOS",
+  "supported_minimum_macos": "$APP_MIN_MACOS_VERSION",
   "used_vendor_wheels": true,
   "built_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }

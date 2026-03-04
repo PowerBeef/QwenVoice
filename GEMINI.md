@@ -81,7 +81,7 @@ The project is cleanly separated into a two-process design, delineating the Swif
 
 ### Frontend (macOS App)
 - **Language**: Swift 5.9
-- **Target**: macOS 14.0+ (Sonoma), Apple Silicon only (arm64)
+- **Target**: macOS 15.0+ (Sequoia), Apple Silicon only (arm64)
 - **Framework**: SwiftUI
 - **UI/UX Design**: Premium monochromatic liquid glass aesthetic with a single soft blue-indigo accent, single ambient glow aurora background, tinted-glass chip style, and fluid micro-animations driven by a centralized `AppTheme`. Playback is currently handled by `SidebarPlayerView` in the sidebar.
 - **Project Generation**: XcodeGen (`project.yml`)
@@ -194,7 +194,7 @@ The underlying discrete multi-codebook language model interprets these prompts t
 ## 7. Gotchas
 
 - **SourceKit false errors** on cross-file Swift references are expected until the project is opened in Xcode — the build still succeeds.
-- macOS 14.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
+- macOS 15.0+ deployment target; Swift 5.9; Apple Silicon only (arm64).
 - **XcodeGen overwrites entitlements** — always use `scripts/regenerate_project.sh` instead of `xcodegen generate` directly.
 - **Asset catalogs are in transition** — `project.yml` points at `Sources/Assets.xcassets`, while the checked-in `.xcodeproj` may still reference the top-level `Assets.xcassets`.
 - **Changing `requirements.txt` invalidates the venv marker** — the app will redo full setup on next launch.
