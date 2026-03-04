@@ -55,7 +55,7 @@ A standout feature of both Custom Voice and Voice Design modes is the absence of
 
 | Requirement | Detail |
 |---|---|
-| macOS | 14.0+ (Sonoma) |
+| macOS | 26.0+ (currently required — macOS 15 support coming soon) |
 | Chip | Apple Silicon (M1 / M2 / M3 / M4) |
 | RAM | 8 GB+ recommended |
 
