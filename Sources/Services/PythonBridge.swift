@@ -67,6 +67,9 @@ final class PythonBridge: ObservableObject {
     private var activeProgressMethod: String?
     private var activeGenerationSession: GenerationSession?
     private var sidebarStatusResetTask: Task<Void, Never>?
+    private var recentStderrLines: [String] = []
+
+    private static let maxStoredStderrLines = 20
 
     // MARK: - Lifecycle
 
@@ -74,6 +77,7 @@ final class PythonBridge: ObservableObject {
     /// - Parameter pythonPath: Explicit path to the Python interpreter. If nil, uses `findPython()`.
     func start(pythonPath: String? = nil) {
         guard process == nil else { return }
+        recentStderrLines = []
 
         let proc = Process()
         let stdin = Pipe()
@@ -99,6 +103,7 @@ final class PythonBridge: ObservableObject {
 
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         env["TOKENIZERS_PARALLELISM"] = "false"
         if let ffmpegPath = Self.findFFmpeg() {
             env["QWENVOICE_FFMPEG_PATH"] = ffmpegPath
@@ -120,7 +125,7 @@ final class PythonBridge: ObservableObject {
                 self.activeGenerationSession = nil
                 self.clearActiveProgressTracking()
                 if shouldReportCrash {
-                    self.lastError = PythonBridgeError.processTerminated.localizedDescription
+                    self.lastError = self.recentStderrLines.last ?? PythonBridgeError.processTerminated.localizedDescription
                 }
                 self.cancelAllPending(error: PythonBridgeError.processTerminated)
             }
@@ -161,6 +166,7 @@ final class PythonBridge: ObservableObject {
         lastError = nil
         readBuffer = ""
         activeGenerationSession = nil
+        recentStderrLines = []
         clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
 
@@ -733,17 +739,31 @@ final class PythonBridge: ObservableObject {
 
     private func startReadingStderr(_ pipe: Pipe) {
         let handle = pipe.fileHandleForReading
-        handle.readabilityHandler = { fileHandle in
+        handle.readabilityHandler = { [weak self] fileHandle in
             let data = fileHandle.availableData
             guard !data.isEmpty else {
                 fileHandle.readabilityHandler = nil
                 return
             }
             if let text = String(data: data, encoding: .utf8) {
+                Task { @MainActor [weak self] in
+                    self?.storeStderr(text)
+                }
                 #if DEBUG
                 print("[Python stderr] \(text)", terminator: "")
                 #endif
             }
+        }
+    }
+
+    private func storeStderr(_ text: String) {
+        for line in text.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            recentStderrLines.append(trimmed)
+        }
+        if recentStderrLines.count > Self.maxStoredStderrLines {
+            recentStderrLines.removeFirst(recentStderrLines.count - Self.maxStoredStderrLines)
         }
     }
 
@@ -843,8 +863,17 @@ final class PythonBridge: ObservableObject {
 
     private static func findServerScript() -> String? {
         // 1. App bundle
+        if let bundlePath = Bundle.main.path(forResource: "server", ofType: "py") {
+            return bundlePath
+        }
         if let bundlePath = Bundle.main.path(forResource: "server", ofType: "py", inDirectory: "backend") {
             return bundlePath
+        }
+        if let resourceURL = Bundle.main.resourceURL {
+            let path = resourceURL.appendingPathComponent("server.py").path
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
         }
         if let resourceURL = Bundle.main.resourceURL {
             let path = resourceURL.appendingPathComponent("backend/server.py").path

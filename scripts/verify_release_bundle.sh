@@ -23,11 +23,13 @@ RESOURCES_DIR="$APP_PATH/Contents/Resources"
 PYTHON_ROOT="$RESOURCES_DIR/python"
 PYTHON_BIN="$PYTHON_ROOT/bin/python3"
 FFMPEG_BIN="$RESOURCES_DIR/ffmpeg"
-SERVER_SCRIPT="$RESOURCES_DIR/backend/server.py"
-if [ ! -f "$SERVER_SCRIPT" ] && [ -f "$RESOURCES_DIR/server.py" ]; then
-    SERVER_SCRIPT="$RESOURCES_DIR/server.py"
+SERVER_SCRIPT="$RESOURCES_DIR/server.py"
+if [ ! -f "$SERVER_SCRIPT" ] && [ -f "$RESOURCES_DIR/backend/server.py" ]; then
+    SERVER_SCRIPT="$RESOURCES_DIR/backend/server.py"
 fi
 MANIFEST_PATH="$PYTHON_ROOT/.qwenvoice-runtime-manifest.json"
+
+export PYTHONDONTWRITEBYTECODE=1
 
 echo "=== Qwen Voice: Verify Release Bundle ==="
 echo ""

@@ -146,7 +146,9 @@ struct SidebarStatusView: View {
     // MARK: - Crashed
 
     private func crashedView(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let detail = message.isEmpty ? "Restart the app to continue" : message
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "bolt.fill")
                     .font(.caption)
@@ -155,9 +157,10 @@ struct SidebarStatusView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
             }
-            Text("Restart the app to continue")
+            Text(detail)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
         .accessibilityIdentifier("sidebar_backendStatus_crashed")
         .padding(.horizontal, 14)

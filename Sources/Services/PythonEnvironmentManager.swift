@@ -312,6 +312,9 @@ final class PythonEnvironmentManager: ObservableObject {
             proc.arguments = arguments
             proc.standardOutput = FileHandle.nullDevice
             proc.standardError = stderr
+            var env = ProcessInfo.processInfo.environment
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            proc.environment = env
 
             nonisolated(unsafe) var resumed = false
 
@@ -352,6 +355,9 @@ final class PythonEnvironmentManager: ObservableObject {
             proc.arguments = pipArgs
             proc.standardOutput = stdout
             proc.standardError = stderr
+            var env = ProcessInfo.processInfo.environment
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            proc.environment = env
 
             nonisolated(unsafe) var installed = 0
             nonisolated(unsafe) var resumed = false
