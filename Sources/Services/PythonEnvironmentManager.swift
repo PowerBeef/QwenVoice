@@ -74,6 +74,12 @@ final class PythonEnvironmentManager: ObservableObject {
             }
             return
         }
+        if bundledRuntimeExists() {
+            state = .failed(
+                message: "The bundled Python runtime is present but could not be located.\n\nThis is a packaging issue. Reinstall the app or use a new release build."
+            )
+            return
+        }
 
         // Check existing venv with valid marker (dev fast path)
         let venvPython = Self.venvPython
@@ -432,7 +438,28 @@ final class PythonEnvironmentManager: ObservableObject {
     }
 
     private func bundledPythonPath() -> String? {
-        Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin")
+        if let bundlePath = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
+            return bundlePath
+        }
+        if let bundlePath = Bundle.main.path(forResource: "python3.13", ofType: nil, inDirectory: "python/bin") {
+            return bundlePath
+        }
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidates = [
+                resourceURL.appendingPathComponent("python/bin/python3").path,
+                resourceURL.appendingPathComponent("python/bin/python3.13").path
+            ]
+            for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private func bundledRuntimeExists() -> Bool {
+        guard let resourceURL = Bundle.main.resourceURL else { return false }
+        let runtimeRoot = resourceURL.appendingPathComponent("python").path
+        return FileManager.default.fileExists(atPath: runtimeRoot)
     }
 
     private func validateBundledRuntime(_ pythonPath: String) async throws {
