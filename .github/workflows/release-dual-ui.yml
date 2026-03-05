@@ -220,7 +220,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.release_tag }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
             exit 0
           fi
@@ -230,7 +230,7 @@ jobs:
             COMMIT_SHA="$GITHUB_SHA"
           fi
 
-          gh release create "$TAG" \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
             --title "QwenVoice ${TAG#v}" \
             --notes "Dual UI artifact release built from ${{ inputs.git_ref }}."
@@ -250,7 +250,7 @@ jobs:
           test -f "dist/QwenVoice-macos15.dmg.sha256"
           test -f "dist/release-metadata-legacy-glass.txt"
 
-          gh release upload "$TAG" \
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" \
             "dist/QwenVoice-macos26.dmg#${MODERN_BASE}.dmg" \
             "dist/QwenVoice-macos26.dmg.sha256#${MODERN_BASE}.dmg.sha256" \
             "dist/release-metadata-modern-liquid.txt#${MODERN_BASE}.metadata.txt" \
