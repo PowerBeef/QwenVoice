@@ -16,7 +16,6 @@ struct VoicesView: View {
                 Text("Voices")
                     .font(.title2.bold())
                     .foregroundStyle(AppTheme.voices)
-                    .accessibilityIdentifier("voices_title")
                 Spacer()
                 Button {
                     showingEnroll = true
@@ -118,6 +117,7 @@ struct VoicesView: View {
 
         }
         .contentColumn()
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen_voices")
         .task {
             if pythonBridge.isReady {

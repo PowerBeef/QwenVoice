@@ -15,7 +15,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT="$PROJECT_DIR/QwenVoice.xcodeproj"
 SCHEME="QwenVoiceUITests"
 TEST_BUNDLE_ID="QwenVoiceUITests"
-DESTINATION="platform=macOS"
+DESTINATION="platform=macOS,arch=arm64"
+TEST_UI_SWIFT_DEFINE="QW_UI_LIQUID"
+TEST_UI_OTHER_SWIFT_FLAGS="OTHER_SWIFT_FLAGS=\$(inherited) -D$TEST_UI_SWIFT_DEFINE"
 TEST_DIR="$PROJECT_DIR/QwenVoiceUITests"
 BUILD_ROOT="$PROJECT_DIR/build/test"
 DERIVED_DATA="$BUILD_ROOT/DerivedData"
@@ -189,11 +191,15 @@ collect_probe_filters() {
 }
 
 compute_source_fingerprint() {
-    (
-        find "$PROJECT_DIR/Sources" "$PROJECT_DIR/QwenVoiceUITests" -type f \
-            \( -name '*.swift' -o -name '*.py' -o -name '*.txt' \) -print0
-        printf '%s\0' "$PROJECT_DIR/project.yml" "$PROJECT_DIR/QwenVoice.xcodeproj/project.pbxproj"
-    ) | xargs -0 shasum 2>/dev/null | shasum | awk '{print $1}'
+    {
+        (
+            find "$PROJECT_DIR/Sources" "$PROJECT_DIR/QwenVoiceUITests" -type f \
+                \( -name '*.swift' -o -name '*.py' -o -name '*.txt' \) -print0
+            printf '%s\0' "$PROJECT_DIR/project.yml" "$PROJECT_DIR/QwenVoice.xcodeproj/project.pbxproj"
+        ) | xargs -0 shasum 2>/dev/null
+        printf 'destination %s\n' "$DESTINATION"
+        printf 'ui_profile %s\n' "$TEST_UI_SWIFT_DEFINE"
+    } | shasum | awk '{print $1}'
 }
 
 find_xctestrun_file() {
@@ -231,7 +237,8 @@ ensure_build_cache() {
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination "$DESTINATION" \
-            -derivedDataPath "$DERIVED_DATA"
+            -derivedDataPath "$DERIVED_DATA" \
+            "$TEST_UI_OTHER_SWIFT_FLAGS"
         printf '%s\n' "$current_fingerprint" > "$CACHE_FINGERPRINT_FILE"
     else
         BUILD_STATUS="reused"

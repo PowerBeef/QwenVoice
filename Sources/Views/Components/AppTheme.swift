@@ -126,18 +126,12 @@ enum AppTheme {
 
     static let uiProfile: UIProfile = {
         #if QW_UI_LIQUID && QW_UI_LEGACY_GLASS
-        #if DEBUG
-        assertionFailure("Both QW_UI_LIQUID and QW_UI_LEGACY_GLASS are set. Defaulting to legacy.")
-        #endif
         return .legacy
         #elseif QW_UI_LIQUID
         return .liquid
         #elseif QW_UI_LEGACY_GLASS
         return .legacy
         #else
-        #if DEBUG
-        assertionFailure("No UI profile compile flag set. Defaulting to legacy.")
-        #endif
         return .legacy
         #endif
     }()

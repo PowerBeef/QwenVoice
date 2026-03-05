@@ -5,7 +5,7 @@ final class VoicesViewTests: QwenVoiceUITestBase {
 
     func testVoicesScreenAvailability() {
         _ = waitForScreen(.voices)
-        assertElementExists("voices_title")
+        XCTAssertTrue(app.staticTexts["Voices"].waitForExistence(timeout: 5), "Voices title should exist")
         _ = waitForElement("voices_enrollButton", type: .button)
     }
 
