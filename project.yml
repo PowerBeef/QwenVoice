@@ -44,8 +44,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app
         PRODUCT_NAME: QwenVoice
         WRAPPER_NAME: QwenVoice.app
-        MARKETING_VERSION: "1.1.4"
-        CURRENT_PROJECT_VERSION: "8"
+        MARKETING_VERSION: "1.1.6"
+        CURRENT_PROJECT_VERSION: "9"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         INFOPLIST_FILE: Sources/Info.plist

@@ -158,19 +158,20 @@ enum AppTheme {
         case .liquid:
             return .thin
         case .legacy:
-            return .paneSplitter
+            return .thin
         }
     }
 
-    /// Optional post-processing pass to soften hard system separator seams.
-    /// Nil means no attenuation layer should be applied.
-    static var systemSeparatorAlpha: CGFloat? {
-        switch uiProfile {
-        case .liquid:
-            return nil
-        case .legacy:
-            return 0.08
-        }
+    static var legacyDividerBlendInset: CGFloat {
+        1.0
+    }
+
+    static var legacyDividerBlendAlpha: CGFloat {
+        0.16
+    }
+
+    static var legacyDividerEdgeAlpha: CGFloat {
+        0.06
     }
 
     // MARK: Section Colors
