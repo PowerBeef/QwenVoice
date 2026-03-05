@@ -15,9 +15,21 @@ extension Color {
 
 // MARK: - Glassmorphism Extension
 
-extension View {
-    func glassCard() -> some View {
-        self
+private struct GlassCardStyle: ViewModifier {
+    let profile: AppTheme.UIProfile
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch profile {
+        case .liquid:
+            liquid(content)
+        case .legacy:
+            legacy(content)
+        }
+    }
+
+    private func liquid(_ content: Content) -> some View {
+        content
             .padding(24)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -41,6 +53,64 @@ extension View {
             .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
     }
 
+    private func legacy(_ content: Content) -> some View {
+        content
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.10),
+                                AppTheme.accent.opacity(0.05),
+                                Color.white.opacity(0.02),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.24), lineWidth: 0.8)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.24), Color.black.opacity(0.18)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.3
+                    )
+                    .blendMode(.overlay)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.08), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+                    .mask(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            )
+            .shadow(color: Color.black.opacity(0.26), radius: 26, x: 0, y: 14)
+            .shadow(color: Color.white.opacity(0.04), radius: 2, x: 0, y: 1)
+    }
+}
+
+extension View {
+    func glassCard() -> some View {
+        modifier(GlassCardStyle(profile: AppTheme.uiProfile))
+    }
+
     func appAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
         self.animation(AppLaunchConfiguration.current.animation(animation), value: value)
     }
@@ -49,6 +119,28 @@ extension View {
 // MARK: - AppTheme
 
 enum AppTheme {
+    enum UIProfile: String {
+        case liquid
+        case legacy
+    }
+
+    static let uiProfile: UIProfile = {
+        #if QW_UI_LIQUID && QW_UI_LEGACY_GLASS
+        #if DEBUG
+        assertionFailure("Both QW_UI_LIQUID and QW_UI_LEGACY_GLASS are set. Defaulting to legacy.")
+        #endif
+        return .legacy
+        #elseif QW_UI_LIQUID
+        return .liquid
+        #elseif QW_UI_LEGACY_GLASS
+        return .legacy
+        #else
+        #if DEBUG
+        assertionFailure("No UI profile compile flag set. Defaulting to legacy.")
+        #endif
+        return .legacy
+        #endif
+    }()
 
     // MARK: Section Colors
 

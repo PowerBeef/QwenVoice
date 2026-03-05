@@ -1,0 +1,261 @@
+name: Release Dual UI
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Branch, tag, or commit to build"
+        required: false
+        default: "main"
+        type: string
+      artifact_label:
+        description: "Optional artifact suffix (appended to uploaded artifact names)"
+        required: false
+        default: ""
+        type: string
+      release_tag:
+        description: "Optional release tag (e.g. v1.1.6). If provided, both variants are uploaded to this release."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    name: Build ${{ matrix.variant.id }} (${{ matrix.variant.runner }})
+    runs-on: ${{ matrix.variant.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - id: modern-liquid
+            runner: macos-26
+            ui_profile: liquid
+            output_name: QwenVoice-modern-liquid-macos15+
+          - id: legacy-glass
+            runner: macos-15
+            ui_profile: legacy
+            output_name: QwenVoice-legacy-glass-macos15+
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 0
+
+      - name: Print build context
+        run: |
+          echo "variant: ${{ matrix.variant.id }}"
+          echo "runner: ${{ matrix.variant.runner }}"
+          echo "ui_profile: ${{ matrix.variant.ui_profile }}"
+          echo "output_name: ${{ matrix.variant.output_name }}"
+          echo "git_ref input: ${{ inputs.git_ref }}"
+          echo "resolved SHA: $GITHUB_SHA"
+          echo "run ID: $GITHUB_RUN_ID"
+          echo "run number: $GITHUB_RUN_NUMBER"
+          sw_vers
+          xcodebuild -version
+
+      - name: Ensure XcodeGen is installed
+        run: |
+          if command -v xcodegen >/dev/null 2>&1; then
+            echo "xcodegen already installed: $(xcodegen --version)"
+          else
+            brew install xcodegen
+            echo "xcodegen installed: $(xcodegen --version)"
+          fi
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/*.sh
+
+      - name: Build release pipeline
+        run: |
+          ./scripts/release.sh \
+            --ui-profile "${{ matrix.variant.ui_profile }}" \
+            --output-name "${{ matrix.variant.output_name }}"
+
+      - name: Verify bundled dependencies in final app
+        run: |
+          APP_PATH="build/QwenVoice.app"
+          RESOURCES_PATH="$APP_PATH/Contents/Resources"
+
+          test -d "$APP_PATH"
+          test -d "$RESOURCES_PATH"
+          test -x "$RESOURCES_PATH/ffmpeg"
+          test -d "$RESOURCES_PATH/python"
+          test -f "$RESOURCES_PATH/python/.qwenvoice-runtime-manifest.json"
+          test -x "$RESOURCES_PATH/python/bin/python3" || test -x "$RESOURCES_PATH/python/bin/python3.13"
+          test -f "$RESOURCES_PATH/server.py" || test -f "$RESOURCES_PATH/backend/server.py"
+
+          if find "$RESOURCES_PATH" -name "*.whl" -print -quit | grep -q .; then
+            echo "Error: .whl files leaked into app resources"
+            exit 1
+          fi
+          if find "$RESOURCES_PATH" \( -name "*.pyc" -o -type d -name "__pycache__" \) -print -quit | grep -q .; then
+            echo "Error: compiled Python artifacts leaked into app resources"
+            exit 1
+          fi
+
+          ./scripts/verify_release_bundle.sh "$APP_PATH"
+
+      - name: Assert outputs and generate checksums
+        run: |
+          APP_PATH="build/QwenVoice.app"
+          APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
+          DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
+          METADATA_PATH="build/release-metadata-${{ matrix.variant.id }}.txt"
+          EXPECTED_DMG_NAME="${{ matrix.variant.output_name }}.dmg"
+          EXPECTED_UI_PROFILE="${{ matrix.variant.ui_profile }}"
+
+          test -d "$APP_PATH"
+          test -f "$DMG_PATH"
+          test -f "build/release-metadata.txt"
+
+          shasum -a 256 "$DMG_PATH" > "${DMG_PATH}.sha256"
+
+          APP_MINOS="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "minos" { print $2; exit }')"
+          APP_SDK="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "sdk" { print $2; exit }')"
+          APP_SDK_MAJOR="$(printf '%s' "$APP_SDK" | cut -d. -f1)"
+
+          META_UI_PROFILE="$(grep -E '^ui_profile=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_DMG_NAME="$(grep -E '^dmg_name=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+
+          if [ "$APP_MINOS" != "15.0" ]; then
+            echo "Error: app minOS is $APP_MINOS (expected 15.0)"
+            exit 1
+          fi
+
+          if [ "$META_UI_PROFILE" != "$EXPECTED_UI_PROFILE" ]; then
+            echo "Error: metadata ui_profile is '$META_UI_PROFILE' (expected '$EXPECTED_UI_PROFILE')"
+            exit 1
+          fi
+          if [ "$META_DMG_NAME" != "$EXPECTED_DMG_NAME" ]; then
+            echo "Error: metadata dmg_name is '$META_DMG_NAME' (expected '$EXPECTED_DMG_NAME')"
+            exit 1
+          fi
+
+          if ! printf '%s' "$APP_SDK_MAJOR" | grep -Eq '^[0-9]+$'; then
+            echo "Error: could not parse SDK major from '$APP_SDK'"
+            exit 1
+          fi
+
+          case "${{ matrix.variant.id }}" in
+            legacy-glass)
+              if [ "$APP_SDK_MAJOR" -ne 15 ]; then
+                echo "Error: legacy-glass SDK major is $APP_SDK_MAJOR (expected 15.x)"
+                exit 1
+              fi
+              ;;
+            modern-liquid)
+              if [ "$APP_SDK_MAJOR" -lt 26 ]; then
+                echo "Error: modern-liquid SDK major is $APP_SDK_MAJOR (expected >= 26)"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Error: unknown matrix variant id '${{ matrix.variant.id }}'"
+              exit 1
+              ;;
+          esac
+
+          cp "build/release-metadata.txt" "$METADATA_PATH"
+          {
+            echo "git_ref_input=${{ inputs.git_ref }}"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "variant_id=${{ matrix.variant.id }}"
+            echo "variant_runner=${{ matrix.variant.runner }}"
+            echo "app_sdk=$APP_SDK"
+            echo "app_sdk_major=$APP_SDK_MAJOR"
+            echo "app_minos_asserted=$APP_MINOS"
+          } >> "$METADATA_PATH"
+
+      - name: Compute artifact name
+        run: |
+          name="qwenvoice-dual-ui-${GITHUB_RUN_NUMBER}-${{ matrix.variant.id }}"
+          label="${{ inputs.artifact_label }}"
+          if [ -n "$label" ]; then
+            safe_label="$(printf '%s' "$label" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')"
+            if [ -n "$safe_label" ]; then
+              name="${name}-${safe_label}"
+            fi
+          fi
+          echo "ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+          echo "artifact name: $name"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: |
+            build/${{ matrix.variant.output_name }}.dmg
+            build/${{ matrix.variant.output_name }}.dmg.sha256
+            build/release-metadata-${{ matrix.variant.id }}.txt
+
+  publish-release:
+    name: Publish dual UI assets to release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: ${{ inputs.release_tag != '' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: qwenvoice-dual-ui-${{ github.run_number }}-*
+          merge-multiple: true
+
+      - name: Show artifact files
+        run: find dist -maxdepth 2 -type f | sort
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+
+          COMMIT_SHA="$(grep -h '^commit_sha=' dist/release-metadata-*.txt | head -n1 | cut -d= -f2-)"
+          if [ -z "$COMMIT_SHA" ]; then
+            COMMIT_SHA="$GITHUB_SHA"
+          fi
+
+          gh release create "$TAG" \
+            --target "$COMMIT_SHA" \
+            --title "QwenVoice ${TAG#v}" \
+            --notes "Dual UI artifact release built from ${{ inputs.git_ref }}."
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          VERSION="${TAG#v}"
+          MODERN_BASE="QwenVoice-${VERSION}-modern-liquid-macos15+"
+          LEGACY_BASE="QwenVoice-${VERSION}-legacy-glass-macos15+"
+
+          test -f "dist/QwenVoice-modern-liquid-macos15+.dmg"
+          test -f "dist/QwenVoice-modern-liquid-macos15+.dmg.sha256"
+          test -f "dist/release-metadata-modern-liquid.txt"
+          test -f "dist/QwenVoice-legacy-glass-macos15+.dmg"
+          test -f "dist/QwenVoice-legacy-glass-macos15+.dmg.sha256"
+          test -f "dist/release-metadata-legacy-glass.txt"
+
+          gh release upload "$TAG" \
+            "dist/QwenVoice-modern-liquid-macos15+.dmg#${MODERN_BASE}.dmg" \
+            "dist/QwenVoice-modern-liquid-macos15+.dmg.sha256#${MODERN_BASE}.dmg.sha256" \
+            "dist/release-metadata-modern-liquid.txt#${MODERN_BASE}.metadata.txt" \
+            "dist/QwenVoice-legacy-glass-macos15+.dmg#${LEGACY_BASE}.dmg" \
+            "dist/QwenVoice-legacy-glass-macos15+.dmg.sha256#${LEGACY_BASE}.dmg.sha256" \
+            "dist/release-metadata-legacy-glass.txt#${LEGACY_BASE}.metadata.txt" \
+            --clobber

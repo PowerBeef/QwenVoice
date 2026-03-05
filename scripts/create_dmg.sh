@@ -10,7 +10,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 APP_BUNDLE_NAME="QwenVoice"
 DISPLAY_NAME="QwenVoice"
 APP_PATH="${1:-$PROJECT_DIR/build/${APP_BUNDLE_NAME}.app}"
-DMG_NAME="QwenVoice"
+DMG_NAME="${DMG_NAME:-${2:-QwenVoice}}"
 DMG_OUTPUT="$PROJECT_DIR/build/${DMG_NAME}.dmg"
 DMG_TEMP="$PROJECT_DIR/build/${DMG_NAME}-temp.dmg"
 VOLUME_NAME="$DISPLAY_NAME"
@@ -23,11 +23,16 @@ echo ""
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: App not found at: $APP_PATH"
     echo ""
-    echo "Usage: $0 [path/to/QwenVoice.app]"
+    echo "Usage: $0 [path/to/QwenVoice.app] [dmg_basename]"
     echo ""
     echo "Build the app first:"
     echo "  xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -configuration Release -archivePath build/QwenVoice.xcarchive archive"
     echo "  xcodebuild -exportArchive -archivePath build/QwenVoice.xcarchive -exportOptionsPlist ExportOptions.plist -exportPath build/"
+    exit 1
+fi
+
+if [[ "$DMG_NAME" == *"/"* ]]; then
+    echo "Error: DMG name must not contain path separators: $DMG_NAME"
     exit 1
 fi
 

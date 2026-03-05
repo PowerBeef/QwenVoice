@@ -85,6 +85,7 @@ struct QwenVoiceApp: App {
                         .frame(minWidth: 500, minHeight: 400)
                 }
             }
+            .background(WindowChromeConfigurator().allowsHitTesting(false))
             .onAppear {
                 setupAppSupport()
                 envManager.ensureEnvironment()

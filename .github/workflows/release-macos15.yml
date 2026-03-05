@@ -50,7 +50,7 @@ jobs:
         run: chmod +x scripts/*.sh
 
       - name: Build release pipeline
-        run: ./scripts/release.sh
+        run: ./scripts/release.sh --ui-profile legacy --output-name QwenVoice
 
       - name: Verify bundled dependencies in final app
         run: |
@@ -76,19 +76,18 @@ jobs:
 
           ./scripts/verify_release_bundle.sh "$APP_PATH"
 
-      - name: Assert outputs and generate release metadata
+      - name: Assert outputs and enrich release metadata
         run: |
           test -d build/QwenVoice.app
           test -f build/QwenVoice.dmg
+          test -f build/release-metadata.txt
           shasum -a 256 build/QwenVoice.dmg > build/QwenVoice.dmg.sha256
 
           {
-            echo "commit_sha=$GITHUB_SHA"
             echo "git_ref_input=${{ inputs.git_ref }}"
             echo "run_id=$GITHUB_RUN_ID"
             echo "run_number=$GITHUB_RUN_NUMBER"
-            echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          } > build/release-metadata.txt
+          } >> build/release-metadata.txt
 
       - name: Compute artifact name
         run: |

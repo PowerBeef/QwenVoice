@@ -34,6 +34,16 @@ if [ -z "$EXPECTED_MLX_AUDIO_VERSION" ]; then
     echo "Error: Could not determine pinned mlx-audio version from $REQUIREMENTS"
     exit 1
 fi
+EXPECTED_MLX_VERSION="$(grep -E '^mlx==' "$REQUIREMENTS" | head -n 1 | sed 's/^mlx==//')"
+if [ -z "$EXPECTED_MLX_VERSION" ]; then
+    echo "Error: Could not determine pinned mlx version from $REQUIREMENTS"
+    exit 1
+fi
+EXPECTED_MLX_METAL_VERSION="$(grep -E '^mlx-metal==' "$REQUIREMENTS" | head -n 1 | sed 's/^mlx-metal==//')"
+if [ -z "$EXPECTED_MLX_METAL_VERSION" ]; then
+    echo "Error: Could not determine pinned mlx-metal version from $REQUIREMENTS"
+    exit 1
+fi
 
 # Step 1: Download standalone Python
 DOWNLOAD_DIR="/tmp/qwenvoice-python-build"
@@ -80,6 +90,29 @@ REQUIREMENTS_HASH=$(shasum -a 256 "$REQUIREMENTS" | awk '{print $1}')
 echo "[3/5] Installing pip packages..."
 "$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --upgrade pip
 "$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --find-links "$VENDOR_DIR" -r "$REQUIREMENTS"
+
+# Force macOS 15-compatible MLX wheels even when bundling on newer host OS versions.
+MLX_WHEEL_CACHE_DIR="$DOWNLOAD_DIR/mlx-wheels-macos15"
+mkdir -p "$MLX_WHEEL_CACHE_DIR"
+"$PYTHON_BUNDLE/bin/python3" -m pip download \
+    --quiet \
+    --only-binary=:all: \
+    --platform macosx_15_0_arm64 \
+    --python-version "${PYTHON_SHORT_VERSION/./}" \
+    --implementation cp \
+    --abi "cp${PYTHON_SHORT_VERSION/./}" \
+    "mlx==$EXPECTED_MLX_VERSION" \
+    "mlx-metal==$EXPECTED_MLX_METAL_VERSION" \
+    -d "$MLX_WHEEL_CACHE_DIR"
+MLX_WHEEL_PATH="$(ls -1 "$MLX_WHEEL_CACHE_DIR"/mlx-"$EXPECTED_MLX_VERSION"-*.whl | head -n 1)"
+MLX_METAL_WHEEL_PATH="$(ls -1 "$MLX_WHEEL_CACHE_DIR"/mlx_metal-"$EXPECTED_MLX_METAL_VERSION"-*.whl | head -n 1)"
+if [ -z "$MLX_WHEEL_PATH" ] || [ -z "$MLX_METAL_WHEEL_PATH" ]; then
+    echo "Error: Failed to resolve macOS 15-compatible MLX wheel paths"
+    exit 1
+fi
+"$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --force-reinstall --no-deps \
+    "$MLX_WHEEL_PATH" \
+    "$MLX_METAL_WHEEL_PATH"
 
 # Validate core imports
 echo "    Validating core imports..."

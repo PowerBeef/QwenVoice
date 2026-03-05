@@ -6,6 +6,8 @@ set -euo pipefail
 #   ./scripts/release.sh              Full pipeline
 #   ./scripts/release.sh --skip-deps  Skip Python/ffmpeg bundling (fast rebuild)
 #   ./scripts/release.sh --skip-build Skip xcodebuild (repackage existing build)
+#   ./scripts/release.sh --ui-profile liquid|legacy
+#   ./scripts/release.sh --output-name <dmg_basename>
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -15,18 +17,62 @@ TOTAL_START=$(date +%s)
 
 SKIP_DEPS=false
 SKIP_BUILD=false
+UI_PROFILE="legacy"
+OUTPUT_NAME="QwenVoice"
 
-for arg in "$@"; do
-    case "$arg" in
-        --skip-deps)  SKIP_DEPS=true ;;
-        --skip-build) SKIP_BUILD=true ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --skip-deps)
+            SKIP_DEPS=true
+            shift
+            ;;
+        --skip-build)
+            SKIP_BUILD=true
+            shift
+            ;;
+        --ui-profile)
+            if [ $# -lt 2 ]; then
+                echo "Error: --ui-profile requires a value (liquid|legacy)"
+                exit 1
+            fi
+            UI_PROFILE="$2"
+            shift 2
+            ;;
+        --output-name)
+            if [ $# -lt 2 ]; then
+                echo "Error: --output-name requires a value"
+                exit 1
+            fi
+            OUTPUT_NAME="$2"
+            shift 2
+            ;;
         *)
-            echo "Unknown option: $arg"
-            echo "Usage: $0 [--skip-deps] [--skip-build]"
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--skip-deps] [--skip-build] [--ui-profile liquid|legacy] [--output-name <basename>]"
             exit 1
             ;;
     esac
 done
+
+case "$UI_PROFILE" in
+    liquid)
+        UI_SWIFT_DEFINE="QW_UI_LIQUID"
+        ;;
+    legacy)
+        UI_SWIFT_DEFINE="QW_UI_LEGACY_GLASS"
+        ;;
+    *)
+        echo "Error: unsupported --ui-profile '$UI_PROFILE' (expected liquid|legacy)"
+        exit 1
+        ;;
+esac
+
+if [[ "$OUTPUT_NAME" == *"/"* ]]; then
+    echo "Error: --output-name must not contain path separators"
+    exit 1
+fi
+
+SWIFT_FLAGS_VALUE="\$(inherited) -D $UI_SWIFT_DEFINE"
 
 step_time() {
     local start=$1
@@ -38,6 +84,8 @@ echo "=== QwenVoice: Release Build ==="
 echo ""
 if $SKIP_DEPS; then echo "  (skipping dependency bundling)"; fi
 if $SKIP_BUILD; then echo "  (skipping xcodebuild)"; fi
+echo "  ui profile: $UI_PROFILE ($UI_SWIFT_DEFINE)"
+echo "  dmg output: $OUTPUT_NAME.dmg"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -91,6 +139,7 @@ else
         -configuration Release \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+        OTHER_SWIFT_FLAGS="$SWIFT_FLAGS_VALUE" \
         build | tail -5
 
     echo ""
@@ -117,6 +166,7 @@ else
     cd "$PROJECT_DIR"
     BUILT_PRODUCTS_DIR=$(xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
+        OTHER_SWIFT_FLAGS="$SWIFT_FLAGS_VALUE" \
         -showBuildSettings 2>/dev/null \
         | grep '^\s*BUILT_PRODUCTS_DIR' \
         | sed 's/.*= //')
@@ -208,7 +258,7 @@ echo ""
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
 echo "[7/8] Creating DMG..."
-"$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+DMG_NAME="$OUTPUT_NAME" "$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 echo ""
 echo "[7/8] Create DMG — done ($(step_time $STEP_START))"
 echo ""
@@ -217,14 +267,53 @@ echo ""
 # Step 8: Report
 # ---------------------------------------------------------------------------
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
-DMG_PATH="$BUILD_DIR/QwenVoice.dmg"
+DMG_PATH="$BUILD_DIR/${OUTPUT_NAME}.dmg"
 DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
 APP_SIZE=$(du -sh "$BUILD_DIR/$APP_BUNDLE_NAME.app" | cut -f1)
+
+APP_BINARY="$BUILD_DIR/$APP_BUNDLE_NAME.app/Contents/MacOS/$APP_BUNDLE_NAME"
+extract_otool_field() {
+    local field="$1"
+    otool -l "$APP_BINARY" | awk -v key="$field" '
+        $1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next }
+        in_block && $1 == key { print $2; exit }
+    '
+}
+
+APP_MINOS="$(extract_otool_field minos)"
+SDK_VERSION="$(extract_otool_field sdk)"
+if [ -z "$APP_MINOS" ] || [ -z "$SDK_VERSION" ]; then
+    echo "Error: failed to extract app minOS/SDK from $APP_BINARY"
+    exit 1
+fi
+
+XCODE_VERSION="$(xcodebuild -version | awk 'NR==1 {print $2}')"
+if [ -z "$XCODE_VERSION" ]; then
+    echo "Error: failed to detect Xcode version"
+    exit 1
+fi
+
+COMMIT_SHA="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
+if [ -z "$COMMIT_SHA" ]; then
+    COMMIT_SHA="unknown"
+fi
+
+METADATA_PATH="$BUILD_DIR/release-metadata.txt"
+{
+    echo "commit_sha=$COMMIT_SHA"
+    echo "ui_profile=$UI_PROFILE"
+    echo "xcode_version=$XCODE_VERSION"
+    echo "sdk_version=$SDK_VERSION"
+    echo "app_minos=$APP_MINOS"
+    echo "dmg_name=$OUTPUT_NAME.dmg"
+    echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+} > "$METADATA_PATH"
 
 echo "[8/8] Release complete!"
 echo ""
 echo "  App:  $BUILD_DIR/$APP_BUNDLE_NAME.app  ($APP_SIZE)"
 echo "  DMG:  $DMG_PATH  ($DMG_SIZE)"
+echo "  Metadata: $METADATA_PATH"
 echo ""
 echo "  Total time: ${TOTAL_ELAPSED}s"
 echo ""
