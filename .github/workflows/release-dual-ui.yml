@@ -34,11 +34,11 @@ jobs:
           - id: modern-liquid
             runner: macos-26
             ui_profile: liquid
-            output_name: QwenVoice-modern-liquid-macos15+
+            output_name: QwenVoice-macos26
           - id: legacy-glass
             runner: macos-15
             ui_profile: legacy
-            output_name: QwenVoice-legacy-glass-macos15+
+            output_name: QwenVoice-macos15
 
     steps:
       - name: Check out repository
@@ -240,22 +240,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.release_tag }}"
-          VERSION="${TAG#v}"
-          MODERN_BASE="QwenVoice-${VERSION}-modern-liquid-macos15+"
-          LEGACY_BASE="QwenVoice-${VERSION}-legacy-glass-macos15+"
+          MODERN_BASE="QwenVoice-macos26"
+          LEGACY_BASE="QwenVoice-macos15"
 
-          test -f "dist/QwenVoice-modern-liquid-macos15+.dmg"
-          test -f "dist/QwenVoice-modern-liquid-macos15+.dmg.sha256"
+          test -f "dist/QwenVoice-macos26.dmg"
+          test -f "dist/QwenVoice-macos26.dmg.sha256"
           test -f "dist/release-metadata-modern-liquid.txt"
-          test -f "dist/QwenVoice-legacy-glass-macos15+.dmg"
-          test -f "dist/QwenVoice-legacy-glass-macos15+.dmg.sha256"
+          test -f "dist/QwenVoice-macos15.dmg"
+          test -f "dist/QwenVoice-macos15.dmg.sha256"
           test -f "dist/release-metadata-legacy-glass.txt"
 
           gh release upload "$TAG" \
-            "dist/QwenVoice-modern-liquid-macos15+.dmg#${MODERN_BASE}.dmg" \
-            "dist/QwenVoice-modern-liquid-macos15+.dmg.sha256#${MODERN_BASE}.dmg.sha256" \
+            "dist/QwenVoice-macos26.dmg#${MODERN_BASE}.dmg" \
+            "dist/QwenVoice-macos26.dmg.sha256#${MODERN_BASE}.dmg.sha256" \
             "dist/release-metadata-modern-liquid.txt#${MODERN_BASE}.metadata.txt" \
-            "dist/QwenVoice-legacy-glass-macos15+.dmg#${LEGACY_BASE}.dmg" \
-            "dist/QwenVoice-legacy-glass-macos15+.dmg.sha256#${LEGACY_BASE}.dmg.sha256" \
+            "dist/QwenVoice-macos15.dmg#${LEGACY_BASE}.dmg" \
+            "dist/QwenVoice-macos15.dmg.sha256#${LEGACY_BASE}.dmg.sha256" \
             "dist/release-metadata-legacy-glass.txt#${LEGACY_BASE}.metadata.txt" \
             --clobber

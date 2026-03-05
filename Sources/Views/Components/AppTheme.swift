@@ -142,6 +142,37 @@ enum AppTheme {
         #endif
     }()
 
+    // MARK: System Separator Styling
+
+    static var windowTitlebarSeparatorStyle: NSTitlebarSeparatorStyle {
+        switch uiProfile {
+        case .liquid:
+            return .automatic
+        case .legacy:
+            return .none
+        }
+    }
+
+    static var splitDividerStyle: NSSplitView.DividerStyle {
+        switch uiProfile {
+        case .liquid:
+            return .thin
+        case .legacy:
+            return .paneSplitter
+        }
+    }
+
+    /// Optional post-processing pass to soften hard system separator seams.
+    /// Nil means no attenuation layer should be applied.
+    static var systemSeparatorAlpha: CGFloat? {
+        switch uiProfile {
+        case .liquid:
+            return nil
+        case .legacy:
+            return 0.08
+        }
+    }
+
     // MARK: Section Colors
 
     static let accent = Color(light: Color(red: 0.33, green: 0.40, blue: 0.65),
