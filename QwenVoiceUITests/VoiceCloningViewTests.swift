@@ -22,11 +22,9 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
         XCTAssertTrue((transcript.value as? String)?.contains("Reference") ?? false)
 
         let editor = waitForElement("textInput_textEditor")
-        editor.click()
-        editor.typeText("Clone this text")
-
         let generate = waitForElement("textInput_generateButton", type: .button)
-        XCTAssertFalse(generate.isEnabled, "Generate should remain disabled until reference audio is selected")
+        XCTAssertFalse(editor.isEnabled, "Text entry should remain disabled until reference audio is selected and the clone model is available")
+        XCTAssertFalse(generate.isEnabled, "Generate should remain disabled until reference audio is selected and the clone model is available")
     }
 
     func testVoiceCloningMissingModelNavigation() {

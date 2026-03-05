@@ -18,14 +18,16 @@ struct CustomVoiceView: View {
         isCustomSpeaker ? .design : .custom
     }
 
-    private var isModelDownloaded: Bool {
-        guard let model = TTSModel.model(for: activeMode) else { return false }
-        let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
-        return FileManager.default.fileExists(atPath: modelDir.path)
+    private var activeModel: TTSModel? {
+        TTSModel.model(for: activeMode)
+    }
+
+    private var isModelAvailable: Bool {
+        activeModel?.isAvailable(in: QwenVoiceApp.modelsDir) ?? false
     }
 
     private var modelDisplayName: String {
-        TTSModel.model(for: activeMode)?.name ?? "Unknown"
+        activeModel?.name ?? "Unknown"
     }
 
     private let speeds: [(String, Double)] = [
@@ -62,16 +64,16 @@ struct CustomVoiceView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(AppTheme.customVoice)
-                    .disabled(!pythonBridge.isReady || !isModelDownloaded || (isCustomSpeaker && voiceDescription.isEmpty))
+                    .disabled(!pythonBridge.isReady || !isModelAvailable || (isCustomSpeaker && voiceDescription.isEmpty))
                     .accessibilityIdentifier("customVoice_batchButton")
                 }
                 .padding(.bottom, 8)
 
-                if !isModelDownloaded {
+                if !isModelAvailable {
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
-                        Text("Model \"\(modelDisplayName)\" is not downloaded.")
+                        Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
                             .font(.callout)
                         Spacer()
                         Button {
@@ -97,6 +99,7 @@ struct CustomVoiceView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                     )
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("customVoice_modelBanner")
                 }
 
@@ -209,7 +212,7 @@ struct CustomVoiceView: View {
                         buttonColor: AppTheme.customVoice,
                         onGenerate: generate
                     )
-                    .disabled(!pythonBridge.isReady || !isModelDownloaded || (isCustomSpeaker && voiceDescription.isEmpty))
+                    .disabled(!pythonBridge.isReady || !isModelAvailable || (isCustomSpeaker && voiceDescription.isEmpty))
                 }
                 .glassCard()
 
@@ -250,12 +253,9 @@ struct CustomVoiceView: View {
         guard !text.isEmpty, pythonBridge.isReady else { return }
         if isCustomSpeaker { guard !voiceDescription.isEmpty else { return } }
 
-        if let model = TTSModel.model(for: activeMode) {
-            let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
-            if !FileManager.default.fileExists(atPath: modelDir.path) {
-                errorMessage = "Model '\(model.name)' is not downloaded. Go to Settings > Models to download it."
-                return
-            }
+        if let model = activeModel, !model.isAvailable(in: QwenVoiceApp.modelsDir) {
+            errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+            return
         }
 
         isGenerating = true

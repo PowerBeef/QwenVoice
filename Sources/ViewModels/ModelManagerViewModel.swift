@@ -20,23 +20,18 @@ final class ModelManagerViewModel: ObservableObject {
     func refresh() async {
         let modelsDir = QwenVoiceApp.modelsDir
         let fileManager = FileManager.default
-        var candidates: [(id: String, folder: String, requiredRelativePaths: [String], epoch: Int)] = []
+        var candidates: [(model: TTSModel, epoch: Int)] = []
 
         for model in TTSModel.all {
             if case .downloading = statuses[model.id] { continue }
             if case .error = statuses[model.id] { continue }
 
             let epoch = beginEpoch(for: model.id)
-            let modelDir = modelsDir.appendingPathComponent(model.folder)
+            let modelDir = model.installDirectory(in: modelsDir)
 
             if fileManager.fileExists(atPath: modelDir.path) {
                 statuses[model.id] = .checking
-                candidates.append((
-                    id: model.id,
-                    folder: model.folder,
-                    requiredRelativePaths: model.requiredRelativePaths,
-                    epoch: epoch
-                ))
+                candidates.append((model: model, epoch: epoch))
             } else {
                 statuses[model.id] = .notDownloaded
             }
@@ -46,13 +41,10 @@ final class ModelManagerViewModel: ObservableObject {
 
         let results: [(String, Int, Bool, Int)] = await Task.detached(priority: .utility) {
             candidates.map { candidate in
-                let modelDir = modelsDir.appendingPathComponent(candidate.folder)
-                let isComplete = Self.isModelComplete(
-                    at: modelDir,
-                    requiredRelativePaths: candidate.requiredRelativePaths
-                )
+                let modelDir = candidate.model.installDirectory(in: modelsDir)
+                let isComplete = candidate.model.isAvailable(in: modelsDir)
                 let size = isComplete ? Self.directorySize(url: modelDir) : 0
-                return (candidate.id, candidate.epoch, isComplete, size)
+                return (candidate.model.id, candidate.epoch, isComplete, size)
             }
         }.value
 
@@ -70,7 +62,7 @@ final class ModelManagerViewModel: ObservableObject {
         statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: nil)
 
         let modelsDir = QwenVoiceApp.modelsDir
-        let targetDir = modelsDir.appendingPathComponent(model.folder)
+        let targetDir = model.installDirectory(in: modelsDir)
 
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
@@ -102,7 +94,7 @@ final class ModelManagerViewModel: ObservableObject {
             do {
                 try await downloader.downloadRepo(repo: model.huggingFaceRepo, to: targetDir)
                 guard isCurrentEpoch(epoch, for: model.id) else { return }
-                guard isModelComplete(at: targetDir, model: model) else {
+                guard model.isAvailable(in: modelsDir) else {
                     statuses[model.id] = .error(message: "Download incomplete")
                     try? FileManager.default.removeItem(at: targetDir)
                     return
@@ -145,7 +137,7 @@ final class ModelManagerViewModel: ObservableObject {
         statuses[model.id] = .notDownloaded
 
         // Clean up partial download directory
-        let targetDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
+        let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
         try? FileManager.default.removeItem(at: targetDir)
     }
 
@@ -156,7 +148,7 @@ final class ModelManagerViewModel: ObservableObject {
         downloadTasks[model.id]?.cancel()
         downloadTasks.removeValue(forKey: model.id)
 
-        let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
+        let modelDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
         try? FileManager.default.removeItem(at: modelDir)
         statuses[model.id] = .notDownloaded
     }
@@ -169,18 +161,6 @@ final class ModelManagerViewModel: ObservableObject {
 
     private func isCurrentEpoch(_ epoch: Int, for modelID: String) -> Bool {
         stateEpochs[modelID] == epoch
-    }
-
-    private func isModelComplete(at url: URL, model: TTSModel) -> Bool {
-        Self.isModelComplete(at: url, requiredRelativePaths: model.requiredRelativePaths)
-    }
-
-    private nonisolated static func isModelComplete(at url: URL, requiredRelativePaths: [String]) -> Bool {
-        let fm = FileManager.default
-        return requiredRelativePaths.allSatisfy { relativePath in
-            let fileURL = url.appendingPathComponent(relativePath)
-            return fm.fileExists(atPath: fileURL.path)
-        }
     }
 
     private nonisolated static func directorySize(url: URL) -> Int {

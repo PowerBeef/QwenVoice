@@ -31,12 +31,11 @@ final class PythonEnvironmentManager: ObservableObject {
     // MARK: - Paths
 
     private static var appSupportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("QwenVoice")
+        AppPaths.appSupportDir
     }
 
     private static var venvDir: URL {
-        appSupportDir.appendingPathComponent("python")
+        AppPaths.pythonVenvDir
     }
 
     private static var venvPython: String {

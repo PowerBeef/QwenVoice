@@ -159,11 +159,10 @@ struct QwenVoiceApp: App {
     }
 
     static var appSupportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("QwenVoice")
+        AppPaths.appSupportDir
     }
 
-    static var modelsDir: URL { appSupportDir.appendingPathComponent("models") }
-    static var outputsDir: URL { appSupportDir.appendingPathComponent("outputs") }
-    static var voicesDir: URL { appSupportDir.appendingPathComponent("voices") }
+    static var modelsDir: URL { AppPaths.modelsDir }
+    static var outputsDir: URL { AppPaths.outputsDir }
+    static var voicesDir: URL { AppPaths.voicesDir }
 }

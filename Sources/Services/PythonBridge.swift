@@ -936,8 +936,7 @@ final class PythonBridge: ObservableObject {
         }
 
         // 2. App Support venv (auto-created by PythonEnvironmentManager)
-        let appSupportVenv = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("QwenVoice/python/bin/python3").path
+        let appSupportVenv = AppPaths.pythonVenvDir.appendingPathComponent("bin/python3").path
         if fm.fileExists(atPath: appSupportVenv) {
             return appSupportVenv
         }

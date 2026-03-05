@@ -29,24 +29,48 @@ final class QwenVoiceUITestSession {
 
     private init() { }
 
-    func launchSharedApp(initialScreen: UITestScreen?, debugCapture: Bool) -> XCUIApplication {
+    func launchSharedApp(
+        initialScreen: UITestScreen?,
+        debugCapture: Bool,
+        additionalEnvironment: [String: String] = [:]
+    ) -> XCUIApplication {
         if let sharedApp, sharedApp.state != .notRunning {
             sharedApp.activate()
             return sharedApp
         }
 
-        let app = makeApplication(initialScreen: initialScreen, debugCapture: debugCapture)
+        let app = makeApplication(
+            initialScreen: initialScreen,
+            debugCapture: debugCapture,
+            additionalEnvironment: additionalEnvironment
+        )
         app.launch()
         sharedApp = app
         return app
     }
 
-    func sharedApplication(initialScreen: UITestScreen?, debugCapture: Bool) -> XCUIApplication {
-        launchSharedApp(initialScreen: initialScreen, debugCapture: debugCapture)
+    func sharedApplication(
+        initialScreen: UITestScreen?,
+        debugCapture: Bool,
+        additionalEnvironment: [String: String] = [:]
+    ) -> XCUIApplication {
+        launchSharedApp(
+            initialScreen: initialScreen,
+            debugCapture: debugCapture,
+            additionalEnvironment: additionalEnvironment
+        )
     }
 
-    func launchFreshApp(initialScreen: UITestScreen?, debugCapture: Bool) -> XCUIApplication {
-        let app = makeApplication(initialScreen: initialScreen, debugCapture: debugCapture)
+    func launchFreshApp(
+        initialScreen: UITestScreen?,
+        debugCapture: Bool,
+        additionalEnvironment: [String: String] = [:]
+    ) -> XCUIApplication {
+        let app = makeApplication(
+            initialScreen: initialScreen,
+            debugCapture: debugCapture,
+            additionalEnvironment: additionalEnvironment
+        )
         app.launch()
         return app
     }
@@ -59,7 +83,11 @@ final class QwenVoiceUITestSession {
         self.sharedApp = nil
     }
 
-    private func makeApplication(initialScreen: UITestScreen?, debugCapture: Bool) -> XCUIApplication {
+    private func makeApplication(
+        initialScreen: UITestScreen?,
+        debugCapture: Bool,
+        additionalEnvironment: [String: String]
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         var launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
@@ -74,7 +102,7 @@ final class QwenVoiceUITestSession {
             launchArguments.append("--uitest-debug-capture")
         }
         app.launchArguments = launchArguments
-        app.launchEnvironment["QWENVOICE_UI_TEST"] = "1"
+        app.launchEnvironment = ["QWENVOICE_UI_TEST": "1"].merging(additionalEnvironment) { _, new in new }
         return app
     }
 }
@@ -86,6 +114,7 @@ class QwenVoiceUITestBase: XCTestCase {
 
     class var launchPolicy: UITestLaunchPolicy { .sharedPerClass }
     class var initialScreen: UITestScreen? { nil }
+    class var additionalLaunchEnvironment: [String: String] { [:] }
 
     private var debugCaptureEnabled: Bool {
         let flag = ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] ?? ""
@@ -98,7 +127,8 @@ class QwenVoiceUITestBase: XCTestCase {
             _ = QwenVoiceUITestSession.shared.launchSharedApp(
                 initialScreen: initialScreen,
                 debugCapture: ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] == "1"
-                    || ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] == "true"
+                    || ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] == "true",
+                additionalEnvironment: additionalLaunchEnvironment
             )
         }
     }
@@ -117,12 +147,14 @@ class QwenVoiceUITestBase: XCTestCase {
         case .sharedPerClass:
             app = QwenVoiceUITestSession.shared.sharedApplication(
                 initialScreen: type(of: self).initialScreen,
-                debugCapture: debugCaptureEnabled
+                debugCapture: debugCaptureEnabled,
+                additionalEnvironment: type(of: self).additionalLaunchEnvironment
             )
         case .freshPerTest:
             app = QwenVoiceUITestSession.shared.launchFreshApp(
                 initialScreen: type(of: self).initialScreen,
-                debugCapture: debugCaptureEnabled
+                debugCapture: debugCaptureEnabled,
+                additionalEnvironment: type(of: self).additionalLaunchEnvironment
             )
         }
 
@@ -151,7 +183,8 @@ class QwenVoiceUITestBase: XCTestCase {
     func launchSharedApp(initialScreen: UITestScreen? = nil) {
         app = QwenVoiceUITestSession.shared.launchSharedApp(
             initialScreen: initialScreen,
-            debugCapture: debugCaptureEnabled
+            debugCapture: debugCaptureEnabled,
+            additionalEnvironment: type(of: self).additionalLaunchEnvironment
         )
     }
 
@@ -211,12 +244,28 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func waitForBackendStatusElement(timeout: TimeInterval = 5) -> XCUIElement {
-        let element = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus").firstMatch
-        XCTAssertTrue(
-            element.waitForExistence(timeout: timeout),
-            "Backend status indicator should exist"
-        )
-        return element
+        let identifiers = [
+            "sidebar_backendStatus",
+            "sidebar_backendStatus_idle",
+            "sidebar_backendStatus_starting",
+            "sidebar_backendStatus_active",
+            "sidebar_backendStatus_error",
+            "sidebar_backendStatus_crashed",
+        ]
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            for identifier in identifiers {
+                let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+                if element.exists {
+                    return element
+                }
+            }
+            usleep(250_000)
+        }
+
+        XCTFail("Backend status indicator should exist")
+        return app.descendants(matching: .any).matching(identifier: identifiers[0]).firstMatch
     }
 
     func waitForElement(

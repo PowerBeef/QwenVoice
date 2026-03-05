@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a TTS model that can be downloaded and used for generation.
-struct TTSModel: Identifiable, Hashable {
+struct TTSModel: Identifiable, Hashable, Sendable {
     let id: String          // e.g. "pro_custom"
     let name: String        // e.g. "Custom Voice"
     let folder: String      // e.g. "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
@@ -10,7 +10,7 @@ struct TTSModel: Identifiable, Hashable {
     let requiredRelativePaths: [String]
 }
 
-enum GenerationMode: String, CaseIterable, Codable, Hashable {
+enum GenerationMode: String, CaseIterable, Codable, Hashable, Sendable {
     case custom
     case design
     case clone
@@ -82,6 +82,18 @@ extension TTSModel {
     /// Find the model for a given generation mode
     static func model(for mode: GenerationMode) -> TTSModel? {
         all.first { $0.mode == mode }
+    }
+
+    func installDirectory(in modelsDirectory: URL) -> URL {
+        modelsDirectory.appendingPathComponent(folder, isDirectory: true)
+    }
+
+    func isAvailable(in modelsDirectory: URL, fileManager: FileManager = .default) -> Bool {
+        let installDirectory = installDirectory(in: modelsDirectory)
+        return requiredRelativePaths.allSatisfy { relativePath in
+            let fileURL = installDirectory.appendingPathComponent(relativePath)
+            return fileManager.fileExists(atPath: fileURL.path)
+        }
     }
 
     /// Available English speakers

@@ -122,6 +122,12 @@ struct BatchGenerationSheet: View {
                 return
             }
 
+            guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
+                errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+                isProcessing = false
+                return
+            }
+
             if mode == .design && (voiceDescription ?? "").isEmpty {
                 errorMessage = "Enter a voice description before starting batch generation."
                 isProcessing = false

@@ -70,20 +70,25 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         emotionField.typeText("Bright and energetic")
         XCTAssertEqual(emotionField.value as? String, "Bright and energetic")
 
+        let editor = waitForElement("textInput_textEditor")
+        let modelBanner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
+        if modelBanner.exists {
+            XCTAssertFalse(editor.isEnabled, "Text input should be disabled when the active model is unavailable")
+        } else {
+            editor.click()
+            editor.typeText("This is a UI test prompt.")
+            XCTAssertTrue(
+                app.staticTexts["textInput_charCount"].waitForExistence(timeout: 2),
+                "Character count should remain visible after typing"
+            )
+        }
+
         let customSpeaker = waitForElement("customVoice_speaker_custom", type: .button)
         customSpeaker.click()
         let voiceField = waitForElement("customVoice_voiceDescriptionField", type: .textField)
         voiceField.click()
         voiceField.typeText("A calm narrator voice")
         XCTAssertTrue((voiceField.value as? String)?.contains("calm") ?? false)
-
-        let editor = waitForElement("textInput_textEditor")
-        editor.click()
-        editor.typeText("This is a UI test prompt.")
-        XCTAssertTrue(
-            app.staticTexts["textInput_charCount"].waitForExistence(timeout: 2),
-            "Character count should remain visible after typing"
-        )
     }
 
     func testModelMissingNavigationPath() {

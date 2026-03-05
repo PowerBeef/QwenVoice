@@ -145,6 +145,7 @@ collect_suite_filters() {
         ui)
             append_filter "$TEST_BUNDLE_ID/SidebarNavigationTests"
             append_filter "$TEST_BUNDLE_ID/CustomVoiceViewTests"
+            append_filter "$TEST_BUNDLE_ID/ModelAvailabilityConsistencyTests"
             append_filter "$TEST_BUNDLE_ID/VoiceCloningViewTests"
             append_filter "$TEST_BUNDLE_ID/PreferencesViewTests"
             append_filter "$TEST_BUNDLE_ID/ModelsViewTests"

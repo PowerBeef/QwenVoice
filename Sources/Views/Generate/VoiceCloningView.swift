@@ -15,14 +15,16 @@ struct VoiceCloningView: View {
     @State private var isDragOver = false
     @State private var showingBatch = false
 
-    private var isModelDownloaded: Bool {
-        guard let model = TTSModel.model(for: .clone) else { return false }
-        let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
-        return FileManager.default.fileExists(atPath: modelDir.path)
+    private var cloneModel: TTSModel? {
+        TTSModel.model(for: .clone)
+    }
+
+    private var isModelAvailable: Bool {
+        cloneModel?.isAvailable(in: QwenVoiceApp.modelsDir) ?? false
     }
 
     private var modelDisplayName: String {
-        TTSModel.model(for: .clone)?.name ?? "Unknown"
+        cloneModel?.name ?? "Unknown"
     }
 
     var body: some View {
@@ -52,16 +54,16 @@ struct VoiceCloningView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(AppTheme.voiceCloning)
-                    .disabled(!pythonBridge.isReady || referenceAudioPath == nil || !isModelDownloaded)
+                    .disabled(!pythonBridge.isReady || referenceAudioPath == nil || !isModelAvailable)
                     .accessibilityIdentifier("voiceCloning_batchButton")
                 }
                 .padding(.bottom, 8)
 
-                if !isModelDownloaded {
+                if !isModelAvailable {
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
-                        Text("Model \"\(modelDisplayName)\" is not downloaded.")
+                        Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
                             .font(.callout)
                         Spacer()
                         Button {
@@ -87,6 +89,7 @@ struct VoiceCloningView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                     )
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("voiceCloning_modelBanner")
                 }
 
@@ -235,7 +238,7 @@ struct VoiceCloningView: View {
                         buttonColor: AppTheme.voiceCloning,
                         onGenerate: generate
                     )
-                    .disabled(!pythonBridge.isReady || !isModelDownloaded || referenceAudioPath == nil)
+                    .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
                 }
                 .glassCard()
 
@@ -282,12 +285,9 @@ struct VoiceCloningView: View {
         }
         guard pythonBridge.isReady else { return }
 
-        if let model = TTSModel.model(for: .clone) {
-            let modelDir = QwenVoiceApp.modelsDir.appendingPathComponent(model.folder)
-            if !FileManager.default.fileExists(atPath: modelDir.path) {
-                errorMessage = "Model '\(model.name)' is not downloaded. Go to Settings > Models to download it."
-                return
-            }
+        if let model = cloneModel, !model.isAvailable(in: QwenVoiceApp.modelsDir) {
+            errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+            return
         }
 
         isGenerating = true
