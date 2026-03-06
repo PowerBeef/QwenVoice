@@ -1,142 +1,67 @@
-# Controlling tone and emotion in Qwen3-TTS
+# Tone and Emotion in QwenVoice
 
-Qwen3-TTS uses **natural language instructions** — not SSML, special tokens, or numeric sliders — as its sole mechanism for controlling emotion, tone, and speech cadence. The `instruct` parameter accepts free-form text descriptions like "Speak in an incredulous tone, but with a hint of panic beginning to creep into your voice," and the model adapts its output accordingly. Only the **1.7B-parameter models** (CustomVoice and VoiceDesign) support this instruction-based control; the 0.6B variants and Base models lack it entirely.
+This guide focuses on what QwenVoice currently exposes, then calls out where the standalone CLI or broader Qwen3-TTS ecosystem goes beyond the shipped macOS app.
 
-The system builds on a discrete multi-codebook language model architecture with a proprietary 12Hz speech tokenizer that preserves paralinguistic information — breath, hesitation, and emotional intensity. This means the model can also automatically adapt prosody based on the semantics of the input text itself, even without explicit instructions. However, the instruction system's controllability is probabilistic rather than deterministic: the model treats instructions as soft guidance, and complex multi-dimensional requests may not always be followed precisely.
+## What the Shipped App Exposes
 
-## Only two model variants offer style control
+The shipped GUI controls tone and emotion through natural-language instructions, not SSML and not explicit temperature/max-token sliders.
 
-The Qwen3-TTS family consists of six models, but the distinction that matters most is whether a given model supports the `instruct` parameter:
+Current app behavior:
 
-| Model | Instruction control | Use case |
-|---|---|---|
-| **Qwen3-TTS-12Hz-1.7B-CustomVoice** | ✅ Yes | Modify emotion/tone of 9 preset voices |
-| **Qwen3-TTS-12Hz-1.7B-VoiceDesign** | ✅ Yes | Create entirely new voices with specified style |
-| Qwen3-TTS-12Hz-1.7B-Base | ❌ No | Voice cloning from reference audio |
-| Qwen3-TTS-12Hz-0.6B-CustomVoice | ❌ No | Preset voices without style control |
-| Qwen3-TTS-12Hz-0.6B-Base | ❌ No | Voice cloning only |
-| qwen3-tts-instruct-flash (cloud API) | ✅ Yes | Alibaba Cloud endpoint with strongest control |
+- **Custom Voice** uses one of the shipped English speakers plus an instruction prompt
+- **Voice Design** is reached inside the Custom Voice screen by switching to the `Custom` speaker chip
+- **Voice Cloning** clones from reference audio and does not expose a separate instruction-style tone control surface
+- the shipping GUI does **not** expose streaming preview, temperature, or max-token controls
 
-The **CustomVoice** model lets you pick from nine preset speakers (e.g., Vivian, Ryan, Serena) and then layer emotional or stylistic modifications on top. The **VoiceDesign** model creates entirely new voices from scratch based on your text description, simultaneously defining both the voice identity and the emotional delivery. The cloud-only **instruct-flash** model through Alibaba's DashScope API reportedly offers the most precise control, including adjustable speech rate, pitch, and volume parameters beyond what the open-source models expose.
+Useful instruction patterns in the shipped app:
 
-## The `instruct` parameter drives all prosody control
+- emotional delivery: `calm and reassuring`, `frustrated but controlled`, `nervous and unsure`
+- pacing and cadence: `slow, deliberate pace`, `quick and energetic`, `measured with slight pauses`
+- character and timbre: `warm documentary narrator`, `dry late-night radio host`, `soft-spoken teacher`
 
-There are no SSML tags, no `<prosody>` elements, no special tokens, and no chat template markup. The entire control surface is a single natural language string passed as the `instruct` parameter. The model's official tagline captures the philosophy: **"what you imagine is what you hear."**
+## What the Standalone CLI Exposes
 
-For the **CustomVoice** model, the API looks like this:
+The CLI in `cli/` is broader than the shipped GUI in two important ways:
 
-```python
-from qwen_tts import Qwen3TTSModel
-import torch, soundfile as sf
+1. it still exposes a wider speaker map in `cli/main.py`
+2. it remains a direct interactive terminal workflow rather than the app’s curated GUI flow
 
-model = Qwen3TTSModel.from_pretrained(
-    "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
-    device_map="cuda:0",
-    dtype=torch.bfloat16,
-    attn_implementation="flash_attention_2",
-)
+That means CLI examples or speaker counts should not be treated as shipped-app UI facts.
 
-# Angry delivery
-wavs, sr = model.generate_custom_voice(
-    text="其实我真的有发现，我是一个特别善于观察别人情绪的人。",
-    language="Chinese",
-    speaker="Vivian",
-    instruct="用特别愤怒的语气说",  # "Say it in a particularly angry tone"
-)
-sf.write("angry_output.wav", wavs[0], sr)
+## Broader Qwen3-TTS Notes
 
-# Happy delivery in English
-wavs, sr = model.generate_custom_voice(
-    text="She said she would be here by noon.",
-    language="English",
-    speaker="Ryan",
-    instruct="Very happy.",
-)
-```
+Qwen3-TTS itself is more flexible than the current app surface. In the broader ecosystem you may see references to:
 
-For the **VoiceDesign** model, the `instruct` parameter carries more weight because it simultaneously defines the voice character and the emotional style:
+- additional speakers or languages outside the app’s shipped UI
+- backend-only streaming preview
+- advanced sampling controls such as `temperature`
+- cloud-only or framework-specific integrations
 
-```python
-model = Qwen3TTSModel.from_pretrained(
-    "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-    device_map="cuda:0",
-    dtype=torch.bfloat16,
-    attn_implementation="flash_attention_2",
-)
+Those are informational for power users and benchmark tooling, but they are not the current QwenVoice GUI contract unless the app docs explicitly say otherwise.
 
-# Panicked, incredulous tone
-wavs, sr = model.generate_voice_design(
-    text="It's in the top drawer... wait, it's empty? No way, that's impossible!",
-    language="English",
-    instruct="Speak in an incredulous tone, but with a hint of panic beginning to creep into your voice.",
-)
+## Practical Guidance
 
-# Nervous teenager gaining confidence
-wavs, sr = model.generate_voice_design(
-    text="H-hey! You dropped your... uh... calculus notebook? I mean, I think it's yours? Maybe?",
-    language="English",
-    instruct="Male, 17 years old, tenor range, gaining confidence - deeper breath support now, though vowels still tighten when nervous",
-)
-```
+- Be specific: combine voice character, emotional state, and pacing in one instruction.
+- Keep requests concrete: `calm middle-aged narrator with steady pacing` works better than `make it better`.
+- Iterate wording: instruction following is probabilistic, so small prompt changes can materially change the result.
+- For consistent stylized production, design a voice first and then clone from a reference workflow rather than trying to rediscover the exact same tone every run.
 
-When serving via vLLM-Omni's OpenAI-compatible `/v1/audio/speech` endpoint, the same concept maps to an `instructions` field in JSON:
+## Examples
 
-```json
-{
-    "input": "I'm so happy to see you!",
-    "voice": "vivian",
-    "response_format": "wav",
-    "task_type": "CustomVoice",
-    "language": "Auto",
-    "instructions": "Speak with excitement and enthusiasm",
-    "max_new_tokens": 2048
-}
-```
+Custom Voice:
 
-## Writing effective instruction prompts
+> Speak in a calm, slightly tired voice, like someone explaining a long day.
 
-The Alibaba Cloud documentation provides explicit guidance on crafting instructions that the model follows well. The core principles: **be specific, be multi-dimensional, and be objective**. An instruction like "high-pitched and energetic" works far better than "nice voice." Combining multiple acoustic dimensions — pitch, speed, emotion, and timbre — in a single description outperforms single-dimension requests.
+Voice Design:
 
-Documented instruction strings that work well span several categories. For **emotion and tone**: `"Very happy."`, `"Angry and frustrated tone"`, `"Sad and tearful voice"`, `"Calm, soothing, and reassuring"`, and `"用特别愤怒的语气说"` (angry, in Chinese). For **speaking speed and cadence**: `"Speak quickly with a rising intonation, suitable for introducing fashion products"`, `"Slow, deliberate pace with dramatic pauses"`, and `"a steady speaking speed and clear articulation"`. For **voice character descriptions** (VoiceDesign model): `"A composed middle-aged male announcer with a deep, rich and magnetic voice, a steady speaking speed and clear articulation, suitable for news broadcasting or documentary commentary"` and `"体现撒娇稚嫩的萝莉女声，音调偏高且起伏明显"` (a childish, high-pitched female voice with noticeable fluctuations).
+> A composed documentary narrator with a low, warm voice and deliberate pacing.
 
-Beyond the `instruct` parameter, standard Hugging Face generation kwargs offer indirect control. Parameters like **`temperature`** affect prosodic variability, **`top_p`** controls nucleus sampling diversity, and **`max_new_tokens`** (default 2048) limits output length. Community integrations like ComfyUI nodes also expose a **`pause_seconds`** parameter for controlling timing between dialogue segments and per-punctuation pause durations for rhythm control. Different random **seeds** produce noticeably different prosodic realizations of the same text and instruction, so iterating seeds is a practical way to find a preferred delivery.
+Voice Cloning support text:
 
-## The Voice Design-to-Clone workflow preserves styled voices
+> Use a clean 5–10 second reference clip and include the transcript if possible.
 
-For projects requiring consistent emotional delivery across many utterances — audiobooks, game dialogue, or radio dramas — the official documentation describes a powerful two-step workflow. First, use VoiceDesign to generate a short reference clip that embodies the desired persona and emotional style. Then, feed that clip into the Base model's `create_voice_clone_prompt()` to create a reusable voice prompt:
+## Related Docs
 
-```python
-# Step 1: Create a styled voice
-ref_wavs, sr = design_model.generate_voice_design(
-    text="H-hey! You dropped your... uh... calculus notebook?",
-    language="English",
-    instruct="Male, 17 years old, tenor range, gaining confidence",
-)
-
-# Step 2: Build a reusable clone prompt from the styled reference
-voice_clone_prompt = clone_model.create_voice_clone_prompt(
-    ref_audio=(ref_wavs[0], sr),
-    ref_text="H-hey! You dropped your... uh... calculus notebook?",
-)
-
-# Step 3: Generate new lines with consistent voice
-wavs, sr = clone_model.generate_voice_clone(
-    text="Actually, I think I saw it in the library.",
-    language="English",
-    voice_clone_prompt=voice_clone_prompt,
-)
-```
-
-This approach bakes emotional characteristics into a persistent voice identity that can be reused across any number of utterances, even though the Base model itself doesn't natively support instruction control. It effectively separates voice design (a one-time creative step) from batch production.
-
-## Known limitations and community-reported issues
-
-Several practical limitations shape what is achievable with Qwen3-TTS's style control system. The most significant: **instruction control is available only in the 1.7B-parameter models**, and via the cloud API, instruction control is limited to **Chinese and English only** with a maximum of **1,600 tokens**. The 0.6B models, while lighter on VRAM (roughly 4GB vs. 8GB), sacrifice instruction-following entirely.
-
-Community users report **occasional random emotional outbursts** — unexpected laughing or moaning — during long generations, likely caused by the autoregressive model drifting in token space. A related issue is **infinite generation loops** where the model fails to emit an end-of-sequence token; the recommended workaround is reducing `max_new_tokens` to 1024 and keeping reference audio between 5–15 seconds. Multiple users also note that **some voices carry a slight Asian accent in English**, particularly the Chinese-native preset speakers.
-
-On the InstructTTSEval benchmark, the VoiceDesign model scored **85.2 APS** (Chinese) and **82.9 APS** (English), substantially outperforming GPT-4o-mini-tts at 54.9 and 76.4 respectively. These numbers confirm strong instruction-following ability, but the model's control remains probabilistic. Complex, multi-dimensional instructions may produce inconsistent results across runs, and the model sometimes ignores specific aspects of detailed prompts. Iterating with different seeds and slightly rephrased instructions is the most practical workaround for production use.
-
-## Conclusion
-
-Qwen3-TTS represents a fundamentally different paradigm from SSML-based TTS systems. Rather than XML markup with numeric pitch and rate values, it leverages the language understanding capabilities of its underlying LLM to interpret natural language style descriptions. This makes it remarkably flexible — you can describe a "nervous teenager gaining confidence" or "an incredulous tone with creeping panic" — but also less deterministic than traditional parametric control. The most effective approach combines three strategies: choosing the right model variant (1.7B-CustomVoice for modifying preset voices, 1.7B-VoiceDesign for creating new ones), writing multi-dimensional instruction prompts that specify emotion, pitch, speed, and character simultaneously, and using the Voice Design-to-Clone pipeline to lock in a styled voice for consistent batch production. For applications requiring the most precise control, the DashScope cloud API's instruct-flash model adds explicit speech rate, pitch, and volume parameters beyond what the open-source models expose.
+- [`README.md`](README.md)
+- [`docs/reference/current-state.md`](docs/reference/current-state.md)
+- [`cli/README.md`](cli/README.md)

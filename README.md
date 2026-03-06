@@ -1,88 +1,97 @@
 <div align="center">
-  <img src="docs/social_preview.png" alt="QwenVoice — Offline Text-to-Speech for Mac with Voice Cloning">
+  <img src="docs/social_preview.png" alt="QwenVoice — offline Qwen3-TTS for macOS with custom voices, voice design, and voice cloning">
 </div>
 
 ## Screenshots
 
-<img width="1868" height="1676" alt="qwenvoice-screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
-
+<img width="1868" height="1676" alt="QwenVoice screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
 
 ## Overview
 
-QwenVoice is a native SwiftUI macOS application that brings state-of-the-art text-to-speech to Apple Silicon Macs with no Python install, no terminal, and no dependencies required of the user — just download and run.
+QwenVoice is a native macOS app for Qwen3-TTS with custom voices, voice design, and voice cloning, 100% offline on Apple Silicon.
 
-It runs the Qwen3-TTS model family entirely offline via Apple's MLX framework, delivering fast, low-latency, low-heat inference on M-series chips. The app communicates with a Python backend over JSON-RPC 2.0 via stdin/stdout, managed transparently as a background process.
+It uses a SwiftUI frontend plus a long-lived Python backend that runs MLX inference locally. End users do not need to install Python or use the terminal when running the packaged app.
 
-## Features
+## Shipped Modes
 
-### Custom Voice & Voice Design
+### Custom Voice
 
-Generate speech using 4 built-in English speakers (Ryan, Aiden, Serena, Vivian) or create entirely new voice identities from a text description (e.g. "deep narrator", "excited child"). Both modes are controlled entirely through natural language instructions — there are no sliders or SSML tags. The underlying discrete multi-codebook language model natively interprets prompts to modulate breath, pitch, resonance, and emotional delivery.
+Generate speech with the app’s built-in English speakers:
+
+- Ryan
+- Aiden
+- Serena
+- Vivian
+
+### Voice Design
+
+Voice Design is currently accessed inside the **Custom Voice** screen by switching to the `Custom` speaker chip. It uses natural-language instructions to create a new voice identity rather than a preset speaker.
 
 ### Voice Cloning
 
-Clone any voice from a short 5–10 second audio sample (WAV, MP3, AIFF, M4A, FLAC, or OGG). Optionally provide a transcript of the reference audio to improve accuracy.
+Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, and OGG input and can also use an optional transcript for better cloning accuracy.
 
-### Model Manager
+## What the App Does Not Expose
 
-Download and manage MLX models directly from HuggingFace inside the app. No browser or command line needed. Uses a native URLSession-based downloader with real-time progress tracking.
+- no streaming preview UI
+- no temperature or max-token controls
+- no standalone Voice Design sidebar destination
 
-### Generation History
+The backend still supports benchmark/internal streaming and advanced sampling parameters, but the shipping GUI intentionally uses the non-streaming generation path only.
 
-Every generation is persisted to a local SQLite database (via GRDB). The History view lists generations sorted by date (newest first) and supports text search filtering. Each entry can be played back instantly, revealed in Finder, or deleted.
+## Features
 
-### Batch Generation
-
-Submit multiple text entries for sequential generation in a single session.
-
-### Additional Features
-
-- **Waveform visualisation** — Live waveform rendered for generated audio clips (via AVFoundation + vDSP)
-- **Reveal in Finder** — Jump directly to any generated file (Cmd+Shift+R)
-- **Keyboard shortcuts** — Cmd+Return to generate, Space to play/pause, Cmd+. to stop, Cmd+Shift+O to open the output folder
-- **CLI companion** — A standalone Python CLI in `cli/` for headless or scripted use
-
-## Tone & Emotion Control
-
-A standout feature of both Custom Voice and Voice Design modes is the absence of traditional parametric controls. The entire control surface is probabilistic and driven by natural language. Examples:
-
-> "Speak in an incredulous tone, but with a hint of panic beginning to creep into your voice."
-
-> "A composed middle-aged male announcer with a deep, rich and magnetic voice."
+- Native model downloads from Hugging Face
+- Local generation history stored in SQLite via GRDB
+- Batch generation for multi-line jobs
+- Sidebar waveform playback UI
+- Configurable output directory and autoplay preference
+- Standalone CLI companion in [`cli/`](cli/)
 
 ## Requirements
 
 | Requirement | Detail |
 |---|---|
-| macOS | 15.0+ (Sequoia) |
-| Chip | Apple Silicon (M1 / M2 / M3 / M4) |
+| macOS | 15.0+ |
+| Chip | Apple Silicon |
 | RAM | 8 GB+ recommended |
 
-## Install
+## Install from GitHub Releases
 
-1. Download `QwenVoice.dmg` from [Releases](https://github.com/PowerBeef/QwenVoice/releases)
-2. Drag to `/Applications`
-3. Remove the quarantine attribute (the app is unsigned):
+Download the appropriate DMG from [Releases](https://github.com/PowerBeef/QwenVoice/releases).
+
+Current GitHub release builds are produced by the dual-release workflow and typically appear as:
+
+- `QwenVoice-macos26.dmg` — modern liquid UI build
+- `QwenVoice-macos15.dmg` — legacy glass UI build
+
+Then:
+
+1. Drag `QwenVoice.app` to `/Applications`
+2. Remove the quarantine attribute because the app is unsigned:
    ```sh
    xattr -cr "/Applications/QwenVoice.app"
    ```
-4. Open the app → go to the **Models** tab → download a model → start generating
+3. Open the app, go to **Models**, download a model, and generate speech
 
 ## Models
 
-| Model | Mode | Size | HuggingFace Repo |
-|---|---|---|---|
-| Custom Voice | Custom Voice | 1.7B (8-bit) | [mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit) |
-| Voice Design | Voice Design | 1.7B (8-bit) | [mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit) |
-| Voice Cloning | Voice Cloning | 1.7B (8-bit) | [mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit) |
+Static model metadata comes from [`Sources/Resources/qwenvoice_contract.json`](Sources/Resources/qwenvoice_contract.json).
 
-All models are 8-bit quantised for efficient memory use and natively support natural language instruction inputs.
+| Mode | Model Folder | Hugging Face Repo |
+|---|---|---|
+| Custom Voice | `Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit) |
+| Voice Design | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit) |
+| Voice Cloning | `Qwen3-TTS-12Hz-1.7B-Base-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit) |
 
 ## Building from Source
 
-**Source build prerequisites:** Apple Silicon (M1 or later), macOS 15+, Xcode 15+, XcodeGen
+Source-build prerequisites:
 
-If you do not already have XcodeGen installed, run `brew install xcodegen` first.
+- macOS 15+
+- Apple Silicon
+- Xcode 15+
+- XcodeGen
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -91,110 +100,92 @@ cd QwenVoice
 open QwenVoice.xcodeproj
 ```
 
-Build and run the `QwenVoice` scheme from Xcode.
+Build the `QwenVoice` scheme from Xcode, or use:
 
-If you want to verify the checked-in Xcode project metadata before building, run `./scripts/check_project_inputs.sh`.
+```sh
+xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+```
 
-**Dev-mode runtime dependencies:** In a clean source checkout, `Sources/Resources/python/` is usually absent, so most source builds will use the local-Python fallback on first launch. Have a local Python 3.11-3.14 install available first (for example `brew install python@3.13`). The app then creates a Python venv at `~/Library/Application Support/QwenVoice/python/`, installs the backend dependencies into it, and shows setup progress in `SetupView`.
+Useful local checks:
 
-For a packaged DMG rather than a normal local Xcode build, use:
+```sh
+./scripts/check_project_inputs.sh
+./scripts/run_tests.sh
+./scripts/run_backend_tests.sh
+```
 
-**Release build:**
+### Development-mode Python behavior
+
+In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then creates a venv under `~/Library/Application Support/QwenVoice/python/` on first launch and installs the backend dependencies from `Sources/Resources/requirements.txt`.
+
+Have a local Python 3.11-3.14 install available first. A typical setup is:
+
+```sh
+brew install python@3.13
+```
+
+### Local release packaging
+
+For a local release build and DMG:
+
 ```sh
 ./scripts/release.sh
 ```
 
-**Release packaging dependencies:** `./scripts/release.sh` downloads and bundles Python 3.13 (arm64) into `Sources/Resources/python/` and ffmpeg into `Sources/Resources/ffmpeg/` before building. Those resource directories are generated build assets and are intentionally not tracked in git, so a clean clone will not contain them until the bundle scripts run. The release flow also requires network access to fetch those artifacts.
+That script bundles Python and ffmpeg, builds the Release app, verifies the bundle, and by default produces `build/QwenVoice.dmg`.
 
-After bundling those generated assets, the release script builds with `xcodebuild` and produces a DMG at `build/QwenVoice.dmg`.
+## Tone and Emotion Control
 
-## Architecture & Tech Stack
+Custom Voice and Voice Design are guided by natural-language instructions rather than SSML-style sliders or markup.
 
-QwenVoice uses a **two-process architecture**:
+See [`qwen_tone.md`](qwen_tone.md) for the current app-oriented guidance on:
 
-**SwiftUI Frontend** (`Sources/`) manages the UI, SQLite history, model downloads, and audio playback. Key components:
+- what the shipped app exposes
+- what the standalone CLI exposes
+- what broader Qwen3-TTS ecosystem notes are informational only
 
-- `PythonBridge` — Launches and manages the Python subprocess, sends JSON-RPC 2.0 requests over stdin/stdout, and handles async continuations for each pending call. Exposes typed Swift methods for every backend operation (`generateCustom`, `generateDesign`, `generateClone`, `enrollVoice`, `loadModel`, etc.)
-- `PythonEnvironmentManager` — Handles the full Python environment lifecycle: architecture check, bundled-Python fast path, venv creation, pip dependency installation with retry logic, SHA-256 marker-file validation to avoid reinstalling on every launch, and import validation before marking setup complete.
-- `HuggingFaceDownloader` — A native `URLSession`-based downloader that queries the HuggingFace tree API, resolves LFS sizes, and streams each file to disk with per-file and aggregate progress callbacks. No `huggingface-cli` dependency.
-- `DatabaseService` — SQLite persistence via GRDB with schema migrations and basic CRUD for generation history.
-- `AudioPlayerViewModel` / `AudioService` — AVFoundation-backed audio player with play/pause/stop and waveform data extraction via vDSP.
-- `ModelManagerViewModel` — Tracks download state for all three models and triggers `PythonBridge.loadModel` on selection.
+## Architecture
 
-**Python Backend** (`Sources/Resources/backend/server.py`) runs as a persistent subprocess and exposes a JSON-RPC 2.0 interface over stdin/stdout. It loads MLX model weights on demand and handles `generate`, `enroll_voice`, `list_voices`, `delete_voice`, `get_model_info`, `load_model`, `unload_model`, `ping`, and `init` methods. MLX memory is explicitly freed between generations to minimise RAM pressure. The shipping SwiftUI app uses non-streaming generation flows; benchmark/internal tooling may still exercise backend-only parameters such as streaming preview, `temperature`, and `max_tokens`.
+QwenVoice uses a two-process architecture:
 
-**Shared TTS contract** (`Sources/Resources/qwenvoice_contract.json`) is the source of truth for static model metadata, speaker groups, default speaker, output subfolders, required files, and Hugging Face repo IDs. Both the Swift app and Python backend load this manifest directly.
+- **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
+- **Python backend** in `Sources/Resources/backend/server.py` for MLX inference over newline-delimited JSON-RPC 2.0
 
-**Output directory layout** (under `~/Library/Application Support/QwenVoice/`):
+Static TTS contract data is shared by Swift and Python through `Sources/Resources/qwenvoice_contract.json`.
 
-```
-models/          ← downloaded MLX model weights
-outputs/
-  CustomVoice/   ← generated audio from Custom Voice mode
-  VoiceDesign/   ← generated audio from Voice Design mode
-  Clones/        ← generated audio from Voice Cloning mode
-voices/          ← enrolled voice reference audio
-history.sqlite   ← generation history database
-python/          ← auto-created Python venv (dev mode)
-```
+Default runtime output layout:
 
-These output subfolders are the current `outputSubfolder` values from `Sources/Resources/qwenvoice_contract.json`.
-
-**Swift package dependencies:** [GRDB.swift](https://github.com/groue/GRDB.swift) (≥ 7.0.0)
-
-**Python dependencies:** `mlx`, `mlx-audio`, `transformers`, `numpy`, `soundfile`, `huggingface-hub`, `ffmpeg` (bundled binary in release)
-
-## CLI
-
-A standalone Python CLI is available in `cli/` for headless or scripted use:
-
-```sh
-cd cli
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
+```text
+~/Library/Application Support/QwenVoice/
+  models/
+  outputs/
+    CustomVoice/
+    VoiceDesign/
+    Clones/
+  voices/
+  history.sqlite
 ```
 
-Supports Custom Voice, Voice Design, and Voice Cloning modes interactively.
+## CLI Companion
 
-## Keyboard Shortcuts
+A standalone Python CLI lives in [`cli/`](cli/) for headless or scripted workflows.
 
-| Shortcut | Action |
-|---|---|
-| Cmd+Return | Generate speech |
-| Space | Play / Pause |
-| Cmd+. | Stop playback |
-| Cmd+Shift+O | Open output folder in Finder |
-| Cmd+Shift+R | Reveal current file in Finder |
+Start here:
 
-## Credits & Open Source Acknowledgements
+- [`cli/README.md`](cli/README.md)
 
-QwenVoice is built on the shoulders of the following open source projects:
+## More Docs
 
-### Core Inference & Models
+- [`docs/README.md`](docs/README.md) — documentation index
+- [`docs/reference/current-state.md`](docs/reference/current-state.md) — current repo facts
+- [`docs/reference/testing.md`](docs/reference/testing.md) — test inventory and commands
+- [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — current strengths and caveats
 
-**[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)** — Alibaba / Qwen Team  
-The underlying text-to-speech model family. Qwen3-TTS is the discrete multi-codebook language model that performs all speech synthesis in this app. Released under the Apache 2.0 license.
+## Credits
 
-**[mlx-audio](https://github.com/Blaizzy/mlx-audio)** — Prince Canuma ([@Blaizzy](https://github.com/Blaizzy))  
-The Python library that provides MLX inference for Qwen3-TTS. Both `server.py` and `cli/main.py` call `mlx_audio.tts.utils.load_model` and `mlx_audio.tts.generate.generate_audio` directly — this is the primary inference engine. Released under the MIT license.
+QwenVoice builds on:
 
-**[MLX](https://github.com/ml-explore/mlx)** — Apple ML Research  
-The array framework for Apple Silicon that powers all on-device inference. Provides GPU/Neural Engine acceleration and the `mlx.metal.clear_cache()` call used to free VRAM between generations. Released under the MIT license.
-
-**[mlx-community on HuggingFace](https://huggingface.co/mlx-community)**  
-The community organisation that hosts the 8-bit quantised MLX model weights used by this app (`Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`, `Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit`, `Qwen3-TTS-12Hz-1.7B-Base-8bit`).
-
-### CLI Foundation
-
-**[qwen3-tts-apple-silicon](https://github.com/kapi2800/qwen3-tts-apple-silicon)** — [@kapi2800](https://github.com/kapi2800)  
-The `cli/main.py` in this repo is directly derived from kapi2800's project. The interactive menu structure, voice enrolment flow, audio conversion helpers (`convert_audio_if_needed`, `get_smart_path`), and overall CLI architecture all originate from this work. The Python backend (`server.py`) was subsequently refactored from `cli/main.py` to expose a JSON-RPC 2.0 interface for the Swift frontend, while static model/speaker metadata now lives in `Sources/Resources/qwenvoice_contract.json`.
-
-### Swift Dependencies
-
-**[GRDB.swift](https://github.com/groue/GRDB.swift)** — Gwendal Roué ([@groue](https://github.com/groue))  
-The SQLite toolkit used for generation history persistence and schema migrations. Integrated via Swift Package Manager. Released under the MIT license.
-
-### Apple Frameworks (built-in)
-
-The app also makes direct use of Apple's system frameworks: **SwiftUI** (UI layer), **AVFoundation** (audio playback), **Accelerate / vDSP** (waveform RMS computation in `WaveformService`), **CryptoKit** (SHA-256 marker-file hashing in `PythonEnvironmentManager`), and **Foundation** (process management, URLSession downloads, file I/O).
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
+- [mlx-audio](https://github.com/Blaizzy/mlx-audio)
+- [MLX](https://github.com/ml-explore/mlx)
+- [GRDB.swift](https://github.com/groue/GRDB.swift)

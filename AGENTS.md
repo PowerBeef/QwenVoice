@@ -1,10 +1,8 @@
 # AGENTS.md
 
-## Scope
+This file applies to the repository at `/Users/patricedery/Coding_Projects/QwenVoice`.
 
-This file applies to the project repository at `/Users/patricedery/Coding_Projects/QwenVoice`.
-
-Run repo-level commands from this directory:
+Run repo-level commands from:
 
 ```bash
 cd /Users/patricedery/Coding_Projects/QwenVoice
@@ -12,14 +10,12 @@ cd /Users/patricedery/Coding_Projects/QwenVoice
 
 ## Project Summary
 
-Qwen Voice is a native macOS SwiftUI app for running Qwen3-TTS locally on Apple Silicon. The app is split into:
+QwenVoice is a native macOS SwiftUI app for running Qwen3-TTS locally on Apple Silicon. It uses:
 
-1. A SwiftUI frontend that owns UI state, model downloads, playback, local persistence, and setup UX.
-2. A long-lived Python backend (`Sources/Resources/backend/server.py`) that runs MLX inference and communicates with Swift over newline-delimited JSON-RPC 2.0 on `stdin`/`stdout`.
+1. a SwiftUI frontend for UI state, downloads, playback, persistence, and setup
+2. a long-lived Python backend at `Sources/Resources/backend/server.py` that communicates with Swift over newline-delimited JSON-RPC 2.0 on `stdin`/`stdout`
 
-The app targets macOS 15+, Apple Silicon only, and uses Swift 5.9.
-
-The current shipped UI exposes six sidebar surfaces:
+The app targets macOS 15+, Apple Silicon only, and currently ships six sidebar destinations:
 
 1. Custom Voice
 2. Voice Cloning
@@ -28,85 +24,42 @@ The current shipped UI exposes six sidebar surfaces:
 5. Models
 6. Preferences
 
-There is no standalone Voice Design screen. Voice Design is currently reached inside `CustomVoiceView` by switching to the "Custom" speaker chip, which flips the active generation mode from `.custom` to `.design`.
+Voice Design is currently embedded inside `CustomVoiceView` and is reached by switching to the `Custom` speaker chip.
 
-## Source Of Truth
+## Source of Truth
 
-Trust the code first, then `project.yml`, then scripts/docs.
-
-When there is drift, prefer these sources in this order:
+Trust the live code and manifest before prose:
 
 1. `Sources/`
 2. `QwenVoiceUITests/`
-3. `scripts/`
-4. `project.yml`
-5. prose docs (`README.md`, `CLAUDE.md`, `GEMINI.md`)
+3. `QwenVoiceTests/`
+4. `backend_tests/`
+5. `scripts/`
+6. `project.yml`
+7. prose docs
 
-Important drift that exists right now:
+Shared current repo facts live in [`docs/reference/current-state.md`](docs/reference/current-state.md). Keep this file, `CLAUDE.md`, and `GEMINI.md` aligned with it.
 
-- Older clones may still have stale generated `.xcodeproj` state. If project metadata looks suspicious, trust `project.yml` and rerun `./scripts/regenerate_project.sh`.
-- Older notes may still describe Voice Design as its own screen, but it is currently folded into `CustomVoiceView`.
-- Older notes may still say `autoPlay` and `outputDirectory` are UI-only, but the live code now uses both settings.
-- Older notes may still describe a bottom playback bar, but the live player is the sidebar inset (`SidebarPlayerView`).
-- `Sources/Resources/python/` is a generated bundled runtime artifact, not the primary source of truth for dependency intent.
+## Documentation Boundaries
 
-When in doubt, verify behavior directly in code before trusting prose.
+- `README.md` is the public GitHub landing page.
+- `docs/README.md` is the internal docs index.
+- `docs/reference/` holds stable current-state reference docs.
+- Generated/vendor docs under `Sources/Resources/python/`, `cli/.venv/`, and dependency package directories are out of scope.
 
-## Repository Layout
-
-### App code
-
-- `Sources/QwenVoiceApp.swift`: app entry point, environment bootstrapping, app support directory creation, backend startup, app-level commands.
-- `Sources/ContentView.swift`: root `NavigationSplitView`, sidebar routing, detail view switching.
-- `Sources/Models/`: shared model types (`TTSModel`, `Generation`, `Voice`, `RPCMessage`, `EmotionPreset`).
-- `Sources/Services/`: backend bridge, Python environment setup, downloads, database, audio, waveform.
-- `Sources/ViewModels/`: `ModelManagerViewModel`, `AudioPlayerViewModel`.
-- `Sources/Views/`: setup flow, generation flows, library views, settings, and shared components.
-- `Sources/Resources/backend/server.py`: Python JSON-RPC server.
-- `Sources/Resources/requirements.txt`: GUI app/backend Python dependencies. This is the dependency file that drives setup hashing.
-- `Sources/Resources/vendor/`: vendored wheels for faster/offline setup. The app currently vendors a repacked `mlx_audio-0.3.1.post1` wheel with the QwenVoice speed patch included.
-- `Sources/Resources/python/`: checked-in bundled Python runtime used for release packaging. Treat this as a generated artifact, not hand-edited source.
-
-### Tests
-
-- `QwenVoiceUITests/`: macOS XCUITests. Current snapshot is 9 `*Tests.swift` files plus `QwenVoiceUITestBase.swift`.
-- `GenerationFlowTests.swift` is the only integration-style end-to-end UI generation test; it skips when required models/backend state are unavailable.
-
-### Build and release
-
-- `.github/workflows/project-inputs.yml`: CI guard that rejects checked-in `.xcodeproj` references to local-only Python cache files.
-- `project.yml`: XcodeGen source of truth. Prefer editing this over the generated `.xcodeproj`.
-- `QwenVoice.xcodeproj/`: generated project; do not hand-edit unless you are intentionally repairing generated output.
-- `scripts/`: build, test, bundling, release, benchmark, and utility scripts.
-
-### Secondary CLI
-
-- `cli/`: standalone Python CLI workflow. Useful for manual backend experiments and dependency comparison, but it is not the source of truth for the shipped app UX.
-
-## Architecture
+## Core Architecture
 
 ### Swift frontend
 
-The Swift app is state-driven and environment-object based:
-
-- `QwenVoiceApp` owns `PythonBridge`, `AudioPlayerViewModel`, `PythonEnvironmentManager`, and `ModelManagerViewModel`.
-- `PythonEnvironmentManager` gates app launch through `SetupView` until Python is usable.
-- Once ready, `ContentView` routes between `CustomVoiceView`, `VoiceCloningView`, `HistoryView`, `VoicesView`, `ModelsView`, and `PreferencesView`.
-- `CustomVoiceView` contains both the normal Custom Voice path and the Voice Design path. The `isCustomSpeaker` toggle determines whether the active mode is `.custom` or `.design`.
-- Both generation screens can open `BatchGenerationSheet`.
-
-The UI currently follows a consistent design language:
-
-- `AppTheme` centralizes accent colors, glass styling, the animated aurora background, and shared button/chip styles.
-- `glassCard()` is the standard card treatment.
-- `contentColumn()` constrains primary content to `LayoutConstants.contentMaxWidth` (currently 700).
-- `TextInputView` is the shared prompt input for generation screens.
-- The persistent playback UI is `SidebarPlayerView`, rendered inside the sidebar safe-area inset.
-- Backend state, progress, and error/crash messaging are surfaced through `SidebarStatusView`.
+- `QwenVoiceApp.swift` owns the shared app services and creates the app-support directories.
+- `ContentView.swift` hosts the `NavigationSplitView` and routes between the six shipped surfaces.
+- `PythonEnvironmentManager` gates launch through `SetupView` until Python is usable.
+- `CustomVoiceView` contains both normal Custom Voice and Voice Design behavior.
+- `VoiceCloningView` and `CustomVoiceView` can both present `BatchGenerationSheet`.
 
 ### Python backend
 
-`server.py` handles:
+`server.py` currently handles:
 
 - `ping`
 - `init`
@@ -120,42 +73,26 @@ The UI currently follows a consistent design language:
 - `get_model_info`
 - `get_speakers`
 
-Important backend traits:
+The shipping GUI uses non-streaming generation flows. Backend streaming preview and advanced sampling parameters remain benchmark/internal only.
 
-- Only one model is kept in memory at a time.
-- MLX imports are lazy (`_ensure_mlx()`).
-- GPU cache is explicitly cleared after requests (`_mx.clear_cache()` / `POST_REQUEST_CACHE_CLEAR`).
-- Voice names are sanitized before file writes/deletes.
-- Model folders may be resolved through Hugging Face `snapshots/` subdirectories (`get_smart_path`).
-- Clone reference audio is normalized into a persistent cache under `cache/normalized_clone_refs`.
-- Prepared clone context is cached in a bounded in-memory LRU (`CLONE_CONTEXT_CACHE_CAPACITY`).
-- `generate` still supports streaming preview notifications (`generation_chunk`) plus advanced sampling params for benchmark/internal tooling, but the shipping Swift app uses the non-streaming path only.
+### Shared contract
 
-Current backend/frontend reality:
+Static TTS contract data lives in `Sources/Resources/qwenvoice_contract.json`.
 
-- `convert_audio` and `get_speakers` are implemented on the backend, but the shipping Swift UI does not currently call them.
-- The shipping SwiftUI app uses non-streaming generation flows; benchmark/internal scripts are the only consumers of backend streaming and advanced sampling params.
+That manifest is the source of truth for:
 
-### Swift/Python contract
+- model registry
+- speakers
+- default speaker
+- output subfolders
+- required model files
+- Hugging Face repos
 
-If you change any RPC shape or backend behavior, update both sides:
-
-1. `Sources/Resources/backend/server.py`
-2. `Sources/Services/PythonBridge.swift`
-3. `Sources/Models/RPCMessage.swift` if new data types are needed
-4. Any affected views/view models/tests
-
-Static TTS contract data now lives in one shared manifest:
-
-1. `Sources/Resources/qwenvoice_contract.json`
-2. `Sources/Models/TTSContract.swift`
-3. `Sources/Resources/backend/server.py`
-
-`TTSModel` is now a manifest-backed Swift facade, and backend `get_model_info` / `get_speakers` also read from the same manifest. If you change models, speakers, tiers, output folders, or required files, update the manifest first and then adjust consumers/tests as needed.
+Update the manifest first when models/speakers/tiers/output folders change.
 
 ## Runtime Data Layout
 
-The app writes under:
+Default app data lives under:
 
 ```text
 ~/Library/Application Support/QwenVoice/
@@ -172,221 +109,78 @@ The app writes under:
     .setup-complete
 ```
 
-Key implications:
+If the user sets a custom output directory in Preferences, generated audio may be written outside the default `outputs/` tree.
 
-- `history.sqlite` is managed by `DatabaseService`.
-- `cache/normalized_clone_refs/` persists normalized clone reference WAVs for reuse.
-- The `python/` directory is only used for the app-support virtualenv path (primarily development or non-bundled runtime setups).
-- In packaged builds, `PythonEnvironmentManager` prefers the bundled runtime in app resources (`python/bin/python3`) and does not rely on the app-support venv.
-- The `.setup-complete` marker stores a SHA-256 of `Sources/Resources/requirements.txt` when the app-support venv path is used.
-- If the user sets a custom output directory in Preferences, generated audio may be written outside `~/Library/Application Support/QwenVoice/outputs/`, even though the default folders are still pre-created there on launch.
-
-## Build, Test, And Release
-
-Run all commands from `/Users/patricedery/Coding_Projects/QwenVoice`.
+## Build, Test, and Release
 
 ### Common commands
 
 ```bash
-# Build
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
-
-# Clean build
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
-
-# Safe project regeneration (preferred over raw xcodegen)
 ./scripts/regenerate_project.sh
-
-# Validate checked-in Xcode project inputs
 ./scripts/check_project_inputs.sh
-
-# Run default smoke UI suite
 ./scripts/run_tests.sh
-
-# Run a named suite
-./scripts/run_tests.sh --suite smoke
 ./scripts/run_tests.sh --suite ui
 ./scripts/run_tests.sh --suite integration
-./scripts/run_tests.sh --suite all
 ./scripts/run_tests.sh --suite debug
-
-# List test classes
-./scripts/run_tests.sh --list
-
-# Run one test class
-./scripts/run_tests.sh --class SidebarNavigation
-
-# Run one test method
-./scripts/run_tests.sh --test CustomVoiceViewTests/testCustomVoiceScreenCoreLayout
-
-# Run a probe
-./scripts/run_tests.sh --probe launch-speed
-./scripts/run_tests.sh --probe generation-benchmark
-
-# Release build + DMG
+./scripts/run_backend_tests.sh
 ./scripts/release.sh
 ```
 
-### Test runner behavior
+### Current test inventory
 
-- `scripts/run_tests.sh` defaults to the `smoke` suite.
-- It caches `xcodebuild build-for-testing` output under `build/test/` and reuses it when the source fingerprint is unchanged.
-- `--probe generation-benchmark` delegates to `scripts/run_generation_benchmark.sh`.
+- UI tests: 11 files / 31 test methods
+- Unit tests: 4 files / 14 test methods
+- Python backend tests: 8 `unittest` cases
 
-### XcodeGen rule
+See [`docs/reference/testing.md`](docs/reference/testing.md) for the current test commands, suites, and caveats.
 
-Use `./scripts/regenerate_project.sh`, not bare `xcodegen generate`, because XcodeGen overwrites `Sources/QwenVoice.entitlements`, the script restores it, and it validates that the generated `.xcodeproj` does not reference local-only `__pycache__` / `.pyc` files.
+### Release workflow reality
 
-### Release packaging rule
+GitHub Actions currently has:
 
-`scripts/release.sh` currently:
+- `.github/workflows/project-inputs.yml`
+- `.github/workflows/release-dual-ui.yml`
 
-1. Bundles Python with `bundle_python.sh` unless `--skip-deps` is used.
-2. Bundles `ffmpeg` with `bundle_ffmpeg.sh` unless `--skip-deps` is used.
-3. Regenerates the Xcode project.
-4. Builds the Release app.
-5. Copies the built `.app` from DerivedData into `build/`.
-6. Injects `Sources/Resources/python` and `Sources/Resources/ffmpeg` into the built `.app` because those paths are excluded from the normal Xcode resource phase.
-7. Removes `vendor`, `__pycache__`, `.pyc`, and `.whl` artifacts from the packaged app resources.
-8. Verifies the bundle and creates the DMG.
+The old single-release workflow is gone. The GitHub release workflow builds:
 
-## Current Implementation Conventions
+- `QwenVoice-macos26.dmg`
+- `QwenVoice-macos15.dmg`
 
-### UI and accessibility
-
-- Maintain `accessibilityIdentifier` coverage for interactive UI and primary assertions.
-- Current naming convention is `"{viewScope}_{elementName}"` (for example `customVoice_title`, `models_download_pro_custom`, `sidebar_backendStatus`).
-- Root screen identifiers follow `screen_*`.
-- Sidebar items follow `sidebar_*`.
-- If you rename identifiers, update the XCUITests in the same change.
-
-### Generation flow
-
-- The generate views and `BatchGenerationSheet` always call `pythonBridge.loadModel(id:)` before generating.
-- Successful generations are immediately persisted through `DatabaseService.shared.saveGeneration`.
-- Successful generations post `Notification.Name.generationSaved`, and `HistoryView` reloads from that notification.
-- Successful single-item generations only auto-play when `AudioService.shouldAutoPlay` is true.
-- `BatchGenerationSheet` does not auto-play results.
-
-Current mode routing details:
-
-- `CustomVoiceView` uses `.custom` when a built-in speaker is selected.
-- `CustomVoiceView` uses `.design` when the "Custom" speaker mode is active.
-- The visible screen title remains "Custom Voice" in both cases.
-
-### Output path handling
-
-- The generation views and batch sheet use `makeOutputPath(...)`, which delegates to `AudioService.makeOutputPath(...)`.
-- `AudioService.makeOutputPath(...)` now honors the `PreferencesView` `outputDirectory` setting.
-- If `outputDirectory` is empty, output falls back to `QwenVoiceApp.outputsDir`.
-- `QwenVoiceApp.setupAppSupport()` still pre-creates the default app-support output folders on launch even when a custom output directory is configured.
-
-### Database reality
-
-`DatabaseService` is simpler than some older docs suggest. It currently provides:
-
-- schema migrations for `generations`
-- save
-- fetch all
-- delete one
-- delete all
-
-Notably:
-
-- There is no DB-backed search helper.
-- `HistoryView` fetches all rows ordered by `createdAt.desc`.
-- Search is done in-memory inside `HistoryView`.
-
-### Models and tiers
-
-- The shipping app currently exposes only the three 1.7B "pro" models.
-- `Sources/Resources/qwenvoice_contract.json` defines `pro_custom`, `pro_design`, and `pro_clone`, and Swift/Python both load from it.
-- `pro_design` is downloadable and usable, but it is surfaced through `CustomVoiceView` instead of a dedicated sidebar destination.
-- `Generation.modelTier` is still stored in history, and generation flows now persist `model.tier` from the shared manifest.
-- `PythonBridge.getModelInfo()` and backend `get_model_info` exist, but the current `ModelsView` uses `ModelManagerViewModel` filesystem checks rather than the RPC.
-
-### Preferences and Python environment
-
-- `PreferencesView.autoPlay` is live. `CustomVoiceView` and `VoiceCloningView` check `AudioService.shouldAutoPlay` before calling `audioPlayer.playFile(...)`.
-- `PreferencesView.outputDirectory` is live via `AudioService.makeOutputPath(...)`.
-- The Python action in Preferences is runtime-dependent:
-  - With bundled Python present, the UI shows "Restart Backend" and `PythonEnvironmentManager.resetEnvironment()` only revalidates/restarts.
-  - Without bundled Python, the UI shows "Reset Environment" and deletes the app-support venv before rebuilding it.
-
-## Dependency Rules
-
-There are two Python dependency files with different roles:
-
-1. `Sources/Resources/requirements.txt`: GUI app/backend dependencies. This is what `PythonEnvironmentManager` hashes and installs for the app-support venv path.
-2. `cli/requirements.txt`: CLI environment. This currently pins `mlx-audio` to a git commit, while the app requirements use `mlx-audio==0.3.1.post1`.
-
-If you change backend Python dependencies:
-
-1. Decide whether the GUI app, the CLI, or both need the change.
-2. Update the correct requirements file(s).
-3. If the GUI app’s `mlx-audio` version changes, update the vendored wheel in `Sources/Resources/vendor/` to match. Use `./scripts/build_mlx_audio_wheel.sh` to rebuild the repacked wheel.
-4. If you refresh the bundled runtime checked into `Sources/Resources/python/`, also refresh `Sources/Resources/python/.qwenvoice-runtime-manifest.json`. The normal path is `./scripts/bundle_python.sh` or the release pipeline.
-5. Expect the app-support venv marker to invalidate because the requirements hash changes.
-
-## Known Gotchas
-
-- `PythonEnvironmentManager` intentionally avoids `/usr/bin/python3` because macOS can treat it as an installer stub. The live `PythonBridge.findPython()` fallback no longer includes `/usr/bin/python3`.
-- Local `__pycache__` directories and `*.pyc` files under `Sources/Resources/backend/` are machine-generated artifacts and must never be referenced by the checked-in `.xcodeproj`. Use `./scripts/check_project_inputs.sh` or `./scripts/regenerate_project.sh` to validate this before committing.
-- Broad recursive searches can get polluted by generated artifacts in `Sources/Resources/python/`, vendored caches, and `__pycache__`. Prefer search patterns that exclude them (for example `rg -g '!Sources/Resources/python/**' -g '!**/__pycache__/**' ...`) when you want real project sources.
-- Older notes may still refer to legacy `audioPlayer_*` accessibility identifiers, but the live player view uses `sidebarPlayer_*`.
-- Some backend/frontend features are partially wired:
-  - backend `get_speakers` exists, but the Swift UI still reads the same bundled manifest directly rather than waiting for backend readiness
-  - backend model info RPC exists, but `ModelsView` does filesystem checks
-  - backend streaming and advanced sampling params remain available for benchmark/internal tooling, but the shipping SwiftUI app intentionally uses non-streaming defaults only
-- The repo already contains other assistant-facing docs (`CLAUDE.md`, `GEMINI.md`). Keep them in sync if you make broad architectural or workflow changes.
-- The inner git worktree may contain unrelated user changes. Check `git status` before editing and do not revert work you did not make.
+Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided.
 
 ## High-Value Change Patterns
 
-### If you add a new generation mode
+### If you change the RPC contract
 
-Update all of:
+Update:
 
-1. `Sources/Resources/qwenvoice_contract.json`
-2. `Sources/Models/TTSContract.swift` / `Sources/Models/TTSModel.swift`
-3. `Sources/Resources/backend/server.py` manifest consumers and generation dispatch
-4. The relevant SwiftUI surface (`CustomVoiceView`, `VoiceCloningView`, or a new screen)
-5. `Sources/ContentView.swift` and `Sources/Views/Sidebar/SidebarView.swift` if the mode needs its own navigation destination
-6. `Sources/Views/Components/BatchGenerationSheet.swift` if batch generation should support it
-7. UI tests and any user-facing docs
+1. `Sources/Resources/backend/server.py`
+2. `Sources/Services/PythonBridge.swift`
+3. `Sources/Models/RPCMessage.swift` if payload types change
+4. affected views, tests, and docs
 
-### If you add a new RPC method
+### If you change models or speakers
 
-Update all of:
-
-1. `server.py` handler
-2. `METHODS` dispatch table
-3. `PythonBridge` convenience wrapper if the method is part of the app-facing contract
-4. Call sites in Swift
-5. Tests that assert the related UI state
-
-### If you change speaker options
-
-Update all of:
+Update:
 
 1. `Sources/Resources/qwenvoice_contract.json`
-2. Any UI text/tests that assume the current speaker list
-3. Any backend or Swift code that depends on a specific default speaker or speaker grouping
+2. Swift or Python consumers that rely on those fields
+3. docs/tests that assert current names or counts
 
-### If you add or rename files in `Sources/`
+### If you add or rename source files
 
-1. Update `project.yml` if the change affects generated project structure or resources.
-2. Regenerate with `./scripts/regenerate_project.sh`.
-3. Verify entitlements were preserved.
+1. update `project.yml` if needed
+2. run `./scripts/regenerate_project.sh`
+3. verify the generated `.xcodeproj` did not pick up `__pycache__` or `.pyc` paths
 
 ## Practical Review Checklist
 
-Before finishing changes, verify:
+Before finishing:
 
-1. The change is made from the repo root (`/Users/patricedery/Coding_Projects/QwenVoice`).
-2. `project.yml` remains the intended source of truth.
-3. Swift and Python stay in sync for any cross-process change.
-4. If you changed speakers, the duplicated Swift/backend speaker lists stay aligned.
-5. Accessibility identifiers remain stable or tests were updated.
-6. If you ran broad searches, you excluded generated runtime artifacts when that mattered.
-7. If Python dependencies changed, the venv marker, bundled runtime, and vendored wheel implications were considered.
+1. confirm Swift and Python still agree on any cross-process change
+2. keep accessibility identifiers stable or update UI tests in the same change
+3. prefer the manifest over duplicated constants
+4. prefer `./scripts/regenerate_project.sh` over raw `xcodegen generate`
+5. keep `README.md`, `docs/reference/current-state.md`, `CLAUDE.md`, and `GEMINI.md` aligned when broad repo facts change
