@@ -4,7 +4,7 @@ struct CustomVoiceView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
-    @State private var selectedSpeaker = "vivian"
+    @State private var selectedSpeaker = TTSModel.defaultSpeaker
     @State private var isCustomSpeaker = false
     @State private var voiceDescription = ""
     @State private var emotion = "Normal tone"
@@ -110,7 +110,7 @@ struct CustomVoiceView: View {
                         Text("SPEAKER").sectionHeader()
 
                         FlowLayout(spacing: 8) {
-                            ForEach(TTSModel.speakers, id: \.self) { speaker in
+                            ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
                                 Button {
                                     AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                                         selectedSpeaker = speaker
@@ -122,6 +122,7 @@ struct CustomVoiceView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityIdentifier("customVoice_speaker_\(speaker)")
+                                .accessibilityValue(!isCustomSpeaker && selectedSpeaker == speaker ? "selected" : "not selected")
                             }
 
                             // Custom speaker chip
@@ -155,6 +156,7 @@ struct CustomVoiceView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("customVoice_speaker_custom")
+                            .accessibilityValue(isCustomSpeaker ? "selected" : "not selected")
                         }
                         .padding(.vertical, 8)
 
@@ -270,7 +272,7 @@ struct CustomVoiceView: View {
                 }
 
                 if isCustomSpeaker {
-                    let outputPath = makeOutputPath(subfolder: "VoiceDesign", text: text)
+                    let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
                     let result = try await pythonBridge.generateDesignFlow(
                         modelID: model.id,
                         text: text,
@@ -280,8 +282,8 @@ struct CustomVoiceView: View {
 
                     var gen = Generation(
                         text: text,
-                        mode: "design",
-                        modelTier: "pro",
+                        mode: model.mode.rawValue,
+                        modelTier: model.tier,
                         voice: voiceDescription,
                         emotion: nil,
                         speed: nil,
@@ -291,7 +293,7 @@ struct CustomVoiceView: View {
                     )
                     try persistGenerationAndMaybeAutoplay(&gen, result: result)
                 } else {
-                    let outputPath = makeOutputPath(subfolder: "CustomVoice", text: text)
+                    let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
                     let result = try await pythonBridge.generateCustomFlow(
                         modelID: model.id,
                         text: text,
@@ -303,8 +305,8 @@ struct CustomVoiceView: View {
 
                     var gen = Generation(
                         text: text,
-                        mode: "custom",
-                        modelTier: "pro",
+                        mode: model.mode.rawValue,
+                        modelTier: model.tier,
                         voice: selectedSpeaker,
                         emotion: emotion,
                         speed: speed,

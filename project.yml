@@ -71,3 +71,19 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: QwenVoice
+
+  QwenVoiceTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - QwenVoiceTests
+    resources:
+      - Sources/Resources/qwenvoice_contract.json
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.tests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: QwenVoice

@@ -130,15 +130,15 @@ The app uses a **Two-Process Architecture**:
 | `init` | `app_support_dir` | Configure paths (called on startup) |
 | `load_model` | `model_id` or `model_path` | Load 1.7B model to GPU (unloads previous) |
 | `unload_model` | — | Free GPU memory |
-| `generate` | `text` + (`voice`\|`instruct`\|`ref_audio`) | Generate audio (mode by param presence) |
+| `generate` | `text` + `mode` + mode-specific params | Generate audio (explicit mode, with compatibility fallback) |
 | `convert_audio` | `input_path`, `output_path?` | Convert to 24kHz mono WAV |
 | `list_voices` | — | List enrolled voices |
 | `enroll_voice` | `name`, `audio_path`, `transcript?` | Save voice reference (.wav + .txt) |
 | `delete_voice` | `name` | Delete enrolled voice files |
-| `get_model_info` | — | Model metadata & download status |
-| `get_speakers` | — | Speaker map (4 English speakers) |
+| `get_model_info` | — | Model metadata, shared contract fields, and download status |
+| `get_speakers` | — | Speaker groups from `Sources/Resources/qwenvoice_contract.json` |
 
-**Mode detection in `generate`:** `ref_audio` present → clone, `voice` present → custom, `instruct` only → design. `speed` parameter scales generation speed (Custom Voice only).
+**Mode selection in `generate`:** Swift now sends explicit `mode`, and the backend validates it against the loaded model. The old request-shape heuristic remains only as a compatibility fallback.
 
 ### Python Environment Setup
 - **Marker file:** `~/Library/Application Support/QwenVoice/python/.setup-complete` stores a SHA256 hash of `requirements.txt`. If missing or stale, the app recreates the venv from scratch.
@@ -163,7 +163,7 @@ open "$(xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -showBuildSett
 
 ### Models
 
-3 Pro (1.7B) 8-bit quantized models from `mlx-community`:
+3 Pro (1.7B) 8-bit quantized models from `mlx-community`, defined in `Sources/Resources/qwenvoice_contract.json`:
 
 | Model | Mode | Folder | Size |
 |-------|------|--------|------|

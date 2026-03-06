@@ -11,22 +11,6 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
     private static let defaultAppSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         .appendingPathComponent("QwenVoice", isDirectory: true)
 
-    private static let requiredRelativePaths = [
-        "README.md",
-        "config.json",
-        "generation_config.json",
-        "merges.txt",
-        "model.safetensors",
-        "model.safetensors.index.json",
-        "preprocessor_config.json",
-        "speech_tokenizer/config.json",
-        "speech_tokenizer/configuration.json",
-        "speech_tokenizer/model.safetensors",
-        "speech_tokenizer/preprocessor_config.json",
-        "tokenizer_config.json",
-        "vocab.json",
-    ]
-
     override class func setUp() {
         fixtureRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("QwenVoiceModelFixtures-\(UUID().uuidString)", isDirectory: true)
@@ -80,16 +64,20 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
     func testModelsViewDistinguishesCompleteAndIncompleteFixtures() {
         ensureOnScreen(.models, timeout: 10)
 
+        let customModelID = UITestContractManifest.current.model(mode: "custom")?.id ?? "pro_custom"
+        let designModelID = UITestContractManifest.current.model(mode: "design")?.id ?? "pro_design"
+        let cloneModelID = UITestContractManifest.current.model(mode: "clone")?.id ?? "pro_clone"
+
         XCTAssertTrue(
-            waitForElement("models_delete_pro_custom", type: .button, timeout: 10).exists,
+            waitForElement("models_delete_\(customModelID)", type: .button, timeout: 10).exists,
             "Complete fixtures should resolve to the ready/delete state"
         )
         XCTAssertTrue(
-            waitForElement("models_download_pro_design", type: .button, timeout: 10).exists,
+            waitForElement("models_download_\(designModelID)", type: .button, timeout: 10).exists,
             "Incomplete fixtures should resolve to the download state"
         )
         XCTAssertTrue(
-            waitForElement("models_download_pro_clone", type: .button, timeout: 10).exists,
+            waitForElement("models_download_\(cloneModelID)", type: .button, timeout: 10).exists,
             "Incomplete clone fixtures should resolve to the download state"
         )
     }
@@ -103,16 +91,16 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
         linkExistingPythonEnvironmentIfPresent()
 
         seedModel(
-            folder: "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
-            relativePaths: requiredRelativePaths
+            mode: "custom",
+            relativePaths: contractModel(mode: "custom")?.requiredRelativePaths ?? []
         )
         seedModel(
-            folder: "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
-            relativePaths: Array(requiredRelativePaths.prefix(1))
+            mode: "design",
+            relativePaths: Array((contractModel(mode: "design")?.requiredRelativePaths ?? []).prefix(1))
         )
         seedModel(
-            folder: "Qwen3-TTS-12Hz-1.7B-Base-8bit",
-            relativePaths: Array(requiredRelativePaths.prefix(1))
+            mode: "clone",
+            relativePaths: Array((contractModel(mode: "clone")?.requiredRelativePaths ?? []).prefix(1))
         )
     }
 
@@ -126,12 +114,17 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
         try? FileManager.default.createSymbolicLink(at: pythonDestination, withDestinationURL: pythonSource)
     }
 
-    private class func seedModel(folder: String, relativePaths: [String]) {
+    private class func contractModel(mode: String) -> UITestContractModel? {
+        UITestContractManifest.current.model(mode: mode)
+    }
+
+    private class func seedModel(mode: String, relativePaths: [String]) {
         guard let fixtureRoot else { return }
+        guard let model = contractModel(mode: mode) else { return }
 
         let modelRoot = fixtureRoot
             .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent(folder, isDirectory: true)
+            .appendingPathComponent(model.folder, isDirectory: true)
 
         for relativePath in relativePaths {
             let fileURL = modelRoot.appendingPathComponent(relativePath)

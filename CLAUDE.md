@@ -313,8 +313,8 @@ The player implements path-pinned retry logic for autoplay after generation:
 | `list_voices` | — | List enrolled voices |
 | `enroll_voice` | `name`, `audio_path`, `transcript?` | Save voice reference (.wav + .txt) |
 | `delete_voice` | `name` | Delete enrolled voice files; name is sanitized |
-| `get_model_info` | — | Model metadata & download status |
-| `get_speakers` | — | Speaker map (4 English speakers) |
+| `get_model_info` | — | Model metadata, shared contract fields, and download status |
+| `get_speakers` | — | Speaker groups from `Sources/Resources/qwenvoice_contract.json` |
 
 **`generate` parameters:**
 
@@ -386,9 +386,9 @@ The player implements path-pinned retry logic for autoplay after generation:
 ## Data Corrections
 
 - 3 Pro (1.7B) models only — Lite (0.6B) tier was removed (Pro runs fine on all Apple Silicon Macs with 8GB+ RAM)
-- There are 4 English preset speakers: ryan, aiden, serena, vivian
+- Preset speakers and the default speaker now come from `Sources/Resources/qwenvoice_contract.json`
 - Instruction control (`instruct` param) is probabilistic — complex multi-dimensional requests may not be followed precisely
-- `Generation.modelTier` always writes `"pro"` — lite tier values are legacy only
+- `Generation.modelTier` is populated from the shared manifest model tier
 - `sortOrder` column exists in the DB but is not yet used in list rendering queries
 
 ## Gotchas

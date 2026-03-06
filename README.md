@@ -124,6 +124,8 @@ QwenVoice uses a **two-process architecture**:
 
 **Python Backend** (`Sources/Resources/backend/server.py`) runs as a persistent subprocess and exposes a JSON-RPC 2.0 interface over stdin/stdout. It loads MLX model weights on demand and handles `generate`, `enroll_voice`, `list_voices`, `delete_voice`, `get_model_info`, `load_model`, `unload_model`, `ping`, and `init` methods. MLX memory is explicitly freed between generations to minimise RAM pressure.
 
+**Shared TTS contract** (`Sources/Resources/qwenvoice_contract.json`) is the source of truth for static model metadata, speaker groups, default speaker, output subfolders, required files, and Hugging Face repo IDs. Both the Swift app and Python backend load this manifest directly.
+
 **Output directory layout** (under `~/Library/Application Support/QwenVoice/`):
 
 ```
@@ -136,6 +138,8 @@ voices/          ← enrolled voice reference audio
 history.sqlite   ← generation history database
 python/          ← auto-created Python venv (dev mode)
 ```
+
+These output subfolders are the current `outputSubfolder` values from `Sources/Resources/qwenvoice_contract.json`.
 
 **Swift package dependencies:** [GRDB.swift](https://github.com/groue/GRDB.swift) (≥ 7.0.0)
 
@@ -185,7 +189,7 @@ The community organisation that hosts the 8-bit quantised MLX model weights used
 ### CLI Foundation
 
 **[qwen3-tts-apple-silicon](https://github.com/kapi2800/qwen3-tts-apple-silicon)** — [@kapi2800](https://github.com/kapi2800)  
-The `cli/main.py` in this repo is directly derived from kapi2800's project. The interactive menu structure, speaker map, voice enrolment flow, audio conversion helpers (`convert_audio_if_needed`, `get_smart_path`), and overall CLI architecture all originate from this work. The Python backend (`server.py`) was subsequently refactored from `cli/main.py` to expose a JSON-RPC 2.0 interface for the Swift frontend.
+The `cli/main.py` in this repo is directly derived from kapi2800's project. The interactive menu structure, voice enrolment flow, audio conversion helpers (`convert_audio_if_needed`, `get_smart_path`), and overall CLI architecture all originate from this work. The Python backend (`server.py`) was subsequently refactored from `cli/main.py` to expose a JSON-RPC 2.0 interface for the Swift frontend, while static model/speaker metadata now lives in `Sources/Resources/qwenvoice_contract.json`.
 
 ### Swift Dependencies
 

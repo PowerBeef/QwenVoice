@@ -16,22 +16,6 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
     private static let appSupportOverrideEnvironmentKey = "QWENVOICE_APP_SUPPORT_DIR"
     private static let defaultAppSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         .appendingPathComponent("QwenVoice", isDirectory: true)
-    private static let cloneModelFolder = "Qwen3-TTS-12Hz-1.7B-Base-8bit"
-    private static let requiredCloneModelPaths = [
-        "README.md",
-        "config.json",
-        "generation_config.json",
-        "merges.txt",
-        "model.safetensors",
-        "model.safetensors.index.json",
-        "preprocessor_config.json",
-        "speech_tokenizer/config.json",
-        "speech_tokenizer/configuration.json",
-        "speech_tokenizer/model.safetensors",
-        "speech_tokenizer/preprocessor_config.json",
-        "tokenizer_config.json",
-        "vocab.json",
-    ]
 
     override func tearDownWithError() throws {
         try super.tearDownWithError()
@@ -173,11 +157,19 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
     }
 
     private func seedCloneModel(at root: URL) throws {
+        guard let cloneModel = UITestContractManifest.current.model(mode: "clone") else {
+            throw NSError(
+                domain: "ErrorSurfacingConsistencyTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing clone model in qwenvoice_contract.json"]
+            )
+        }
+
         let modelRoot = root
             .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent(Self.cloneModelFolder, isDirectory: true)
+            .appendingPathComponent(cloneModel.folder, isDirectory: true)
 
-        for relativePath in Self.requiredCloneModelPaths {
+        for relativePath in cloneModel.requiredRelativePaths {
             let fileURL = modelRoot.appendingPathComponent(relativePath)
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
@@ -202,7 +194,7 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
     private func seedHistoryFixture(at root: URL) throws {
         let audioPath = root
             .appendingPathComponent("outputs", isDirectory: true)
-            .appendingPathComponent("Clones", isDirectory: true)
+            .appendingPathComponent(UITestContractManifest.current.model(mode: "clone")?.outputSubfolder ?? "Clones", isDirectory: true)
             .appendingPathComponent("history-fixture.wav")
 
         try FileManager.default.createDirectory(

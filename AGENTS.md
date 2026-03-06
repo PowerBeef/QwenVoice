@@ -145,17 +145,13 @@ If you change any RPC shape or backend behavior, update both sides:
 3. `Sources/Models/RPCMessage.swift` if new data types are needed
 4. Any affected views/view models/tests
 
-Also keep model definitions mirrored across:
+Static TTS contract data now lives in one shared manifest:
 
-1. `Sources/Models/TTSModel.swift`
-2. `Sources/Resources/backend/server.py` (`MODELS`)
+1. `Sources/Resources/qwenvoice_contract.json`
+2. `Sources/Models/TTSContract.swift`
+3. `Sources/Resources/backend/server.py`
 
-Speaker definitions are also effectively mirrored today:
-
-1. `Sources/Models/TTSModel.swift` (`TTSModel.speakers`)
-2. `Sources/Resources/backend/server.py` (`SPEAKER_MAP`)
-
-The Swift UI does not currently fetch speakers from `get_speakers`, so changing only the backend speaker map will not update the picker.
+`TTSModel` is now a manifest-backed Swift facade, and backend `get_model_info` / `get_speakers` also read from the same manifest. If you change models, speakers, tiers, output folders, or required files, update the manifest first and then adjust consumers/tests as needed.
 
 ## Runtime Data Layout
 
@@ -305,9 +301,9 @@ Notably:
 ### Models and tiers
 
 - The shipping app currently exposes only the three 1.7B "pro" models.
-- `TTSModel.all` includes `pro_custom`, `pro_design`, and `pro_clone`.
+- `Sources/Resources/qwenvoice_contract.json` defines `pro_custom`, `pro_design`, and `pro_clone`, and Swift/Python both load from it.
 - `pro_design` is downloadable and usable, but it is surfaced through `CustomVoiceView` instead of a dedicated sidebar destination.
-- `Generation.modelTier` still exists, but generation flows currently write `"pro"` only.
+- `Generation.modelTier` is still stored in history, and generation flows now persist `model.tier` from the shared manifest.
 - `PythonBridge.getModelInfo()` and backend `get_model_info` exist, but the current `ModelsView` uses `ModelManagerViewModel` filesystem checks rather than the RPC.
 
 ### Preferences and Python environment
@@ -340,7 +336,7 @@ If you change backend Python dependencies:
 - Broad recursive searches can get polluted by generated artifacts in `Sources/Resources/python/`, vendored caches, and `__pycache__`. Prefer search patterns that exclude them (for example `rg -g '!Sources/Resources/python/**' -g '!**/__pycache__/**' ...`) when you want real project sources.
 - Older notes may still refer to legacy `audioPlayer_*` accessibility identifiers, but the live player view uses `sidebarPlayer_*`.
 - Some backend/frontend features are partially wired:
-  - backend `get_speakers` exists, but Swift uses hardcoded speakers
+  - backend `get_speakers` exists, but the Swift UI still reads the same bundled manifest directly rather than waiting for backend readiness
   - backend model info RPC exists, but `ModelsView` does filesystem checks
   - streaming generation helpers exist in `PythonBridge`, but the current SwiftUI screens use non-streaming methods
 - The repo already contains other assistant-facing docs (`CLAUDE.md`, `GEMINI.md`). Keep them in sync if you make broad architectural or workflow changes.
@@ -352,12 +348,13 @@ If you change backend Python dependencies:
 
 Update all of:
 
-1. `Sources/Models/TTSModel.swift`
-2. `Sources/Resources/backend/server.py` model definitions and generation dispatch
-3. The relevant SwiftUI surface (`CustomVoiceView`, `VoiceCloningView`, or a new screen)
-4. `Sources/ContentView.swift` and `Sources/Views/Sidebar/SidebarView.swift` if the mode needs its own navigation destination
-5. `Sources/Views/Components/BatchGenerationSheet.swift` if batch generation should support it
-6. UI tests and any user-facing docs
+1. `Sources/Resources/qwenvoice_contract.json`
+2. `Sources/Models/TTSContract.swift` / `Sources/Models/TTSModel.swift`
+3. `Sources/Resources/backend/server.py` manifest consumers and generation dispatch
+4. The relevant SwiftUI surface (`CustomVoiceView`, `VoiceCloningView`, or a new screen)
+5. `Sources/ContentView.swift` and `Sources/Views/Sidebar/SidebarView.swift` if the mode needs its own navigation destination
+6. `Sources/Views/Components/BatchGenerationSheet.swift` if batch generation should support it
+7. UI tests and any user-facing docs
 
 ### If you add a new RPC method
 
@@ -373,9 +370,9 @@ Update all of:
 
 Update all of:
 
-1. `Sources/Models/TTSModel.swift` (`TTSModel.speakers`)
-2. `Sources/Resources/backend/server.py` (`SPEAKER_MAP`)
-3. Any UI text/tests that assume the current speaker list
+1. `Sources/Resources/qwenvoice_contract.json`
+2. Any UI text/tests that assume the current speaker list
+3. Any backend or Swift code that depends on a specific default speaker or speaker grouping
 
 ### If you add or rename files in `Sources/`
 

@@ -329,7 +329,7 @@ struct VoiceCloningView: View {
                     return
                 }
 
-                let outputPath = makeOutputPath(subfolder: "Clones", text: text)
+                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
                 let result = try await pythonBridge.generateCloneFlow(
                     modelID: model.id,
                     text: text,
@@ -341,8 +341,8 @@ struct VoiceCloningView: View {
                 let voiceName = selectedVoice?.name ?? URL(fileURLWithPath: refPath).deletingPathExtension().lastPathComponent
                 var gen = Generation(
                     text: text,
-                    mode: "clone",
-                    modelTier: "pro",
+                    mode: model.mode.rawValue,
+                    modelTier: model.tier,
                     voice: voiceName,
                     emotion: nil,
                     speed: nil,

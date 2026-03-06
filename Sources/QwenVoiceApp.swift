@@ -144,15 +144,17 @@ struct QwenVoiceApp: App {
 
     private func setupAppSupport() {
         let fm = FileManager.default
+        let outputSubdirectories = Set(TTSModel.all.map(\.outputSubfolder))
+
         let dirs = [
             Self.appSupportDir.path,
             Self.appSupportDir.appendingPathComponent("models").path,
             Self.appSupportDir.appendingPathComponent("outputs").path,
-            Self.appSupportDir.appendingPathComponent("outputs/CustomVoice").path,
-            Self.appSupportDir.appendingPathComponent("outputs/VoiceDesign").path,
-            Self.appSupportDir.appendingPathComponent("outputs/Clones").path,
             Self.appSupportDir.appendingPathComponent("voices").path,
-        ]
+        ] + outputSubdirectories.sorted().map {
+            Self.appSupportDir.appendingPathComponent("outputs/\($0)").path
+        }
+
         for dir in dirs {
             try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }

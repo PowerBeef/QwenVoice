@@ -145,20 +145,20 @@ struct BatchGenerationSheet: View {
                     if cancelled { break }
 
                     let outputPath = makeOutputPath(
-                        subfolder: model.mode == .clone ? "Clones" : (model.mode == .design ? "VoiceDesign" : "CustomVoice"),
+                        subfolder: model.outputSubfolder,
                         text: line
                     )
 
                     var result: GenerationResult?
                     switch mode {
                     case .custom:
-                        result = try await pythonBridge.generateCustomFlow(
-                            modelID: model.id,
-                            text: line,
-                            voice: voice ?? "vivian",
-                            emotion: emotion ?? "Normal tone",
-                            speed: speed ?? 1.0,
-                            outputPath: outputPath,
+                            result = try await pythonBridge.generateCustomFlow(
+                                modelID: model.id,
+                                text: line,
+                                voice: voice ?? TTSModel.defaultSpeaker,
+                                emotion: emotion ?? "Normal tone",
+                                speed: speed ?? 1.0,
+                                outputPath: outputPath,
                             batchIndex: i + 1,
                             batchTotal: totalItems
                         )
@@ -195,7 +195,7 @@ struct BatchGenerationSheet: View {
                     var gen = Generation(
                         text: line,
                         mode: mode.rawValue,
-                        modelTier: "pro",
+                        modelTier: model.tier,
                         voice: voiceName,
                         emotion: emotion,
                         speed: speed,

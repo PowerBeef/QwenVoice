@@ -322,6 +322,7 @@ final class PythonBridge: ObservableObject {
                         outputPath: String, temperature: Double? = nil,
                         maxTokens: Int? = nil) async throws -> GenerationResult {
         var params: [String: RPCValue] = [
+            "mode": .string(GenerationMode.custom.rawValue),
             "text": .string(text),
             "voice": .string(voice),
             "instruct": .string(emotion),
@@ -338,6 +339,7 @@ final class PythonBridge: ObservableObject {
     func generateDesign(text: String, voiceDescription: String, outputPath: String,
                         temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
         var params: [String: RPCValue] = [
+            "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
             "instruct": .string(voiceDescription),
             "output_path": .string(outputPath),
@@ -352,6 +354,7 @@ final class PythonBridge: ObservableObject {
     func generateClone(text: String, refAudio: String, refText: String?, outputPath: String,
                        temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
         var params: [String: RPCValue] = [
+            "mode": .string(GenerationMode.clone.rawValue),
             "text": .string(text),
             "ref_audio": .string(refAudio),
             "output_path": .string(outputPath),
@@ -468,6 +471,7 @@ final class PythonBridge: ObservableObject {
         onChunk: @escaping (GenerationChunkNotification) -> Void
     ) async throws -> GenerationResult {
         let result = try await callDict("generate", params: [
+            "mode": .string(GenerationMode.custom.rawValue),
             "text": .string(text),
             "voice": .string(voice),
             "instruct": .string(emotion),
@@ -488,6 +492,7 @@ final class PythonBridge: ObservableObject {
         onChunk: @escaping (GenerationChunkNotification) -> Void
     ) async throws -> GenerationResult {
         let result = try await callDict("generate", params: [
+            "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
             "instruct": .string(voiceDescription),
             "output_path": .string(outputPath),
@@ -528,6 +533,18 @@ final class PythonBridge: ObservableObject {
     func getModelInfo() async throws -> [[String: RPCValue]] {
         let items = try await callArray("get_model_info")
         return items.compactMap { $0.objectValue }
+    }
+
+    func getSpeakers() async throws -> [String: [String]] {
+        let response = try await callDict("get_speakers")
+        var speakers: [String: [String]] = [:]
+
+        for (group, value) in response {
+            guard let array = value.arrayValue else { continue }
+            speakers[group] = array.compactMap(\.stringValue)
+        }
+
+        return speakers
     }
 
     // MARK: - Sidebar Status

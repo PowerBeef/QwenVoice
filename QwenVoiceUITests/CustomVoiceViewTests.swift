@@ -7,7 +7,9 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         _ = waitForScreen(.customVoice)
         assertElementExists("customVoice_title")
         _ = waitForElement("customVoice_batchButton", type: .button)
-        _ = waitForElement("customVoice_speaker_vivian", type: .button)
+        for speaker in UITestContractManifest.current.allSpeakers {
+            _ = waitForElement("customVoice_speaker_\(speaker)", type: .button)
+        }
         _ = waitForElement("customVoice_speaker_custom", type: .button)
         _ = waitForElement("customVoice_emotion_custom", type: .button)
         _ = waitForElement("customVoice_speedPicker")
@@ -54,9 +56,22 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
             "Speed picker should hide in custom speaker mode"
         )
 
-        let presetSpeaker = waitForElement("customVoice_speaker_vivian", type: .button)
+        let presetSpeaker = waitForElement(
+            "customVoice_speaker_\(UITestContractManifest.current.defaultSpeaker)",
+            type: .button
+        )
         presetSpeaker.click()
         _ = waitForElement("customVoice_speedPicker", timeout: 5)
+    }
+
+    func testDefaultSpeakerMatchesContract() {
+        _ = waitForScreen(.customVoice)
+
+        let defaultSpeaker = waitForElement(
+            "customVoice_speaker_\(UITestContractManifest.current.defaultSpeaker)",
+            type: .button
+        )
+        XCTAssertEqual(defaultSpeaker.value as? String, "selected")
     }
 
     func testTextInputsAcceptUserInput() {

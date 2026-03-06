@@ -59,35 +59,58 @@ OUTPUTS_DIR = os.path.join(APP_SUPPORT_DIR, "outputs")
 VOICES_DIR = os.path.join(APP_SUPPORT_DIR, "voices")
 CLONE_REF_CACHE_DIR = os.path.join(APP_SUPPORT_DIR, "cache", "normalized_clone_refs")
 
-# Model definitions (mirrors main.py MODELS dict)
-MODELS = {
-    # Pro (1.7B)
-    "pro_custom": {
-        "name": "Custom Voice (Pro)",
-        "folder": "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
-        "mode": "custom",
-        "tier": "pro",
-        "output_subfolder": "CustomVoice",
-    },
-    "pro_design": {
-        "name": "Voice Design (Pro)",
-        "folder": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
-        "mode": "design",
-        "tier": "pro",
-        "output_subfolder": "VoiceDesign",
-    },
-    "pro_clone": {
-        "name": "Voice Cloning (Pro)",
-        "folder": "Qwen3-TTS-12Hz-1.7B-Base-8bit",
-        "mode": "clone",
-        "tier": "pro",
-        "output_subfolder": "Clones",
-    },
-}
 
-SPEAKER_MAP = {
-    "English": ["ryan", "aiden", "serena", "vivian"],
-}
+def _resolve_resources_dir():
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    candidates = [
+        script_dir,
+        os.path.dirname(script_dir),
+    ]
+
+    for candidate in candidates:
+        if os.path.exists(os.path.join(candidate, "qwenvoice_contract.json")):
+            return candidate
+
+    return script_dir
+
+
+RESOURCES_DIR = _resolve_resources_dir()
+CONTRACT_PATH = os.path.join(RESOURCES_DIR, "qwenvoice_contract.json")
+
+def _load_contract():
+    with open(CONTRACT_PATH, "r", encoding="utf-8") as handle:
+        contract = json.load(handle)
+
+    if not contract.get("models"):
+        raise RuntimeError("qwenvoice_contract.json must define at least one model")
+
+    if not contract.get("speakers"):
+        raise RuntimeError("qwenvoice_contract.json must define at least one speaker group")
+
+    model_ids = [model["id"] for model in contract["models"]]
+    if len(model_ids) != len(set(model_ids)):
+        raise RuntimeError("qwenvoice_contract.json contains duplicate model ids")
+
+    modes = [model["mode"] for model in contract["models"]]
+    if len(modes) != len(set(modes)):
+        raise RuntimeError("qwenvoice_contract.json contains duplicate model modes")
+
+    all_speakers = [
+        speaker
+        for group_name in sorted(contract["speakers"].keys())
+        for speaker in contract["speakers"][group_name]
+    ]
+    if contract["defaultSpeaker"] not in all_speakers:
+        raise RuntimeError("qwenvoice_contract.json defaultSpeaker is not present in speakers")
+
+    return contract
+
+
+CONTRACT = _load_contract()
+MODELS = {model["id"]: model for model in CONTRACT["models"]}
+MODELS_BY_MODE = {model["mode"]: model for model in CONTRACT["models"]}
+SPEAKER_MAP = CONTRACT["speakers"]
+DEFAULT_SPEAKER = CONTRACT["defaultSpeaker"]
 
 # ---------------------------------------------------------------------------
 # State
@@ -95,6 +118,7 @@ SPEAKER_MAP = {
 
 _current_model = None
 _current_model_path = None
+_current_model_id = None
 _load_model_fn = None
 _generate_audio_fn = None
 _audio_write_fn = None
@@ -156,7 +180,7 @@ def _resolve_ffmpeg_binary():
     if configured and os.path.exists(configured):
         return configured
 
-    bundled = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ffmpeg")
+    bundled = os.path.join(RESOURCES_DIR, "ffmpeg")
     if os.path.exists(bundled):
         return bundled
 
@@ -181,6 +205,19 @@ def get_smart_path(folder_name):
             return os.path.join(snapshots_dir, subfolders[0])
 
     return full_path
+
+
+def _resolve_model_id_for_path(model_path):
+    if not model_path:
+        return None
+
+    normalized = os.path.realpath(model_path)
+    for model_id, model_def in MODELS.items():
+        resolved = get_smart_path(model_def["folder"])
+        if resolved and os.path.realpath(resolved) == normalized:
+            return model_id
+
+    return None
 
 
 def convert_audio_if_needed(input_path):
@@ -490,7 +527,51 @@ def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text):
     return prepared, False
 
 
-def _resolve_final_output_path(explicit_output_path, text, voice=None, ref_audio=None):
+def _infer_legacy_mode(voice=None, ref_audio=None):
+    if ref_audio:
+        return "clone"
+    if voice:
+        return "custom"
+    return "design"
+
+
+def _current_model_contract():
+    if not _current_model_id:
+        return None
+    return MODELS.get(_current_model_id)
+
+
+def _resolve_generation_mode(requested_mode, voice=None, ref_audio=None):
+    if requested_mode:
+        return requested_mode
+
+    current_model_contract = _current_model_contract()
+    if current_model_contract:
+        return current_model_contract["mode"]
+
+    return _infer_legacy_mode(voice=voice, ref_audio=ref_audio)
+
+
+def _resolve_output_subfolder(requested_mode, voice=None, ref_audio=None):
+    current_model_contract = _current_model_contract()
+    if current_model_contract:
+        return current_model_contract["outputSubfolder"]
+
+    if requested_mode and requested_mode in MODELS_BY_MODE:
+        return MODELS_BY_MODE[requested_mode]["outputSubfolder"]
+
+    legacy_mode = _infer_legacy_mode(voice=voice, ref_audio=ref_audio)
+    if legacy_mode in MODELS_BY_MODE:
+        return MODELS_BY_MODE[legacy_mode]["outputSubfolder"]
+
+    return {
+        "custom": "CustomVoice",
+        "design": "VoiceDesign",
+        "clone": "Clones",
+    }[legacy_mode]
+
+
+def _resolve_final_output_path(explicit_output_path, text, mode=None, voice=None, ref_audio=None):
     """Resolve the final output path while preserving the existing contract."""
     if explicit_output_path:
         parent_dir = os.path.dirname(explicit_output_path)
@@ -498,11 +579,7 @@ def _resolve_final_output_path(explicit_output_path, text, voice=None, ref_audio
             os.makedirs(parent_dir, exist_ok=True)
         return explicit_output_path
 
-    subfolder = "CustomVoice"
-    if ref_audio:
-        subfolder = "Clones"
-    elif not voice:
-        subfolder = "VoiceDesign"
+    subfolder = _resolve_output_subfolder(mode, voice=voice, ref_audio=ref_audio)
     return make_output_path(subfolder, text)
 
 
@@ -589,7 +666,7 @@ def _generate_streaming_preview(
 
 def handle_load_model(params, request_id=None):
     """Load a model into memory. Unloads any existing model first."""
-    global _current_model, _current_model_path
+    global _current_model, _current_model_path, _current_model_id
 
     model_id = params.get("model_id")
     model_path = params.get("model_path")
@@ -608,9 +685,13 @@ def handle_load_model(params, request_id=None):
     if not model_path:
         raise ValueError("Must provide model_id or model_path")
 
+    resolved_model_id = model_id or _resolve_model_id_for_path(model_path)
+
     # Skip reload if same model already loaded
     if _current_model is not None and _current_model_path == model_path:
         result = {"success": True, "model_path": model_path, "cached": True}
+        if resolved_model_id:
+            _current_model_id = resolved_model_id
         if benchmark:
             result["benchmark"] = {
                 "timings_ms": {
@@ -622,6 +703,7 @@ def handle_load_model(params, request_id=None):
     # Unload existing model
     if _current_model is not None:
         _current_model = None
+        _current_model_id = None
         _clear_clone_context_cache()
         gc.collect()
         if _mx is not None:
@@ -635,6 +717,7 @@ def handle_load_model(params, request_id=None):
     if _enable_speech_tokenizer_encoder_fn is not None:
         _enable_speech_tokenizer_encoder_fn(_current_model, model_path)
     _current_model_path = model_path
+    _current_model_id = resolved_model_id
 
     send_progress(100, "Model ready", request_id=request_id)
 
@@ -653,10 +736,11 @@ def handle_load_model(params, request_id=None):
 
 def handle_unload_model(params):
     """Unload current model and free memory."""
-    global _current_model, _current_model_path
+    global _current_model, _current_model_path, _current_model_id
 
     _current_model = None
     _current_model_path = None
+    _current_model_id = None
     _clear_clone_context_cache()
     gc.collect()
     if _mx is not None:
@@ -679,6 +763,7 @@ def handle_generate(params, request_id=None):
         raise ValueError("Missing required param: text")
 
     output_path = params.get("output_path")
+    requested_mode = params.get("mode")
     voice = params.get("voice")
     instruct = params.get("instruct")
     speed = params.get("speed")
@@ -691,7 +776,24 @@ def handle_generate(params, request_id=None):
     streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
     benchmark = bool(params.get("benchmark", False))
     benchmark_label = params.get("benchmark_label")
-    benchmark_mode = "clone" if ref_audio else ("custom" if voice else "design")
+    benchmark_mode = _resolve_generation_mode(requested_mode, voice=voice, ref_audio=ref_audio)
+    current_model_contract = _current_model_contract()
+
+    if requested_mode and requested_mode not in MODELS_BY_MODE:
+        raise ValueError(f"Unknown generation mode: {requested_mode}")
+
+    if requested_mode and current_model_contract and current_model_contract["mode"] != requested_mode:
+        raise ValueError(
+            f"Requested mode '{requested_mode}' does not match loaded model '{_current_model_id}' ({current_model_contract['mode']})."
+        )
+
+    if benchmark_mode == "custom" and not voice:
+        raise ValueError("Mode 'custom' requires a voice.")
+    if benchmark_mode == "design" and not instruct:
+        raise ValueError("Mode 'design' requires instruct.")
+    if benchmark_mode == "clone" and not ref_audio:
+        raise ValueError("Mode 'clone' requires ref_audio.")
+
     effective_max_tokens = int(max_tokens) if max_tokens is not None else None
     model_was_loaded = _current_model is not None
     benchmark_flags = {
@@ -715,7 +817,7 @@ def handle_generate(params, request_id=None):
         "total_backend": 0,
     }
     overall_start = time.perf_counter()
-    final_path = _resolve_final_output_path(output_path, text, voice=voice, ref_audio=ref_audio)
+    final_path = _resolve_final_output_path(output_path, text, mode=benchmark_mode, voice=voice, ref_audio=ref_audio)
     target_dir, target_stem, generated_path = _derive_generation_paths(final_path)
 
     if ref_audio:
@@ -977,6 +1079,9 @@ def handle_get_model_info(params):
             "folder": model_def["folder"],
             "mode": model_def["mode"],
             "tier": model_def["tier"],
+            "output_subfolder": model_def["outputSubfolder"],
+            "hugging_face_repo": model_def["huggingFaceRepo"],
+            "required_relative_paths": model_def["requiredRelativePaths"],
             "downloaded": path is not None,
             "size_bytes": size_bytes,
         })

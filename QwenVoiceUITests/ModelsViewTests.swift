@@ -7,16 +7,18 @@ final class ModelsViewTests: QwenVoiceUITestBase {
         _ = waitForScreen(.models)
         assertElementExists("models_title")
 
-        let firstCard = app.descendants(matching: .any).matching(identifier: "models_card_pro_custom").firstMatch
+        let firstModelID = UITestContractManifest.current.models.first?.id ?? "pro_custom"
+        let firstCard = app.descendants(matching: .any).matching(identifier: "models_card_\(firstModelID)").firstMatch
         XCTAssertTrue(firstCard.waitForExistence(timeout: 10), "Model cards should load after refresh")
     }
 
     func testModelCardsAndActionsArePresent() {
         _ = waitForScreen(.models)
 
-        let modelIds = ["pro_custom", "pro_design", "pro_clone"]
-        for modelId in modelIds {
+        for model in UITestContractManifest.current.models {
+            let modelId = model.id
             let card = waitForElement("models_card_\(modelId)", timeout: 10)
+            XCTAssertTrue(card.staticTexts[model.name].exists, "Model '\(modelId)' should show its contract name")
             let checking = app.descendants(matching: .any).matching(identifier: "models_checking_\(modelId)").firstMatch
             let download = app.descendants(matching: .any).matching(identifier: "models_download_\(modelId)").firstMatch
             let delete = app.descendants(matching: .any).matching(identifier: "models_delete_\(modelId)").firstMatch
