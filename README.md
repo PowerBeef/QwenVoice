@@ -37,7 +37,6 @@ Submit multiple text entries for sequential generation in a single session.
 
 ### Additional Features
 
-- **Temperature & max-token controls** — Fine-tune the model's sampling behaviour from the UI
 - **Waveform visualisation** — Live waveform rendered for generated audio clips (via AVFoundation + vDSP)
 - **Reveal in Finder** — Jump directly to any generated file (Cmd+Shift+R)
 - **Keyboard shortcuts** — Cmd+Return to generate, Space to play/pause, Cmd+. to stop, Cmd+Shift+O to open the output folder
@@ -118,11 +117,11 @@ QwenVoice uses a **two-process architecture**:
 - `PythonBridge` — Launches and manages the Python subprocess, sends JSON-RPC 2.0 requests over stdin/stdout, and handles async continuations for each pending call. Exposes typed Swift methods for every backend operation (`generateCustom`, `generateDesign`, `generateClone`, `enrollVoice`, `loadModel`, etc.)
 - `PythonEnvironmentManager` — Handles the full Python environment lifecycle: architecture check, bundled-Python fast path, venv creation, pip dependency installation with retry logic, SHA-256 marker-file validation to avoid reinstalling on every launch, and import validation before marking setup complete.
 - `HuggingFaceDownloader` — A native `URLSession`-based downloader that queries the HuggingFace tree API, resolves LFS sizes, and streams each file to disk with per-file and aggregate progress callbacks. No `huggingface-cli` dependency.
-- `DatabaseService` — SQLite persistence via GRDB with schema migrations (v2 adds `sortOrder` column) and basic CRUD for generation history.
+- `DatabaseService` — SQLite persistence via GRDB with schema migrations and basic CRUD for generation history.
 - `AudioPlayerViewModel` / `AudioService` — AVFoundation-backed audio player with play/pause/stop and waveform data extraction via vDSP.
 - `ModelManagerViewModel` — Tracks download state for all three models and triggers `PythonBridge.loadModel` on selection.
 
-**Python Backend** (`Sources/Resources/backend/server.py`) runs as a persistent subprocess and exposes a JSON-RPC 2.0 interface over stdin/stdout. It loads MLX model weights on demand and handles `generate`, `enroll_voice`, `list_voices`, `delete_voice`, `get_model_info`, `load_model`, `unload_model`, `ping`, and `init` methods. MLX memory is explicitly freed between generations to minimise RAM pressure.
+**Python Backend** (`Sources/Resources/backend/server.py`) runs as a persistent subprocess and exposes a JSON-RPC 2.0 interface over stdin/stdout. It loads MLX model weights on demand and handles `generate`, `enroll_voice`, `list_voices`, `delete_voice`, `get_model_info`, `load_model`, `unload_model`, `ping`, and `init` methods. MLX memory is explicitly freed between generations to minimise RAM pressure. The shipping SwiftUI app uses non-streaming generation flows; benchmark/internal tooling may still exercise backend-only parameters such as streaming preview, `temperature`, and `max_tokens`.
 
 **Shared TTS contract** (`Sources/Resources/qwenvoice_contract.json`) is the source of truth for static model metadata, speaker groups, default speaker, output subfolders, required files, and Hugging Face repo IDs. Both the Swift app and Python backend load this manifest directly.
 

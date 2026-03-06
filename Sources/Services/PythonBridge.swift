@@ -1,12 +1,5 @@
 import Foundation
 
-struct GenerationChunkNotification {
-    let requestID: Int
-    let chunkIndex: Int
-    let chunkPath: String
-    let isFinal: Bool
-}
-
 struct ActivityStatus: Equatable {
     let label: String
     let fraction: Double?
@@ -61,7 +54,6 @@ final class PythonBridge: ObservableObject {
     private var stderrPipe: Pipe?
     private var requestID = 0
     private var pendingRequests: [Int: CheckedContinuation<RPCValue, Error>] = [:]
-    private var generationChunkHandlers: [Int: (GenerationChunkNotification) -> Void] = [:]
     private var readBuffer = ""
     private var activeProgressRequestID: Int?
     private var activeProgressMethod: String?
@@ -188,8 +180,7 @@ final class PythonBridge: ObservableObject {
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
     func call(
         _ method: String,
-        params: [String: RPCValue] = [:],
-        onGenerationChunk: ((GenerationChunkNotification) -> Void)? = nil
+        params: [String: RPCValue] = [:]
     ) async throws -> RPCValue {
         guard process?.isRunning == true else {
             throw PythonBridgeError.processNotRunning
@@ -233,12 +224,8 @@ final class PythonBridge: ObservableObject {
             group.addTask { @MainActor in
                 try await withCheckedThrowingContinuation { continuation in
                     self.pendingRequests[id] = continuation
-                    if let onGenerationChunk {
-                        self.generationChunkHandlers[id] = onGenerationChunk
-                    }
                     guard let pipe = self.stdinPipe else {
                         self.pendingRequests.removeValue(forKey: id)
-                        self.generationChunkHandlers.removeValue(forKey: id)
                         continuation.resume(throwing: PythonBridgeError.processNotRunning)
                         return
                     }
@@ -254,7 +241,6 @@ final class PythonBridge: ObservableObject {
             defer {
                 group.cancelAll()
                 pendingRequests.removeValue(forKey: id)
-                generationChunkHandlers.removeValue(forKey: id)
                 isProcessing = false
                 progressPercent = 0
                 progressMessage = ""
@@ -277,10 +263,9 @@ final class PythonBridge: ObservableObject {
     /// Send a JSON-RPC request expecting a dict result.
     func callDict(
         _ method: String,
-        params: [String: RPCValue] = [:],
-        onGenerationChunk: ((GenerationChunkNotification) -> Void)? = nil
+        params: [String: RPCValue] = [:]
     ) async throws -> [String: RPCValue] {
-        let result = try await call(method, params: params, onGenerationChunk: onGenerationChunk)
+        let result = try await call(method, params: params)
         return result.objectValue ?? [:]
     }
 
@@ -317,11 +302,47 @@ final class PythonBridge: ObservableObject {
         _ = try await callDict("unload_model")
     }
 
+    func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
+        cancelAllPending(error: PythonBridgeError.cancelled)
+
+        let proc = process
+        process = nil
+        stdinPipe = nil
+        stdoutPipe = nil
+        stderrPipe = nil
+        isReady = false
+        isProcessing = false
+        readBuffer = ""
+        activeGenerationSession = nil
+        recentStderrLines = []
+        lastError = nil
+        clearActiveProgressTracking()
+
+        if let proc, proc.isRunning {
+            proc.terminate()
+            await Task.detached {
+                proc.waitUntilExit()
+            }.value
+        }
+
+        start(pythonPath: pythonPath)
+        guard process?.isRunning == true else {
+            throw PythonBridgeError.restartFailed(lastError ?? "Failed to restart Python backend")
+        }
+
+        do {
+            try await initialize(appSupportDir: appSupportDir)
+            clearGenerationActivity()
+        } catch {
+            stop()
+            throw PythonBridgeError.restartFailed(error.localizedDescription)
+        }
+    }
+
     /// Generate audio with custom voice mode.
     func generateCustom(text: String, voice: String, emotion: String, speed: Double,
-                        outputPath: String, temperature: Double? = nil,
-                        maxTokens: Int? = nil) async throws -> GenerationResult {
-        var params: [String: RPCValue] = [
+                        outputPath: String) async throws -> GenerationResult {
+        let params: [String: RPCValue] = [
             "mode": .string(GenerationMode.custom.rawValue),
             "text": .string(text),
             "voice": .string(voice),
@@ -329,30 +350,24 @@ final class PythonBridge: ObservableObject {
             "speed": .double(speed),
             "output_path": .string(outputPath),
         ]
-        if let temperature { params["temperature"] = .double(temperature) }
-        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
 
     /// Generate audio with voice design mode.
-    func generateDesign(text: String, voiceDescription: String, outputPath: String,
-                        temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
-        var params: [String: RPCValue] = [
+    func generateDesign(text: String, voiceDescription: String, outputPath: String) async throws -> GenerationResult {
+        let params: [String: RPCValue] = [
             "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
             "instruct": .string(voiceDescription),
             "output_path": .string(outputPath),
         ]
-        if let temperature { params["temperature"] = .double(temperature) }
-        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
 
     /// Generate audio with voice cloning mode.
-    func generateClone(text: String, refAudio: String, refText: String?, outputPath: String,
-                       temperature: Double? = nil, maxTokens: Int? = nil) async throws -> GenerationResult {
+    func generateClone(text: String, refAudio: String, refText: String?, outputPath: String) async throws -> GenerationResult {
         var params: [String: RPCValue] = [
             "mode": .string(GenerationMode.clone.rawValue),
             "text": .string(text),
@@ -362,8 +377,6 @@ final class PythonBridge: ObservableObject {
         if let refText, !refText.isEmpty {
             params["ref_text"] = .string(refText)
         }
-        if let temperature { params["temperature"] = .double(temperature) }
-        if let maxTokens { params["max_tokens"] = .int(maxTokens) }
         let result = try await callDict("generate", params: params)
         return GenerationResult(from: result)
     }
@@ -375,8 +388,6 @@ final class PythonBridge: ObservableObject {
         emotion: String,
         speed: Double,
         outputPath: String,
-        temperature: Double? = nil,
-        maxTokens: Int? = nil,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
@@ -391,9 +402,7 @@ final class PythonBridge: ObservableObject {
                 voice: voice,
                 emotion: emotion,
                 speed: speed,
-                outputPath: outputPath,
-                temperature: temperature,
-                maxTokens: maxTokens
+                outputPath: outputPath
             )
         }
     }
@@ -403,8 +412,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voiceDescription: String,
         outputPath: String,
-        temperature: Double? = nil,
-        maxTokens: Int? = nil,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
@@ -417,9 +424,7 @@ final class PythonBridge: ObservableObject {
             try await self.generateDesign(
                 text: text,
                 voiceDescription: voiceDescription,
-                outputPath: outputPath,
-                temperature: temperature,
-                maxTokens: maxTokens
+                outputPath: outputPath
             )
         }
     }
@@ -430,8 +435,6 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         outputPath: String,
-        temperature: Double? = nil,
-        maxTokens: Int? = nil,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
     ) async throws -> GenerationResult {
@@ -445,9 +448,7 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
-                outputPath: outputPath,
-                temperature: temperature,
-                maxTokens: maxTokens
+                outputPath: outputPath
             )
         }
     }
@@ -458,48 +459,6 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         clearActiveProgressTracking()
         syncSidebarStatusFromSystemState()
-    }
-
-    /// Generate audio with custom voice mode while streaming chunk previews.
-    func generateCustomStreaming(
-        text: String,
-        voice: String,
-        emotion: String,
-        speed: Double,
-        outputPath: String,
-        streamingInterval: Double = 2.0,
-        onChunk: @escaping (GenerationChunkNotification) -> Void
-    ) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
-            "mode": .string(GenerationMode.custom.rawValue),
-            "text": .string(text),
-            "voice": .string(voice),
-            "instruct": .string(emotion),
-            "speed": .double(speed),
-            "output_path": .string(outputPath),
-            "stream": .bool(true),
-            "streaming_interval": .double(streamingInterval),
-        ], onGenerationChunk: onChunk)
-        return GenerationResult(from: result)
-    }
-
-    /// Generate audio with voice design mode while streaming chunk previews.
-    func generateDesignStreaming(
-        text: String,
-        voiceDescription: String,
-        outputPath: String,
-        streamingInterval: Double = 2.0,
-        onChunk: @escaping (GenerationChunkNotification) -> Void
-    ) async throws -> GenerationResult {
-        let result = try await callDict("generate", params: [
-            "mode": .string(GenerationMode.design.rawValue),
-            "text": .string(text),
-            "instruct": .string(voiceDescription),
-            "output_path": .string(outputPath),
-            "stream": .bool(true),
-            "streaming_interval": .double(streamingInterval),
-        ], onGenerationChunk: onChunk)
-        return GenerationResult(from: result)
     }
 
     /// List enrolled voices.
@@ -809,9 +768,7 @@ final class PythonBridge: ObservableObject {
     }
 
     private func processLine(_ line: String) {
-        guard let data = line.data(using: .utf8) else { return }
-
-        guard let response = try? JSONDecoder().decode(RPCResponse.self, from: data) else {
+        guard let response = PythonBridgeLineParser.parse(line) else {
             #if DEBUG
             print("[PythonBridge] Unparseable line: \(line)")
             #endif
@@ -819,6 +776,7 @@ final class PythonBridge: ObservableObject {
         }
 
         if response.isNotification {
+            guard PythonBridgeLineParser.isHandledNotification(response) else { return }
             handleNotification(response)
             return
         }
@@ -857,23 +815,6 @@ final class PythonBridge: ObservableObject {
                 percent: progressPercent,
                 message: progressMessage
             )
-        case "generation_chunk":
-            guard
-                let params = response.params,
-                let requestID = params["request_id"]?.intValue,
-                let chunkIndex = params["chunk_index"]?.intValue,
-                let chunkPath = params["chunk_path"]?.stringValue,
-                let isFinal = params["is_final"]?.boolValue
-            else { return }
-            guard let handler = generationChunkHandlers[requestID] else { return }
-            handler(
-                GenerationChunkNotification(
-                    requestID: requestID,
-                    chunkIndex: chunkIndex,
-                    chunkPath: chunkPath,
-                    isFinal: isFinal
-                )
-            )
         default:
             break
         }
@@ -884,7 +825,6 @@ final class PythonBridge: ObservableObject {
             continuation.resume(throwing: error)
         }
         pendingRequests.removeAll()
-        generationChunkHandlers.removeAll()
     }
 
     // MARK: - Path Resolution
@@ -1006,8 +946,10 @@ struct GenerationResult {
 enum PythonBridgeError: LocalizedError {
     case processNotRunning
     case processTerminated
+    case cancelled
     case encodingError
     case rpcError(code: Int, message: String)
+    case restartFailed(String)
     case timeout(seconds: Int)
 
     var errorDescription: String? {
@@ -1016,9 +958,13 @@ enum PythonBridgeError: LocalizedError {
             return "Python backend is not running"
         case .processTerminated:
             return "Python backend process terminated unexpectedly"
+        case .cancelled:
+            return "Generation cancelled"
         case .encodingError:
             return "Failed to encode RPC request"
         case .rpcError(_, let message):
+            return message
+        case .restartFailed(let message):
             return message
         case .timeout(let seconds):
             return "Request timed out after \(seconds) seconds"

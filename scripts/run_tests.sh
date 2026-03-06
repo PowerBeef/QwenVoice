@@ -16,6 +16,7 @@ PROJECT="$PROJECT_DIR/QwenVoice.xcodeproj"
 SCHEME="QwenVoiceUITests"
 TEST_BUNDLE_ID="QwenVoiceUITests"
 DESTINATION="platform=macOS,arch=arm64"
+DESTINATION_FINGERPRINT="$DESTINATION"
 TEST_UI_SWIFT_DEFINE="QW_UI_LIQUID"
 TEST_UI_OTHER_SWIFT_FLAGS="OTHER_SWIFT_FLAGS=\$(inherited) -D$TEST_UI_SWIFT_DEFINE"
 TEST_DIR="$PROJECT_DIR/QwenVoiceUITests"
@@ -89,6 +90,24 @@ list_test_classes() {
     done
 }
 
+resolve_destination() {
+    local resolved_id
+
+    resolved_id="$(
+        xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showdestinations 2>/dev/null \
+            | sed -n 's/.*{ platform:macOS, arch:arm64, id:\([^,]*\), name:My Mac }.*/\1/p' \
+            | head -1
+    )"
+
+    if [[ -n "$resolved_id" ]]; then
+        DESTINATION="platform=macOS,id=$resolved_id,arch=arm64"
+        DESTINATION_FINGERPRINT="$DESTINATION"
+    else
+        DESTINATION="platform=macOS,arch=arm64"
+        DESTINATION_FINGERPRINT="$DESTINATION"
+    fi
+}
+
 normalize_class_name() {
     local input="$1"
     local candidate="$input"
@@ -127,6 +146,23 @@ normalize_test_identifier() {
     method_part="${input#*/}"
     class_name="$(normalize_class_name "$class_part")" || return 1
     echo "$TEST_BUNDLE_ID/$class_name/$method_part"
+}
+
+filter_xcodebuild_output() {
+    awk '
+        /^--- xcodebuild: WARNING: Using the first of multiple matching destinations:$/ {
+            suppress_destinations = 1
+            next
+        }
+        suppress_destinations && /^[[:space:]]*\{ platform:macOS,/ {
+            next
+        }
+        {
+            suppress_destinations = 0
+            print
+            fflush()
+        }
+    '
 }
 
 collect_suite_filters() {
@@ -198,7 +234,7 @@ compute_source_fingerprint() {
                 \( -name '*.swift' -o -name '*.py' -o -name '*.txt' \) -print0
             printf '%s\0' "$PROJECT_DIR/project.yml" "$PROJECT_DIR/QwenVoice.xcodeproj/project.pbxproj"
         ) | xargs -0 shasum 2>/dev/null
-        printf 'destination %s\n' "$DESTINATION"
+        printf 'destination %s\n' "$DESTINATION_FINGERPRINT"
         printf 'ui_profile %s\n' "$TEST_UI_SWIFT_DEFINE"
     } | shasum | awk '{print $1}'
 }
@@ -512,7 +548,7 @@ run_tests() {
     fi
 
     set +e
-    QWENVOICE_DEBUG_ON_FAIL="$debug_env" "${command[@]}" 2>&1 | tee "$XCODEBUILD_LOG"
+    QWENVOICE_DEBUG_ON_FAIL="$debug_env" "${command[@]}" 2>&1 | filter_xcodebuild_output | tee "$XCODEBUILD_LOG"
     command_status=${PIPESTATUS[0]}
     set -e
 
@@ -599,6 +635,7 @@ if [[ "$NO_BUILD" == "true" && "$FORCE_BUILD" == "true" ]]; then
     exit 1
 fi
 
+resolve_destination
 collect_requested_filters
 apply_shard_if_requested
 

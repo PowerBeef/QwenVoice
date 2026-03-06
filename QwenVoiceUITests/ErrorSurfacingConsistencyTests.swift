@@ -209,6 +209,7 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
         CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY);
         INSERT INTO grdb_migrations(identifier) VALUES ('v1_create_generations');
         INSERT INTO grdb_migrations(identifier) VALUES ('v2_add_sortOrder');
+        INSERT INTO grdb_migrations(identifier) VALUES ('v3_drop_sortOrder');
         CREATE TABLE generations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             text TEXT NOT NULL,
@@ -219,13 +220,12 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
             speed DOUBLE,
             audioPath TEXT NOT NULL,
             duration DOUBLE,
-            createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            sortOrder INTEGER DEFAULT 0
+            createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO generations (
-            text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt, sortOrder
+            text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
         ) VALUES (
-            'History fixture entry', 'clone', 'pro', 'fixture_voice', NULL, NULL, '\(escapedAudioPath)', 1.2, '2026-03-05 12:00:00', 0
+            'History fixture entry', 'clone', 'pro', 'fixture_voice', NULL, NULL, '\(escapedAudioPath)', 1.2, '2026-03-05 12:00:00'
         );
         """
 

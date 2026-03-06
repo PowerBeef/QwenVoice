@@ -25,6 +25,10 @@ final class DatabaseService {
     private func migrate() throws {
         guard let dbQueue else { return }
 
+        try Self.makeMigrator().migrate(dbQueue)
+    }
+
+    static func makeMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
 
         migrator.registerMigration("v1_create_generations") { db in
@@ -54,7 +58,32 @@ final class DatabaseService {
             }
         }
 
-        try migrator.migrate(dbQueue)
+        migrator.registerMigration("v3_drop_sortOrder") { db in
+            try db.create(table: "generations_v3") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("text", .text).notNull()
+                t.column("mode", .text).notNull()
+                t.column("modelTier", .text).notNull()
+                t.column("voice", .text)
+                t.column("emotion", .text)
+                t.column("speed", .double)
+                t.column("audioPath", .text).notNull()
+                t.column("duration", .double)
+                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+
+            try db.execute(sql: """
+                INSERT INTO generations_v3 (id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt)
+                SELECT id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
+                FROM generations
+                ORDER BY createdAt DESC
+                """)
+
+            try db.drop(table: "generations")
+            try db.rename(table: "generations_v3", to: "generations")
+        }
+
+        return migrator
     }
 
     // MARK: - CRUD

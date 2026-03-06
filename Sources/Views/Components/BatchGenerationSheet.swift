@@ -4,6 +4,7 @@ import SwiftUI
 struct BatchGenerationSheet: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject var envManager: PythonEnvironmentManager
     @Environment(\.dismiss) private var dismiss
 
     let mode: GenerationMode
@@ -15,14 +16,17 @@ struct BatchGenerationSheet: View {
     var refText: String?
 
     @State private var batchText = ""
-    @State private var isProcessing = false
-    @State private var currentIndex = 0
-    @State private var totalItems = 0
-    @State private var errorMessage: String?
-    @State private var cancelled = false
+    @StateObject private var coordinator = BatchGenerationCoordinator()
 
     private var themeColor: Color {
         AppTheme.modeColor(for: mode)
+    }
+
+    private var activePythonPath: String? {
+        if case .ready(let pythonPath) = envManager.state {
+            return pythonPath
+        }
+        return nil
     }
 
     var body: some View {
@@ -47,18 +51,18 @@ struct BatchGenerationSheet: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                 )
-                .disabled(isProcessing)
+                .disabled(coordinator.isProcessing)
 
-            if isProcessing {
+            if coordinator.isProcessing {
                 VStack(spacing: 8) {
-                    ProgressView(value: Double(currentIndex), total: Double(totalItems))
+                    ProgressView(value: Double(coordinator.currentIndex), total: Double(coordinator.totalItems))
                         .tint(themeColor)
-                    Text("Generating \(min(currentIndex + 1, max(totalItems, 1)))/\(totalItems)...")
+                    Text(progressLabel)
                         .font(.caption)
                 }
             }
 
-            if let errorMessage {
+            if let errorMessage = coordinator.errorMessage {
                 Text(errorMessage)
                     .foregroundColor(.red)
                     .font(.caption)
@@ -66,21 +70,21 @@ struct BatchGenerationSheet: View {
 
             HStack {
                 Button("Cancel") {
-                    if isProcessing {
-                        cancelled = true
-                    } else {
-                        dismiss()
-                    }
+                    coordinator.cancelBatch(
+                        pythonPath: activePythonPath,
+                        dismiss: { dismiss() }
+                    )
                 }
+                .disabled(coordinator.isCancelling)
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button(isProcessing ? "Processing..." : "Generate All") {
+                Button(coordinator.isCancelling ? "Cancelling..." : (coordinator.isProcessing ? "Processing..." : "Generate All")) {
                     startBatch()
                 }
                 .buttonStyle(GlowingGradientButtonStyle(baseColor: themeColor))
-                .disabled(batchText.isEmpty || isProcessing)
+                .disabled(batchText.isEmpty || coordinator.isProcessing)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -102,120 +106,33 @@ struct BatchGenerationSheet: View {
         }
     }
 
+    private var progressLabel: String {
+        let total = max(coordinator.totalItems, 1)
+        let current = min(coordinator.currentIndex + 1, total)
+        return coordinator.isCancelling
+            ? "Cancelling after interrupting \(current)/\(total)..."
+            : "Generating \(current)/\(total)..."
+    }
+
     private func startBatch() {
-        let lines = batchText.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        guard !lines.isEmpty else { return }
-
-        isProcessing = true
-        totalItems = lines.count
-        currentIndex = 0
-        cancelled = false
-        errorMessage = nil
-
-        Task {
-            guard let model = TTSModel.model(for: mode) else {
-                errorMessage = "Model not found"
-                isProcessing = false
-                return
-            }
-
-            guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
-                errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
-                isProcessing = false
-                return
-            }
-
-            if mode == .design && (voiceDescription ?? "").isEmpty {
-                errorMessage = "Enter a voice description before starting batch generation."
-                isProcessing = false
-                return
-            }
-
-            if mode == .clone && refAudio == nil {
-                errorMessage = "Select a reference audio file before starting batch generation."
-                isProcessing = false
-                return
-            }
-
-            do {
-                for (i, line) in lines.enumerated() {
-                    if cancelled { break }
-
-                    let outputPath = makeOutputPath(
-                        subfolder: model.outputSubfolder,
-                        text: line
-                    )
-
-                    var result: GenerationResult?
-                    switch mode {
-                    case .custom:
-                            result = try await pythonBridge.generateCustomFlow(
-                                modelID: model.id,
-                                text: line,
-                                voice: voice ?? TTSModel.defaultSpeaker,
-                                emotion: emotion ?? "Normal tone",
-                                speed: speed ?? 1.0,
-                                outputPath: outputPath,
-                            batchIndex: i + 1,
-                            batchTotal: totalItems
-                        )
-                    case .design:
-                        result = try await pythonBridge.generateDesignFlow(
-                            modelID: model.id,
-                            text: line,
-                            voiceDescription: voiceDescription ?? "",
-                            outputPath: outputPath,
-                            batchIndex: i + 1,
-                            batchTotal: totalItems
-                        )
-                    case .clone:
-                        if let refAudio {
-                            result = try await pythonBridge.generateCloneFlow(
-                                modelID: model.id,
-                                text: line,
-                                refAudio: refAudio,
-                                refText: refText,
-                                outputPath: outputPath,
-                                batchIndex: i + 1,
-                                batchTotal: totalItems
-                            )
-                        }
-                    }
-
-                    guard let result else { continue }
-
-                    // Save to history
-                    let voiceName: String? = voice ?? voiceDescription ?? {
-                        guard let ref = refAudio else { return nil }
-                        return URL(fileURLWithPath: ref).deletingPathExtension().lastPathComponent
-                    }()
-                    var gen = Generation(
-                        text: line,
-                        mode: mode.rawValue,
-                        modelTier: model.tier,
-                        voice: voiceName,
-                        emotion: emotion,
-                        speed: speed,
-                        audioPath: result.audioPath,
-                        duration: result.durationSeconds,
-                        createdAt: Date()
-                    )
-                    try DatabaseService.shared.saveGeneration(&gen)
-                    NotificationCenter.default.post(name: .generationSaved, object: nil)
-                    currentIndex = i + 1
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-
-            if cancelled {
-                pythonBridge.clearGenerationActivity()
-            }
-            isProcessing = false
-            dismiss()
-        }
+        coordinator.startBatch(
+            batchText: batchText,
+            requestBuilder: { lines in
+                guard let model = TTSModel.model(for: mode) else { return nil }
+                return BatchGenerationRequest(
+                    mode: mode,
+                    model: model,
+                    lines: lines,
+                    voice: voice,
+                    emotion: emotion,
+                    speed: speed,
+                    voiceDescription: voiceDescription,
+                    refAudio: refAudio,
+                    refText: refText
+                )
+            },
+            bridge: pythonBridge,
+            dismiss: { dismiss() }
+        )
     }
 }

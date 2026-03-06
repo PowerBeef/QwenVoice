@@ -103,14 +103,14 @@ The project is cleanly separated into a two-process design, delineating the Swif
 
 The app uses a **Two-Process Architecture**:
 1. **SwiftUI Frontend**: Acts as the visual interface. It handles model management, maintains the SQLite generation log, captures user inputs, and routes different UI modules like Custom Voice, Voice Cloning, History, and Model management.
-2. **Python Backend**: The MLX-based inference operates continuously in a separate process. The Swift frontend starts a persistent Python backend via `server.py` located in Resources, and communicates via **JSON-RPC 2.0** over standard input/output (`stdin/stdout`) handled by `PythonBridge.swift`. (Notably, `cli/main.py` serves as a standalone CLI alternative.)
+2. **Python Backend**: The MLX-based inference operates continuously in a separate process. The Swift frontend starts a persistent Python backend via `server.py` located in Resources, and communicates via **JSON-RPC 2.0** over standard input/output (`stdin/stdout`) handled by `PythonBridge.swift`. The shipping app uses non-streaming generation flows; backend-only streaming and advanced sampling parameters remain available for benchmark/internal tooling. (Notably, `cli/main.py` serves as a standalone CLI alternative.)
 3. **Release Packaging**: When built for release using `scripts/release.sh`, the project automatically bundles the Python 3.13 arm64 environment and `ffmpeg` directly into the `.app` bundle, ensuring a standalone experience without requiring system-level dependencies from the end user.
 
 ### Key Files
 | File | Role |
 |------|------|
 | `Sources/Resources/backend/server.py` | Python JSON-RPC server; all ML inference happens here |
-| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, handles async continuations |
+| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, restarts on batch cancel, handles async continuations |
 | `Sources/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum, speaker list |
 | `Sources/Models/RPCMessage.swift` | JSON-RPC 2.0 codec — `RPCValue` enum for type-safe JSON |
 | `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history at `history.sqlite` |

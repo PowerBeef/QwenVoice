@@ -11,7 +11,7 @@ struct RPCRequest: Encodable {
 
 // MARK: - JSON-RPC Response
 
-struct RPCResponse: Decodable {
+struct RPCResponse: Decodable, Equatable {
     let jsonrpc: String
     let id: Int?
     let result: RPCValue?
@@ -32,7 +32,7 @@ struct RPCResponse: Decodable {
     }
 }
 
-struct RPCError: Decodable {
+struct RPCError: Decodable, Equatable {
     let code: Int
     let message: String
 }

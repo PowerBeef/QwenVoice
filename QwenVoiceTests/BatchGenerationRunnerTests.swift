@@ -1,0 +1,243 @@
+import XCTest
+@testable import QwenVoice
+
+@MainActor
+final class BatchGenerationRunnerTests: XCTestCase {
+    func testRunPersistsAllCompletedItems() async throws {
+        let bridge = FakeBatchBridge(behaviors: [.success, .success])
+        let store = RecordingGenerationStore()
+        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+
+        let outcome = try await runner.run(
+            request: makeRequest(lines: ["First line", "Second line"]),
+            makeOutputPath: makeOutputPath(subfolder:text:),
+            onItemStarted: { _, _ in }
+        )
+
+        XCTAssertEqual(outcome, .completed(completedCount: 2))
+        XCTAssertEqual(store.savedGenerations.map(\.text), ["First line", "Second line"])
+        XCTAssertEqual(store.savedGenerations.map(\.modelTier), ["pro", "pro"])
+    }
+
+    func testImmediateCancelInterruptsInFlightGeneration() async throws {
+        let bridge = FakeBatchBridge(behaviors: [.success, .waitForCancel])
+        let store = RecordingGenerationStore()
+        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+
+        let task = Task {
+            try await runner.run(
+                request: makeRequest(lines: ["First line", "Second line"]),
+                makeOutputPath: makeOutputPath(subfolder:text:),
+                onItemStarted: { _, _ in }
+            )
+        }
+
+        await waitForPendingGeneration(in: bridge)
+        try await runner.requestCancellation(
+            pythonPath: "/opt/homebrew/bin/python3",
+            appSupportDir: "/tmp/QwenVoiceTests"
+        )
+        let outcome = try await task.value
+
+        XCTAssertEqual(outcome, .cancelled(completedCount: 1))
+        XCTAssertEqual(store.savedGenerations.map(\.text), ["First line"])
+        XCTAssertEqual(bridge.cancelRequests.count, 1)
+        XCTAssertEqual(bridge.clearGenerationActivityCallCount, 1)
+    }
+
+    func testRestartFailureAfterCancelIsSurfaced() async throws {
+        let bridge = FakeBatchBridge(
+            behaviors: [.success, .waitForCancel],
+            restartError: TestFailure("Restart failed")
+        )
+        let store = RecordingGenerationStore()
+        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+
+        let task = Task {
+            try await runner.run(
+                request: makeRequest(lines: ["First line", "Second line"]),
+                makeOutputPath: makeOutputPath(subfolder:text:),
+                onItemStarted: { _, _ in }
+            )
+        }
+
+        await waitForPendingGeneration(in: bridge)
+        do {
+            try await runner.requestCancellation(
+                pythonPath: "/opt/homebrew/bin/python3",
+                appSupportDir: "/tmp/QwenVoiceTests"
+            )
+            XCTFail("Cancellation restart failure should be thrown")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Restart failed")
+        }
+
+        let outcome = try await task.value
+        XCTAssertEqual(outcome, .cancelled(completedCount: 1))
+        XCTAssertEqual(store.savedGenerations.map(\.text), ["First line"])
+    }
+
+    func testOnlyCompletedItemsArePersistedWhenCancellationOccursMidBatch() async throws {
+        let bridge = FakeBatchBridge(behaviors: [.success, .waitForCancel, .success])
+        let store = RecordingGenerationStore()
+        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+
+        let task = Task {
+            try await runner.run(
+                request: makeRequest(lines: ["First line", "Second line", "Third line"]),
+                makeOutputPath: makeOutputPath(subfolder:text:),
+                onItemStarted: { _, _ in }
+            )
+        }
+
+        await waitForPendingGeneration(in: bridge)
+        try await runner.requestCancellation(
+            pythonPath: "/opt/homebrew/bin/python3",
+            appSupportDir: "/tmp/QwenVoiceTests"
+        )
+        _ = try await task.value
+
+        XCTAssertEqual(store.savedGenerations.count, 1)
+        XCTAssertEqual(store.savedGenerations.first?.text, "First line")
+    }
+
+    private func waitForPendingGeneration(in bridge: FakeBatchBridge) async {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if bridge.hasPendingGeneration {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Timed out waiting for a pending batch generation")
+    }
+
+    private func makeRequest(lines: [String]) -> BatchGenerationRequest {
+        BatchGenerationRequest(
+            mode: .custom,
+            model: TTSModel.model(for: .custom)!,
+            lines: lines,
+            voice: TTSModel.defaultSpeaker,
+            emotion: "Normal tone",
+            speed: 1.0,
+            voiceDescription: nil,
+            refAudio: nil,
+            refText: nil
+        )
+    }
+
+    private func makeOutputPath(subfolder: String, text: String) -> String {
+        "/tmp/\(subfolder)/\(text.replacingOccurrences(of: " ", with: "_")).wav"
+    }
+}
+
+@MainActor
+private final class RecordingGenerationStore: GenerationPersisting {
+    private(set) var savedGenerations: [Generation] = []
+
+    func saveGeneration(_ generation: inout Generation) throws {
+        generation.id = Int64(savedGenerations.count + 1)
+        savedGenerations.append(generation)
+    }
+}
+
+@MainActor
+private final class FakeBatchBridge: BatchGenerationBridging {
+    enum Behavior {
+        case success
+        case waitForCancel
+    }
+
+    private var behaviors: [Behavior]
+    private var pendingContinuation: CheckedContinuation<GenerationResult, Error>?
+    private let restartError: Error?
+
+    private(set) var cancelRequests: [(pythonPath: String, appSupportDir: String)] = []
+    private(set) var clearGenerationActivityCallCount = 0
+
+    init(behaviors: [Behavior], restartError: Error? = nil) {
+        self.behaviors = behaviors
+        self.restartError = restartError
+    }
+
+    var hasPendingGeneration: Bool {
+        pendingContinuation != nil
+    }
+
+    func generateCustomFlow(
+        modelID: String,
+        text: String,
+        voice: String,
+        emotion: String,
+        speed: Double,
+        outputPath: String,
+        batchIndex: Int?,
+        batchTotal: Int?
+    ) async throws -> GenerationResult {
+        try await generate(text: text, outputPath: outputPath)
+    }
+
+    func generateDesignFlow(
+        modelID: String,
+        text: String,
+        voiceDescription: String,
+        outputPath: String,
+        batchIndex: Int?,
+        batchTotal: Int?
+    ) async throws -> GenerationResult {
+        try await generate(text: text, outputPath: outputPath)
+    }
+
+    func generateCloneFlow(
+        modelID: String,
+        text: String,
+        refAudio: String,
+        refText: String?,
+        outputPath: String,
+        batchIndex: Int?,
+        batchTotal: Int?
+    ) async throws -> GenerationResult {
+        try await generate(text: text, outputPath: outputPath)
+    }
+
+    func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
+        cancelRequests.append((pythonPath, appSupportDir))
+        pendingContinuation?.resume(throwing: PythonBridgeError.cancelled)
+        pendingContinuation = nil
+
+        if let restartError {
+            throw restartError
+        }
+    }
+
+    func clearGenerationActivity() {
+        clearGenerationActivityCallCount += 1
+    }
+
+    private func generate(text: String, outputPath: String) async throws -> GenerationResult {
+        let behavior = behaviors.removeFirst()
+        switch behavior {
+        case .success:
+            return GenerationResult(from: [
+                "audio_path": .string(outputPath),
+                "duration_seconds": .double(1.25),
+            ])
+        case .waitForCancel:
+            return try await withCheckedThrowingContinuation { continuation in
+                pendingContinuation = continuation
+            }
+        }
+    }
+}
+
+private struct TestFailure: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? {
+        message
+    }
+}

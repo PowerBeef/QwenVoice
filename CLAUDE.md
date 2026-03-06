@@ -93,17 +93,12 @@ All UI elements have `accessibilityIdentifier` values following the pattern `"{v
 2. `PythonBridge.swift` (JSON-RPC client) sends newline-delimited JSON requests; reads responses line-by-line
 3. The Python process sends a `ready` notification on startup → sets `PythonBridge.isReady = true`
 4. Progress updates arrive as `progress` notifications (no `id` field) before the final response
-5. Streaming generation sends `generation_chunk` notifications (with `request_id`) for each audio chunk as it's generated
+5. Backend benchmark/internal clients may receive `generation_chunk` notifications, but the shipping Swift app ignores them
 6. Only one model lives in GPU memory at a time; `load_model` unloads the previous before loading
 7. RPC calls have timeouts: 300s for generation, 10s for `ping`. On timeout, `PythonBridgeError.timeout(seconds:)` is thrown with the actual duration
 
-### Streaming generation
-Custom Voice and Voice Design modes support streaming output via `generation_chunk` notifications:
-1. Swift calls `generateCustomStreaming()` or `generateDesignStreaming()` with `stream: true` and a `streamingInterval` (default 2.0s)
-2. Python writes each chunk to `{stem}__chunk_{index:03d}.wav` and sends a `generation_chunk` notification
-3. `PythonBridge` routes notifications to per-request `onGenerationChunk` callbacks via `generationChunkHandlers[requestID]`
-4. After all chunks, Python concatenates them into the final output file
-5. Voice cloning does NOT support streaming — it uses the prepared ICL fast path instead
+### Streaming and advanced sampling
+The backend still supports `generation_chunk`, `temperature`, `max_tokens`, and `streaming_interval` for benchmark/internal tooling. The shipping SwiftUI app intentionally uses the non-streaming generation path and does not expose temperature/max-token controls in the UI.
 
 ### Clone performance optimization (Prepared ICL Context)
 Voice cloning uses a two-level caching system to avoid re-encoding reference audio on every request:
@@ -158,12 +153,12 @@ Models are downloaded via `HuggingFaceDownloader.swift` using native URLSession 
 |------|------|
 | `Sources/Resources/backend/server.py` | Python JSON-RPC server; all ML inference, caching, and streaming happen here |
 | `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py` | Prepared ICL context for clone speed; speech tokenizer encoder repair |
-| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, streaming chunk handlers, async continuations with timeouts |
+| `Sources/Services/PythonBridge.swift` | Swift JSON-RPC client; spawns Python, restarts on batch cancel, async continuations with timeouts |
 | `Sources/Models/TTSModel.swift` | Model registry (3 Pro models), `GenerationMode` enum, speaker list |
 | `Sources/Models/RPCMessage.swift` | JSON-RPC 2.0 codec — `RPCValue` enum for type-safe JSON |
 | `Sources/Models/Generation.swift` | GRDB history record; `audioFileExists`, `textPreview` computed properties |
 | `Sources/Models/EmotionPreset.swift` | Predefined emotion/tone presets |
-| `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history; v2 migration adds `sortOrder`; LIKE-escaped search |
+| `Sources/Services/DatabaseService.swift` | GRDB SQLite — stores generation history; v3 drops the dead `sortOrder` column |
 | `Sources/Services/AudioService.swift` | `shouldAutoPlay` (UserDefaults), `configuredOutputsRoot` (user-configurable output dir), `makeOutputPath` |
 | `Sources/Services/WaveformService.swift` | Waveform data extraction for visualization |
 | `Sources/ViewModels/ModelManagerViewModel.swift` | Download/delete model state, `ModelStatus` enum |
@@ -187,14 +182,14 @@ Sources/
 ├── ContentView.swift               # Root NavigationSplitView + sidebar routing + notifications
 ├── Models/
 │   ├── TTSModel.swift              # Model registry, GenerationMode enum, speakers
-│   ├── Generation.swift            # GRDB history record (v2: sortOrder column)
+│   ├── Generation.swift            # GRDB history record
 │   ├── Voice.swift                 # Voice cloning reference
 │   ├── RPCMessage.swift            # JSON-RPC 2.0 codec
 │   └── EmotionPreset.swift         # Emotion preset definitions
 ├── Services/
-│   ├── PythonBridge.swift          # JSON-RPC client, subprocess, streaming chunk handlers
+│   ├── PythonBridge.swift          # JSON-RPC client, subprocess, batch-cancel restart support
 │   ├── PythonEnvironmentManager.swift  # Venv setup, incremental update, pip retry, import validation
-│   ├── DatabaseService.swift       # GRDB SQLite (v2 migration), LIKE-escaped search
+│   ├── DatabaseService.swift       # GRDB SQLite (v3 migration removes dead sortOrder column)
 │   ├── HuggingFaceDownloader.swift # Native URLSession downloader, withLock, DownloadError
 │   ├── AudioService.swift          # shouldAutoPlay, configurable output directory
 │   └── WaveformService.swift       # Waveform extraction
@@ -326,10 +321,10 @@ The player implements path-pinned retry logic for autoplay after generation:
 | `ref_audio` | string | — | Reference audio path → Voice Cloning mode |
 | `ref_text` | string | None | Explicit transcript for clone reference (fallback: sidecar .txt) |
 | `speed` | float | 1.0 | Speed scale (Custom Voice only) |
-| `temperature` | float | 0.6 | Sampling temperature |
-| `max_tokens` | int | None | Hard cap on generated tokens |
-| `stream` | bool | False | Enable streaming chunk output (Custom/Design only) |
-| `streaming_interval` | float | 2.0 | Seconds between streamed chunks |
+| `temperature` | float | 0.6 | Backend-only sampling parameter used by benchmark/internal tooling |
+| `max_tokens` | int | None | Backend-only token cap used by benchmark/internal tooling |
+| `stream` | bool | False | Backend-only chunked preview mode used by benchmark/internal tooling |
+| `streaming_interval` | float | 2.0 | Backend-only chunk interval |
 | `benchmark` | bool | False | Include timing breakdown in response |
 | `benchmark_label` | string | None | Override label for benchmark output |
 
@@ -339,10 +334,10 @@ The player implements path-pinned retry logic for autoplay after generation:
 
 **Notifications during generation:**
 - `progress`: Status updates (no `id` field)
-- `generation_chunk`: Streaming audio chunks with `request_id`, `chunk_index`, `chunk_path`, `is_final`
+- `generation_chunk`: Backend-only streaming audio chunks with `request_id`, `chunk_index`, `chunk_path`, `is_final`
 
 ### DatabaseService
-- **v2 migration** adds `sortOrder` integer column with backfill by `createdAt DESC` order
+- **v3 migration** rebuilds `generations` without the dead `sortOrder` column
 - **`fetchAllGenerations()`** uses GRDB's type-safe query builder (`Generation.order(...).fetchAll(db)`); do NOT use raw SQL with manual `init(row:)` mapping — it silently returns empty results with GRDB 7.10.0
 - **`deleteAllGenerations()`** batch delete; silently returns if `dbQueue` is nil
 - **Error strategy:** Write operations throw `DatabaseServiceError.notInitialized(reason)`. Read operations return empty arrays with console warning.
@@ -389,7 +384,6 @@ The player implements path-pinned retry logic for autoplay after generation:
 - Preset speakers and the default speaker now come from `Sources/Resources/qwenvoice_contract.json`
 - Instruction control (`instruct` param) is probabilistic — complex multi-dimensional requests may not be followed precisely
 - `Generation.modelTier` is populated from the shared manifest model tier
-- `sortOrder` column exists in the DB but is not yet used in list rendering queries
 
 ## Gotchas
 
@@ -399,7 +393,7 @@ The player implements path-pinned retry logic for autoplay after generation:
 - **Changing `requirements.txt` invalidates the venv marker** — the app first tries an incremental `pip install` on the existing venv; on failure it recreates from scratch. After editing requirements manually: recreate the venv, `pip install -r requirements.txt`, and write `shasum -a 256 requirements.txt | awk '{print $1}'` to `python/.setup-complete`.
 - **`audioop-lts` is 3.13+ only** — it backports the `audioop` stdlib module removed in 3.13. The environment marker in `requirements.txt` ensures pip skips it on 3.12 where `audioop` is built-in.
 - **No auto-restart on backend crash** — if the Python process terminates, `PythonBridge.isReady` becomes `false`, `cancelAllPending(error: .processTerminated)` fires for all waiting continuations, and generation views disable. The user must quit and reopen the app. `stop()` terminates the process and waits for exit in a detached task to avoid zombie processes.
-- **RPC timeout** — `PythonBridge.call()` times out after 300s (generation) or 10s (ping). On timeout the pending request and any `generationChunkHandlers` are cleaned up in a `defer` block, and `PythonBridgeError.timeout(seconds:)` is thrown.
+- **RPC timeout** — `PythonBridge.call()` times out after 300s (generation) or 10s (ping). On timeout the pending request is cleaned up in a `defer` block, and `PythonBridgeError.timeout(seconds:)` is thrown.
 - **DatabaseService.saveGeneration throws** `DatabaseServiceError.notInitialized(reason)` when `dbQueue` is nil (init failed). Callers must handle errors. Read-only methods return empty arrays with a console warning.
 - **HuggingFaceDownloader thread safety** — all `continuations`, `destinations`, and progress state access goes through `withLock<Result>()` which wraps `NSLock` with `defer { lock.unlock() }`. Safe temp file move to UUID path prevents URLSession from deleting downloads before they're moved to final destination.
 - **VoiceCloningView drop handler** validates file extensions against `[wav, mp3, aiff, aif, m4a, flac, ogg]`; non-audio files are rejected with an error message.

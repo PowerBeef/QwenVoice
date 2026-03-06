@@ -129,12 +129,12 @@ Important backend traits:
 - Model folders may be resolved through Hugging Face `snapshots/` subdirectories (`get_smart_path`).
 - Clone reference audio is normalized into a persistent cache under `cache/normalized_clone_refs`.
 - Prepared clone context is cached in a bounded in-memory LRU (`CLONE_CONTEXT_CACHE_CAPACITY`).
-- `generate` supports streaming preview notifications (`generation_chunk`) for custom/design requests and optional benchmark timing payloads.
+- `generate` still supports streaming preview notifications (`generation_chunk`) plus advanced sampling params for benchmark/internal tooling, but the shipping Swift app uses the non-streaming path only.
 
 Current backend/frontend reality:
 
 - `convert_audio` and `get_speakers` are implemented on the backend, but the shipping Swift UI does not currently call them.
-- `PythonBridge` already has streaming generation helpers, but the current SwiftUI views use the non-streaming generation methods.
+- The shipping SwiftUI app uses non-streaming generation flows; benchmark/internal scripts are the only consumers of backend streaming and advanced sampling params.
 
 ### Swift/Python contract
 
@@ -285,7 +285,7 @@ Current mode routing details:
 
 `DatabaseService` is simpler than some older docs suggest. It currently provides:
 
-- migrations for `generations` and `sortOrder`
+- schema migrations for `generations`
 - save
 - fetch all
 - delete one
@@ -296,7 +296,6 @@ Notably:
 - There is no DB-backed search helper.
 - `HistoryView` fetches all rows ordered by `createdAt.desc`.
 - Search is done in-memory inside `HistoryView`.
-- The `sortOrder` column exists but is not used by the current UI.
 
 ### Models and tiers
 
@@ -338,7 +337,7 @@ If you change backend Python dependencies:
 - Some backend/frontend features are partially wired:
   - backend `get_speakers` exists, but the Swift UI still reads the same bundled manifest directly rather than waiting for backend readiness
   - backend model info RPC exists, but `ModelsView` does filesystem checks
-  - streaming generation helpers exist in `PythonBridge`, but the current SwiftUI screens use non-streaming methods
+  - backend streaming and advanced sampling params remain available for benchmark/internal tooling, but the shipping SwiftUI app intentionally uses non-streaming defaults only
 - The repo already contains other assistant-facing docs (`CLAUDE.md`, `GEMINI.md`). Keep them in sync if you make broad architectural or workflow changes.
 - The inner git worktree may contain unrelated user changes. Check `git status` before editing and do not revert work you did not make.
 
