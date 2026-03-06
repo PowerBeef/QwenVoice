@@ -499,6 +499,7 @@ final class PythonBridge: ObservableObject {
 
     /// List enrolled voices.
     func listVoices() async throws -> [Voice] {
+        try UITestFaultInjection.throwIfEnabled(.listVoices)
         let items = try await callArray("list_voices")
         return items.compactMap { item -> Voice? in
             guard let obj = item.objectValue else { return nil }

@@ -43,6 +43,7 @@
 		B1D83CB652CC883A7A1DDC65 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6436F73812606485A0589C35 /* AppPaths.swift */; };
 		B25FDE21DB15AAB169D519EA /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */; };
 		B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890E011F57EAC237416DDF0F /* AppTheme.swift */; };
+		B655BBEFC7968D1B11AF3BE6 /* ErrorSurfacingConsistencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFEC0A10ACD9912B837A5B0 /* ErrorSurfacingConsistencyTests.swift */; };
 		B7962EA5C5AE26BE94E09309 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = A6529F131AAB6D76EF97AA1B /* server.py */; };
 		BAFA99B95D495C9303E851D1 /* ModelsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */; };
 		BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */; };
@@ -52,6 +53,7 @@
 		C838C6E3E59717F67F49C45C /* SidebarPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */; };
 		CD868F54EB56E87BE5F00283 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927B9E942C6EACB0CD15D12D /* PythonBridge.swift */; };
 		D43105145129C9FECE338221 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B9A406B3FB86D1CB132845 /* SetupView.swift */; };
+		E5E94AD88F173238332FECF7 /* UITestFaultInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */; };
 		EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52130E590A4CD0ED7447B159 /* EmotionPreset.swift */; };
 		F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006AC6BD98420562AC6A931C /* AudioService.swift */; };
 		FB7787825792B2182031F43C /* WindowChromeConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4ED24544C9C26510DFCFE5C /* WindowChromeConfigurator.swift */; };
@@ -71,9 +73,11 @@
 
 /* Begin PBXFileReference section */
 		006AC6BD98420562AC6A931C /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
+		04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFaultInjection.swift; sourceTree = "<group>"; };
 		0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
 		0D3C6777F2ABFE603D026E0D /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
 		16357673B0524D933999409E /* SidebarStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarStatusView.swift; sourceTree = "<group>"; };
+		1AFEC0A10ACD9912B837A5B0 /* ErrorSurfacingConsistencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorSurfacingConsistencyTests.swift; sourceTree = "<group>"; };
 		1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewTests.swift; sourceTree = "<group>"; };
 		281629E0EE8593C8F69031A6 /* ModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsView.swift; sourceTree = "<group>"; };
 		2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationFlowTests.swift; sourceTree = "<group>"; };
@@ -182,6 +186,7 @@
 			children = (
 				CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */,
 				9BF0A4CFC64A4D46B9332080 /* DebugHierarchyTests.swift */,
+				1AFEC0A10ACD9912B837A5B0 /* ErrorSurfacingConsistencyTests.swift */,
 				2A4522F2EEED55088BD1B53C /* GenerationFlowTests.swift */,
 				1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */,
 				CACC0EFA822954908DC61D02 /* ModelAvailabilityConsistencyTests.swift */,
@@ -251,6 +256,7 @@
 				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
 				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
+				04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */,
 				D2A539A647083CC4810F72FE /* WaveformService.swift */,
 			);
 			path = Services;
@@ -433,6 +439,7 @@
 				7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */,
 				019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */,
 				1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */,
+				E5E94AD88F173238332FECF7 /* UITestFaultInjection.swift in Sources */,
 				FDC2379CA4DB15F84DB80A3C /* Voice.swift in Sources */,
 				9506A9366B29D225A10210E7 /* VoiceCloningView.swift in Sources */,
 				B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */,
@@ -448,6 +455,7 @@
 			files = (
 				C48D4D80BF6A0E8A29A6BC0D /* CustomVoiceViewTests.swift in Sources */,
 				02BEE0FA37C826AA2E83A2DF /* DebugHierarchyTests.swift in Sources */,
+				B655BBEFC7968D1B11AF3BE6 /* ErrorSurfacingConsistencyTests.swift in Sources */,
 				9AC67B6FDF9D54F27814423B /* GenerationFlowTests.swift in Sources */,
 				0FD1F6EE2257C0314EFAA6F4 /* HistoryViewTests.swift in Sources */,
 				0C9DB80EE17B40CB715FE654 /* ModelAvailabilityConsistencyTests.swift in Sources */,

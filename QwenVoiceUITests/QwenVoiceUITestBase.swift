@@ -188,6 +188,28 @@ class QwenVoiceUITestBase: XCTestCase {
         )
     }
 
+    func relaunchFreshApp(
+        initialScreen: UITestScreen? = nil,
+        additionalEnvironment: [String: String] = [:]
+    ) {
+        if let app, app.state != .notRunning {
+            app.terminate()
+        }
+
+        let mergedEnvironment = type(of: self).additionalLaunchEnvironment
+            .merging(additionalEnvironment) { _, new in new }
+
+        app = QwenVoiceUITestSession.shared.launchFreshApp(
+            initialScreen: initialScreen,
+            debugCapture: debugCaptureEnabled,
+            additionalEnvironment: mergedEnvironment
+        )
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10), "App window should appear after relaunch")
+        dismissTransientUI()
+    }
+
     func waitForScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) -> XCUIElement {
         let element = app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
         XCTAssertTrue(

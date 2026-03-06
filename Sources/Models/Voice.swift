@@ -7,10 +7,12 @@ struct Voice: Identifiable, Hashable {
     let wavPath: String
     let hasTranscript: Bool
 
-    var transcript: String? {
+    func loadTranscript(fileManager: FileManager = .default) throws -> String? {
         let txtURL = URL(fileURLWithPath: wavPath).deletingPathExtension().appendingPathExtension("txt")
-        guard FileManager.default.fileExists(atPath: txtURL.path) else { return nil }
-        return try? String(contentsOfFile: txtURL.path, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard fileManager.fileExists(atPath: txtURL.path) else { return nil }
+        try UITestFaultInjection.throwIfEnabled(.voiceTranscriptRead)
+        return try String(contentsOfFile: txtURL.path, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Initialize from a Python backend response

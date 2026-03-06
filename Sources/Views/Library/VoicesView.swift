@@ -1,6 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct VoicesAlertState: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 struct VoicesView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
@@ -8,7 +14,8 @@ struct VoicesView: View {
     @State private var voices: [Voice] = []
     @State private var showingEnroll = false
     @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var loadError: String?
+    @State private var actionAlert: VoicesAlertState?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,7 +50,34 @@ struct VoicesView: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-            } else if isLoading {
+            } else if let loadError, voices.isEmpty, !isLoading {
+                Spacer()
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.orange)
+                    Text("Couldn't load voices")
+                        .font(.headline)
+                    Text(loadError)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button {
+                        Task {
+                            await loadVoices()
+                        }
+                    } label: {
+                        Text("Try Again")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.voices)
+                    .accessibilityIdentifier("voices_retryButton")
+                }
+                .padding(24)
+                .glassCard()
+                .accessibilityIdentifier("voices_errorState")
+                Spacer()
+            } else if isLoading && voices.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     ProgressView()
@@ -136,13 +170,12 @@ struct VoicesView: View {
             })
             .environmentObject(pythonBridge)
         }
-        .alert("Error", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -151,11 +184,21 @@ struct VoicesView: View {
             isLoading = false
             return
         }
+        let hadVoices = !voices.isEmpty
         isLoading = true
         do {
-            voices = try await pythonBridge.listVoices()
+            let loadedVoices = try await pythonBridge.listVoices()
+            voices = loadedVoices
+            loadError = nil
         } catch {
-            // Silent fail
+            if hadVoices {
+                presentActionAlert(
+                    title: "Couldn't refresh voices",
+                    message: error.localizedDescription
+                )
+            } else {
+                loadError = error.localizedDescription
+            }
         }
         isLoading = false
     }
@@ -164,11 +207,19 @@ struct VoicesView: View {
         Task {
             do {
                 try await pythonBridge.deleteVoice(name: voice.name)
+                voices.removeAll { $0.id == voice.id }
             } catch {
-                errorMessage = "Failed to delete voice: \(error.localizedDescription)"
+                presentActionAlert(
+                    title: "Error",
+                    message: "Failed to delete voice: \(error.localizedDescription)"
+                )
             }
             await loadVoices()
         }
+    }
+
+    private func presentActionAlert(title: String, message: String) {
+        actionAlert = VoicesAlertState(title: title, message: message)
     }
 }
 

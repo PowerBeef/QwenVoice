@@ -24,16 +24,32 @@ private struct HistoryListItem: Identifiable {
     }
 }
 
+private struct HistoryActionAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+private enum HistorySessionCache {
+    static var generations: [Generation] = []
+}
+
+private enum HistoryDeletionResult {
+    case deleted
+    case databaseFailure(String)
+    case audioCleanupFailure(String)
+}
+
 struct HistoryView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @State private var items: [HistoryListItem] = []
+    @State private var items: [HistoryListItem] = HistorySessionCache.generations.map(HistoryListItem.init)
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var loadTask: Task<Void, Never>?
     @State private var loadError: String?
     @State private var showDeleteConfirmation = false
     @State private var itemToDelete: HistoryListItem?
-    @State private var exportError: String?
+    @State private var actionAlert: HistoryActionAlert?
 
     private var filtered: [HistoryListItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -132,7 +148,7 @@ struct HistoryView: View {
         }
         .contentColumn()
         .accessibilityIdentifier("screen_history")
-        .task {
+        .onAppear {
             reloadHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
@@ -147,55 +163,56 @@ struct HistoryView: View {
                 itemToDelete = nil
             }
             Button("Delete", role: .destructive) {
-                if let item = itemToDelete, let id = item.generation.id {
-                    do {
-                        try DatabaseService.shared.deleteGeneration(id: id)
-                        if item.audioFileExists {
-                            try? FileManager.default.removeItem(atPath: item.generation.audioPath)
-                        }
-                        items.removeAll { $0.id == item.id }
-                    } catch {
-                        // Database delete failed
-                    }
-                    itemToDelete = nil
+                if let item = itemToDelete {
+                    confirmDelete(item)
                 }
+                itemToDelete = nil
             }
         } message: {
             Text("This will permanently delete the generation and its audio file.")
         }
-        .alert("Export Error", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("OK") { exportError = nil }
-        } message: {
-            Text(exportError ?? "")
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
     private func reloadHistory() {
         loadTask?.cancel()
-        if items.isEmpty {
+        let hasExistingItems = !items.isEmpty
+        if !hasExistingItems {
             isLoading = true
+            loadError = nil
         }
-        loadError = nil
 
         loadTask = Task {
             do {
                 let loadedItems = try await Task.detached(priority: .userInitiated) {
-                    try DatabaseService.shared.fetchAllGenerations().map(HistoryListItem.init)
+                    if hasExistingItems {
+                        try UITestFaultInjection.throwIfEnabled(.historyFetch)
+                    }
+                    return try DatabaseService.shared.fetchAllGenerations().map(HistoryListItem.init)
                 }.value
 
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     items = loadedItems
+                    HistorySessionCache.generations = loadedItems.map(\.generation)
                     loadError = nil
                     isLoading = false
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    if items.isEmpty {
+                    if hasExistingItems {
+                        presentActionAlert(
+                            title: "Couldn't refresh history",
+                            message: error.localizedDescription
+                        )
+                    } else {
                         loadError = error.localizedDescription
                     }
                     isLoading = false
@@ -206,19 +223,24 @@ struct HistoryView: View {
 
     private func deleteGenerations(at indices: IndexSet) {
         let toDelete = indices.map { filtered[$0] }
+        var databaseFailures: [String] = []
+        var audioCleanupFailures: [String] = []
+
         for item in toDelete {
-            if let id = item.generation.id {
-                do {
-                    try DatabaseService.shared.deleteGeneration(id: id)
-                    if item.audioFileExists {
-                        try? FileManager.default.removeItem(atPath: item.generation.audioPath)
-                    }
-                    items.removeAll { $0.id == item.id }
-                } catch {
-                    // Database delete failed — don't remove from UI
-                }
+            switch deleteItem(item) {
+            case .deleted:
+                break
+            case .databaseFailure(let message):
+                databaseFailures.append(message)
+            case .audioCleanupFailure(let message):
+                audioCleanupFailures.append(message)
             }
         }
+
+        presentBulkDeleteSummary(
+            databaseFailures: databaseFailures,
+            audioCleanupFailures: audioCleanupFailures
+        )
     }
 
     private func exportGeneration(_ item: HistoryListItem) {
@@ -230,9 +252,90 @@ struct HistoryView: View {
             do {
                 try FileManager.default.copyItem(at: URL(fileURLWithPath: item.generation.audioPath), to: url)
             } catch {
-                exportError = "Export failed: \(error.localizedDescription)"
+                presentActionAlert(
+                    title: "Export Error",
+                    message: "Export failed: \(error.localizedDescription)"
+                )
             }
         }
+    }
+
+    private func confirmDelete(_ item: HistoryListItem) {
+        switch deleteItem(item) {
+        case .deleted:
+            break
+        case .databaseFailure(let message):
+            presentActionAlert(
+                title: "Delete Error",
+                message: "Failed to delete generation: \(message)"
+            )
+        case .audioCleanupFailure(let message):
+            presentActionAlert(
+                title: "Delete Warning",
+                message: "Generation removed from history, but the audio file could not be deleted: \(message)"
+            )
+        }
+    }
+
+    private func deleteItem(_ item: HistoryListItem) -> HistoryDeletionResult {
+        guard let id = item.generation.id else {
+            return .databaseFailure("Missing generation identifier.")
+        }
+
+        do {
+            try UITestFaultInjection.throwIfEnabled(.historyDeleteDatabase)
+            try DatabaseService.shared.deleteGeneration(id: id)
+        } catch {
+            return .databaseFailure(error.localizedDescription)
+        }
+
+        items.removeAll { $0.id == item.id }
+        HistorySessionCache.generations.removeAll { generation in
+            guard let generationID = generation.id, let itemID = item.generation.id else {
+                return generation.audioPath == item.generation.audioPath
+            }
+            return generationID == itemID
+        }
+
+        guard item.audioFileExists else {
+            return .deleted
+        }
+
+        do {
+            try UITestFaultInjection.throwIfEnabled(.historyDeleteAudio)
+            try FileManager.default.removeItem(atPath: item.generation.audioPath)
+            return .deleted
+        } catch {
+            return .audioCleanupFailure(error.localizedDescription)
+        }
+    }
+
+    private func presentBulkDeleteSummary(
+        databaseFailures: [String],
+        audioCleanupFailures: [String]
+    ) {
+        guard !databaseFailures.isEmpty || !audioCleanupFailures.isEmpty else { return }
+
+        var lines: [String] = []
+        if let firstDatabaseFailure = databaseFailures.first {
+            let count = databaseFailures.count
+            let label = count == 1 ? "1 generation" : "\(count) generations"
+            lines.append("Failed to delete \(label) from history. First error: \(firstDatabaseFailure)")
+        }
+        if let firstAudioFailure = audioCleanupFailures.first {
+            let count = audioCleanupFailures.count
+            let label = count == 1 ? "1 history entry" : "\(count) history entries"
+            lines.append("Removed \(label), but could not delete the audio file. First error: \(firstAudioFailure)")
+        }
+
+        presentActionAlert(
+            title: "Delete Completed with Warnings",
+            message: lines.joined(separator: "\n")
+        )
+    }
+
+    private func presentActionAlert(title: String, message: String) {
+        actionAlert = HistoryActionAlert(title: title, message: message)
     }
 }
 
@@ -309,6 +412,7 @@ private struct HistoryRow: View {
                     .font(.title3)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("historyRow_delete")
         }
         .padding(.vertical, 4)
         .opacity(item.audioFileExists ? 1 : 0.5)

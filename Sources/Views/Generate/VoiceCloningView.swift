@@ -10,6 +10,8 @@ struct VoiceCloningView: View {
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
+    @State private var savedVoicesLoadError: String?
+    @State private var transcriptLoadError: String?
     @State private var savedVoices: [Voice] = []
     @State private var selectedVoice: Voice?
     @State private var isDragOver = false
@@ -96,45 +98,71 @@ struct VoiceCloningView: View {
                 // Controls card
                 VStack(alignment: .leading, spacing: 24) {
                     // Saved voices picker
-                    if !savedVoices.isEmpty {
+                    if !savedVoices.isEmpty || savedVoicesLoadError != nil || transcriptLoadError != nil {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("SAVED VOICES").sectionHeader()
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(savedVoices) { voice in
-                                        Button {
-                                            AppLaunchConfiguration.performAnimated(.spring()) {
-                                                selectSavedVoice(voice)
+                            if !savedVoices.isEmpty {
+                                Text("SAVED VOICES").sectionHeader()
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 12) {
+                                        ForEach(savedVoices) { voice in
+                                            Button {
+                                                AppLaunchConfiguration.performAnimated(.spring()) {
+                                                    selectSavedVoice(voice)
+                                                }
+                                            } label: {
+                                                VStack(spacing: 8) {
+                                                    Image(systemName: "waveform")
+                                                        .font(.title2)
+                                                        .foregroundStyle(AppTheme.voiceCloning)
+                                                    Text(voice.name)
+                                                        .font(.caption.weight(.medium))
+                                                }
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 12)
+                                                .frame(minWidth: 100)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                        .fill(selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.15) : Color.primary.opacity(0.04))
+                                                )
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                        .stroke(selectedVoice?.id == voice.id ? AppTheme.voiceCloning : Color.primary.opacity(0.08), lineWidth: 1)
+                                                )
+                                                .shadow(color: selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.1) : .clear, radius: 4, y: 2)
                                             }
-                                        } label: {
-                                            VStack(spacing: 8) {
-                                                Image(systemName: "waveform")
-                                                    .font(.title2)
-                                                    .foregroundStyle(AppTheme.voiceCloning)
-                                                Text(voice.name)
-                                                    .font(.caption.weight(.medium))
-                                            }
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 12)
-                                            .frame(minWidth: 100)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                    .fill(selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.15) : Color.primary.opacity(0.04))
-                                            )
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                    .stroke(selectedVoice?.id == voice.id ? AppTheme.voiceCloning : Color.primary.opacity(0.08), lineWidth: 1)
-                                            )
-                                            .shadow(color: selectedVoice?.id == voice.id ? AppTheme.voiceCloning.opacity(0.1) : .clear, radius: 4, y: 2)
+                                            .buttonStyle(.plain)
+                                            .accessibilityIdentifier("voiceCloning_savedVoice_\(voice.id)")
                                         }
-                                        .buttonStyle(.plain)
                                     }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 4)
                                 }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 4)
+                            }
+
+                            if let savedVoicesLoadError {
+                                warningCard(
+                                    message: savedVoicesLoadError,
+                                    accessibilityIdentifier: "voiceCloning_savedVoicesWarning"
+                                ) {
+                                    Button("Retry") {
+                                        Task {
+                                            await loadSavedVoices()
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(AppTheme.voiceCloning)
+                                    .accessibilityIdentifier("voiceCloning_savedVoicesRetry")
+                                }
+                            }
+
+                            if let transcriptLoadError {
+                                warningCard(
+                                    message: transcriptLoadError,
+                                    accessibilityIdentifier: "voiceCloning_transcriptWarning"
+                                )
                             }
                         }
-                        
+
                         Divider().opacity(0.5)
                     }
 
@@ -359,20 +387,30 @@ struct VoiceCloningView: View {
     private func selectSavedVoice(_ voice: Voice) {
         selectedVoice = voice
         referenceAudioPath = voice.wavPath
-        referenceTranscript = voice.transcript ?? ""
+        savedVoicesLoadError = nil
+        do {
+            referenceTranscript = try voice.loadTranscript() ?? ""
+            transcriptLoadError = nil
+        } catch {
+            referenceTranscript = ""
+            transcriptLoadError = "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
+        }
     }
 
     private func clearReference() {
         referenceAudioPath = nil
         referenceTranscript = ""
         selectedVoice = nil
+        transcriptLoadError = nil
     }
 
     private func loadSavedVoices() async {
         do {
-            savedVoices = try await pythonBridge.listVoices()
+            let loadedVoices = try await pythonBridge.listVoices()
+            savedVoices = loadedVoices
+            savedVoicesLoadError = nil
         } catch {
-            // Silently fail
+            savedVoicesLoadError = "Couldn't load saved voices right now. You can still clone from a file. \(error.localizedDescription)"
         }
     }
 
@@ -395,6 +433,7 @@ struct VoiceCloningView: View {
             Task { @MainActor in
                 referenceAudioPath = url.path
                 selectedVoice = nil
+                transcriptLoadError = nil
             }
         }
         return true
@@ -407,6 +446,41 @@ struct VoiceCloningView: View {
         if panel.runModal() == .OK, let url = panel.url {
             referenceAudioPath = url.path
             selectedVoice = nil
+            transcriptLoadError = nil
         }
+    }
+
+    @ViewBuilder
+    private func warningCard(
+        message: String,
+        accessibilityIdentifier: String,
+        @ViewBuilder action: () -> some View = { EmptyView() }
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                action()
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.orange.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
