@@ -8,7 +8,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Deployment target: macOS 15+
 - Product name: `QwenVoice`
 - Version source: `project.yml`
-- Current version/build: `1.1.6` / `9`
+- Current version/build: `1.1.7` / `10`
 
 ## Shipped UI
 
