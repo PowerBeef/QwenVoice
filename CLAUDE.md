@@ -57,6 +57,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 - The GitHub single-release workflow is gone; only `project-inputs.yml` and `release-dual-ui.yml` remain.
 - The shipping GUI uses non-streaming generation paths only.
 - Backend streaming preview plus advanced sampling parameters remain benchmark/internal only.
+- The backend MLX cache policy defaults to `adaptive`; use `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics.
 - Local `./scripts/release.sh` produces `build/QwenVoice.dmg` by default; GitHub dual-release builds produce `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg`.
 - Current test inventory is no longer UI-only; the repo also has `QwenVoiceTests/` and `backend_tests/`.
 

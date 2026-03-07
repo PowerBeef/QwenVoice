@@ -39,6 +39,8 @@ Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, 
 
 The backend still supports benchmark/internal streaming and advanced sampling parameters, but the shipping GUI intentionally uses the non-streaming generation path only.
 
+For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENVOICE_CACHE_POLICY=always` remains available as a conservative diagnostic override for backend benchmarking and regression checks.
+
 ## Features
 
 - Native model downloads from Hugging Face

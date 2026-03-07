@@ -44,9 +44,26 @@ def _env_flag(name, default=True):
     return raw not in {"0", "false", "False"}
 
 
+def _resolve_cache_policy():
+    raw = os.environ.get("QWENVOICE_CACHE_POLICY")
+    if raw is not None:
+        normalized = raw.strip().lower()
+        if normalized in {"adaptive", "always", "never"}:
+            return normalized
+        raise RuntimeError(
+            "QWENVOICE_CACHE_POLICY must be one of: adaptive, always, never"
+        )
+
+    legacy = os.environ.get("QWENVOICE_POST_REQUEST_CACHE_CLEAR")
+    if legacy is not None:
+        return "always" if legacy not in {"0", "false", "False"} else "never"
+
+    return "adaptive"
+
+
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
-POST_REQUEST_CACHE_CLEAR = _env_flag("QWENVOICE_POST_REQUEST_CACHE_CLEAR", default=True)
+CACHE_POLICY = _resolve_cache_policy()
 CLONE_CONTEXT_CACHE_CAPACITY = 8
 DEFAULT_STREAMING_INTERVAL = 2.0
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
@@ -351,6 +368,49 @@ def _clear_clone_context_cache():
     _clone_context_cache.clear()
 
 
+def _clear_mlx_cache():
+    if _mx is not None:
+        _mx.clear_cache()
+
+
+def _perform_memory_recovery():
+    gc.collect()
+    _clear_mlx_cache()
+
+
+def _discard_loaded_model():
+    global _current_model, _current_model_path, _current_model_id
+
+    _current_model = None
+    _current_model_path = None
+    _current_model_id = None
+    _clear_clone_context_cache()
+    _perform_memory_recovery()
+
+
+def _should_clear_cache_after_request(succeeded):
+    if CACHE_POLICY == "always":
+        return True
+    if CACHE_POLICY == "adaptive":
+        return not succeeded
+    return False
+
+
+def _is_retryable_allocation_error(error):
+    message = str(error).lower()
+    patterns = (
+        "out of memory",
+        "failed to allocate",
+        "resource exhausted",
+        "memory allocation",
+        "insufficient memory",
+        "mtlheap",
+    )
+    return any(pattern in message for pattern in patterns) or (
+        "allocate" in message and ("memory" in message or "metal" in message)
+    )
+
+
 def _convert_audio_to_wav(input_path, output_path):
     """Convert audio to 24kHz mono WAV at a specific target path."""
     parent_dir = os.path.dirname(output_path)
@@ -488,11 +548,20 @@ def _resolve_clone_transcript(clean_ref_audio_path, requested_transcript):
 def _clone_cache_key(clean_ref_audio_path, ref_text):
     """Build a stable cache key for prepared clone-conditioning state."""
     stat_result = os.stat(clean_ref_audio_path)
+    real_path = os.path.realpath(clean_ref_audio_path)
+    cache_root = os.path.realpath(CLONE_REF_CACHE_DIR)
+
+    # Stable normalized reference files already encode the source identity in
+    # their cache-path fingerprint. Ignore mtime here so access-time refreshes
+    # used for pruning do not invalidate prepared clone contexts on every hit.
+    if real_path.startswith(cache_root + os.sep):
+        file_identity = (real_path, stat_result.st_size)
+    else:
+        file_identity = (real_path, stat_result.st_size, stat_result.st_mtime_ns)
+
     return (
         _current_model_path,
-        os.path.realpath(clean_ref_audio_path),
-        stat_result.st_size,
-        stat_result.st_mtime_ns,
+        *file_identity,
         (ref_text or "").strip(),
     )
 
@@ -702,12 +771,7 @@ def handle_load_model(params, request_id=None):
 
     # Unload existing model
     if _current_model is not None:
-        _current_model = None
-        _current_model_id = None
-        _clear_clone_context_cache()
-        gc.collect()
-        if _mx is not None:
-            _mx.clear_cache()
+        _discard_loaded_model()
 
     _ensure_mlx()
     send_progress(5, "Preparing model...", request_id=request_id)
@@ -736,15 +800,7 @@ def handle_load_model(params, request_id=None):
 
 def handle_unload_model(params):
     """Unload current model and free memory."""
-    global _current_model, _current_model_path, _current_model_id
-
-    _current_model = None
-    _current_model_path = None
-    _current_model_id = None
-    _clear_clone_context_cache()
-    gc.collect()
-    if _mx is not None:
-        _mx.clear_cache()
+    _discard_loaded_model()
 
     return {"success": True}
 
@@ -796,7 +852,7 @@ def handle_generate(params, request_id=None):
 
     effective_max_tokens = int(max_tokens) if max_tokens is not None else None
     model_was_loaded = _current_model is not None
-    benchmark_flags = {
+    benchmark_flags_base = {
         "label": benchmark_label or benchmark_mode,
         "mode": benchmark_mode,
         "prepared_clone_used": False,
@@ -807,14 +863,10 @@ def handle_generate(params, request_id=None):
         "request_max_tokens": effective_max_tokens,
         "model_path": _current_model_path,
         "model_already_loaded": bool(model_was_loaded),
-        "post_request_cache_clear_enabled": bool(POST_REQUEST_CACHE_CLEAR),
-    }
-    benchmark_timings = {
-        "normalize_reference": 0,
-        "prepare_clone_context": 0,
-        "generation": 0,
-        "write_output": 0,
-        "total_backend": 0,
+        "post_request_cache_clear_enabled": CACHE_POLICY == "always",
+        "cache_policy": CACHE_POLICY,
+        "allocation_retry_attempted": False,
+        "allocation_retry_succeeded": False,
     }
     overall_start = time.perf_counter()
     final_path = _resolve_final_output_path(output_path, text, mode=benchmark_mode, voice=voice, ref_audio=ref_audio)
@@ -825,7 +877,38 @@ def handle_generate(params, request_id=None):
     else:
         send_progress(15, "Preparing request...", request_id=request_id)
 
-    try:
+    def cleanup_partial_outputs():
+        paths_to_remove = {final_path}
+        if generated_path != final_path:
+            paths_to_remove.add(generated_path)
+
+        for path in paths_to_remove:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+        chunk_prefix = f"{target_stem}__chunk_"
+        if os.path.isdir(target_dir):
+            for name in os.listdir(target_dir):
+                if name.startswith(chunk_prefix) and name.endswith(".wav"):
+                    try:
+                        os.remove(os.path.join(target_dir, name))
+                    except OSError:
+                        pass
+
+    def generate_once():
+        nonlocal effective_max_tokens
+
+        benchmark_flags = dict(benchmark_flags_base)
+        benchmark_timings = {
+            "normalize_reference": 0,
+            "prepare_clone_context": 0,
+            "generation": 0,
+            "write_output": 0,
+        }
+
         if ref_audio:
             normalize_start = time.perf_counter()
             clean_ref_audio = _normalize_clone_reference(ref_audio)
@@ -948,27 +1031,45 @@ def handle_generate(params, request_id=None):
             benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
 
         output_metadata = get_audio_metadata(final_path)
-        duration = output_metadata["duration_seconds"]
-        benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
-
-        send_progress(100, "Done", request_id=request_id)
-
         result = {
             "audio_path": final_path,
-            "duration_seconds": round(duration, 2),
+            "duration_seconds": round(output_metadata["duration_seconds"], 2),
         }
+        return result, benchmark_flags, benchmark_timings, output_metadata
+
+    request_succeeded = False
+    retried_after_allocation_failure = False
+
+    try:
+        try:
+            result, benchmark_flags, benchmark_timings, output_metadata = generate_once()
+        except Exception as error:
+            if not _is_retryable_allocation_error(error):
+                raise
+
+            retried_after_allocation_failure = True
+            cleanup_partial_outputs()
+            _perform_memory_recovery()
+            result, benchmark_flags, benchmark_timings, output_metadata = generate_once()
+
+        request_succeeded = True
+        benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
+        benchmark_flags["allocation_retry_attempted"] = retried_after_allocation_failure
+        benchmark_flags["allocation_retry_succeeded"] = retried_after_allocation_failure
+        send_progress(100, "Done", request_id=request_id)
+
         if benchmark:
             result["benchmark"] = {
                 **benchmark_flags,
-                "output_duration_seconds": round(duration, 4),
+                "output_duration_seconds": round(output_metadata["duration_seconds"], 4),
                 "output_frames": output_metadata["frames"],
                 "timings_ms": benchmark_timings,
             }
         return result
 
     finally:
-        if POST_REQUEST_CACHE_CLEAR and _mx is not None:
-            _mx.clear_cache()
+        if _should_clear_cache_after_request(request_succeeded):
+            _clear_mlx_cache()
 
 
 def handle_convert_audio(params):

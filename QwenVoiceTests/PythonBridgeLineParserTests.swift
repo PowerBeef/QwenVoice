@@ -1,6 +1,7 @@
 import XCTest
 @testable import QwenVoice
 
+@MainActor
 final class PythonBridgeLineParserTests: XCTestCase {
     func testSuccessResponseDecodesResultPayload() {
         let line = #"{"jsonrpc":"2.0","id":7,"result":{"status":"ok","size_bytes":123}}"#
@@ -46,5 +47,14 @@ final class PythonBridgeLineParserTests: XCTestCase {
 
     func testMalformedLineReturnsNil() {
         XCTAssertNil(PythonBridgeLineParser.parse("not json"))
+    }
+
+    func testCanSkipLoadModelWhenSameModelIsKnownLoaded() {
+        XCTAssertTrue(PythonBridge.canSkipLoadModel(requestedID: "pro_custom", loadedModelID: "pro_custom"))
+    }
+
+    func testCanSkipLoadModelReturnsFalseWhenModelDiffers() {
+        XCTAssertFalse(PythonBridge.canSkipLoadModel(requestedID: "pro_design", loadedModelID: "pro_custom"))
+        XCTAssertFalse(PythonBridge.canSkipLoadModel(requestedID: "pro_design", loadedModelID: nil))
     }
 }

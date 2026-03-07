@@ -397,7 +397,6 @@ def generate_with_prepared_icl(
         generated_codes.append(all_codes)
 
         del code_cache
-        mx.clear_cache()
 
         if trailing_idx < trailing_text_hidden.shape[1]:
             text_embed = trailing_text_hidden[:, trailing_idx : trailing_idx + 1, :]
@@ -413,9 +412,6 @@ def generate_with_prepared_icl(
 
         input_embeds = text_embed + codec_embed
         mx.eval(input_embeds)
-
-        if step > 0 and step % 50 == 0:
-            mx.clear_cache()
 
     if not generated_codes:
         return
@@ -465,5 +461,3 @@ def generate_with_prepared_icl(
         processing_time_seconds=elapsed_time,
         peak_memory_usage=mx.get_peak_memory() / 1e9,
     )
-
-    mx.clear_cache()

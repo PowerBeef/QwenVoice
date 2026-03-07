@@ -25,6 +25,8 @@ Voice Design is not a separate sidebar screen. It is accessed inside `CustomVoic
 
 The shipping SwiftUI app uses non-streaming generation flows. Backend streaming preview and advanced sampling parameters remain available for benchmark/internal tooling only.
 
+The backend MLX cache policy currently defaults to `adaptive` via `QWENVOICE_CACHE_POLICY`. Set `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics or regression comparison runs.
+
 ## Models, Speakers, and Contract Ownership
 
 Static TTS contract data lives in `Sources/Resources/qwenvoice_contract.json`.
@@ -103,8 +105,8 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 Current tracked test coverage:
 
 - UI tests: 11 `*Tests.swift` files / 31 test methods in `QwenVoiceUITests/`
-- Unit tests: 4 `*Tests.swift` files / 14 test methods in `QwenVoiceTests/`
-- Python backend tests: 8 `unittest` cases under `backend_tests/`
+- Unit tests: 4 `*Tests.swift` files / 16 test methods in `QwenVoiceTests/`
+- Python backend tests: 13 `unittest` cases under `backend_tests/`
 
 Primary commands:
 

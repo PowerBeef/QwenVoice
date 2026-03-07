@@ -34,7 +34,7 @@ DEFAULT_BENCH_ROOT = PROJECT_DIR / "build" / "benchmarks"
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "QwenVoice"
 APP_VENV_PYTHON = APP_SUPPORT_DIR / "python" / "bin" / "python3"
 APP_MODELS_DIR = APP_SUPPORT_DIR / "models"
-BENCHMARK_SCRIPT_VERSION = "1.2.0"
+BENCHMARK_SCRIPT_VERSION = "1.3.0"
 
 REFERENCE_TEXT = (
     "Hello, this is the benchmark reference voice speaking clearly for the cloning performance test."
@@ -102,13 +102,13 @@ class BackendClient:
         rpc_events_path: Path,
         backend_log_path: Path,
         ffmpeg_path: str | None,
-        cache_clear: bool,
+        cache_policy: str,
     ) -> None:
         self.python_path = python_path
         self.rpc_events_path = rpc_events_path
         self.backend_log_path = backend_log_path
         self.ffmpeg_path = ffmpeg_path
-        self.cache_clear = cache_clear
+        self.cache_policy = cache_policy
         self.proc: subprocess.Popen[str] | None = None
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -167,7 +167,7 @@ class BackendClient:
         env["PYTHONUNBUFFERED"] = "1"
         if self.ffmpeg_path:
             env["QWENVOICE_FFMPEG_PATH"] = self.ffmpeg_path
-        env["QWENVOICE_POST_REQUEST_CACHE_CLEAR"] = "1" if self.cache_clear else "0"
+        env["QWENVOICE_CACHE_POLICY"] = self.cache_policy
         self.proc = subprocess.Popen(
             [self.python_path, str(SERVER_PATH)],
             cwd=str(PROJECT_DIR),
@@ -305,8 +305,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--json-only", action="store_true", help="Print only machine-readable summary details.")
     parser.add_argument("--keep-sandbox", action="store_true", help="Keep the isolated benchmark sandbox after completion.")
     parser.add_argument("--python", default="", help="Explicit Python interpreter path for the backend runtime.")
-    parser.add_argument("--cache-clear", dest="cache_clear", action="store_true", default=True, help="Clear MLX cache after each request (default).")
-    parser.add_argument("--no-cache-clear", dest="cache_clear", action="store_false", help="Disable post-request MLX cache clearing for experiments.")
+    parser.add_argument(
+        "--cache-policy",
+        choices=("adaptive", "always", "never"),
+        default="adaptive",
+        help="Backend MLX cache policy (default: adaptive).",
+    )
+    parser.add_argument(
+        "--cache-clear",
+        dest="cache_policy",
+        action="store_const",
+        const="always",
+        help="Compatibility alias for --cache-policy always.",
+    )
+    parser.add_argument(
+        "--no-cache-clear",
+        dest="cache_policy",
+        action="store_const",
+        const="never",
+        help="Compatibility alias for --cache-policy never.",
+    )
+    parser.add_argument(
+        "--stability-runs",
+        type=int,
+        default=20,
+        help="Warm cache-hit repetitions for the long-run stability probe (0 disables it).",
+    )
     parser.add_argument(
         "--clone-reference-source",
         choices=("synthetic", "kathleen"),
@@ -1145,6 +1169,9 @@ def run_sample(
         "benchmark_model_path": benchmark.get("model_path"),
         "model_already_loaded": benchmark.get("model_already_loaded"),
         "post_request_cache_clear_enabled": benchmark.get("post_request_cache_clear_enabled"),
+        "cache_policy": benchmark.get("cache_policy"),
+        "allocation_retry_attempted": benchmark.get("allocation_retry_attempted"),
+        "allocation_retry_succeeded": benchmark.get("allocation_retry_succeeded"),
         "effective_temperature_bucket": effective_temperature_bucket,
         "ms_per_output_second": ms_per_output_second,
         "output_exists": output_check["exists"],
@@ -1321,6 +1348,147 @@ def run_scenario(
         }
 
 
+def _median_for_rows(rows: list[dict[str, Any]], key: str) -> float | None:
+    values = [float(row[key]) for row in rows if row.get(key) is not None]
+    if not values:
+        return None
+    return round(statistics.median(values), 3)
+
+
+def run_batch_probe(
+    client: BackendClient,
+    outputs_root: Path,
+    available_models: dict[str, dict[str, Any]],
+    state: dict[str, Any],
+    batch_size: int = 10,
+) -> dict[str, Any]:
+    scenario = Scenario(
+        identifier="custom_short_batch_warm_loop",
+        model_id="pro_custom",
+        params={
+            "text": SHORT_TEXT,
+            "voice": "serena",
+            "instruct": "neutral",
+            "speed": 1.0,
+        },
+        cold_reset=False,
+    )
+
+    model_info = available_models.get(scenario.model_id)
+    if batch_size <= 0:
+        return {"status": "skipped", "reason": "Batch probe disabled", "sample_rows": []}
+    if not model_info or not model_info.get("available"):
+        return {
+            "status": "skipped",
+            "reason": f"Model '{scenario.model_id}' is unavailable",
+            "sample_rows": [],
+        }
+
+    load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=True)
+    rows: list[dict[str, Any]] = []
+    for index in range(batch_size):
+        rows.append(
+            run_sample(
+                client,
+                scenario,
+                "batch",
+                index + 1,
+                outputs_root,
+                load_context=load_context if index == 0 else None,
+            )
+        )
+
+    return {
+        "status": "completed",
+        "reason": "",
+        "batch_size": batch_size,
+        "total_wall_ms": round(sum(float(row["total_wall_ms"]) for row in rows), 3),
+        "aggregates": aggregate_samples([], rows),
+        "sample_rows": rows,
+    }
+
+
+def run_stability_probe(
+    client: BackendClient,
+    outputs_root: Path,
+    available_models: dict[str, dict[str, Any]],
+    state: dict[str, Any],
+    seed_wav: Path,
+    reference_text: str,
+    runs: int,
+) -> dict[str, Any]:
+    scenario = Scenario(
+        identifier="clone_external_wav_stability",
+        model_id="pro_clone",
+        params={
+            "text": CLONE_TEXT,
+            "ref_audio": str(seed_wav),
+            "ref_text": reference_text,
+        },
+        cold_reset=False,
+    )
+
+    model_info = available_models.get(scenario.model_id)
+    if runs <= 0:
+        return {"status": "skipped", "reason": "Stability probe disabled", "sample_rows": []}
+    if not model_info or not model_info.get("available"):
+        return {
+            "status": "skipped",
+            "reason": f"Model '{scenario.model_id}' is unavailable",
+            "sample_rows": [],
+        }
+
+    load_context = ensure_model_loaded(client, state, scenario.model_id, force_reload=True)
+    warmup_row = run_sample(
+        client,
+        scenario,
+        "stability_warmup",
+        0,
+        outputs_root,
+        load_context=load_context,
+    )
+
+    rows: list[dict[str, Any]] = []
+    for index in range(runs):
+        rows.append(
+            run_sample(
+                client,
+                scenario,
+                "stability",
+                index + 1,
+                outputs_root,
+            )
+        )
+
+    window = min(5, len(rows))
+    first_window = rows[:window]
+    last_window = rows[-window:]
+    first_median = _median_for_rows(first_window, "total_wall_ms")
+    last_median = _median_for_rows(last_window, "total_wall_ms")
+    wall_drift_ms = None
+    wall_drift_ratio = None
+    if first_median not in (None, 0) and last_median is not None:
+        wall_drift_ms = round(last_median - first_median, 3)
+        wall_drift_ratio = round(last_median / first_median, 4)
+
+    retry_attempts = sum(1 for row in rows if row.get("allocation_retry_attempted"))
+
+    return {
+        "status": "completed",
+        "reason": "",
+        "runs": runs,
+        "warmup_row": warmup_row,
+        "sample_rows": rows,
+        "aggregates": aggregate_samples([], rows),
+        "first_window_median_ms": first_median,
+        "last_window_median_ms": last_median,
+        "wall_drift_ms": wall_drift_ms,
+        "wall_drift_ratio": wall_drift_ratio,
+        "retry_attempts": retry_attempts,
+        "all_clone_cache_hits": all(row.get("clone_cache_hit") is True for row in rows),
+    }
+
+
 def build_repeatability_highlights(scenarios: dict[str, dict[str, Any]]) -> dict[str, Any]:
     pairs = [
         ("custom_short_default_temp_repeatability", "custom_short_temp_zero_repeatability"),
@@ -1464,6 +1632,7 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     configuration = summary["configuration"]
     setup = summary["setup"]
     scenarios = summary["scenarios"]
+    probes = summary.get("probes", {})
     highlights = summary["highlights"]
 
     lines.append("# QwenVoice Generation Benchmark Report")
@@ -1474,8 +1643,9 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append(f"- Warm runs per scenario: {configuration['runs']}")
     lines.append(f"- Cold runs per scenario: {configuration['cold_runs']}")
     lines.append(f"- Streaming enabled: {configuration['streaming_enabled']}")
-    lines.append(f"- Post-request cache clear: {configuration['cache_clear']}")
+    lines.append(f"- Backend cache policy: {configuration['cache_policy']}")
     lines.append(f"- Clone reference source: {configuration['clone_reference_source']}")
+    lines.append(f"- Stability warm runs: {configuration['stability_runs']}")
     if highlights.get("fastest_scenario"):
         lines.append(
             f"- Fastest warm median: `{highlights['fastest_scenario']['id']}` "
@@ -1496,6 +1666,17 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     skipped = [scenario_id for scenario_id, data in scenarios.items() if data.get("status") == "skipped"]
     if skipped:
         lines.append(f"- Skipped scenarios: {', '.join(skipped)}")
+    warm_batch = probes.get("warm_batch", {})
+    if warm_batch.get("status") == "completed":
+        lines.append(
+            f"- Warm batch probe: {warm_batch['batch_size']} items in {warm_batch['total_wall_ms']} ms"
+        )
+    stability = probes.get("stability", {})
+    if stability.get("status") == "completed":
+        lines.append(
+            f"- Stability probe: {stability['runs']} warm clone hits, "
+            f"drift ratio {stability.get('wall_drift_ratio')}"
+        )
     lines.append("")
 
     lines.append("## Environment")
@@ -1510,7 +1691,7 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append(f"- Git dirty: {metadata['git']['dirty']}")
     lines.append(f"- Requirements hash: {metadata['requirements_sha256']}")
     lines.append(f"- ffmpeg: {metadata['ffmpeg_path'] or 'unavailable'}")
-    lines.append(f"- Backend cache clear default: {configuration['cache_clear']}")
+    lines.append(f"- Backend cache policy: {configuration['cache_policy']}")
     reference_setup = setup.get("bootstrap_reference_generation", {})
     if reference_setup:
         lines.append(f"- Clone reference seed source: {reference_setup.get('source', 'unknown')}")
@@ -1522,8 +1703,38 @@ def render_markdown_report(summary: dict[str, Any], artifact_paths: dict[str, st
     lines.append("- Cold samples are the first generate call after a model load or cache reset.")
     lines.append("- Warm samples reuse the loaded model and, where possible, the clone-conditioning cache.")
     lines.append("- Clone reference audio is prepared once, then reused for enrolled and external clone scenarios.")
+    lines.append("- The warm batch probe runs 10 sequential requests on one loaded model.")
+    lines.append("- The stability probe warms the clone cache once, then measures repeated cache-hit runs.")
     lines.append("- Repeatability probes compare the default backend temperature with explicit temperature 0.0.")
     lines.append("- Output files are validated for existence, WAV readability, and 24 kHz sample rate.")
+    lines.append("")
+
+    lines.append("## Warm Batch Probe")
+    lines.append("")
+    if warm_batch.get("status") == "completed":
+        aggregates = warm_batch.get("aggregates", {})
+        lines.append(f"- Batch size: {warm_batch['batch_size']}")
+        lines.append(f"- Total wall time (ms): {warm_batch['total_wall_ms']}")
+        lines.append(f"- Warm median total wall (ms): {aggregates.get('warm_total_wall_ms', {}).get('median')}")
+        lines.append(f"- Warm median generation (ms): {aggregates.get('warm_generation_ms', {}).get('median')}")
+    else:
+        lines.append(f"- {warm_batch.get('reason', 'Probe did not run')}")
+    lines.append("")
+
+    lines.append("## Stability Probe")
+    lines.append("")
+    if stability.get("status") == "completed":
+        aggregates = stability.get("aggregates", {})
+        lines.append(f"- Warm runs: {stability['runs']}")
+        lines.append(f"- Warm median total wall (ms): {aggregates.get('warm_total_wall_ms', {}).get('median')}")
+        lines.append(f"- First-window median (ms): {stability.get('first_window_median_ms')}")
+        lines.append(f"- Last-window median (ms): {stability.get('last_window_median_ms')}")
+        lines.append(f"- Wall drift (ms): {stability.get('wall_drift_ms')}")
+        lines.append(f"- Wall drift ratio: {stability.get('wall_drift_ratio')}")
+        lines.append(f"- Allocation retries observed: {stability.get('retry_attempts')}")
+        lines.append(f"- All runs were clone-cache hits: {stability.get('all_clone_cache_hits')}")
+    else:
+        lines.append(f"- {stability.get('reason', 'Probe did not run')}")
     lines.append("")
 
     lines.append("## Repeatability Analysis")
@@ -1693,6 +1904,8 @@ def main() -> int:
         raise SystemExit("--runs must be at least 1")
     if args.cold_runs < 0:
         raise SystemExit("--cold-runs cannot be negative")
+    if args.stability_runs < 0:
+        raise SystemExit("--stability-runs cannot be negative")
 
     run_dir = Path(args.output_dir) if args.output_dir else DEFAULT_BENCH_ROOT / "runs" / now_timestamp()
     ensure_directory(run_dir)
@@ -1728,7 +1941,8 @@ def main() -> int:
         "runs": args.runs,
         "cold_runs": args.cold_runs,
         "streaming_enabled": args.include_streaming,
-        "cache_clear": args.cache_clear,
+        "cache_policy": args.cache_policy,
+        "stability_runs": args.stability_runs,
         "download_missing": args.download_missing,
         "clone_reference_source": args.clone_reference_source,
         "sandbox_path": str(sandbox_dir),
@@ -1744,6 +1958,10 @@ def main() -> int:
             "app_sanity": None,
         },
         "scenarios": {},
+        "probes": {
+            "warm_batch": {},
+            "stability": {},
+        },
         "highlights": {},
     }
 
@@ -1764,7 +1982,7 @@ def main() -> int:
                 summary["setup"]["skipped_downloads"].append(result)
         metadata["model_sources"] = available_models
 
-        client = BackendClient(backend_python, rpc_events_path, backend_log_path, ffmpeg_path, args.cache_clear)
+        client = BackendClient(backend_python, rpc_events_path, backend_log_path, ffmpeg_path, args.cache_policy)
         state = {"loaded_model": None}
         try:
             client.start()
@@ -1834,6 +2052,26 @@ def main() -> int:
                 )
                 summary["scenarios"][scenario.identifier] = result
                 all_rows.extend(result.get("sample_rows", []))
+
+            summary["probes"]["warm_batch"] = run_batch_probe(
+                client,
+                sandbox_outputs_dir,
+                available_models,
+                state,
+                batch_size=10,
+            )
+            all_rows.extend(summary["probes"]["warm_batch"].get("sample_rows", []))
+
+            summary["probes"]["stability"] = run_stability_probe(
+                client,
+                sandbox_outputs_dir,
+                available_models,
+                state,
+                actual_seed_wav,
+                reference_text,
+                args.stability_runs,
+            )
+            all_rows.extend(summary["probes"]["stability"].get("sample_rows", []))
 
             if args.include_app_sanity:
                 summary["setup"]["app_sanity"] = maybe_run_app_sanity(run_dir)

@@ -60,6 +60,7 @@ final class PythonBridge: ObservableObject {
     private var activeGenerationSession: GenerationSession?
     private var sidebarStatusResetTask: Task<Void, Never>?
     private var recentStderrLines: [String] = []
+    private var loadedModelID: String?
 
     private static let maxStoredStderrLines = 20
 
@@ -70,6 +71,7 @@ final class PythonBridge: ObservableObject {
     func start(pythonPath: String? = nil) {
         guard process == nil else { return }
         recentStderrLines = []
+        loadedModelID = nil
 
         let proc = Process()
         let stdin = Pipe()
@@ -115,6 +117,7 @@ final class PythonBridge: ObservableObject {
                 self.isReady = false
                 self.isProcessing = false
                 self.activeGenerationSession = nil
+                self.loadedModelID = nil
                 self.clearActiveProgressTracking()
                 if shouldReportCrash {
                     self.lastError = self.recentStderrLines.last ?? PythonBridgeError.processTerminated.localizedDescription
@@ -130,6 +133,7 @@ final class PythonBridge: ObservableObject {
             stdinPipe = nil
             stdoutPipe = nil
             stderrPipe = nil
+            loadedModelID = nil
             isReady = false
             isProcessing = false
             lastError = "Failed to start Python: \(error.localizedDescription)"
@@ -158,6 +162,7 @@ final class PythonBridge: ObservableObject {
         lastError = nil
         readBuffer = ""
         activeGenerationSession = nil
+        loadedModelID = nil
         recentStderrLines = []
         clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
@@ -282,6 +287,7 @@ final class PythonBridge: ObservableObject {
         _ = try await callDict("init", params: [
             "app_support_dir": .string(appSupportDir)
         ])
+        loadedModelID = nil
     }
 
     /// Ping the backend to check it's alive.
@@ -292,14 +298,25 @@ final class PythonBridge: ObservableObject {
 
     /// Load a model by its ID (e.g. "pro_custom").
     func loadModel(id: String) async throws -> [String: RPCValue] {
-        try await callDict("load_model", params: [
+        if Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) {
+            return [
+                "success": .bool(true),
+                "cached": .bool(true),
+                "model_id": .string(id),
+            ]
+        }
+
+        let result = try await callDict("load_model", params: [
             "model_id": .string(id)
         ])
+        loadedModelID = id
+        return result
     }
 
     /// Unload the current model.
     func unloadModel() async throws {
         _ = try await callDict("unload_model")
+        loadedModelID = nil
     }
 
     func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
@@ -314,6 +331,7 @@ final class PythonBridge: ObservableObject {
         isProcessing = false
         readBuffer = ""
         activeGenerationSession = nil
+        loadedModelID = nil
         recentStderrLines = []
         lastError = nil
         clearActiveProgressTracking()
@@ -928,6 +946,10 @@ final class PythonBridge: ObservableObject {
         }
 
         return nil
+    }
+
+    static func canSkipLoadModel(requestedID: String, loadedModelID: String?) -> Bool {
+        loadedModelID == requestedID
     }
 }
 
