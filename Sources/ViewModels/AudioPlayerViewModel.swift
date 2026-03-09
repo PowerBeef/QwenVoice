@@ -1,8 +1,7 @@
 import Foundation
 import AVFoundation
-import Combine
 
-/// Manages audio playback state for the persistent bottom player bar.
+/// Manages playback state for the persistent sidebar player bar.
 @MainActor
 final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var isPlaying = false
@@ -12,56 +11,93 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     @Published var currentTitle: String = ""
     @Published var waveformSamples: [Float] = []
     @Published var playbackError: String?
+    @Published private(set) var isLiveStream = false
 
+    private enum PlaybackMode {
+        case none
+        case file
+        case live
+    }
+
+    private var playbackMode: PlaybackMode = .none
     private var player: AVAudioPlayer?
+    private var liveEngine: AVAudioEngine?
+    private var livePlayerNode: AVAudioPlayerNode?
+    private var liveBuffers: [AVAudioPCMBuffer] = []
+    private var liveFormat: AVAudioFormat?
+    private var liveSessionID: String?
+    private var liveSessionDirectory: String?
+    private var liveFinalFilePath: String?
+    private var liveAutoplayEnabled = false
+    private var chunkObserver: NSObjectProtocol?
     private var timer: Timer?
 
-    var hasAudio: Bool { currentFilePath != nil }
-
+    var hasAudio: Bool { currentFilePath != nil || isLiveStream || liveSessionID != nil }
+    var canSeek: Bool { playbackMode == .file || liveFinalFilePath != nil }
     var formattedCurrentTime: String { Self.formatTime(currentTime) }
     var formattedDuration: String { Self.formatTime(duration) }
+    var durationDisplayText: String { isLiveStream && liveFinalFilePath == nil ? "Live" : formattedDuration }
 
     var progress: Double {
         guard duration > 0 else { return 0 }
         return currentTime / duration
     }
 
+    override init() {
+        super.init()
+        bindNotifications()
+    }
+
+    deinit {
+        if let chunkObserver {
+            NotificationCenter.default.removeObserver(chunkObserver)
+        }
+    }
+
     // MARK: - Playback
 
     func load(filePath: String, title: String = "") {
-        stop()
-
-        let url = URL(fileURLWithPath: filePath)
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            clearLoadedAudio()
-            playbackError = "Audio file not found."
-            return
-        }
+        teardownLivePlayback(clearSession: true)
+        stopFilePlayback(clearPlayer: true)
 
         do {
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.delegate = self
-            player?.prepareToPlay()
-            currentFilePath = filePath
-            currentTitle = title.isEmpty ? URL(fileURLWithPath: filePath).lastPathComponent : title
-            duration = player?.duration ?? 0
-            currentTime = 0
-            playbackError = nil
-            extractWaveform(from: url)
+            try applyFilePlayback(
+                filePath: filePath,
+                title: title,
+                preserveCurrentTime: 0,
+                autoPlay: false,
+                transitionFromLive: false
+            )
         } catch {
             clearLoadedAudio()
-            playbackError = "Playback could not load this file."
+            playbackError = error.localizedDescription
         }
     }
 
     func play() {
-        attemptPlay()
+        switch playbackMode {
+        case .live:
+            attemptLivePlay()
+        case .file:
+            attemptFilePlay()
+        case .none:
+            break
+        }
     }
 
     func pause() {
-        player?.pause()
-        isPlaying = false
-        stopTimer()
+        switch playbackMode {
+        case .live:
+            livePlayerNode?.pause()
+            isPlaying = false
+            stopTimer()
+        case .file:
+            player?.pause()
+            isPlaying = false
+            stopTimer()
+        case .none:
+            break
+        }
     }
 
     func togglePlayPause() {
@@ -69,24 +105,44 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func stop() {
-        player?.stop()
-        player = nil
-        isPlaying = false
-        currentTime = 0
-        stopTimer()
+        switch playbackMode {
+        case .live:
+            stopLivePlayback(resetCurrentTime: true)
+        case .file:
+            stopFilePlayback(clearPlayer: false)
+            currentTime = 0
+        case .none:
+            break
+        }
     }
 
     func dismiss() {
         stop()
+        teardownLivePlayback(clearSession: true)
+        stopFilePlayback(clearPlayer: true)
         clearLoadedAudio()
         playbackError = nil
+        playbackMode = .none
+        isLiveStream = false
     }
 
     func seek(to fraction: Double) {
+        guard canSeek else { return }
+
+        let clampedFraction = max(0, min(1, fraction))
+        let targetTime = clampedFraction * duration
+
+        if playbackMode == .live, liveFinalFilePath != nil {
+            switchToFinalFilePlayback(
+                preserveCurrentTime: targetTime,
+                autoPlay: isPlaying
+            )
+            return
+        }
+
         guard let player else { return }
-        let time = fraction * duration
-        player.currentTime = time
-        currentTime = time
+        player.currentTime = targetTime
+        currentTime = targetTime
     }
 
     func playFile(_ path: String, title: String = "") {
@@ -95,31 +151,339 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         play()
     }
 
-    // MARK: - Timer
+    func prepareStreamingPreview(title: String, shouldAutoPlay: Bool) {
+        UITestAutomationSupport.recordAction("sidebar-preview-prepared", appSupportDir: AppPaths.appSupportDir)
+        teardownLivePlayback(clearSession: true)
+        stopFilePlayback(clearPlayer: true)
 
-    private func startTimer() {
-        stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let player = self.player else { return }
-                self.currentTime = player.currentTime
-                if !player.isPlaying {
-                    self.isPlaying = false
-                    self.stopTimer()
-                }
+        playbackMode = .live
+        liveSessionID = "pending-\(UUID().uuidString)"
+        liveSessionDirectory = nil
+        liveFinalFilePath = nil
+        liveAutoplayEnabled = shouldAutoPlay
+        liveBuffers = []
+        liveFormat = nil
+        currentTitle = title
+        currentFilePath = nil
+        duration = 0
+        currentTime = 0
+        waveformSamples = []
+        playbackError = nil
+        isPlaying = false
+        isLiveStream = true
+    }
+
+    func completeStreamingPreview(result: GenerationResult, title: String, shouldAutoPlay: Bool) {
+        UITestAutomationSupport.recordAction("sidebar-preview-finalized", appSupportDir: AppPaths.appSupportDir)
+        guard result.usedStreaming else {
+            if shouldAutoPlay {
+                playFile(result.audioPath, title: title)
+            }
+            return
+        }
+
+        currentTitle = title
+        currentFilePath = result.audioPath
+        liveFinalFilePath = result.audioPath
+        if let streamSessionDirectory = result.streamSessionDirectory {
+            liveSessionDirectory = streamSessionDirectory
+        }
+        duration = max(duration, result.durationSeconds)
+
+        if !shouldAutoPlay || !isPlaying {
+            switchToFinalFilePlayback(
+                preserveCurrentTime: shouldAutoPlay ? currentTime : 0,
+                autoPlay: false
+            )
+            return
+        }
+
+        extractWaveform(from: URL(fileURLWithPath: result.audioPath), replace: true)
+    }
+
+    func abortLivePreviewIfNeeded() {
+        guard playbackMode == .live || liveSessionID != nil else { return }
+        dismiss()
+    }
+
+    // MARK: - Notifications
+
+    private func bindNotifications() {
+        chunkObserver = NotificationCenter.default.addObserver(
+            forName: .generationChunkReceived,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor [weak self] in
+                self?.handleGenerationChunk(notification)
             }
         }
     }
 
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
+    private func handleGenerationChunk(_ notification: Notification) {
+        UITestAutomationSupport.recordAction("sidebar-preview-chunk", appSupportDir: AppPaths.appSupportDir)
+        guard
+            let userInfo = notification.userInfo,
+            let requestID = userInfo["requestID"] as? Int,
+            let title = userInfo["title"] as? String,
+            let chunkPath = userInfo["chunkPath"] as? String
+        else {
+            return
+        }
+
+        let sessionID = String(requestID)
+        let sessionDirectory = userInfo["streamSessionDirectory"] as? String
+        let cumulativeDuration = userInfo["cumulativeDurationSeconds"] as? Double
+
+        if liveSessionID != sessionID {
+            startLiveSession(
+                id: sessionID,
+                title: title,
+                sessionDirectory: sessionDirectory,
+                autoPlay: AudioService.shouldAutoPlay
+            )
+        }
+
+        appendLiveChunk(
+            from: URL(fileURLWithPath: chunkPath),
+            cumulativeDuration: cumulativeDuration
+        )
     }
 
-    private func attemptPlay() {
+    // MARK: - Live Playback
+
+    private func startLiveSession(id: String, title: String, sessionDirectory: String?, autoPlay: Bool) {
+        teardownLivePlayback(clearSession: true)
+        stopFilePlayback(clearPlayer: true)
+
+        playbackMode = .live
+        liveSessionID = id
+        liveSessionDirectory = sessionDirectory
+        liveFinalFilePath = nil
+        liveAutoplayEnabled = autoPlay
+        liveBuffers = []
+        liveFormat = nil
+        currentTitle = title
+        currentFilePath = nil
+        duration = 0
+        currentTime = 0
+        waveformSamples = []
+        playbackError = nil
+        isPlaying = false
+        isLiveStream = true
+    }
+
+    private func appendLiveChunk(from url: URL, cumulativeDuration: TimeInterval?) {
+        guard let (buffer, fileFormat) = loadPCMBuffer(from: url) else {
+            playbackError = "Live audio preview could not decode the latest chunk."
+            return
+        }
+
+        if liveEngine == nil || livePlayerNode == nil {
+            configureLiveEngine(with: fileFormat)
+        }
+
+        liveBuffers.append(buffer)
+        scheduleLiveBuffer(buffer)
+
+        duration = cumulativeDuration ?? (duration + TimeInterval(buffer.frameLength) / fileFormat.sampleRate)
+        extractWaveform(from: url, replace: false)
+
+        if liveAutoplayEnabled {
+            attemptLivePlay()
+        }
+
+        try? FileManager.default.removeItem(at: url)
+        cleanupLiveSessionDirectoryIfEmpty()
+    }
+
+    private func attemptLivePlay() {
+        if liveFinalFilePath != nil, !isPlaying {
+            switchToFinalFilePlayback(preserveCurrentTime: currentTime, autoPlay: true)
+            return
+        }
+
+        guard let liveEngine, let livePlayerNode else { return }
+
+        do {
+            if !liveEngine.isRunning {
+                try liveEngine.start()
+            }
+            if !livePlayerNode.isPlaying {
+                livePlayerNode.play()
+            }
+            isPlaying = true
+            playbackError = nil
+            startTimer()
+        } catch {
+            playbackError = "Playback could not start."
+        }
+    }
+
+    private func configureLiveEngine(with format: AVAudioFormat) {
+        let engine = AVAudioEngine()
+        let playerNode = AVAudioPlayerNode()
+        engine.attach(playerNode)
+        engine.connect(playerNode, to: engine.mainMixerNode, format: format)
+        liveEngine = engine
+        livePlayerNode = playerNode
+        liveFormat = format
+    }
+
+    private func scheduleLiveBuffer(_ buffer: AVAudioPCMBuffer) {
+        livePlayerNode?.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleLiveBufferPlaybackCompletion()
+            }
+        }
+    }
+
+    private func handleLiveBufferPlaybackCompletion() {
+        guard playbackMode == .live else { return }
+
+        if liveFinalFilePath != nil,
+           isPlaying == false {
+            switchToFinalFilePlayback(preserveCurrentTime: duration, autoPlay: false)
+        }
+    }
+
+    private func switchToFinalFilePlayback(preserveCurrentTime: TimeInterval, autoPlay: Bool) {
+        guard let finalFilePath = liveFinalFilePath else { return }
+
+        do {
+            try applyFilePlayback(
+                filePath: finalFilePath,
+                title: currentTitle,
+                preserveCurrentTime: preserveCurrentTime,
+                autoPlay: autoPlay,
+                transitionFromLive: true
+            )
+        } catch {
+            playbackError = error.localizedDescription
+        }
+    }
+
+    private func teardownLivePlayback(clearSession: Bool) {
+        stopLivePlayback(resetCurrentTime: true)
+        liveBuffers.removeAll()
+        liveFormat = nil
+
+        if clearSession {
+            cleanupLiveSessionDirectory()
+            liveSessionID = nil
+            liveSessionDirectory = nil
+            liveFinalFilePath = nil
+            liveAutoplayEnabled = false
+            isLiveStream = false
+        }
+    }
+
+    private func stopLivePlayback(resetCurrentTime: Bool) {
+        livePlayerNode?.stop()
+        liveEngine?.stop()
+        liveEngine?.reset()
+        isPlaying = false
+        stopTimer()
+        if resetCurrentTime {
+            currentTime = 0
+        }
+    }
+
+    private func cleanupLiveSessionDirectoryIfEmpty() {
+        guard liveFinalFilePath != nil else { return }
+        guard let liveSessionDirectory else { return }
+        let directoryURL = URL(fileURLWithPath: liveSessionDirectory, isDirectory: true)
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: directoryURL.path)) ?? []
+        if contents.isEmpty {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+    }
+
+    private func cleanupLiveSessionDirectory() {
+        guard let liveSessionDirectory else { return }
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: liveSessionDirectory, isDirectory: true))
+    }
+
+    private func loadPCMBuffer(from url: URL) -> (AVAudioPCMBuffer, AVAudioFormat)? {
+        guard let audioFile = try? AVAudioFile(forReading: url) else { return nil }
+        let format = audioFile.processingFormat
+        let frameCapacity = AVAudioFrameCount(audioFile.length)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
+            return nil
+        }
+
+        do {
+            try audioFile.read(into: buffer)
+            return (buffer, format)
+        } catch {
+            return nil
+        }
+    }
+
+    private func applyFilePlayback(
+        filePath: String,
+        title: String,
+        preserveCurrentTime: TimeInterval,
+        autoPlay: Bool,
+        transitionFromLive: Bool
+    ) throws {
+        let url = URL(fileURLWithPath: filePath)
+        guard FileManager.default.fileExists(atPath: filePath) else {
+            throw NSError(domain: "AudioPlayerViewModel", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "Audio file not found."
+            ])
+        }
+
+        let audioPlayer = try AVAudioPlayer(contentsOf: url)
+        audioPlayer.delegate = self
+        audioPlayer.prepareToPlay()
+
+        if transitionFromLive {
+            stopLivePlayback(resetCurrentTime: false)
+            liveBuffers.removeAll()
+            liveFormat = nil
+            cleanupLiveSessionDirectory()
+            liveSessionID = nil
+            liveSessionDirectory = nil
+            liveFinalFilePath = nil
+            liveAutoplayEnabled = false
+        } else {
+            teardownLivePlayback(clearSession: true)
+        }
+
+        stopFilePlayback(clearPlayer: true)
+
+        player = audioPlayer
+        playbackMode = .file
+        currentFilePath = filePath
+        currentTitle = title.isEmpty ? url.lastPathComponent : title
+        duration = audioPlayer.duration
+        let clampedTime = min(max(preserveCurrentTime, 0), audioPlayer.duration)
+        audioPlayer.currentTime = clampedTime
+        currentTime = clampedTime
+        playbackError = nil
+        isLiveStream = false
+        extractWaveform(from: url, replace: true)
+
+        if autoPlay {
+            attemptFilePlay()
+        }
+    }
+
+    // MARK: - File Playback
+
+    private func stopFilePlayback(clearPlayer: Bool) {
+        player?.stop()
+        if clearPlayer {
+            player = nil
+        }
+        isPlaying = false
+        stopTimer()
+    }
+
+    private func attemptFilePlay() {
         guard var player else { return }
 
-        // Seek to beginning if playback already finished
         if player.currentTime >= player.duration, player.duration > 0 {
             player.currentTime = 0
         }
@@ -132,7 +496,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             return
         }
 
-        // Player in bad state — recreate from disk and retry once
         guard let path = currentFilePath else {
             playbackError = "Playback could not start."
             return
@@ -166,15 +529,86 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         waveformSamples = []
     }
 
-    // MARK: - Waveform
+    // MARK: - Timer
 
-    private func extractWaveform(from url: URL) {
-        Task.detached {
-            let samples = WaveformService.extractSamples(from: url, targetCount: 120)
-            await MainActor.run { [weak self] in
-                self?.waveformSamples = samples
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updatePlaybackProgress()
             }
         }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func updatePlaybackProgress() {
+        switch playbackMode {
+        case .file:
+            guard let player else { return }
+            currentTime = player.currentTime
+            if !player.isPlaying {
+                isPlaying = false
+                stopTimer()
+            }
+        case .live:
+            guard let livePlayerNode else { return }
+            if let lastRenderTime = livePlayerNode.lastRenderTime,
+               let playerTime = livePlayerNode.playerTime(forNodeTime: lastRenderTime),
+               playerTime.sampleRate > 0 {
+                currentTime = Double(playerTime.sampleTime) / playerTime.sampleRate
+            }
+
+            if !livePlayerNode.isPlaying {
+                isPlaying = false
+                stopTimer()
+                if liveFinalFilePath != nil {
+                    switchToFinalFilePlayback(preserveCurrentTime: min(currentTime, duration), autoPlay: false)
+                }
+            }
+        case .none:
+            stopTimer()
+        }
+    }
+
+    // MARK: - Waveform
+
+    private func extractWaveform(from url: URL, replace: Bool) {
+        Task.detached {
+            let extracted = WaveformService.extractSamples(from: url, targetCount: replace ? 120 : 32)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if replace || self.waveformSamples.isEmpty {
+                    self.waveformSamples = extracted
+                } else {
+                    self.waveformSamples = Self.mergeWaveformSamples(
+                        existing: self.waveformSamples,
+                        incoming: extracted,
+                        targetCount: 120
+                    )
+                }
+            }
+        }
+    }
+
+    private static func mergeWaveformSamples(existing: [Float], incoming: [Float], targetCount: Int) -> [Float] {
+        let combined = existing + incoming
+        guard combined.count > targetCount else { return combined }
+
+        var reduced: [Float] = []
+        reduced.reserveCapacity(targetCount)
+        let step = Double(combined.count) / Double(targetCount)
+        for index in 0..<targetCount {
+            let lowerBound = Int(Double(index) * step)
+            let upperBound = min(Int(Double(index + 1) * step), combined.count)
+            let slice = combined[lowerBound..<max(lowerBound + 1, upperBound)]
+            let average = slice.reduce(0, +) / Float(slice.count)
+            reduced.append(average)
+        }
+        return reduced
     }
 
     // MARK: - Formatting

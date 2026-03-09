@@ -5,9 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATCH_DIR="$ROOT_DIR/third_party_patches/mlx-audio"
 VENDOR_DIR="$ROOT_DIR/Sources/Resources/vendor"
 SOURCE_HELPER="$PATCH_DIR/qwenvoice_speed_patch.py"
+BACKEND_HELPER="$ROOT_DIR/Sources/Resources/backend/mlx_audio_qwen_speed_patch.py"
 PATCH_NOTE="$PATCH_DIR/qwenvoice-speed.patch"
-BASE_VERSION="0.3.1"
-TARGET_VERSION="0.3.1.post1"
+BASE_VERSION="0.4.0"
+TARGET_VERSION="0.4.0.post1"
 
 if [[ ! -f "$SOURCE_HELPER" ]]; then
   echo "Missing helper source: $SOURCE_HELPER" >&2
@@ -18,6 +19,9 @@ if [[ ! -f "$PATCH_NOTE" ]]; then
   echo "Missing patch note: $PATCH_NOTE" >&2
   exit 1
 fi
+
+mkdir -p "$(dirname "$BACKEND_HELPER")"
+cp "$SOURCE_HELPER" "$BACKEND_HELPER"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -33,7 +37,7 @@ python3 -m pip download \
   "mlx-audio==${BASE_VERSION}" \
   -d "$DOWNLOAD_DIR" >/dev/null
 
-SOURCE_WHEEL="$(find "$DOWNLOAD_DIR" -maxdepth 1 -name 'mlx_audio-0.3.1-*.whl' | head -n 1)"
+SOURCE_WHEEL="$(find "$DOWNLOAD_DIR" -maxdepth 1 -name "mlx_audio-${BASE_VERSION}-*.whl" | head -n 1)"
 if [[ -z "$SOURCE_WHEEL" ]]; then
   echo "Could not download upstream mlx-audio wheel" >&2
   exit 1
@@ -80,6 +84,8 @@ PY
 
 OUTPUT_WHEEL="$VENDOR_DIR/mlx_audio-${TARGET_VERSION}-py3-none-any.whl"
 
+rm -f "$VENDOR_DIR"/mlx_audio-*.whl
+
 python3 - "$UNPACK_DIR" "$OUTPUT_WHEEL" "$TARGET_VERSION" <<'PY'
 import base64
 import csv
@@ -117,5 +123,4 @@ with zipfile.ZipFile(output_wheel, "w", compression=zipfile.ZIP_DEFLATED) as zf:
     zf.writestr(f"{dist_info}/RECORD", record_buffer.getvalue().encode("utf-8"))
 PY
 
-rm -f "$VENDOR_DIR/mlx_audio-${BASE_VERSION}-py3-none-any.whl"
 echo "Built $OUTPUT_WHEEL"

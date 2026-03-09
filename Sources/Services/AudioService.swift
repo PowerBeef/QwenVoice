@@ -2,15 +2,19 @@ import Foundation
 
 /// Utility functions for audio file management.
 enum AudioService {
+    private static var defaults: UserDefaults {
+        UITestAutomationSupport.appStorage
+    }
+
     static var shouldAutoPlay: Bool {
-        if UserDefaults.standard.object(forKey: "autoPlay") == nil {
+        if defaults.object(forKey: "autoPlay") == nil {
             return true
         }
-        return UserDefaults.standard.bool(forKey: "autoPlay")
+        return defaults.bool(forKey: "autoPlay")
     }
 
     private static var configuredOutputsRoot: URL {
-        let configuredPath = (UserDefaults.standard.string(forKey: "outputDirectory") ?? "")
+        let configuredPath = (defaults.string(forKey: "outputDirectory") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if configuredPath.isEmpty {
             return QwenVoiceApp.outputsDir

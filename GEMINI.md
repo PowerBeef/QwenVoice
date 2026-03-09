@@ -51,8 +51,8 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 
 ## Current Repo Reality
 
-- The shipping app does not expose streaming preview or temperature/max-token controls.
-- Backend streaming and advanced sampling parameters remain benchmark/internal only.
+- The shipping app exposes live streaming preview for single-generation flows, but not temperature/max-token controls.
+- Batch generation remains sequential/non-streaming in the GUI; backend advanced sampling and internal batch paths remain benchmark/internal only.
 - The backend MLX cache policy defaults to `adaptive`; use `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics.
 - The repo now has UI tests, Swift unit tests, and Python backend tests.
 - GitHub Actions now uses the dual-release workflow only.

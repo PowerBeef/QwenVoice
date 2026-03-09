@@ -134,6 +134,7 @@ struct VoicesView: View {
                                     .foregroundColor(AppTheme.voices)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("voicesRow_play_\(voice.id)")
 
                             Button(role: .destructive) {
                                 deleteVoice(voice)
@@ -142,6 +143,7 @@ struct VoicesView: View {
                                     .font(.title3)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("voicesRow_delete_\(voice.id)")
                         }
                         .padding(.vertical, 4)
                     }
@@ -243,21 +245,30 @@ struct EnrollVoiceSheet: View {
 
             TextField("Voice name (e.g. Boss, Mom)", text: $name)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("voicesEnroll_nameField")
 
             HStack {
                 TextField("Reference audio file", text: $audioPath)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("voicesEnroll_audioPathField")
                 Button("Browse...") {
+                    if UITestAutomationSupport.isStubBackendMode,
+                       let url = UITestAutomationSupport.enrollAudioURL {
+                        audioPath = url.path
+                        return
+                    }
                     let panel = NSOpenPanel()
                     panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
                     if panel.runModal() == .OK, let url = panel.url {
                         audioPath = url.path
                     }
                 }
+                .accessibilityIdentifier("voicesEnroll_browseButton")
             }
 
             TextField("Transcript — type exactly what the audio says", text: $transcript)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("voicesEnroll_transcriptField")
 
             if let errorMessage {
                 Text(errorMessage)
@@ -270,6 +281,7 @@ struct EnrollVoiceSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("voicesEnroll_cancelButton")
 
                 Spacer()
 
@@ -279,6 +291,7 @@ struct EnrollVoiceSheet: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(name.isEmpty || audioPath.isEmpty || isEnrolling)
                 .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("voicesEnroll_confirmButton")
             }
         }
         .padding(24)

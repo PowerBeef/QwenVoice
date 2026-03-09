@@ -323,6 +323,7 @@ struct VoiceCloningView: View {
 
         Task {
             do {
+                UITestAutomationSupport.recordAction("clone-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
                 guard let model = TTSModel.model(for: .clone) else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -330,7 +331,11 @@ struct VoiceCloningView: View {
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                let result = try await pythonBridge.generateCloneFlow(
+                audioPlayer.prepareStreamingPreview(
+                    title: String(text.prefix(40)),
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
+                let result = try await pythonBridge.generateCloneStreamingFlow(
                     modelID: model.id,
                     text: text,
                     refAudio: refPath,
@@ -351,7 +356,10 @@ struct VoiceCloningView: View {
                     createdAt: Date()
                 )
                 try persistGenerationAndMaybeAutoplay(&gen, result: result)
+                UITestAutomationSupport.recordAction("clone-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
+                UITestAutomationSupport.recordAction("clone-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
             }
             isGenerating = false
@@ -359,24 +367,39 @@ struct VoiceCloningView: View {
     }
 
     private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
-        let saveStart = DispatchTime.now().uptimeNanoseconds
-        try DatabaseService.shared.saveGeneration(&generation)
-        #if DEBUG
-        print("[Performance][VoiceCloningView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
-        #endif
+        var persistenceError: Error?
+        do {
+            let saveStart = DispatchTime.now().uptimeNanoseconds
+            try DatabaseService.shared.saveGeneration(&generation)
+            #if DEBUG
+            print("[Performance][VoiceCloningView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
+            #endif
 
-        let notificationStart = DispatchTime.now().uptimeNanoseconds
-        NotificationCenter.default.post(name: .generationSaved, object: nil)
-        #if DEBUG
-        print("[Performance][VoiceCloningView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
-        #endif
+            let notificationStart = DispatchTime.now().uptimeNanoseconds
+            NotificationCenter.default.post(name: .generationSaved, object: nil)
+            #if DEBUG
+            print("[Performance][VoiceCloningView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
+            #endif
+        } catch {
+            persistenceError = error
+        }
 
-        if AudioService.shouldAutoPlay {
+        if result.usedStreaming {
+            audioPlayer.completeStreamingPreview(
+                result: result,
+                title: String(text.prefix(40)),
+                shouldAutoPlay: AudioService.shouldAutoPlay
+            )
+        } else if AudioService.shouldAutoPlay {
             let autoplayStart = DispatchTime.now().uptimeNanoseconds
             audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
             #if DEBUG
             print("[Performance][VoiceCloningView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
             #endif
+        }
+
+        if let persistenceError {
+            throw persistenceError
         }
     }
 
@@ -440,6 +463,14 @@ struct VoiceCloningView: View {
     }
 
     private func browseForAudio() {
+        if UITestAutomationSupport.isStubBackendMode,
+           let url = UITestAutomationSupport.importAudioURL {
+            referenceAudioPath = url.path
+            selectedVoice = nil
+            transcriptLoadError = nil
+            return
+        }
+
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
         panel.allowsMultipleSelection = false

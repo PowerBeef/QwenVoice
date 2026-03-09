@@ -54,7 +54,7 @@ usage() {
     cat <<'EOF'
 Usage:
   ./scripts/run_tests.sh
-  ./scripts/run_tests.sh --suite smoke|ui|integration|all|debug
+  ./scripts/run_tests.sh --suite smoke|ui|integration|all|debug|feature-matrix
   ./scripts/run_tests.sh --class <ClassName>
   ./scripts/run_tests.sh --test <ClassName/testMethod>
   ./scripts/run_tests.sh --list
@@ -197,6 +197,16 @@ collect_suite_filters() {
             ;;
         debug)
             append_filter "$TEST_BUNDLE_ID/DebugHierarchyTests"
+            ;;
+        feature-matrix)
+            append_filter "$TEST_BUNDLE_ID/SetupFlowTests"
+            append_filter "$TEST_BUNDLE_ID/ModelsFlowTests"
+            append_filter "$TEST_BUNDLE_ID/VoicesFlowTests"
+            append_filter "$TEST_BUNDLE_ID/VoiceDesignFlowTests"
+            append_filter "$TEST_BUNDLE_ID/VoiceCloningGenerationTests"
+            append_filter "$TEST_BUNDLE_ID/SidebarPlayerTests"
+            append_filter "$TEST_BUNDLE_ID/HistoryFlowTests"
+            append_filter "$TEST_BUNDLE_ID/PreferencesFlowTests"
             ;;
         *)
             echo "ERROR: Unknown suite '$suite_name'." >&2

@@ -31,6 +31,9 @@ brew install ffmpeg
 python main.py
 ```
 
+Install from the `cli/` directory so the `--find-links ../Sources/Resources/vendor`
+entry in `requirements.txt` can resolve the repo’s vendored `mlx-audio` wheel.
+
 ## Important Differences from the GUI
 
 - The CLI still has its own `MODELS` and `SPEAKER_MAP` in `main.py`

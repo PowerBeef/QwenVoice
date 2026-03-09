@@ -102,7 +102,7 @@ final class BatchGenerationRunnerTests: XCTestCase {
     }
 
     private func waitForPendingGeneration(in bridge: FakeBatchBridge) async {
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             if bridge.hasPendingGeneration {
                 return

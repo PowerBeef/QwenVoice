@@ -40,17 +40,27 @@ struct PreferencesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 prefSection(header: "Playback", icon: "play.circle") {
-                    HStack {
-                        Text("Auto-play generated audio")
-                        Spacer()
-                        Toggle("", isOn: $autoPlay)
-                            .toggleStyle(.switch)
-                            .tint(AppTheme.preferences)
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .accessibilityIdentifier("preferences_autoPlayToggle")
+                    Button {
+                        autoPlay.toggle()
+                    } label: {
+                        HStack {
+                            Text("Auto-play generated audio")
+                            Spacer()
+                            Toggle("Auto-play generated audio", isOn: $autoPlay)
+                                .toggleStyle(.switch)
+                                .tint(AppTheme.preferences)
+                                .labelsHidden()
+                                .controlSize(.small)
+                                .allowsHitTesting(false)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Auto-play generated audio")
+                    .accessibilityValue(autoPlay ? "on" : "off")
+                    .accessibilityIdentifier("preferences_autoPlayToggle")
                 }
 
                 prefSection(header: "Output", icon: "folder") {
@@ -60,6 +70,11 @@ struct PreferencesView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .accessibilityIdentifier("preferences_outputDirectory")
                             Button("Browse...") {
+                                if UITestAutomationSupport.isStubBackendMode,
+                                   let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
+                                    outputDirectory = outputDirectoryURL.path
+                                    return
+                                }
                                 let panel = NSOpenPanel()
                                 panel.canChooseDirectories = true
                                 panel.canChooseFiles = false
@@ -67,9 +82,11 @@ struct PreferencesView: View {
                                     outputDirectory = url.path
                                 }
                             }
+                            .accessibilityIdentifier("preferences_browseButton")
                             Button("Reset") {
                                 outputDirectory = ""
                             }
+                            .accessibilityIdentifier("preferences_outputResetButton")
                         }
                         if outputDirectory.isEmpty {
                             Text("Default: ~/Library/Application Support/QwenVoice/outputs/")
@@ -88,7 +105,11 @@ struct PreferencesView: View {
                         Text("App Support Directory")
                         Spacer()
                         Button("Open in Finder") {
-                            NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
+                            if UITestAutomationSupport.isStubBackendMode {
+                                UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
+                            } else {
+                                NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
+                            }
                         }
                         .accessibilityIdentifier("preferences_openFinderButton")
                     }

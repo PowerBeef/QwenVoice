@@ -14,6 +14,19 @@ struct SidebarPlayerView: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
+                    if audioPlayer.isLiveStream {
+                        Text("Live")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(AppTheme.accent.opacity(0.12))
+                            )
+                            .accessibilityIdentifier("sidebarPlayer_liveBadge")
+                    }
+
                     Spacer()
 
                     Button {
@@ -34,12 +47,17 @@ struct SidebarPlayerView: View {
                     WaveformView(samples: audioPlayer.waveformSamples, progress: audioPlayer.progress)
                         .contentShape(Rectangle())
                         .onTapGesture { location in
+                            guard audioPlayer.canSeek else { return }
                             let fraction = max(0, min(1, location.x / geo.size.width))
                             audioPlayer.seek(to: fraction)
                         }
                 }
                 .frame(height: 30)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Waveform")
+                .opacity(audioPlayer.canSeek ? 1.0 : 0.75)
                 .accessibilityIdentifier("sidebarPlayer_waveform")
+                .accessibilityValue(audioPlayer.canSeek ? "seek enabled" : "seek disabled")
 
                 // Row 3: Play/pause + time
                 HStack(spacing: 8) {
@@ -54,10 +72,12 @@ struct SidebarPlayerView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("sidebarPlayer_playPause")
+                    .accessibilityValue(audioPlayer.isPlaying ? "pause" : "play")
 
-                    Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.formattedDuration)")
+                    Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.durationDisplayText)")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("sidebarPlayer_time")
                 }
 
                 if let playbackError = audioPlayer.playbackError {
@@ -83,6 +103,7 @@ struct SidebarPlayerView: View {
                 ? .move(edge: .bottom).combined(with: .opacity)
                 : .identity
             )
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("sidebarPlayer_bar")
         }
     }

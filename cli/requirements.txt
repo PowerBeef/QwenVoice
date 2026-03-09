@@ -1,3 +1,4 @@
+--find-links ../Sources/Resources/vendor
 anyio==4.12.1
 audioop-lts==0.2.2; python_version >= "3.13"
 audioread==3.1.0
@@ -24,7 +25,7 @@ lxml==6.0.2
 MarkupSafe==3.0.3
 miniaudio==1.61
 mlx==0.30.3
-mlx-audio @ git+https://github.com/Blaizzy/mlx-audio.git@9349644ccbd62eb10900852228f7b952c566def3
+mlx-audio==0.4.0.post1
 mlx-lm==0.30.5
 mlx-metal==0.30.3
 msgpack==1.1.2
@@ -33,7 +34,7 @@ numpy==2.3.5
 packaging==26.0
 platformdirs==4.5.1
 pooch==1.8.2
-protobuf==6.33.4
+protobuf==6.33.5
 pycparser==3.0
 pycryptodomex==3.23.0
 pyloudnorm==0.2.0

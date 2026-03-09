@@ -86,6 +86,7 @@ struct QwenVoiceApp: App {
                 }
             }
             .background(WindowChromeConfigurator().allowsHitTesting(false))
+            .defaultAppStorage(UITestAutomationSupport.appStorage)
             .onAppear {
                 setupAppSupport()
                 envManager.ensureEnvironment()
@@ -151,6 +152,8 @@ struct QwenVoiceApp: App {
             Self.appSupportDir.appendingPathComponent("models").path,
             Self.appSupportDir.appendingPathComponent("outputs").path,
             Self.appSupportDir.appendingPathComponent("voices").path,
+            Self.appSupportDir.appendingPathComponent("cache").path,
+            Self.appSupportDir.appendingPathComponent("cache/stream_sessions").path,
         ] + outputSubdirectories.sorted().map {
             Self.appSupportDir.appendingPathComponent("outputs/\($0)").path
         }

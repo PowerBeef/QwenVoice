@@ -290,6 +290,15 @@ class QwenVoiceUITestBase: XCTestCase {
         return app.descendants(matching: .any).matching(identifier: identifiers[0]).firstMatch
     }
 
+    func waitForBackendIdle(timeout: TimeInterval = 10) -> XCUIElement {
+        let idle = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus_idle").firstMatch
+        XCTAssertTrue(
+            idle.waitForExistence(timeout: timeout),
+            "Backend should reach the idle state within \(timeout)s"
+        )
+        return idle
+    }
+
     func waitForElement(
         _ identifier: String,
         type: XCUIElement.ElementType = .any,
@@ -300,6 +309,23 @@ class QwenVoiceUITestBase: XCTestCase {
             element.waitForExistence(timeout: timeout),
             "Element '\(identifier)' should exist within \(timeout)s"
         )
+        return element
+    }
+
+    func waitForElementToBecomeEnabled(
+        _ identifier: String,
+        type: XCUIElement.ElementType = .any,
+        timeout: TimeInterval = 5
+    ) -> XCUIElement {
+        let element = waitForElement(identifier, type: type, timeout: timeout)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.isEnabled {
+                return element
+            }
+            usleep(200_000)
+        }
+        XCTFail("Element '\(identifier)' should become enabled within \(timeout)s")
         return element
     }
 

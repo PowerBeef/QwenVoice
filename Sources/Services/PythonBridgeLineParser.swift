@@ -14,5 +14,6 @@ enum PythonBridgeLineParser {
     private static let handledNotificationMethods: Set<String> = [
         "ready",
         "progress",
+        "generation_chunk",
     ]
 }

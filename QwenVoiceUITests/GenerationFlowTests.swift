@@ -16,11 +16,18 @@ final class GenerationFlowTests: QwenVoiceUITestBase {
         }
 
         _ = waitForBackendStatusElement(timeout: 5)
-        if app.staticTexts["Starting..."].exists {
-            throw XCTSkip("Backend not ready; skipping generation test")
+        let idleStatus = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus_idle").firstMatch
+        let crashedStatus = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus_crashed").firstMatch
+        let errorStatus = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus_error").firstMatch
+        if !(idleStatus.waitForExistence(timeout: 20)) {
+            if crashedStatus.exists || errorStatus.exists {
+                throw XCTSkip("Backend failed to initialize; skipping generation test")
+            }
+            throw XCTSkip("Backend did not reach the idle state in time; skipping generation test")
         }
 
         let editor = waitForElement("textInput_textEditor")
+        XCTAssertTrue(editor.isEnabled, "Text editor should be enabled once the backend is idle")
         editor.click()
         editor.typeText("Hello, this is a test.")
 

@@ -52,6 +52,14 @@ final class PythonEnvironmentManager: ObservableObject {
         // Don't re-check if already resolved
         if case .ready = state { return }
 
+        if UITestAutomationSupport.isStubBackendMode {
+            state = .checking
+            Task.detached(priority: .userInitiated) { [weak self] in
+                await self?.runStubSetup()
+            }
+            return
+        }
+
         // --- Synchronous fast path (no Task, no dispatch) ---
 
         // Architecture check (instant)
@@ -103,6 +111,13 @@ final class PythonEnvironmentManager: ObservableObject {
     }
 
     func resetEnvironment() {
+        if UITestAutomationSupport.isStubBackendMode {
+            needsBackendRestart = true
+            state = .idle
+            ensureEnvironment()
+            return
+        }
+
         if let bundledPython = bundledPythonPath() {
             needsBackendRestart = true
             if case .ready(let pythonPath) = state, pythonPath == bundledPython {
@@ -238,6 +253,50 @@ final class PythonEnvironmentManager: ObservableObject {
 
         await MainActor.run {
             state = .ready(pythonPath: Self.venvPython)
+        }
+    }
+
+    private func runStubSetup() async {
+        let delay = UITestAutomationSupport.setupDelayNanoseconds
+
+        await MainActor.run {
+            self.state = .settingUp(.findingPython)
+        }
+        try? await Task.sleep(nanoseconds: delay)
+
+        await MainActor.run {
+            self.state = .settingUp(.creatingVenv)
+        }
+        try? await Task.sleep(nanoseconds: delay)
+
+        await MainActor.run {
+            self.state = .settingUp(.installingDependencies(installed: 1, total: 3))
+        }
+        try? await Task.sleep(nanoseconds: delay)
+
+        await MainActor.run {
+            self.state = .settingUp(.installingDependencies(installed: 2, total: 3))
+        }
+        try? await Task.sleep(nanoseconds: delay)
+
+        await MainActor.run {
+            self.state = .settingUp(.updatingDependencies)
+        }
+        try? await Task.sleep(nanoseconds: delay)
+
+        if UITestAutomationSupport.setupScenario == .failOnce,
+           UITestAutomationSupport.consumeFailOnceFlag(
+                namespace: "setup-fail",
+                appSupportDir: Self.appSupportDir
+           ) {
+            await MainActor.run {
+                self.state = .failed(message: "Simulated setup failure for UI automation.")
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.state = .ready(pythonPath: UITestAutomationSupport.stubPythonPath())
         }
     }
 

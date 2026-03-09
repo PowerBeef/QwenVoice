@@ -10,7 +10,7 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 - Static model/speaker contract data is shared between Swift and Python through `qwenvoice_contract.json`.
 - Batch generation cancel now interrupts in-flight work by restarting the backend instead of only stopping between items.
 - The dead `sortOrder` database column now has a real drop migration.
-- App-facing streaming and advanced sampling helpers were removed from the shipping Swift bridge.
+- Single-generation GUI flows now use streamed chunk previews and live sidebar playback backed by the Python bridge and audio player.
 - The repo now includes focused Swift unit tests and a real Python backend test suite.
 
 ## Current Strengths
@@ -23,8 +23,8 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 
 ## Current Caveats
 
-- The shipping UI intentionally uses non-streaming generation flows even though the backend still supports benchmark/internal streaming previews.
 - Voice Design is still embedded inside Custom Voice rather than exposed as its own sidebar destination.
+- Batch generation is still sequential and non-streaming even though the backend/runtime now supports richer streaming data and internal batch capabilities.
 - `ModelsView` still uses filesystem status through `ModelManagerViewModel` rather than backend `get_model_info`.
 - On some Xcode/macOS combinations, macOS UI test sessions can still fail before a control session is established even when the app code is healthy.
 

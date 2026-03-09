@@ -20,6 +20,8 @@ import hashlib
 import subprocess
 import warnings
 import traceback
+import uuid
+from importlib import metadata as importlib_metadata
 from collections import OrderedDict
 from datetime import datetime
 
@@ -75,6 +77,7 @@ MODELS_DIR = os.path.join(APP_SUPPORT_DIR, "models")
 OUTPUTS_DIR = os.path.join(APP_SUPPORT_DIR, "outputs")
 VOICES_DIR = os.path.join(APP_SUPPORT_DIR, "voices")
 CLONE_REF_CACHE_DIR = os.path.join(APP_SUPPORT_DIR, "cache", "normalized_clone_refs")
+STREAM_SESSIONS_DIR = os.path.join(APP_SUPPORT_DIR, "cache", "stream_sessions")
 
 
 def _resolve_resources_dir():
@@ -146,13 +149,14 @@ _prepare_icl_context_fn = None
 _generate_prepared_icl_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
+_mlx_audio_version = None
 
 
 def _ensure_mlx():
     """Lazy-import mlx_audio so we only load it when needed."""
     global _load_model_fn, _generate_audio_fn, _audio_write_fn
     global _mx, _np, _can_prepare_icl_fn, _prepare_icl_context_fn, _generate_prepared_icl_fn
-    global _enable_speech_tokenizer_encoder_fn
+    global _enable_speech_tokenizer_encoder_fn, _mlx_audio_version
     if _load_model_fn is None:
         import numpy as np
         from mlx_audio.tts.utils import load_model
@@ -189,6 +193,10 @@ def _ensure_mlx():
         _prepare_icl_context_fn = prepare_icl_context
         _generate_prepared_icl_fn = generate_with_prepared_icl
         _enable_speech_tokenizer_encoder_fn = try_enable_speech_tokenizer_encoder
+        try:
+            _mlx_audio_version = importlib_metadata.version("mlx-audio")
+        except importlib_metadata.PackageNotFoundError:
+            _mlx_audio_version = "unknown"
 
 
 def _resolve_ffmpeg_binary():
@@ -202,6 +210,51 @@ def _resolve_ffmpeg_binary():
         return bundled
 
     return "ffmpeg"
+
+
+def _base_model_capabilities(model_def):
+    version = _mlx_audio_version
+    if version is None:
+        try:
+            version = importlib_metadata.version("mlx-audio")
+        except importlib_metadata.PackageNotFoundError:
+            version = "unknown"
+    is_clone = model_def["mode"] == "clone"
+    return {
+        "mlx_audio_version": version,
+        "supports_streaming": True,
+        "supports_prepared_clone": is_clone,
+        "supports_clone_streaming": is_clone,
+        "supports_batch": True,
+    }
+
+
+def _resolved_model_capabilities(model_def):
+    capabilities = dict(_base_model_capabilities(model_def))
+
+    if (
+        _current_model is None
+        or _current_model_id != model_def["id"]
+    ):
+        return capabilities
+
+    capabilities["supports_streaming"] = hasattr(_current_model, "generate")
+    capabilities["supports_batch"] = bool(
+        hasattr(_current_model, "batch_generate")
+        or hasattr(_current_model, "generate_batch")
+    )
+
+    if model_def["mode"] == "clone":
+        supports_prepared_clone = bool(
+            _can_prepare_icl_fn
+            and _can_prepare_icl_fn(_current_model)
+        )
+        capabilities["supports_prepared_clone"] = supports_prepared_clone
+        capabilities["supports_clone_streaming"] = bool(
+            capabilities["supports_streaming"] and supports_prepared_clone
+        )
+
+    return capabilities
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +372,15 @@ def send_progress(percent, message, request_id=None):
     send_notification("progress", payload)
 
 
-def send_generation_chunk(request_id, chunk_index, chunk_path, is_final):
+def send_generation_chunk(
+    request_id,
+    chunk_index,
+    chunk_path,
+    is_final,
+    chunk_duration_seconds,
+    cumulative_duration_seconds,
+    stream_session_dir,
+):
     """Send a generation chunk notification to the frontend."""
     if request_id is None:
         return
@@ -330,6 +391,9 @@ def send_generation_chunk(request_id, chunk_index, chunk_path, is_final):
             "chunk_index": chunk_index,
             "chunk_path": chunk_path,
             "is_final": is_final,
+            "chunk_duration_seconds": round(chunk_duration_seconds, 4),
+            "cumulative_duration_seconds": round(cumulative_duration_seconds, 4),
+            "stream_session_dir": stream_session_dir,
         },
     )
 
@@ -345,7 +409,7 @@ def handle_ping(params):
 
 def handle_init(params):
     """Initialize paths. Called once at startup."""
-    global MODELS_DIR, OUTPUTS_DIR, VOICES_DIR, APP_SUPPORT_DIR, CLONE_REF_CACHE_DIR
+    global MODELS_DIR, OUTPUTS_DIR, VOICES_DIR, APP_SUPPORT_DIR, CLONE_REF_CACHE_DIR, STREAM_SESSIONS_DIR
 
     if "app_support_dir" in params:
         APP_SUPPORT_DIR = params["app_support_dir"]
@@ -353,11 +417,13 @@ def handle_init(params):
         OUTPUTS_DIR = os.path.join(APP_SUPPORT_DIR, "outputs")
         VOICES_DIR = os.path.join(APP_SUPPORT_DIR, "voices")
         CLONE_REF_CACHE_DIR = os.path.join(APP_SUPPORT_DIR, "cache", "normalized_clone_refs")
+        STREAM_SESSIONS_DIR = os.path.join(APP_SUPPORT_DIR, "cache", "stream_sessions")
 
     os.makedirs(MODELS_DIR, exist_ok=True)
     os.makedirs(OUTPUTS_DIR, exist_ok=True)
     os.makedirs(VOICES_DIR, exist_ok=True)
     os.makedirs(CLONE_REF_CACHE_DIR, exist_ok=True)
+    os.makedirs(STREAM_SESSIONS_DIR, exist_ok=True)
     _prune_normalized_clone_reference_cache()
 
     return {"status": "ok", "models_dir": MODELS_DIR, "outputs_dir": OUTPUTS_DIR}
@@ -669,68 +735,93 @@ def _write_audio_file(output_path, audio, sample_rate):
     _audio_write_fn(output_path, _np.array(audio), sample_rate, format="wav")
 
 
-def _generate_streaming_preview(
-    request_id,
-    final_path,
-    text,
-    voice=None,
-    instruct=None,
-    speed=None,
-    temperature=0.6,
-    max_tokens=None,
-    streaming_interval=DEFAULT_STREAMING_INTERVAL,
-):
-    """Generate chunk previews while preserving the final output-file contract."""
-    target_dir, stem, _ = _derive_generation_paths(final_path)
+def _make_stream_session_dir(request_id):
+    session_id = f"{int(time.time() * 1000)}_{request_id or 'stream'}_{uuid.uuid4().hex[:8]}"
+    session_dir = os.path.join(STREAM_SESSIONS_DIR, session_id)
+    os.makedirs(session_dir, exist_ok=True)
+    return session_dir
 
-    generator_kwargs = {
-        "text": text,
-        "temperature": float(temperature),
-        "stream": True,
-        "streaming_interval": float(streaming_interval),
+
+def _metrics_from_generation_result(result, streaming_used):
+    if result is None:
+        return {"streaming_used": streaming_used}
+
+    return {
+        "token_count": int(getattr(result, "token_count", 0) or 0),
+        "processing_time_seconds": round(float(getattr(result, "processing_time_seconds", 0.0) or 0.0), 4),
+        "peak_memory_usage": round(float(getattr(result, "peak_memory_usage", 0.0) or 0.0), 4),
+        "streaming_used": streaming_used,
     }
-    if max_tokens is not None:
-        generator_kwargs["max_tokens"] = int(max_tokens)
 
-    if voice or instruct:
-        generator = _current_model.generate(
-            voice=voice,
-            instruct=instruct,
-            speed=float(speed) if speed is not None else 1.0,
-            **generator_kwargs,
-        )
-    else:
-        generator = _current_model.generate(**generator_kwargs)
 
-    chunk_numpy = []
+def _consume_streaming_generator(generator, request_id, final_path):
+    stream_start = time.perf_counter()
+    write_start = time.perf_counter()
+    session_dir = _make_stream_session_dir(request_id)
+    chunk_arrays = []
     chunk_index = 0
+    cumulative_duration = 0.0
+    first_chunk_ms = None
+    total_token_count = 0
+    peak_memory_usage = 0.0
+    last_chunk = None
 
     for chunk in generator:
-        chunk_path = os.path.join(target_dir, f"{stem}__chunk_{chunk_index:03d}.wav")
+        chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
         _write_audio_file(chunk_path, chunk.audio, chunk.sample_rate)
+
+        audio_array = _np.array(chunk.audio)
+        chunk_arrays.append(audio_array)
+        chunk_duration_seconds = (
+            float(chunk.samples) / float(chunk.sample_rate)
+            if getattr(chunk, "samples", 0) and getattr(chunk, "sample_rate", 0)
+            else 0.0
+        )
+        cumulative_duration += chunk_duration_seconds
+        total_token_count += int(getattr(chunk, "token_count", 0) or 0)
+        peak_memory_usage = max(
+            peak_memory_usage,
+            float(getattr(chunk, "peak_memory_usage", 0.0) or 0.0),
+        )
+
+        if first_chunk_ms is None:
+            first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
+
         send_generation_chunk(
             request_id=request_id,
             chunk_index=chunk_index,
             chunk_path=chunk_path,
             is_final=bool(getattr(chunk, "is_final_chunk", False)),
+            chunk_duration_seconds=chunk_duration_seconds,
+            cumulative_duration_seconds=cumulative_duration,
+            stream_session_dir=session_dir,
         )
-        chunk_numpy.append(_np.array(chunk.audio))
-        _mx.clear_cache()
+        last_chunk = chunk
         chunk_index += 1
 
-    if not chunk_numpy:
+    if not chunk_arrays:
         raise RuntimeError("Generation produced no audio file")
 
-    full_audio = chunk_numpy[0] if len(chunk_numpy) == 1 else _np.concatenate(chunk_numpy, axis=0)
+    full_audio = chunk_arrays[0] if len(chunk_arrays) == 1 else _np.concatenate(chunk_arrays, axis=0)
     _audio_write_fn(final_path, full_audio, _current_model.sample_rate, format="wav")
+    write_output_ms = int((time.perf_counter() - write_start) * 1000)
 
-    # Clean up intermediate chunk files
-    for ci in range(chunk_index):
-        cp = os.path.join(target_dir, f"{stem}__chunk_{ci:03d}.wav")
-        try:
-            os.remove(cp)
-        except OSError:
-            pass
+    metrics = _metrics_from_generation_result(last_chunk, streaming_used=True)
+    metrics["token_count"] = total_token_count
+    metrics["peak_memory_usage"] = round(peak_memory_usage, 4)
+    metrics["processing_time_seconds"] = round(time.perf_counter() - stream_start, 4)
+    metrics["first_chunk_ms"] = first_chunk_ms
+
+    return (
+        {
+            "audio_path": final_path,
+            "duration_seconds": round(cumulative_duration, 2),
+            "stream_session_dir": session_dir,
+            "metrics": metrics,
+        },
+        write_output_ms,
+        get_audio_metadata(final_path),
+    )
 
 
 def handle_load_model(params, request_id=None):
@@ -758,9 +849,15 @@ def handle_load_model(params, request_id=None):
 
     # Skip reload if same model already loaded
     if _current_model is not None and _current_model_path == model_path:
-        result = {"success": True, "model_path": model_path, "cached": True}
+        result = {
+            "success": True,
+            "model_path": model_path,
+            "cached": True,
+            "model_id": resolved_model_id,
+        }
         if resolved_model_id:
             _current_model_id = resolved_model_id
+            result.update(_resolved_model_capabilities(MODELS[resolved_model_id]))
         if benchmark:
             result["benchmark"] = {
                 "timings_ms": {
@@ -788,7 +885,10 @@ def handle_load_model(params, request_id=None):
     result = {
         "success": True,
         "model_path": model_path,
+        "model_id": resolved_model_id,
     }
+    if resolved_model_id:
+        result.update(_resolved_model_capabilities(MODELS[resolved_model_id]))
     if benchmark:
         result["benchmark"] = {
             "timings_ms": {
@@ -857,7 +957,7 @@ def handle_generate(params, request_id=None):
         "mode": benchmark_mode,
         "prepared_clone_used": False,
         "clone_cache_hit": None,
-        "streaming_used": bool(stream and request_id is not None and not ref_audio),
+        "streaming_used": bool(stream and request_id is not None),
         "used_temp_reference": False,
         "request_temperature": temperature_value,
         "request_max_tokens": effective_max_tokens,
@@ -871,6 +971,7 @@ def handle_generate(params, request_id=None):
     overall_start = time.perf_counter()
     final_path = _resolve_final_output_path(output_path, text, mode=benchmark_mode, voice=voice, ref_audio=ref_audio)
     target_dir, target_stem, generated_path = _derive_generation_paths(final_path)
+    stream_session_dirs = []
 
     if ref_audio:
         send_progress(10, "Normalizing reference...", request_id=request_id)
@@ -898,8 +999,12 @@ def handle_generate(params, request_id=None):
                     except OSError:
                         pass
 
+        for session_dir in stream_session_dirs:
+            if os.path.isdir(session_dir):
+                shutil.rmtree(session_dir, ignore_errors=True)
+
     def generate_once():
-        nonlocal effective_max_tokens
+        nonlocal effective_max_tokens, stream_session_dirs
 
         benchmark_flags = dict(benchmark_flags_base)
         benchmark_timings = {
@@ -908,6 +1013,7 @@ def handle_generate(params, request_id=None):
             "generation": 0,
             "write_output": 0,
         }
+        metrics = None
 
         if ref_audio:
             normalize_start = time.perf_counter()
@@ -933,28 +1039,55 @@ def handle_generate(params, request_id=None):
                 if effective_max_tokens is None:
                     effective_max_tokens = 4096
                     benchmark_flags["request_max_tokens"] = effective_max_tokens
-                send_progress(60, "Generating audio...", request_id=request_id)
-                generation_start = time.perf_counter()
-                prepared_results = list(
-                    _generate_prepared_icl_fn(
-                        _current_model,
-                        text,
-                        prepared_context,
-                        temperature=temperature_value,
-                        max_tokens=effective_max_tokens,
+                if stream and request_id is not None:
+                    send_progress(55, "Streaming audio...", request_id=request_id)
+                    generation_start = time.perf_counter()
+                    result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                        _generate_prepared_icl_fn(
+                            _current_model,
+                            text,
+                            prepared_context,
+                            temperature=temperature_value,
+                            max_tokens=effective_max_tokens,
+                            stream=True,
+                            streaming_interval=streaming_interval,
+                        ),
+                        request_id=request_id,
+                        final_path=final_path,
                     )
-                )
-                benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-                if not prepared_results:
-                    raise RuntimeError("Generation produced no audio file")
-                send_progress(90, "Saving audio...", request_id=request_id)
-                write_start = time.perf_counter()
-                _write_audio_file(
-                    final_path,
-                    prepared_results[0].audio,
-                    prepared_results[0].sample_rate,
-                )
-                benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    stream_session_dirs.append(result["stream_session_dir"])
+                    metrics = dict(result.get("metrics") or {})
+                else:
+                    send_progress(60, "Generating audio...", request_id=request_id)
+                    generation_start = time.perf_counter()
+                    prepared_results = list(
+                        _generate_prepared_icl_fn(
+                            _current_model,
+                            text,
+                            prepared_context,
+                            temperature=temperature_value,
+                            max_tokens=effective_max_tokens,
+                        )
+                    )
+                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    if not prepared_results:
+                        raise RuntimeError("Generation produced no audio file")
+                    send_progress(90, "Saving audio...", request_id=request_id)
+                    write_start = time.perf_counter()
+                    prepared_result = prepared_results[0]
+                    _write_audio_file(
+                        final_path,
+                        prepared_result.audio,
+                        prepared_result.sample_rate,
+                    )
+                    benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+                    output_metadata = get_audio_metadata(final_path)
+                    metrics = _metrics_from_generation_result(prepared_result, streaming_used=False)
+                    result = {
+                        "audio_path": final_path,
+                        "duration_seconds": round(output_metadata["duration_seconds"], 2),
+                    }
             else:
                 generation_start = time.perf_counter()
                 fallback_kwargs = {
@@ -968,34 +1101,66 @@ def handle_generate(params, request_id=None):
                 if resolved_ref_text:
                     fallback_kwargs["ref_text"] = resolved_ref_text
 
-                send_progress(60, "Generating audio...", request_id=request_id)
-                fallback_results = list(_current_model.generate(**fallback_kwargs))
-                benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-                if not fallback_results:
-                    raise RuntimeError("Generation produced no audio file")
-                send_progress(90, "Saving audio...", request_id=request_id)
-                write_start = time.perf_counter()
-                _write_audio_file(
-                    final_path,
-                    fallback_results[0].audio,
-                    fallback_results[0].sample_rate,
-                )
-                benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+                if stream and request_id is not None:
+                    fallback_kwargs["stream"] = True
+                    fallback_kwargs["streaming_interval"] = streaming_interval
+                    send_progress(55, "Streaming audio...", request_id=request_id)
+                    result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                        _current_model.generate(**fallback_kwargs),
+                        request_id=request_id,
+                        final_path=final_path,
+                    )
+                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    stream_session_dirs.append(result["stream_session_dir"])
+                    metrics = dict(result.get("metrics") or {})
+                else:
+                    send_progress(60, "Generating audio...", request_id=request_id)
+                    fallback_results = list(_current_model.generate(**fallback_kwargs))
+                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    if not fallback_results:
+                        raise RuntimeError("Generation produced no audio file")
+                    send_progress(90, "Saving audio...", request_id=request_id)
+                    write_start = time.perf_counter()
+                    fallback_result = fallback_results[0]
+                    _write_audio_file(
+                        final_path,
+                        fallback_result.audio,
+                        fallback_result.sample_rate,
+                    )
+                    benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+                    output_metadata = get_audio_metadata(final_path)
+                    metrics = _metrics_from_generation_result(fallback_result, streaming_used=False)
+                    result = {
+                        "audio_path": final_path,
+                        "duration_seconds": round(output_metadata["duration_seconds"], 2),
+                    }
         elif stream and request_id is not None:
+            stream_kwargs = {
+                "text": text,
+                "temperature": temperature_value,
+                "verbose": False,
+                "stream": True,
+                "streaming_interval": streaming_interval,
+            }
+            if max_tokens is not None:
+                stream_kwargs["max_tokens"] = int(max_tokens)
+            if voice:
+                stream_kwargs["voice"] = voice
+            if instruct:
+                stream_kwargs["instruct"] = instruct
+            if speed is not None:
+                stream_kwargs["speed"] = float(speed)
+
             send_progress(35, "Streaming audio...", request_id=request_id)
             generation_start = time.perf_counter()
-            _generate_streaming_preview(
+            result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                _current_model.generate(**stream_kwargs),
                 request_id=request_id,
                 final_path=final_path,
-                text=text,
-                voice=voice,
-                instruct=instruct,
-                speed=speed,
-                temperature=temperature_value,
-                max_tokens=max_tokens,
-                streaming_interval=streaming_interval,
             )
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+            stream_session_dirs.append(result["stream_session_dir"])
+            metrics = dict(result.get("metrics") or {})
             send_progress(85, "Saving audio...", request_id=request_id)
         else:
             gen_kwargs = {
@@ -1029,12 +1194,21 @@ def handle_generate(params, request_id=None):
             if generated_path != final_path:
                 os.replace(generated_path, final_path)
             benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
+            output_metadata = get_audio_metadata(final_path)
+            metrics = {
+                "processing_time_seconds": round(benchmark_timings["generation"] / 1000.0, 4),
+                "streaming_used": False,
+            }
+            result = {
+                "audio_path": final_path,
+                "duration_seconds": round(output_metadata["duration_seconds"], 2),
+            }
 
-        output_metadata = get_audio_metadata(final_path)
-        result = {
-            "audio_path": final_path,
-            "duration_seconds": round(output_metadata["duration_seconds"], 2),
-        }
+        metrics = dict(metrics or {})
+        metrics.setdefault("streaming_used", bool(stream and request_id is not None))
+        metrics["prepared_clone_used"] = benchmark_flags["prepared_clone_used"]
+        metrics["clone_cache_hit"] = benchmark_flags["clone_cache_hit"]
+        result["metrics"] = metrics
         return result, benchmark_flags, benchmark_timings, output_metadata
 
     request_succeeded = False
@@ -1185,6 +1359,7 @@ def handle_get_model_info(params):
             "required_relative_paths": model_def["requiredRelativePaths"],
             "downloaded": path is not None,
             "size_bytes": size_bytes,
+            **_resolved_model_capabilities(model_def),
         })
 
     return models_info

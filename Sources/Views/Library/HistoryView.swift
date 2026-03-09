@@ -1,5 +1,48 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+private struct HistorySearchField: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = NSTextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.placeholderString = "Search..."
+        textField.stringValue = text
+        textField.isBordered = true
+        textField.isBezeled = true
+        textField.bezelStyle = .roundedBezel
+        textField.focusRingType = .default
+        textField.identifier = NSUserInterfaceItemIdentifier("history_searchField")
+        textField.setAccessibilityIdentifier("history_searchField")
+        textField.setAccessibilityLabel("Search history")
+        return textField
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding private var text: String
+
+        init(text: Binding<String>) {
+            self._text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let textField = notification.object as? NSTextField else { return }
+            text = textField.stringValue
+        }
+    }
+}
 
 private struct HistoryListItem: Identifiable {
     let generation: Generation
@@ -59,6 +102,11 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen_history")
+                .allowsHitTesting(false)
+
             // Header
             HStack {
                 Text("History")
@@ -66,10 +114,8 @@ struct HistoryView: View {
                     .foregroundStyle(AppTheme.history)
                     .accessibilityIdentifier("history_title")
                 Spacer()
-                TextField("Search...", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                HistorySearchField(text: $searchText)
                     .frame(minWidth: 150, maxWidth: 240)
-                    .accessibilityIdentifier("history_searchField")
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -147,7 +193,6 @@ struct HistoryView: View {
 
         }
         .contentColumn()
-        .accessibilityIdentifier("screen_history")
         .onAppear {
             reloadHistory()
         }
@@ -244,6 +289,23 @@ struct HistoryView: View {
     }
 
     private func exportGeneration(_ item: HistoryListItem) {
+        if UITestAutomationSupport.isStubBackendMode,
+           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
+            do {
+                try FileManager.default.createDirectory(at: outputDirectoryURL, withIntermediateDirectories: true)
+                let destination = outputDirectoryURL.appendingPathComponent(URL(fileURLWithPath: item.generation.audioPath).lastPathComponent)
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.copyItem(at: URL(fileURLWithPath: item.generation.audioPath), to: destination)
+                UITestAutomationSupport.recordAction("history-export", details: destination.path, appSupportDir: QwenVoiceApp.appSupportDir)
+            } catch {
+                presentActionAlert(
+                    title: "Export Error",
+                    message: "Export failed: \(error.localizedDescription)"
+                )
+            }
+            return
+        }
+
         let panel = NSSavePanel()
         panel.nameFieldStringValue = URL(fileURLWithPath: item.generation.audioPath).lastPathComponent
         panel.allowedContentTypes = [.wav]
@@ -394,6 +456,7 @@ private struct HistoryRow: View {
             }
             .buttonStyle(.plain)
             .disabled(!item.audioFileExists)
+            .accessibilityIdentifier("historyRow_play")
 
             Button {
                 onSaveAs()
@@ -404,6 +467,7 @@ private struct HistoryRow: View {
             }
             .buttonStyle(.plain)
             .disabled(!item.audioFileExists)
+            .accessibilityIdentifier("historyRow_saveAs")
 
             Button(role: .destructive) {
                 onDelete()
@@ -416,5 +480,7 @@ private struct HistoryRow: View {
         }
         .padding(.vertical, 4)
         .opacity(item.audioFileExists ? 1 : 0.5)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("historyRow_\(item.id)")
     }
 }

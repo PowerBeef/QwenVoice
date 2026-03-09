@@ -33,17 +33,20 @@ Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, 
 
 ## What the App Does Not Expose
 
-- no streaming preview UI
 - no temperature or max-token controls
 - no standalone Voice Design sidebar destination
+- no streaming batch UI
 
-The backend still supports benchmark/internal streaming and advanced sampling parameters, but the shipping GUI intentionally uses the non-streaming generation path only.
+Single-generation flows in the shipping GUI now use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based.
+
+The backend still supports additional benchmark/internal advanced sampling parameters beyond what the shipped GUI exposes.
 
 For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENVOICE_CACHE_POLICY=always` remains available as a conservative diagnostic override for backend benchmarking and regression checks.
 
 ## Features
 
 - Native model downloads from Hugging Face
+- Live streaming preview for single generations
 - Local generation history stored in SQLite via GRDB
 - Batch generation for multi-line jobs
 - Sidebar waveform playback UI

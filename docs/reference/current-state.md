@@ -23,7 +23,13 @@ The app currently exposes six sidebar destinations:
 
 Voice Design is not a separate sidebar screen. It is accessed inside `CustomVoiceView` by switching to the `Custom` speaker chip, which changes the active generation mode from `.custom` to `.design`.
 
-The shipping SwiftUI app uses non-streaming generation flows. Backend streaming preview and advanced sampling parameters remain available for benchmark/internal tooling only.
+The shipping SwiftUI app now uses live streaming preview for single-generation flows:
+
+- Custom Voice
+- Voice Design inside `CustomVoiceView`
+- Voice Cloning
+
+Batch generation remains sequential and non-streaming in the shipped GUI. Advanced sampling parameters remain available for benchmark/internal tooling only.
 
 The backend MLX cache policy currently defaults to `adaptive` via `QWENVOICE_CACHE_POLICY`. Set `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics or regression comparison runs.
 
@@ -104,9 +110,9 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 
 Current tracked test coverage:
 
-- UI tests: 11 `*Tests.swift` files / 31 test methods in `QwenVoiceUITests/`
-- Unit tests: 4 `*Tests.swift` files / 16 test methods in `QwenVoiceTests/`
-- Python backend tests: 13 `unittest` cases under `backend_tests/`
+- UI tests: 19 `*Tests.swift` files / 45 test methods in `QwenVoiceUITests/`
+- Unit tests: 4 `*Tests.swift` files / 17 test methods in `QwenVoiceTests/`
+- Python backend tests: 15 `unittest` cases under `backend_tests/`
 
 Primary commands:
 
@@ -114,7 +120,9 @@ Primary commands:
 - `./scripts/run_tests.sh --suite ui`
 - `./scripts/run_tests.sh --suite integration`
 - `./scripts/run_tests.sh --suite debug`
+- `./scripts/run_tests.sh --suite feature-matrix`
 - `./scripts/run_backend_tests.sh`
+- `./scripts/run_full_app_automation.sh`
 
 ## Current Documentation Boundaries
 

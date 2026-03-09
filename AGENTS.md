@@ -73,7 +73,7 @@ Shared current repo facts live in [`docs/reference/current-state.md`](docs/refer
 - `get_model_info`
 - `get_speakers`
 
-The shipping GUI uses non-streaming generation flows. Backend streaming preview and advanced sampling parameters remain benchmark/internal only.
+The shipping GUI uses live streaming preview for single-generation flows and keeps batch generation sequential/non-streaming. Advanced sampling parameters remain benchmark/internal only.
 The backend MLX cache policy defaults to `adaptive`. Use `QWENVOICE_CACHE_POLICY=always` only as a conservative diagnostic override.
 
 ### Shared contract
@@ -131,9 +131,9 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
 ### Current test inventory
 
-- UI tests: 11 files / 31 test methods
-- Unit tests: 4 files / 16 test methods
-- Python backend tests: 13 `unittest` cases
+- UI tests: 19 files / 45 test methods
+- Unit tests: 4 files / 17 test methods
+- Python backend tests: 15 `unittest` cases
 
 See [`docs/reference/testing.md`](docs/reference/testing.md) for the current test commands, suites, and caveats.
 

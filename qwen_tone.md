@@ -11,7 +11,7 @@ Current app behavior:
 - **Custom Voice** uses one of the shipped English speakers plus an instruction prompt
 - **Voice Design** is reached inside the Custom Voice screen by switching to the `Custom` speaker chip
 - **Voice Cloning** clones from reference audio and does not expose a separate instruction-style tone control surface
-- the shipping GUI does **not** expose streaming preview, temperature, or max-token controls
+- the shipping GUI exposes live streaming preview for single generations, but not temperature or max-token controls
 
 Useful instruction patterns in the shipped app:
 
@@ -33,7 +33,7 @@ That means CLI examples or speaker counts should not be treated as shipped-app U
 Qwen3-TTS itself is more flexible than the current app surface. In the broader ecosystem you may see references to:
 
 - additional speakers or languages outside the app’s shipped UI
-- backend-only streaming preview
+- backend/internal streaming and batch capabilities beyond the shipped GUI
 - advanced sampling controls such as `temperature`
 - cloud-only or framework-specific integrations
 

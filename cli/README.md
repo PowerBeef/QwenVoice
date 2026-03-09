@@ -24,6 +24,9 @@ pip install -r requirements.txt
 brew install ffmpeg
 ```
 
+The CLI requirements now resolve `mlx-audio` from the repo’s vendored wheel in
+`../Sources/Resources/vendor/`, so install from the `cli/` directory as shown.
+
 ## Models
 
 Download these model folders from `mlx-community` on Hugging Face and place them under `cli/models/`:

@@ -10,6 +10,10 @@ enum AppPaths {
             return URL(fileURLWithPath: overridePath, isDirectory: true)
         }
 
+        if let fixtureRoot = UITestAutomationSupport.fixtureRoot {
+            return fixtureRoot
+        }
+
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("QwenVoice", isDirectory: true)
     }

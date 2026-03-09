@@ -16,6 +16,7 @@ final class ModelManagerViewModel: ObservableObject {
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
+    private var stubDownloadTasks: [String: Task<Void, Never>] = [:]
 
     func refresh() async {
         let modelsDir = QwenVoiceApp.modelsDir
@@ -57,6 +58,11 @@ final class ModelManagerViewModel: ObservableObject {
     func download(_ model: TTSModel) async {
         // Prevent double-downloads
         if case .downloading = statuses[model.id] { return }
+
+        if UITestAutomationSupport.isStubBackendMode {
+            await downloadStub(model)
+            return
+        }
 
         let epoch = beginEpoch(for: model.id)
         statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: nil)
@@ -126,6 +132,15 @@ final class ModelManagerViewModel: ObservableObject {
     func cancelDownload(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
 
+        if UITestAutomationSupport.isStubBackendMode {
+            stubDownloadTasks[model.id]?.cancel()
+            stubDownloadTasks.removeValue(forKey: model.id)
+            let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
+            try? FileManager.default.removeItem(at: targetDir)
+            statuses[model.id] = .notDownloaded
+            return
+        }
+
         // Stop URLSession tasks
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
@@ -143,6 +158,16 @@ final class ModelManagerViewModel: ObservableObject {
 
     func delete(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
+
+        if UITestAutomationSupport.isStubBackendMode {
+            stubDownloadTasks[model.id]?.cancel()
+            stubDownloadTasks.removeValue(forKey: model.id)
+            let modelDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
+            try? FileManager.default.removeItem(at: modelDir)
+            statuses[model.id] = .notDownloaded
+            return
+        }
+
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
         downloadTasks[model.id]?.cancel()
@@ -173,5 +198,52 @@ final class ModelManagerViewModel: ObservableObject {
             }
         }
         return total
+    }
+
+    private func downloadStub(_ model: TTSModel) async {
+        let epoch = beginEpoch(for: model.id)
+        let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
+
+        stubDownloadTasks[model.id]?.cancel()
+        stubDownloadTasks.removeValue(forKey: model.id)
+        try? FileManager.default.removeItem(at: targetDir)
+        statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: 3)
+
+        let shouldFailOnce = UITestAutomationSupport.modelDownloadFailOnceIDs.contains(model.id)
+        let task = Task { [weak self] in
+            guard let self else { return }
+
+            for step in 1...3 {
+                try? await Task.sleep(nanoseconds: 180_000_000)
+                guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
+                self.statuses[model.id] = .downloading(downloadedBytes: Int64(step), totalBytes: 3)
+            }
+
+            if shouldFailOnce,
+               UITestAutomationSupport.consumeFailOnceFlag(
+                    namespace: "model-download-fail",
+                    identifier: model.id,
+                    appSupportDir: QwenVoiceApp.appSupportDir
+               ) {
+                guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
+                self.statuses[model.id] = .error(message: "Simulated model download failure.")
+                self.stubDownloadTasks.removeValue(forKey: model.id)
+                return
+            }
+
+            for relativePath in model.requiredRelativePaths {
+                let fileURL = targetDir.appendingPathComponent(relativePath)
+                try? FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                FileManager.default.createFile(atPath: fileURL.path, contents: Data())
+            }
+
+            guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
+            self.statuses[model.id] = .downloaded(sizeBytes: Self.directorySize(url: targetDir))
+            self.stubDownloadTasks.removeValue(forKey: model.id)
+        }
+        stubDownloadTasks[model.id] = task
     }
 }

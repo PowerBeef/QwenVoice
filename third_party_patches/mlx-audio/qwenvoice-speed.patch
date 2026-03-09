@@ -9,8 +9,8 @@ from:
 
 - `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`
 
-and then repacking the upstream `mlx-audio==0.3.1` wheel as
-`mlx-audio==0.3.1.post1`.
+and then repacking the upstream `mlx-audio==0.4.0` wheel as
+`mlx-audio==0.4.0.post1`.
 
 Use:
 

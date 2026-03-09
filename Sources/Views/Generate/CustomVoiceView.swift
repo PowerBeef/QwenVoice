@@ -265,6 +265,7 @@ struct CustomVoiceView: View {
 
         Task {
             do {
+                UITestAutomationSupport.recordAction("custom-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
                 guard let model = TTSModel.model(for: activeMode) else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -273,7 +274,11 @@ struct CustomVoiceView: View {
 
                 if isCustomSpeaker {
                     let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                    let result = try await pythonBridge.generateDesignFlow(
+                    audioPlayer.prepareStreamingPreview(
+                        title: String(text.prefix(40)),
+                        shouldAutoPlay: AudioService.shouldAutoPlay
+                    )
+                    let result = try await pythonBridge.generateDesignStreamingFlow(
                         modelID: model.id,
                         text: text,
                         voiceDescription: voiceDescription,
@@ -294,7 +299,11 @@ struct CustomVoiceView: View {
                     try persistGenerationAndMaybeAutoplay(&gen, result: result)
                 } else {
                     let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                    let result = try await pythonBridge.generateCustomFlow(
+                    audioPlayer.prepareStreamingPreview(
+                        title: String(text.prefix(40)),
+                        shouldAutoPlay: AudioService.shouldAutoPlay
+                    )
+                    let result = try await pythonBridge.generateCustomStreamingFlow(
                         modelID: model.id,
                         text: text,
                         voice: selectedSpeaker,
@@ -316,7 +325,10 @@ struct CustomVoiceView: View {
                     )
                     try persistGenerationAndMaybeAutoplay(&gen, result: result)
                 }
+                UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
+                UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
             }
             isGenerating = false
@@ -324,24 +336,39 @@ struct CustomVoiceView: View {
     }
 
     private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
-        let saveStart = DispatchTime.now().uptimeNanoseconds
-        try DatabaseService.shared.saveGeneration(&generation)
-        #if DEBUG
-        print("[Performance][CustomVoiceView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
-        #endif
+        var persistenceError: Error?
+        do {
+            let saveStart = DispatchTime.now().uptimeNanoseconds
+            try DatabaseService.shared.saveGeneration(&generation)
+            #if DEBUG
+            print("[Performance][CustomVoiceView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
+            #endif
 
-        let notificationStart = DispatchTime.now().uptimeNanoseconds
-        NotificationCenter.default.post(name: .generationSaved, object: nil)
-        #if DEBUG
-        print("[Performance][CustomVoiceView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
-        #endif
+            let notificationStart = DispatchTime.now().uptimeNanoseconds
+            NotificationCenter.default.post(name: .generationSaved, object: nil)
+            #if DEBUG
+            print("[Performance][CustomVoiceView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
+            #endif
+        } catch {
+            persistenceError = error
+        }
 
-        if AudioService.shouldAutoPlay {
+        if result.usedStreaming {
+            audioPlayer.completeStreamingPreview(
+                result: result,
+                title: String(text.prefix(40)),
+                shouldAutoPlay: AudioService.shouldAutoPlay
+            )
+        } else if AudioService.shouldAutoPlay {
             let autoplayStart = DispatchTime.now().uptimeNanoseconds
             audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
             #if DEBUG
             print("[Performance][CustomVoiceView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
             #endif
+        }
+
+        if let persistenceError {
+            throw persistenceError
         }
     }
 

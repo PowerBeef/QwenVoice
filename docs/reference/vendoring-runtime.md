@@ -34,13 +34,15 @@ The release pipeline also:
 
 ## Vendored Wheel Strategy
 
-The app currently vendors a repacked `mlx-audio==0.3.1.post1` wheel that includes the QwenVoice speed patch.
+The app currently vendors a repacked `mlx-audio==0.4.0.post1` wheel that includes the QwenVoice speed patch.
 
 Relevant locations:
 
 - `Sources/Resources/vendor/`
 - `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 - `third_party_patches/mlx-audio/`
+
+`scripts/build_mlx_audio_wheel.sh` is the source of truth for rebuilding that wheel and now also syncs the backend fallback helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py` before repacking.
 
 If the GUI app’s `mlx-audio` version changes, the vendored wheel and vendoring notes must be updated together.
 
