@@ -38,103 +38,124 @@ struct PreferencesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                prefSection(header: "Playback", icon: "play.circle") {
-                    Button {
-                        autoPlay.toggle()
-                    } label: {
-                        HStack {
-                            Text("Auto-play generated audio")
-                            Spacer()
-                            Toggle("Auto-play generated audio", isOn: $autoPlay)
-                                .toggleStyle(.switch)
-                                .tint(AppTheme.preferences)
-                                .labelsHidden()
-                                .controlSize(.small)
-                                .allowsHitTesting(false)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Auto-play generated audio")
-                    .accessibilityValue(autoPlay ? "on" : "off")
-                    .accessibilityIdentifier("preferences_autoPlayToggle")
-                }
+            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+                GenerationHeaderView(
+                    title: "Preferences",
+                    subtitle: "Playback defaults, storage paths, and backend maintenance."
+                )
 
-                prefSection(header: "Output", icon: "folder") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            TextField("Output directory", text: $outputDirectory)
-                                .textFieldStyle(.roundedBorder)
-                                .accessibilityIdentifier("preferences_outputDirectory")
-                            Button("Browse...") {
-                                if UITestAutomationSupport.isStubBackendMode,
-                                   let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
-                                    outputDirectory = outputDirectoryURL.path
-                                    return
+                StudioSectionCard(
+                    title: "Daily Use",
+                    iconName: "slider.horizontal.3",
+                    accentColor: AppTheme.preferences
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        prefSection(header: "Playback", icon: "play.circle") {
+                            Button {
+                                autoPlay.toggle()
+                            } label: {
+                                HStack {
+                                    Text("Auto-play generated audio")
+                                    Spacer()
+                                    Toggle("Auto-play generated audio", isOn: $autoPlay)
+                                        .toggleStyle(.switch)
+                                        .tint(AppTheme.preferences)
+                                        .labelsHidden()
+                                        .controlSize(.small)
+                                        .allowsHitTesting(false)
                                 }
-                                let panel = NSOpenPanel()
-                                panel.canChooseDirectories = true
-                                panel.canChooseFiles = false
-                                if panel.runModal() == .OK, let url = panel.url {
-                                    outputDirectory = url.path
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Auto-play generated audio")
+                            .accessibilityValue(autoPlay ? "on" : "off")
+                            .accessibilityIdentifier("preferences_autoPlayToggle")
+                        }
+
+                        prefSection(header: "Output", icon: "folder") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    TextField("Output directory", text: $outputDirectory)
+                                        .textFieldStyle(.roundedBorder)
+                                        .accessibilityIdentifier("preferences_outputDirectory")
+                                    Button("Browse...") {
+                                        if UITestAutomationSupport.isStubBackendMode,
+                                           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
+                                            outputDirectory = outputDirectoryURL.path
+                                            return
+                                        }
+                                        let panel = NSOpenPanel()
+                                        panel.canChooseDirectories = true
+                                        panel.canChooseFiles = false
+                                        if panel.runModal() == .OK, let url = panel.url {
+                                            outputDirectory = url.path
+                                        }
+                                    }
+                                    .accessibilityIdentifier("preferences_browseButton")
+                                    Button("Reset") {
+                                        outputDirectory = ""
+                                    }
+                                    .accessibilityIdentifier("preferences_outputResetButton")
+                                }
+                                if outputDirectory.isEmpty {
+                                    Text("Default: ~/Library/Application Support/QwenVoice/outputs/")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Custom: \(outputDirectory)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
                             }
-                            .accessibilityIdentifier("preferences_browseButton")
-                            Button("Reset") {
-                                outputDirectory = ""
-                            }
-                            .accessibilityIdentifier("preferences_outputResetButton")
-                        }
-                        if outputDirectory.isEmpty {
-                            Text("Default: ~/Library/Application Support/QwenVoice/outputs/")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("Custom: \(outputDirectory)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
                         }
                     }
                 }
 
-                prefSection(header: "Storage", icon: "internaldrive") {
-                    HStack {
-                        Text("App Support Directory")
-                        Spacer()
-                        Button("Open in Finder") {
-                            if UITestAutomationSupport.isStubBackendMode {
-                                UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
-                            } else {
-                                NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
+                StudioSectionCard(
+                    title: "Maintenance",
+                    iconName: "wrench.and.screwdriver",
+                    accentColor: AppTheme.preferences
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        prefSection(header: "Storage", icon: "internaldrive") {
+                            HStack {
+                                Text("App Support Directory")
+                                Spacer()
+                                Button("Open in Finder") {
+                                    if UITestAutomationSupport.isStubBackendMode {
+                                        UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
+                                    } else {
+                                        NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
+                                    }
+                                }
+                                .accessibilityIdentifier("preferences_openFinderButton")
                             }
                         }
-                        .accessibilityIdentifier("preferences_openFinderButton")
-                    }
-                }
 
-                prefSection(header: "Python", icon: "terminal") {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(pythonActionTitle)
-                            Text(pythonActionDescription)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        prefSection(header: "Python", icon: "terminal") {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(pythonActionTitle)
+                                    Text(pythonActionDescription)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Button(pythonActionButtonLabel) {
+                                    showResetConfirmation = true
+                                }
+                                .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.preferences))
+                                .accessibilityIdentifier("preferences_resetEnvButton")
+                            }
                         }
-                        Spacer()
-                        Button(pythonActionButtonLabel) {
-                            showResetConfirmation = true
-                        }
-                        .accessibilityIdentifier("preferences_resetEnvButton")
                     }
                 }
             }
-            .padding(24)
+            .padding(LayoutConstants.canvasPadding)
             .contentColumn()
         }
-        .navigationTitle("Preferences")
         .accessibilityIdentifier("screen_preferences")
         .alert(pythonActionConfirmationTitle, isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -152,20 +173,20 @@ struct PreferencesView: View {
         icon: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Label(header, systemImage: icon)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             content()
         }
-        .padding(16)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(AppTheme.preferences.opacity(0.06))
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.035))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(AppTheme.preferences.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: LayoutConstants.cardBorderWidth)
         )
     }
 }

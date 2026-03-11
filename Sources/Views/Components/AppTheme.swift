@@ -13,106 +13,138 @@ extension Color {
     }
 }
 
-// MARK: - Glassmorphism Extension
+// MARK: - Studio Card Modifier
 
-private struct GlassCardStyle: ViewModifier {
-    let profile: AppTheme.UIProfile
+private struct StudioCardStyle: ViewModifier {
+    var padding: CGFloat = LayoutConstants.cardPadding
+    var radius: CGFloat = LayoutConstants.cardRadius
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        switch profile {
-        case .liquid:
-            liquid(content)
-        case .legacy:
-            legacy(content)
-        }
-    }
-
-    private func liquid(_ content: Content) -> some View {
         content
-            .padding(24)
+            .padding(padding)
             .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white.opacity(0.02))
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(AppTheme.cardFill)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.25), Color.white.opacity(0.05)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(AppTheme.cardStroke, lineWidth: LayoutConstants.cardBorderWidth)
             )
-            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
-    }
-
-    private func legacy(_ content: Content) -> some View {
-        content
-            .padding(24)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.regularMaterial)
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.10),
-                                AppTheme.accent.opacity(0.05),
-                                Color.white.opacity(0.02),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.24), lineWidth: 0.8)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.24), Color.black.opacity(0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.3
-                    )
-                    .blendMode(.overlay)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.08), Color.clear],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                    )
-                    .mask(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            )
-            .shadow(color: Color.black.opacity(0.26), radius: 26, x: 0, y: 14)
-            .shadow(color: Color.white.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 }
 
 extension View {
+    func studioCard(padding: CGFloat = LayoutConstants.cardPadding, radius: CGFloat = LayoutConstants.cardRadius) -> some View {
+        modifier(StudioCardStyle(padding: padding, radius: radius))
+    }
+
     func glassCard() -> some View {
-        modifier(GlassCardStyle(profile: AppTheme.uiProfile))
+        modifier(StudioCardStyle(padding: LayoutConstants.glassCardPadding, radius: LayoutConstants.cardRadius))
+    }
+
+    func stageCard() -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: LayoutConstants.stageRadius, style: .continuous)
+                    .fill(AppTheme.stageFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: LayoutConstants.stageRadius, style: .continuous)
+                    .stroke(AppTheme.stageStroke, lineWidth: LayoutConstants.cardBorderWidth)
+            )
+            .shadow(color: AppTheme.stageGlow, radius: 5, y: 0)
     }
 
     func appAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
         self.animation(AppLaunchConfiguration.current.animation(animation), value: value)
+    }
+}
+
+// MARK: - Studio Chip Modifier
+
+private struct StudioChipStyle: ViewModifier {
+    let isSelected: Bool
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 14, weight: .semibold))
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(isSelected ? color.opacity(0.16) : Color.white.opacity(0.03))
+            )
+            .foregroundStyle(isSelected ? color : .primary.opacity(0.7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(isSelected ? color.opacity(0.54) : Color.white.opacity(0.05), lineWidth: isSelected ? 1.1 : LayoutConstants.cardBorderWidth)
+            )
+            .shadow(color: isSelected ? color.opacity(0.08) : .clear, radius: 6, y: 0)
+            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 20), value: isSelected)
+    }
+}
+
+private struct VoiceChoiceChipStyle: ViewModifier {
+    let isSelected: Bool
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 14, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(minWidth: 96, maxWidth: 132)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(isSelected ? color.opacity(0.15) : Color.white.opacity(0.025))
+            )
+            .foregroundStyle(isSelected ? color : .primary.opacity(0.72))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(isSelected ? color.opacity(0.5) : Color.white.opacity(0.045), lineWidth: isSelected ? 1.05 : LayoutConstants.cardBorderWidth)
+            )
+            .shadow(color: isSelected ? color.opacity(0.06) : .clear, radius: 4, y: 0)
+            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 20), value: isSelected)
+    }
+}
+
+extension View {
+    func studioChip(isSelected: Bool, color: Color) -> some View {
+        modifier(StudioChipStyle(isSelected: isSelected, color: color))
+    }
+
+    func chipStyle(isSelected: Bool, color: Color) -> some View {
+        modifier(StudioChipStyle(isSelected: isSelected, color: color))
+    }
+
+    func voiceChoiceChip(isSelected: Bool, color: Color) -> some View {
+        modifier(VoiceChoiceChipStyle(isSelected: isSelected, color: color))
+    }
+}
+
+// MARK: - Toolbar Row Modifier
+
+private struct ToolbarRowStyle: ViewModifier {
+    let label: String
+
+    func body(content: Content) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.5)
+                .foregroundStyle(.secondary)
+                .frame(width: 52, alignment: .leading)
+            content
+        }
+    }
+}
+
+extension View {
+    func toolbarRow(_ label: String) -> some View {
+        modifier(ToolbarRowStyle(label: label))
     }
 }
 
@@ -170,8 +202,8 @@ enum AppTheme {
 
     // MARK: Section Colors
 
-    static let accent = Color(light: Color(red: 0.33, green: 0.40, blue: 0.65),
-                               dark: Color(red: 0.50, green: 0.58, blue: 0.85))
+    static let accent = Color(light: Color(red: 0.20, green: 0.68, blue: 0.98),
+                               dark: Color(red: 0.38, green: 0.82, blue: 1.00))
     static let customVoice  = accent
     static let voiceDesign  = accent
     static let voiceCloning = accent
@@ -179,6 +211,31 @@ enum AppTheme {
     static let voices       = accent
     static let models       = accent
     static let preferences  = accent
+
+    static let canvasBase = Color(light: Color(red: 0.08, green: 0.09, blue: 0.12),
+                                  dark: Color(red: 0.06, green: 0.07, blue: 0.09))
+    static let canvasInset = Color(light: Color(red: 0.11, green: 0.13, blue: 0.18),
+                                   dark: Color(red: 0.10, green: 0.12, blue: 0.16))
+    static let cardFill = Color.white.opacity(0.04)
+    static let cardStroke = Color.white.opacity(0.085)
+    static let railFill = Color.white.opacity(0.038)
+    static let railStroke = Color.white.opacity(0.095)
+    static let mutedFill = Color.white.opacity(0.05)
+    static let stageFill = Color(red: 0.10, green: 0.12, blue: 0.15).opacity(0.96)
+    static let stageStroke = Color.white.opacity(0.12)
+    static let stageGlow = accent.opacity(0.022)
+
+    static let canvasBackground = canvasBase
+
+    static let railBackground = LinearGradient(
+        colors: [
+            railFill,
+            railFill.opacity(0.88),
+            Color.white.opacity(0.024)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 
     // MARK: Emotion Colors
 
@@ -259,12 +316,12 @@ struct GlowingGradientButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.title3.weight(.bold))
+            .font(.body.weight(.bold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [baseColor, baseColor.opacity(0.8)],
@@ -274,11 +331,11 @@ struct GlowingGradientButtonStyle: ButtonStyle {
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.24), lineWidth: 0.5)
             )
-            .shadow(color: baseColor.opacity(0.25), radius: configuration.isPressed ? 6 : 12, y: configuration.isPressed ? 3 : 6)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .shadow(color: baseColor.opacity(0.18), radius: configuration.isPressed ? 4 : 6, y: configuration.isPressed ? 2 : 3)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: configuration.isPressed)
     }
 }
@@ -310,31 +367,6 @@ struct CompactGenerateButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Chip Style
-
-struct ChipStyle: ViewModifier {
-    let isSelected: Bool
-    let color: Color
-
-    func body(content: Content) -> some View {
-        content
-            .font(.caption.weight(.bold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? color.opacity(0.15) : Color.primary.opacity(0.06))
-            )
-            .foregroundStyle(isSelected ? color : color.opacity(0.8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? color.opacity(0.3) : Color.primary.opacity(0.04), lineWidth: 0.5)
-            )
-            .scaleEffect(isSelected ? 1.02 : 1.0)
-            .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: isSelected)
-    }
-}
-
 // MARK: - Aurora Background
 
 struct AuroraBackground: View {
@@ -360,12 +392,6 @@ struct AuroraBackground: View {
                 animate = true
             }
         }
-    }
-}
-
-extension View {
-    func chipStyle(isSelected: Bool, color: Color) -> some View {
-        modifier(ChipStyle(isSelected: isSelected, color: color))
     }
 }
 

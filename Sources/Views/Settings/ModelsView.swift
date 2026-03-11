@@ -2,27 +2,88 @@ import SwiftUI
 
 struct ModelsView: View {
     @EnvironmentObject var viewModel: ModelManagerViewModel
+    @Binding var highlightedModelID: String?
+    @State private var flashedModelID: String?
+    @State private var modelToDelete: TTSModel?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Models")
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.models)
-                    .accessibilityIdentifier("models_title")
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+                    GenerationHeaderView(
+                        title: "Models",
+                        subtitle: "Each model powers one generation workflow. Download what you need.",
+                        titleAccessibilityIdentifier: "models_title"
+                    )
 
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(TTSModel.all) { model in
-                        ModelCard(model: model, viewModel: viewModel)
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(TTSModel.all) { model in
+                            ModelCard(
+                                model: model,
+                                viewModel: viewModel,
+                                isHighlighted: flashedModelID == model.id,
+                                onDelete: {
+                                    modelToDelete = model
+                                    showDeleteConfirmation = true
+                                }
+                            )
+                            .id(model.id)
+                        }
                     }
                 }
+                .padding(LayoutConstants.canvasPadding)
+                .contentColumn()
             }
-            .padding(24)
-            .contentColumn()
+            .accessibilityIdentifier("screen_models")
+            .task {
+                await viewModel.refresh()
+                focusHighlightedModel(using: proxy)
+            }
+            .onChange(of: highlightedModelID) { _, _ in
+                focusHighlightedModel(using: proxy)
+            }
         }
-        .accessibilityIdentifier("screen_models")
-        .task {
-            await viewModel.refresh()
+        .alert("Delete Model?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                modelToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let model = modelToDelete {
+                    viewModel.delete(model)
+                }
+                modelToDelete = nil
+            }
+        } message: {
+            if let model = modelToDelete {
+                let status = viewModel.statuses[model.id]
+                let sizeText: String = {
+                    if case .downloaded(let sizeBytes) = status {
+                        return " (\(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file)))"
+                    }
+                    return ""
+                }()
+                Text("This will delete \"\(model.name)\"\(sizeText) from disk.")
+            }
+        }
+    }
+
+    private func focusHighlightedModel(using proxy: ScrollViewProxy) {
+        guard let highlightedModelID else { return }
+        let modelID = highlightedModelID
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            proxy.scrollTo(modelID, anchor: .center)
+        }
+        flashedModelID = modelID
+        self.highlightedModelID = nil
+
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            await MainActor.run {
+                if flashedModelID == modelID {
+                    flashedModelID = nil
+                }
+            }
         }
     }
 }
@@ -30,6 +91,8 @@ struct ModelsView: View {
 struct ModelCard: View {
     let model: TTSModel
     @ObservedObject var viewModel: ModelManagerViewModel
+    var isHighlighted: Bool = false
+    var onDelete: (() -> Void)? = nil
 
     private var status: ModelManagerViewModel.ModelStatus {
         viewModel.statuses[model.id] ?? .checking
@@ -39,18 +102,27 @@ struct ModelCard: View {
         AppTheme.modeColor(for: model.mode)
     }
 
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: model.mode.iconName)
-                .font(.title2)
-                .foregroundColor(modeColor)
-                .frame(width: 40)
+    private var usageLabel: String {
+        "Used by \(model.mode.displayName)"
+    }
 
-            VStack(alignment: .leading, spacing: 4) {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: model.mode.iconName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(modeColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 5) {
                 Text(model.name)
-                    .font(.body.bold())
+                    .font(.system(size: 14, weight: .semibold))
+
+                Text(usageLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(modeColor)
+
                 Text(model.folder)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.secondary)
 
                 switch status {
@@ -59,13 +131,13 @@ struct ModelCard: View {
                         ProgressView()
                             .controlSize(.small)
                             .frame(maxWidth: 200, alignment: .leading)
-                        Text("Checking local files…")
+                        Text("Checking local files...")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                     .accessibilityIdentifier("models_checking_\(model.id)")
                 case .notDownloaded:
-                    Text("Not downloaded")
+                    Text("Download this model to enable \(model.mode.displayName).")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 case .downloading(let downloadedBytes, let totalBytes):
@@ -86,14 +158,14 @@ struct ModelCard: View {
                             }
                             .frame(maxWidth: 200, maxHeight: 6)
 
-                            Text(progress >= 1.0 ? "Finalizing…" : "\(formattedDL) / \(formattedTotal)")
+                            Text(progress >= 1.0 ? "Finalizing..." : "\(formattedDL) / \(formattedTotal)")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         } else {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(maxWidth: 200, alignment: .leading)
-                            Text("Preparing download…")
+                            Text("Preparing download...")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
@@ -103,7 +175,7 @@ struct ModelCard: View {
                         .font(.caption)
                         .foregroundColor(modeColor)
                 case .error:
-                    Text("Download failed")
+                    Text("Download failed. Retry to keep using \(model.mode.displayName).")
                         .font(.caption)
                         .foregroundColor(.red)
                 }
@@ -129,7 +201,7 @@ struct ModelCard: View {
                 .controlSize(.small)
             case .downloaded:
                 Button(role: .destructive) {
-                    viewModel.delete(model)
+                    onDelete?()
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -145,14 +217,14 @@ struct ModelCard: View {
                 .accessibilityIdentifier("models_retry_\(model.id)")
             }
         }
-        .padding(12)
+        .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(modeColor.opacity(0.06))
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(isHighlighted ? modeColor.opacity(0.10) : AppTheme.cardFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(modeColor.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(isHighlighted ? modeColor.opacity(0.30) : AppTheme.cardStroke, lineWidth: isHighlighted ? 1.5 : LayoutConstants.cardBorderWidth)
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("models_card_\(model.id)")

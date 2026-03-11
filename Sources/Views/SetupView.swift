@@ -5,40 +5,64 @@ struct SetupView: View {
     @ObservedObject var envManager: PythonEnvironmentManager
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ZStack {
+            AppTheme.canvasBackground
 
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(AppTheme.accent)
-                .accessibilityIdentifier("setup_icon")
+            VStack(spacing: 16) {
+                Spacer()
 
-            Text("QwenVoice")
-                .font(.largeTitle.bold())
-                .foregroundStyle(AppTheme.accent)
-                .accessibilityIdentifier("setup_title")
+                VStack(spacing: 16) {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(AppTheme.accent)
+                        .accessibilityIdentifier("setup_icon")
 
-            switch envManager.state {
-            case .idle:
-                EmptyView()
+                    Text("QwenVoice")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.accent)
+                        .accessibilityIdentifier("setup_title")
 
-            case .checking:
-                checkingView
+                    Text("Runs locally on your Mac. First launch may take a few minutes while QwenVoice prepares Python and dependencies.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 460)
+                        .accessibilityIdentifier("setup_reassurance")
 
-            case .settingUp(let phase):
-                settingUpView(phase: phase)
+                    switch envManager.state {
+                    case .idle:
+                        EmptyView()
 
-            case .failed(let message):
-                failedView(message: message)
+                    case .checking:
+                        checkingView
 
-            case .ready:
-                readyView
+                    case .settingUp(let phase):
+                        settingUpView(phase: phase)
+
+                    case .failed(let message):
+                        failedView(message: message)
+
+                    case .ready:
+                        readyView
+                    }
+                }
+                .padding(22)
+                .frame(maxWidth: 500)
+                .background(
+                    RoundedRectangle(cornerRadius: LayoutConstants.stageRadius, style: .continuous)
+                        .fill(AppTheme.cardFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: LayoutConstants.stageRadius, style: .continuous)
+                        .stroke(AppTheme.stageStroke, lineWidth: 1.2)
+                )
+                .shadow(color: AppTheme.stageGlow.opacity(0.26), radius: 20, y: 12)
+
+                Spacer()
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(24)
     }
 
     // MARK: - Substates
@@ -47,7 +71,7 @@ struct SetupView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .controlSize(.large)
-            Text("Checking Python environment...")
+            Text("Checking environment")
                 .foregroundColor(.secondary)
                 .accessibilityIdentifier("setup_checkingLabel")
         }
@@ -59,14 +83,14 @@ struct SetupView: View {
             case .findingPython:
                 ProgressView()
                     .controlSize(.large)
-                Text("Finding Python...")
+                Text("Preparing Python")
                     .foregroundColor(.secondary)
                     .accessibilityIdentifier("setup_findingPythonLabel")
 
             case .creatingVenv:
                 ProgressView()
                     .controlSize(.large)
-                Text("Creating virtual environment...")
+                Text("Preparing Python")
                     .foregroundColor(.secondary)
                     .accessibilityIdentifier("setup_creatingVenvLabel")
 
@@ -91,7 +115,7 @@ struct SetupView: View {
             case .updatingDependencies:
                 ProgressView()
                     .controlSize(.large)
-                Text("Updating dependencies...")
+                Text("Installing dependencies")
                     .foregroundColor(.secondary)
                     .accessibilityIdentifier("setup_updatingDepsLabel")
             }
@@ -130,7 +154,7 @@ struct SetupView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .controlSize(.large)
-            Text("Starting...")
+            Text("Starting QwenVoice")
                 .foregroundColor(.secondary)
                 .accessibilityIdentifier("setup_startingLabel")
         }

@@ -69,7 +69,7 @@ struct QwenVoiceApp: App {
                         .environmentObject(audioPlayer)
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
-                        .frame(minWidth: 780, minHeight: 520)
+                        .frame(minWidth: 720, minHeight: 500)
                         .onAppear {
                             if envManager.needsBackendRestart {
                                 pythonBridge.stop()
@@ -92,8 +92,8 @@ struct QwenVoiceApp: App {
                 envManager.ensureEnvironment()
             }
         }
-        .windowStyle(.titleBar)
-        .defaultSize(width: 900, height: 640)
+        .windowStyle(.hiddenTitleBar) // Using hiddenTitleBar instead of titleBar to merge content cleanly
+        .defaultSize(width: 860, height: 600)
         .commands {
             CommandGroup(replacing: .newItem) { }
 

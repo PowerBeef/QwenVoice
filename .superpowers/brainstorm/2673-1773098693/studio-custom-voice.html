@@ -1,0 +1,139 @@
+<h2>Studio: Custom Voice — Detailed Layout</h2>
+<p class="subtitle">How should the controls toolbar be organized?</p>
+
+<div class="cards">
+  <!-- Option A: Single toolbar row -->
+  <div class="card" data-choice="single-row" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;font-family:system-ui;font-size:11px;color:#ccc;">
+        <!-- Title bar -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <span style="font-size:20px;font-weight:700;color:#eee;">Custom Voice</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex;background:#12122a;border-radius:8px;padding:2px;">
+            <span style="background:#2a2a5a;border-radius:6px;padding:4px 12px;font-size:10px;color:#aab;font-weight:600;">Preset Speaker</span>
+            <span style="padding:4px 12px;font-size:10px;color:#555;">Voice Design</span>
+          </div>
+        </div>
+        <!-- Single controls row -->
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:nowrap;">
+          <!-- Voice picker -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;display:flex;gap:8px;align-items:center;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Voice</span>
+            <div style="display:flex;gap:4px;">
+              <span style="background:#2a2a5a;border:1px solid rgba(100,100,170,0.4);border-radius:6px;padding:3px 10px;font-size:10px;color:#aab;font-weight:500;">Vivian</span>
+              <span style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:10px;color:#666;">Ryan</span>
+              <span style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:10px;color:#666;">Serena</span>
+              <span style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:10px;color:#666;">Aiden</span>
+            </div>
+          </div>
+          <!-- Tone dropdown -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;display:flex;gap:8px;align-items:center;cursor:pointer;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Tone</span>
+            <span style="font-size:10px;color:#aaa;">😊 Happy · Normal ▾</span>
+          </div>
+          <!-- Speed slider -->
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;display:flex;gap:8px;align-items:center;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Speed</span>
+            <div style="width:80px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;position:relative;">
+              <div style="width:50%;height:100%;background:linear-gradient(90deg,#5555aa,#7777cc);border-radius:2px;"></div>
+              <div style="position:absolute;top:-4px;left:calc(50% - 6px);width:12px;height:12px;background:#7777cc;border-radius:50%;border:2px solid #1a1a2e;"></div>
+            </div>
+            <span style="font-size:10px;color:#aaa;font-variant-numeric:tabular-nums;">1.0×</span>
+          </div>
+        </div>
+        <!-- Large text area -->
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;min-height:180px;display:flex;flex-direction:column;">
+          <div style="flex:1;color:#555;font-size:13px;line-height:1.6;">Enter your text here. The text area expands to fill available space, making it the primary workspace...</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:9px;color:#444;">128 chars</span>
+            <span style="font-size:9px;color:#555;cursor:pointer;">⊞ Batch</span>
+            <div style="flex:1;"></div>
+            <span style="font-size:8px;color:#444;">⌘↵</span>
+            <div style="background:linear-gradient(135deg,#5555aa,#7777cc);border-radius:10px;padding:8px 20px;color:white;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;">✦ Generate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Single Toolbar Row</h3>
+      <p>All controls in one horizontal strip: voice chips + tone dropdown + speed slider. Compact, scannable, everything above the text area. Tone opens a popover/dropdown with the full emotion grid.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Two toolbar rows -->
+  <div class="card" data-choice="two-rows" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;font-family:system-ui;font-size:11px;color:#ccc;">
+        <!-- Title bar -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <span style="font-size:20px;font-weight:700;color:#eee;">Custom Voice</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex;background:#12122a;border-radius:8px;padding:2px;">
+            <span style="background:#2a2a5a;border-radius:6px;padding:4px 12px;font-size:10px;color:#aab;font-weight:600;">Preset Speaker</span>
+            <span style="padding:4px 12px;font-size:10px;color:#555;">Voice Design</span>
+          </div>
+        </div>
+        <!-- Row 1: Voice -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;width:40px;">Voice</span>
+          <div style="display:flex;gap:4px;">
+            <span style="background:#2a2a5a;border:1px solid rgba(100,100,170,0.4);border-radius:8px;padding:5px 14px;font-size:10px;color:#aab;font-weight:500;">Vivian</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:5px 14px;font-size:10px;color:#666;">Ryan</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:5px 14px;font-size:10px;color:#666;">Serena</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:5px 14px;font-size:10px;color:#666;">Aiden</span>
+          </div>
+        </div>
+        <!-- Row 2: Tone + Speed -->
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;width:40px;">Tone</span>
+            <div style="display:flex;gap:3px;flex-wrap:wrap;">
+              <span style="background:#2a3a2a;border:1px solid #4a6a4a;border-radius:6px;padding:4px 10px;font-size:9px;color:#8aba8a;">😊 Happy</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">😐 Neutral</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">😢 Sad</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">😡 Angry</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">🤫 Whisper</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">⚡ Excited</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">🎭 Dramatic</span>
+              <span style="border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:9px;color:#777;">🧘 Calm</span>
+              <span style="border:1px dashed rgba(100,100,170,0.3);border-radius:6px;padding:4px 10px;font-size:9px;color:#555;">✎ Custom</span>
+            </div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Speed</span>
+            <div style="width:70px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;position:relative;">
+              <div style="width:50%;height:100%;background:linear-gradient(90deg,#5555aa,#7777cc);border-radius:2px;"></div>
+              <div style="position:absolute;top:-4px;left:calc(50% - 6px);width:12px;height:12px;background:#7777cc;border-radius:50%;border:2px solid #1a1a2e;"></div>
+            </div>
+            <span style="font-size:10px;color:#aaa;font-variant-numeric:tabular-nums;">1.0×</span>
+          </div>
+        </div>
+        <!-- Intensity row (appears when non-neutral selected) -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:14px;padding-left:46px;">
+          <span style="font-size:8px;color:#555;">Intensity:</span>
+          <div style="display:flex;gap:2px;background:rgba(255,255,255,0.04);border-radius:6px;padding:2px;">
+            <span style="border-radius:4px;padding:2px 10px;font-size:9px;color:#666;">Subtle</span>
+            <span style="background:rgba(100,170,100,0.2);border-radius:4px;padding:2px 10px;font-size:9px;color:#8aba8a;">Normal</span>
+            <span style="border-radius:4px;padding:2px 10px;font-size:9px;color:#666;">Strong</span>
+          </div>
+        </div>
+        <!-- Text area -->
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;min-height:140px;display:flex;flex-direction:column;">
+          <div style="flex:1;color:#555;font-size:13px;line-height:1.6;">Enter your text here...</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:9px;color:#444;">0 chars</span>
+            <span style="font-size:9px;color:#555;">⊞ Batch</span>
+            <div style="flex:1;"></div>
+            <span style="font-size:8px;color:#444;">⌘↵</span>
+            <div style="background:linear-gradient(135deg,#5555aa,#7777cc);border-radius:10px;padding:8px 20px;color:white;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;">✦ Generate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Two Rows — Visible Tones</h3>
+      <p>Row 1: voice chips. Row 2: all tone chips inline (emoji + label) + speed slider. Intensity segmented control appears below when a non-neutral tone is selected. All emotions visible at a glance — no dropdown needed.</p>
+    </div>
+  </div>
+</div>

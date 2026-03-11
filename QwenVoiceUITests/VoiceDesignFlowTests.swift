@@ -9,7 +9,7 @@ final class VoiceDesignFlowTests: FeatureMatrixUITestBase {
         _ = waitForScreen(.customVoice, timeout: 15)
         _ = waitForBackendIdle(timeout: 10)
 
-        waitForElement("customVoice_speaker_custom", type: .button, timeout: 5).click()
+        waitForElement("customVoice_mode_design", type: .button, timeout: 5).click()
 
         let voiceDescription = waitForElement("customVoice_voiceDescriptionField", type: .textField, timeout: 5)
         voiceDescription.click()

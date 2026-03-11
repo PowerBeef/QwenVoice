@@ -24,7 +24,7 @@ The app targets macOS 15+, Apple Silicon only, and currently ships six sidebar d
 5. Models
 6. Preferences
 
-Voice Design is currently embedded inside `CustomVoiceView` and is reached by switching to the `Custom` speaker chip.
+Voice Design is embedded inside `CustomVoiceView` behind an explicit top-level mode switch between `Preset Speaker` and `Voice Design`.
 
 ## Source of Truth
 

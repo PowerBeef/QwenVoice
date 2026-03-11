@@ -32,7 +32,7 @@ final class VoiceCloningGenerationTests: FeatureMatrixUITestBase {
         _ = waitForScreen(.voiceCloning, timeout: 15)
         _ = waitForBackendIdle(timeout: 10)
 
-        waitForElement("voiceCloning_dropZone", timeout: 5).click()
+        waitForElement("voiceCloning_importButton", type: .button, timeout: 5).click()
         XCTAssertTrue(
             app.staticTexts["import-reference.wav"].firstMatch.waitForExistence(timeout: 5)
         )

@@ -16,6 +16,7 @@ import time
 import wave
 import gc
 import re
+import math
 import hashlib
 import subprocess
 import warnings
@@ -496,6 +497,50 @@ def _convert_audio_to_wav(input_path, output_path):
     return output_path
 
 
+def _apply_speed_transform(wav_path, speed):
+    """Apply a simple ffmpeg atempo transform in-place."""
+    if speed is None:
+        return wav_path
+
+    target_speed = float(speed)
+    if math.isclose(target_speed, 1.0, rel_tol=1e-3, abs_tol=1e-3):
+        return wav_path
+    if target_speed <= 0:
+        raise RuntimeError("Requested speed must be greater than zero.")
+
+    temp_output = f"{wav_path}.speed.tmp.wav"
+    cmd = [
+        _resolve_ffmpeg_binary(),
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        wav_path,
+        "-filter:a",
+        f"atempo={target_speed}",
+        "-ar",
+        str(SAMPLE_RATE),
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        temp_output,
+    ]
+
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        os.replace(temp_output, wav_path)
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        try:
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+        except OSError:
+            pass
+        raise RuntimeError("Could not apply the requested speed adjustment.") from error
+
+    return wav_path
+
+
 def _clone_reference_cache_path(input_path):
     """Build a stable normalized WAV cache path for an external reference clip."""
     stat_result = os.stat(input_path)
@@ -934,6 +979,7 @@ def handle_generate(params, request_id=None):
     benchmark_label = params.get("benchmark_label")
     benchmark_mode = _resolve_generation_mode(requested_mode, voice=voice, ref_audio=ref_audio)
     current_model_contract = _current_model_contract()
+    requested_speed_value = float(speed) if speed is not None else None
 
     if requested_mode and requested_mode not in MODELS_BY_MODE:
         raise ValueError(f"Unknown generation mode: {requested_mode}")
@@ -1034,7 +1080,7 @@ def handle_generate(params, request_id=None):
 
             send_progress(30, "Preparing voice context...", request_id=request_id)
 
-            if prepared_context is not None:
+            if prepared_context is not None and not instruct:
                 benchmark_flags["prepared_clone_used"] = True
                 if effective_max_tokens is None:
                     effective_max_tokens = 4096
@@ -1100,6 +1146,8 @@ def handle_generate(params, request_id=None):
                 fallback_kwargs["ref_audio"] = clean_ref_audio
                 if resolved_ref_text:
                     fallback_kwargs["ref_text"] = resolved_ref_text
+                if instruct:
+                    fallback_kwargs["instruct"] = instruct
 
                 if stream and request_id is not None:
                     fallback_kwargs["stream"] = True
@@ -1148,7 +1196,7 @@ def handle_generate(params, request_id=None):
                 stream_kwargs["voice"] = voice
             if instruct:
                 stream_kwargs["instruct"] = instruct
-            if speed is not None:
+            if speed is not None and voice:
                 stream_kwargs["speed"] = float(speed)
 
             send_progress(35, "Streaming audio...", request_id=request_id)
@@ -1203,6 +1251,16 @@ def handle_generate(params, request_id=None):
                 "audio_path": final_path,
                 "duration_seconds": round(output_metadata["duration_seconds"], 2),
             }
+
+        if (
+            benchmark_mode in {"design", "clone"}
+            and requested_speed_value is not None
+            and not math.isclose(requested_speed_value, 1.0, rel_tol=1e-3, abs_tol=1e-3)
+        ):
+            send_progress(92, "Applying speed...", request_id=request_id)
+            _apply_speed_transform(final_path, requested_speed_value)
+            output_metadata = get_audio_metadata(final_path)
+            result["duration_seconds"] = round(output_metadata["duration_seconds"], 2)
 
         metrics = dict(metrics or {})
         metrics.setdefault("streaming_used", bool(stream and request_id is not None))

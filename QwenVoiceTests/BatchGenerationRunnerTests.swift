@@ -181,6 +181,8 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         modelID: String,
         text: String,
         voiceDescription: String,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -193,6 +195,8 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         text: String,
         refAudio: String,
         refText: String?,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?

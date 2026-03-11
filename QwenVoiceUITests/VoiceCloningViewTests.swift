@@ -6,11 +6,16 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
     func testVoiceCloningScreenCoreLayout() {
         _ = waitForScreen(.voiceCloning)
         assertElementExists("voiceCloning_title")
-        _ = waitForElement("voiceCloning_batchButton", type: .button)
-        _ = waitForElement("voiceCloning_dropZone")
+        _ = waitForElement("voiceCloning_voiceSetup")
+        _ = waitForElement("voiceCloning_toneSpeed")
+        _ = waitForElement("voiceCloning_script")
+        _ = waitForElement("voiceCloning_importButton", type: .button)
         _ = waitForElement("voiceCloning_transcriptField", type: .textField)
+        _ = waitForElement("delivery_tonePicker", type: .button)
+        _ = waitForElement("delivery_speedPicker")
         _ = waitForElement("textInput_textEditor")
         _ = waitForElement("textInput_generateButton", type: .button)
+        _ = waitForElement("textInput_batchButton", type: .button)
     }
 
     func testVoiceCloningInputControls() {

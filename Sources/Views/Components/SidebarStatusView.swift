@@ -50,14 +50,13 @@ struct SidebarStatusView: View {
                 .fill(AppTheme.accent)
                 .frame(width: 6, height: 6)
             Text("Ready")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_idle")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.04, strokeOpacity: 0.08))
     }
 
     // MARK: - Starting
@@ -66,15 +65,15 @@ struct SidebarStatusView: View {
         HStack(spacing: 6) {
             ProgressView()
                 .controlSize(.mini)
-            Text("Starting...")
-                .font(.caption)
+            Text("Starting engine…")
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_starting")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.06, strokeOpacity: 0.12))
+        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.04, strokeOpacity: 0.08))
     }
 
     // MARK: - Active (with progress bar)
@@ -87,7 +86,7 @@ struct SidebarStatusView: View {
                 ProgressView()
                     .controlSize(.mini)
                 Text(activity.label)
-                    .font(.caption)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -104,10 +103,10 @@ struct SidebarStatusView: View {
             }
         }
         .accessibilityIdentifier("sidebar_backendStatus_active")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.08, strokeOpacity: 0.15))
+        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.05, strokeOpacity: 0.10))
     }
 
     // MARK: - Error (dismissible)
@@ -119,7 +118,7 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
                 Text("Error")
-                    .font(.caption.weight(.medium))
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.primary)
                 Spacer()
                 Button {
@@ -137,8 +136,8 @@ struct SidebarStatusView: View {
                 .lineLimit(2)
         }
         .accessibilityIdentifier("sidebar_backendStatus_error")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(statusBackground(color: .orange, fillOpacity: 0.08, strokeOpacity: 0.15))
     }
@@ -154,7 +153,7 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                 Text("Engine Stopped")
-                    .font(.caption.weight(.medium))
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.primary)
             }
             Text(detail)
@@ -163,8 +162,8 @@ struct SidebarStatusView: View {
                 .lineLimit(2)
         }
         .accessibilityIdentifier("sidebar_backendStatus_crashed")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(statusBackground(color: .red, fillOpacity: 0.08, strokeOpacity: 0.15))
     }
@@ -172,10 +171,10 @@ struct SidebarStatusView: View {
     // MARK: - Shared Background
 
     private func statusBackground(color: Color, fillOpacity: Double, strokeOpacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
             .fill(color.opacity(fillOpacity))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .strokeBorder(color.opacity(strokeOpacity), lineWidth: 1)
             )
     }

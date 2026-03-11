@@ -211,6 +211,23 @@ final class PythonBridge: ObservableObject {
     private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio"]
     private static let appStreamingInterval = 0.32
 
+    private static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
+        let trimmed = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed.caseInsensitiveCompare("Normal tone") != .orderedSame
+    }
+
+    private static func designInstruction(voiceDescription: String, emotion: String) -> String {
+        let trimmedDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmotion = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.hasMeaningfulDeliveryInstruction(trimmedEmotion) else {
+            return trimmedDescription
+        }
+        return """
+        Voice description: \(trimmedDescription)
+        Delivery style: \(trimmedEmotion)
+        """
+    }
+
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
     private func call(
         _ method: String,
@@ -487,6 +504,8 @@ final class PythonBridge: ObservableObject {
     private func generateDesign(
         text: String,
         voiceDescription: String,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -504,7 +523,8 @@ final class PythonBridge: ObservableObject {
         var params: [String: RPCValue] = [
             "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
-            "instruct": .string(voiceDescription),
+            "instruct": .string(Self.designInstruction(voiceDescription: voiceDescription, emotion: emotion)),
+            "speed": .double(speed),
             "output_path": .string(outputPath),
         ]
         if stream {
@@ -520,6 +540,8 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -542,6 +564,12 @@ final class PythonBridge: ObservableObject {
         ]
         if let refText, !refText.isEmpty {
             params["ref_text"] = .string(refText)
+        }
+        if Self.hasMeaningfulDeliveryInstruction(emotion) {
+            params["instruct"] = .string(emotion)
+        }
+        if speed != 1.0 {
+            params["speed"] = .double(speed)
         }
         if stream {
             params["stream"] = .bool(true)
@@ -611,6 +639,8 @@ final class PythonBridge: ObservableObject {
         modelID: String,
         text: String,
         voiceDescription: String,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -624,6 +654,8 @@ final class PythonBridge: ObservableObject {
             try await self.generateDesign(
                 text: text,
                 voiceDescription: voiceDescription,
+                emotion: emotion,
+                speed: speed,
                 outputPath: outputPath,
                 stream: false
             )
@@ -634,6 +666,8 @@ final class PythonBridge: ObservableObject {
         modelID: String,
         text: String,
         voiceDescription: String,
+        emotion: String,
+        speed: Double,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -645,6 +679,8 @@ final class PythonBridge: ObservableObject {
             try await self.generateDesign(
                 text: text,
                 voiceDescription: voiceDescription,
+                emotion: emotion,
+                speed: speed,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(
@@ -660,6 +696,8 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -674,6 +712,8 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
+                emotion: emotion,
+                speed: speed,
                 outputPath: outputPath,
                 stream: false
             )
@@ -685,6 +725,8 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
+        emotion: String,
+        speed: Double,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -697,6 +739,8 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
+                emotion: emotion,
+                speed: speed,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(

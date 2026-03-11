@@ -22,6 +22,17 @@ struct BatchGenerationSheet: View {
         AppTheme.modeColor(for: mode)
     }
 
+    private var deliverySummary: [String] {
+        var summary: [String] = []
+        if let emotion, !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            summary.append("Tone: \(emotion)")
+        }
+        if let speed {
+            summary.append(String(format: "Speed: %.1fx", speed))
+        }
+        return summary
+    }
+
     private var activePythonPath: String? {
         if case .ready(let pythonPath) = envManager.state {
             return pythonPath
@@ -38,6 +49,31 @@ struct BatchGenerationSheet: View {
             Text("Enter one text per line, or drag a .txt file")
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+            if !deliverySummary.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("This batch uses the current delivery settings:")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(deliverySummary, id: \.self) { line in
+                        Text(line)
+                            .font(.callout)
+                            .foregroundStyle(.primary)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(themeColor.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(themeColor.opacity(0.15), lineWidth: 1)
+                )
+                .accessibilityIdentifier("batch_deliverySummary")
+            }
 
             TextEditor(text: $batchText)
                 .font(.body)

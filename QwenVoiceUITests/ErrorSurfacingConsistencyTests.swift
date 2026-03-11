@@ -45,7 +45,7 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
         )
 
         XCTAssertTrue(waitForElement("voiceCloning_savedVoicesWarning", timeout: 10).exists)
-        XCTAssertTrue(waitForElement("voiceCloning_dropZone", timeout: 5).isEnabled)
+        XCTAssertTrue(waitForElement("voiceCloning_importButton", type: .button, timeout: 5).isEnabled)
 
         let transcript = waitForElement("voiceCloning_transcriptField", type: .textField, timeout: 5)
         XCTAssertTrue(transcript.isEnabled, "Transcript entry should remain usable when saved voices fail to load")

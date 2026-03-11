@@ -25,7 +25,7 @@ Generate speech with the app’s built-in English speakers:
 
 ### Voice Design
 
-Voice Design is currently accessed inside the **Custom Voice** screen by switching to the `Custom` speaker chip. It uses natural-language instructions to create a new voice identity rather than a preset speaker.
+Voice Design lives inside the **Custom Voice** screen as an explicit mode. Switch the top mode control from `Preset Speaker` to `Voice Design`, describe the voice you want, then shape tone and speed before generating.
 
 ### Voice Cloning
 

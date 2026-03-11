@@ -40,8 +40,8 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
             "Preset speaker mode should use the complete Custom Voice model fixture"
         )
 
-        let customSpeaker = waitForElement("customVoice_speaker_custom", timeout: 10)
-        customSpeaker.click()
+        let designMode = waitForElement("customVoice_mode_design", timeout: 10)
+        designMode.click()
 
         let banner = waitForElement("customVoice_modelBanner", timeout: 5)
         XCTAssertTrue(banner.exists, "Custom speaker mode should switch to the incomplete Voice Design model fixture")
@@ -50,7 +50,7 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
         voiceField.click()
         voiceField.typeText("A warm narrator voice")
 
-        let batchButton = waitForElement("customVoice_batchButton", type: .button)
+        let batchButton = waitForElement("textInput_batchButton", type: .button)
         XCTAssertFalse(batchButton.isEnabled, "Batch generation should stay disabled when the active model is incomplete")
     }
 

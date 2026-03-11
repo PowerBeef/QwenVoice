@@ -57,6 +57,7 @@
 		B25FDE21DB15AAB169D519EA /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */; };
 		B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890E011F57EAC237416DDF0F /* AppTheme.swift */; };
 		B655BBEFC7968D1B11AF3BE6 /* ErrorSurfacingConsistencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFEC0A10ACD9912B837A5B0 /* ErrorSurfacingConsistencyTests.swift */; };
+		B6824C9F4B35990C52CCDDB8 /* GenerationWorkflowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */; };
 		B7962EA5C5AE26BE94E09309 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = A6529F131AAB6D76EF97AA1B /* server.py */; };
 		BAFA99B95D495C9303E851D1 /* ModelsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */; };
 		BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */; };
@@ -128,6 +129,7 @@
 		52130E590A4CD0ED7447B159 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
 		53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
 		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
+		5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationWorkflowView.swift; sourceTree = "<group>"; };
 		617BE72142511CD5043C341E /* qwenvoice_contract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = qwenvoice_contract.json; sourceTree = "<group>"; };
 		61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarNavigationTests.swift; sourceTree = "<group>"; };
 		637866C95AC607A5E0509956 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 				E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */,
 				5A9B0840026EFF26202877BF /* EmotionPickerView.swift */,
 				D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */,
+				5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */,
 				E876590A12FADBE38100CD17 /* LayoutConstants.swift */,
 				C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */,
 				16357673B0524D933999409E /* SidebarStatusView.swift */,
@@ -518,6 +521,7 @@
 				EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */,
 				5E975521FC8B355333145278 /* FlowLayout.swift in Sources */,
 				1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */,
+				B6824C9F4B35990C52CCDDB8 /* GenerationWorkflowView.swift in Sources */,
 				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
 				102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */,
 				2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */,

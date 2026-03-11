@@ -18,6 +18,8 @@ protocol BatchGenerationBridging: AnyObject {
         modelID: String,
         text: String,
         voiceDescription: String,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -28,6 +30,8 @@ protocol BatchGenerationBridging: AnyObject {
         text: String,
         refAudio: String,
         refText: String?,
+        emotion: String,
+        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -93,8 +97,8 @@ struct BatchGenerationRequest {
             mode: model.mode.rawValue,
             modelTier: model.tier,
             voice: voiceName,
-            emotion: mode == .custom ? emotion : nil,
-            speed: mode == .custom ? speed : nil,
+            emotion: emotion,
+            speed: speed,
             audioPath: result.audioPath,
             duration: result.durationSeconds,
             createdAt: Date()
@@ -332,6 +336,8 @@ final class BatchGenerationRunner {
                 modelID: request.model.id,
                 text: line,
                 voiceDescription: request.voiceDescription ?? "",
+                emotion: request.emotion ?? "Normal tone",
+                speed: request.speed ?? 1.0,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal
@@ -342,6 +348,8 @@ final class BatchGenerationRunner {
                 text: line,
                 refAudio: request.refAudio ?? "",
                 refText: request.refText,
+                emotion: request.emotion ?? "Normal tone",
+                speed: request.speed ?? 1.0,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal

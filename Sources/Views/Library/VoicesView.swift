@@ -16,141 +16,98 @@ struct VoicesView: View {
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var actionAlert: VoicesAlertState?
+    @State private var successMessage: String?
+    @State private var voiceToDelete: Voice?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Voices")
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.voices)
-                Spacer()
-                Button {
-                    showingEnroll = true
-                } label: {
-                    Label("Enroll Voice", systemImage: "plus")
-                }
-                .tint(AppTheme.voices)
-                .accessibilityIdentifier("voices_enrollButton")
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
-
-            if !pythonBridge.isReady {
-                Spacer()
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(AppTheme.voices)
-                    Text("Starting backend...")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("Enrolled voices will appear once the Python service is ready")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            } else if let loadError, voices.isEmpty, !isLoading {
-                Spacer()
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.orange)
-                    Text("Couldn't load voices")
-                        .font(.headline)
-                    Text(loadError)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+                GenerationHeaderView(
+                    title: "Voices",
+                    subtitle: "Your voice library for Voice Cloning."
+                ) {
                     Button {
-                        Task {
-                            await loadVoices()
-                        }
+                        showingEnroll = true
                     } label: {
-                        Text("Try Again")
+                        Label("Enroll Voice", systemImage: "plus")
+                            .font(.system(size: 16, weight: .semibold))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.voices)
-                    .accessibilityIdentifier("voices_retryButton")
+                    .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.voices))
+                    .accessibilityIdentifier("voices_enrollButton")
                 }
-                .padding(24)
-                .glassCard()
-                .accessibilityIdentifier("voices_errorState")
-                Spacer()
-            } else if isLoading && voices.isEmpty {
-                Spacer()
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(AppTheme.voices)
-                    Text("Loading voices...")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
+
+                if let successMessage {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.voices)
+                        Text(successMessage)
+                            .font(.system(size: 14, weight: .medium))
+                        Spacer()
+                    }
+                    .studioCard(padding: 12, radius: 14)
+                    .accessibilityIdentifier("voices_successBanner")
                 }
-                Spacer()
-            } else if voices.isEmpty {
-                Spacer()
-                VStack(spacing: 12) {
-                    Image(systemName: "waveform.badge.plus")
-                        .font(.system(size: 48))
-                        .emptyStateStyle()
-                    Text("No enrolled voices")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("Enroll a voice to use it for voice cloning")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .accessibilityIdentifier("voices_emptyState")
-                Spacer()
-            } else {
-                List {
-                    ForEach(voices) { voice in
-                        HStack(spacing: 12) {
-                            Image(systemName: "waveform.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(AppTheme.voices)
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(voice.name)
-                                    .font(.body.bold())
-                                HStack(spacing: 8) {
-                                    Label(
-                                        voice.hasTranscript ? "Has transcript" : "No transcript",
-                                        systemImage: voice.hasTranscript ? "text.badge.checkmark" : "text.badge.minus"
-                                    )
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                }
-                            }
+                if !pythonBridge.isReady {
+                    voicesStateCard(
+                        icon: "arrow.triangle.2.circlepath.circle",
+                        title: "Starting backend...",
+                        detail: "Enrolled voices will appear once the Python service is ready."
+                    )
+                } else if let loadError, voices.isEmpty, !isLoading {
+                    VStack(spacing: 18) {
+                        voicesStateCard(
+                            icon: "exclamationmark.triangle",
+                            title: "Couldn't load voices",
+                            detail: loadError,
+                            accessibilityIdentifier: "voices_errorState",
+                            tint: .orange
+                        )
 
-                            Spacer()
-
-                            Button {
-                                audioPlayer.playFile(voice.wavPath, title: voice.name)
-                            } label: {
-                                Image(systemName: "play.circle")
-                                    .font(.title3)
-                                    .foregroundColor(AppTheme.voices)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("voicesRow_play_\(voice.id)")
-
-                            Button(role: .destructive) {
-                                deleteVoice(voice)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.title3)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("voicesRow_delete_\(voice.id)")
+                        Button("Try Again") {
+                            Task { await loadVoices() }
                         }
-                        .padding(.vertical, 4)
+                        .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.voices))
+                        .accessibilityIdentifier("voices_retryButton")
+                    }
+                } else if isLoading && voices.isEmpty {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(AppTheme.voices)
+                        Text("Loading voices...")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 180)
+                    .studioCard()
+                } else if voices.isEmpty {
+                    voicesStateCard(
+                        icon: "waveform.badge.plus",
+                        title: "No enrolled voices",
+                        detail: "Enroll a voice here, then use it in Voice Cloning.",
+                        accessibilityIdentifier: "voices_emptyState"
+                    )
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(voices) { voice in
+                            VoiceRow(
+                                voice: voice,
+                                onPlay: {
+                                    audioPlayer.playFile(voice.wavPath, title: voice.name)
+                                },
+                                onDelete: {
+                                    voiceToDelete = voice
+                                    showDeleteConfirmation = true
+                                }
+                            )
+                        }
                     }
                 }
-                .listStyle(.inset)
             }
-
+            .padding(LayoutConstants.canvasPadding)
+            .contentColumn()
         }
         .contentColumn()
         .accessibilityElement(children: .contain)
@@ -162,15 +119,29 @@ struct VoicesView: View {
         }
         .onChange(of: pythonBridge.isReady) { _, isReady in
             guard isReady else { return }
-            Task {
-                await loadVoices()
-            }
+            Task { await loadVoices() }
         }
         .sheet(isPresented: $showingEnroll) {
-            EnrollVoiceSheet(onComplete: {
+            EnrollVoiceSheet(onComplete: { voiceName in
+                successMessage = "\"\(voiceName)\" is ready. Use it in Voice Cloning."
                 Task { await loadVoices() }
             })
             .environmentObject(pythonBridge)
+        }
+        .alert("Delete Voice?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                voiceToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let voice = voiceToDelete {
+                    deleteVoice(voice)
+                }
+                voiceToDelete = nil
+            }
+        } message: {
+            if let voice = voiceToDelete {
+                Text("This will permanently remove \"\(voice.name)\" from your voice library.")
+            }
         }
         .alert(item: $actionAlert) { alert in
             Alert(
@@ -223,6 +194,80 @@ struct VoicesView: View {
     private func presentActionAlert(title: String, message: String) {
         actionAlert = VoicesAlertState(title: title, message: message)
     }
+
+    @ViewBuilder
+    private func voicesStateCard(
+        icon: String,
+        title: String,
+        detail: String,
+        accessibilityIdentifier: String = "voices_emptyState",
+        tint: Color = AppTheme.voices
+    ) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
+        .studioCard()
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+// MARK: - Voice Row (Card-style)
+
+private struct VoiceRow: View {
+    let voice: Voice
+    let onPlay: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 20))
+                .foregroundColor(AppTheme.voices)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(voice.name)
+                    .font(.system(size: 15, weight: .semibold))
+                HStack(spacing: 8) {
+                    Label(
+                        voice.hasTranscript ? "Has transcript" : "No transcript",
+                        systemImage: voice.hasTranscript ? "text.badge.checkmark" : "text.badge.minus"
+                    )
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button { onPlay() } label: {
+                    Image(systemName: "play.circle")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(AppTheme.voices)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("voicesRow_play_\(voice.id)")
+
+                Button(role: .destructive) { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("voicesRow_delete_\(voice.id)")
+            }
+        }
+        .studioCard(padding: 12, radius: 14)
+    }
 }
 
 // MARK: - Enroll Voice Sheet
@@ -236,7 +281,7 @@ struct EnrollVoiceSheet: View {
     @State private var transcript = ""
     @State private var isEnrolling = false
     @State private var errorMessage: String?
-    var onComplete: () -> Void
+    var onComplete: (String) -> Void
 
     var body: some View {
         VStack(spacing: 20) {
@@ -308,7 +353,7 @@ struct EnrollVoiceSheet: View {
                     audioPath: audioPath,
                     transcript: transcript.isEmpty ? nil : transcript
                 )
-                onComplete()
+                onComplete(name)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

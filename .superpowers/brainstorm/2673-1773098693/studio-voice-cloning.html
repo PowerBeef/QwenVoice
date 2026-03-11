@@ -1,0 +1,145 @@
+<h2>Studio: Voice Cloning Layout</h2>
+<p class="subtitle">Voice Cloning has more setup (reference audio, saved voices, transcript). How should it fit the Studio toolbar pattern?</p>
+
+<div class="cards">
+  <!-- Option A: Stacked toolbars -->
+  <div class="card" data-choice="stacked-toolbars" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;font-family:system-ui;font-size:11px;color:#ccc;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <span style="font-size:20px;font-weight:700;color:#eee;">Voice Cloning</span>
+        </div>
+        <!-- Row 1: Reference audio -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;width:60px;">Source</span>
+          <!-- Saved voices scroll -->
+          <div style="display:flex;gap:4px;overflow:hidden;">
+            <span style="background:#2a3a5a;border:1px solid rgba(100,140,200,0.4);border-radius:8px;padding:4px 12px;font-size:10px;color:#8ab;white-space:nowrap;">🎤 Sarah Clone</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:4px 12px;font-size:10px;color:#666;white-space:nowrap;">🎤 Deep Voice</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:4px 12px;font-size:10px;color:#666;white-space:nowrap;">🎤 Narrator</span>
+          </div>
+          <div style="width:1px;height:20px;background:rgba(255,255,255,0.08);margin:0 4px;"></div>
+          <!-- Drop zone compact -->
+          <div style="border:1px dashed rgba(100,140,200,0.3);border-radius:8px;padding:4px 12px;font-size:10px;color:#557;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
+            📁 Import audio...
+          </div>
+        </div>
+        <!-- Row 2: Transcript (conditional) -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;width:60px;">Transcript</span>
+          <div style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:6px 10px;">
+            <span style="font-size:10px;color:#555;">What the reference audio says (optional)...</span>
+          </div>
+        </div>
+        <!-- Row 3: Tone chips + speed -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;width:60px;">Tone</span>
+          <div style="display:flex;gap:3px;flex-wrap:wrap;flex:1;">
+            <span style="background:#2a3a2a;border:1px solid #4a6a4a;border-radius:6px;padding:3px 8px;font-size:9px;color:#8aba8a;">😊 Happy</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😐 Neutral</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😢 Sad</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😡 Angry</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">🤫 Whisper</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">⚡ Excited</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">🎭 Drama</span>
+            <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">🧘 Calm</span>
+            <span style="border:1px dashed rgba(100,100,170,0.3);border-radius:6px;padding:3px 8px;font-size:9px;color:#555;">✎ Custom</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:8px;">
+            <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Speed</span>
+            <div style="width:70px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;position:relative;">
+              <div style="width:50%;height:100%;background:linear-gradient(90deg,#5588aa,#77aacc);border-radius:2px;"></div>
+              <div style="position:absolute;top:-4px;left:calc(50% - 6px);width:12px;height:12px;background:#77aacc;border-radius:50%;border:2px solid #1a1a2e;"></div>
+            </div>
+            <span style="font-size:10px;color:#aaa;">1.0×</span>
+          </div>
+        </div>
+        <!-- Divider -->
+        <div style="height:1px;background:rgba(255,255,255,0.04);margin:6px 0;"></div>
+        <!-- Text area -->
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:14px;min-height:140px;display:flex;flex-direction:column;">
+          <div style="flex:1;color:#555;font-size:13px;">Enter text to clone with this voice...</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:9px;color:#444;">0 chars</span>
+            <span style="font-size:9px;color:#555;">⊞ Batch</span>
+            <div style="flex:1;"></div>
+            <div style="background:linear-gradient(135deg,#5588aa,#77aacc);border-radius:10px;padding:7px 18px;color:white;font-size:11px;font-weight:600;">✦ Generate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Stacked Toolbar Rows</h3>
+      <p>Same pattern as Custom Voice but with more rows. Row 1: saved voice chips + import button. Row 2: transcript field. Row 3: tone chips + speed slider. Consistent left-aligned labels (Source, Transcript, Tone). Everything stays above the text area.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Collapsible reference section -->
+  <div class="card" data-choice="collapsible" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;font-family:system-ui;font-size:11px;color:#ccc;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <span style="font-size:20px;font-weight:700;color:#eee;">Voice Cloning</span>
+        </div>
+        <!-- Reference section (collapsible) -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:10px;font-weight:600;color:#aab;">Reference Voice</span>
+            <div style="flex:1;"></div>
+            <span style="font-size:9px;color:#555;">▼ Expanded</span>
+          </div>
+          <!-- Active reference indicator -->
+          <div style="display:flex;align-items:center;gap:8px;background:rgba(100,140,200,0.08);border:1px solid rgba(100,140,200,0.2);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+            <span style="color:#7aa;">🎤</span>
+            <div>
+              <div style="font-size:10px;color:#aab;font-weight:500;">Sarah Clone</div>
+              <div style="font-size:8px;color:#666;">Has transcript · Enrolled voice</div>
+            </div>
+            <div style="flex:1;"></div>
+            <span style="font-size:10px;color:#557;cursor:pointer;">✕ Clear</span>
+          </div>
+          <!-- Other voices row -->
+          <div style="display:flex;gap:4px;margin-bottom:8px;">
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:9px;color:#666;">🎤 Deep Voice</span>
+            <span style="border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;font-size:9px;color:#666;">🎤 Narrator</span>
+            <span style="border:1px dashed rgba(100,140,200,0.3);border-radius:6px;padding:3px 10px;font-size:9px;color:#557;">📁 Import...</span>
+          </div>
+          <!-- Transcript inline -->
+          <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:6px 10px;">
+            <span style="font-size:9px;color:#888;">"Hello, my name is Sarah and this is how I speak normally..."</span>
+          </div>
+        </div>
+        <!-- Tone + Speed row -->
+        <div style="display:flex;gap:3px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+          <span style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-right:4px;">Tone</span>
+          <span style="background:#2a3a2a;border:1px solid #4a6a4a;border-radius:6px;padding:3px 8px;font-size:9px;color:#8aba8a;">😊 Happy</span>
+          <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😐 Neutral</span>
+          <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😢 Sad</span>
+          <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">😡 Angry</span>
+          <span style="border:1px solid #333;border-radius:6px;padding:3px 8px;font-size:9px;color:#777;">🤫+5</span>
+          <div style="flex:1;"></div>
+          <span style="font-size:9px;color:#666;">Speed</span>
+          <div style="width:60px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;position:relative;">
+            <div style="width:50%;height:100%;background:#77aacc;border-radius:2px;"></div>
+            <div style="position:absolute;top:-4px;left:calc(50% - 5px);width:10px;height:10px;background:#77aacc;border-radius:50%;border:2px solid #1a1a2e;"></div>
+          </div>
+          <span style="font-size:10px;color:#aaa;">1.0×</span>
+        </div>
+        <!-- Text area -->
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:14px;min-height:140px;display:flex;flex-direction:column;">
+          <div style="flex:1;color:#555;font-size:13px;">Enter text to clone with this voice...</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:9px;color:#444;">0 chars</span>
+            <span style="font-size:9px;color:#555;">⊞ Batch</span>
+            <div style="flex:1;"></div>
+            <div style="background:linear-gradient(135deg,#5588aa,#77aacc);border-radius:10px;padding:7px 18px;color:white;font-size:11px;font-weight:600;">✦ Generate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Collapsible Reference Panel</h3>
+      <p>Reference voice setup lives in a collapsible card at the top. Shows the active voice with status details, other voices as chips, transcript inline. Collapses to a single line showing "🎤 Sarah Clone · Has transcript" once configured. Tone and speed below as flat chips.</p>
+    </div>
+  </div>
+</div>

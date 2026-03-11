@@ -6,11 +6,11 @@ struct SidebarPlayerView: View {
 
     var body: some View {
         if audioPlayer.hasAudio {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 // Row 1: Title + dismiss
                 HStack {
                     Text(audioPlayer.currentTitle)
-                        .font(.caption)
+                        .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
@@ -18,11 +18,11 @@ struct SidebarPlayerView: View {
                         Text("Live")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(AppTheme.accent)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(
                                 Capsule()
-                                    .fill(AppTheme.accent.opacity(0.12))
+                                    .fill(AppTheme.accent.opacity(0.14))
                             )
                             .accessibilityIdentifier("sidebarPlayer_liveBadge")
                     }
@@ -89,12 +89,12 @@ struct SidebarPlayerView: View {
                         .accessibilityIdentifier("sidebarPlayer_error")
                 }
             }
-            .padding(10)
+            .padding(7)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppTheme.accent.opacity(0.08))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(AppTheme.accent.opacity(0.15), lineWidth: 1)
                     )
             )

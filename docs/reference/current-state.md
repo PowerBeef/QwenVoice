@@ -21,7 +21,7 @@ The app currently exposes six sidebar destinations:
 5. Models
 6. Preferences
 
-Voice Design is not a separate sidebar screen. It is accessed inside `CustomVoiceView` by switching to the `Custom` speaker chip, which changes the active generation mode from `.custom` to `.design`.
+Voice Design is not a separate sidebar screen. It is accessed inside `CustomVoiceView` through an explicit top-level mode switch between `Preset Speaker` and `Voice Design`, which changes the active generation mode from `.custom` to `.design`.
 
 The shipping SwiftUI app now uses live streaming preview for single-generation flows:
 

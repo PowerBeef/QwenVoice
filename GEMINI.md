@@ -35,7 +35,7 @@ The shipped UI currently includes six destinations:
 5. Models
 6. Preferences
 
-Voice Design remains embedded inside `CustomVoiceView`.
+Voice Design remains embedded inside `CustomVoiceView`, but it is now exposed through an explicit mode switch instead of hidden speaker-chip navigation.
 
 ## Commands
 

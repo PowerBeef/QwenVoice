@@ -4,8 +4,8 @@ struct CustomVoiceView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
+    @State private var workflowMode: CustomVoiceWorkflowMode = .presetSpeaker
     @State private var selectedSpeaker = TTSModel.defaultSpeaker
-    @State private var isCustomSpeaker = false
     @State private var voiceDescription = ""
     @State private var emotion = "Normal tone"
     @State private var speed: Double = 1.0
@@ -15,7 +15,7 @@ struct CustomVoiceView: View {
     @State private var showingBatch = false
 
     private var activeMode: GenerationMode {
-        isCustomSpeaker ? .design : .custom
+        workflowMode.generationMode
     }
 
     private var activeModel: TTSModel? {
@@ -30,210 +30,105 @@ struct CustomVoiceView: View {
         activeModel?.name ?? "Unknown"
     }
 
-    private let speeds: [(String, Double)] = [
-        ("Slow (0.8x)", 0.8),
-        ("Normal (1.0x)", 1.0),
-        ("Fast (1.3x)", 1.3),
-    ]
+    private var canRunBatch: Bool {
+        pythonBridge.isReady && isModelAvailable && (workflowMode == .presetSpeaker || !voiceDescription.isEmpty)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header with model picker and batch button
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Text to Speech")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(1.5)
-                        
-                        Text("Custom Voice")
-                            .font(.system(size: 38, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
-                            .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
-                            .accessibilityIdentifier("customVoice_title")
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+                    GenerationHeaderView(
+                        title: workflowMode == .presetSpeaker ? "Custom Voice" : "Voice Design",
+                        subtitle: workflowMode == .presetSpeaker
+                            ? "Choose a built-in speaker, then shape the delivery."
+                            : "Describe the voice, then shape the delivery.",
+                        titleAccessibilityIdentifier: "customVoice_title",
+                        subtitleAccessibilityIdentifier: "customVoice_subtitle"
+                    ) {
+                        GenerationModeSwitch(selection: $workflowMode)
                     }
-                    
-                    Spacer()
-
-                    Button {
-                        showingBatch = true
-                    } label: {
-                        Label("Batch", systemImage: "square.grid.2x2.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(AppTheme.customVoice)
-                    .disabled(!pythonBridge.isReady || !isModelAvailable || (isCustomSpeaker && voiceDescription.isEmpty))
-                    .accessibilityIdentifier("customVoice_batchButton")
-                }
-                .padding(.bottom, 8)
-
-                if !isModelAvailable {
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
-                            .font(.callout)
-                        Spacer()
-                        Button {
-                            NotificationCenter.default.post(name: .navigateToModels, object: nil)
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text("Go to Models")
-                                Image(systemName: "chevron.right")
-                                    .imageScale(.small)
-                            }
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(Color.orange)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("customVoice_goToModels")
-                    }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.orange.opacity(0.12))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                    )
                     .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("customVoice_modelBanner")
-                }
+                    .accessibilityIdentifier("customVoice_header")
 
-                // Controls card
-                VStack(alignment: .leading, spacing: 24) {
-                    // Speaker picker
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("SPEAKER").sectionHeader()
+                    if !isModelAvailable {
+                        modelUnavailableBanner
+                    }
 
-                        FlowLayout(spacing: 8) {
-                            ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                                Button {
-                                    AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        selectedSpeaker = speaker
-                                        isCustomSpeaker = false
-                                    }
-                                } label: {
-                                    Text(speaker)
-                                        .chipStyle(isSelected: !isCustomSpeaker && selectedSpeaker == speaker, color: AppTheme.customVoice)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("customVoice_speaker_\(speaker)")
-                                .accessibilityValue(!isCustomSpeaker && selectedSpeaker == speaker ? "selected" : "not selected")
+                    StudioSectionCard(
+                        title: "Voice",
+                        accentColor: AppTheme.customVoice,
+                        accessibilityIdentifier: "customVoice_voiceSetup"
+                    ) {
+                        if workflowMode == .presetSpeaker {
+                            FlowLayout(spacing: 10) {
+                                speakerButtons
                             }
-
-                            // Custom speaker chip
-                            Button {
-                                AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    isCustomSpeaker = true
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "pencil.line")
-                                        .font(.caption)
-                                    Text("Custom")
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(isCustomSpeaker ? AppTheme.accent.opacity(0.15) : Color.primary.opacity(0.06))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TextField(
+                                    "A warm, deep narrator with a subtle British accent.",
+                                    text: $voiceDescription,
+                                    axis: .vertical
                                 )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .strokeBorder(
-                                            isCustomSpeaker ? AppTheme.accent.opacity(0.3) : AppTheme.accent.opacity(0.5),
-                                            style: StrokeStyle(lineWidth: 0.5, dash: isCustomSpeaker ? [] : [4, 4])
-                                        )
-                                )
-                                .foregroundStyle(isCustomSpeaker ? AppTheme.accent : AppTheme.accent.opacity(0.8))
-                                .scaleEffect(isCustomSpeaker ? 1.02 : 1.0)
-                                .appAnimation(.interpolatingSpring(stiffness: 300, damping: 15), value: isCustomSpeaker)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("customVoice_speaker_custom")
-                            .accessibilityValue(isCustomSpeaker ? "selected" : "not selected")
-                        }
-                        .padding(.vertical, 8)
-
-                        // Voice description field (visible only in custom speaker mode)
-                        if isCustomSpeaker {
-                            TextField("Describe the voice you want, e.g. 'A warm, deep male voice with a British accent'", text: $voiceDescription, axis: .vertical)
                                 .textFieldStyle(.plain)
-                                .font(.title3)
-                                .padding(16)
+                                .font(.body)
+                                .padding(12)
                                 .background(Color.primary.opacity(0.04))
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                                 )
-                                .lineLimit(2...4)
+                                .lineLimit(1...3)
                                 .accessibilityIdentifier("customVoice_voiceDescriptionField")
-                        }
-                    }
-
-                    if !isCustomSpeaker {
-                        Divider().opacity(0.5)
-
-                        // Emotion
-                        EmotionPickerView(emotion: $emotion)
-
-                        Divider().opacity(0.5)
-
-                        // Speed
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("SPEED").sectionHeader()
-                            HStack(spacing: 8) {
-                                ForEach(speeds, id: \.1) { label, value in
-                                    Button {
-                                        AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            speed = value
-                                        }
-                                    } label: {
-                                        Text(label)
-                                            .chipStyle(isSelected: speed == value, color: AppTheme.customVoice)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("customVoice_speed_\(label.split(separator: " ").first?.lowercased() ?? "")")
-                                }
                             }
-                            .accessibilityIdentifier("customVoice_speedPicker")
                         }
                     }
 
-                    Divider().opacity(0.5)
-
-                    TextInputView(
-                        text: $text,
-                        isGenerating: isGenerating,
-                        buttonColor: AppTheme.customVoice,
-                        onGenerate: generate
+                    DeliveryControlsView(
+                        emotion: $emotion,
+                        speed: $speed,
+                        accentColor: AppTheme.customVoice
                     )
-                    .disabled(!pythonBridge.isReady || !isModelAvailable || (isCustomSpeaker && voiceDescription.isEmpty))
-                }
-                .glassCard()
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("customVoice_toneSpeed")
 
-                // Error display
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundColor(.red)
-                        .font(.callout)
-                }
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            TextInputView(
+                                text: $text,
+                                isGenerating: isGenerating,
+                                placeholder: "What should I say?",
+                                buttonColor: AppTheme.customVoice,
+                                batchAction: { showingBatch = true },
+                                batchDisabled: !canRunBatch,
+                                onGenerate: generate
+                            )
+                            .disabled(!pythonBridge.isReady || !isModelAvailable || (workflowMode == .voiceDesign && voiceDescription.isEmpty))
 
+                            if let errorMessage {
+                                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                    .foregroundColor(.red)
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("customVoice_script")
+                }
+                .padding(LayoutConstants.canvasPadding)
+                .contentColumn()
             }
-            .padding(24)
-            .contentColumn()
         }
         .accessibilityIdentifier("screen_customVoice")
         .sheet(isPresented: $showingBatch) {
-            if isCustomSpeaker {
+            if workflowMode == .voiceDesign {
                 BatchGenerationSheet(
                     mode: .design,
+                    emotion: emotion,
+                    speed: speed,
                     voiceDescription: voiceDescription
                 )
                 .environmentObject(pythonBridge)
@@ -251,9 +146,47 @@ struct CustomVoiceView: View {
         }
     }
 
+    // MARK: - Model Unavailable Banner
+
+    private var modelUnavailableBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
+                .font(.caption)
+            Spacer()
+            Button {
+                NotificationCenter.default.post(name: .navigateToModels, object: activeModel?.id)
+            } label: {
+                HStack(spacing: 3) {
+                    Text("Go to Models")
+                    Image(systemName: "chevron.right")
+                        .imageScale(.small)
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("customVoice_goToModels")
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.orange.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("customVoice_modelBanner")
+    }
+
+    // MARK: - Generate
+
     private func generate() {
         guard !text.isEmpty, pythonBridge.isReady else { return }
-        if isCustomSpeaker { guard !voiceDescription.isEmpty else { return } }
+        if workflowMode == .voiceDesign { guard !voiceDescription.isEmpty else { return } }
 
         if let model = activeModel, !model.isAvailable(in: QwenVoiceApp.modelsDir) {
             errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
@@ -266,44 +199,44 @@ struct CustomVoiceView: View {
         Task {
             do {
                 UITestAutomationSupport.recordAction("custom-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
-                guard let model = TTSModel.model(for: activeMode) else {
+                guard let model = activeModel else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
                     return
                 }
 
-                if isCustomSpeaker {
-                    let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                    audioPlayer.prepareStreamingPreview(
-                        title: String(text.prefix(40)),
-                        shouldAutoPlay: AudioService.shouldAutoPlay
-                    )
-                    let result = try await pythonBridge.generateDesignStreamingFlow(
+                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
+                audioPlayer.prepareStreamingPreview(
+                    title: String(text.prefix(40)),
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
+
+                let result: GenerationResult
+                var generation: Generation
+
+                if workflowMode == .voiceDesign {
+                    result = try await pythonBridge.generateDesignStreamingFlow(
                         modelID: model.id,
                         text: text,
                         voiceDescription: voiceDescription,
+                        emotion: emotion,
+                        speed: speed,
                         outputPath: outputPath
                     )
 
-                    var gen = Generation(
+                    generation = Generation(
                         text: text,
                         mode: model.mode.rawValue,
                         modelTier: model.tier,
                         voice: voiceDescription,
-                        emotion: nil,
-                        speed: nil,
+                        emotion: emotion,
+                        speed: speed,
                         audioPath: result.audioPath,
                         duration: result.durationSeconds,
                         createdAt: Date()
                     )
-                    try persistGenerationAndMaybeAutoplay(&gen, result: result)
                 } else {
-                    let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                    audioPlayer.prepareStreamingPreview(
-                        title: String(text.prefix(40)),
-                        shouldAutoPlay: AudioService.shouldAutoPlay
-                    )
-                    let result = try await pythonBridge.generateCustomStreamingFlow(
+                    result = try await pythonBridge.generateCustomStreamingFlow(
                         modelID: model.id,
                         text: text,
                         voice: selectedSpeaker,
@@ -312,7 +245,7 @@ struct CustomVoiceView: View {
                         outputPath: outputPath
                     )
 
-                    var gen = Generation(
+                    generation = Generation(
                         text: text,
                         mode: model.mode.rawValue,
                         modelTier: model.tier,
@@ -323,8 +256,9 @@ struct CustomVoiceView: View {
                         duration: result.durationSeconds,
                         createdAt: Date()
                     )
-                    try persistGenerationAndMaybeAutoplay(&gen, result: result)
                 }
+
+                try persistGenerationAndMaybeAutoplay(&generation, result: result)
                 UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
@@ -374,5 +308,22 @@ struct CustomVoiceView: View {
 
     private func elapsedMs(since start: UInt64) -> Int {
         Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+    }
+
+    @ViewBuilder
+    private var speakerButtons: some View {
+        ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
+            Button {
+                AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    selectedSpeaker = speaker
+                }
+            } label: {
+                Text(speaker.capitalized)
+                    .voiceChoiceChip(isSelected: selectedSpeaker == speaker, color: AppTheme.customVoice)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("customVoice_speaker_\(speaker)")
+            .accessibilityValue(selectedSpeaker == speaker ? "selected" : "not selected")
+        }
     }
 }

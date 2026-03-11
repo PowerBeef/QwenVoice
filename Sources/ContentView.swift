@@ -69,6 +69,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @State private var selectedItem: SidebarItem?
+    @State private var pendingHighlightedModelID: String?
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
@@ -77,37 +78,44 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(selection: $selectedItem)
-        } detail: {
-            ZStack {
-                AuroraBackground()
-                    .ignoresSafeArea()
+        ZStack {
+            AppTheme.canvasBackground
+                .ignoresSafeArea()
 
-                Group {
-                    switch selectedItem {
-                    case .customVoice:
-                        CustomVoiceView()
-                    case .voiceCloning:
-                        VoiceCloningView()
-                    case .history:
-                        HistoryView()
-                    case .voices:
-                        VoicesView()
-                    case .models:
-                        ModelsView()
-                    case .preferences:
-                        PreferencesView()
-                    case nil:
-                        CustomVoiceView()
+            HStack(spacing: 0) {
+                SidebarView(selection: $selectedItem)
+
+                ZStack {
+                    AppTheme.canvasBackground
+
+                    Group {
+                        switch selectedItem {
+                        case .customVoice:
+                            CustomVoiceView()
+                        case .voiceCloning:
+                            VoiceCloningView()
+                        case .history:
+                            HistoryView()
+                        case .voices:
+                            VoicesView()
+                        case .models:
+                            ModelsView(highlightedModelID: $pendingHighlightedModelID)
+                        case .preferences:
+                            PreferencesView()
+                        case nil:
+                            CustomVoiceView()
+                        }
                     }
+                    .id(selectedItem)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color.clear)
                 }
-                .id(selectedItem)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .environment(\.colorScheme, .dark)
         }
-        .navigationSplitViewStyle(.balanced)
-        .onReceive(NotificationCenter.default.publisher(for: .navigateToModels)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToModels)) { notification in
+            pendingHighlightedModelID = notification.object as? String
             selectedItem = .models
         }
     }
