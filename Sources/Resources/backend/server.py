@@ -69,6 +69,8 @@ FILENAME_MAX_LEN = 20
 CACHE_POLICY = _resolve_cache_policy()
 CLONE_CONTEXT_CACHE_CAPACITY = 8
 DEFAULT_STREAMING_INTERVAL = 2.0
+PREWARM_MAX_TOKENS = 128
+PREWARM_TEXT = "The selected voice model is warming up."
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
@@ -151,6 +153,7 @@ _generate_prepared_icl_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
 _mlx_audio_version = None
+_prewarmed_model_keys = set()
 
 
 def _ensure_mlx():
@@ -334,6 +337,33 @@ def get_audio_metadata(wav_path):
             return {"frames": frames, "duration_seconds": duration}
     except Exception:
         return {"frames": None, "duration_seconds": 0.0}
+
+
+def _resolve_model_request(model_id=None, model_path=None):
+    """Resolve the on-disk model path and canonical model identifier."""
+    if not model_path and model_id:
+        model_def = MODELS.get(model_id)
+        if not model_def:
+            raise ValueError(f"Unknown model_id: {model_id}")
+        model_path = get_smart_path(model_def["folder"])
+        if not model_path:
+            raise FileNotFoundError(f"Model not found on disk: {model_def['folder']}")
+
+    if not model_path:
+        raise ValueError("Must provide model_id or model_path")
+
+    resolved_model_id = model_id or _resolve_model_id_for_path(model_path)
+    return model_path, resolved_model_id
+
+
+def _model_identity_key(resolved_model_id, model_path):
+    """Return a stable per-process identity key for model warm-up tracking."""
+    return resolved_model_id or os.path.realpath(model_path)
+
+
+def _maybe_send_progress(percent, message, request_id=None):
+    if request_id is not None:
+        send_progress(percent, message, request_id=request_id)
 
 
 # ---------------------------------------------------------------------------
@@ -772,12 +802,38 @@ def _derive_generation_paths(final_path):
     return target_dir, stem, generated_path
 
 
+def _to_int16_audio_array(audio):
+    """Convert model output audio into the signed int16 format used for WAV output."""
+    array = audio if isinstance(audio, _np.ndarray) else _np.array(audio)
+
+    if array.dtype in (_np.float32, _np.float64):
+        array = _np.clip(array, -1.0, 1.0)
+        array = (array * 32767).astype(_np.int16)
+    elif array.dtype != _np.int16:
+        array = array.astype(_np.int16)
+
+    return array
+
+
+def _flatten_audio_samples(audio):
+    """Return normalized int16 audio data plus flattened interleaved PCM samples."""
+    normalized = _to_int16_audio_array(audio)
+    if normalized.ndim == 1:
+        nchannels = 1
+        samples_flat = normalized
+    else:
+        nchannels = int(normalized.shape[1])
+        samples_flat = normalized.reshape(-1)
+
+    return normalized, samples_flat, nchannels
+
+
 def _write_audio_file(output_path, audio, sample_rate):
     """Write an audio buffer to a WAV file."""
     parent_dir = os.path.dirname(output_path)
     if parent_dir:
         os.makedirs(parent_dir, exist_ok=True)
-    _audio_write_fn(output_path, _np.array(audio), sample_rate, format="wav")
+    _audio_write_fn(output_path, _to_int16_audio_array(audio), sample_rate, format="wav")
 
 
 def _make_stream_session_dir(request_id):
@@ -803,52 +859,73 @@ def _consume_streaming_generator(generator, request_id, final_path):
     stream_start = time.perf_counter()
     write_start = time.perf_counter()
     session_dir = _make_stream_session_dir(request_id)
-    chunk_arrays = []
     chunk_index = 0
     cumulative_duration = 0.0
     first_chunk_ms = None
     total_token_count = 0
     peak_memory_usage = 0.0
     last_chunk = None
+    wav_writer = None
+    expected_sample_rate = None
+    expected_channels = None
 
-    for chunk in generator:
-        chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
-        _write_audio_file(chunk_path, chunk.audio, chunk.sample_rate)
+    try:
+        for chunk in generator:
+            normalized_audio, samples_flat, nchannels = _flatten_audio_samples(chunk.audio)
+            chunk_sample_rate = int(getattr(chunk, "sample_rate", 0) or 0)
+            if chunk_sample_rate <= 0:
+                raise RuntimeError("Streaming chunk is missing a valid sample rate")
 
-        audio_array = _np.array(chunk.audio)
-        chunk_arrays.append(audio_array)
-        chunk_duration_seconds = (
-            float(chunk.samples) / float(chunk.sample_rate)
-            if getattr(chunk, "samples", 0) and getattr(chunk, "sample_rate", 0)
-            else 0.0
-        )
-        cumulative_duration += chunk_duration_seconds
-        total_token_count += int(getattr(chunk, "token_count", 0) or 0)
-        peak_memory_usage = max(
-            peak_memory_usage,
-            float(getattr(chunk, "peak_memory_usage", 0.0) or 0.0),
-        )
+            if wav_writer is None:
+                parent_dir = os.path.dirname(final_path)
+                if parent_dir:
+                    os.makedirs(parent_dir, exist_ok=True)
+                wav_writer = wave.open(final_path, "wb")
+                wav_writer.setnchannels(nchannels)
+                wav_writer.setsampwidth(2)
+                wav_writer.setframerate(chunk_sample_rate)
+                expected_sample_rate = chunk_sample_rate
+                expected_channels = nchannels
+            elif chunk_sample_rate != expected_sample_rate or nchannels != expected_channels:
+                raise RuntimeError("Streaming generation produced incompatible audio chunk formats")
 
-        if first_chunk_ms is None:
-            first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
+            chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
+            _audio_write_fn(chunk_path, normalized_audio, chunk_sample_rate, format="wav")
+            wav_writer.writeframes(samples_flat.tobytes())
 
-        send_generation_chunk(
-            request_id=request_id,
-            chunk_index=chunk_index,
-            chunk_path=chunk_path,
-            is_final=bool(getattr(chunk, "is_final_chunk", False)),
-            chunk_duration_seconds=chunk_duration_seconds,
-            cumulative_duration_seconds=cumulative_duration,
-            stream_session_dir=session_dir,
-        )
-        last_chunk = chunk
-        chunk_index += 1
+            sample_count = int(getattr(chunk, "samples", 0) or 0)
+            if sample_count <= 0:
+                sample_count = samples_flat.size // max(nchannels, 1)
 
-    if not chunk_arrays:
+            chunk_duration_seconds = sample_count / float(chunk_sample_rate)
+            cumulative_duration += chunk_duration_seconds
+            total_token_count += int(getattr(chunk, "token_count", 0) or 0)
+            peak_memory_usage = max(
+                peak_memory_usage,
+                float(getattr(chunk, "peak_memory_usage", 0.0) or 0.0),
+            )
+
+            if first_chunk_ms is None:
+                first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
+
+            send_generation_chunk(
+                request_id=request_id,
+                chunk_index=chunk_index,
+                chunk_path=chunk_path,
+                is_final=bool(getattr(chunk, "is_final_chunk", False)),
+                chunk_duration_seconds=chunk_duration_seconds,
+                cumulative_duration_seconds=cumulative_duration,
+                stream_session_dir=session_dir,
+            )
+            last_chunk = chunk
+            chunk_index += 1
+    finally:
+        if wav_writer is not None:
+            wav_writer.close()
+
+    if last_chunk is None:
         raise RuntimeError("Generation produced no audio file")
 
-    full_audio = chunk_arrays[0] if len(chunk_arrays) == 1 else _np.concatenate(chunk_arrays, axis=0)
-    _audio_write_fn(final_path, full_audio, _current_model.sample_rate, format="wav")
     write_output_ms = int((time.perf_counter() - write_start) * 1000)
 
     metrics = _metrics_from_generation_result(last_chunk, streaming_used=True)
@@ -869,31 +946,15 @@ def _consume_streaming_generator(generator, request_id, final_path):
     )
 
 
-def handle_load_model(params, request_id=None):
-    """Load a model into memory. Unloads any existing model first."""
+def _load_model_request(model_id=None, model_path=None, benchmark=False, request_id=None):
+    """Load a model into memory and return the standard response payload."""
     global _current_model, _current_model_path, _current_model_id
 
-    model_id = params.get("model_id")
-    model_path = params.get("model_path")
-    benchmark = bool(params.get("benchmark", False))
     load_start = time.perf_counter()
+    model_path, resolved_model_id = _resolve_model_request(model_id=model_id, model_path=model_path)
+    was_same_model_loaded = _current_model is not None and _current_model_path == model_path
 
-    # Resolve model path from model_id if not given directly
-    if not model_path and model_id:
-        model_def = MODELS.get(model_id)
-        if not model_def:
-            raise ValueError(f"Unknown model_id: {model_id}")
-        model_path = get_smart_path(model_def["folder"])
-        if not model_path:
-            raise FileNotFoundError(f"Model not found on disk: {model_def['folder']}")
-
-    if not model_path:
-        raise ValueError("Must provide model_id or model_path")
-
-    resolved_model_id = model_id or _resolve_model_id_for_path(model_path)
-
-    # Skip reload if same model already loaded
-    if _current_model is not None and _current_model_path == model_path:
+    if was_same_model_loaded:
         result = {
             "success": True,
             "model_path": model_path,
@@ -909,15 +970,14 @@ def handle_load_model(params, request_id=None):
                     "load_model_total": int((time.perf_counter() - load_start) * 1000),
                 }
             }
-        return result
+        return result, resolved_model_id, model_path, False
 
-    # Unload existing model
     if _current_model is not None:
         _discard_loaded_model()
 
     _ensure_mlx()
-    send_progress(5, "Preparing model...", request_id=request_id)
-    send_progress(25, "Loading model...", request_id=request_id)
+    _maybe_send_progress(5, "Preparing model...", request_id=request_id)
+    _maybe_send_progress(25, "Loading model...", request_id=request_id)
 
     _current_model = _load_model_fn(model_path)
     if _enable_speech_tokenizer_encoder_fn is not None:
@@ -925,7 +985,7 @@ def handle_load_model(params, request_id=None):
     _current_model_path = model_path
     _current_model_id = resolved_model_id
 
-    send_progress(100, "Model ready", request_id=request_id)
+    _maybe_send_progress(100, "Model ready", request_id=request_id)
 
     result = {
         "success": True,
@@ -939,6 +999,182 @@ def handle_load_model(params, request_id=None):
             "timings_ms": {
                 "load_model_total": int((time.perf_counter() - load_start) * 1000),
             }
+        }
+    return result, resolved_model_id, model_path, True
+
+
+def handle_load_model(params, request_id=None):
+    """Load a model into memory. Unloads any existing model first."""
+    result, _, _, _ = _load_model_request(
+        model_id=params.get("model_id"),
+        model_path=params.get("model_path"),
+        benchmark=bool(params.get("benchmark", False)),
+        request_id=request_id,
+    )
+    return result
+
+
+def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text=None):
+    """Run a short in-memory generation to pay one-time model warm-up costs while idle."""
+    if _current_model is None:
+        raise RuntimeError("No model loaded. Call load_model first.")
+
+    warmup_text = PREWARM_TEXT
+    generation_start = time.perf_counter()
+    normalize_reference_ms = 0
+    prepare_clone_context_ms = 0
+    prepared_clone_used = False
+    clone_cache_hit = None
+
+    if mode == "custom":
+        warm_results = list(
+            _current_model.generate(
+                text=warmup_text,
+                voice=voice or DEFAULT_SPEAKER,
+                instruct=instruct or "Normal tone",
+                verbose=False,
+                temperature=0.6,
+                max_tokens=PREWARM_MAX_TOKENS,
+            )
+        )
+    elif mode == "design":
+        warm_results = list(
+            _current_model.generate(
+                text=warmup_text,
+                instruct=instruct or "A calm, clear narrator with steady pacing.",
+                verbose=False,
+                temperature=0.6,
+                max_tokens=PREWARM_MAX_TOKENS,
+            )
+        )
+    elif mode == "clone":
+        if not ref_audio:
+            raise ValueError("Mode 'clone' prewarm requires ref_audio.")
+
+        normalize_start = time.perf_counter()
+        clean_ref_audio = _normalize_clone_reference(ref_audio)
+        normalize_reference_ms = int((time.perf_counter() - normalize_start) * 1000)
+        if not clean_ref_audio:
+            raise RuntimeError("Could not process reference audio file")
+
+        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+        prepare_start = time.perf_counter()
+        prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
+            clean_ref_audio,
+            resolved_ref_text,
+        )
+        prepare_clone_context_ms = int((time.perf_counter() - prepare_start) * 1000)
+
+        if prepared_context is not None and not instruct:
+            prepared_clone_used = True
+            warm_results = list(
+                _generate_prepared_icl_fn(
+                    _current_model,
+                    warmup_text,
+                    prepared_context,
+                    temperature=0.6,
+                    max_tokens=PREWARM_MAX_TOKENS,
+                )
+            )
+        else:
+            warm_kwargs = {
+                "text": warmup_text,
+                "ref_audio": clean_ref_audio,
+                "verbose": False,
+                "temperature": 0.6,
+                "max_tokens": PREWARM_MAX_TOKENS,
+            }
+            if resolved_ref_text:
+                warm_kwargs["ref_text"] = resolved_ref_text
+            if instruct:
+                warm_kwargs["instruct"] = instruct
+            warm_results = list(_current_model.generate(**warm_kwargs))
+    else:
+        raise ValueError(f"Unknown prewarm mode: {mode}")
+
+    if not warm_results:
+        raise RuntimeError("Prewarm produced no generation output")
+
+    return {
+        "normalize_reference": normalize_reference_ms,
+        "prepare_clone_context": prepare_clone_context_ms,
+        "generation": int((time.perf_counter() - generation_start) * 1000),
+        "prepared_clone_used": prepared_clone_used,
+        "clone_cache_hit": clone_cache_hit,
+    }
+
+
+def handle_prewarm_model(params, request_id=None):
+    """Optionally load and warm a model so the first user-facing request is cheaper."""
+    benchmark = bool(params.get("benchmark", False))
+    model_id = params.get("model_id")
+    model_path = params.get("model_path")
+    requested_mode = params.get("mode")
+    voice = params.get("voice")
+    instruct = params.get("instruct")
+    ref_audio = params.get("ref_audio")
+    ref_text = params.get("ref_text")
+
+    overall_start = time.perf_counter()
+    model_path, resolved_model_id = _resolve_model_request(model_id=model_id, model_path=model_path)
+    model_key = _model_identity_key(resolved_model_id, model_path)
+    loaded_model_changed = _current_model_path != model_path
+
+    load_result, resolved_model_id, model_path, _ = _load_model_request(
+        model_id=model_id,
+        model_path=model_path,
+        benchmark=benchmark,
+        request_id=None,
+    )
+    load_timings = load_result.get("benchmark", {}).get("timings_ms", {})
+    warm_mode = requested_mode or (MODELS.get(resolved_model_id, {}).get("mode") if resolved_model_id else None)
+    if not warm_mode:
+        current_model_contract = _current_model_contract()
+        warm_mode = current_model_contract["mode"] if current_model_contract else None
+    if not warm_mode:
+        raise RuntimeError("Could not determine which generation mode to prewarm")
+
+    already_prewarmed = model_key in _prewarmed_model_keys
+    prewarm_timings = {
+        "normalize_reference": 0,
+        "prepare_clone_context": 0,
+        "generation": 0,
+    }
+    prepared_clone_used = False
+    clone_cache_hit = None
+
+    if not already_prewarmed:
+        prewarm_timings = _run_model_prewarm(
+            warm_mode,
+            voice=voice,
+            instruct=instruct,
+            ref_audio=ref_audio,
+            ref_text=ref_text,
+        )
+        prepared_clone_used = prewarm_timings["prepared_clone_used"]
+        clone_cache_hit = prewarm_timings["clone_cache_hit"]
+        _prewarmed_model_keys.add(model_key)
+
+    result = {
+        "success": True,
+        "model_id": resolved_model_id,
+        "model_path": model_path,
+        "loaded_model_changed": loaded_model_changed,
+        "already_prewarmed": already_prewarmed,
+        "prewarm_applied": not already_prewarmed,
+    }
+    if benchmark:
+        result["benchmark"] = {
+            "mode": warm_mode,
+            "prepared_clone_used": prepared_clone_used,
+            "clone_cache_hit": clone_cache_hit,
+            "timings_ms": {
+                "load_model_total": load_timings.get("load_model_total", 0),
+                "normalize_reference": prewarm_timings["normalize_reference"],
+                "prepare_clone_context": prewarm_timings["prepare_clone_context"],
+                "generation": prewarm_timings["generation"],
+                "total_backend": int((time.perf_counter() - overall_start) * 1000),
+            },
         }
     return result
 
@@ -1436,6 +1672,7 @@ METHODS = {
     "ping": handle_ping,
     "init": handle_init,
     "load_model": handle_load_model,
+    "prewarm_model": handle_prewarm_model,
     "unload_model": handle_unload_model,
     "generate": handle_generate,
     "convert_audio": handle_convert_audio,
@@ -1469,7 +1706,7 @@ def process_request(line):
         return
 
     try:
-        if method in {"generate", "load_model"}:
+        if method in {"generate", "load_model", "prewarm_model"}:
             result = METHODS[method](params, request_id=req_id)
         else:
             result = METHODS[method](params)

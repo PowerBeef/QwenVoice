@@ -16,7 +16,7 @@ BUNDLED_PYTHON_PATH = ROOT_DIR / "Sources/Resources/python/bin/python3"
 
 
 class BackendServerHarness:
-    LONG_RUNNING_METHODS = {"load_model", "generate", "unload_model", "convert_audio"}
+    LONG_RUNNING_METHODS = {"load_model", "prewarm_model", "generate", "unload_model", "convert_audio"}
 
     def __init__(self, python_executable: str | None = None) -> None:
         self.python_executable = python_executable or default_python_executable()

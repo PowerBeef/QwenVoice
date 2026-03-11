@@ -144,6 +144,9 @@ struct CustomVoiceView: View {
                 .environmentObject(audioPlayer)
             }
         }
+        .task(id: idlePrewarmTaskID) {
+            await prewarmSelectedModelIfNeeded()
+        }
     }
 
     // MARK: - Model Unavailable Banner
@@ -270,6 +273,8 @@ struct CustomVoiceView: View {
     }
 
     private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
+        AppPerformanceSignposts.emit("Final File Ready")
+
         var persistenceError: Error?
         do {
             let saveStart = DispatchTime.now().uptimeNanoseconds
@@ -295,7 +300,11 @@ struct CustomVoiceView: View {
             )
         } else if AudioService.shouldAutoPlay {
             let autoplayStart = DispatchTime.now().uptimeNanoseconds
-            audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+            audioPlayer.playFile(
+                result.audioPath,
+                title: String(text.prefix(40)),
+                isAutoplay: true
+            )
             #if DEBUG
             print("[Performance][CustomVoiceView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
             #endif
@@ -308,6 +317,22 @@ struct CustomVoiceView: View {
 
     private func elapsedMs(since start: UInt64) -> Int {
         Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+    }
+
+    private var idlePrewarmTaskID: String {
+        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(workflowMode.rawValue)-\(isModelAvailable)"
+    }
+
+    private func prewarmSelectedModelIfNeeded() async {
+        guard let model = activeModel else { return }
+        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
+
+        await pythonBridge.prewarmModelIfNeeded(
+            modelID: model.id,
+            mode: activeMode,
+            voice: workflowMode == .presetSpeaker ? selectedSpeaker : nil,
+            instruct: workflowMode == .presetSpeaker ? emotion : nil
+        )
     }
 
     @ViewBuilder

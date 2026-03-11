@@ -29,6 +29,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var liveSessionDirectory: String?
     private var liveFinalFilePath: String?
     private var liveAutoplayEnabled = false
+    private var pendingFirstChunkInterval: AppPerformanceSignposts.Interval?
+    private var pendingAutoplaySignpost = false
     private var chunkObserver: NSObjectProtocol?
     private var timer: Timer?
 
@@ -57,6 +59,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     // MARK: - Playback
 
     func load(filePath: String, title: String = "") {
+        pendingAutoplaySignpost = false
         teardownLivePlayback(clearSession: true)
         stopFilePlayback(clearPlayer: true)
 
@@ -117,6 +120,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func dismiss() {
+        pendingAutoplaySignpost = false
         stop()
         teardownLivePlayback(clearSession: true)
         stopFilePlayback(clearPlayer: true)
@@ -145,8 +149,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         currentTime = targetTime
     }
 
-    func playFile(_ path: String, title: String = "") {
+    func playFile(_ path: String, title: String = "", isAutoplay: Bool = false) {
         load(filePath: path, title: title)
+        if isAutoplay {
+            pendingAutoplaySignpost = true
+        }
         guard player != nil else { return }
         play()
     }
@@ -155,12 +162,15 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         UITestAutomationSupport.recordAction("sidebar-preview-prepared", appSupportDir: AppPaths.appSupportDir)
         teardownLivePlayback(clearSession: true)
         stopFilePlayback(clearPlayer: true)
+        clearPendingFirstChunkInterval()
 
         playbackMode = .live
         liveSessionID = "pending-\(UUID().uuidString)"
         liveSessionDirectory = nil
         liveFinalFilePath = nil
         liveAutoplayEnabled = shouldAutoPlay
+        pendingAutoplaySignpost = shouldAutoPlay
+        pendingFirstChunkInterval = AppPerformanceSignposts.begin("Preview To First Chunk")
         liveBuffers = []
         liveFormat = nil
         currentTitle = title
@@ -287,7 +297,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         scheduleLiveBuffer(buffer)
 
         duration = cumulativeDuration ?? (duration + TimeInterval(buffer.frameLength) / fileFormat.sampleRate)
-        extractWaveform(from: url, replace: false)
+        if let pendingFirstChunkInterval {
+            AppPerformanceSignposts.end(pendingFirstChunkInterval)
+            AppPerformanceSignposts.emit("First Chunk Received")
+            self.pendingFirstChunkInterval = nil
+        }
 
         if liveAutoplayEnabled {
             attemptLivePlay()
@@ -315,6 +329,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             isPlaying = true
             playbackError = nil
             startTimer()
+            consumeAutoplaySignpostIfNeeded()
         } catch {
             playbackError = "Playback could not start."
         }
@@ -340,6 +355,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     private func handleLiveBufferPlaybackCompletion() {
         guard playbackMode == .live else { return }
+        if !liveBuffers.isEmpty {
+            liveBuffers.removeFirst()
+        }
 
         if liveFinalFilePath != nil,
            isPlaying == false {
@@ -367,6 +385,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         stopLivePlayback(resetCurrentTime: true)
         liveBuffers.removeAll()
         liveFormat = nil
+        clearPendingFirstChunkInterval()
 
         if clearSession {
             cleanupLiveSessionDirectory()
@@ -493,6 +512,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             isPlaying = true
             currentTime = player.currentTime
             startTimer()
+            consumeAutoplaySignpostIfNeeded()
             return
         }
 
@@ -516,9 +536,22 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             isPlaying = true
             currentTime = player.currentTime
             startTimer()
+            consumeAutoplaySignpostIfNeeded()
         } else {
             playbackError = "Playback could not start."
         }
+    }
+
+    private func clearPendingFirstChunkInterval() {
+        guard let pendingFirstChunkInterval else { return }
+        AppPerformanceSignposts.end(pendingFirstChunkInterval)
+        self.pendingFirstChunkInterval = nil
+    }
+
+    private func consumeAutoplaySignpostIfNeeded() {
+        guard pendingAutoplaySignpost else { return }
+        pendingAutoplaySignpost = false
+        AppPerformanceSignposts.emit("Autoplay Start")
     }
 
     private func clearLoadedAudio() {

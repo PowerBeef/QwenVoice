@@ -64,6 +64,7 @@ Shared current repo facts live in [`docs/reference/current-state.md`](docs/refer
 - `ping`
 - `init`
 - `load_model`
+- `prewarm_model`
 - `unload_model`
 - `generate`
 - `convert_audio`
@@ -133,7 +134,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
 - UI tests: 19 files / 45 test methods
 - Unit tests: 4 files / 17 test methods
-- Python backend tests: 15 `unittest` cases
+- Python backend tests: 16 `unittest` cases
 
 See [`docs/reference/testing.md`](docs/reference/testing.md) for the current test commands, suites, and caveats.
 

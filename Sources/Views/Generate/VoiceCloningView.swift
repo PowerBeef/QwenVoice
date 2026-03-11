@@ -158,6 +158,9 @@ struct VoiceCloningView: View {
             guard isReady else { return }
             Task { await loadSavedVoices() }
         }
+        .task(id: idlePrewarmTaskID) {
+            await prewarmCloneModelIfNeeded()
+        }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .clone,
@@ -360,6 +363,8 @@ struct VoiceCloningView: View {
     }
 
     private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
+        AppPerformanceSignposts.emit("Final File Ready")
+
         var persistenceError: Error?
         do {
             let saveStart = DispatchTime.now().uptimeNanoseconds
@@ -385,7 +390,11 @@ struct VoiceCloningView: View {
             )
         } else if AudioService.shouldAutoPlay {
             let autoplayStart = DispatchTime.now().uptimeNanoseconds
-            audioPlayer.playFile(result.audioPath, title: String(text.prefix(40)))
+            audioPlayer.playFile(
+                result.audioPath,
+                title: String(text.prefix(40)),
+                isAutoplay: true
+            )
             #if DEBUG
             print("[Performance][VoiceCloningView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
             #endif
@@ -398,6 +407,24 @@ struct VoiceCloningView: View {
 
     private func elapsedMs(since start: UInt64) -> Int {
         Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+    }
+
+    private var idlePrewarmTaskID: String {
+        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+    }
+
+    private func prewarmCloneModelIfNeeded() async {
+        guard let model = cloneModel else { return }
+        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
+        guard let refPath = referenceAudioPath else { return }
+
+        await pythonBridge.prewarmModelIfNeeded(
+            modelID: model.id,
+            mode: .clone,
+            instruct: PythonBridge.hasMeaningfulDeliveryInstruction(emotion) ? emotion : nil,
+            refAudio: refPath,
+            refText: referenceTranscript.isEmpty ? nil : referenceTranscript
+        )
     }
 
     // MARK: - Voice Selection

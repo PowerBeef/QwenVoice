@@ -42,6 +42,7 @@
 		7AE85CD4CE775DCE4BBE2285 /* SidebarPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28257C7A24F10591944339E5 /* SidebarPlayerTests.swift */; };
 		80B162A6B2D1D7E86252D5B3 /* qwenvoice_contract.json in Resources */ = {isa = PBXBuildFile; fileRef = 617BE72142511CD5043C341E /* qwenvoice_contract.json */; };
 		82477C8375221067B1B85F6B /* BatchGenerationRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B012C93D8AC77A60ED5A790 /* BatchGenerationRunnerTests.swift */; };
+		8612AA28117CF2FDD46D401A /* AppPerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */; };
 		8D072F75019EE703381F7FC7 /* UITestContractManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064999686F2333C3A66854B9 /* UITestContractManifest.swift */; };
 		8D6183A2086E6C2AD0F8E32A /* requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9A5EED3BA5A17E54C8B5E699 /* requirements.txt */; };
 		8E102AB05D280735BE3D2E36 /* FeatureMatrixUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11753C3344FD12F244321D0 /* FeatureMatrixUITestSupport.swift */; };
@@ -126,6 +127,7 @@
 		4B012C93D8AC77A60ED5A790 /* BatchGenerationRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationRunnerTests.swift; sourceTree = "<group>"; };
 		4F892B13197306152484F4B6 /* HistoryFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryFlowTests.swift; sourceTree = "<group>"; };
 		5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesViewTests.swift; sourceTree = "<group>"; };
+		50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPerformanceSignposts.swift; sourceTree = "<group>"; };
 		52130E590A4CD0ED7447B159 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
 		53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
 		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
@@ -323,6 +325,7 @@
 			isa = PBXGroup;
 			children = (
 				6436F73812606485A0589C35 /* AppPaths.swift */,
+				50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */,
 				006AC6BD98420562AC6A931C /* AudioService.swift */,
 				297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */,
 				0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */,
@@ -361,6 +364,7 @@
 				F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */,
 				652CF3434A19FF8823B9CCA2 /* WaveformView.swift */,
 				D4ED24544C9C26510DFCFE5C /* WindowChromeConfigurator.swift */,
+				C1FC88E299FA8685AA781D8D /* V2 */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -372,6 +376,13 @@
 				0D3C6777F2ABFE603D026E0D /* VoicesView.swift */,
 			);
 			path = Library;
+			sourceTree = "<group>";
+		};
+		C1FC88E299FA8685AA781D8D /* V2 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = V2;
 			sourceTree = "<group>";
 		};
 		D04B5DF95506C7083D60178B /* Sidebar */ = {
@@ -509,6 +520,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B1D83CB652CC883A7A1DDC65 /* AppPaths.swift in Sources */,
+				8612AA28117CF2FDD46D401A /* AppPerformanceSignposts.swift in Sources */,
 				B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */,
 				B25FDE21DB15AAB169D519EA /* AudioPlayerViewModel.swift in Sources */,
 				F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */,

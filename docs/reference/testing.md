@@ -12,7 +12,7 @@ Current inventory:
 
 - UI tests: 19 files / 45 test methods
 - Unit tests: 4 files / 17 test methods
-- Backend tests: 15 test cases
+- Backend tests: 16 test cases
 
 ## Primary Commands
 

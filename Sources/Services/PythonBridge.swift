@@ -59,12 +59,17 @@ final class PythonBridge: ObservableObject {
         var cumulativeDurationSeconds: Double
     }
 
+    private struct PendingRequest {
+        let continuation: CheckedContinuation<RPCValue, Error>
+        let reportsErrors: Bool
+    }
+
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var requestID = 0
-    private var pendingRequests: [Int: CheckedContinuation<RPCValue, Error>] = [:]
+    private var pendingRequests: [Int: PendingRequest] = [:]
     private var readBuffer = ""
     private var activeProgressRequestID: Int?
     private var activeProgressMethod: String?
@@ -73,6 +78,8 @@ final class PythonBridge: ObservableObject {
     private var sidebarStatusResetTask: Task<Void, Never>?
     private var recentStderrLines: [String] = []
     private var loadedModelID: String?
+    private var prewarmedModelIDs: Set<String> = []
+    private var prewarmingModelIDs: Set<String> = []
     private var stubRequestSeed = 10_000
 
     private static let maxStoredStderrLines = 20
@@ -86,6 +93,8 @@ final class PythonBridge: ObservableObject {
         guard process == nil else { return }
         recentStderrLines = []
         loadedModelID = nil
+        prewarmedModelIDs = []
+        prewarmingModelIDs = []
 
         if isStubBackendMode {
             lastError = nil
@@ -187,6 +196,8 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
+        prewarmedModelIDs = []
+        prewarmingModelIDs = []
         recentStderrLines = []
         clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
@@ -211,7 +222,7 @@ final class PythonBridge: ObservableObject {
     private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio"]
     private static let appStreamingInterval = 0.32
 
-    private static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
+    static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
         let trimmed = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed.caseInsensitiveCompare("Normal tone") != .orderedSame
     }
@@ -232,7 +243,9 @@ final class PythonBridge: ObservableObject {
     private func call(
         _ method: String,
         params: [String: RPCValue] = [:],
-        streamingContext: StreamingRequestContext? = nil
+        streamingContext: StreamingRequestContext? = nil,
+        reportsErrors: Bool = true,
+        resetLastError: Bool = true
     ) async throws -> RPCValue {
         guard process?.isRunning == true else {
             throw PythonBridgeError.processNotRunning
@@ -276,14 +289,19 @@ final class PythonBridge: ObservableObject {
                 activeGenerationSession = session
             }
         }
-        lastError = nil
+        if resetLastError {
+            lastError = nil
+        }
 
         let timeout = method == "ping" ? Self.pingTimeout : Self.defaultTimeout
 
         return try await withThrowingTaskGroup(of: RPCValue.self) { group in
             group.addTask { @MainActor in
                 try await withCheckedThrowingContinuation { continuation in
-                    self.pendingRequests[id] = continuation
+                    self.pendingRequests[id] = PendingRequest(
+                        continuation: continuation,
+                        reportsErrors: reportsErrors
+                    )
                     guard let pipe = self.stdinPipe else {
                         self.pendingRequests.removeValue(forKey: id)
                         continuation.resume(throwing: PythonBridgeError.processNotRunning)
@@ -327,9 +345,17 @@ final class PythonBridge: ObservableObject {
     private func callDict(
         _ method: String,
         params: [String: RPCValue] = [:],
-        streamingContext: StreamingRequestContext? = nil
+        streamingContext: StreamingRequestContext? = nil,
+        reportsErrors: Bool = true,
+        resetLastError: Bool = true
     ) async throws -> [String: RPCValue] {
-        let result = try await call(method, params: params, streamingContext: streamingContext)
+        let result = try await call(
+            method,
+            params: params,
+            streamingContext: streamingContext,
+            reportsErrors: reportsErrors,
+            resetLastError: resetLastError
+        )
         return result.objectValue ?? [:]
     }
 
@@ -409,6 +435,66 @@ final class PythonBridge: ObservableObject {
         loadedModelID = nil
     }
 
+    func prewarmModelIfNeeded(
+        modelID: String,
+        mode: GenerationMode,
+        voice: String? = nil,
+        instruct: String? = nil,
+        refAudio: String? = nil,
+        refText: String? = nil
+    ) async {
+        guard isReady else { return }
+        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard !isProcessing, activeGenerationSession == nil else { return }
+        guard loadedModelID != modelID else { return }
+        guard !prewarmedModelIDs.contains(modelID) else { return }
+        guard !prewarmingModelIDs.contains(modelID) else { return }
+        if mode == .clone && (refAudio?.isEmpty ?? true) {
+            return
+        }
+
+        prewarmingModelIDs.insert(modelID)
+        defer { prewarmingModelIDs.remove(modelID) }
+
+        if isStubBackendMode {
+            loadedModelID = modelID
+            prewarmedModelIDs.insert(modelID)
+            return
+        }
+
+        var params: [String: RPCValue] = [
+            "model_id": .string(modelID),
+            "mode": .string(mode.rawValue),
+        ]
+        if let voice, !voice.isEmpty {
+            params["voice"] = .string(voice)
+        }
+        if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
+            params["instruct"] = .string(instruct)
+        }
+        if let refAudio, !refAudio.isEmpty {
+            params["ref_audio"] = .string(refAudio)
+        }
+        if let refText, !refText.isEmpty {
+            params["ref_text"] = .string(refText)
+        }
+
+        do {
+            _ = try await callDict(
+                "prewarm_model",
+                params: params,
+                reportsErrors: false,
+                resetLastError: false
+            )
+            loadedModelID = modelID
+            prewarmedModelIDs.insert(modelID)
+        } catch {
+            #if DEBUG
+            print("[Performance][PythonBridge] prewarm_model_failed id=\(modelID) error=\(error.localizedDescription)")
+            #endif
+        }
+    }
+
     func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
         if isStubBackendMode {
             cancelAllPending(error: PythonBridgeError.cancelled)
@@ -418,6 +504,8 @@ final class PythonBridge: ObservableObject {
             activeGenerationSession = nil
             activeStreamingRequests.removeAll()
             loadedModelID = nil
+            prewarmedModelIDs = []
+            prewarmingModelIDs = []
             recentStderrLines = []
             lastError = nil
             clearActiveProgressTracking()
@@ -439,6 +527,8 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
+        prewarmedModelIDs = []
+        prewarmingModelIDs = []
         recentStderrLines = []
         lastError = nil
         clearActiveProgressTracking()
@@ -834,7 +924,12 @@ final class PythonBridge: ObservableObject {
 
         do {
             let loadStart = DispatchTime.now().uptimeNanoseconds
-            let loadResult = try await loadModel(id: modelID)
+            let loadResult: [String: RPCValue]
+            do {
+                let loadSignpost = AppPerformanceSignposts.begin("Model Load")
+                defer { AppPerformanceSignposts.end(loadSignpost) }
+                loadResult = try await loadModel(id: modelID)
+            }
             let loadElapsedMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart) / 1_000_000)
             #if DEBUG
             print("[Performance][PythonBridge] mode=\(mode.rawValue) load_model_client_wall_ms=\(loadElapsedMs) cached=\(loadResult["cached"]?.boolValue == true)")
@@ -1097,15 +1192,19 @@ final class PythonBridge: ObservableObject {
         }
 
         guard let id = response.id,
-              let continuation = pendingRequests.removeValue(forKey: id) else { return }
+              let pendingRequest = pendingRequests.removeValue(forKey: id) else { return }
 
         if let error = response.error {
-            lastError = error.message
-            continuation.resume(throwing: PythonBridgeError.rpcError(code: error.code, message: error.message))
+            if pendingRequest.reportsErrors {
+                lastError = error.message
+            }
+            pendingRequest.continuation.resume(
+                throwing: PythonBridgeError.rpcError(code: error.code, message: error.message)
+            )
         } else if let result = response.result {
-            continuation.resume(returning: result)
+            pendingRequest.continuation.resume(returning: result)
         } else {
-            continuation.resume(returning: .null)
+            pendingRequest.continuation.resume(returning: .null)
         }
     }
 
@@ -1171,8 +1270,8 @@ final class PythonBridge: ObservableObject {
     }
 
     private func cancelAllPending(error: Error) {
-        for (_, continuation) in pendingRequests {
-            continuation.resume(throwing: error)
+        for (_, pendingRequest) in pendingRequests {
+            pendingRequest.continuation.resume(throwing: error)
         }
         pendingRequests.removeAll()
     }

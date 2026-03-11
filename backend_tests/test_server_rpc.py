@@ -113,6 +113,39 @@ class ServerRPCTests(unittest.TestCase):
         self.assertFalse(response["result"]["supports_prepared_clone"])
         self.assertFalse(response["result"]["supports_clone_streaming"])
 
+    def test_prewarm_model_marks_model_as_prepared_once_per_process(self) -> None:
+        if not model_is_installed("pro_custom"):
+            self.skipTest("Custom Voice model is not installed locally")
+
+        first = self.harness.send_request(
+            "prewarm_model",
+            {
+                "model_id": "pro_custom",
+                "mode": "custom",
+                "benchmark": True,
+            },
+        )
+
+        self.assertTrue(first["result"]["success"])
+        self.assertEqual(first["result"]["model_id"], "pro_custom")
+        self.assertTrue(first["result"]["prewarm_applied"])
+        self.assertFalse(first["result"]["already_prewarmed"])
+        self.assertIn("generation", first["result"]["benchmark"]["timings_ms"])
+
+        second = self.harness.send_request(
+            "prewarm_model",
+            {
+                "model_id": "pro_custom",
+                "mode": "custom",
+                "benchmark": True,
+            },
+        )
+
+        self.assertTrue(second["result"]["success"])
+        self.assertEqual(second["result"]["model_id"], "pro_custom")
+        self.assertFalse(second["result"]["prewarm_applied"])
+        self.assertTrue(second["result"]["already_prewarmed"])
+
     def test_streaming_generate_emits_chunk_notifications_and_metrics_for_custom_model(self) -> None:
         if not model_is_installed("pro_custom"):
             self.skipTest("Custom Voice model is not installed locally")

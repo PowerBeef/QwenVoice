@@ -54,6 +54,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 - The shipping app exposes live streaming preview for single-generation flows, but not temperature/max-token controls.
 - Batch generation remains sequential/non-streaming in the GUI; backend advanced sampling and internal batch paths remain benchmark/internal only.
 - The backend MLX cache policy defaults to `adaptive`; use `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics.
+- Interactive latency measurement now uses Instruments signposts around model load, first streamed chunk, final file readiness, and autoplay start. Idle model warm-up uses a separate `prewarm_model` RPC.
 - The repo now has UI tests, Swift unit tests, and Python backend tests.
 - GitHub Actions now uses the dual-release workflow only.
 - Local release packaging and GitHub release artifact names differ; do not assume every DMG is named `QwenVoice.dmg`.

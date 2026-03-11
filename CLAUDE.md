@@ -51,9 +51,11 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
 ### Swift/Python Communication
 
-`PythonBridge.swift` spawns `server.py` as a subprocess and communicates via JSON-RPC 2.0 over stdin/stdout. Key RPC methods: `ping`, `init`, `load_model`, `unload_model`, `generate`, `convert_audio`, `list_voices`, `enroll_voice`, `delete_voice`, `get_model_info`, `get_speakers`.
+`PythonBridge.swift` spawns `server.py` as a subprocess and communicates via JSON-RPC 2.0 over stdin/stdout. Key RPC methods: `ping`, `init`, `load_model`, `prewarm_model`, `unload_model`, `generate`, `convert_audio`, `list_voices`, `enroll_voice`, `delete_voice`, `get_model_info`, `get_speakers`.
 
 **Streaming protocol:** Single-generation flows use live streaming. The backend emits `generation_chunk` notifications with chunk WAV files written to a session directory. `AudioPlayerViewModel` picks up chunks via `.generationChunkReceived` notifications for real-time playback. Batch generation remains sequential and non-streaming.
+
+**Interactive latency tooling:** The app emits Instruments-native signposts around model load, first streamed chunk, final file readiness, and autoplay start. Idle model warm-up now uses a separate `prewarm_model` RPC instead of hiding warm-up inside `load_model`.
 
 **Progress notifications:** The backend sends `progress` notifications with `percent` and `message` fields. `PythonBridge` maps these to UI phases: `loadingModel` (0-15%), `preparing` (15-30%), `generating` (30-95%), `saving` (95-100%).
 

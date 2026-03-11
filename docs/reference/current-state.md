@@ -33,6 +33,8 @@ Batch generation remains sequential and non-streaming in the shipped GUI. Advanc
 
 The backend MLX cache policy currently defaults to `adaptive` via `QWENVOICE_CACHE_POLICY`. Set `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics or regression comparison runs.
 
+Interactive latency instrumentation now uses Instruments-native signposts around model load, first streamed chunk, final file readiness, and autoplay start. Idle model warm-up is handled through a dedicated `prewarm_model` backend RPC instead of being folded into `load_model`.
+
 ## Models, Speakers, and Contract Ownership
 
 Static TTS contract data lives in `Sources/Resources/qwenvoice_contract.json`.
@@ -112,7 +114,7 @@ Current tracked test coverage:
 
 - UI tests: 19 `*Tests.swift` files / 45 test methods in `QwenVoiceUITests/`
 - Unit tests: 4 `*Tests.swift` files / 17 test methods in `QwenVoiceTests/`
-- Python backend tests: 15 `unittest` cases under `backend_tests/`
+- Python backend tests: 16 `unittest` cases under `backend_tests/`
 
 Primary commands:
 
