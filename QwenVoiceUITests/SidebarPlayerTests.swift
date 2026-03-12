@@ -19,7 +19,6 @@ final class SidebarPlayerTests: FeatureMatrixUITestBase {
         generate.click()
 
         XCTAssertTrue(waitForElement("sidebarPlayer_bar", timeout: 10).exists)
-        XCTAssertTrue(waitForElement("sidebarPlayer_liveBadge", timeout: 10).exists)
         XCTAssertTrue(waitForElement("sidebarPlayer_waveform", timeout: 5).exists)
 
         let playPause = waitForElement("sidebarPlayer_playPause", timeout: 5)

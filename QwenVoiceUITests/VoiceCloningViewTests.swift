@@ -12,7 +12,6 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
         _ = waitForElement("voiceCloning_importButton", type: .button)
         _ = waitForElement("voiceCloning_transcriptField", type: .textField)
         _ = waitForElement("delivery_tonePicker", type: .button)
-        _ = waitForElement("delivery_speedPicker")
         _ = waitForElement("textInput_textEditor")
         _ = waitForElement("textInput_generateButton", type: .button)
         _ = waitForElement("textInput_batchButton", type: .button)

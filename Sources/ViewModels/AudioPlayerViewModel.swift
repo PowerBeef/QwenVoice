@@ -42,7 +42,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     var progress: Double {
         guard duration > 0 else { return 0 }
-        return currentTime / duration
+        return min(max(currentTime / duration, 0), 1)
     }
 
     override init() {
@@ -359,9 +359,21 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             liveBuffers.removeFirst()
         }
 
-        if liveFinalFilePath != nil,
-           isPlaying == false {
-            switchToFinalFilePlayback(preserveCurrentTime: duration, autoPlay: false)
+        if liveBuffers.isEmpty {
+            finishLivePlaybackAfterDrainingBuffers()
+        }
+    }
+
+    private func finishLivePlaybackAfterDrainingBuffers() {
+        let completedTime = duration > 0 ? duration : currentTime
+        stopLivePlayback(resetCurrentTime: false)
+        currentTime = completedTime
+
+        if liveFinalFilePath != nil {
+            switchToFinalFilePlayback(
+                preserveCurrentTime: completedTime,
+                autoPlay: false
+            )
         }
     }
 
@@ -582,7 +594,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         switch playbackMode {
         case .file:
             guard let player else { return }
-            currentTime = player.currentTime
+            currentTime = duration > 0 ? min(player.currentTime, duration) : player.currentTime
             if !player.isPlaying {
                 isPlaying = false
                 stopTimer()
@@ -592,7 +604,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             if let lastRenderTime = livePlayerNode.lastRenderTime,
                let playerTime = livePlayerNode.playerTime(forNodeTime: lastRenderTime),
                playerTime.sampleRate > 0 {
-                currentTime = Double(playerTime.sampleTime) / playerTime.sampleRate
+                let renderedTime = Double(playerTime.sampleTime) / playerTime.sampleRate
+                currentTime = duration > 0 ? min(renderedTime, duration) : renderedTime
             }
 
             if !livePlayerNode.isPlaying {

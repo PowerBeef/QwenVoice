@@ -559,7 +559,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voice: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -579,7 +578,6 @@ final class PythonBridge: ObservableObject {
             "text": .string(text),
             "voice": .string(voice),
             "instruct": .string(emotion),
-            "speed": .double(speed),
             "output_path": .string(outputPath),
         ]
         if stream {
@@ -595,7 +593,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voiceDescription: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -614,7 +611,6 @@ final class PythonBridge: ObservableObject {
             "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
             "instruct": .string(Self.designInstruction(voiceDescription: voiceDescription, emotion: emotion)),
-            "speed": .double(speed),
             "output_path": .string(outputPath),
         ]
         if stream {
@@ -631,7 +627,6 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
-        speed: Double,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -658,9 +653,6 @@ final class PythonBridge: ObservableObject {
         if Self.hasMeaningfulDeliveryInstruction(emotion) {
             params["instruct"] = .string(emotion)
         }
-        if speed != 1.0 {
-            params["speed"] = .double(speed)
-        }
         if stream {
             params["stream"] = .bool(true)
             params["streaming_interval"] = .double(Self.appStreamingInterval)
@@ -674,7 +666,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voice: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -689,7 +680,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 voice: voice,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: false
             )
@@ -701,7 +691,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voice: String,
         emotion: String,
-        speed: Double,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -714,7 +703,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 voice: voice,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(
@@ -730,7 +718,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voiceDescription: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -745,7 +732,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 voiceDescription: voiceDescription,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: false
             )
@@ -757,7 +743,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         voiceDescription: String,
         emotion: String,
-        speed: Double,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -770,7 +755,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 voiceDescription: voiceDescription,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(
@@ -787,7 +771,6 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -803,7 +786,6 @@ final class PythonBridge: ObservableObject {
                 refAudio: refAudio,
                 refText: refText,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: false
             )
@@ -816,7 +798,6 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
-        speed: Double,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -830,7 +811,6 @@ final class PythonBridge: ObservableObject {
                 refAudio: refAudio,
                 refText: refText,
                 emotion: emotion,
-                speed: speed,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(

@@ -8,7 +8,6 @@ struct CustomVoiceView: View {
     @State private var selectedSpeaker = TTSModel.defaultSpeaker
     @State private var voiceDescription = ""
     @State private var emotion = "Normal tone"
-    @State private var speed: Double = 1.0
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
@@ -89,7 +88,6 @@ struct CustomVoiceView: View {
 
                     DeliveryControlsView(
                         emotion: $emotion,
-                        speed: $speed,
                         accentColor: AppTheme.customVoice
                     )
                     .accessibilityElement(children: .contain)
@@ -128,7 +126,6 @@ struct CustomVoiceView: View {
                 BatchGenerationSheet(
                     mode: .design,
                     emotion: emotion,
-                    speed: speed,
                     voiceDescription: voiceDescription
                 )
                 .environmentObject(pythonBridge)
@@ -137,8 +134,7 @@ struct CustomVoiceView: View {
                 BatchGenerationSheet(
                     mode: .custom,
                     voice: selectedSpeaker,
-                    emotion: emotion,
-                    speed: speed
+                    emotion: emotion
                 )
                 .environmentObject(pythonBridge)
                 .environmentObject(audioPlayer)
@@ -213,7 +209,6 @@ struct CustomVoiceView: View {
                     title: String(text.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
-
                 let result: GenerationResult
                 var generation: Generation
 
@@ -223,7 +218,6 @@ struct CustomVoiceView: View {
                         text: text,
                         voiceDescription: voiceDescription,
                         emotion: emotion,
-                        speed: speed,
                         outputPath: outputPath
                     )
 
@@ -233,7 +227,7 @@ struct CustomVoiceView: View {
                         modelTier: model.tier,
                         voice: voiceDescription,
                         emotion: emotion,
-                        speed: speed,
+                        speed: nil,
                         audioPath: result.audioPath,
                         duration: result.durationSeconds,
                         createdAt: Date()
@@ -244,7 +238,6 @@ struct CustomVoiceView: View {
                         text: text,
                         voice: selectedSpeaker,
                         emotion: emotion,
-                        speed: speed,
                         outputPath: outputPath
                     )
 
@@ -254,7 +247,7 @@ struct CustomVoiceView: View {
                         modelTier: model.tier,
                         voice: selectedSpeaker,
                         emotion: emotion,
-                        speed: speed,
+                        speed: nil,
                         audioPath: result.audioPath,
                         duration: result.durationSeconds,
                         createdAt: Date()

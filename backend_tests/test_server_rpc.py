@@ -162,7 +162,7 @@ class ServerRPCTests(unittest.TestCase):
                 "text": "Streaming backend test.",
                 "voice": load_contract()["defaultSpeaker"],
                 "instruct": "Normal tone",
-                "speed": 1.0,
+                "speed": 1.75,
                 "stream": True,
                 "streaming_interval": 0.32,
                 "output_path": str(output_path),

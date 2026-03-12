@@ -23,6 +23,7 @@ final class VoiceDesignFlowTests: FeatureMatrixUITestBase {
         let generate = waitForElementToBecomeEnabled("textInput_generateButton", type: .button, timeout: 5)
         generate.click()
         XCTAssertTrue(waitForElement("sidebarPlayer_bar", timeout: 10).exists)
+        XCTAssertTrue(waitForElement("sidebarPlayer_liveBadge", timeout: 10).exists)
 
         ensureOnScreen(.history, timeout: 10)
         XCTAssertTrue(

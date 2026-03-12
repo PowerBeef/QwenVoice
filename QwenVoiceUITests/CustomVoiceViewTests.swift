@@ -16,7 +16,6 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
             _ = waitForElement("customVoice_speaker_\(speaker)", type: .button)
         }
         _ = waitForElement("delivery_tonePicker", type: .button)
-        _ = waitForElement("delivery_speedPicker")
         _ = waitForElement("textInput_textEditor")
         _ = waitForElement("textInput_generateButton", type: .button)
         _ = waitForElement("textInput_batchButton", type: .button)
@@ -56,7 +55,6 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         let designMode = waitForElement("customVoice_mode_design", type: .button)
         designMode.click()
         _ = waitForElement("customVoice_voiceDescriptionField", type: .textField)
-        _ = waitForElement("delivery_speedPicker", timeout: 5)
 
         let presetMode = waitForElement("customVoice_mode_preset", type: .button)
         presetMode.click()

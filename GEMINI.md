@@ -51,7 +51,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 
 ## Current Repo Reality
 
-- The shipping app exposes live streaming preview for single-generation flows, but not temperature/max-token controls.
+- The shipping app exposes live streaming preview for single-generation flows. The GUI still does not expose temperature/max-token controls.
 - Batch generation remains sequential/non-streaming in the GUI; backend advanced sampling and internal batch paths remain benchmark/internal only.
 - The backend MLX cache policy defaults to `adaptive`; use `QWENVOICE_CACHE_POLICY=always` only for conservative diagnostics.
 - Interactive latency measurement now uses Instruments signposts around model load, first streamed chunk, final file readiness, and autoplay start. Idle model warm-up uses a separate `prewarm_model` RPC.

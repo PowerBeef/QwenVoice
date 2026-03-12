@@ -10,7 +10,6 @@ struct BatchGenerationSheet: View {
     let mode: GenerationMode
     var voice: String?
     var emotion: String?
-    var speed: Double?
     var voiceDescription: String?
     var refAudio: String?
     var refText: String?
@@ -26,9 +25,6 @@ struct BatchGenerationSheet: View {
         var summary: [String] = []
         if let emotion, !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             summary.append("Tone: \(emotion)")
-        }
-        if let speed {
-            summary.append(String(format: "Speed: %.1fx", speed))
         }
         return summary
     }
@@ -161,7 +157,6 @@ struct BatchGenerationSheet: View {
                     lines: lines,
                     voice: voice,
                     emotion: emotion,
-                    speed: speed,
                     voiceDescription: voiceDescription,
                     refAudio: refAudio,
                     refText: refText

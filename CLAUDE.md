@@ -119,5 +119,5 @@ Sources/
 - Both `enroll_voice` and `delete_voice` sanitize the name param in `server.py`.
 - App is unsigned — end users need `xattr -cr` after install.
 - Clone context cache is cleared on model load/unload.
-- Speed patch import: local file → wheel module → silent fallback to standard generation.
+- Runtime helper import: local file → wheel module → silent fallback to standard generation.
 - GitHub has only two workflows: `project-inputs.yml` (validation) and `release-dual-ui.yml` (dual DMG builds for macos26/macos15).

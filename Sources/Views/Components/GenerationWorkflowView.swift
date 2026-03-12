@@ -174,64 +174,13 @@ struct StudioSectionCard<Content: View>: View {
     }
 }
 
-struct SpeedControlView: View {
-    @Binding var speed: Double
-    var color: Color = AppTheme.accent
-
-    private var clampedSpeed: Double {
-        min(max(speed, 0.5), 2.0)
-    }
-
-    private var displayValue: String {
-        String(format: "%.1fx", clampedSpeed)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Slider(value: $speed, in: 0.5 ... 2.0, step: 0.05)
-                .tint(color)
-                .accessibilityIdentifier("delivery_speedSlider")
-
-            HStack {
-                Text("0.5")
-                Spacer()
-                Text("2.0")
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("delivery_speedPicker")
-        .accessibilityValue(displayValue)
-    }
-}
-
 struct DeliveryControlsView: View {
     @Binding var emotion: String
-    @Binding var speed: Double
     var accentColor: Color = AppTheme.accent
     var accessibilityPrefix: String = "delivery"
 
-    private var speedValueText: String {
-        String(format: "%.1fx", min(max(speed, 0.5), 2.0))
-    }
-
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: LayoutConstants.compactGap) {
-                toneCard
-                    .frame(maxWidth: .infinity)
-                    .layoutPriority(1)
-
-                speedCard
-                    .frame(width: 236)
-            }
-
-            VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
-                toneCard
-                speedCard
-            }
-        }
+        toneCard
     }
 
     private var toneCard: some View {
@@ -250,15 +199,4 @@ struct DeliveryControlsView: View {
         }
     }
 
-    private var speedCard: some View {
-        StudioSectionCard(
-            title: "Speed",
-            iconName: "scribble.variable",
-            accentColor: accentColor,
-            trailingText: speedValueText,
-            accessibilityIdentifier: "\(accessibilityPrefix)_speedCard"
-        ) {
-            SpeedControlView(speed: $speed, color: accentColor)
-        }
-    }
 }

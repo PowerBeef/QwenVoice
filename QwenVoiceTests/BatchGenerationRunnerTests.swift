@@ -119,7 +119,6 @@ final class BatchGenerationRunnerTests: XCTestCase {
             lines: lines,
             voice: TTSModel.defaultSpeaker,
             emotion: "Normal tone",
-            speed: 1.0,
             voiceDescription: nil,
             refAudio: nil,
             refText: nil
@@ -169,7 +168,6 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         text: String,
         voice: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -182,7 +180,6 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         text: String,
         voiceDescription: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -196,7 +193,6 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         refAudio: String,
         refText: String?,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?

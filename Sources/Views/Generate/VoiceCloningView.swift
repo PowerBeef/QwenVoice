@@ -8,7 +8,6 @@ struct VoiceCloningView: View {
     @State private var referenceAudioPath: String?
     @State private var referenceTranscript = ""
     @State private var emotion = "Normal tone"
-    @State private var speed: Double = 1.0
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
@@ -105,7 +104,6 @@ struct VoiceCloningView: View {
 
                     DeliveryControlsView(
                         emotion: $emotion,
-                        speed: $speed,
                         accentColor: AppTheme.voiceCloning
                     )
                     .accessibilityElement(children: .contain)
@@ -165,7 +163,6 @@ struct VoiceCloningView: View {
             BatchGenerationSheet(
                 mode: .clone,
                 emotion: emotion,
-                speed: speed,
                 refAudio: referenceAudioPath,
                 refText: referenceTranscript.isEmpty ? nil : referenceTranscript
             )
@@ -325,8 +322,9 @@ struct VoiceCloningView: View {
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
+                let title = String(text.prefix(40))
                 audioPlayer.prepareStreamingPreview(
-                    title: String(text.prefix(40)),
+                    title: title,
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
                 let result = try await pythonBridge.generateCloneStreamingFlow(
@@ -335,7 +333,6 @@ struct VoiceCloningView: View {
                     refAudio: refPath,
                     refText: referenceTranscript.isEmpty ? nil : referenceTranscript,
                     emotion: emotion,
-                    speed: speed,
                     outputPath: outputPath
                 )
 
@@ -346,7 +343,7 @@ struct VoiceCloningView: View {
                     modelTier: model.tier,
                     voice: voiceName,
                     emotion: emotion,
-                    speed: speed,
+                    speed: nil,
                     audioPath: result.audioPath,
                     duration: result.durationSeconds,
                     createdAt: Date()

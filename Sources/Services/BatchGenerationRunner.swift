@@ -8,7 +8,6 @@ protocol BatchGenerationBridging: AnyObject {
         text: String,
         voice: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -19,7 +18,6 @@ protocol BatchGenerationBridging: AnyObject {
         text: String,
         voiceDescription: String,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -31,7 +29,6 @@ protocol BatchGenerationBridging: AnyObject {
         refAudio: String,
         refText: String?,
         emotion: String,
-        speed: Double,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -54,7 +51,6 @@ struct BatchGenerationRequest {
     let lines: [String]
     let voice: String?
     let emotion: String?
-    let speed: Double?
     let voiceDescription: String?
     let refAudio: String?
     let refText: String?
@@ -98,7 +94,7 @@ struct BatchGenerationRequest {
             modelTier: model.tier,
             voice: voiceName,
             emotion: emotion,
-            speed: speed,
+            speed: nil,
             audioPath: result.audioPath,
             duration: result.durationSeconds,
             createdAt: Date()
@@ -326,7 +322,6 @@ final class BatchGenerationRunner {
                 text: line,
                 voice: request.voice ?? TTSModel.defaultSpeaker,
                 emotion: request.emotion ?? "Normal tone",
-                speed: request.speed ?? 1.0,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal
@@ -337,7 +332,6 @@ final class BatchGenerationRunner {
                 text: line,
                 voiceDescription: request.voiceDescription ?? "",
                 emotion: request.emotion ?? "Normal tone",
-                speed: request.speed ?? 1.0,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal
@@ -349,7 +343,6 @@ final class BatchGenerationRunner {
                 refAudio: request.refAudio ?? "",
                 refText: request.refText,
                 emotion: request.emotion ?? "Normal tone",
-                speed: request.speed ?? 1.0,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal

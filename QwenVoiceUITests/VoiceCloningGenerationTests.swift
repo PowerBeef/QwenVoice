@@ -21,6 +21,7 @@ final class VoiceCloningGenerationTests: FeatureMatrixUITestBase {
         generate.click()
 
         XCTAssertTrue(waitForElement("sidebarPlayer_bar", timeout: 10).exists)
+        XCTAssertTrue(waitForElement("sidebarPlayer_liveBadge", timeout: 10).exists)
         XCTAssertTrue(
             app.staticTexts["fixture_voice.wav"].waitForExistence(timeout: 5)
                 || app.textFields["voiceCloning_transcriptField"].value as? String == "Fixture transcript"
@@ -45,5 +46,6 @@ final class VoiceCloningGenerationTests: FeatureMatrixUITestBase {
         generate.click()
 
         XCTAssertTrue(waitForElement("sidebarPlayer_bar", timeout: 10).exists)
+        XCTAssertTrue(waitForElement("sidebarPlayer_liveBadge", timeout: 10).exists)
     }
 }

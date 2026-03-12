@@ -1,7 +1,7 @@
 This repository vendors `mlx-audio` as a repacked wheel rather than rebuilding
 the full source tree.
 
-The QwenVoice-specific patch consists of injecting:
+The QwenVoice-specific runtime helper consists of injecting:
 
 - `mlx_audio/qwenvoice_speed_patch.py`
 
