@@ -2,7 +2,6 @@ import SwiftUI
 import AppKit
 
 extension Notification.Name {
-    static let navigateToModels = Notification.Name("navigateToModels")
     static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
     static let generationSaved = Notification.Name("generationSaved")
     static let generationChunkReceived = Notification.Name("generationChunkReceived")
@@ -35,6 +34,23 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .models:
             return "screen_models"
         }
+    }
+
+    var generationMode: GenerationMode? {
+        switch self {
+        case .customVoice:
+            return .custom
+        case .voiceDesign:
+            return .design
+        case .voiceCloning:
+            return .clone
+        case .history, .voices, .models:
+            return nil
+        }
+    }
+
+    var requiredModel: TTSModel? {
+        generationMode.flatMap(TTSModel.model(for:))
     }
 
     var iconName: String {
@@ -87,16 +103,51 @@ enum SidebarItem: String, CaseIterable, Identifiable {
             }
         }
     }
+
+    static var generationItems: [SidebarItem] {
+        [.customVoice, .voiceDesign, .voiceCloning]
+    }
+
+    @MainActor
+    func isAvailable(using modelManager: ModelManagerViewModel) -> Bool {
+        guard let requiredModel else { return true }
+        return modelManager.isAvailable(requiredModel)
+    }
+
+    static func defaultInitialSelection(
+        launchOverride: SidebarItem? = AppLaunchConfiguration.current.initialSidebarItem,
+        modelsDirectory: URL = QwenVoiceApp.modelsDir
+    ) -> SidebarItem {
+        if let launchOverride {
+            return launchOverride
+        }
+
+        if let firstAvailableGenerationItem = generationItems.first(where: { item in
+            guard let requiredModel = item.requiredModel else { return false }
+            return requiredModel.isAvailable(in: modelsDirectory)
+        }) {
+            return firstAvailableGenerationItem
+        }
+
+        return .models
+    }
 }
 
+@MainActor
 struct ContentView: View {
+    @EnvironmentObject private var modelManager: ModelManagerViewModel
+
+    private let launchSidebarOverride: SidebarItem?
+
     @State private var selectedItem: SidebarItem?
     @State private var activatedItems: Set<SidebarItem>
+    @State private var protectedLaunchOverride: SidebarItem?
     @State private var pendingHighlightedModelID: String?
     @State private var historySearchText = ""
     @State private var historySortOrder: HistorySortOrder = .newest
     @State private var voicesEnrollRequestID: UUID?
     @State private var voiceDesignVoiceDescription = ""
+    @State private var didCompleteInitialAvailabilityRefresh = false
 
     private var currentWindowTitle: String {
         selectedItem?.rawValue ?? "QwenVoice"
@@ -106,15 +157,48 @@ struct ContentView: View {
         selectedItem?.screenAccessibilityID ?? "screen_customVoice"
     }
 
+    private var disabledSidebarItems: Set<SidebarItem> {
+        Set(SidebarItem.generationItems.filter { !$0.isAvailable(using: modelManager) })
+    }
+
+    private var currentDisabledSidebarIdentifiers: String {
+        let identifiers = disabledSidebarItems.map(\.accessibilityID).sorted()
+        return identifiers.isEmpty ? "none" : identifiers.joined(separator: ",")
+    }
+
+    private var isPreservingLaunchOverrideSelection: Bool {
+        guard let protectedLaunchOverride else { return false }
+        return selectedItem == protectedLaunchOverride
+    }
+
+    private var sidebarSelectionBinding: Binding<SidebarItem?> {
+        Binding(
+            get: { selectedItem },
+            set: { newValue in
+                guard let newValue else { return }
+                selectSidebarItemIfEnabled(newValue)
+            }
+        )
+    }
+
     init() {
-        let initialSelection = AppLaunchConfiguration.current.initialSidebarItem ?? .customVoice
+        let launchSidebarOverride = AppLaunchConfiguration.current.initialSidebarItem
+        self.launchSidebarOverride = launchSidebarOverride
+
+        let initialSelection = SidebarItem.defaultInitialSelection(
+            launchOverride: launchSidebarOverride
+        )
         _selectedItem = State(initialValue: initialSelection)
         _activatedItems = State(initialValue: [initialSelection])
+        _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
     }
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(selection: $selectedItem)
+            SidebarView(
+                selection: sidebarSelectionBinding,
+                disabledItems: disabledSidebarItems
+            )
                 .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
         } detail: {
             detailContent
@@ -129,21 +213,33 @@ struct ContentView: View {
                 activatedItems.insert(selectedItem)
             }
         }
+        .task {
+            await modelManager.refresh()
+            didCompleteInitialAvailabilityRefresh = true
+            if !isPreservingLaunchOverrideSelection {
+                reconcileSelectionWithAvailability()
+            }
+        }
         .onChange(of: selectedItem) { _, newValue in
             if let newValue {
                 activatedItems.insert(newValue)
             }
+
+            if let protectedLaunchOverride, newValue != protectedLaunchOverride {
+                self.protectedLaunchOverride = nil
+            }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .navigateToModels)) { notification in
-            pendingHighlightedModelID = notification.object as? String
-            selectedItem = .models
+        .onChange(of: modelManager.statuses) { _, _ in
+            guard didCompleteInitialAvailabilityRefresh else { return }
+            guard !isPreservingLaunchOverrideSelection else { return }
+            reconcileSelectionWithAvailability()
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
             if let item = notification.object as? SidebarItem {
-                selectedItem = item
+                selectSidebarItemIfEnabled(item)
             } else if let screenID = notification.object as? String,
                       let item = SidebarItem(testScreenID: screenID) {
-                selectedItem = item
+                selectSidebarItemIfEnabled(item)
             }
         }
     }
@@ -238,6 +334,10 @@ struct ContentView: View {
                 value: currentActiveScreenID,
                 identifier: "mainWindow_activeScreen"
             )
+            hiddenMarker(
+                value: currentDisabledSidebarIdentifiers,
+                identifier: "mainWindow_disabledSidebarItems"
+            )
         }
     }
 
@@ -251,6 +351,24 @@ struct ContentView: View {
             .accessibilityLabel(value)
             .accessibilityValue(value)
             .accessibilityIdentifier(identifier)
+    }
+
+    private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
+        guard !disabledSidebarItems.contains(item) else { return }
+        selectedItem = item
+    }
+
+    private func reconcileSelectionWithAvailability() {
+        guard let selectedItem, disabledSidebarItems.contains(selectedItem) else {
+            return
+        }
+
+        if let modelID = selectedItem.requiredModel?.id {
+            pendingHighlightedModelID = modelID
+        }
+
+        self.selectedItem = .models
+        activatedItems.insert(.models)
     }
 }
 

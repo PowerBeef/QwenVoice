@@ -3,22 +3,31 @@ import XCTest
 final class CustomVoiceViewTests: QwenVoiceUITestBase {
     override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
     override class var initialScreen: UITestScreen? { .customVoice }
+    override class var additionalLaunchEnvironment: [String: String] {
+        ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
 
     func testCustomVoiceScreenCoreLayout() {
         _ = waitForScreen(.customVoice)
         _ = waitForMainWindowTitle("Custom Voice")
-        let configuration = waitForElement("customVoice_configuration")
-        let script = waitForElement("customVoice_script")
-        XCTAssertLessThan(
-            configuration.frame.minY,
-            script.frame.minY,
-            "Configuration should be the first visible content section on Custom Voice"
-        )
-        _ = waitForCustomVoiceSpeakerPicker()
+        let speakerPicker = waitForCustomVoiceSpeakerPicker()
         _ = waitForElement("delivery_tonePicker")
-        _ = waitForElement("textInput_textEditor")
-        _ = waitForElement("textInput_generateButton", type: .button)
-        _ = waitForElement("textInput_batchButton", type: .button)
+        let editor = waitForElement("textInput_textEditor")
+        XCTAssertLessThan(
+            speakerPicker.frame.minY,
+            editor.frame.minY,
+            "Configuration controls should remain above the Script editor on Custom Voice"
+        )
+        let generateButton = waitForElement("textInput_generateButton", type: .button)
+        let batchButton = waitForElement("textInput_batchButton", type: .button)
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
+        XCTAssertGreaterThan(
+            editor.frame.height,
+            150,
+            "Custom Voice should let the script editor absorb spare vertical space"
+        )
         XCTAssertFalse(
             app.descendants(matching: .any).matching(identifier: "customVoice_modeSwitch").firstMatch.waitForExistence(timeout: 1),
             "The legacy embedded mode switch should no longer be present on Custom Voice"
@@ -95,8 +104,8 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         XCTAssertEqual(toneField.value as? String, "Bright and energetic")
 
         let editor = waitForElement("textInput_textEditor")
-        let modelBanner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
-        if modelBanner.waitForExistence(timeout: 1) {
+        if isSidebarItemDisabled(.customVoice) {
+            _ = waitForSidebarItemState(.customVoice, disabled: true, timeout: 2)
             XCTAssertFalse(editor.isEnabled, "Text input should be disabled when the active model is unavailable")
         } else {
             editor.click()
@@ -348,15 +357,27 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
     func testModelMissingNavigationPath() {
         _ = waitForScreen(.customVoice)
 
-        let banner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
-        guard banner.waitForExistence(timeout: 2) else {
+        guard isSidebarItemDisabled(.customVoice) else {
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "screen_customVoice").firstMatch.exists)
             return
         }
 
-        let goToModels = waitForElement("customVoice_goToModels", type: .button)
-        goToModels.click()
+        _ = waitForSidebarItemState(.customVoice, disabled: true, timeout: 2)
+        XCTAssertFalse(
+            app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch.exists,
+            "Custom Voice should not render an in-content model banner anymore"
+        )
+        XCTAssertFalse(
+            app.buttons.matching(identifier: "customVoice_goToModels").firstMatch.exists,
+            "Custom Voice should no longer surface a titlebar warning action"
+        )
+
+        XCTAssertFalse(
+            waitForElement("textInput_textEditor").isEnabled,
+            "The editor should remain disabled while the Custom Voice model is unavailable"
+        )
+
+        ensureOnScreen(.models)
         _ = waitForScreen(.models)
-        _ = waitForElement("models_card_pro_custom")
     }
 }

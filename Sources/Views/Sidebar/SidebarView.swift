@@ -19,6 +19,7 @@ private struct SidebarSectionHeader: View {
 private struct SidebarRow: View {
     let item: SidebarItem
     @Binding var selection: SidebarItem?
+    let isDisabled: Bool
     @State private var isHovered = false
 
     private var isSelected: Bool {
@@ -35,6 +36,10 @@ private struct SidebarRow: View {
     }
 
     private var backgroundColor: Color {
+        if isDisabled {
+            return isSelected ? Color.secondary.opacity(0.08) : .clear
+        }
+
         if isSelected {
             return .accentColor.opacity(0.12)
         }
@@ -47,6 +52,10 @@ private struct SidebarRow: View {
     }
 
     private var borderColor: Color {
+        if isDisabled {
+            return isSelected ? Color.secondary.opacity(0.16) : .clear
+        }
+
         if isSelected {
             return .accentColor.opacity(0.24)
         }
@@ -58,20 +67,60 @@ private struct SidebarRow: View {
         return .clear
     }
 
+    private var iconColor: Color {
+        if isDisabled {
+            return Color.secondary.opacity(isSelected ? 0.8 : 0.65)
+        }
+
+        return isSelected ? Color.accentColor : Color.primary
+    }
+
+    private var textColor: Color {
+        if isDisabled {
+            return Color.secondary.opacity(isSelected ? 0.88 : 0.72)
+        }
+
+        return Color.primary
+    }
+
+    private var selectionIndicatorColor: Color {
+        if !isSelected {
+            return .clear
+        }
+
+        return isDisabled ? Color.secondary.opacity(0.6) : Color.accentColor
+    }
+
+    private var accessibilityStateValue: String {
+        var states: [String] = []
+
+        if isSelected {
+            states.append("selected")
+        } else {
+            states.append("not selected")
+        }
+
+        if isDisabled {
+            states.append("disabled")
+        }
+
+        return states.joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Capsule()
-                .fill(isSelected ? Color.accentColor : .clear)
+                .fill(selectionIndicatorColor)
                 .frame(width: 3, height: 16)
 
             Image(systemName: item.iconName)
                 .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .foregroundStyle(iconColor)
                 .frame(width: 22, alignment: .center)
 
             Text(item.rawValue)
                 .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(textColor)
                 .lineLimit(1)
 
             Spacer(minLength: 0)
@@ -82,14 +131,23 @@ private struct SidebarRow: View {
             .background(rowBackground)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onTapGesture {
+                guard !isDisabled else { return }
                 selection = item
             }
             .onHover { hovering in
-                isHovered = hovering
+                isHovered = isDisabled ? false : hovering
+            }
+            .onChange(of: isDisabled) { _, disabled in
+                if disabled {
+                    isHovered = false
+                }
             }
             .animation(.easeOut(duration: 0.14), value: isHovered)
             .animation(.easeOut(duration: 0.14), value: isSelected)
-            .accessibilityValue(selection == item ? "selected" : "not selected")
+            .disabled(isDisabled)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(item.rawValue)
+            .accessibilityValue(accessibilityStateValue)
             .accessibilityIdentifier(item.accessibilityID)
     }
 }
@@ -98,22 +156,22 @@ struct SidebarView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
 
     @Binding var selection: SidebarItem?
+    let disabledItems: Set<SidebarItem>
+
+    private var usesNativeListSelection: Bool {
+        guard let selection else { return true }
+        return !disabledItems.contains(selection)
+    }
 
     var body: some View {
-        List(selection: $selection) {
-            ForEach(SidebarItem.Section.allCases, id: \.self) { section in
-                Section {
-                    ForEach(section.items) { item in
-                        SidebarRow(item: item, selection: $selection)
-                            .tag(item as SidebarItem?)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                            .listRowBackground(Color.clear)
-                    }
-                } header: {
-                    SidebarSectionHeader(
-                        title: section.rawValue,
-                        accessibilityID: section.accessibilityID
-                    )
+        Group {
+            if usesNativeListSelection {
+                List(selection: $selection) {
+                    sidebarListContent
+                }
+            } else {
+                List {
+                    sidebarListContent
                 }
             }
         }
@@ -121,6 +179,29 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) {
             SidebarFooterRegion()
                 .environmentObject(audioPlayer)
+        }
+    }
+
+    @ViewBuilder
+    private var sidebarListContent: some View {
+        ForEach(SidebarItem.Section.allCases, id: \.self) { section in
+            Section {
+                ForEach(section.items) { item in
+                    SidebarRow(
+                        item: item,
+                        selection: $selection,
+                        isDisabled: disabledItems.contains(item)
+                    )
+                        .tag(item as SidebarItem?)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                        .listRowBackground(Color.clear)
+                }
+            } header: {
+                SidebarSectionHeader(
+                    title: section.rawValue,
+                    accessibilityID: section.accessibilityID
+                )
+            }
         }
     }
 }

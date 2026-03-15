@@ -1,6 +1,37 @@
 import XCTest
 
 final class VoiceDesignFlowTests: FeatureMatrixUITestBase {
+    override class var additionalLaunchEnvironment: [String: String] {
+        ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
+
+    func testGenerationComposerBaselineMatchesAcrossModes() {
+        fixture.installModel(mode: "custom")
+        fixture.installModel(mode: "design")
+        fixture.installModel(mode: "clone")
+
+        let customMetrics = captureGenerationLayoutMetrics(
+            screen: .customVoice
+        )
+        let designMetrics = captureGenerationLayoutMetrics(
+            screen: .voiceDesign
+        )
+        let cloneMetrics = captureGenerationLayoutMetrics(
+            screen: .voiceCloning
+        )
+
+        assertComposerBaseline(
+            customMetrics,
+            alignedWith: designMetrics,
+            label: "Custom Voice vs Voice Design"
+        )
+        assertComposerBaseline(
+            customMetrics,
+            alignedWith: cloneMetrics,
+            label: "Custom Voice vs Voice Cloning"
+        )
+    }
+
     func testVoiceDesignGenerationCreatesHistoryEntry() throws {
         fixture.installModel(mode: "custom")
         fixture.installModel(mode: "design")
@@ -16,6 +47,11 @@ final class VoiceDesignFlowTests: FeatureMatrixUITestBase {
         voiceDescription.typeText("Warm narrator.")
 
         let editor = waitForElement("textInput_textEditor", timeout: 5)
+        let generateButton = waitForElement("textInput_generateButton", type: .button, timeout: 5)
+        let batchButton = waitForElement("textInput_batchButton", type: .button, timeout: 5)
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
         XCTAssertTrue(editor.isHittable, "Voice Design should surface the composer above the fold")
         app.activate()
         editor.click()
@@ -73,4 +109,79 @@ final class VoiceDesignFlowTests: FeatureMatrixUITestBase {
             "Voice Design brief should reset on a fresh app launch"
         )
     }
+
+    private func captureGenerationLayoutMetrics(
+        screen: UITestScreen
+    ) -> GenerationLayoutMetrics {
+        launchStubApp(initialScreen: screen)
+        _ = waitForScreen(screen, timeout: 15)
+        _ = waitForBackendIdle(timeout: 10)
+
+        let editor = waitForElement("textInput_textEditor", timeout: 5)
+        let generateButton = waitForElement("textInput_generateButton", type: .button, timeout: 5)
+        let batchButton = waitForElement("textInput_batchButton", type: .button, timeout: 5)
+
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
+        XCTAssertGreaterThan(
+            editor.frame.height,
+            150,
+            "Generation screens should let the script editor grow beyond the compact embedded minimum when space is available"
+        )
+
+        return GenerationLayoutMetrics(
+            editorMinY: editor.frame.minY,
+            editorMaxY: editor.frame.maxY,
+            editorHeight: editor.frame.height,
+            generateMidY: generateButton.frame.midY,
+            batchMidY: batchButton.frame.midY
+        )
+    }
+
+    private func assertComposerBaseline(
+        _ lhs: GenerationLayoutMetrics,
+        alignedWith rhs: GenerationLayoutMetrics,
+        tolerance: CGFloat = 8,
+        label: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertLessThanOrEqual(
+            abs(lhs.editorMinY - rhs.editorMinY),
+            tolerance,
+            "\(label): The speech input editor should start at a consistent vertical position",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            abs(lhs.editorMaxY - rhs.editorMaxY),
+            tolerance,
+            "\(label): The speech input bottom edge should align across generation modes",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            abs(lhs.generateMidY - rhs.generateMidY),
+            tolerance,
+            "\(label): Generate should stay on a consistent action row baseline",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            abs(lhs.batchMidY - rhs.batchMidY),
+            tolerance,
+            "\(label): Batch should stay on the same row across generation modes",
+            file: file,
+            line: line
+        )
+    }
+}
+
+private struct GenerationLayoutMetrics {
+    let editorMinY: CGFloat
+    let editorMaxY: CGFloat
+    let editorHeight: CGFloat
+    let generateMidY: CGFloat
+    let batchMidY: CGFloat
 }

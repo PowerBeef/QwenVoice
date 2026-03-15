@@ -1,6 +1,13 @@
 import XCTest
 
 final class ModelsFlowTests: FeatureMatrixUITestBase {
+    func testAppDefaultsToModelsWhenNoGenerationModelsAreInstalled() {
+        launchStubApp()
+        _ = waitForScreen(.models, timeout: 15)
+        _ = waitForMainWindowTitle("Models", timeout: 5)
+        _ = waitForDisabledSidebarItems([.customVoice, .voiceDesign, .voiceCloning], timeout: 5)
+    }
+
     func testModelDownloadAndDeleteTransitions() {
         launchStubApp(initialScreen: .models)
         _ = waitForScreen(.models, timeout: 15)
@@ -26,14 +33,16 @@ final class ModelsFlowTests: FeatureMatrixUITestBase {
         )
     }
 
-    func testCustomVoiceBannerClearsPromptlyAfterDownload() {
+    func testCustomVoiceSidebarUnlocksPromptlyAfterDownload() {
         launchStubApp(initialScreen: .customVoice)
         _ = waitForScreen(.customVoice, timeout: 15)
 
-        let banner = waitForElement("customVoice_modelBanner", timeout: 5)
-        XCTAssertTrue(banner.exists, "Custom Voice should start unavailable before the model is downloaded")
+        _ = waitForDisabledSidebarItems([.customVoice, .voiceDesign, .voiceCloning], timeout: 5)
+        _ = waitForSidebarItemState(.customVoice, disabled: true, timeout: 2)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(identifier: "customVoice_goToModels").firstMatch.exists)
 
-        waitForElement("customVoice_goToModels", type: .button, timeout: 5).click()
+        ensureOnScreen(.models, timeout: 10)
         _ = waitForScreen(.models, timeout: 10)
 
         let customModelID = UITestContractManifest.current.model(mode: "custom")?.id ?? "pro_custom"
@@ -43,16 +52,13 @@ final class ModelsFlowTests: FeatureMatrixUITestBase {
             "Downloading the custom model should transition to the ready/delete state"
         )
 
+        _ = waitForDisabledSidebarItems([.voiceDesign, .voiceCloning], timeout: 10)
+        _ = waitForSidebarItemState(.customVoice, disabled: false, timeout: 5)
         ensureOnScreen(.customVoice, timeout: 10)
         _ = waitForScreen(.customVoice, timeout: 5)
-        let refreshedBanner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
-        XCTAssertTrue(
-            refreshedBanner.waitForNonExistence(timeout: 2),
-            "Custom Voice should drop the unavailable-model banner promptly once the download completes"
-        )
     }
 
-    func testModelRetryAndBannerNavigation() {
+    func testModelRetryEnablesVoiceDesignAndSupportsDefaultGenerationLaunch() {
         let designModelID = UITestContractManifest.current.model(mode: "design")?.id ?? "pro_design"
         launchStubApp(
             initialScreen: .models,
@@ -73,15 +79,14 @@ final class ModelsFlowTests: FeatureMatrixUITestBase {
         )
 
         relaunchFreshApp(
-            initialScreen: .customVoice,
+            initialScreen: nil,
             additionalEnvironment: fixture.environment(
                 additional: ["QWENVOICE_UI_TEST_SETUP_DELAY_MS": "150"]
             )
         )
-        _ = waitForScreen(.customVoice, timeout: 15)
-        let banner = waitForElement("customVoice_modelBanner", timeout: 5)
-        XCTAssertTrue(banner.exists)
-        waitForElement("customVoice_goToModels", type: .button, timeout: 5).click()
-        _ = waitForScreen(.models, timeout: 10)
+        _ = waitForScreen(.voiceDesign, timeout: 15)
+        _ = waitForMainWindowTitle("Voice Design", timeout: 5)
+        _ = waitForDisabledSidebarItems([.customVoice, .voiceCloning], timeout: 5)
+        _ = waitForSidebarItemState(.voiceDesign, disabled: false, timeout: 2)
     }
 }

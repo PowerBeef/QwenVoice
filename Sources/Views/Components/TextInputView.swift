@@ -10,15 +10,17 @@ struct TextInputView: View {
     var batchDisabled: Bool = true
     var generateDisabled: Bool = false
     var isEmbedded: Bool = false
+    var usesFlexibleEmbeddedHeight: Bool = false
     var onGenerate: () -> Void
 
     @FocusState private var isEditorFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: isEmbedded ? LayoutConstants.composerEmbeddedSpacing : 12) {
             editor
             actionRow
         }
+        .frame(maxHeight: usesFlexibleEmbeddedHeight ? .infinity : nil, alignment: .topLeading)
         .background(shortcutBridge)
     }
 
@@ -28,11 +30,11 @@ struct TextInputView: View {
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .focused($isEditorFocused)
-                .padding(8)
+                .padding(isEmbedded ? LayoutConstants.composerEmbeddedEditorInset : 8)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: isEmbedded ? LayoutConstants.composerEmbeddedMinHeight : 160,
-                    maxHeight: LayoutConstants.textEditorMaxHeight,
+                    maxHeight: usesFlexibleEmbeddedHeight && isEmbedded ? .infinity : LayoutConstants.textEditorMaxHeight,
                     alignment: .topLeading
                 )
                 .background(
@@ -49,15 +51,16 @@ struct TextInputView: View {
                 Text(placeholder)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, isEmbedded ? LayoutConstants.composerEmbeddedPlaceholderHorizontalPadding : 14)
+                    .padding(.vertical, isEmbedded ? LayoutConstants.composerEmbeddedPlaceholderVerticalPadding : 16)
                     .allowsHitTesting(false)
             }
         }
+        .frame(maxHeight: usesFlexibleEmbeddedHeight ? .infinity : nil, alignment: .topLeading)
     }
 
     private var actionRow: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: isEmbedded ? 10 : 12) {
             ControlGroup {
                 if let batchAction {
                     Button("Batch") {

@@ -47,13 +47,12 @@ struct CustomVoiceView: View {
     var body: some View {
         PageScaffold(
             accessibilityIdentifier: "screen_customVoice",
-            contentSpacing: LayoutConstants.sectionSpacing,
-            contentMaxWidth: LayoutConstants.generationContentMaxWidth
+            fillsViewportHeight: true,
+            contentSpacing: LayoutConstants.generationSectionSpacing,
+            contentMaxWidth: LayoutConstants.generationContentMaxWidth,
+            topPadding: LayoutConstants.generationPageTopPadding,
+            bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            if !isModelAvailable {
-                modelUnavailableBanner
-            }
-
             configurationPanel
             composerPanel
         }
@@ -81,12 +80,21 @@ private extension CustomVoiceView {
             detail: "Pick a built-in speaker, then shape the delivery before you generate.",
             iconName: "slider.horizontal.3",
             accentColor: AppTheme.customVoice,
+            rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            panelPadding: LayoutConstants.generationConfigurationPanelPadding,
+            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
             accessibilityIdentifier: "customVoice_configuration"
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 speakerSettings
                 deliverySettings
             }
+        }
+        .overlay(alignment: .topLeading) {
+            HiddenAccessibilityMarker(
+                value: "Configuration",
+                identifier: "customVoice_configuration"
+            )
         }
     }
 
@@ -96,10 +104,10 @@ private extension CustomVoiceView {
             iconName: "text.alignleft",
             accentColor: AppTheme.customVoice,
             trailingText: canGenerate ? "Ready" : nil,
-            minHeight: 340,
+            fillsAvailableHeight: true,
             accessibilityIdentifier: "customVoice_script"
         ) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
@@ -108,24 +116,27 @@ private extension CustomVoiceView {
                     batchAction: { showingBatch = true },
                     batchDisabled: !canRunBatch,
                     isEmbedded: true,
+                    usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
                 )
                 .disabled(!pythonBridge.isReady || !isModelAvailable)
 
-                generationReadiness
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundColor(.red)
-                        .font(.callout)
-                }
+                composerFooter
             }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
     }
 
     var speakerSettings: some View {
-        ConfigurationFieldRow(label: "Speaker") {
+        ConfigurationFieldRow(
+            label: "Speaker",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
             HStack(spacing: 10) {
                 speakerPicker
                 Spacer(minLength: 0)
@@ -145,7 +156,13 @@ private extension CustomVoiceView {
     }
 
     var deliverySettings: some View {
-        ConfigurationFieldRow(label: "Delivery") {
+        ConfigurationFieldRow(
+            label: "Delivery",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
             DeliveryControlsView(
                 emotion: $emotion,
                 accentColor: AppTheme.customVoice,
@@ -180,27 +197,6 @@ private extension CustomVoiceView {
         )
     }
 
-    var modelUnavailableBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-
-            Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
-                .font(.callout)
-
-            Spacer()
-
-            Button("Go to Models") {
-                NotificationCenter.default.post(name: .navigateToModels, object: activeModel?.id)
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("customVoice_goToModels")
-        }
-        .inlinePanel(padding: 12, radius: 12)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("customVoice_modelBanner")
-    }
-
     var readinessTitle: String {
         if !pythonBridge.isReady {
             return "Engine starting"
@@ -219,7 +215,7 @@ private extension CustomVoiceView {
             return "QwenVoice is still preparing the generation engine."
         }
         if !isModelAvailable {
-            return "Open Models and install \(modelDisplayName) before generating."
+            return "Install \(modelDisplayName) in Models to enable generation."
         }
         if text.isEmpty {
             return "The selected speaker and delivery settings are ready as soon as the line is written."
@@ -237,6 +233,23 @@ private extension CustomVoiceView {
             .accessibilityLabel(selectedSpeaker.capitalized)
             .accessibilityValue(selectedSpeaker.capitalized)
             .accessibilityIdentifier("customVoice_selectedSpeaker")
+    }
+
+    var composerFooter: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            generationReadiness
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                    .font(.callout)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: LayoutConstants.generationComposerFooterMinHeight,
+            alignment: .topLeading
+        )
     }
 }
 

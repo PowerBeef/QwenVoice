@@ -33,18 +33,25 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
 
     func testCustomVoiceAndVoiceDesignUseScreenSpecificAvailability() {
         _ = waitForScreen(.customVoice, timeout: 10)
+        _ = waitForDisabledSidebarItems([.voiceDesign, .voiceCloning], timeout: 5)
+        _ = waitForSidebarItemState(.customVoice, disabled: false, timeout: 2)
+        _ = waitForSidebarItemState(.voiceDesign, disabled: true, timeout: 2)
+        _ = waitForSidebarItemState(.voiceCloning, disabled: true, timeout: 2)
 
-        let initialBanner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
         XCTAssertFalse(
-            initialBanner.waitForExistence(timeout: 1),
+            app.buttons.matching(identifier: "customVoice_goToModels").firstMatch.exists,
             "Custom Voice should use the complete Custom Voice model fixture"
         )
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "voiceDesign_modelBanner").firstMatch.exists)
 
-        ensureOnScreen(.voiceDesign, timeout: 10)
-        _ = waitForScreen(.voiceDesign, timeout: 5)
-
-        let banner = waitForElement("voiceDesign_modelBanner", timeout: 5)
-        XCTAssertTrue(banner.exists, "Voice Design should surface the incomplete Voice Design model fixture")
+        relaunchFreshApp(
+            initialScreen: .voiceDesign,
+            additionalEnvironment: ["QWENVOICE_APP_SUPPORT_DIR": Self.fixtureRoot?.path ?? ""]
+        )
+        waitForMainUI()
+        _ = waitForScreen(.voiceDesign, timeout: 10)
+        _ = waitForDisabledSidebarItems([.voiceDesign, .voiceCloning], timeout: 5)
+        _ = waitForSidebarItemState(.voiceDesign, disabled: true, timeout: 2)
 
         let voiceField = waitForElement("voiceDesign_voiceDescriptionField")
         voiceField.click()
@@ -54,11 +61,18 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
         XCTAssertFalse(batchButton.isEnabled, "Batch generation should stay disabled when the active model is incomplete")
     }
 
-    func testVoiceCloningShowsBannerForIncompleteFixture() {
-        ensureOnScreen(.voiceCloning)
+    func testVoiceCloningLaunchOverridePreservesDisabledStateForIncompleteFixture() {
+        relaunchFreshApp(
+            initialScreen: .voiceCloning,
+            additionalEnvironment: ["QWENVOICE_APP_SUPPORT_DIR": Self.fixtureRoot?.path ?? ""]
+        )
+        waitForMainUI()
+        _ = waitForScreen(.voiceCloning, timeout: 10)
 
-        let banner = waitForElement("voiceCloning_modelBanner", timeout: 5)
-        XCTAssertTrue(banner.exists, "Voice Cloning should surface the incomplete clone model fixture as unavailable")
+        _ = waitForDisabledSidebarItems([.voiceDesign, .voiceCloning], timeout: 5)
+        _ = waitForSidebarItemState(.voiceCloning, disabled: true, timeout: 2)
+        XCTAssertFalse(app.buttons.matching(identifier: "voiceCloning_goToModels").firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "voiceCloning_modelBanner").firstMatch.exists)
     }
 
     func testModelsViewDistinguishesCompleteAndIncompleteFixtures() {

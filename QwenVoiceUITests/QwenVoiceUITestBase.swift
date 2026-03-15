@@ -44,7 +44,7 @@ enum UITestScreen: String, CaseIterable {
     var visibilitySentinelIdentifier: String? {
         switch self {
         case .customVoice:
-            return "customVoice_voiceSetup"
+            return "customVoice_speakerPicker"
         case .voiceDesign:
             return "voiceDesign_voiceDescriptionField"
         case .voiceCloning:
@@ -59,6 +59,7 @@ enum UITestScreen: String, CaseIterable {
             return "preferences_autoPlayToggle"
         }
     }
+
 }
 
 final class QwenVoiceUITestSession {
@@ -286,6 +287,11 @@ class QwenVoiceUITestBase: XCTestCase {
             return
         }
 
+        if isSidebarItemDisabled(screen) {
+            XCTFail("Sidebar item '\(screen.sidebarIdentifier)' is disabled and should not be selected")
+            return
+        }
+
         let sidebarItem = app.descendants(matching: .any).matching(identifier: screen.sidebarIdentifier).firstMatch
         if sidebarItem.waitForExistence(timeout: 3) {
             activateSidebarItem(sidebarItem, identifier: screen.sidebarIdentifier)
@@ -386,6 +392,50 @@ class QwenVoiceUITestBase: XCTestCase {
             .first(where: { markerText.contains($0) })
     }
 
+    func waitForDisabledSidebarItems(
+        _ screens: [UITestScreen],
+        timeout: TimeInterval = 5
+    ) -> XCUIElement {
+        let marker = app.descendants(matching: .any).matching(identifier: "mainWindow_disabledSidebarItems").firstMatch
+        let expectedIdentifiers = Set(screens.map(\.sidebarIdentifier))
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if marker.waitForExistence(timeout: 0.2) {
+                if currentDisabledSidebarIdentifiers() == expectedIdentifiers {
+                    return marker
+                }
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        XCTFail(
+            "Disabled sidebar marker should resolve to \(expectedIdentifiers.sorted()) within \(timeout)s, found \(currentDisabledSidebarIdentifiers().sorted())"
+        )
+        return marker
+    }
+
+    func waitForSidebarItemState(
+        _ screen: UITestScreen,
+        disabled: Bool,
+        timeout: TimeInterval = 5
+    ) -> XCUIElement {
+        let sidebarItem = app.descendants(matching: .any).matching(identifier: screen.sidebarIdentifier).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if sidebarItem.waitForExistence(timeout: 0.2), isSidebarItemDisabled(screen) == disabled {
+                return sidebarItem
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        XCTFail("Sidebar item '\(screen.sidebarIdentifier)' should resolve to disabled=\(disabled) within \(timeout)s")
+        return sidebarItem
+    }
+
     func waitForBackendStatusElement(timeout: TimeInterval = 5) -> XCUIElement {
         let identifiers = [
             "sidebar_backendStatus",
@@ -434,6 +484,30 @@ class QwenVoiceUITestBase: XCTestCase {
             .joined(separator: " ")
         XCTFail("Main window title should resolve to '\(title)' within \(timeout)s, found '\(markerText)'")
         return marker
+    }
+
+    func isSidebarItemDisabled(_ screen: UITestScreen) -> Bool {
+        currentDisabledSidebarIdentifiers().contains(screen.sidebarIdentifier)
+    }
+
+    private func currentDisabledSidebarIdentifiers() -> Set<String> {
+        let marker = app.descendants(matching: .any).matching(identifier: "mainWindow_disabledSidebarItems").firstMatch
+        guard marker.exists || marker.waitForExistence(timeout: 0.2) else {
+            return []
+        }
+
+        let markerText = (marker.value as? String) ?? marker.label
+        let trimmed = markerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "none" else {
+            return []
+        }
+
+        return Set(
+            trimmed
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
     }
 
     func waitForBackendIdle(timeout: TimeInterval = 10) -> XCUIElement {
@@ -728,6 +802,31 @@ class QwenVoiceUITestBase: XCTestCase {
 
     func assertElementExists(_ identifier: String, timeout: TimeInterval = 5) {
         _ = waitForElement(identifier, timeout: timeout)
+    }
+
+    func assertElementAboveFold(
+        _ element: XCUIElement,
+        bottomInset: CGFloat = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 2), "App window should exist", file: file, line: line)
+        XCTAssertTrue(element.exists, "Element should exist before verifying above-the-fold layout", file: file, line: line)
+        XCTAssertGreaterThan(
+            element.frame.maxY,
+            element.frame.minY,
+            "Element frame should be non-empty",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            element.frame.maxY,
+            window.frame.maxY - bottomInset,
+            "Element should be visible without scrolling at the active window size",
+            file: file,
+            line: line
+        )
     }
 
     func dismissTransientUI() {

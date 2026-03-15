@@ -44,7 +44,11 @@ Shared current repo facts live in [`docs/reference/current-state.md`](docs/refer
 
 This repository is a native macOS SwiftUI app. For normal QwenVoice work, prefer repo scripts and shell `xcodebuild` flows for build, test, and validation.
 
-- Use `xcode-mcp` for project inspection when it reduces ambiguity, but keep shell/script execution as the default path.
+- Default execution order for this repo:
+  1. local repo truth first (`rg`, source, tests, scripts, manifests)
+  2. shell/script `xcodebuild` flows for normal build and test work
+  3. `xcode-mcp` when project/file/build-setting inspection is faster or less ambiguous than shell discovery
+  4. `XcodeBuildMCP` only when a visual build/run/log/screenshot workflow is genuinely helpful
 - Do not default to iOS simulator workflows. `ios-debugger-agent` and simulator-heavy `XcodeBuildMCP` flows are only for explicitly requested iOS/simulator work or a compatible visual debugging workflow.
 - Use browser-facing MCPs only for web docs, hosted tools, or browser tasks. They are not the default path for the native app UI.
 - If a preferred skill or MCP is unavailable in the current session, fall back to shell commands and the repo scripts rather than blocking.
@@ -58,24 +62,36 @@ This repository is a native macOS SwiftUI app. For normal QwenVoice work, prefer
 - History uses shell-owned toolbar-native search and sort controls, including a native AppKit-backed toolbar search field. UI tests should prefer the dedicated helpers/fallbacks in `QwenVoiceUITestBase` instead of assuming a fixed search-field hierarchy or a specific XCUI element class for the sort control.
 - Preserve accessibility identifiers whenever control types change; many of the deterministic feature-matrix tests depend on stable IDs even when native control wrappers shift.
 
+### Run / UI-test discipline
+
+- Before any app launch or macOS UI-test run, explicitly terminate previous `QwenVoice`, backend `server.py`, `QwenVoiceUITests-Runner`, and repo `xcodebuild` processes.
+- Never run parallel macOS UI suites for this repo.
+- Keep at most one live app/test instance at a time.
+- Clean up those same processes again after the run completes.
+- Treat this discipline as part of reliable validation on QwenVoice, not optional housekeeping; it protects both machine stability and UI automation determinism.
+
 ### Skill routing
 
 - `swiftui-design-review-loop` for SwiftUI layout, polish, interaction, and visual investigation work.
 - `swiftui-ui-patterns` for new or refactored SwiftUI screens and components.
 - `swiftui-view-refactor` for view cleanup, state ownership, Observation usage, and structure cleanup.
+- `swiftui-performance-audit` for SwiftUI lag, jank, invalidation churn, and layout-thrash investigations.
+- `swiftui-liquid-glass` only for explicit Liquid Glass work. It is non-default for QwenVoice's current native macOS direction.
 - `swift-concurrency-expert` for Swift 6.2 concurrency diagnostics, actor isolation, and compiler-safety fixes.
 - `github` for pull requests, issues, releases, and GitHub workflow investigation.
 - `app-store-changelog` for user-facing release notes.
 - `openai-docs` only for OpenAI API or product work, not normal QwenVoice development.
+- `ios-debugger-agent` is non-default and should only be used for explicitly requested iOS/simulator debugging.
+- `react-component-performance`, `vercel-deploy`, and `macos-spm-app-packaging` are generally out of scope for normal QwenVoice work unless the task clearly shifts into those domains.
 
 ### MCP routing
 
 - `desktop-commander` for local file inspection, structured file operations, and search when it is more effective than raw shell output.
 - `xcode-mcp` for project structure, file, and build-setting inspection when shell discovery is noisy or ambiguous.
 - `XcodeBuildMCP` for build/run/log/screenshot workflows when a visual Xcode-driven path is genuinely helpful, but not as the default execution path for everyday macOS validation.
-- `apple-docs` for Apple API, SwiftUI, AppKit, and platform guidance.
-- `context7` for third-party framework and library documentation.
-- `github` for hosted repository state, PR metadata, and remote issue context.
+- `apple-docs` is the first choice for Apple API, SwiftUI, AppKit, and platform guidance.
+- `context7` is for third-party framework and library documentation.
+- `github` is for hosted repository state, PR metadata, and remote issue context. Normal local git inspection and commits still belong in shell commands.
 - `playwright` and `chrome-devtools` for browser-based docs or tools, not the native QwenVoice UI.
 - `openaiDeveloperDocs` only when the task is specifically about OpenAI APIs or OpenAI documentation.
 
@@ -237,3 +253,6 @@ Before finishing:
 6. if a change touches Preferences, validate the separate Settings-window path rather than only the main window
 7. if a change touches picker-like controls, verify the actual macOS XCUI exposure (`MenuButton` / `MenuItem` vs. button assumptions)
 8. if a change touches main-window toolbar or search chrome, verify the controls are owned by `ContentView` and disappear immediately when leaving the active sidebar destination
+9. if a change required app launches or UI tests, verify cleanup happened before and after the run
+10. if a change touched UI automation, confirm the implementation and tests did not rely on hidden cached screens, leaked toolbar ownership, or incorrect assumptions about menu-backed macOS controls
+11. if a task involved docs or research, confirm the chosen MCP/skill matched the source type (Apple docs vs. third-party docs vs. GitHub vs. OpenAI docs)

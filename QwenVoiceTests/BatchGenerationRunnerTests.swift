@@ -288,3 +288,62 @@ final class ModelManagerViewModelRecoveryTests: XCTestCase {
         XCTAssertGreaterThan(sizeBytes, 0, "Completed model fixtures should report a non-zero directory size")
     }
 }
+
+final class SidebarItemInitialSelectionTests: XCTestCase {
+    func testDefaultInitialSelectionFallsBackToModelsWhenNoGenerationModelsAreInstalled() {
+        let modelsDir = makeTemporaryModelsDirectory()
+        defer { try? FileManager.default.removeItem(at: modelsDir.deletingLastPathComponent()) }
+
+        XCTAssertEqual(
+            SidebarItem.defaultInitialSelection(launchOverride: nil, modelsDirectory: modelsDir),
+            .models
+        )
+    }
+
+    func testDefaultInitialSelectionPrefersFirstAvailableGenerationDestination() throws {
+        let modelsDir = makeTemporaryModelsDirectory()
+        defer { try? FileManager.default.removeItem(at: modelsDir.deletingLastPathComponent()) }
+
+        let designModel = try XCTUnwrap(TTSModel.model(for: .design))
+        try installRequiredFixtureFiles(for: designModel, in: modelsDir)
+
+        XCTAssertEqual(
+            SidebarItem.defaultInitialSelection(launchOverride: nil, modelsDirectory: modelsDir),
+            .voiceDesign
+        )
+    }
+
+    func testDefaultInitialSelectionHonorsExplicitLaunchOverride() throws {
+        let modelsDir = makeTemporaryModelsDirectory()
+        defer { try? FileManager.default.removeItem(at: modelsDir.deletingLastPathComponent()) }
+
+        let designModel = try XCTUnwrap(TTSModel.model(for: .design))
+        try installRequiredFixtureFiles(for: designModel, in: modelsDir)
+
+        XCTAssertEqual(
+            SidebarItem.defaultInitialSelection(launchOverride: .customVoice, modelsDirectory: modelsDir),
+            .customVoice
+        )
+    }
+
+    private func makeTemporaryModelsDirectory() -> URL {
+        let fixtureRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QwenVoiceSidebarSelection-\(UUID().uuidString)", isDirectory: true)
+        let modelsDir = fixtureRoot.appendingPathComponent("models", isDirectory: true)
+        try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        return modelsDir
+    }
+
+    private func installRequiredFixtureFiles(for model: TTSModel, in modelsDir: URL) throws {
+        let installDir = model.installDirectory(in: modelsDir)
+
+        for relativePath in model.requiredRelativePaths {
+            let fileURL = installDir.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            FileManager.default.createFile(atPath: fileURL.path, contents: Data("fixture".utf8))
+        }
+    }
+}

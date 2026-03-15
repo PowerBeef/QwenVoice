@@ -64,13 +64,12 @@ struct VoiceCloningView: View {
     var body: some View {
         PageScaffold(
             accessibilityIdentifier: "screen_voiceCloning",
-            contentSpacing: LayoutConstants.sectionSpacing,
-            contentMaxWidth: LayoutConstants.generationContentMaxWidth
+            fillsViewportHeight: true,
+            contentSpacing: LayoutConstants.generationSectionSpacing,
+            contentMaxWidth: LayoutConstants.generationContentMaxWidth,
+            topPadding: LayoutConstants.generationPageTopPadding,
+            bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            if !isModelAvailable {
-                modelUnavailableBanner
-            }
-
             configurationPanel
             composerPanel
         }
@@ -115,10 +114,13 @@ private extension VoiceCloningView {
     var configurationPanel: some View {
         CompactConfigurationSection(
             title: "Reference",
-            detail: "Choose a saved voice or import a clip, then set the delivery and optional transcript.",
+            detail: "Choose a saved voice or clip, then set the delivery and optional transcript.",
             iconName: "waveform",
             accentColor: AppTheme.voiceCloning,
             trailingText: activeReferenceLabel,
+            rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            panelPadding: LayoutConstants.generationConfigurationPanelPadding,
+            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
             accessibilityIdentifier: "voiceCloning_configuration"
         ) {
             VStack(alignment: .leading, spacing: 0) {
@@ -126,6 +128,12 @@ private extension VoiceCloningView {
                 transcriptSettings
                 deliverySettings
             }
+        }
+        .overlay(alignment: .topLeading) {
+            HiddenAccessibilityMarker(
+                value: "Reference",
+                identifier: "voiceCloning_configuration"
+            )
         }
     }
 
@@ -135,10 +143,10 @@ private extension VoiceCloningView {
             iconName: "text.alignleft",
             accentColor: AppTheme.voiceCloning,
             trailingText: canGenerate ? "Ready" : nil,
-            minHeight: 340,
+            fillsAvailableHeight: true,
             accessibilityIdentifier: "voiceCloning_script"
         ) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
@@ -147,24 +155,27 @@ private extension VoiceCloningView {
                     batchAction: { showingBatch = true },
                     batchDisabled: !canRunBatch,
                     isEmbedded: true,
+                    usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
                 )
                 .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
 
-                generationReadiness
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundColor(.red)
-                        .font(.callout)
-                }
+                composerFooter
             }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
     }
 
     var referenceSettings: some View {
-        ConfigurationFieldRow(label: "Source") {
+        ConfigurationFieldRow(
+            label: "Source",
+            rowVerticalPadding: max(LayoutConstants.generationConfigurationRowVerticalPadding - 2, 2),
+            horizontalSpacing: 12,
+            stackedSpacing: max(LayoutConstants.generationConfigurationRowSpacing - 2, 2),
+            supportingSpacing: 3
+        ) {
             sourceRow
         } supporting: {
             referenceStatus
@@ -198,6 +209,10 @@ private extension VoiceCloningView {
     var transcriptSettings: some View {
         ConfigurationFieldRow(
             label: "Transcript",
+            rowVerticalPadding: max(LayoutConstants.generationConfigurationRowVerticalPadding - 2, 2),
+            horizontalSpacing: 12,
+            stackedSpacing: max(LayoutConstants.generationConfigurationRowSpacing - 2, 2),
+            supportingSpacing: 3,
             accessibilityIdentifier: "voiceCloning_transcriptField"
         ) {
             TextField(
@@ -208,16 +223,18 @@ private extension VoiceCloningView {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Transcript")
             .accessibilityIdentifier("voiceCloning_transcriptInput")
-        } supporting: {
-            Text("Optional, but a transcript improves pronunciation and pacing for cloned takes.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .contain)
     }
 
     var deliverySettings: some View {
-        ConfigurationFieldRow(label: "Delivery") {
+        ConfigurationFieldRow(
+            label: "Delivery",
+            rowVerticalPadding: max(LayoutConstants.generationConfigurationRowVerticalPadding - 2, 2),
+            horizontalSpacing: 12,
+            stackedSpacing: max(LayoutConstants.generationConfigurationRowSpacing - 2, 2),
+            supportingSpacing: 3
+        ) {
             DeliveryControlsView(
                 emotion: $emotion,
                 accentColor: AppTheme.voiceCloning,
@@ -231,13 +248,25 @@ private extension VoiceCloningView {
 
     @ViewBuilder
     var sourceRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !savedVoices.isEmpty {
-                savedVoicePicker
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 8) {
+                if !savedVoices.isEmpty {
+                    savedVoicePicker
+                }
+
+                importButton
+
+                Spacer(minLength: 0)
             }
 
-            importButton
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                if !savedVoices.isEmpty {
+                    savedVoicePicker
+                }
+
+                importButton
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -270,13 +299,14 @@ private extension VoiceCloningView {
         }
         .buttonStyle(.bordered)
         .tint(AppTheme.voiceCloning)
+        .controlSize(.small)
         .accessibilityIdentifier("voiceCloning_importButton")
     }
 
     @ViewBuilder
     var referenceStatus: some View {
         if let path = referenceAudioPath {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.voiceCloning)
@@ -299,18 +329,20 @@ private extension VoiceCloningView {
                     }
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.small)
             }
-            .inlinePanel(padding: 10, radius: 10)
+            .inlinePanel(padding: 8, radius: 10)
             .accessibilityIdentifier("voiceCloning_activeReference")
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "waveform.badge.exclamationmark")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text("Add a reference clip to unlock the script composer and generation.")
-                    .font(.callout)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .inlinePanel(padding: 10, radius: 10)
+            .padding(.vertical, 1)
         }
     }
 
@@ -334,24 +366,6 @@ private extension VoiceCloningView {
         )
     }
 
-    var modelUnavailableBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-            Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
-                .font(.callout)
-            Spacer()
-            Button("Go to Models") {
-                NotificationCenter.default.post(name: .navigateToModels, object: cloneModel?.id)
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("voiceCloning_goToModels")
-        }
-        .inlinePanel(padding: 12, radius: 12)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceCloning_modelBanner")
-    }
-
     var readinessTitle: String {
         if !pythonBridge.isReady {
             return "Engine starting"
@@ -373,7 +387,7 @@ private extension VoiceCloningView {
             return "QwenVoice is still preparing the generation engine."
         }
         if !isModelAvailable {
-            return "Open Models and install \(modelDisplayName) before generating."
+            return "Install \(modelDisplayName) in Models to enable generation."
         }
         if referenceAudioPath == nil {
             return "Saved voices or imported clips both work here. Choose one before writing the final line."
@@ -382,6 +396,23 @@ private extension VoiceCloningView {
             return "Your reference is ready. Add the line you want the cloned voice to perform."
         }
         return "Everything is in place for a live preview and a saved clone."
+    }
+
+    var composerFooter: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            generationReadiness
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                    .font(.callout)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: LayoutConstants.generationComposerFooterMinHeight,
+            alignment: .topLeading
+        )
     }
 
     @ViewBuilder

@@ -54,13 +54,12 @@ struct VoiceDesignView: View {
     var body: some View {
         PageScaffold(
             accessibilityIdentifier: "screen_voiceDesign",
-            contentSpacing: LayoutConstants.sectionSpacing,
-            contentMaxWidth: LayoutConstants.generationContentMaxWidth
+            fillsViewportHeight: true,
+            contentSpacing: LayoutConstants.generationSectionSpacing,
+            contentMaxWidth: LayoutConstants.generationContentMaxWidth,
+            topPadding: LayoutConstants.generationPageTopPadding,
+            bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            if !isModelAvailable {
-                modelUnavailableBanner
-            }
-
             configurationPanel
             composerPanel
         }
@@ -85,16 +84,25 @@ private extension VoiceDesignView {
     var configurationPanel: some View {
         CompactConfigurationSection(
             title: "Configuration",
-            detail: "Describe the voice, set the delivery, and keep the script front and center.",
+            detail: "Describe the voice, set the delivery, then keep the script front and center.",
             iconName: "slider.horizontal.3",
             accentColor: AppTheme.voiceDesign,
             trailingText: voiceDescription.isEmpty ? "Brief required" : "Brief ready",
+            rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            panelPadding: LayoutConstants.generationConfigurationPanelPadding,
+            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
             accessibilityIdentifier: "voiceDesign_configuration"
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 briefSettings
                 deliverySettings
             }
+        }
+        .overlay(alignment: .topLeading) {
+            HiddenAccessibilityMarker(
+                value: "Configuration",
+                identifier: "voiceDesign_configuration"
+            )
         }
     }
 
@@ -104,10 +112,10 @@ private extension VoiceDesignView {
             iconName: "text.alignleft",
             accentColor: AppTheme.voiceDesign,
             trailingText: canGenerate ? "Ready" : nil,
-            minHeight: 340,
+            fillsAvailableHeight: true,
             accessibilityIdentifier: "voiceDesign_script"
         ) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
@@ -117,23 +125,26 @@ private extension VoiceDesignView {
                     batchDisabled: !canRunBatch,
                     generateDisabled: !pythonBridge.isReady || !isModelAvailable || voiceDescription.isEmpty,
                     isEmbedded: true,
+                    usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
                 )
 
-                generationReadiness
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundColor(.red)
-                        .font(.callout)
-                }
+                composerFooter
             }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
     }
 
     var briefSettings: some View {
-        ConfigurationFieldRow(label: "Voice brief") {
+        ConfigurationFieldRow(
+            label: "Voice brief",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
             ContinuousVoiceDescriptionField(
                 text: $voiceDescription,
                 placeholder: "A warm, deep narrator with a subtle British accent.",
@@ -142,7 +153,7 @@ private extension VoiceDesignView {
             .frame(maxWidth: .infinity, alignment: .leading)
         } supporting: {
             Text("Describe timbre, accent, or delivery style in one tight sentence.")
-                .font(.footnote)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .overlay(alignment: .topLeading) {
@@ -154,7 +165,13 @@ private extension VoiceDesignView {
     }
 
     var deliverySettings: some View {
-        ConfigurationFieldRow(label: "Delivery") {
+        ConfigurationFieldRow(
+            label: "Delivery",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
             DeliveryControlsView(
                 emotion: $emotion,
                 accentColor: AppTheme.voiceDesign,
@@ -174,27 +191,6 @@ private extension VoiceDesignView {
             accentColor: AppTheme.voiceDesign,
             accessibilityIdentifier: "voiceDesign_readiness"
         )
-    }
-
-    var modelUnavailableBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-
-            Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
-                .font(.callout)
-
-            Spacer()
-
-            Button("Go to Models") {
-                NotificationCenter.default.post(name: .navigateToModels, object: activeModel?.id)
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("voiceDesign_goToModels")
-        }
-        .inlinePanel(padding: 12, radius: 12)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceDesign_modelBanner")
     }
 
     var readinessTitle: String {
@@ -218,7 +214,7 @@ private extension VoiceDesignView {
             return "QwenVoice is still preparing the generation engine."
         }
         if !isModelAvailable {
-            return "Open Models and install \(modelDisplayName) before generating."
+            return "Install \(modelDisplayName) in Models to enable generation."
         }
         if voiceDescription.isEmpty {
             return "Describe the voice you want before writing the final line."
@@ -239,6 +235,23 @@ private extension VoiceDesignView {
             .accessibilityLabel(voiceDescription)
             .accessibilityValue(voiceDescription)
             .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
+    }
+
+    var composerFooter: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            generationReadiness
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                    .font(.callout)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: LayoutConstants.generationComposerFooterMinHeight,
+            alignment: .topLeading
+        )
     }
 }
 

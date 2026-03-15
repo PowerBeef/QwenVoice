@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct AppLaunchConfiguration {
     let isUITest: Bool
@@ -6,11 +7,15 @@ struct AppLaunchConfiguration {
     let fastIdle: Bool
     let initialScreenID: String?
     let debugCaptureEnabled: Bool
+    let uiTestWindowSize: CGSize?
 
-    static let current = AppLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
+    static let current = AppLaunchConfiguration(
+        arguments: ProcessInfo.processInfo.arguments,
+        environment: ProcessInfo.processInfo.environment
+    )
     private static var openedInitialSettingsWindow = false
 
-    init(arguments: [String]) {
+    init(arguments: [String], environment: [String: String]) {
         let inferredUITest = arguments.contains("--uitest")
             || arguments.contains("--uitest-disable-animations")
             || arguments.contains("--uitest-fast-idle")
@@ -27,6 +32,7 @@ struct AppLaunchConfiguration {
         debugCaptureEnabled = inferredUITest && arguments.contains("--uitest-debug-capture")
         initialScreenID = arguments.first(where: { $0.hasPrefix("--uitest-screen=") })?
             .replacingOccurrences(of: "--uitest-screen=", with: "")
+        uiTestWindowSize = Self.parseWindowSize(environment["QWENVOICE_UI_TEST_WINDOW_SIZE"])
     }
 
     var initialSidebarItem: SidebarItem? {
@@ -57,6 +63,24 @@ struct AppLaunchConfiguration {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         }
     }
+
+    private static func parseWindowSize(_ rawValue: String?) -> CGSize? {
+        guard let rawValue else { return nil }
+
+        let parts = rawValue
+            .lowercased()
+            .split(separator: "x", maxSplits: 1)
+            .map(String.init)
+        guard parts.count == 2,
+              let width = Double(parts[0]),
+              let height = Double(parts[1]),
+              width > 0,
+              height > 0 else {
+            return nil
+        }
+
+        return CGSize(width: width, height: height)
+    }
 }
 
 @main
@@ -82,7 +106,12 @@ struct QwenVoiceApp: App {
                         .environmentObject(audioPlayer)
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
-                        .frame(minWidth: 720, minHeight: 500)
+                        .background(
+                            UITestWindowSizeConfigurator(
+                                contentSize: AppLaunchConfiguration.current.uiTestWindowSize
+                            )
+                        )
+                        .frame(minWidth: 720, minHeight: 560)
                         .onAppear {
                             if envManager.needsBackendRestart {
                                 pythonBridge.stop()
@@ -105,7 +134,7 @@ struct QwenVoiceApp: App {
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
         }
-        .defaultSize(width: 860, height: 600)
+        .defaultSize(width: 720, height: 560)
         Settings {
             PreferencesView()
                 .environmentObject(envManager)
@@ -219,4 +248,39 @@ struct QwenVoiceApp: App {
     static var modelsDir: URL { AppPaths.modelsDir }
     static var outputsDir: URL { AppPaths.outputsDir }
     static var voicesDir: URL { AppPaths.voicesDir }
+}
+
+private enum UITestWindowSizingState {
+    static var configuredWindows: Set<ObjectIdentifier> = []
+}
+
+private struct UITestWindowSizeConfigurator: NSViewRepresentable {
+    let contentSize: CGSize?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            applyWindowSizeIfNeeded(for: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            applyWindowSizeIfNeeded(for: nsView)
+        }
+    }
+
+    private func applyWindowSizeIfNeeded(for view: NSView) {
+        guard let contentSize,
+              let window = view.window else {
+            return
+        }
+
+        let key = ObjectIdentifier(window)
+        guard !UITestWindowSizingState.configuredWindows.contains(key) else { return }
+
+        window.setContentSize(contentSize)
+        UITestWindowSizingState.configuredWindows.insert(key)
+    }
 }

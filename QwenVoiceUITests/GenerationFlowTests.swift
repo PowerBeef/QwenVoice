@@ -8,16 +8,15 @@ final class GenerationFlowTests: QwenVoiceUITestBase {
     /// Requires a downloaded model and running backend.
     func testFullCustomVoiceGeneration() throws {
         _ = waitForScreen(.customVoice)
-        let configuration = waitForElement("customVoice_configuration")
-        let script = waitForElement("customVoice_script")
+        let speakerPicker = waitForCustomVoiceSpeakerPicker()
+        let editor = waitForElement("textInput_textEditor")
         XCTAssertLessThan(
-            configuration.frame.minY,
-            script.frame.minY,
-            "Configuration should remain the first visible content section on Custom Voice"
+            speakerPicker.frame.minY,
+            editor.frame.minY,
+            "Configuration should remain above the Script editor on Custom Voice"
         )
 
-        let banner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
-        if banner.waitForExistence(timeout: 2) {
+        if isSidebarItemDisabled(.customVoice) {
             throw XCTSkip("Model not downloaded; skipping generation test")
         }
 
@@ -32,14 +31,13 @@ final class GenerationFlowTests: QwenVoiceUITestBase {
             throw XCTSkip("Backend did not reach the idle state in time; skipping generation test")
         }
 
-        let editor = waitForElement("textInput_textEditor")
         if !editor.isEnabled {
             let deadline = Date().addingTimeInterval(10)
             while Date() < deadline {
                 if editor.isEnabled {
                     break
                 }
-                if banner.exists {
+                if isSidebarItemDisabled(.customVoice) {
                     throw XCTSkip("Model became unavailable before generation could start")
                 }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.2))

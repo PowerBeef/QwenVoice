@@ -1,6 +1,10 @@
 import XCTest
 
 final class SidebarPlayerTests: FeatureMatrixUITestBase {
+    override class var additionalLaunchEnvironment: [String: String] {
+        ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         fixture.installModel(mode: "custom")
@@ -12,6 +16,11 @@ final class SidebarPlayerTests: FeatureMatrixUITestBase {
         _ = waitForBackendIdle(timeout: 10)
 
         let editor = waitForElement("textInput_textEditor", timeout: 5)
+        let generateButton = waitForElement("textInput_generateButton", type: .button, timeout: 5)
+        let batchButton = waitForElement("textInput_batchButton", type: .button, timeout: 5)
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
         XCTAssertTrue(editor.isHittable, "Custom Voice should expose the composer without scrolling")
         app.activate()
         editor.click()
@@ -37,6 +46,11 @@ final class SidebarPlayerTests: FeatureMatrixUITestBase {
         _ = waitForBackendIdle(timeout: 10)
 
         let editor = waitForElement("textInput_textEditor", timeout: 5)
+        let generateButton = waitForElement("textInput_generateButton", type: .button, timeout: 5)
+        let batchButton = waitForElement("textInput_batchButton", type: .button, timeout: 5)
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
         XCTAssertTrue(editor.isHittable, "Custom Voice should expose the composer without scrolling")
         app.activate()
         editor.click()

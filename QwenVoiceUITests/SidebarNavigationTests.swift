@@ -10,11 +10,16 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
 
         let customVoiceRow = waitForElement("sidebar_customVoice", timeout: 5)
         XCTAssertGreaterThan(customVoiceRow.frame.minY, generateHeader.frame.maxY, "First sidebar row should appear below the Generate section header")
-        let hittableDeadline = Date().addingTimeInterval(2)
-        while Date() < hittableDeadline, !customVoiceRow.isHittable {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+
+        if isSidebarItemDisabled(.customVoice) {
+            _ = waitForSidebarItemState(.customVoice, disabled: true, timeout: 2)
+        } else {
+            let hittableDeadline = Date().addingTimeInterval(2)
+            while Date() < hittableDeadline, !customVoiceRow.isHittable {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            XCTAssertTrue(customVoiceRow.isHittable, "First sidebar row should be hittable on launch")
         }
-        XCTAssertTrue(customVoiceRow.isHittable, "First sidebar row should be hittable on launch")
     }
 
     func testSidebarNavigationAcrossAllSections() {
@@ -22,7 +27,11 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
             .customVoice, .voiceDesign, .voiceCloning, .history, .voices, .models,
         ]
 
-        for screen in screens {
+        for screen in screens where isSidebarItemDisabled(screen) {
+            _ = waitForSidebarItemState(screen, disabled: true, timeout: 2)
+        }
+
+        for screen in screens where !isSidebarItemDisabled(screen) {
             ensureOnScreen(screen)
             _ = waitForScreen(screen)
             _ = waitForMainWindowTitle(expectedTitle(for: screen))
@@ -42,9 +51,9 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         let enrollButton = waitForElement("voices_enrollButton", type: .button, timeout: 5)
         XCTAssertTrue(enrollButton.exists, "Enroll Voice should appear while Voices is active")
 
-        ensureOnScreen(.customVoice)
-        _ = waitForScreen(.customVoice)
-        _ = waitForMainWindowTitle("Custom Voice")
+        ensureOnScreen(.models)
+        _ = waitForScreen(.models)
+        _ = waitForMainWindowTitle("Models")
         XCTAssertTrue(
             enrollButton.waitForNonExistence(timeout: 5),
             "Enroll Voice should disappear when leaving Voices"
@@ -59,9 +68,9 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         XCTAssertTrue(searchField.exists, "History search should appear while History is active")
         XCTAssertTrue(sortPicker.exists, "History sort should appear while History is active")
 
-        ensureOnScreen(.voiceDesign)
-        _ = waitForScreen(.voiceDesign)
-        _ = waitForMainWindowTitle("Voice Design")
+        ensureOnScreen(.models)
+        _ = waitForScreen(.models)
+        _ = waitForMainWindowTitle("Models")
         XCTAssertTrue(
             searchField.waitForNonExistence(timeout: 5),
             "History search should disappear when leaving History"
@@ -70,9 +79,23 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
             sortPicker.waitForNonExistence(timeout: 5),
             "History sort should disappear when leaving History"
         )
+
+        ensureOnScreen(.voices)
+        _ = waitForScreen(.voices)
+        _ = waitForMainWindowTitle("Voices")
+        _ = waitForElement("voices_enrollButton", type: .button, timeout: 5)
+
+        XCTAssertFalse(
+            app.buttons.matching(identifier: "customVoice_goToModels").firstMatch.exists,
+            "Generation warning toolbar chrome should no longer exist"
+        )
     }
 
-    func testSidebarNavigationPreservesGenerationDraftState() {
+    func testSidebarNavigationPreservesGenerationDraftState() throws {
+        if isSidebarItemDisabled(.customVoice) || isSidebarItemDisabled(.voiceDesign) {
+            throw XCTSkip("Draft-preservation navigation requires Custom Voice and Voice Design to be enabled")
+        }
+
         let defaultSpeaker = UITestContractManifest.current.defaultSpeaker
         let alternateSpeaker = UITestContractManifest.current.allSpeakers.first(where: { $0 != defaultSpeaker }) ?? defaultSpeaker
 

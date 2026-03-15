@@ -11,61 +11,106 @@ private extension View {
     }
 }
 
+struct HiddenAccessibilityMarker: View {
+    let value: String
+    let identifier: String
+
+    var body: some View {
+        Text(value)
+            .font(.caption2)
+            .foregroundStyle(.clear)
+            .opacity(0.01)
+            .frame(width: 1, height: 1, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityLabel(value)
+            .accessibilityValue(value)
+            .accessibilityIdentifier(identifier)
+    }
+}
+
 struct PageScaffold<Header: View, Content: View>: View {
     let accessibilityIdentifier: String?
+    let fillsViewportHeight: Bool
     let contentSpacing: CGFloat
     let contentMaxWidth: CGFloat
     let topPadding: CGFloat
+    let bottomPadding: CGFloat
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
 
     init(
         accessibilityIdentifier: String? = nil,
+        fillsViewportHeight: Bool = false,
         contentSpacing: CGFloat = LayoutConstants.sectionSpacing,
         contentMaxWidth: CGFloat = LayoutConstants.contentMaxWidth,
         topPadding: CGFloat = 8,
+        bottomPadding: CGFloat = LayoutConstants.canvasPadding,
         @ViewBuilder header: @escaping () -> Header,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.fillsViewportHeight = fillsViewportHeight
         self.contentSpacing = contentSpacing
         self.contentMaxWidth = contentMaxWidth
         self.topPadding = topPadding
+        self.bottomPadding = bottomPadding
         self.header = header
         self.content = content
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: contentSpacing) {
-                header()
-                content()
+        GeometryReader { proxy in
+            ScrollView {
+                contentColumn(viewportHeight: fillsViewportHeight ? proxy.size.height : nil)
             }
-            .padding(.horizontal, LayoutConstants.canvasPadding)
-            .padding(.top, topPadding)
-            .padding(.bottom, LayoutConstants.canvasPadding)
-            .contentColumn(maxWidth: contentMaxWidth)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    @ViewBuilder
+    private func contentColumn(viewportHeight: CGFloat?) -> some View {
+        let column = VStack(alignment: .leading, spacing: contentSpacing) {
+            header()
+            content()
+        }
+        .padding(.horizontal, LayoutConstants.canvasPadding)
+        .padding(.top, topPadding)
+        .padding(.bottom, bottomPadding)
+        .contentColumn(maxWidth: contentMaxWidth)
+
+        if let viewportHeight {
+            column
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: viewportHeight,
+                    alignment: .topLeading
+                )
+        } else {
+            column
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
 extension PageScaffold where Header == EmptyView {
     init(
         accessibilityIdentifier: String? = nil,
+        fillsViewportHeight: Bool = false,
         contentSpacing: CGFloat = LayoutConstants.sectionSpacing,
         contentMaxWidth: CGFloat = LayoutConstants.contentMaxWidth,
         topPadding: CGFloat = 8,
+        bottomPadding: CGFloat = LayoutConstants.canvasPadding,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(
             accessibilityIdentifier: accessibilityIdentifier,
+            fillsViewportHeight: fillsViewportHeight,
             contentSpacing: contentSpacing,
             contentMaxWidth: contentMaxWidth,
             topPadding: topPadding,
+            bottomPadding: bottomPadding,
             header: { EmptyView() },
             content: content
         )
@@ -112,6 +157,7 @@ struct StudioSectionCard<Content: View>: View {
     var accentColor: Color = AppTheme.accent
     var trailingText: String? = nil
     var minHeight: CGFloat? = nil
+    var fillsAvailableHeight: Bool = false
     var contentAlignment: HorizontalAlignment = .leading
     var style: StudioCardStyle = .standard
     var accessibilityIdentifier: String? = nil
@@ -129,7 +175,12 @@ struct StudioSectionCard<Content: View>: View {
 
                 content()
             }
-            .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: minHeight,
+                maxHeight: fillsAvailableHeight ? .infinity : nil,
+                alignment: .topLeading
+            )
         } label: {
             HStack(spacing: 8) {
                 if let iconName {
@@ -150,6 +201,7 @@ struct StudioSectionCard<Content: View>: View {
             }
         }
         .groupBoxStyle(.automatic)
+        .frame(maxHeight: fillsAvailableHeight ? .infinity : nil, alignment: .topLeading)
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
 }
@@ -160,11 +212,14 @@ struct CompactConfigurationSection<Content: View>: View {
     var iconName: String? = nil
     var accentColor: Color = AppTheme.accent
     var trailingText: String? = nil
+    var rowSpacing: CGFloat = LayoutConstants.configurationRowSpacing
+    var panelPadding: CGFloat = LayoutConstants.configurationPanelPadding
+    var contentSlotHeight: CGFloat? = nil
     var accessibilityIdentifier: String? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LayoutConstants.configurationRowSpacing) {
+        VStack(alignment: .leading, spacing: rowSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if let iconName {
                     Image(systemName: iconName)
@@ -191,11 +246,9 @@ struct CompactConfigurationSection<Content: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                content()
-            }
-            .padding(.horizontal, LayoutConstants.configurationPanelPadding)
-            .padding(.vertical, LayoutConstants.configurationPanelPadding - 1)
+            panelBody
+            .padding(.horizontal, panelPadding)
+            .padding(.vertical, max(panelPadding - 1, 0))
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(AppTheme.inlineFill.opacity(0.58))
@@ -207,18 +260,41 @@ struct CompactConfigurationSection<Content: View>: View {
         }
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
+
+    @ViewBuilder
+    private var panelBody: some View {
+        if let contentSlotHeight {
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: contentSlotHeight,
+                maxHeight: contentSlotHeight,
+                alignment: .topLeading
+            )
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+        }
+    }
 }
 
 struct ConfigurationFieldRow<Content: View, Supporting: View>: View {
     let label: String
+    var rowVerticalPadding: CGFloat = LayoutConstants.configurationRowVerticalPadding
+    var horizontalSpacing: CGFloat = 16
+    var stackedSpacing: CGFloat = 8
+    var supportingSpacing: CGFloat = 6
     var accessibilityIdentifier: String? = nil
     @ViewBuilder let content: () -> Content
     @ViewBuilder let supporting: () -> Supporting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: supportingSpacing) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: horizontalSpacing) {
                     labelView
                         .frame(width: LayoutConstants.configurationLabelWidth, alignment: .leading)
 
@@ -226,7 +302,7 @@ struct ConfigurationFieldRow<Content: View, Supporting: View>: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: stackedSpacing) {
                     labelView
                     content()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -235,7 +311,7 @@ struct ConfigurationFieldRow<Content: View, Supporting: View>: View {
 
             supporting()
         }
-        .padding(.vertical, LayoutConstants.configurationRowVerticalPadding)
+        .padding(.vertical, rowVerticalPadding)
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
 
@@ -249,10 +325,22 @@ struct ConfigurationFieldRow<Content: View, Supporting: View>: View {
 extension ConfigurationFieldRow where Supporting == EmptyView {
     init(
         label: String,
+        rowVerticalPadding: CGFloat = LayoutConstants.configurationRowVerticalPadding,
+        horizontalSpacing: CGFloat = 16,
+        stackedSpacing: CGFloat = 8,
+        supportingSpacing: CGFloat = 6,
         accessibilityIdentifier: String? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.init(label: label, accessibilityIdentifier: accessibilityIdentifier, content: content) {
+        self.init(
+            label: label,
+            rowVerticalPadding: rowVerticalPadding,
+            horizontalSpacing: horizontalSpacing,
+            stackedSpacing: stackedSpacing,
+            supportingSpacing: supportingSpacing,
+            accessibilityIdentifier: accessibilityIdentifier,
+            content: content
+        ) {
             EmptyView()
         }
     }

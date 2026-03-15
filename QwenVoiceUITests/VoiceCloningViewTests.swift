@@ -1,33 +1,52 @@
 import XCTest
 
 final class VoiceCloningViewTests: QwenVoiceUITestBase {
-    override class var initialScreen: UITestScreen? { .voiceCloning }
+    override class var initialScreen: UITestScreen? { nil }
+    override class var additionalLaunchEnvironment: [String: String] {
+        ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
 
     func testVoiceCloningScreenCoreLayout() {
-        _ = waitForScreen(.voiceCloning)
+        relaunchFreshApp(initialScreen: .voiceCloning)
         _ = waitForMainWindowTitle("Voice Cloning")
-        let configuration = waitForElement("voiceCloning_configuration")
-        let script = waitForElement("voiceCloning_script")
-        XCTAssertLessThan(
-            configuration.frame.minY,
-            script.frame.minY,
-            "Reference should be the first visible content section on Voice Cloning"
+        _ = waitForElement("mainWindow_activeScreen")
+        let activeScreenMarker = app.descendants(matching: .any)
+            .matching(identifier: "mainWindow_activeScreen")
+            .firstMatch
+        XCTAssertTrue(
+            activeScreenMarker.label.contains("screen_voiceCloning")
+                || ((activeScreenMarker.value as? String)?.contains("screen_voiceCloning") == true),
+            "Explicit Voice Cloning launch override should keep the Voice Cloning screen active"
         )
-        _ = waitForElement("voiceCloning_importButton")
+        let importButton = waitForElement("voiceCloning_importButton")
         _ = waitForTranscriptInput()
         _ = waitForElement("delivery_tonePicker")
-        _ = waitForElement("textInput_textEditor")
-        _ = waitForElement("textInput_generateButton", type: .button)
-        _ = waitForElement("textInput_batchButton", type: .button)
+        let editor = waitForElement("textInput_textEditor")
+        XCTAssertLessThan(
+            importButton.frame.minY,
+            editor.frame.minY,
+            "Reference controls should remain above the Script editor on Voice Cloning"
+        )
+        let generateButton = waitForElement("textInput_generateButton", type: .button)
+        let batchButton = waitForElement("textInput_batchButton", type: .button)
+        assertElementAboveFold(editor)
+        assertElementAboveFold(generateButton)
+        assertElementAboveFold(batchButton)
+        XCTAssertGreaterThan(
+            editor.frame.height,
+            150,
+            "Voice Cloning should let the script editor absorb spare vertical space"
+        )
     }
 
     func testVoiceCloningInputControls() {
+        relaunchFreshApp(initialScreen: .voiceCloning)
         _ = waitForScreen(.voiceCloning)
 
         let transcript = waitForTranscriptInput()
         transcript.click()
         transcript.typeText("Reference transcript")
-        XCTAssertTrue((transcript.value as? String)?.contains("Reference") ?? false)
+        XCTAssertTrue(transcriptContains("Reference transcript"))
 
         let editor = waitForElement("textInput_textEditor")
         let generate = waitForElement("textInput_generateButton", type: .button)
@@ -36,6 +55,7 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
     }
 
     func testVoiceCloningDeliveryControlsUseInlineIntensityLayout() {
+        relaunchFreshApp(initialScreen: .voiceCloning)
         _ = waitForScreen(.voiceCloning)
 
         let neutralTonePicker = waitForElement("delivery_tonePicker")
@@ -87,6 +107,32 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
 
         XCTFail("Voice Cloning transcript input should exist within \(timeout)s")
         return identified
+    }
+
+    private func transcriptContains(_ expected: String, timeout: TimeInterval = 2) -> Bool {
+        let candidates: [XCUIElement] = [
+            app.descendants(matching: .any).matching(identifier: "voiceCloning_transcriptInput").firstMatch,
+            app.textFields["voiceCloning_transcriptInput"].firstMatch,
+            app.textFields["Transcript"].firstMatch,
+            app.descendants(matching: .any).matching(identifier: "voiceCloning_transcriptField").firstMatch,
+        ]
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            for candidate in candidates where candidate.exists {
+                let text = [candidate.value as? String, candidate.label]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+
+                if text.contains(expected) {
+                    return true
+                }
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        return false
     }
 
     private func openTonePickerAndSelect(_ identifier: String) -> XCUIElement {
@@ -288,17 +334,28 @@ final class VoiceCloningViewTests: QwenVoiceUITestBase {
     }
 
     func testVoiceCloningMissingModelNavigation() {
+        relaunchFreshApp(initialScreen: .voiceCloning)
         _ = waitForScreen(.voiceCloning)
 
-        let banner = app.descendants(matching: .any).matching(identifier: "voiceCloning_modelBanner").firstMatch
-        guard banner.waitForExistence(timeout: 2) else {
+        guard isSidebarItemDisabled(.voiceCloning) else {
             XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "screen_voiceCloning").firstMatch.exists)
             return
         }
 
-        let goToModels = waitForElement("voiceCloning_goToModels", type: .button)
-        goToModels.click()
+        _ = waitForSidebarItemState(.voiceCloning, disabled: true, timeout: 2)
+        XCTAssertFalse(
+            app.descendants(matching: .any).matching(identifier: "voiceCloning_modelBanner").firstMatch.exists,
+            "Voice Cloning should not render an in-content model banner anymore"
+        )
+        XCTAssertFalse(
+            app.buttons.matching(identifier: "voiceCloning_goToModels").firstMatch.exists,
+            "Voice Cloning should no longer surface a titlebar warning action"
+        )
+
+        let editor = waitForElement("textInput_textEditor")
+        XCTAssertFalse(editor.isEnabled, "The editor should remain disabled while the clone model is unavailable")
+
+        ensureOnScreen(.models)
         _ = waitForScreen(.models)
-        _ = waitForElement("models_card_pro_custom")
     }
 }
