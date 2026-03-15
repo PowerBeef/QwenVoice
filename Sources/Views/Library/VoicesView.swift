@@ -8,8 +8,9 @@ private struct VoicesAlertState: Identifiable {
 }
 
 struct VoicesView: View {
-    @EnvironmentObject var pythonBridge: PythonBridge
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    let enrollRequestID: UUID?
 
     @State private var voices: [Voice] = []
     @State private var showingEnroll = false
@@ -21,101 +22,27 @@ struct VoicesView: View {
     @State private var showDeleteConfirmation = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                GenerationHeaderView(
-                    title: "Voices",
-                    subtitle: "Your voice library for Voice Cloning."
-                ) {
-                    Button {
-                        showingEnroll = true
-                    } label: {
-                        Label("Enroll Voice", systemImage: "plus")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.voices))
-                    .accessibilityIdentifier("voices_enrollButton")
-                }
-
-                if let successMessage {
-                    HStack(spacing: 12) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(AppTheme.voices)
-                        Text(successMessage)
-                            .font(.system(size: 14, weight: .medium))
-                        Spacer()
-                    }
-                    .studioCard(padding: 12, radius: 14)
+        VStack(alignment: .leading, spacing: 12) {
+            if let successMessage {
+                Label(successMessage, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(AppTheme.voices)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
                     .accessibilityIdentifier("voices_successBanner")
-                }
-
-                if !pythonBridge.isReady {
-                    voicesStateCard(
-                        icon: "arrow.triangle.2.circlepath.circle",
-                        title: "Starting backend...",
-                        detail: "Enrolled voices will appear once the Python service is ready."
-                    )
-                } else if let loadError, voices.isEmpty, !isLoading {
-                    VStack(spacing: 18) {
-                        voicesStateCard(
-                            icon: "exclamationmark.triangle",
-                            title: "Couldn't load voices",
-                            detail: loadError,
-                            accessibilityIdentifier: "voices_errorState",
-                            tint: .orange
-                        )
-
-                        Button("Try Again") {
-                            Task { await loadVoices() }
-                        }
-                        .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.voices))
-                        .accessibilityIdentifier("voices_retryButton")
-                    }
-                } else if isLoading && voices.isEmpty {
-                    VStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.large)
-                            .tint(AppTheme.voices)
-                        Text("Loading voices...")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 180)
-                    .studioCard()
-                } else if voices.isEmpty {
-                    voicesStateCard(
-                        icon: "waveform.badge.plus",
-                        title: "No enrolled voices",
-                        detail: "Enroll a voice here, then use it in Voice Cloning.",
-                        accessibilityIdentifier: "voices_emptyState"
-                    )
-                } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(voices) { voice in
-                            VoiceRow(
-                                voice: voice,
-                                onPlay: {
-                                    audioPlayer.playFile(voice.wavPath, title: voice.name)
-                                },
-                                onDelete: {
-                                    voiceToDelete = voice
-                                    showDeleteConfirmation = true
-                                }
-                            )
-                        }
-                    }
-                }
             }
-            .padding(LayoutConstants.canvasPadding)
-            .contentColumn()
+
+            content
         }
-        .contentColumn()
-        .accessibilityElement(children: .contain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityIdentifier("screen_voices")
         .task {
             if pythonBridge.isReady {
                 await loadVoices()
             }
+        }
+        .onChange(of: enrollRequestID) { _, newValue in
+            guard newValue != nil else { return }
+            showingEnroll = true
         }
         .onChange(of: pythonBridge.isReady) { _, isReady in
             guard isReady else { return }
@@ -152,11 +79,73 @@ struct VoicesView: View {
         }
     }
 
-    private func loadVoices() async {
+    @ViewBuilder
+    private var content: some View {
+        if !pythonBridge.isReady {
+            ContentUnavailableView(
+                "Starting backend...",
+                systemImage: "arrow.triangle.2.circlepath.circle",
+                description: Text("Enrolled voices will appear once the Python service is ready.")
+            )
+            .accessibilityIdentifier("voices_emptyState")
+        } else if let loadError, voices.isEmpty, !isLoading {
+            VStack(alignment: .leading, spacing: 12) {
+                ContentUnavailableView(
+                    "Couldn't load voices",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(loadError)
+                )
+                .accessibilityIdentifier("voices_errorState")
+
+                Button("Try Again") {
+                    Task { await loadVoices() }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("voices_retryButton")
+            }
+        } else if isLoading && voices.isEmpty {
+            ProgressView("Loading voices...")
+        } else if voices.isEmpty {
+            ContentUnavailableView(
+                "No enrolled voices",
+                systemImage: "person.2.wave.2",
+                description: Text("Enroll a voice here, then use it in Voice Cloning.")
+            )
+            .accessibilityIdentifier("voices_emptyState")
+        } else {
+            List {
+                Section {
+                    LabeledContent("Saved voices", value: "\(voices.count)")
+                        .accessibilityIdentifier("voices_librarySummary")
+                }
+
+                Section("Voice Library") {
+                    ForEach(voices) { voice in
+                        VoiceRow(
+                            voice: voice,
+                            onPlay: {
+                                audioPlayer.playFile(voice.wavPath, title: voice.name)
+                            },
+                            onDelete: {
+                                voiceToDelete = voice
+                                showDeleteConfirmation = true
+                            }
+                        )
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+    }
+}
+
+private extension VoicesView {
+    func loadVoices() async {
         guard pythonBridge.isReady else {
             isLoading = false
             return
         }
+
         let hadVoices = !voices.isEmpty
         isLoading = true
         do {
@@ -176,7 +165,7 @@ struct VoicesView: View {
         isLoading = false
     }
 
-    private func deleteVoice(_ voice: Voice) {
+    func deleteVoice(_ voice: Voice) {
         Task {
             do {
                 try await pythonBridge.deleteVoice(name: voice.name)
@@ -191,37 +180,10 @@ struct VoicesView: View {
         }
     }
 
-    private func presentActionAlert(title: String, message: String) {
+    func presentActionAlert(title: String, message: String) {
         actionAlert = VoicesAlertState(title: title, message: message)
     }
-
-    @ViewBuilder
-    private func voicesStateCard(
-        icon: String,
-        title: String,
-        detail: String,
-        accessibilityIdentifier: String = "voices_emptyState",
-        tint: Color = AppTheme.voices
-    ) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-            Text(detail)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-        .studioCard()
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
 }
-
-// MARK: - Voice Row (Card-style)
 
 private struct VoiceRow: View {
     let voice: Voice
@@ -230,47 +192,32 @@ private struct VoiceRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 20))
-                .foregroundColor(AppTheme.voices)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(voice.name)
-                    .font(.system(size: 15, weight: .semibold))
-                HStack(spacing: 8) {
-                    Label(
-                        voice.hasTranscript ? "Has transcript" : "No transcript",
-                        systemImage: voice.hasTranscript ? "text.badge.checkmark" : "text.badge.minus"
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
-            }
+            Label(voice.name, systemImage: "waveform.circle.fill")
+                .font(.body.weight(.semibold))
 
             Spacer()
 
-            HStack(spacing: 8) {
-                Button { onPlay() } label: {
-                    Image(systemName: "play.circle")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(AppTheme.voices)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("voicesRow_play_\(voice.id)")
+            Text(voice.hasTranscript ? "Transcript available" : "No transcript saved")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
 
-                Button(role: .destructive) { onDelete() } label: {
+            ControlGroup {
+                Button("Preview", action: onPlay)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("voicesRow_play_\(voice.id)")
+
+                Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
-                        .font(.system(size: 15, weight: .semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityIdentifier("voicesRow_delete_\(voice.id)")
             }
         }
-        .studioCard(padding: 12, radius: 14)
+        .padding(.vertical, 4)
     }
 }
-
-// MARK: - Enroll Voice Sheet
 
 struct EnrollVoiceSheet: View {
     @EnvironmentObject var pythonBridge: PythonBridge
@@ -281,44 +228,42 @@ struct EnrollVoiceSheet: View {
     @State private var transcript = ""
     @State private var isEnrolling = false
     @State private var errorMessage: String?
+
     var onComplete: (String) -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Enroll New Voice")
-                .font(.title2.bold())
+                .font(.title2.weight(.bold))
 
-            TextField("Voice name (e.g. Boss, Mom)", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("voicesEnroll_nameField")
+            Text("Add a reference clip and transcript so the voice is ready for cloning.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
-            HStack {
-                TextField("Reference audio file", text: $audioPath)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("voicesEnroll_audioPathField")
-                Button("Browse...") {
-                    if UITestAutomationSupport.isStubBackendMode,
-                       let url = UITestAutomationSupport.enrollAudioURL {
-                        audioPath = url.path
-                        return
+            Form {
+                TextField("Voice name (e.g. Boss, Mom)", text: $name)
+                    .accessibilityIdentifier("voicesEnroll_nameField")
+
+                HStack {
+                    TextField("Reference audio file", text: $audioPath)
+                        .accessibilityIdentifier("voicesEnroll_audioPathField")
+
+                    Button("Browse...") {
+                        browseForAudio()
                     }
-                    let panel = NSOpenPanel()
-                    panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
-                    if panel.runModal() == .OK, let url = panel.url {
-                        audioPath = url.path
-                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("voicesEnroll_browseButton")
                 }
-                .accessibilityIdentifier("voicesEnroll_browseButton")
-            }
 
-            TextField("Transcript — type exactly what the audio says", text: $transcript)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("voicesEnroll_transcriptField")
+                TextField("Transcript", text: $transcript)
+                    .accessibilityIdentifier("voicesEnroll_transcriptField")
+            }
+            .formStyle(.grouped)
 
             if let errorMessage {
                 Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .font(.callout)
             }
 
             HStack {
@@ -339,8 +284,22 @@ struct EnrollVoiceSheet: View {
                 .accessibilityIdentifier("voicesEnroll_confirmButton")
             }
         }
-        .padding(24)
-        .frame(width: 460)
+        .padding(20)
+        .frame(width: 480)
+    }
+
+    private func browseForAudio() {
+        if UITestAutomationSupport.isStubBackendMode,
+           let url = UITestAutomationSupport.enrollAudioURL {
+            audioPath = url.path
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
+        if panel.runModal() == .OK, let url = panel.url {
+            audioPath = url.path
+        }
     }
 
     private func enroll() {

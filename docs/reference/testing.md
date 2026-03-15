@@ -10,7 +10,7 @@ This document describes the current automated test surface and supported command
 
 Current inventory:
 
-- UI tests: 22 files / 45 test methods
+- UI tests: 19 files / 50 test methods
 - Unit tests: 4 files / 17 test methods
 - Backend tests: 16 test cases
 

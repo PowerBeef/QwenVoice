@@ -1,6 +1,7 @@
 import XCTest
 
 final class DebugHierarchyTests: QwenVoiceUITestBase {
+    override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
     override class var initialScreen: UITestScreen? { .customVoice }
 
     func testAppWindowAndDefaultScreen() {

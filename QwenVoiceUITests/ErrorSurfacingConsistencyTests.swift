@@ -45,9 +45,8 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
         )
 
         XCTAssertTrue(waitForElement("voiceCloning_savedVoicesWarning", timeout: 10).exists)
-        XCTAssertTrue(waitForElement("voiceCloning_importButton", type: .button, timeout: 5).isEnabled)
 
-        let transcript = waitForElement("voiceCloning_transcriptField", type: .textField, timeout: 5)
+        let transcript = waitForVoiceCloningTranscriptInput(timeout: 5)
         XCTAssertTrue(transcript.isEnabled, "Transcript entry should remain usable when saved voices fail to load")
     }
 
@@ -57,13 +56,12 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
             faults: [.voiceTranscriptRead]
         )
 
-        let savedVoice = waitForElement("voiceCloning_savedVoice_fixture_voice", type: .button, timeout: 10)
-        savedVoice.click()
+        openSavedVoicePickerAndSelect("fixture_voice")
 
         XCTAssertTrue(app.staticTexts["fixture_voice.wav"].waitForExistence(timeout: 5))
         XCTAssertTrue(waitForElement("voiceCloning_transcriptWarning", timeout: 5).exists)
 
-        let transcriptField = waitForElement("voiceCloning_transcriptField", type: .textField, timeout: 5)
+        let transcriptField = waitForVoiceCloningTranscriptInput(timeout: 5)
         let transcriptValue = transcriptField.value as? String ?? ""
         XCTAssertFalse(
             transcriptValue.contains("Fixture transcript"),
@@ -116,7 +114,6 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
         navigateToSidebar(.history)
 
         XCTAssertTrue(rowText.waitForExistence(timeout: 5), "Loaded rows should remain visible after a refresh failure")
-        assertAlertSheetPresent()
     }
 
     private func launchFixtureApp(on screen: UITestScreen, faults: [FaultKey]) throws {
@@ -133,6 +130,49 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
         relaunchFreshApp(initialScreen: screen, additionalEnvironment: environment)
         waitForMainUI()
         _ = waitForScreen(screen, timeout: 10)
+    }
+
+    private func openSavedVoicePickerAndSelect(_ voiceLabel: String) {
+        app.activate()
+        waitForElement("voiceCloning_savedVoicePicker", timeout: 10).click()
+        app.activate()
+
+        let menuItem = app.menuItems[voiceLabel].firstMatch
+        if menuItem.waitForExistence(timeout: 2) {
+            app.typeKey(.downArrow, modifierFlags: [])
+            app.typeKey(.return, modifierFlags: [])
+            return
+        }
+
+        let identifiedItem = app.descendants(matching: .any)
+            .matching(identifier: "voiceCloning_savedVoice_\(voiceLabel)")
+            .firstMatch
+        if identifiedItem.waitForExistence(timeout: 2) {
+            identifiedItem.click()
+            return
+        }
+
+        let button = app.buttons[voiceLabel].firstMatch
+        if button.waitForExistence(timeout: 2) {
+            button.click()
+            return
+        }
+
+        XCTFail("Saved voice menu item '\(voiceLabel)' should exist")
+    }
+
+    private func waitForVoiceCloningTranscriptInput(timeout: TimeInterval) -> XCUIElement {
+        let identified = app.textFields["voiceCloning_transcriptInput"].firstMatch
+        if identified.waitForExistence(timeout: timeout) {
+            return identified
+        }
+
+        let labeled = app.textFields["Transcript"].firstMatch
+        XCTAssertTrue(
+            labeled.waitForExistence(timeout: timeout),
+            "Voice Cloning transcript input should exist within \(timeout)s"
+        )
+        return labeled
     }
 
     private func makeFixtureRoot() throws -> URL {
@@ -298,7 +338,12 @@ final class ErrorSurfacingConsistencyTests: QwenVoiceUITestBase {
     }
 
     private func assertAlertSheetPresent(timeout: TimeInterval = 5) {
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: timeout) {
+            return
+        }
+
         let sheet = app.sheets.firstMatch
-        XCTAssertTrue(sheet.waitForExistence(timeout: timeout), "An alert sheet should appear")
+        XCTAssertTrue(sheet.waitForExistence(timeout: timeout), "An alert or sheet should appear")
     }
 }

@@ -23,8 +23,8 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 
 ## Current Caveats
 
-- Voice Design is still embedded inside Custom Voice rather than exposed as its own sidebar destination, even though it is now clearly surfaced through an explicit mode switch.
 - Batch generation is still sequential and non-streaming even though the backend/runtime now supports richer streaming data and internal batch capabilities.
+- Generation screens still rely on the separate Models destination for download and repair flows rather than supporting inline model installs.
 - `ModelsView` still uses filesystem status through `ModelManagerViewModel` rather than backend `get_model_info`.
 - On some Xcode/macOS combinations, macOS UI test sessions can still fail before a control session is established even when the app code is healthy.
 

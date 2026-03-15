@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Sheet for batch TTS generation — one line per generation.
 struct BatchGenerationSheet: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
@@ -37,67 +36,56 @@ struct BatchGenerationSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Batch Generation")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+                .font(.title.weight(.bold))
 
-            Text("Enter one text per line, or drag a .txt file")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Text("Enter one line per generation, or drag a `.txt` file onto this sheet.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             if !deliverySummary.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("This batch uses the current delivery settings:")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    ForEach(deliverySummary, id: \.self) { line in
-                        Text(line)
-                            .font(.callout)
-                            .foregroundStyle(.primary)
+                GroupBox("Current delivery") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(deliverySummary, id: \.self) { line in
+                            Text(line)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(themeColor.opacity(0.08))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(themeColor.opacity(0.15), lineWidth: 1)
-                )
                 .accessibilityIdentifier("batch_deliverySummary")
             }
 
             TextEditor(text: $batchText)
                 .font(.body)
-                .frame(minHeight: 200)
-                .padding(8)
                 .scrollContentBackground(.hidden)
-                .background(Color.primary.opacity(0.02))
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(8)
+                .frame(minHeight: 220)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
                 )
                 .disabled(coordinator.isProcessing)
 
             if coordinator.isProcessing {
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     ProgressView(value: Double(coordinator.currentIndex), total: Double(coordinator.totalItems))
                         .tint(themeColor)
                     Text(progressLabel)
-                        .font(.caption)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
             }
 
             if let errorMessage = coordinator.errorMessage {
                 Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .font(.callout)
             }
 
             HStack {
@@ -107,6 +95,7 @@ struct BatchGenerationSheet: View {
                         dismiss: { dismiss() }
                     )
                 }
+                .buttonStyle(.bordered)
                 .disabled(coordinator.isCancelling)
                 .keyboardShortcut(.cancelAction)
 
@@ -115,13 +104,15 @@ struct BatchGenerationSheet: View {
                 Button(coordinator.isCancelling ? "Cancelling..." : (coordinator.isProcessing ? "Processing..." : "Generate All")) {
                     startBatch()
                 }
-                .buttonStyle(GlowingGradientButtonStyle(baseColor: themeColor))
+                .buttonStyle(.borderedProminent)
+                .tint(themeColor)
                 .disabled(batchText.isEmpty || coordinator.isProcessing)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 520, minHeight: 440)
+        .background(AppTheme.canvasBackground)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { data, _ in

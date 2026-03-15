@@ -5,195 +5,169 @@ struct EmotionPickerView: View {
     var title: String = "Tone"
     var accentColor: Color = AppTheme.accent
     var accessibilityPrefix: String = "delivery"
+    var showsLabel: Bool = true
 
     @State private var selectedPreset: EmotionPreset?
     @State private var intensity: EmotionIntensity = .normal
     @State private var isCustomMode = false
     @State private var customText = ""
-    @State private var isPickerExpanded = false
+
+    private var showsIntensityPicker: Bool {
+        !isCustomMode && selectedPreset != nil && !isNeutralSelected
+    }
+
+    private var reservesIntensitySlot: Bool {
+        true
+    }
 
     private var isNeutralSelected: Bool {
         selectedPreset?.id == "neutral"
     }
 
-    private var selectedEmotionColor: Color {
-        guard let preset = selectedPreset else { return accentColor }
-        return AppTheme.emotionColor(for: preset.id)
-    }
-
     private var currentToneLabel: String {
         if isCustomMode {
-            return customText.isEmpty ? "Custom tone" : "Custom tone"
+            return "Custom"
         }
 
-        if let selectedPreset {
-            return selectedPreset.id == "neutral" ? "Normal tone" : selectedPreset.label
+        guard let selectedPreset else {
+            return "Normal tone"
         }
 
-        return "Normal tone"
+        return selectedPreset.id == "neutral" ? "Normal tone" : selectedPreset.label
+    }
+
+    private var selectedOptionID: Binding<String> {
+        Binding(
+            get: {
+                if isCustomMode {
+                    return "custom"
+                }
+                return selectedPreset?.id ?? "neutral"
+            },
+            set: { newValue in
+                if newValue == "custom" {
+                    enterCustomMode()
+                } else if let preset = EmotionPreset.all.first(where: { $0.id == newValue }) {
+                    selectPreset(preset)
+                }
+            }
+        )
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.18)) {
-                    isPickerExpanded.toggle()
+        VStack(alignment: .leading, spacing: 8) {
+            if showsLabel {
+                LabeledContent(title) {
+                    toneControlRow
                 }
-            } label: {
-                HStack(spacing: 10) {
-                    Text(currentToneLabel)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary)
-
-                    Spacer(minLength: 12)
-
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.07), lineWidth: LayoutConstants.cardBorderWidth)
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
-            .popover(isPresented: $isPickerExpanded, arrowEdge: .top) {
-                VStack(spacing: 8) {
-                    ForEach(EmotionPreset.all) { preset in
-                        toneOptionButton(
-                            label: preset.id == "neutral" ? "Normal tone" : preset.label,
-                            icon: preset.sfSymbol,
-                            isSelected: !isCustomMode && selectedPreset?.id == preset.id,
-                            accessibilityIdentifier: "\(accessibilityPrefix)_tone_\(preset.id)"
-                        ) {
-                            selectPreset(preset)
-                        }
-                    }
-
-                    toneOptionButton(
-                        label: "Custom",
-                        icon: "pencil.line",
-                        isSelected: isCustomMode,
-                        accessibilityIdentifier: "\(accessibilityPrefix)_tone_custom"
-                    ) {
-                        enterCustomMode()
-                    }
-                }
-                .padding(8)
-                .frame(width: 252)
-                .background(AppTheme.canvasBase)
+            } else {
+                toneControlRow
             }
 
-            if !isCustomMode && selectedPreset != nil && !isNeutralSelected {
-                Picker("Intensity", selection: $intensity) {
-                    ForEach(EmotionIntensity.allCases) { level in
-                        Text(level.label).tag(level)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(selectedEmotionColor)
-                .accessibilityIdentifier("\(accessibilityPrefix)_intensityPicker")
-                .onChange(of: intensity) { _, _ in
-                    if let preset = selectedPreset {
-                        emotion = preset.instruction(for: intensity)
-                    }
-                }
-            }
-
-            if isCustomMode {
-                TextField("Describe the delivery in your own words", text: $customText)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.white.opacity(0.05))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: LayoutConstants.cardBorderWidth)
-                    )
-                    .accessibilityIdentifier("\(accessibilityPrefix)_toneField")
-                    .onChange(of: customText) { _, newValue in
-                        emotion = newValue
-                    }
-            }
+            customToneField
+        }
+        .overlay(alignment: .topLeading) {
+            emotionValueAnchor
         }
         .onAppear {
             syncSelectionFromText()
         }
     }
 
-    private func toneOptionButton(
-        label: String,
-        icon: String,
-        isSelected: Bool,
-        accessibilityIdentifier: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            action()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isSelected ? accentColor : .secondary)
-                    .frame(width: 18)
+    private var tonePicker: some View {
+        Picker(title, selection: selectedOptionID) {
+            ForEach(EmotionPreset.all) { preset in
+                Text(preset.id == "neutral" ? "Normal tone" : preset.label)
+                    .tag(preset.id)
+            }
 
-                Text(label)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
+            Text("Custom")
+                .tag("custom")
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 240, alignment: .leading)
+        .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
+    }
 
-                Spacer(minLength: 8)
+    private var toneControlRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                tonePicker
 
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(accentColor)
+                if reservesIntensitySlot {
+                    intensityInlineSlot
                 }
             }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(isSelected ? accentColor.opacity(0.14) : Color.white.opacity(0.025))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(isSelected ? accentColor.opacity(0.34) : Color.white.opacity(0.06), lineWidth: LayoutConstants.cardBorderWidth)
-                    )
+
+            VStack(alignment: .leading, spacing: 8) {
+                tonePicker
+
+                if reservesIntensitySlot {
+                    intensityInlineSlot
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var intensityInlineSlot: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text("Intensity")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(showsIntensityPicker ? .secondary : .tertiary)
+
+            intensityPicker
+        }
+    }
+
+    private var intensityPicker: some View {
+        Picker("Intensity", selection: $intensity) {
+            ForEach(EmotionIntensity.allCases) { level in
+                Text(level.label).tag(level)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(minWidth: 112, maxWidth: 152, alignment: .leading)
+        .tint(showsIntensityPicker ? AppTheme.emotionColor(for: selectedPreset?.id ?? "neutral") : .secondary)
+        .opacity(showsIntensityPicker ? 1 : 0.6)
+        .disabled(!showsIntensityPicker)
+        .accessibilityIdentifier("\(accessibilityPrefix)_intensityPicker")
+        .onChange(of: intensity) { _, _ in
+            if let selectedPreset {
+                emotion = selectedPreset.instruction(for: intensity)
+            }
+        }
+    }
+
+    private var customToneField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Custom tone")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(isCustomMode ? .secondary : .tertiary)
+
+            TextField("Describe the delivery in your own words", text: $customText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: .infinity, alignment: .leading)
+                .opacity(isCustomMode ? 1 : 0.6)
+                .disabled(!isCustomMode)
+                .accessibilityIdentifier("\(accessibilityPrefix)_toneField")
+                .onChange(of: customText) { _, newValue in
+                    emotion = newValue
+                }
+        }
     }
 
     private func selectPreset(_ preset: EmotionPreset) {
-        AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.2)) {
-            isCustomMode = false
-            selectedPreset = preset
-            isPickerExpanded = false
-        }
+        selectedPreset = preset
+        isCustomMode = false
         emotion = preset.instruction(for: intensity)
     }
 
     private func enterCustomMode() {
-        AppLaunchConfiguration.performAnimated(.easeInOut(duration: 0.2)) {
-            selectedPreset = nil
-            isCustomMode = true
-            isPickerExpanded = false
-        }
-        customText = ""
-        emotion = ""
+        selectedPreset = nil
+        isCustomMode = true
+        emotion = customText
     }
 
     private func syncSelectionFromText() {
@@ -214,6 +188,19 @@ struct EmotionPickerView: View {
         } else {
             selectedPreset = EmotionPreset.all.first
             isCustomMode = false
+            customText = ""
         }
+    }
+
+    private var emotionValueAnchor: some View {
+        Text(emotion.isEmpty ? " " : emotion)
+            .font(.caption2)
+            .foregroundStyle(.clear)
+            .opacity(0.01)
+            .frame(width: 1, height: 1, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityLabel(emotion)
+            .accessibilityValue(emotion)
+            .accessibilityIdentifier("\(accessibilityPrefix)_emotionValue")
     }
 }

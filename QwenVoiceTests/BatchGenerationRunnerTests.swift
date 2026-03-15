@@ -1,5 +1,6 @@
 import XCTest
 @testable import QwenVoice
+import Darwin
 
 @MainActor
 final class BatchGenerationRunnerTests: XCTestCase {
@@ -239,5 +240,51 @@ private struct TestFailure: LocalizedError {
 
     var errorDescription: String? {
         message
+    }
+}
+
+@MainActor
+final class ModelManagerViewModelRecoveryTests: XCTestCase {
+    func testErrorStateFallsBackToDiskAvailabilityAndRefreshes() async throws {
+        let model = try XCTUnwrap(TTSModel.model(for: .design))
+        let fixtureRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QwenVoiceModelManagerRecovery-\(UUID().uuidString)", isDirectory: true)
+        let modelsDir = fixtureRoot.appendingPathComponent("models", isDirectory: true)
+        let installDir = model.installDirectory(in: modelsDir)
+
+        let previousOverride = ProcessInfo.processInfo.environment[AppPaths.appSupportOverrideEnvironmentKey]
+        setenv(AppPaths.appSupportOverrideEnvironmentKey, fixtureRoot.path, 1)
+        defer {
+            if let previousOverride {
+                setenv(AppPaths.appSupportOverrideEnvironmentKey, previousOverride, 1)
+            } else {
+                unsetenv(AppPaths.appSupportOverrideEnvironmentKey)
+            }
+            try? FileManager.default.removeItem(at: fixtureRoot)
+        }
+
+        for relativePath in model.requiredRelativePaths {
+            let fileURL = installDir.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            FileManager.default.createFile(atPath: fileURL.path, contents: Data("fixture".utf8))
+        }
+
+        let viewModel = ModelManagerViewModel()
+        viewModel.statuses[model.id] = .error(message: "Simulated failure")
+
+        XCTAssertTrue(
+            viewModel.isAvailable(model),
+            "A stale error state should not block generation when the model files are complete on disk"
+        )
+
+        await viewModel.refresh()
+
+        guard case let .downloaded(sizeBytes) = viewModel.statuses[model.id] else {
+            return XCTFail("Refresh should re-evaluate error states and mark complete models as downloaded")
+        }
+        XCTAssertGreaterThan(sizeBytes, 0, "Completed model fixtures should report a non-zero directory size")
     }
 }

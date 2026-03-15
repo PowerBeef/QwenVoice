@@ -25,7 +25,7 @@ Generate speech with the app’s built-in English speakers:
 
 ### Voice Design
 
-Voice Design lives inside the **Custom Voice** screen as an explicit mode. Switch the top mode control from `Preset Speaker` to `Voice Design`, describe the voice you want, then shape tone before generating.
+Voice Design is a standalone destination. Describe the voice you want, then shape tone before generating.
 
 ### Voice Cloning
 
@@ -34,7 +34,6 @@ Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, 
 ## What the App Does Not Expose
 
 - no temperature or max-token controls
-- no standalone Voice Design sidebar destination
 - no streaming batch UI
 
 Single-generation flows in the shipping GUI use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based.

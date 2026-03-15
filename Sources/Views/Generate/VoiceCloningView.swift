@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct VoiceCloningView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject var modelManager: ModelManagerViewModel
 
     @State private var referenceAudioPath: String?
     @State private var referenceTranscript = ""
@@ -23,130 +24,66 @@ struct VoiceCloningView: View {
     }
 
     private var isModelAvailable: Bool {
-        cloneModel?.isAvailable(in: QwenVoiceApp.modelsDir) ?? false
+        guard let cloneModel else { return false }
+        return modelManager.isAvailable(cloneModel)
     }
 
     private var modelDisplayName: String {
         cloneModel?.name ?? "Unknown"
     }
 
+    private var canGenerate: Bool {
+        pythonBridge.isReady && isModelAvailable && referenceAudioPath != nil && !text.isEmpty
+    }
+
     private var canRunBatch: Bool {
         pythonBridge.isReady && referenceAudioPath != nil && isModelAvailable
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                    GenerationHeaderView(
-                        title: "Voice Cloning",
-                        subtitle: "Choose a reference voice, then shape the delivery.",
-                        titleAccessibilityIdentifier: "voiceCloning_title",
-                        subtitleAccessibilityIdentifier: "voiceCloning_subtitle"
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("voiceCloning_header")
+    private var idlePrewarmTaskID: String {
+        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+    }
 
-                    if !isModelAvailable {
-                        modelUnavailableBanner
+    private var selectedSavedVoiceID: Binding<String?> {
+        Binding(
+            get: { selectedVoice?.id },
+            set: { newID in
+                guard let newID else {
+                    if selectedVoice != nil {
+                        clearReference()
                     }
-
-                    StudioSectionCard(
-                        title: "Voice",
-                        accentColor: AppTheme.voiceCloning,
-                        accessibilityIdentifier: "voiceCloning_voiceSetup"
-                    ) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            sourceRow
-
-                            if let savedVoicesLoadError {
-                                warningCard(
-                                    message: savedVoicesLoadError,
-                                    accessibilityIdentifier: "voiceCloning_savedVoicesWarning"
-                                ) {
-                                    Button("Retry") {
-                                        Task { await loadSavedVoices() }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(AppTheme.voiceCloning)
-                                    .controlSize(.small)
-                                    .accessibilityIdentifier("voiceCloning_savedVoicesRetry")
-                                }
-                            }
-
-                            if let transcriptLoadError {
-                                warningCard(
-                                    message: transcriptLoadError,
-                                    accessibilityIdentifier: "voiceCloning_transcriptWarning"
-                                )
-                            }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("TRANSCRIPT")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .tracking(0.6)
-                                    .foregroundStyle(.secondary)
-
-                                TextField("What does the reference audio say? (optional)", text: $referenceTranscript)
-                                    .textFieldStyle(.plain)
-                                    .font(.caption)
-                                    .padding(10)
-                                    .background(Color.primary.opacity(0.04))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                                    )
-                                    .accessibilityIdentifier("voiceCloning_transcriptField")
-                            }
-                        }
-                    }
-
-                    DeliveryControlsView(
-                        emotion: $emotion,
-                        accentColor: AppTheme.voiceCloning
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("voiceCloning_toneSpeed")
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            TextInputView(
-                                text: $text,
-                                isGenerating: isGenerating,
-                                placeholder: "What should the cloned voice say?",
-                                buttonColor: AppTheme.voiceCloning,
-                                batchAction: { showingBatch = true },
-                                batchDisabled: !canRunBatch,
-                                onGenerate: generate
-                            )
-                            .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
-
-                            if let errorMessage {
-                                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                                    .foregroundColor(.red)
-                                    .font(.callout)
-                            }
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("voiceCloning_script")
+                    return
                 }
-                .padding(LayoutConstants.canvasPadding)
-                .contentColumn()
+
+                guard let voice = savedVoices.first(where: { $0.id == newID }) else { return }
+                selectSavedVoice(voice)
             }
+        )
+    }
+
+    var body: some View {
+        PageScaffold(
+            accessibilityIdentifier: "screen_voiceCloning",
+            contentSpacing: LayoutConstants.sectionSpacing,
+            contentMaxWidth: LayoutConstants.generationContentMaxWidth
+        ) {
+            if !isModelAvailable {
+                modelUnavailableBanner
+            }
+
+            configurationPanel
+            composerPanel
         }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers)
         }
         .overlay(
             isDragOver
-                ? RoundedRectangle(cornerRadius: 10)
-                    .stroke(AppTheme.voiceCloning.opacity(0.6), lineWidth: 2)
-                    .padding(4)
+                ? RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppTheme.voiceCloning.opacity(0.5), lineWidth: 2)
+                    .padding(8)
                 : nil
         )
-        .accessibilityIdentifier("screen_voiceCloning")
         .task {
             if pythonBridge.isReady {
                 await loadSavedVoices()
@@ -170,141 +107,324 @@ struct VoiceCloningView: View {
             .environmentObject(audioPlayer)
         }
     }
+}
 
-    // MARK: - Source Row
+// MARK: - Subviews
 
-    private var sourceRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text("SOURCE")
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 52, alignment: .leading)
-
-                if !savedVoices.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(savedVoices) { voice in
-                                Button {
-                                    AppLaunchConfiguration.performAnimated(.spring()) {
-                                        selectSavedVoice(voice)
-                                    }
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: "waveform")
-                                            .font(.system(size: 9, weight: .semibold))
-                                        Text(voice.name)
-                                            .font(.system(size: 14, weight: .semibold))
-                                    }
-                                    .voiceChoiceChip(isSelected: selectedVoice?.id == voice.id, color: AppTheme.voiceCloning)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("voiceCloning_savedVoice_\(voice.id)")
-                            }
-                        }
-                    }
-                }
-
-                if !savedVoices.isEmpty {
-                    Divider()
-                        .frame(height: 16)
-                }
-
-                Button {
-                    browseForAudio()
-                } label: {
-                    Label("Import audio...", systemImage: "waveform.badge.plus")
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(AppTheme.voiceCloning)
-                .accessibilityIdentifier("voiceCloning_importButton")
+private extension VoiceCloningView {
+    var configurationPanel: some View {
+        CompactConfigurationSection(
+            title: "Reference",
+            detail: "Choose a saved voice or import a clip, then set the delivery and optional transcript.",
+            iconName: "waveform",
+            accentColor: AppTheme.voiceCloning,
+            trailingText: activeReferenceLabel,
+            accessibilityIdentifier: "voiceCloning_configuration"
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                referenceSettings
+                transcriptSettings
+                deliverySettings
             }
+        }
+    }
 
-            // Active reference indicator
-            if let path = referenceAudioPath {
-                HStack(spacing: 8) {
-                    Color.clear.frame(width: 52, height: 1)
+    var composerPanel: some View {
+        StudioSectionCard(
+            title: "Script",
+            iconName: "text.alignleft",
+            accentColor: AppTheme.voiceCloning,
+            trailingText: canGenerate ? "Ready" : nil,
+            minHeight: 340,
+            accessibilityIdentifier: "voiceCloning_script"
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                TextInputView(
+                    text: $text,
+                    isGenerating: isGenerating,
+                    placeholder: "What should the cloned voice say?",
+                    buttonColor: AppTheme.voiceCloning,
+                    batchAction: { showingBatch = true },
+                    batchDisabled: !canRunBatch,
+                    isEmbedded: true,
+                    onGenerate: generate
+                )
+                .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
 
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.voiceCloning)
+                generationReadiness
 
-                    Text(URL(fileURLWithPath: path).lastPathComponent)
-                        .font(.caption.weight(.medium))
-                        .lineLimit(1)
-
-                    Text("Ready")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        AppLaunchConfiguration.performAnimated(.default) {
-                            clearReference()
-                        }
-                    } label: {
-                        Image(systemName: "xmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundColor(.red)
+                        .font(.callout)
                 }
-                .accessibilityIdentifier("voiceCloning_activeReference")
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceCloning_sourceRow")
     }
 
-    // MARK: - Model Unavailable Banner
+    var referenceSettings: some View {
+        ConfigurationFieldRow(label: "Source") {
+            sourceRow
+        } supporting: {
+            referenceStatus
 
-    private var modelUnavailableBanner: some View {
+            if let savedVoicesLoadError {
+                warningCard(
+                    message: savedVoicesLoadError,
+                    accessibilityIdentifier: "voiceCloning_savedVoicesWarning"
+                ) {
+                    Button("Retry") {
+                        Task { await loadSavedVoices() }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(AppTheme.voiceCloning)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("voiceCloning_savedVoicesRetry")
+                }
+            }
+
+            if let transcriptLoadError {
+                warningCard(
+                    message: transcriptLoadError,
+                    accessibilityIdentifier: "voiceCloning_transcriptWarning"
+                )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceCloning_voiceSetup")
+    }
+
+    var transcriptSettings: some View {
+        ConfigurationFieldRow(
+            label: "Transcript",
+            accessibilityIdentifier: "voiceCloning_transcriptField"
+        ) {
+            TextField(
+                "What does the reference audio say? (optional)",
+                text: $referenceTranscript
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Transcript")
+            .accessibilityIdentifier("voiceCloning_transcriptInput")
+        } supporting: {
+            Text("Optional, but a transcript improves pronunciation and pacing for cloned takes.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    var deliverySettings: some View {
+        ConfigurationFieldRow(label: "Delivery") {
+            DeliveryControlsView(
+                emotion: $emotion,
+                accentColor: AppTheme.voiceCloning,
+                isCompact: true,
+                showsLabel: false
+            )
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceCloning_toneSpeed")
+    }
+
+    @ViewBuilder
+    var sourceRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !savedVoices.isEmpty {
+                savedVoicePicker
+            }
+
+            importButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    var savedVoicePicker: some View {
+        if !savedVoices.isEmpty {
+            Picker("Saved voice", selection: selectedSavedVoiceID) {
+                Text("Choose a saved voice")
+                    .tag(Optional<String>.none)
+
+                ForEach(savedVoices) { voice in
+                    Text(voice.name)
+                        .tag(Optional(voice.id))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 240, alignment: .leading)
+            .accessibilityValue(selectedVoice?.name ?? "")
+            .accessibilityIdentifier("voiceCloning_savedVoicePicker")
+        }
+    }
+
+    var importButton: some View {
+        Button {
+            browseForAudio()
+        } label: {
+            Label(referenceAudioPath == nil ? "Import reference audio..." : "Replace reference audio...", systemImage: "waveform.badge.plus")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(AppTheme.voiceCloning)
+        .accessibilityIdentifier("voiceCloning_importButton")
+    }
+
+    @ViewBuilder
+    var referenceStatus: some View {
+        if let path = referenceAudioPath {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.voiceCloning)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+
+                    Text(selectedVoice == nil ? "Imported file ready" : "Saved voice ready")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Button("Clear") {
+                    AppLaunchConfiguration.performAnimated(.default) {
+                        clearReference()
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+            .inlinePanel(padding: 10, radius: 10)
+            .accessibilityIdentifier("voiceCloning_activeReference")
+        } else {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.badge.exclamationmark")
+                    .foregroundStyle(.secondary)
+                Text("Add a reference clip to unlock the script composer and generation.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .inlinePanel(padding: 10, radius: 10)
+        }
+    }
+
+    var activeReferenceLabel: String {
+        if let selectedVoice {
+            return selectedVoice.name
+        }
+        if let referenceAudioPath {
+            return URL(fileURLWithPath: referenceAudioPath).lastPathComponent
+        }
+        return "Required"
+    }
+
+    var generationReadiness: some View {
+        WorkflowReadinessNote(
+            isReady: canGenerate,
+            title: canGenerate ? "Ready to generate" : readinessTitle,
+            detail: readinessDetail,
+            accentColor: AppTheme.voiceCloning,
+            accessibilityIdentifier: "voiceCloning_readiness"
+        )
+    }
+
+    var modelUnavailableBanner: some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
             Text("Model \"\(modelDisplayName)\" is unavailable or incomplete.")
-                .font(.caption)
+                .font(.callout)
             Spacer()
-            Button {
+            Button("Go to Models") {
                 NotificationCenter.default.post(name: .navigateToModels, object: cloneModel?.id)
-            } label: {
-                HStack(spacing: 3) {
-                    Text("Go to Models")
-                    Image(systemName: "chevron.right")
-                        .imageScale(.small)
-                }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Color.orange)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
             .accessibilityIdentifier("voiceCloning_goToModels")
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.orange.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
-        )
+        .inlinePanel(padding: 12, radius: 12)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voiceCloning_modelBanner")
     }
 
-    // MARK: - Generate
+    var readinessTitle: String {
+        if !pythonBridge.isReady {
+            return "Engine starting"
+        }
+        if !isModelAvailable {
+            return "Install the active model"
+        }
+        if referenceAudioPath == nil {
+            return "Add a reference"
+        }
+        if text.isEmpty {
+            return "Add a script"
+        }
+        return "Review the take"
+    }
 
-    private func generate() {
+    var readinessDetail: String {
+        if !pythonBridge.isReady {
+            return "QwenVoice is still preparing the generation engine."
+        }
+        if !isModelAvailable {
+            return "Open Models and install \(modelDisplayName) before generating."
+        }
+        if referenceAudioPath == nil {
+            return "Saved voices or imported clips both work here. Choose one before writing the final line."
+        }
+        if text.isEmpty {
+            return "Your reference is ready. Add the line you want the cloned voice to perform."
+        }
+        return "Everything is in place for a live preview and a saved clone."
+    }
+
+    @ViewBuilder
+    func warningCard(
+        message: String,
+        accessibilityIdentifier: String,
+        @ViewBuilder action: () -> some View = { EmptyView() }
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.subheadline.weight(.semibold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                action()
+            }
+
+            Spacer(minLength: 0)
+        }
+        .inlinePanel(padding: 12, radius: 12)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+// MARK: - Actions
+
+private extension VoiceCloningView {
+    func generate() {
         guard !text.isEmpty else { return }
+
         guard let refPath = referenceAudioPath else {
             errorMessage = "Select a reference audio file before generating."
             return
         }
+
         guard pythonBridge.isReady else { return }
 
-        if let model = cloneModel, !model.isAvailable(in: QwenVoiceApp.modelsDir) {
+        if let model = cloneModel, !isModelAvailable {
             errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
             return
         }
@@ -315,6 +435,7 @@ struct VoiceCloningView: View {
         Task {
             do {
                 UITestAutomationSupport.recordAction("clone-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
+
                 guard let model = cloneModel else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -327,6 +448,7 @@ struct VoiceCloningView: View {
                     title: title,
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
+
                 let result = try await pythonBridge.generateCloneStreamingFlow(
                     modelID: model.id,
                     text: text,
@@ -359,7 +481,7 @@ struct VoiceCloningView: View {
         }
     }
 
-    private func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
+    func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
         AppPerformanceSignposts.emit("Final File Ready")
 
         var persistenceError: Error?
@@ -402,15 +524,11 @@ struct VoiceCloningView: View {
         }
     }
 
-    private func elapsedMs(since start: UInt64) -> Int {
+    func elapsedMs(since start: UInt64) -> Int {
         Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
-    private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
-    }
-
-    private func prewarmCloneModelIfNeeded() async {
+    func prewarmCloneModelIfNeeded() async {
         guard let model = cloneModel else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
         guard let refPath = referenceAudioPath else { return }
@@ -424,9 +542,7 @@ struct VoiceCloningView: View {
         )
     }
 
-    // MARK: - Voice Selection
-
-    private func selectSavedVoice(_ voice: Voice) {
+    func selectSavedVoice(_ voice: Voice) {
         selectedVoice = voice
         referenceAudioPath = voice.wavPath
         savedVoicesLoadError = nil
@@ -439,14 +555,14 @@ struct VoiceCloningView: View {
         }
     }
 
-    private func clearReference() {
+    func clearReference() {
         referenceAudioPath = nil
         referenceTranscript = ""
         selectedVoice = nil
         transcriptLoadError = nil
     }
 
-    private func loadSavedVoices() async {
+    func loadSavedVoices() async {
         do {
             let loadedVoices = try await pythonBridge.listVoices()
             savedVoices = loadedVoices
@@ -456,13 +572,11 @@ struct VoiceCloningView: View {
         }
     }
 
-    // MARK: - File Handling
-
-    private static let allowedAudioExtensions: Set<String> = [
+    static let allowedAudioExtensions: Set<String> = [
         "wav", "mp3", "aiff", "aif", "m4a", "flac", "ogg"
     ]
 
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+    func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
             guard let data = data as? Data,
@@ -483,7 +597,7 @@ struct VoiceCloningView: View {
         return true
     }
 
-    private func browseForAudio() {
+    func browseForAudio() {
         if UITestAutomationSupport.isStubBackendMode,
            let url = UITestAutomationSupport.importAudioURL {
             referenceAudioPath = url.path
@@ -500,41 +614,5 @@ struct VoiceCloningView: View {
             selectedVoice = nil
             transcriptLoadError = nil
         }
-    }
-
-    // MARK: - Warning Card
-
-    @ViewBuilder
-    private func warningCard(
-        message: String,
-        accessibilityIdentifier: String,
-        @ViewBuilder action: () -> some View = { EmptyView() }
-    ) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .font(.caption)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                action()
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.orange.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.orange.opacity(0.20), lineWidth: 1)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }

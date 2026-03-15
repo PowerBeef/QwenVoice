@@ -3,7 +3,9 @@ import SwiftUI
 struct PreferencesView: View {
     @AppStorage("autoPlay") private var autoPlay = true
     @AppStorage("outputDirectory") private var outputDirectory = ""
+
     @EnvironmentObject private var envManager: PythonEnvironmentManager
+
     @State private var showResetConfirmation = false
 
     private var usesBundledPython: Bool {
@@ -16,7 +18,7 @@ struct PreferencesView: View {
 
     private var pythonActionDescription: String {
         if usesBundledPython {
-            return "Uses the bundled Python runtime included with the app. This restarts the backend without reinstalling dependencies."
+            return "Uses the bundled runtime included with the app. This restarts the backend without reinstalling dependencies."
         }
         return "Deletes the virtual environment and reinstalls all dependencies."
     }
@@ -37,125 +39,69 @@ struct PreferencesView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                GenerationHeaderView(
-                    title: "Preferences",
-                    subtitle: "Playback defaults, storage paths, and backend maintenance."
-                )
+        Form {
+            Section("General") {
+                Toggle("Auto-play generated audio", isOn: $autoPlay)
+                    .tint(AppTheme.preferences)
+                    .accessibilityIdentifier("preferences_autoPlayToggle")
 
-                StudioSectionCard(
-                    title: "Daily Use",
-                    iconName: "slider.horizontal.3",
-                    accentColor: AppTheme.preferences
-                ) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        prefSection(header: "Playback", icon: "play.circle") {
-                            Button {
-                                autoPlay.toggle()
-                            } label: {
-                                HStack {
-                                    Text("Auto-play generated audio")
-                                    Spacer()
-                                    Toggle("Auto-play generated audio", isOn: $autoPlay)
-                                        .toggleStyle(.switch)
-                                        .tint(AppTheme.preferences)
-                                        .labelsHidden()
-                                        .controlSize(.small)
-                                        .allowsHitTesting(false)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Auto-play generated audio")
-                            .accessibilityValue(autoPlay ? "on" : "off")
-                            .accessibilityIdentifier("preferences_autoPlayToggle")
-                        }
-
-                        prefSection(header: "Output", icon: "folder") {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    TextField("Output directory", text: $outputDirectory)
-                                        .textFieldStyle(.roundedBorder)
-                                        .accessibilityIdentifier("preferences_outputDirectory")
-                                    Button("Browse...") {
-                                        if UITestAutomationSupport.isStubBackendMode,
-                                           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
-                                            outputDirectory = outputDirectoryURL.path
-                                            return
-                                        }
-                                        let panel = NSOpenPanel()
-                                        panel.canChooseDirectories = true
-                                        panel.canChooseFiles = false
-                                        if panel.runModal() == .OK, let url = panel.url {
-                                            outputDirectory = url.path
-                                        }
-                                    }
-                                    .accessibilityIdentifier("preferences_browseButton")
-                                    Button("Reset") {
-                                        outputDirectory = ""
-                                    }
-                                    .accessibilityIdentifier("preferences_outputResetButton")
-                                }
-                                if outputDirectory.isEmpty {
-                                    Text("Default: ~/Library/Application Support/QwenVoice/outputs/")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    Text("Custom: \(outputDirectory)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                StudioSectionCard(
-                    title: "Maintenance",
-                    iconName: "wrench.and.screwdriver",
-                    accentColor: AppTheme.preferences
-                ) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        prefSection(header: "Storage", icon: "internaldrive") {
-                            HStack {
-                                Text("App Support Directory")
-                                Spacer()
-                                Button("Open in Finder") {
-                                    if UITestAutomationSupport.isStubBackendMode {
-                                        UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
-                                    } else {
-                                        NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
-                                    }
-                                }
-                                .accessibilityIdentifier("preferences_openFinderButton")
-                            }
-                        }
-
-                        prefSection(header: "Python", icon: "terminal") {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(pythonActionTitle)
-                                    Text(pythonActionDescription)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Button(pythonActionButtonLabel) {
-                                    showResetConfirmation = true
-                                }
-                                .buttonStyle(GlowingGradientButtonStyle(baseColor: AppTheme.preferences))
-                                .accessibilityIdentifier("preferences_resetEnvButton")
-                            }
-                        }
-                    }
-                }
+                Text("Play the latest result automatically after generation finishes.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            .padding(LayoutConstants.canvasPadding)
-            .contentColumn()
+
+            Section("Storage") {
+                LabeledContent("Output directory") {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        TextField("Output directory", text: $outputDirectory)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 260)
+                            .accessibilityIdentifier("preferences_outputDirectory")
+
+                        HStack {
+                            Button("Browse...") {
+                                browseForOutputDirectory()
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("preferences_browseButton")
+
+                            Button("Reset") {
+                                outputDirectory = ""
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("preferences_outputResetButton")
+                        }
+                    }
+                }
+
+                Text(outputDirectorySummary)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Button("Open App Support Directory") {
+                    openAppSupportDirectory()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("preferences_openFinderButton")
+            }
+
+            Section("Maintenance") {
+                Text(pythonActionDescription)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Button(pythonActionButtonLabel) {
+                    showResetConfirmation = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.preferences)
+                .accessibilityIdentifier("preferences_resetEnvButton")
+            }
         }
+        .formStyle(.grouped)
+        .padding(20)
+        .frame(minWidth: 580, minHeight: 420)
+        .navigationTitle("Preferences")
         .accessibilityIdentifier("screen_preferences")
         .alert(pythonActionConfirmationTitle, isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -167,26 +113,33 @@ struct PreferencesView: View {
         }
     }
 
-    @ViewBuilder
-    private func prefSection<Content: View>(
-        header: String,
-        icon: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(header, systemImage: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            content()
+    private var outputDirectorySummary: String {
+        if outputDirectory.isEmpty {
+            return "Default: ~/Library/Application Support/QwenVoice/outputs/"
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color.white.opacity(0.035))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: LayoutConstants.cardBorderWidth)
-        )
+        return "Custom: \(outputDirectory)"
+    }
+
+    private func browseForOutputDirectory() {
+        if UITestAutomationSupport.isStubBackendMode,
+           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
+            outputDirectory = outputDirectoryURL.path
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        if panel.runModal() == .OK, let url = panel.url {
+            outputDirectory = url.path
+        }
+    }
+
+    private func openAppSupportDirectory() {
+        if UITestAutomationSupport.isStubBackendMode {
+            UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
+        } else {
+            NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
+        }
     }
 }

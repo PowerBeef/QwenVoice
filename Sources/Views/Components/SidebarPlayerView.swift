@@ -7,10 +7,13 @@ struct SidebarPlayerView: View {
     var body: some View {
         if audioPlayer.hasAudio {
             VStack(alignment: .leading, spacing: 7) {
-                // Row 1: Title + dismiss
+                Text("Player")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+
                 HStack {
                     Text(audioPlayer.currentTitle)
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
@@ -42,7 +45,6 @@ struct SidebarPlayerView: View {
                     .accessibilityIdentifier("sidebarPlayer_dismiss")
                 }
 
-                // Row 2: Waveform (tap to seek)
                 GeometryReader { geo in
                     WaveformView(samples: audioPlayer.waveformSamples, progress: audioPlayer.progress)
                         .contentShape(Rectangle())
@@ -52,22 +54,21 @@ struct SidebarPlayerView: View {
                             audioPlayer.seek(to: fraction)
                         }
                 }
-                .frame(height: 30)
+                .frame(height: 24)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Waveform")
                 .opacity(audioPlayer.canSeek ? 1.0 : 0.75)
                 .accessibilityIdentifier("sidebarPlayer_waveform")
                 .accessibilityValue(audioPlayer.canSeek ? "seek enabled" : "seek disabled")
 
-                // Row 3: Play/pause + time
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Button {
                         AppLaunchConfiguration.performAnimated(.spring(response: 0.3, dampingFraction: 0.7)) {
                             audioPlayer.togglePlayPause()
                         }
                     } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(AppTheme.accent)
                     }
                     .buttonStyle(.plain)
@@ -75,9 +76,15 @@ struct SidebarPlayerView: View {
                     .accessibilityValue(audioPlayer.isPlaying ? "pause" : "play")
 
                     Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.durationDisplayText)")
-                        .font(.caption2.monospacedDigit())
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("sidebarPlayer_time")
+
+                    Spacer(minLength: 0)
+
+                    Text(audioPlayer.isLiveStream ? "Preview" : "Playback")
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.tertiary)
                 }
 
                 if let playbackError = audioPlayer.playbackError {
@@ -89,15 +96,6 @@ struct SidebarPlayerView: View {
                         .accessibilityIdentifier("sidebarPlayer_error")
                 }
             }
-            .padding(7)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(AppTheme.accent.opacity(0.15), lineWidth: 1)
-                    )
-            )
             .transition(
                 AppLaunchConfiguration.current.animationsEnabled
                 ? .move(edge: .bottom).combined(with: .opacity)

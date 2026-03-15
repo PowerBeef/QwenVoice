@@ -14,12 +14,14 @@ struct SidebarStatusView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                statusContent
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("sidebar_backendStatus")
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Engine")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            statusContent
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("sidebar_backendStatus")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sidebar_generationStatus")
@@ -48,14 +50,12 @@ struct SidebarStatusView: View {
         HStack(spacing: 6) {
             Circle()
                 .fill(AppTheme.accent)
-                .frame(width: 6, height: 6)
+                .frame(width: 5, height: 5)
             Text("Ready")
-                .font(.caption2.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_idle")
-        .padding(.horizontal, 4)
-        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -66,14 +66,12 @@ struct SidebarStatusView: View {
             ProgressView()
                 .controlSize(.mini)
             Text("Starting engine…")
-                .font(.caption2.weight(.medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_starting")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.04, strokeOpacity: 0.08))
     }
 
     // MARK: - Active (with progress bar)
@@ -86,7 +84,7 @@ struct SidebarStatusView: View {
                 ProgressView()
                     .controlSize(.mini)
                 Text(activity.label)
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -97,16 +95,16 @@ struct SidebarStatusView: View {
                         .tint(AppTheme.accent)
                         .scaleEffect(y: 0.6)
                     Text("\(percent)%")
-                        .font(.caption2.monospacedDigit())
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
             }
         }
         .accessibilityIdentifier("sidebar_backendStatus_active")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.05, strokeOpacity: 0.10))
+        .background(statusBackground(color: AppTheme.accent, fillOpacity: 0.035, strokeOpacity: 0.07))
     }
 
     // MARK: - Error (dismissible)
@@ -118,7 +116,7 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
                 Text("Error")
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
                 Spacer()
                 Button {
@@ -131,15 +129,15 @@ struct SidebarStatusView: View {
                 .buttonStyle(.plain)
             }
             Text(message)
-                .font(.caption2)
+                .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
         .accessibilityIdentifier("sidebar_backendStatus_error")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: .orange, fillOpacity: 0.08, strokeOpacity: 0.15))
+        .background(statusBackground(color: .orange, fillOpacity: 0.05, strokeOpacity: 0.1))
     }
 
     // MARK: - Crashed
@@ -153,28 +151,28 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                 Text("Engine Stopped")
-                    .font(.caption2.weight(.medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
             }
             Text(detail)
-                .font(.caption2)
+                .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
         .accessibilityIdentifier("sidebar_backendStatus_crashed")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusBackground(color: .red, fillOpacity: 0.08, strokeOpacity: 0.15))
+        .background(statusBackground(color: .red, fillOpacity: 0.05, strokeOpacity: 0.1))
     }
 
     // MARK: - Shared Background
 
     private func statusBackground(color: Color, fillOpacity: Double, strokeOpacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(color.opacity(fillOpacity))
             .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(color.opacity(strokeOpacity), lineWidth: 1)
             )
     }

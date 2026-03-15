@@ -8,6 +8,7 @@ struct AppLaunchConfiguration {
     let debugCaptureEnabled: Bool
 
     static let current = AppLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
+    private static var openedInitialSettingsWindow = false
 
     init(arguments: [String]) {
         let inferredUITest = arguments.contains("--uitest")
@@ -33,6 +34,10 @@ struct AppLaunchConfiguration {
         return SidebarItem(testScreenID: initialScreenID)
     }
 
+    var shouldOpenSettingsOnLaunch: Bool {
+        initialScreenID == "preferences"
+    }
+
     var animationsEnabled: Bool {
         !disableAnimations
     }
@@ -43,6 +48,14 @@ struct AppLaunchConfiguration {
 
     static func performAnimated<Result>(_ animation: Animation?, _ updates: () -> Result) -> Result {
         withAnimation(current.animation(animation), updates)
+    }
+
+    static func openSettingsWindowIfNeeded() {
+        guard current.shouldOpenSettingsOnLaunch, !openedInitialSettingsWindow else { return }
+        openedInitialSettingsWindow = true
+        DispatchQueue.main.async {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 }
 
@@ -85,15 +98,19 @@ struct QwenVoiceApp: App {
                         .frame(minWidth: 500, minHeight: 400)
                 }
             }
-            .background(WindowChromeConfigurator().allowsHitTesting(false))
             .defaultAppStorage(UITestAutomationSupport.appStorage)
             .onAppear {
                 setupAppSupport()
                 envManager.ensureEnvironment()
+                AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
         }
-        .windowStyle(.hiddenTitleBar) // Using hiddenTitleBar instead of titleBar to merge content cleanly
         .defaultSize(width: 860, height: 600)
+        Settings {
+            PreferencesView()
+                .environmentObject(envManager)
+                .defaultAppStorage(UITestAutomationSupport.appStorage)
+        }
         .commands {
             CommandGroup(replacing: .newItem) { }
 
@@ -110,6 +127,38 @@ struct QwenVoiceApp: App {
                 }
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(!audioPlayer.hasAudio)
+            }
+
+            CommandMenu("Navigate") {
+                Button("Custom Voice") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.customVoice)
+                }
+                .keyboardShortcut("1", modifiers: .command)
+
+                Button("Voice Design") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voiceDesign)
+                }
+                .keyboardShortcut("2", modifiers: .command)
+
+                Button("Voice Cloning") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voiceCloning)
+                }
+                .keyboardShortcut("3", modifiers: .command)
+
+                Button("History") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.history)
+                }
+                .keyboardShortcut("4", modifiers: .command)
+
+                Button("Voices") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voices)
+                }
+                .keyboardShortcut("5", modifiers: .command)
+
+                Button("Models") {
+                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.models)
+                }
+                .keyboardShortcut("6", modifiers: .command)
             }
 
             // File menu additions

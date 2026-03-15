@@ -31,22 +31,22 @@ final class ModelAvailabilityConsistencyTests: QwenVoiceUITestBase {
         waitForMainUI()
     }
 
-    func testCustomVoiceUsesModeSpecificAvailability() {
+    func testCustomVoiceAndVoiceDesignUseScreenSpecificAvailability() {
         _ = waitForScreen(.customVoice, timeout: 10)
 
         let initialBanner = app.descendants(matching: .any).matching(identifier: "customVoice_modelBanner").firstMatch
         XCTAssertFalse(
             initialBanner.waitForExistence(timeout: 1),
-            "Preset speaker mode should use the complete Custom Voice model fixture"
+            "Custom Voice should use the complete Custom Voice model fixture"
         )
 
-        let designMode = waitForElement("customVoice_mode_design", timeout: 10)
-        designMode.click()
+        ensureOnScreen(.voiceDesign, timeout: 10)
+        _ = waitForScreen(.voiceDesign, timeout: 5)
 
-        let banner = waitForElement("customVoice_modelBanner", timeout: 5)
-        XCTAssertTrue(banner.exists, "Custom speaker mode should switch to the incomplete Voice Design model fixture")
+        let banner = waitForElement("voiceDesign_modelBanner", timeout: 5)
+        XCTAssertTrue(banner.exists, "Voice Design should surface the incomplete Voice Design model fixture")
 
-        let voiceField = waitForElement("customVoice_voiceDescriptionField", type: .textField)
+        let voiceField = waitForElement("voiceDesign_voiceDescriptionField")
         voiceField.click()
         voiceField.typeText("A warm narrator voice")
 

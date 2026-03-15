@@ -1,24 +1,38 @@
 import SwiftUI
 
 struct ModelsView: View {
-    @EnvironmentObject var viewModel: ModelManagerViewModel
+    @EnvironmentObject private var viewModel: ModelManagerViewModel
+
     @Binding var highlightedModelID: String?
+
     @State private var flashedModelID: String?
     @State private var modelToDelete: TTSModel?
     @State private var showDeleteConfirmation = false
 
+    private var installedModels: [TTSModel] {
+        TTSModel.all.filter { model in
+            if case .downloaded = viewModel.statuses[model.id] {
+                return true
+            }
+            return false
+        }
+    }
+
+    private var otherModels: [TTSModel] {
+        TTSModel.all.filter { model in
+            if case .downloaded = viewModel.statuses[model.id] {
+                return false
+            }
+            return true
+        }
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                    GenerationHeaderView(
-                        title: "Models",
-                        subtitle: "Each model powers one generation workflow. Download what you need.",
-                        titleAccessibilityIdentifier: "models_title"
-                    )
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(TTSModel.all) { model in
+            List {
+                if !installedModels.isEmpty {
+                    Section("Installed") {
+                        ForEach(installedModels) { model in
                             ModelCard(
                                 model: model,
                                 viewModel: viewModel,
@@ -32,8 +46,30 @@ struct ModelsView: View {
                         }
                     }
                 }
-                .padding(LayoutConstants.canvasPadding)
-                .contentColumn()
+
+                Section(installedModels.isEmpty ? "Available Models" : "Available To Download") {
+                    ForEach(otherModels) { model in
+                        ModelCard(
+                            model: model,
+                            viewModel: viewModel,
+                            isHighlighted: flashedModelID == model.id,
+                            onDelete: {
+                                modelToDelete = model
+                                showDeleteConfirmation = true
+                            }
+                        )
+                        .id(model.id)
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .topLeading) {
+                Text("Models")
+                    .font(.system(size: 1))
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("models_title")
             }
             .accessibilityIdentifier("screen_models")
             .task {
@@ -67,8 +103,10 @@ struct ModelsView: View {
             }
         }
     }
+}
 
-    private func focusHighlightedModel(using proxy: ScrollViewProxy) {
+private extension ModelsView {
+    func focusHighlightedModel(using proxy: ScrollViewProxy) {
         guard let highlightedModelID else { return }
         let modelID = highlightedModelID
         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -107,126 +145,105 @@ struct ModelCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: model.mode.iconName)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(modeColor)
-                .frame(width: 22)
+        HStack(alignment: .center, spacing: 12) {
+            Label(model.name, systemImage: model.mode.iconName)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(modeColor)
+                .accessibilityIdentifier("models_card_\(model.id)")
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(model.name)
-                    .font(.system(size: 14, weight: .semibold))
-
+            VStack(alignment: .leading, spacing: 4) {
                 Text(usageLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(modeColor)
-
+                    .font(.footnote.weight(.medium))
                 Text(model.folder)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-
-                switch status {
-                case .checking:
-                    VStack(alignment: .leading, spacing: 2) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(maxWidth: 200, alignment: .leading)
-                        Text("Checking local files...")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .accessibilityIdentifier("models_checking_\(model.id)")
-                case .notDownloaded:
-                    Text("Download this model to enable \(model.mode.displayName).")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                case .downloading(let downloadedBytes, let totalBytes):
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let totalBytes, totalBytes > 0 {
-                            let progress = min(max(Double(downloadedBytes) / Double(totalBytes), 0), 1)
-                            let formattedDL = ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)
-                            let formattedTotal = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(modeColor.opacity(0.18))
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(modeColor)
-                                        .frame(width: max(6, geo.size.width * progress))
-                                }
-                            }
-                            .frame(maxWidth: 200, maxHeight: 6)
-
-                            Text(progress >= 1.0 ? "Finalizing..." : "\(formattedDL) / \(formattedTotal)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        } else {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(maxWidth: 200, alignment: .leading)
-                            Text("Preparing download...")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                case .downloaded(let sizeBytes):
-                    Text("Ready — \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
-                        .font(.caption)
-                        .foregroundColor(modeColor)
-                case .error:
-                    Text("Download failed. Retry to keep using \(model.mode.displayName).")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                statusView
             }
 
             Spacer()
-
-            switch status {
-            case .checking:
-                EmptyView()
-            case .notDownloaded:
-                Button("Download") {
-                    Task { await viewModel.download(model) }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(modeColor)
-                .controlSize(.small)
-                .accessibilityIdentifier("models_download_\(model.id)")
-            case .downloading:
-                Button("Cancel") {
-                    viewModel.cancelDownload(model)
-                }
-                .controlSize(.small)
-            case .downloaded:
-                Button(role: .destructive) {
-                    onDelete?()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .controlSize(.small)
-                .accessibilityIdentifier("models_delete_\(model.id)")
-            case .error:
-                Button("Retry") {
-                    Task { await viewModel.download(model) }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(modeColor)
-                .controlSize(.small)
-                .accessibilityIdentifier("models_retry_\(model.id)")
-            }
+            actionView
         }
-        .padding(10)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(isHighlighted ? modeColor.opacity(0.10) : AppTheme.cardFill)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHighlighted ? modeColor.opacity(0.08) : .clear)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(isHighlighted ? modeColor.opacity(0.30) : AppTheme.cardStroke, lineWidth: isHighlighted ? 1.5 : LayoutConstants.cardBorderWidth)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("models_card_\(model.id)")
+    }
+
+    @ViewBuilder
+    private var statusView: some View {
+        switch status {
+        case .checking:
+            Label("Checking local files...", systemImage: "hourglass")
+                .font(.caption)
+                .accessibilityIdentifier("models_checking_\(model.id)")
+        case .notDownloaded:
+            Text("Download this model to enable \(model.mode.displayName).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .downloading(let downloadedBytes, let totalBytes):
+            VStack(alignment: .leading, spacing: 4) {
+                if let totalBytes, totalBytes > 0 {
+                    ProgressView(value: Double(downloadedBytes), total: Double(totalBytes))
+                    Text(
+                        "\(ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    ProgressView()
+                    Text("Preparing download...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .downloaded(let sizeBytes):
+            Text("Ready - \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
+                .font(.caption)
+                .foregroundStyle(modeColor)
+        case .error:
+            Text("Download failed. Retry to keep using \(model.mode.displayName).")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    @ViewBuilder
+    private var actionView: some View {
+        switch status {
+        case .checking:
+            EmptyView()
+        case .notDownloaded:
+            Button("Download") {
+                Task { await viewModel.download(model) }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(modeColor)
+            .accessibilityIdentifier("models_download_\(model.id)")
+        case .downloading:
+            Button("Cancel") {
+                viewModel.cancelDownload(model)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        case .downloaded:
+            Button(role: .destructive) {
+                onDelete?()
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityIdentifier("models_delete_\(model.id)")
+        case .error:
+            Button("Retry") {
+                Task { await viewModel.download(model) }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(modeColor)
+            .accessibilityIdentifier("models_retry_\(model.id)")
+        }
     }
 }

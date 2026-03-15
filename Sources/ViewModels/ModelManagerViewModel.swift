@@ -25,7 +25,6 @@ final class ModelManagerViewModel: ObservableObject {
 
         for model in TTSModel.all {
             if case .downloading = statuses[model.id] { continue }
-            if case .error = statuses[model.id] { continue }
 
             let epoch = beginEpoch(for: model.id)
             let modelDir = model.installDirectory(in: modelsDir)
@@ -52,6 +51,17 @@ final class ModelManagerViewModel: ObservableObject {
         for (id, epoch, isComplete, size) in results {
             guard isCurrentEpoch(epoch, for: id) else { continue }
             statuses[id] = isComplete ? .downloaded(sizeBytes: size) : .notDownloaded
+        }
+    }
+
+    func isAvailable(_ model: TTSModel) -> Bool {
+        switch statuses[model.id] {
+        case .downloaded:
+            return true
+        case .downloading, .notDownloaded:
+            return false
+        case .checking, .error, .none:
+            return model.isAvailable(in: QwenVoiceApp.modelsDir)
         }
     }
 
@@ -100,13 +110,17 @@ final class ModelManagerViewModel: ObservableObject {
             do {
                 try await downloader.downloadRepo(repo: model.huggingFaceRepo, to: targetDir)
                 guard isCurrentEpoch(epoch, for: model.id) else { return }
-                guard model.isAvailable(in: modelsDir) else {
+                let finalizedDownload = await Task.detached(priority: .utility) { () -> (isComplete: Bool, size: Int) in
+                    let isComplete = model.isAvailable(in: modelsDir)
+                    let size = isComplete ? Self.directorySize(url: targetDir) : 0
+                    return (isComplete, size)
+                }.value
+                guard finalizedDownload.isComplete else {
                     statuses[model.id] = .error(message: "Download incomplete")
                     try? FileManager.default.removeItem(at: targetDir)
                     return
                 }
-                let size = Self.directorySize(url: targetDir)
-                statuses[model.id] = .downloaded(sizeBytes: size)
+                statuses[model.id] = .downloaded(sizeBytes: finalizedDownload.size)
             } catch is CancellationError {
                 // cancelDownload() already set status — no-op
             } catch let dlError as HuggingFaceDownloader.DownloadError {

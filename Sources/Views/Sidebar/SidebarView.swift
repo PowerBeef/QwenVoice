@@ -1,131 +1,150 @@
 import SwiftUI
 
-private struct SidebarNavigationRow: View {
-    let item: SidebarItem
-    let isSelected: Bool
-    let action: () -> Void
-
-    private var color: Color {
-        AppTheme.sidebarColor(for: item)
-    }
+private struct SidebarSectionHeader: View {
+    let title: String
+    let accessibilityID: String
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: item.iconName)
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 22)
-                    .foregroundStyle(isSelected ? color : .secondary)
-
-                Text(item.rawValue)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? color : .primary.opacity(0.86))
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? color.opacity(0.18) : Color.clear)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(item.accessibilityID)
-        .accessibilityValue(isSelected ? "selected" : "not selected")
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier(accessibilityID)
     }
 }
 
-private struct SidebarSectionView: View {
-    let section: SidebarItem.Section
+private struct SidebarRow: View {
+    let item: SidebarItem
     @Binding var selection: SidebarItem?
+    @State private var isHovered = false
+
+    private var isSelected: Bool {
+        selection == item
+    }
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(backgroundColor)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(borderColor, lineWidth: isSelected || isHovered ? 1 : 0)
+            }
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return .accentColor.opacity(0.12)
+        }
+
+        if isHovered {
+            return Color.primary.opacity(0.05)
+        }
+
+        return .clear
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return .accentColor.opacity(0.24)
+        }
+
+        if isHovered {
+            return Color.primary.opacity(0.08)
+        }
+
+        return .clear
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(section.rawValue.uppercased())
-                .font(.system(size: 10, weight: .bold))
-                .tracking(1.2)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
+        HStack(spacing: 8) {
+            Capsule()
+                .fill(isSelected ? Color.accentColor : .clear)
+                .frame(width: 3, height: 16)
 
-            VStack(spacing: 8) {
-                ForEach(section.items) { item in
-                    SidebarNavigationRow(item: item, isSelected: selection == item) {
-                        AppLaunchConfiguration.performAnimated(.spring(response: 0.26, dampingFraction: 0.82)) {
-                            selection = item
-                        }
-                    }
-                }
-            }
+            Image(systemName: item.iconName)
+                .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .frame(width: 22, alignment: .center)
+
+            Text(item.rawValue)
+                .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
         }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+            .background(rowBackground)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onTapGesture {
+                selection = item
+            }
+            .onHover { hovering in
+                isHovered = hovering
+            }
+            .animation(.easeOut(duration: 0.14), value: isHovered)
+            .animation(.easeOut(duration: 0.14), value: isSelected)
+            .accessibilityValue(selection == item ? "selected" : "not selected")
+            .accessibilityIdentifier(item.accessibilityID)
     }
 }
 
 struct SidebarView: View {
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+
     @Binding var selection: SidebarItem?
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(AppTheme.accent.opacity(0.16))
-                            .frame(width: 34, height: 34)
-
-                        Image(systemName: "waveform")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(AppTheme.accent)
+        List(selection: $selection) {
+            ForEach(SidebarItem.Section.allCases, id: \.self) { section in
+                Section {
+                    ForEach(section.items) { item in
+                        SidebarRow(item: item, selection: $selection)
+                            .tag(item as SidebarItem?)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                            .listRowBackground(Color.clear)
                     }
-
-                    Text("QwenVoice")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.76)
-                }
-                .padding(.horizontal, 8)
-                .padding(.top, 6)
-
-                ForEach(SidebarItem.Section.allCases, id: \.self) { section in
-                    SidebarSectionView(section: section, selection: $selection)
+                } header: {
+                    SidebarSectionHeader(
+                        title: section.rawValue,
+                        accessibilityID: section.accessibilityID
+                    )
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) {
+            SidebarFooterRegion()
+                .environmentObject(audioPlayer)
+        }
+    }
+}
 
-            Spacer(minLength: 20)
+private struct SidebarFooterRegion: View {
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
 
-            VStack(spacing: 10) {
-                SidebarPlayerView()
-                    .appAnimation(.easeInOut(duration: 0.25), value: audioPlayer.hasAudio)
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                if audioPlayer.hasAudio {
+                    SidebarPlayerView()
+                    Divider()
+                }
 
                 SidebarStatusView()
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: LayoutConstants.sidebarWidth)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(AppTheme.railStroke, lineWidth: 1)
-                }
-                .padding(.leading, 8)
-                .padding(.top, 10)
-                .padding(.bottom, 10)
-        }
-        .padding(.vertical, 6)
-        .onAppear {
-            if selection == nil {
-                selection = .customVoice
-            }
-        }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }

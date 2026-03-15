@@ -1,11 +1,12 @@
 import SwiftUI
+import AppKit
 
-struct CustomVoiceView: View {
+struct VoiceDesignView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
 
-    @State private var selectedSpeaker = TTSModel.defaultSpeaker
+    @Binding private var voiceDescription: String
     @State private var emotion = "Normal tone"
     @State private var text = ""
     @State private var isGenerating = false
@@ -13,7 +14,7 @@ struct CustomVoiceView: View {
     @State private var showingBatch = false
 
     private var activeMode: GenerationMode {
-        .custom
+        .design
     }
 
     private var activeModel: TTSModel? {
@@ -33,20 +34,26 @@ struct CustomVoiceView: View {
         pythonBridge.isReady
             && isModelAvailable
             && !text.isEmpty
+            && !voiceDescription.isEmpty
     }
 
     private var canRunBatch: Bool {
         pythonBridge.isReady
             && isModelAvailable
+            && !voiceDescription.isEmpty
     }
 
     private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)"
+        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
+    }
+
+    init(voiceDescription: Binding<String>) {
+        _voiceDescription = voiceDescription
     }
 
     var body: some View {
         PageScaffold(
-            accessibilityIdentifier: "screen_customVoice",
+            accessibilityIdentifier: "screen_voiceDesign",
             contentSpacing: LayoutConstants.sectionSpacing,
             contentMaxWidth: LayoutConstants.generationContentMaxWidth
         ) {
@@ -59,9 +66,9 @@ struct CustomVoiceView: View {
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
-                mode: .custom,
-                voice: selectedSpeaker,
-                emotion: emotion
+                mode: .design,
+                emotion: emotion,
+                voiceDescription: voiceDescription
             )
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
@@ -74,17 +81,18 @@ struct CustomVoiceView: View {
 
 // MARK: - Subviews
 
-private extension CustomVoiceView {
+private extension VoiceDesignView {
     var configurationPanel: some View {
         CompactConfigurationSection(
             title: "Configuration",
-            detail: "Pick a built-in speaker, then shape the delivery before you generate.",
+            detail: "Describe the voice, set the delivery, and keep the script front and center.",
             iconName: "slider.horizontal.3",
-            accentColor: AppTheme.customVoice,
-            accessibilityIdentifier: "customVoice_configuration"
+            accentColor: AppTheme.voiceDesign,
+            trailingText: voiceDescription.isEmpty ? "Brief required" : "Brief ready",
+            accessibilityIdentifier: "voiceDesign_configuration"
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                speakerSettings
+                briefSettings
                 deliverySettings
             }
         }
@@ -94,23 +102,23 @@ private extension CustomVoiceView {
         StudioSectionCard(
             title: "Script",
             iconName: "text.alignleft",
-            accentColor: AppTheme.customVoice,
+            accentColor: AppTheme.voiceDesign,
             trailingText: canGenerate ? "Ready" : nil,
             minHeight: 340,
-            accessibilityIdentifier: "customVoice_script"
+            accessibilityIdentifier: "voiceDesign_script"
         ) {
             VStack(alignment: .leading, spacing: 10) {
                 TextInputView(
                     text: $text,
                     isGenerating: isGenerating,
                     placeholder: "What should I say?",
-                    buttonColor: AppTheme.customVoice,
+                    buttonColor: AppTheme.voiceDesign,
                     batchAction: { showingBatch = true },
                     batchDisabled: !canRunBatch,
+                    generateDisabled: !pythonBridge.isReady || !isModelAvailable || voiceDescription.isEmpty,
                     isEmbedded: true,
                     onGenerate: generate
                 )
-                .disabled(!pythonBridge.isReady || !isModelAvailable)
 
                 generationReadiness
 
@@ -124,50 +132,38 @@ private extension CustomVoiceView {
         .accessibilityElement(children: .contain)
     }
 
-    var speakerSettings: some View {
-        ConfigurationFieldRow(label: "Speaker") {
-            HStack(spacing: 10) {
-                speakerPicker
-                Spacer(minLength: 0)
-            }
+    var briefSettings: some View {
+        ConfigurationFieldRow(label: "Voice brief") {
+            ContinuousVoiceDescriptionField(
+                text: $voiceDescription,
+                placeholder: "A warm, deep narrator with a subtle British accent.",
+                accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         } supporting: {
-            if pythonBridge.isReady && isModelAvailable {
-                Label("Model ready", systemImage: "checkmark.circle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.customVoice)
-            }
+            Text("Describe timbre, accent, or delivery style in one tight sentence.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .overlay(alignment: .topLeading) {
-            selectedSpeakerValueAnchor
+            voiceDescriptionValueAnchor
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("customVoice_voiceSetup")
+        .accessibilityIdentifier("voiceDesign_voiceSetup")
+        .accessibilityValue(voiceDescription)
     }
 
     var deliverySettings: some View {
         ConfigurationFieldRow(label: "Delivery") {
             DeliveryControlsView(
                 emotion: $emotion,
-                accentColor: AppTheme.customVoice,
+                accentColor: AppTheme.voiceDesign,
                 isCompact: true,
                 showsLabel: false
             )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("customVoice_toneSpeed")
-    }
-
-    var speakerPicker: some View {
-        Picker("Speaker", selection: $selectedSpeaker) {
-            ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                Text(speaker.capitalized).tag(speaker)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
-        .accessibilityValue(selectedSpeaker.capitalized)
-        .accessibilityIdentifier("customVoice_speakerPicker")
+        .accessibilityIdentifier("voiceDesign_toneSpeed")
     }
 
     var generationReadiness: some View {
@@ -175,8 +171,8 @@ private extension CustomVoiceView {
             isReady: canGenerate,
             title: canGenerate ? "Ready to generate" : readinessTitle,
             detail: readinessDetail,
-            accentColor: AppTheme.customVoice,
-            accessibilityIdentifier: "customVoice_readiness"
+            accentColor: AppTheme.voiceDesign,
+            accessibilityIdentifier: "voiceDesign_readiness"
         )
     }
 
@@ -194,11 +190,11 @@ private extension CustomVoiceView {
                 NotificationCenter.default.post(name: .navigateToModels, object: activeModel?.id)
             }
             .buttonStyle(.bordered)
-            .accessibilityIdentifier("customVoice_goToModels")
+            .accessibilityIdentifier("voiceDesign_goToModels")
         }
         .inlinePanel(padding: 12, radius: 12)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("customVoice_modelBanner")
+        .accessibilityIdentifier("voiceDesign_modelBanner")
     }
 
     var readinessTitle: String {
@@ -207,6 +203,9 @@ private extension CustomVoiceView {
         }
         if !isModelAvailable {
             return "Install the active model"
+        }
+        if voiceDescription.isEmpty {
+            return "Add a voice brief"
         }
         if text.isEmpty {
             return "Add a script"
@@ -221,30 +220,84 @@ private extension CustomVoiceView {
         if !isModelAvailable {
             return "Open Models and install \(modelDisplayName) before generating."
         }
+        if voiceDescription.isEmpty {
+            return "Describe the voice you want before writing the final line."
+        }
         if text.isEmpty {
-            return "The selected speaker and delivery settings are ready as soon as the line is written."
+            return "Once the line is written, the generated voice will use this brief and delivery."
         }
         return "Everything is in place for a live preview and a saved generation."
     }
 
-    var selectedSpeakerValueAnchor: some View {
-        Text(selectedSpeaker.capitalized)
+    var voiceDescriptionValueAnchor: some View {
+        Text(voiceDescription.isEmpty ? " " : voiceDescription)
             .font(.caption2)
             .foregroundStyle(.clear)
             .opacity(0.01)
             .frame(width: 1, height: 1, alignment: .leading)
             .allowsHitTesting(false)
-            .accessibilityLabel(selectedSpeaker.capitalized)
-            .accessibilityValue(selectedSpeaker.capitalized)
-            .accessibilityIdentifier("customVoice_selectedSpeaker")
+            .accessibilityLabel(voiceDescription)
+            .accessibilityValue(voiceDescription)
+            .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
+    }
+}
+
+private struct ContinuousVoiceDescriptionField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let accessibilityIdentifier: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: text)
+        field.delegate = context.coordinator
+        field.isBordered = true
+        field.isBezeled = true
+        field.bezelStyle = .roundedBezel
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byTruncatingTail
+        configure(field)
+        return field
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+        configure(nsView)
+    }
+
+    private func configure(_ field: NSTextField) {
+        field.placeholderString = placeholder
+        field.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
+        field.setAccessibilityIdentifier(accessibilityIdentifier)
+        field.setAccessibilityLabel("Voice brief")
+        field.setAccessibilityValue(field.stringValue)
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+        }
     }
 }
 
 // MARK: - Actions
 
-private extension CustomVoiceView {
+private extension VoiceDesignView {
     func generate() {
-        guard !text.isEmpty, pythonBridge.isReady else { return }
+        guard !text.isEmpty, !voiceDescription.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
@@ -256,7 +309,7 @@ private extension CustomVoiceView {
 
         Task {
             do {
-                UITestAutomationSupport.recordAction("custom-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
+                UITestAutomationSupport.recordAction("design-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
 
                 guard let model = activeModel else {
                     errorMessage = "Model configuration not found"
@@ -270,10 +323,10 @@ private extension CustomVoiceView {
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
 
-                let result = try await pythonBridge.generateCustomStreamingFlow(
+                let result = try await pythonBridge.generateDesignStreamingFlow(
                     modelID: model.id,
                     text: text,
-                    voice: selectedSpeaker,
+                    voiceDescription: voiceDescription,
                     emotion: emotion,
                     outputPath: outputPath
                 )
@@ -282,7 +335,7 @@ private extension CustomVoiceView {
                     text: text,
                     mode: model.mode.rawValue,
                     modelTier: model.tier,
-                    voice: selectedSpeaker,
+                    voice: voiceDescription,
                     emotion: emotion,
                     speed: nil,
                     audioPath: result.audioPath,
@@ -291,9 +344,9 @@ private extension CustomVoiceView {
                 )
 
                 try persistGenerationAndMaybeAutoplay(&generation, result: result)
-                UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
+                UITestAutomationSupport.recordAction("design-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
-                UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
+                UITestAutomationSupport.recordAction("design-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
                 audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
             }
@@ -310,13 +363,13 @@ private extension CustomVoiceView {
             let saveStart = DispatchTime.now().uptimeNanoseconds
             try DatabaseService.shared.saveGeneration(&generation)
             #if DEBUG
-            print("[Performance][CustomVoiceView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
+            print("[Performance][VoiceDesignView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
             #endif
 
             let notificationStart = DispatchTime.now().uptimeNanoseconds
             NotificationCenter.default.post(name: .generationSaved, object: nil)
             #if DEBUG
-            print("[Performance][CustomVoiceView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
+            print("[Performance][VoiceDesignView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
             #endif
         } catch {
             persistenceError = error
@@ -336,7 +389,7 @@ private extension CustomVoiceView {
                 isAutoplay: true
             )
             #if DEBUG
-            print("[Performance][CustomVoiceView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
+            print("[Performance][VoiceDesignView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
             #endif
         }
 
@@ -356,7 +409,7 @@ private extension CustomVoiceView {
         await pythonBridge.prewarmModelIfNeeded(
             modelID: model.id,
             mode: activeMode,
-            voice: selectedSpeaker,
+            voice: nil,
             instruct: emotion
         )
     }

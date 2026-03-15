@@ -2,48 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct HistorySearchField: NSViewRepresentable {
-    @Binding var text: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    func makeNSView(context: Context) -> NSTextField {
-        let textField = NSTextField(frame: .zero)
-        textField.delegate = context.coordinator
-        textField.placeholderString = "Search..."
-        textField.stringValue = text
-        textField.isBordered = true
-        textField.isBezeled = true
-        textField.bezelStyle = .roundedBezel
-        textField.focusRingType = .default
-        textField.identifier = NSUserInterfaceItemIdentifier("history_searchField")
-        textField.setAccessibilityIdentifier("history_searchField")
-        textField.setAccessibilityLabel("Search history")
-        return textField
-    }
-
-    func updateNSView(_ nsView: NSTextField, context: Context) {
-        if nsView.stringValue != text {
-            nsView.stringValue = text
-        }
-    }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        @Binding private var text: String
-
-        init(text: Binding<String>) {
-            self._text = text
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let textField = notification.object as? NSTextField else { return }
-            text = textField.stringValue
-        }
-    }
-}
-
 private struct HistoryListItem: Identifiable {
     let generation: Generation
     let audioFileExists: Bool
@@ -83,7 +41,7 @@ private enum HistoryDeletionResult {
     case audioCleanupFailure(String)
 }
 
-private enum HistorySortOrder: String, CaseIterable, Identifiable {
+enum HistorySortOrder: String, CaseIterable, Identifiable {
     case newest
     case oldest
     case longestDuration
@@ -94,20 +52,26 @@ private enum HistorySortOrder: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .newest: return "Newest"
-        case .oldest: return "Oldest"
-        case .longestDuration: return "Longest"
-        case .shortestDuration: return "Shortest"
-        case .mode: return "Mode"
+        case .newest:
+            return "Newest"
+        case .oldest:
+            return "Oldest"
+        case .longestDuration:
+            return "Longest"
+        case .shortestDuration:
+            return "Shortest"
+        case .mode:
+            return "Mode"
         }
     }
 }
 
 struct HistoryView: View {
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @Binding var searchText: String
+    @Binding var sortOrder: HistorySortOrder
+
     @State private var items: [HistoryListItem] = HistorySessionCache.generations.map(HistoryListItem.init)
-    @State private var searchText = ""
-    @State private var sortOrder: HistorySortOrder = .newest
     @State private var isLoading = false
     @State private var loadTask: Task<Void, Never>?
     @State private var loadError: String?
@@ -115,7 +79,7 @@ struct HistoryView: View {
     @State private var itemToDelete: HistoryListItem?
     @State private var actionAlert: HistoryActionAlert?
 
-    private var filtered: [HistoryListItem] {
+    private var filteredItems: [HistoryListItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var result = query.isEmpty ? items : items.filter { $0.searchKey.contains(query) }
 
@@ -136,110 +100,9 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                Color.clear
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("screen_history")
-                    .allowsHitTesting(false)
-
-                GenerationHeaderView(
-                    title: "History",
-                    subtitle: "Review, replay, export, and remove generated audio.",
-                    titleAccessibilityIdentifier: "history_title"
-                )
-
-                StudioSectionCard(
-                    title: "Browse",
-                    iconName: "line.3.horizontal.decrease.circle",
-                    accentColor: AppTheme.history
-                ) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .center, spacing: 14) {
-                            HistorySearchField(text: $searchText)
-                                .frame(minWidth: 280, maxWidth: .infinity)
-
-                            Picker("Sort", selection: $sortOrder) {
-                                ForEach(HistorySortOrder.allCases) { order in
-                                    Text(order.label).tag(order)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 160)
-                            .accessibilityIdentifier("history_sortPicker")
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            HistorySearchField(text: $searchText)
-                                .frame(maxWidth: .infinity)
-
-                            Picker("Sort", selection: $sortOrder) {
-                                ForEach(HistorySortOrder.allCases) { order in
-                                    Text(order.label).tag(order)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 180)
-                            .accessibilityIdentifier("history_sortPicker")
-                        }
-                    }
-                }
-
-                if let loadError, items.isEmpty, !isLoading {
-                    historyStateCard(
-                        icon: "exclamationmark.triangle",
-                        title: "Couldn't load history",
-                        detail: loadError,
-                        accessibilityIdentifier: "history_errorState",
-                        tint: .orange
-                    )
-                } else if isLoading && items.isEmpty {
-                    VStack(spacing: 12) {
-                        ProgressView("Loading history...")
-                            .accessibilityIdentifier("history_loadingState")
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 180)
-                    .studioCard()
-                } else if filtered.isEmpty {
-                    historyStateCard(
-                        icon: "clock",
-                        title: items.isEmpty ? "No generations yet" : "No results found",
-                        detail: items.isEmpty
-                            ? "Generate some audio to see it here."
-                            : "Try a different search term or clear the search.",
-                        accessibilityIdentifier: "history_emptyState"
-                    )
-                } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(filtered) { item in
-                            HistoryRow(
-                                item: item,
-                                onPlay: {
-                                    audioPlayer.playFile(item.generation.audioPath, title: item.textPreview)
-                                },
-                                onSaveAs: {
-                                    exportGeneration(item)
-                                },
-                                onDelete: {
-                                    itemToDelete = item
-                                    showDeleteConfirmation = true
-                                }
-                            )
-                            .contextMenu {
-                                Button {
-                                    NSWorkspace.shared.selectFile(item.generation.audioPath, inFileViewerRootedAtPath: "")
-                                } label: {
-                                    Label("Reveal in Finder", systemImage: "folder")
-                                }
-                                .disabled(!item.audioFileExists)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(LayoutConstants.canvasPadding)
-            .contentColumn()
-        }
+        content
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityIdentifier("screen_history")
         .onAppear {
             reloadHistory()
         }
@@ -272,7 +135,86 @@ struct HistoryView: View {
         }
     }
 
-    private func reloadHistory() {
+    @ViewBuilder
+    private var content: some View {
+        if let loadError, items.isEmpty, !isLoading {
+            historyStateContainer(identifier: "history_errorState", markerLabel: "History error state") {
+                ContentUnavailableView(
+                    "Couldn't load history",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(loadError)
+                )
+            }
+        } else if isLoading && items.isEmpty {
+            historyStateContainer(identifier: "history_loadingState", markerLabel: "History loading state") {
+                VStack(spacing: 12) {
+                    ProgressView("Loading history...")
+                }
+            }
+        } else if filteredItems.isEmpty {
+            historyStateContainer(identifier: "history_emptyState", markerLabel: "History empty state") {
+                ContentUnavailableView(
+                    items.isEmpty ? "No generations yet" : "No results found",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text(
+                        items.isEmpty
+                        ? "Generate some audio to see it here."
+                        : "Try a different search term or clear the search."
+                    )
+                )
+            }
+        } else {
+            List(filteredItems) { item in
+                HistoryRow(
+                    item: item,
+                    onPlay: {
+                        audioPlayer.playFile(item.generation.audioPath, title: item.textPreview)
+                    },
+                    onSaveAs: {
+                        exportGeneration(item)
+                    },
+                    onDelete: {
+                        itemToDelete = item
+                        showDeleteConfirmation = true
+                    }
+                )
+                .contextMenu {
+                    Button {
+                        NSWorkspace.shared.selectFile(item.generation.audioPath, inFileViewerRootedAtPath: "")
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                    .disabled(!item.audioFileExists)
+                }
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+            }
+            .listStyle(.inset)
+        }
+    }
+}
+
+private extension HistoryView {
+    @ViewBuilder
+    func historyStateContainer<Content: View>(
+        identifier: String,
+        markerLabel: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack {
+            content()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            Text(markerLabel)
+                .font(.system(size: 1))
+                .opacity(0.01)
+                .allowsHitTesting(false)
+                .accessibilityIdentifier(identifier)
+        }
+    }
+
+    func reloadHistory() {
         loadTask?.cancel()
         let hasExistingItems = !items.isEmpty
         if !hasExistingItems {
@@ -313,29 +255,7 @@ struct HistoryView: View {
         }
     }
 
-    private func deleteGenerations(at indices: IndexSet) {
-        let toDelete = indices.map { filtered[$0] }
-        var databaseFailures: [String] = []
-        var audioCleanupFailures: [String] = []
-
-        for item in toDelete {
-            switch deleteItem(item) {
-            case .deleted:
-                break
-            case .databaseFailure(let message):
-                databaseFailures.append(message)
-            case .audioCleanupFailure(let message):
-                audioCleanupFailures.append(message)
-            }
-        }
-
-        presentBulkDeleteSummary(
-            databaseFailures: databaseFailures,
-            audioCleanupFailures: audioCleanupFailures
-        )
-    }
-
-    private func exportGeneration(_ item: HistoryListItem) {
+    func exportGeneration(_ item: HistoryListItem) {
         if UITestAutomationSupport.isStubBackendMode,
            let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
             do {
@@ -369,7 +289,7 @@ struct HistoryView: View {
         }
     }
 
-    private func confirmDelete(_ item: HistoryListItem) {
+    func confirmDelete(_ item: HistoryListItem) {
         switch deleteItem(item) {
         case .deleted:
             break
@@ -386,7 +306,7 @@ struct HistoryView: View {
         }
     }
 
-    private func deleteItem(_ item: HistoryListItem) -> HistoryDeletionResult {
+    func deleteItem(_ item: HistoryListItem) -> HistoryDeletionResult {
         guard let id = item.generation.id else {
             return .databaseFailure("Missing generation identifier.")
         }
@@ -419,61 +339,10 @@ struct HistoryView: View {
         }
     }
 
-    private func presentBulkDeleteSummary(
-        databaseFailures: [String],
-        audioCleanupFailures: [String]
-    ) {
-        guard !databaseFailures.isEmpty || !audioCleanupFailures.isEmpty else { return }
-
-        var lines: [String] = []
-        if let firstDatabaseFailure = databaseFailures.first {
-            let count = databaseFailures.count
-            let label = count == 1 ? "1 generation" : "\(count) generations"
-            lines.append("Failed to delete \(label) from history. First error: \(firstDatabaseFailure)")
-        }
-        if let firstAudioFailure = audioCleanupFailures.first {
-            let count = audioCleanupFailures.count
-            let label = count == 1 ? "1 history entry" : "\(count) history entries"
-            lines.append("Removed \(label), but could not delete the audio file. First error: \(firstAudioFailure)")
-        }
-
-        presentActionAlert(
-            title: "Delete Completed with Warnings",
-            message: lines.joined(separator: "\n")
-        )
-    }
-
-    private func presentActionAlert(title: String, message: String) {
+    func presentActionAlert(title: String, message: String) {
         actionAlert = HistoryActionAlert(title: title, message: message)
     }
-
-    @ViewBuilder
-    private func historyStateCard(
-        icon: String,
-        title: String,
-        detail: String,
-        accessibilityIdentifier: String,
-        tint: Color = AppTheme.history
-    ) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-            Text(detail)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-        .studioCard()
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
 }
-
-// MARK: - History Row (Table-style)
 
 private struct HistoryRow: View {
     let item: HistoryListItem
@@ -486,98 +355,85 @@ private struct HistoryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Group {
-                if item.audioFileExists {
-                    Button { onPlay() } label: {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(AppTheme.history)
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(AppTheme.history.opacity(0.14)))
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.orange)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color.orange.opacity(0.14)))
-                }
+        HStack(alignment: .center, spacing: 12) {
+            Button(action: onPlay) {
+                Label(
+                    item.audioFileExists ? "Play" : "Audio unavailable",
+                    systemImage: item.audioFileExists ? "play.fill" : "exclamationmark.triangle.fill"
+                )
             }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!item.audioFileExists)
+            .accessibilityLabel(item.audioFileExists ? "Play generation" : "Audio unavailable")
             .accessibilityIdentifier("historyRow_play")
+            .accessibilityRepresentation {
+                Button(item.audioFileExists ? "Play generation" : "Audio unavailable", action: onPlay)
+                    .disabled(!item.audioFileExists)
+                    .accessibilityIdentifier("historyRow_play")
+            }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(item.textPreview)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
 
                 HStack(spacing: 8) {
                     Text(item.generation.mode.capitalized)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(modeColor))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(modeColor.opacity(0.15))
+                        )
 
                     if let voice = item.generation.voice, !voice.isEmpty {
-                        Label(voice, systemImage: "person.fill")
-                            .font(.caption.weight(.medium))
+                        Text(voice)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
 
                     Text(item.formattedDate)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Text(durationText)
-                        .font(.caption.monospacedDigit().weight(.medium))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            HStack(spacing: 8) {
-                Button { onSaveAs() } label: {
+            Spacer()
+
+            Text(durationText)
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            ControlGroup {
+                Button(action: onSaveAs) {
                     Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.history)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                )
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(!item.audioFileExists)
                 .accessibilityIdentifier("historyRow_saveAs")
 
-                Button(role: .destructive) { onDelete() } label: {
+                Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                )
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityIdentifier("historyRow_delete")
             }
         }
-        .opacity(item.audioFileExists ? 1 : 0.65)
-        .studioCard(padding: 12, radius: 14)
-        .accessibilityElement(children: .contain)
+        .padding(.vertical, 4)
         .accessibilityIdentifier("historyRow_\(item.id)")
+        .accessibilityElement(children: .contain)
     }
 
     private var durationText: String {
         if let duration = item.generation.duration, duration > 0 {
             return String(format: "%.1fs", duration)
         }
-        return "—"
+        return "-"
     }
 }

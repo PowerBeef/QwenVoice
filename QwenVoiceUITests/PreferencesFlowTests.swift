@@ -45,7 +45,7 @@ final class PreferencesFlowTests: FeatureMatrixUITestBase {
         )
         _ = waitForScreen(.preferences, timeout: 15)
 
-        waitForElement("preferences_resetEnvButton", type: .button, timeout: 5).click()
+        clickMaintenanceResetButton()
 
         let confirmButtons = app.descendants(matching: .button).matching(
             NSPredicate(format: "label == 'Reset' OR label == 'Restart'")
@@ -65,5 +65,26 @@ final class PreferencesFlowTests: FeatureMatrixUITestBase {
         if !returnedToPreferences {
             _ = waitForScreen(.customVoice, timeout: 20)
         }
+    }
+
+    private func clickMaintenanceResetButton() {
+        let resetButton = waitForElement("preferences_resetEnvButton", type: .button, timeout: 5)
+        if resetButton.isHittable {
+            resetButton.click()
+            return
+        }
+
+        let preferencesScrollView = app.scrollViews.matching(identifier: "screen_preferences").firstMatch
+        let scrollContainer = preferencesScrollView.exists ? preferencesScrollView : app.scrollViews.firstMatch
+
+        for _ in 0..<4 {
+            scrollContainer.swipeUp()
+            if resetButton.isHittable {
+                resetButton.click()
+                return
+            }
+        }
+
+        XCTFail("Reset Environment button should become hittable after scrolling Preferences")
     }
 }

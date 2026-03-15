@@ -2,85 +2,104 @@ import SwiftUI
 
 struct TextInputView: View {
     @Binding var text: String
+
     var isGenerating: Bool
     var placeholder: String = "What should I say?"
     var buttonColor: Color = AppTheme.customVoice
     var batchAction: (() -> Void)? = nil
     var batchDisabled: Bool = true
+    var generateDisabled: Bool = false
+    var isEmbedded: Bool = false
     var onGenerate: () -> Void
 
+    @FocusState private var isEditorFocused: Bool
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(.secondary.opacity(0.75)), axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 19, weight: .medium))
-                .lineLimit(7 ... 15)
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
-                .frame(maxWidth: .infinity, minHeight: 216, alignment: .topLeading)
+        VStack(alignment: .leading, spacing: 12) {
+            editor
+            actionRow
+        }
+        .background(shortcutBridge)
+    }
+
+    private var editor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .font(.body)
+                .scrollContentBackground(.hidden)
+                .focused($isEditorFocused)
+                .padding(8)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: isEmbedded ? LayoutConstants.composerEmbeddedMinHeight : 160,
+                    maxHeight: LayoutConstants.textEditorMaxHeight,
+                    alignment: .topLeading
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(isEditorFocused ? buttonColor.opacity(0.45) : AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
+                )
                 .accessibilityIdentifier("textInput_textEditor")
 
-            Spacer(minLength: 0)
-
-            HStack(spacing: 12) {
-                Text("\(text.count) characters")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(text.count > 500 ? .orange : .secondary)
-                    .accessibilityIdentifier("textInput_charCount")
-
-                Spacer()
-
-                if let batchAction {
-                    Button {
-                        batchAction()
-                    } label: {
-                        Label("Batch", systemImage: "square.grid.2x2.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(0.08))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: LayoutConstants.cardBorderWidth)
-                    )
-                    .foregroundStyle(.primary)
+                    .padding(.vertical, 16)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ControlGroup {
+                if let batchAction {
+                    Button("Batch") {
+                        batchAction()
+                    }
+                    .buttonStyle(.bordered)
                     .disabled(batchDisabled)
                     .accessibilityIdentifier("textInput_batchButton")
                 }
 
-                Text("\u{2318}\u{21A9}")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 4)
-
-                Button(action: onGenerate) {
-                    Group {
-                        if isGenerating {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.white)
-                        } else {
-                            Label("Generate", systemImage: "sparkles")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
+                Button {
+                    onGenerate()
+                } label: {
+                    if isGenerating {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(minWidth: 88)
+                    } else {
+                        Label("Generate", systemImage: "sparkles")
+                            .frame(minWidth: 88)
                     }
-                    .frame(minWidth: 116)
                 }
-                .buttonStyle(GlowingGradientButtonStyle(baseColor: buttonColor))
-                .disabled(text.isEmpty || isGenerating)
-                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .tint(buttonColor)
+                .disabled(text.isEmpty || isGenerating || generateDisabled)
                 .accessibilityIdentifier("textInput_generateButton")
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 14)
+
+            Spacer(minLength: 0)
+
+            Text("\(text.count) characters")
+                .font(.callout)
+                .foregroundStyle(text.count > 500 ? .orange : .secondary)
+                .accessibilityIdentifier("textInput_charCount")
         }
-        .frame(maxWidth: .infinity, minHeight: 292, alignment: .topLeading)
-        .stageCard()
+    }
+
+    private var shortcutBridge: some View {
+        Button("", action: onGenerate)
+            .keyboardShortcut(.return, modifiers: .command)
+            .opacity(0.001)
+            .disabled(text.isEmpty || isGenerating || generateDisabled)
+            .accessibilityHidden(true)
     }
 }

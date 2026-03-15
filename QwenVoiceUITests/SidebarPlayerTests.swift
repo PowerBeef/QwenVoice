@@ -12,7 +12,8 @@ final class SidebarPlayerTests: FeatureMatrixUITestBase {
         _ = waitForBackendIdle(timeout: 10)
 
         let editor = waitForElement("textInput_textEditor", timeout: 5)
-        XCTAssertTrue(editor.isEnabled)
+        XCTAssertTrue(editor.isHittable, "Custom Voice should expose the composer without scrolling")
+        app.activate()
         editor.click()
         editor.typeText("Sidebar live stream test.")
         let generate = waitForElementToBecomeEnabled("textInput_generateButton", type: .button, timeout: 5)
@@ -36,7 +37,8 @@ final class SidebarPlayerTests: FeatureMatrixUITestBase {
         _ = waitForBackendIdle(timeout: 10)
 
         let editor = waitForElement("textInput_textEditor", timeout: 5)
-        XCTAssertTrue(editor.isEnabled)
+        XCTAssertTrue(editor.isHittable, "Custom Voice should expose the composer without scrolling")
+        app.activate()
         editor.click()
         editor.typeText("Sidebar final playback test.")
         let generate = waitForElementToBecomeEnabled("textInput_generateButton", type: .button, timeout: 5)

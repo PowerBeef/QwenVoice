@@ -12,21 +12,20 @@ This document is the shared factual reference for the current QwenVoice reposito
 
 ## Shipped UI
 
-The app currently exposes six sidebar destinations:
+The app currently exposes six sidebar destinations in the main window, plus a dedicated macOS Settings window:
 
 1. Custom Voice
-2. Voice Cloning
-3. History
-4. Voices
-5. Models
-6. Preferences
-
-Voice Design is not a separate sidebar screen. It is accessed inside `CustomVoiceView` through an explicit top-level mode switch between `Preset Speaker` and `Voice Design`, which changes the active generation mode from `.custom` to `.design`.
+2. Voice Design
+3. Voice Cloning
+4. History
+5. Voices
+6. Models
+Voice Design now has its own sidebar destination and screen (`VoiceDesignView`) alongside `CustomVoiceView` and `VoiceCloningView`. `ContentView` keeps activated generation screens alive so Custom Voice and Voice Design preserve independent draft state while you move through the sidebar. `PreferencesView` now lives in the app's `Settings` scene instead of the main sidebar.
 
 The shipping SwiftUI app uses live streaming preview for single-generation flows:
 
 - Custom Voice
-- Voice Design inside `CustomVoiceView`
+- Voice Design
 - Voice Cloning
 
 Batch generation remains sequential and non-streaming in the shipped GUI. Advanced sampling parameters remain available for benchmark/internal tooling only.
@@ -112,7 +111,7 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 
 Current tracked test coverage:
 
-- UI tests: 19 `*Tests.swift` files / 45 test methods in `QwenVoiceUITests/`
+- UI tests: 19 `*Tests.swift` files / 50 test methods in `QwenVoiceUITests/`
 - Unit tests: 4 `*Tests.swift` files / 17 test methods in `QwenVoiceTests/`
 - Python backend tests: 16 `unittest` cases under `backend_tests/`
 
@@ -129,5 +128,5 @@ Primary commands:
 ## Current Documentation Boundaries
 
 - `README.md` is the public GitHub landing page.
-- `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` are repo-operating docs and should stay aligned with this file.
+- `AGENTS.md` and `GEMINI.md` are repo-operating docs and should stay aligned with this file.
 - `cli/README.md` documents the standalone CLI, which has a broader speaker map than the shipped GUI.

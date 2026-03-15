@@ -5,8 +5,9 @@ enum UITestLaunchPolicy {
     case freshPerTest
 }
 
-enum UITestScreen: String {
+enum UITestScreen: String, CaseIterable {
     case customVoice
+    case voiceDesign
     case voiceCloning
     case history
     case voices
@@ -19,6 +20,44 @@ enum UITestScreen: String {
 
     var sidebarIdentifier: String {
         "sidebar_\(rawValue)"
+    }
+
+    var commandShortcutKey: String? {
+        switch self {
+        case .customVoice:
+            return "1"
+        case .voiceDesign:
+            return "2"
+        case .voiceCloning:
+            return "3"
+        case .history:
+            return "4"
+        case .voices:
+            return "5"
+        case .models:
+            return "6"
+        case .preferences:
+            return nil
+        }
+    }
+
+    var visibilitySentinelIdentifier: String? {
+        switch self {
+        case .customVoice:
+            return "customVoice_voiceSetup"
+        case .voiceDesign:
+            return "voiceDesign_voiceDescriptionField"
+        case .voiceCloning:
+            return "voiceCloning_importButton"
+        case .history:
+            return nil
+        case .voices:
+            return "voices_enrollButton"
+        case .models:
+            return "models_card_pro_custom"
+        case .preferences:
+            return "preferences_autoPlayToggle"
+        }
     }
 }
 
@@ -211,42 +250,63 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func waitForScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) -> XCUIElement {
-        let element = app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
+        let element = screenElement(for: screen)
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastSettingsOpenAttempt: Date?
+
+        while Date() < deadline {
+            if isScreenVisible(screen) {
+                return element
+            }
+            if screen == .preferences {
+                let shouldRetryOpen = lastSettingsOpenAttempt.map { Date().timeIntervalSince($0) > 1 } ?? true
+                if shouldRetryOpen {
+                    openSettingsWindow()
+                    lastSettingsOpenAttempt = Date()
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
         XCTAssertTrue(
-            element.waitForExistence(timeout: timeout),
-            "Screen root '\(screen.rootIdentifier)' should exist within \(timeout)s"
+            isScreenVisible(screen),
+            "Screen root '\(screen.rootIdentifier)' should be visible within \(timeout)s"
         )
         return element
     }
 
     func ensureOnScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) {
-        let existing = app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
-        if existing.exists {
+        if isScreenVisible(screen) {
+            return
+        }
+
+        if screen == .preferences {
+            openSettingsWindow()
+            _ = waitForScreen(screen, timeout: timeout)
             return
         }
 
         let sidebarItem = app.descendants(matching: .any).matching(identifier: screen.sidebarIdentifier).firstMatch
-        XCTAssertTrue(
-            sidebarItem.waitForExistence(timeout: 10),
-            "Sidebar item '\(screen.sidebarIdentifier)' should exist"
-        )
-        sidebarItem.click()
+        if sidebarItem.waitForExistence(timeout: 3) {
+            activateSidebarItem(sidebarItem, identifier: screen.sidebarIdentifier)
+        } else if let shortcutKey = screen.commandShortcutKey {
+            app.activate()
+            app.typeKey(shortcutKey, modifierFlags: .command)
+        } else {
+            XCTFail("Sidebar item '\(screen.sidebarIdentifier)' should exist")
+        }
         _ = waitForScreen(screen, timeout: timeout)
     }
 
     func resetToScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) {
-        let existing = app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
-        if existing.exists {
-            let fallback: UITestScreen = screen == .customVoice ? .models : .customVoice
-            let targetItem = app.descendants(matching: .any).matching(identifier: screen.sidebarIdentifier).firstMatch
-            let fallbackItem = app.descendants(matching: .any).matching(identifier: fallback.sidebarIdentifier).firstMatch
-            if targetItem.exists && fallbackItem.waitForExistence(timeout: 5) {
-                fallbackItem.click()
-                _ = waitForScreen(fallback, timeout: timeout)
-            } else {
-                _ = waitForScreen(screen, timeout: timeout)
-                return
-            }
+        if isScreenVisible(screen) {
+            return
+        }
+
+        if screen == .preferences {
+            openSettingsWindow()
+            _ = waitForScreen(screen, timeout: timeout)
+            return
         }
 
         ensureOnScreen(screen, timeout: timeout)
@@ -263,6 +323,67 @@ class QwenVoiceUITestBase: XCTestCase {
 
     func navigateToSidebar(_ screen: UITestScreen) {
         ensureOnScreen(screen)
+    }
+
+    private func screenElement(for screen: UITestScreen) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: screen.rootIdentifier).firstMatch
+    }
+
+    private func isScreenVisible(_ element: XCUIElement) -> Bool {
+        element.exists
+    }
+
+    private func isScreenVisible(_ screen: UITestScreen) -> Bool {
+        if screen == .preferences {
+            return isSettingsScreenVisible(screen)
+        }
+
+        return isMainWindowScreenVisible(screen)
+    }
+
+    private func isMainWindowScreenVisible(_ screen: UITestScreen) -> Bool {
+        guard activeMainWindowScreenIdentifier() == screen.rootIdentifier else {
+            return false
+        }
+
+        if isScreenVisible(screenElement(for: screen)) {
+            return true
+        }
+
+        guard let sentinelIdentifier = screen.visibilitySentinelIdentifier else {
+            return false
+        }
+
+        let sentinel = app.descendants(matching: .any).matching(identifier: sentinelIdentifier).firstMatch
+        return sentinel.exists
+    }
+
+    private func isSettingsScreenVisible(_ screen: UITestScreen) -> Bool {
+        if isScreenVisible(screenElement(for: screen)) {
+            return true
+        }
+
+        guard let sentinelIdentifier = screen.visibilitySentinelIdentifier else {
+            return false
+        }
+
+        let sentinel = app.descendants(matching: .any).matching(identifier: sentinelIdentifier).firstMatch
+        return sentinel.exists
+    }
+
+    private func activeMainWindowScreenIdentifier() -> String? {
+        let marker = app.descendants(matching: .any).matching(identifier: "mainWindow_activeScreen").firstMatch
+        guard marker.exists || marker.waitForExistence(timeout: 0.2) else {
+            return nil
+        }
+
+        let markerText = [marker.label, marker.value as? String]
+            .compactMap { $0 }
+            .joined(separator: " ")
+
+        return UITestScreen.allCases
+            .map(\.rootIdentifier)
+            .first(where: { markerText.contains($0) })
     }
 
     func waitForBackendStatusElement(timeout: TimeInterval = 5) -> XCUIElement {
@@ -290,6 +411,31 @@ class QwenVoiceUITestBase: XCTestCase {
         return app.descendants(matching: .any).matching(identifier: identifiers[0]).firstMatch
     }
 
+    func waitForMainWindowTitle(_ title: String, timeout: TimeInterval = 5) -> XCUIElement {
+        let marker = app.descendants(matching: .any).matching(identifier: "mainWindow_activeTitle").firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if marker.waitForExistence(timeout: 0.2) {
+                let markerText = [marker.label, marker.value as? String]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+
+                if markerText.contains(title) {
+                    return marker
+                }
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        let markerText = [marker.label, marker.value as? String]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        XCTFail("Main window title should resolve to '\(title)' within \(timeout)s, found '\(markerText)'")
+        return marker
+    }
+
     func waitForBackendIdle(timeout: TimeInterval = 10) -> XCUIElement {
         let idle = app.descendants(matching: .any).matching(identifier: "sidebar_backendStatus_idle").firstMatch
         XCTAssertTrue(
@@ -297,6 +443,127 @@ class QwenVoiceUITestBase: XCTestCase {
             "Backend should reach the idle state within \(timeout)s"
         )
         return idle
+    }
+
+    func waitForHistorySearchField(timeout: TimeInterval = 5) -> XCUIElement {
+        let identifiedField = app.descendants(matching: .any).matching(identifier: "history_searchField").firstMatch
+        if identifiedField.waitForExistence(timeout: timeout) {
+            return identifiedField
+        }
+
+        let identifiedTextField = app.textFields.matching(identifier: "history_searchField").firstMatch
+        if identifiedTextField.waitForExistence(timeout: timeout) {
+            return identifiedTextField
+        }
+
+        let placeholderField = app.searchFields["Search history"].firstMatch
+        if placeholderField.waitForExistence(timeout: timeout) {
+            return placeholderField
+        }
+
+        let genericSearchField = app.searchFields.firstMatch
+        if genericSearchField.waitForExistence(timeout: timeout) {
+            return genericSearchField
+        }
+
+        let fallbackField = app.textFields["Search history"].firstMatch
+        if fallbackField.waitForExistence(timeout: timeout) {
+            return fallbackField
+        }
+
+        let genericToolbarTextField = app.textFields.firstMatch
+        XCTAssertTrue(
+            genericToolbarTextField.waitForExistence(timeout: timeout),
+            "History search field should exist within \(timeout)s"
+        )
+        return genericToolbarTextField
+    }
+
+    func waitForHistorySortPicker(timeout: TimeInterval = 5) -> XCUIElement {
+        let identifiedPicker = app.descendants(matching: .any).matching(identifier: "history_sortPicker").firstMatch
+        if identifiedPicker.waitForExistence(timeout: timeout) {
+            return identifiedPicker
+        }
+
+        let identifiedMenuButton = app.menuButtons.matching(identifier: "history_sortPicker").firstMatch
+        if identifiedMenuButton.waitForExistence(timeout: timeout) {
+            return identifiedMenuButton
+        }
+
+        let toolbarPopup = app.popUpButtons.matching(identifier: "history_toolbar").firstMatch
+        if toolbarPopup.waitForExistence(timeout: timeout) {
+            return toolbarPopup
+        }
+
+        let labeledToolbarPopup = app.popUpButtons.matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS[c] %@", "history_toolbar", "Sort history")
+        ).firstMatch
+        if labeledToolbarPopup.waitForExistence(timeout: timeout) {
+            return labeledToolbarPopup
+        }
+
+        let labeledPopup = app.popUpButtons["Sort history"].firstMatch
+        if labeledPopup.waitForExistence(timeout: timeout) {
+            return labeledPopup
+        }
+
+        let labeledMenuButton = app.menuButtons["Sort history"].firstMatch
+        if labeledMenuButton.waitForExistence(timeout: timeout) {
+            return labeledMenuButton
+        }
+
+        let labeledButton = app.buttons["Sort history"].firstMatch
+        if labeledButton.waitForExistence(timeout: timeout) {
+            return labeledButton
+        }
+
+        let sortButton = app.buttons["Sort"].firstMatch
+        if sortButton.waitForExistence(timeout: timeout) {
+            return sortButton
+        }
+
+        let sortMenuButton = app.menuButtons["Sort"].firstMatch
+        if sortMenuButton.waitForExistence(timeout: timeout) {
+            return sortMenuButton
+        }
+
+        let currentValueButton = app.buttons["Newest"].firstMatch
+        if currentValueButton.waitForExistence(timeout: timeout) {
+            return currentValueButton
+        }
+
+        let currentValueMenuButton = app.menuButtons["Newest"].firstMatch
+        if currentValueMenuButton.waitForExistence(timeout: timeout) {
+            return currentValueMenuButton
+        }
+
+        let toolbar = app.descendants(matching: .any).matching(identifier: "history_toolbar").firstMatch
+        if toolbar.waitForExistence(timeout: timeout) {
+            let toolbarButton = toolbar.buttons.firstMatch
+            if toolbarButton.waitForExistence(timeout: timeout) {
+                return toolbarButton
+            }
+
+            let toolbarMenuButton = toolbar.menuButtons.firstMatch
+            if toolbarMenuButton.waitForExistence(timeout: timeout) {
+                return toolbarMenuButton
+            }
+
+            let toolbarPopup = toolbar.popUpButtons.firstMatch
+            XCTAssertTrue(
+                toolbarPopup.waitForExistence(timeout: timeout),
+                "History sort picker should exist within \(timeout)s"
+            )
+            return toolbarPopup
+        }
+
+        XCTFail("History sort picker should exist within \(timeout)s")
+        return identifiedPicker
+    }
+
+    private func openSettingsWindow() {
+        app.activate()
+        app.typeKey(",", modifierFlags: .command)
     }
 
     func waitForElement(
@@ -327,6 +594,136 @@ class QwenVoiceUITestBase: XCTestCase {
         }
         XCTFail("Element '\(identifier)' should become enabled within \(timeout)s")
         return element
+    }
+
+    func waitForCustomVoiceSpeakerPicker(timeout: TimeInterval = 5) -> XCUIElement {
+        let identified = app.descendants(matching: .any)
+            .matching(identifier: "customVoice_speakerPicker")
+            .firstMatch
+        if identified.waitForExistence(timeout: min(timeout, 1.5)) {
+            return identified
+        }
+
+        let voiceSetup = app.descendants(matching: .any)
+            .matching(identifier: "customVoice_voiceSetup")
+            .firstMatch
+        if voiceSetup.waitForExistence(timeout: timeout) {
+            let containedPopup = voiceSetup.descendants(matching: .popUpButton).firstMatch
+            if containedPopup.waitForExistence(timeout: 1) {
+                return containedPopup
+            }
+        }
+
+        let labeledPopup = app.popUpButtons["Speaker"].firstMatch
+        if labeledPopup.waitForExistence(timeout: timeout) {
+            return labeledPopup
+        }
+
+        let firstPopup = app.popUpButtons.firstMatch
+        if firstPopup.waitForExistence(timeout: timeout) {
+            return firstPopup
+        }
+
+        XCTFail("Custom Voice speaker picker should exist within \(timeout)s")
+        return identified
+    }
+
+    func activateSidebarItem(_ element: XCUIElement, identifier: String) {
+        let targetScreen = UITestScreen(rawValue: identifier.replacingOccurrences(of: "sidebar_", with: ""))
+
+        if element.isHittable {
+            element.click()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if let targetScreen {
+                if isScreenVisible(targetScreen) {
+                    return
+                }
+            } else {
+                return
+            }
+        }
+
+        if let targetScreen,
+           let currentScreen = visibleSidebarScreen(),
+           let targetIndex = orderedSidebarScreens.firstIndex(of: targetScreen),
+           let currentIndex = orderedSidebarScreens.firstIndex(of: currentScreen) {
+            let outline = app.outlines.firstMatch
+            if outline.exists {
+                outline.click()
+
+                let distance = targetIndex - currentIndex
+                let key: XCUIKeyboardKey = distance >= 0 ? .downArrow : .upArrow
+                for _ in 0..<abs(distance) {
+                    app.typeKey(key, modifierFlags: [])
+                }
+
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+                if isScreenVisible(targetScreen) {
+                    return
+                }
+            }
+
+            if let shortcutKey = targetScreen.commandShortcutKey {
+                app.typeKey(shortcutKey, modifierFlags: .command)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+                if isScreenVisible(targetScreen) {
+                    return
+                }
+            }
+        }
+
+        let outline = app.outlines.firstMatch
+        if outline.exists {
+            outline.click()
+            app.typeKey(.home, modifierFlags: [])
+            app.typeKey(.space, modifierFlags: [])
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        if element.isHittable {
+            element.click()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if let targetScreen {
+                if isScreenVisible(targetScreen) {
+                    return
+                }
+            } else {
+                return
+            }
+        }
+
+        let fallbackCoordinate = element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        fallbackCoordinate.click()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        if let targetScreen,
+           !isScreenVisible(targetScreen),
+           let shortcutKey = targetScreen.commandShortcutKey {
+            app.typeKey(shortcutKey, modifierFlags: .command)
+        }
+    }
+
+    private var orderedSidebarScreens: [UITestScreen] {
+        [.customVoice, .voiceDesign, .voiceCloning, .history, .voices, .models]
+    }
+
+    private func visibleSidebarScreen() -> UITestScreen? {
+        guard let identifier = activeMainWindowScreenIdentifier() else {
+            return nil
+        }
+
+        return orderedSidebarScreens.first(where: { $0.rootIdentifier == identifier })
+    }
+
+    func revealElementIfNeeded(_ element: XCUIElement, maxScrolls: Int = 4) {
+        guard !element.isHittable else { return }
+
+        let scrollView = app.scrollViews.firstMatch
+        guard scrollView.exists else { return }
+
+        for _ in 0..<maxScrolls where !element.isHittable {
+            scrollView.swipeUp()
+        }
     }
 
     func assertElementExists(_ identifier: String, timeout: TimeInterval = 5) {
