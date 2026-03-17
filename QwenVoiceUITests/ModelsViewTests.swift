@@ -1,6 +1,6 @@
 import XCTest
 
-final class ModelsViewTests: QwenVoiceUITestBase {
+final class ModelsViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .models }
 
     func testModelsScreenAvailability() {

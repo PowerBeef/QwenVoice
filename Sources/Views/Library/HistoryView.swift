@@ -68,6 +68,9 @@ enum HistorySortOrder: String, CaseIterable, Identifiable {
 
 struct HistoryView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
+    let isActive: Bool
     @Binding var searchText: String
     @Binding var sortOrder: HistorySortOrder
 
@@ -78,6 +81,9 @@ struct HistoryView: View {
     @State private var showDeleteConfirmation = false
     @State private var itemToDelete: HistoryListItem?
     @State private var actionAlert: HistoryActionAlert?
+    @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
+    @State private var needsReloadWhenActive = false
+    @State private var pendingReloadAfterCurrentLoad = false
 
     private var filteredItems: [HistoryListItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -104,9 +110,21 @@ struct HistoryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityIdentifier("screen_history")
         .onAppear {
-            reloadHistory()
+            if isActive && items.isEmpty {
+                reloadHistory()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
+            if isActive {
+                reloadHistory()
+            } else {
+                needsReloadWhenActive = true
+            }
+        }
+        .onChange(of: isActive) { _, isActive in
+            guard isActive else { return }
+            guard items.isEmpty || needsReloadWhenActive || loadError != nil else { return }
+            needsReloadWhenActive = false
             reloadHistory()
         }
         .onDisappear {
@@ -132,6 +150,17 @@ struct HistoryView: View {
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .sheet(item: $savedVoiceSheetConfiguration) { configuration in
+            SavedVoiceSheet(configuration: configuration) { voice in
+                savedVoicesViewModel.insertOrReplace(voice)
+                Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+                presentActionAlert(
+                    title: "Saved Voice Added",
+                    message: "\"\(voice.name)\" is ready in Saved Voices."
+                )
+            }
+            .environmentObject(pythonBridge)
         }
     }
 
@@ -170,6 +199,15 @@ struct HistoryView: View {
                     onPlay: {
                         audioPlayer.playFile(item.generation.audioPath, title: item.textPreview)
                     },
+                    onSaveToSavedVoices: item.generation.mode == GenerationMode.clone.rawValue
+                        ? {
+                            savedVoiceSheetConfiguration = SavedVoiceSheetConfiguration.cloneResult(
+                                suggestedName: suggestedSavedVoiceName(for: item),
+                                audioPath: item.generation.audioPath,
+                                transcript: item.generation.text
+                            )
+                        }
+                        : nil,
                     onSaveAs: {
                         exportGeneration(item)
                     },
@@ -215,14 +253,30 @@ private extension HistoryView {
     }
 
     func reloadHistory() {
-        loadTask?.cancel()
+        if loadTask != nil {
+            pendingReloadAfterCurrentLoad = true
+            return
+        }
+
         let hasExistingItems = !items.isEmpty
         if !hasExistingItems {
             isLoading = true
             loadError = nil
         }
 
+        let interval = AppPerformanceSignposts.begin("History Reload")
+        let wallStart = DispatchTime.now().uptimeNanoseconds
+
         loadTask = Task {
+            var didFinishReload = false
+            defer {
+                if !didFinishReload {
+                    Task { @MainActor in
+                        cancelReload(interval: interval)
+                    }
+                }
+            }
+
             do {
                 let loadedItems = try await Task.detached(priority: .userInitiated) {
                     if hasExistingItems {
@@ -237,7 +291,9 @@ private extension HistoryView {
                     HistorySessionCache.generations = loadedItems.map(\.generation)
                     loadError = nil
                     isLoading = false
+                    finishReload(wallStart: wallStart, interval: interval)
                 }
+                didFinishReload = true
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
@@ -250,9 +306,33 @@ private extension HistoryView {
                         loadError = error.localizedDescription
                     }
                     isLoading = false
+                    finishReload(wallStart: wallStart, interval: interval)
                 }
+                didFinishReload = true
             }
         }
+    }
+
+    func finishReload(wallStart: UInt64, interval: AppPerformanceSignposts.Interval) {
+        AppPerformanceSignposts.end(interval)
+        #if DEBUG
+        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+        print("[Performance][HistoryView] reload_wall_ms=\(elapsedMs)")
+        #endif
+
+        loadTask = nil
+
+        if pendingReloadAfterCurrentLoad {
+            pendingReloadAfterCurrentLoad = false
+            reloadHistory()
+        }
+    }
+
+    func cancelReload(interval: AppPerformanceSignposts.Interval) {
+        AppPerformanceSignposts.end(interval)
+        isLoading = false
+        loadTask = nil
+        pendingReloadAfterCurrentLoad = false
     }
 
     func exportGeneration(_ item: HistoryListItem) {
@@ -287,6 +367,17 @@ private extension HistoryView {
                 )
             }
         }
+    }
+
+    func suggestedSavedVoiceName(for item: HistoryListItem) -> String {
+        if let voice = item.generation.voice?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !voice.isEmpty {
+            return "\(voice) Sample"
+        }
+
+        return URL(fileURLWithPath: item.generation.audioPath)
+            .deletingPathExtension()
+            .lastPathComponent
     }
 
     func confirmDelete(_ item: HistoryListItem) {
@@ -347,6 +438,7 @@ private extension HistoryView {
 private struct HistoryRow: View {
     let item: HistoryListItem
     let onPlay: () -> Void
+    let onSaveToSavedVoices: (() -> Void)?
     let onSaveAs: () -> Void
     let onDelete: () -> Void
 
@@ -409,6 +501,17 @@ private struct HistoryRow: View {
                 .foregroundStyle(.secondary)
 
             ControlGroup {
+                if let onSaveToSavedVoices {
+                    Button(action: onSaveToSavedVoices) {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!item.audioFileExists)
+                    .accessibilityLabel("Save to Saved Voices")
+                    .accessibilityIdentifier("historyRow_saveVoice_\(item.id)")
+                }
+
                 Button(action: onSaveAs) {
                     Image(systemName: "square.and.arrow.down")
                 }

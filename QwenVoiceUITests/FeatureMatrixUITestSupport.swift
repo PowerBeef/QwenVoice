@@ -213,29 +213,49 @@ final class StubFeatureFixture {
     }
 }
 
-class FeatureMatrixUITestBase: QwenVoiceUITestBase {
+class StubbedQwenVoiceUITestBase: QwenVoiceUITestBase {
     override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
+    override class var backendMode: UITestBackendMode { .stub }
+    override class var stateIsolation: UITestStateIsolation { .isolatedFixture }
 
     private(set) var fixture: StubFeatureFixture!
+
+    func configureStubFixture(_ fixture: StubFeatureFixture) throws { }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         fixture = try StubFeatureFixture()
+        try configureStubFixture(fixture)
+        try super.setUpWithError()
     }
 
     override func tearDownWithError() throws {
-        if let app, app.state != .notRunning {
-            app.terminate()
-        }
         let failureCount = testRun?.failureCount ?? 0
         let unexpectedCount = testRun?.unexpectedExceptionCount ?? 0
+        try super.tearDownWithError()
         if failureCount == 0 && unexpectedCount == 0 {
             fixture?.cleanup()
         } else if let fixture {
-            print("[FeatureMatrixUITestBase] Preserving failed fixture root at \(fixture.root.path)")
+            print("[StubbedQwenVoiceUITestBase] Preserving failed fixture root at \(fixture.root.path)")
         }
         fixture = nil
     }
+
+    override func isolatedLaunchEnvironment() -> [String : String] {
+        fixture.environment()
+    }
+
+    override func isolatedAppSupportDirectoryOverride() -> URL? {
+        fixture.root
+    }
+
+    override func isolatedDefaultsSuiteOverride() -> String? {
+        fixture.defaultsSuiteName
+    }
+}
+
+class FeatureMatrixUITestBase: StubbedQwenVoiceUITestBase {
+    override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
 
     func launchStubApp(
         initialScreen: UITestScreen? = nil,
@@ -244,10 +264,9 @@ class FeatureMatrixUITestBase: QwenVoiceUITestBase {
     ) {
         relaunchFreshApp(
             initialScreen: initialScreen,
-            additionalEnvironment: fixture.environment(
-                setupScenario: setupScenario,
-                additional: additionalEnvironment
-            )
+            additionalEnvironment: [
+                "QWENVOICE_UI_TEST_SETUP_SCENARIO": setupScenario.rawValue,
+            ].merging(additionalEnvironment) { _, new in new }
         )
     }
 

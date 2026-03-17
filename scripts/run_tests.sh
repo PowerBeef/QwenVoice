@@ -41,6 +41,7 @@ PROBE_NAME=""
 
 FILTERS=()
 FAILED_TESTS=()
+COMPLETED_FILTERS=()
 SLOW_TMP=""
 BUILD_STATUS="reused"
 SUMMARY_JSON_PATH=""
@@ -48,7 +49,16 @@ SUMMARY_TXT_PATH=""
 SLOW_REPORT_PATH=""
 RUN_RESULT_DIR=""
 RESULT_BUNDLE=""
+RESULT_BUNDLE_DISPLAY=""
 XCODEBUILD_LOG=""
+PROGRESS_PATH=""
+LATEST_PROGRESS_PATH=""
+INFRASTRUCTURE_SUMMARY_PATH=""
+FILTER_STATUS_DIR=""
+INFRASTRUCTURE_FAILURE=false
+INFRASTRUCTURE_REASON=""
+RETRY_ATTEMPTED=false
+CURRENT_FILTER=""
 
 usage() {
     cat <<'EOF'
@@ -65,7 +75,7 @@ Usage:
   ./scripts/run_tests.sh --result-dir <path>
   ./scripts/run_tests.sh --debug-on-fail
   ./scripts/run_tests.sh --json-summary
-  ./scripts/run_tests.sh --probe launch-speed|generation-perf|history-accessibility|generation-benchmark
+  ./scripts/run_tests.sh --probe launch-speed|generation-perf|history-accessibility|generation-benchmark|clone-tone
 
 Notes:
   - Default suite is "smoke".
@@ -77,6 +87,15 @@ EOF
 if [[ "${1:-}" == "--probe" && "${2:-}" == "generation-benchmark" ]]; then
     shift 2
     exec "$SCRIPT_DIR/run_generation_benchmark.sh" "$@"
+fi
+
+if [[ "${1:-}" == "--probe" && "${2:-}" == "clone-tone" ]]; then
+    shift 2
+    if command -v python3 >/dev/null 2>&1; then
+        exec python3 "$SCRIPT_DIR/evaluate_clone_tone.py" "$@"
+    fi
+    echo "ERROR: Could not find python3 to launch the clone tone evaluation probe." >&2
+    exit 1
 fi
 
 append_filter() {
@@ -230,6 +249,10 @@ collect_probe_filters() {
             SUITE="debug"
             append_filter "$TEST_BUNDLE_ID/DebugHierarchyTests/testHistoryScreenIdentifiers"
             ;;
+        clone-tone)
+            echo "ERROR: Probe 'clone-tone' is handled by scripts/evaluate_clone_tone.py and should not reach the UI test runner." >&2
+            exit 1
+            ;;
         *)
             echo "ERROR: Unknown probe '$PROBE_NAME'." >&2
             exit 1
@@ -304,13 +327,19 @@ prepare_result_paths() {
 
     mkdir -p "$RUN_RESULT_DIR"
     RESULT_BUNDLE="$RUN_RESULT_DIR/TestResults.xcresult"
+    RESULT_BUNDLE_DISPLAY="$RESULT_BUNDLE"
     rm -rf "$RESULT_BUNDLE"
     XCODEBUILD_LOG="$RUN_RESULT_DIR/xcodebuild.log"
     SUMMARY_JSON_PATH="$RUN_RESULT_DIR/summary.json"
     SUMMARY_TXT_PATH="$RUN_RESULT_DIR/summary.txt"
     SLOW_REPORT_PATH="$RUN_RESULT_DIR/slow-tests.txt"
+    PROGRESS_PATH="$RUN_RESULT_DIR/progress.txt"
+    INFRASTRUCTURE_SUMMARY_PATH="$RUN_RESULT_DIR/infrastructure-failure.txt"
+    FILTER_STATUS_DIR="$RUN_RESULT_DIR/filter-status"
     SLOW_TMP="$RUN_RESULT_DIR/.slow-tests.tmp"
+    mkdir -p "$FILTER_STATUS_DIR"
     : > "$SLOW_TMP"
+    : > "$XCODEBUILD_LOG"
 
     if [[ -z "$RESULT_DIR_OVERRIDE" ]]; then
         mkdir -p "$RESULTS_ROOT"
@@ -318,6 +347,8 @@ prepare_result_paths() {
         rm -rf "$latest_link"
         ln -s "$RUN_RESULT_DIR" "$latest_link"
     fi
+
+    LATEST_PROGRESS_PATH="$RESULTS_ROOT/latest-progress.txt"
 }
 
 apply_shard_if_requested() {
@@ -394,15 +425,151 @@ collect_requested_filters() {
     collect_suite_filters "$SUITE"
 }
 
+cleanup_repo_processes() {
+    local pid
+
+    pkill -x QwenVoice 2>/dev/null || true
+    pkill -f "$PROJECT_DIR/Sources/Resources/backend/server.py" 2>/dev/null || true
+    pkill -f "QwenVoiceUITests-Runner" 2>/dev/null || true
+
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+    done < <(ps -axo pid=,command= | awk -v project="$PROJECT_DIR" '
+        index($0, "xcodebuild") && index($0, project) { print $1 }
+    ')
+
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+    done < <(ps -axo pid=,command= | awk '
+        index($0, "debugserver") && index($0, "QwenVoice") { print $1 }
+    ')
+}
+
+cooldown_after_cleanup() {
+    sleep 2
+}
+
+write_progress() {
+    local status="$1"
+    local current_filter="${2:-$CURRENT_FILTER}"
+    local total_filters="${#FILTERS[@]}"
+    local completed_count=0
+    local completed_filters_text=""
+
+    if [[ -n "${COMPLETED_FILTERS[*]-}" ]]; then
+        completed_count="${#COMPLETED_FILTERS[@]}"
+        completed_filters_text="$(printf '  - %s\n' "${COMPLETED_FILTERS[@]}")"
+    fi
+
+    {
+        printf 'status: %s\n' "$status"
+        printf 'suite: %s\n' "$SUITE"
+        printf 'current_filter: %s\n' "$current_filter"
+        printf 'completed_count: %s\n' "$completed_count"
+        printf 'total_filters: %s\n' "$total_filters"
+        printf 'infrastructure_failure: %s\n' "$INFRASTRUCTURE_FAILURE"
+        printf 'infrastructure_reason: %s\n' "$INFRASTRUCTURE_REASON"
+        printf 'retry_attempted: %s\n' "$RETRY_ATTEMPTED"
+        printf 'filters:\n'
+        local filter
+        for filter in "${FILTERS[@]}"; do
+            printf '  - %s\n' "$filter"
+        done
+        printf 'completed_filters:\n'
+        if [[ -n "$completed_filters_text" ]]; then
+            printf '%s' "$completed_filters_text"
+        fi
+    } > "$PROGRESS_PATH"
+
+    mkdir -p "$(dirname "$LATEST_PROGRESS_PATH")"
+    cp "$PROGRESS_PATH" "$LATEST_PROGRESS_PATH"
+}
+
+write_filter_status() {
+    local filter="$1"
+    local status="$2"
+    local attempt="$3"
+    local reason="${4:-}"
+    local log_path="${5:-}"
+    local result_bundle="${6:-}"
+    local slug
+
+    slug="$(slugify_filter "$filter")"
+    mkdir -p "$FILTER_STATUS_DIR"
+    {
+        printf 'timestamp: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')"
+        printf 'filter: %s\n' "$filter"
+        printf 'status: %s\n' "$status"
+        printf 'attempt: %s\n' "$attempt"
+        printf 'reason: %s\n' "$reason"
+        printf 'log: %s\n' "$log_path"
+        printf 'result_bundle: %s\n' "$result_bundle"
+        printf '\n'
+    } >> "$FILTER_STATUS_DIR/${slug}.txt"
+}
+
+slugify_filter() {
+    printf '%s' "$1" | tr '/: ' '___' | tr -cd '[:alnum:]_.-'
+}
+
+parsed_test_case_count() {
+    local log_path="$1"
+    grep -Ec "^Test Case '-\\[[^]]+\\]' (passed|failed|skipped) \\([0-9.]+ seconds\\)$" "$log_path" || true
+}
+
+detect_infrastructure_failure() {
+    local log_path="$1"
+    local parsed_count
+    INFRASTRUCTURE_REASON=""
+    parsed_count="$(parsed_test_case_count "$log_path")"
+
+    if grep -Fq "Timed out while enabling automation mode." "$log_path"; then
+        INFRASTRUCTURE_REASON="Timed out while enabling automation mode."
+        return 0
+    fi
+
+    if grep -Fq "Lost connection to the application" "$log_path"; then
+        INFRASTRUCTURE_REASON="Lost connection to the application."
+        return 0
+    fi
+
+    if grep -Eq 'Failed to get matching snapshot|AXError|accessibility.*(failed|error)|Accessibility hierarchy' "$log_path"; then
+        INFRASTRUCTURE_REASON="Accessibility automation infrastructure failed."
+        return 0
+    fi
+
+    if grep -Fq "** TEST EXECUTE FAILED **" "$log_path" && [[ "$parsed_count" -eq 0 ]]; then
+        INFRASTRUCTURE_REASON="XCTest execution failed before any test cases completed."
+        return 0
+    fi
+
+    return 1
+}
+
+record_infrastructure_failure() {
+    INFRASTRUCTURE_FAILURE=true
+    cat > "$INFRASTRUCTURE_SUMMARY_PATH" <<EOF
+reason: $INFRASTRUCTURE_REASON
+current_filter: $CURRENT_FILTER
+log: $XCODEBUILD_LOG
+results: $RUN_RESULT_DIR
+EOF
+    write_progress "infrastructure_failure" "$CURRENT_FILTER"
+}
+
 write_failed_cache() {
+    local -a failed_tests=("${FAILED_TESTS[@]-}")
     mkdir -p "$BUILD_ROOT"
     : > "$LAST_FAILED_FILE"
-    if [[ "${#FAILED_TESTS[@]}" -eq 0 ]]; then
+    if [[ "$INFRASTRUCTURE_FAILURE" == "true" ]]; then
+        return
+    fi
+    if [[ "${#failed_tests[@]}" -eq 0 ]]; then
         return
     fi
     local i
-    for (( i = 0; i < ${#FAILED_TESTS[@]}; i++ )); do
-        printf '%s\n' "${FAILED_TESTS[$i]}" >> "$LAST_FAILED_FILE"
+    for (( i = 0; i < ${#failed_tests[@]}; i++ )); do
+        printf '%s\n' "${failed_tests[$i]}" >> "$LAST_FAILED_FILE"
     done
 }
 
@@ -438,6 +605,12 @@ parse_and_summarize_log() {
         fi
     done < "$XCODEBUILD_LOG"
 
+    if [[ "$INFRASTRUCTURE_FAILURE" == "true" ]]; then
+        overall_status="infrastructure_failure"
+    elif [[ "$failed" -gt 0 ]]; then
+        overall_status="failed"
+    fi
+
     if [[ -s "$SLOW_TMP" ]]; then
         sort -nr "$SLOW_TMP" | awk '{printf "%.3fs %s\n", $1, $2}' > "$SLOW_REPORT_PATH"
     else
@@ -447,44 +620,64 @@ parse_and_summarize_log() {
 
     write_failed_cache
 
+    local -a failed_tests=("${FAILED_TESTS[@]-}")
     local failed_json="[]"
-    if [[ "${#FAILED_TESTS[@]}" -gt 0 ]]; then
+    if [[ "${#failed_tests[@]}" -gt 0 ]]; then
         local buffer="[" i
-        for (( i = 0; i < ${#FAILED_TESTS[@]}; i++ )); do
+        for (( i = 0; i < ${#failed_tests[@]}; i++ )); do
             if (( i > 0 )); then
                 buffer="$buffer,"
             fi
-            buffer="$buffer\"${FAILED_TESTS[$i]}\""
+            buffer="$buffer\"${failed_tests[$i]}\""
         done
         buffer="$buffer]"
         failed_json="$buffer"
     fi
 
+    local execution_state="complete"
+    if [[ "$INFRASTRUCTURE_FAILURE" == "true" ]]; then
+        execution_state="infrastructure_failure"
+    fi
+
     cat > "$SUMMARY_TXT_PATH" <<EOF
 Suite: $SUITE
 Build cache: $BUILD_STATUS
+Overall status: $overall_status
+Execution state: $execution_state
 Total: $total
 Passed: $passed
 Failed: $failed
 Skipped: $skipped
-Result bundle: $RESULT_BUNDLE
+Assertion failures: $failed
+Infrastructure failures: $INFRASTRUCTURE_FAILURE
+Result bundle: $RESULT_BUNDLE_DISPLAY
 Log: $XCODEBUILD_LOG
 Failed tests file: $LAST_FAILED_FILE
 Slow tests: $SLOW_REPORT_PATH
+Infrastructure failure: $INFRASTRUCTURE_FAILURE
+Infrastructure reason: $INFRASTRUCTURE_REASON
+Filter status dir: $FILTER_STATUS_DIR
 EOF
 
     cat > "$SUMMARY_JSON_PATH" <<EOF
 {
   "suite": "$SUITE",
   "build_cache": "$BUILD_STATUS",
+  "overall_status": "$overall_status",
+  "execution_state": "$execution_state",
   "total": $total,
   "passed": $passed,
   "failed": $failed,
   "skipped": $skipped,
-  "result_bundle": "$RESULT_BUNDLE",
+  "assertion_failures": $failed,
+  "infrastructure_failures": $INFRASTRUCTURE_FAILURE,
+  "result_bundle": "$RESULT_BUNDLE_DISPLAY",
   "log": "$XCODEBUILD_LOG",
   "failed_tests_file": "$LAST_FAILED_FILE",
   "slow_tests_file": "$SLOW_REPORT_PATH",
+  "infrastructure_failure": $INFRASTRUCTURE_FAILURE,
+  "infrastructure_reason": "$INFRASTRUCTURE_REASON",
+  "filter_status_dir": "$FILTER_STATUS_DIR",
   "failed_tests": $failed_json
 }
 EOF
@@ -520,9 +713,14 @@ extract_debug_metadata() {
     fi
 }
 
-run_tests() {
+run_xcodebuild_for_filters() {
+    local result_bundle_path="$1"
+    local log_path="$2"
+    shift 2
+
     local xctestrun_file command_status=0
     local debug_env="$DEBUG_ON_FAIL"
+    local -a active_filters=("$@")
     local -a command
 
     xctestrun_file="$(find_xctestrun_file)"
@@ -535,33 +733,190 @@ run_tests() {
         xcodebuild test-without-building
         -xctestrun "$xctestrun_file"
         -destination "$DESTINATION"
-        -resultBundlePath "$RESULT_BUNDLE"
+        -resultBundlePath "$result_bundle_path"
     )
 
     local i
-    for (( i = 0; i < ${#FILTERS[@]}; i++ )); do
-        command+=("-only-testing:${FILTERS[$i]}")
+    for (( i = 0; i < ${#active_filters[@]}; i++ )); do
+        command+=("-only-testing:${active_filters[$i]}")
     done
-
-    echo "==> Suite: $SUITE"
-    echo "==> Build cache: $BUILD_STATUS"
-    if [[ "${#FILTERS[@]}" -gt 0 ]]; then
-        echo "==> Filters:"
-        for (( i = 0; i < ${#FILTERS[@]}; i++ )); do
-            echo "    - ${FILTERS[$i]}"
-        done
-    fi
-    echo "==> Results: $RUN_RESULT_DIR"
 
     if [[ "$SUITE" == "integration" || "$SUITE" == "debug" ]]; then
         debug_env="true"
     fi
 
     set +e
-    QWENVOICE_DEBUG_ON_FAIL="$debug_env" "${command[@]}" 2>&1 | filter_xcodebuild_output | tee "$XCODEBUILD_LOG"
+    QWENVOICE_DEBUG_ON_FAIL="$debug_env" "${command[@]}" 2>&1 | filter_xcodebuild_output | tee "$log_path"
     command_status=${PIPESTATUS[0]}
     set -e
 
+    return "$command_status"
+}
+
+preserve_retry_attempt_artifacts() {
+    local log_path="$1"
+    local result_bundle="$2"
+    local attempt="$3"
+    local archived_log="${log_path%.log}.attempt${attempt}.log"
+    local archived_bundle="${result_bundle%.xcresult}.attempt${attempt}.xcresult"
+
+    if [[ -f "$log_path" ]]; then
+        cp "$log_path" "$archived_log"
+    fi
+
+    if [[ -d "$result_bundle" ]]; then
+        rm -rf "$archived_bundle"
+        mv "$result_bundle" "$archived_bundle"
+    fi
+}
+
+run_filter_with_infrastructure_retry() {
+    local filter="$1"
+    local result_bundle_path="$2"
+    local log_path="$3"
+    local allow_retry="$4"
+    shift 4
+    local -a active_filters=("$@")
+    local attempt=1
+    local command_status=0
+
+    RETRY_ATTEMPTED=false
+
+    while true; do
+        write_filter_status "$filter" "running" "$attempt" "" "$log_path" "$result_bundle_path"
+
+        if run_xcodebuild_for_filters "$result_bundle_path" "$log_path" "${active_filters[@]}"; then
+            command_status=0
+        else
+            command_status=$?
+        fi
+
+        if detect_infrastructure_failure "$log_path"; then
+            write_filter_status "$filter" "infrastructure_failure" "$attempt" "$INFRASTRUCTURE_REASON" "$log_path" "$result_bundle_path"
+
+            if [[ "$allow_retry" == "true" && "$attempt" -eq 1 ]]; then
+                RETRY_ATTEMPTED=true
+                preserve_retry_attempt_artifacts "$log_path" "$result_bundle_path" "$attempt"
+                echo "==> Infrastructure failure detected for $filter. Cleaning up and retrying once..."
+                write_filter_status "$filter" "retrying" "$attempt" "$INFRASTRUCTURE_REASON" "$log_path" "$result_bundle_path"
+                write_progress "retrying" "$filter"
+                cleanup_repo_processes
+                cooldown_after_cleanup
+                : > "$log_path"
+                rm -rf "$result_bundle_path"
+                attempt=$((attempt + 1))
+                INFRASTRUCTURE_REASON=""
+                continue
+            fi
+
+            return 97
+        fi
+
+        if [[ "$command_status" -ne 0 ]]; then
+            write_filter_status "$filter" "assertion_failure" "$attempt" "" "$log_path" "$result_bundle_path"
+            return "$command_status"
+        fi
+
+        write_filter_status "$filter" "passed" "$attempt" "" "$log_path" "$result_bundle_path"
+        return 0
+    done
+}
+
+run_targeted_filters_with_retry() {
+    local command_status=0
+
+    cleanup_repo_processes
+    cooldown_after_cleanup
+    write_progress "running" "$CURRENT_FILTER"
+
+    : > "$XCODEBUILD_LOG"
+
+    if run_filter_with_infrastructure_retry "${FILTERS[*]}" "$RESULT_BUNDLE" "$XCODEBUILD_LOG" "true" "${FILTERS[@]}"; then
+        command_status=0
+    else
+        command_status=$?
+    fi
+
+    if [[ "$command_status" -eq 97 ]]; then
+        record_infrastructure_failure
+        return 1
+    fi
+
+    return "$command_status"
+}
+
+run_smoke_suite_sequentially() {
+    local filter slug filter_log filter_bundle command_status=0
+    local bundles_dir="$RUN_RESULT_DIR/result-bundles"
+    RESULT_BUNDLE_DISPLAY="$bundles_dir"
+    mkdir -p "$bundles_dir"
+
+    for filter in "${FILTERS[@]}"; do
+        CURRENT_FILTER="$filter"
+        write_progress "running" "$CURRENT_FILTER"
+        cleanup_repo_processes
+        cooldown_after_cleanup
+
+        slug="$(slugify_filter "$filter")"
+        filter_log="$RUN_RESULT_DIR/${slug}.log"
+        filter_bundle="$bundles_dir/${slug}.xcresult"
+        rm -rf "$filter_bundle"
+        : > "$filter_log"
+
+        if run_filter_with_infrastructure_retry "$filter" "$filter_bundle" "$filter_log" "true" "$filter"; then
+            command_status=0
+        else
+            command_status=$?
+        fi
+
+        cat "$filter_log" >> "$XCODEBUILD_LOG"
+        printf '\n' >> "$XCODEBUILD_LOG"
+
+        if [[ "$command_status" -eq 97 ]]; then
+            record_infrastructure_failure
+            return 1
+        fi
+
+        if [[ "$command_status" -ne 0 ]]; then
+            return "$command_status"
+        fi
+
+        COMPLETED_FILTERS+=("$filter")
+        write_progress "running" ""
+    done
+
+    return 0
+}
+
+run_tests() {
+    local command_status=0
+
+    echo "==> Suite: $SUITE"
+    echo "==> Build cache: $BUILD_STATUS"
+    if [[ "${#FILTERS[@]}" -gt 0 ]]; then
+        echo "==> Filters:"
+        local i
+        for (( i = 0; i < ${#FILTERS[@]}; i++ )); do
+            echo "    - ${FILTERS[$i]}"
+        done
+    fi
+    echo "==> Results: $RUN_RESULT_DIR"
+
+    if [[ "$SUITE" == "smoke" && -z "$CLASS_NAME" && -z "$TEST_NAME" && "$RERUN_FAILED" != "true" ]]; then
+        run_smoke_suite_sequentially || command_status=$?
+    else
+        CURRENT_FILTER="${FILTERS[*]}"
+        run_targeted_filters_with_retry || command_status=$?
+        if [[ "$command_status" -eq 0 ]]; then
+            COMPLETED_FILTERS=("${FILTERS[@]}")
+        fi
+    fi
+
+    if [[ "$INFRASTRUCTURE_FAILURE" == "true" ]]; then
+        write_progress "infrastructure_failure" ""
+    else
+        write_progress "completed" ""
+    fi
     parse_and_summarize_log
     extract_debug_metadata
     return "$command_status"
@@ -654,9 +1009,16 @@ if [[ "${#FILTERS[@]}" -eq 0 ]]; then
     exit 1
 fi
 
+cleanup_repo_processes
+cooldown_after_cleanup
 ensure_build_cache
 prepare_result_paths
+trap 'cleanup_repo_processes' EXIT
+write_progress "prepared" ""
 
 if ! run_tests; then
     exit 1
 fi
+
+cleanup_repo_processes
+cooldown_after_cleanup

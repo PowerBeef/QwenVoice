@@ -5,6 +5,8 @@ struct CustomVoiceView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
 
+    let isActive: Bool
+
     @State private var selectedSpeaker = TTSModel.defaultSpeaker
     @State private var emotion = "Normal tone"
     @State private var text = ""
@@ -41,7 +43,7 @@ struct CustomVoiceView: View {
     }
 
     private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)"
+        "\(isActive)-\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)"
     }
 
     var body: some View {
@@ -142,11 +144,9 @@ private extension CustomVoiceView {
                 Spacer(minLength: 0)
             }
         } supporting: {
-            if pythonBridge.isReady && isModelAvailable {
-                Label("Model ready", systemImage: "checkmark.circle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.customVoice)
-            }
+            Text("Choose the built-in speaker that should deliver this line.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .overlay(alignment: .topLeading) {
             selectedSpeakerValueAnchor
@@ -364,6 +364,7 @@ private extension CustomVoiceView {
 
     func prewarmSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
+        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
 
         await pythonBridge.prewarmModelIfNeeded(

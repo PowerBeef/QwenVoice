@@ -17,8 +17,31 @@ final class ModelManagerViewModel: ObservableObject {
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
     private var stubDownloadTasks: [String: Task<Void, Never>] = [:]
+    private var refreshTask: Task<Void, Never>?
 
     func refresh() async {
+        if let refreshTask {
+            await refreshTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            let interval = AppPerformanceSignposts.begin("Model Status Refresh")
+            let wallStart = DispatchTime.now().uptimeNanoseconds
+            await performRefresh()
+            AppPerformanceSignposts.end(interval)
+            #if DEBUG
+            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+            print("[Performance][ModelManagerViewModel] refresh_wall_ms=\(elapsedMs)")
+            #endif
+        }
+
+        refreshTask = task
+        await task.value
+        refreshTask = nil
+    }
+
+    private func performRefresh() async {
         let modelsDir = QwenVoiceApp.modelsDir
         let fileManager = FileManager.default
         var candidates: [(model: TTSModel, epoch: Int)] = []

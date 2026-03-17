@@ -9,6 +9,7 @@ struct BatchGenerationSheet: View {
     let mode: GenerationMode
     var voice: String?
     var emotion: String?
+    var deliveryProfile: DeliveryProfile? = nil
     var voiceDescription: String?
     var refAudio: String?
     var refText: String?
@@ -148,6 +149,7 @@ struct BatchGenerationSheet: View {
                     lines: lines,
                     voice: voice,
                     emotion: emotion,
+                    deliveryProfile: deliveryProfile,
                     voiceDescription: voiceDescription,
                     refAudio: refAudio,
                     refText: refText

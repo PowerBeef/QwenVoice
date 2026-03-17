@@ -1,8 +1,11 @@
 import XCTest
 
-final class SidebarNavigationTests: QwenVoiceUITestBase {
-    override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
+final class SidebarNavigationTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .customVoice }
+
+    override func configureStubFixture(_ fixture: StubFeatureFixture) throws {
+        fixture.installAllModels()
+    }
 
     func testSidebarLaunchLayoutKeepsTopSectionVisible() {
         let generateHeader = waitForElement("sidebarSection_generate", timeout: 5)
@@ -46,17 +49,17 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
     func testWindowToolbarChromeTracksActiveScreen() {
         ensureOnScreen(.voices)
         _ = waitForScreen(.voices)
-        _ = waitForMainWindowTitle("Voices")
+        _ = waitForMainWindowTitle("Saved Voices")
 
         let enrollButton = waitForElement("voices_enrollButton", type: .button, timeout: 5)
-        XCTAssertTrue(enrollButton.exists, "Enroll Voice should appear while Voices is active")
+        XCTAssertTrue(enrollButton.exists, "Add Voice Sample should appear while Saved Voices is active")
 
         ensureOnScreen(.models)
         _ = waitForScreen(.models)
         _ = waitForMainWindowTitle("Models")
         XCTAssertTrue(
             enrollButton.waitForNonExistence(timeout: 5),
-            "Enroll Voice should disappear when leaving Voices"
+            "Add Voice Sample should disappear when leaving Saved Voices"
         )
 
         ensureOnScreen(.history)
@@ -82,7 +85,7 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
 
         ensureOnScreen(.voices)
         _ = waitForScreen(.voices)
-        _ = waitForMainWindowTitle("Voices")
+        _ = waitForMainWindowTitle("Saved Voices")
         _ = waitForElement("voices_enrollButton", type: .button, timeout: 5)
 
         XCTAssertFalse(
@@ -182,7 +185,7 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         case .history:
             return "History"
         case .voices:
-            return "Voices"
+            return "Saved Voices"
         case .models:
             return "Models"
         case .preferences:

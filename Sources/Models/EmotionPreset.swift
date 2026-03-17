@@ -14,6 +14,63 @@ enum EmotionIntensity: Int, CaseIterable, Identifiable {
         case .strong: "Strong"
         }
     }
+
+    var rpcValue: String {
+        switch self {
+        case .subtle: "subtle"
+        case .normal: "normal"
+        case .strong: "strong"
+        }
+    }
+}
+
+struct DeliveryProfile: Equatable {
+    let presetID: String?
+    let intensity: EmotionIntensity?
+    let customText: String?
+    let finalInstruction: String
+
+    static let neutral = DeliveryProfile(
+        presetID: "neutral",
+        intensity: nil,
+        customText: nil,
+        finalInstruction: "Normal tone"
+    )
+
+    var trimmedInstruction: String {
+        finalInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedCustomText: String? {
+        customText?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isNeutral: Bool {
+        let instruction = trimmedInstruction
+        return instruction.isEmpty || instruction.caseInsensitiveCompare("Normal tone") == .orderedSame
+    }
+
+    var isMeaningful: Bool {
+        !isNeutral
+    }
+
+    static func preset(_ preset: EmotionPreset, intensity: EmotionIntensity) -> DeliveryProfile {
+        DeliveryProfile(
+            presetID: preset.id,
+            intensity: preset.id == "neutral" ? nil : intensity,
+            customText: nil,
+            finalInstruction: preset.instruction(for: intensity)
+        )
+    }
+
+    static func custom(_ text: String) -> DeliveryProfile {
+        DeliveryProfile(
+            presetID: nil,
+            intensity: .normal,
+            customText: text,
+            finalInstruction: text
+        )
+    }
 }
 
 struct EmotionPreset: Identifiable {
@@ -24,6 +81,11 @@ struct EmotionPreset: Identifiable {
 
     func instruction(for intensity: EmotionIntensity) -> String {
         instructions[intensity] ?? instructions[.normal] ?? "Normal tone"
+    }
+
+    static func preset(id: String?) -> EmotionPreset? {
+        guard let id else { return nil }
+        return all.first(where: { $0.id == id })
     }
 
     static let all: [EmotionPreset] = [

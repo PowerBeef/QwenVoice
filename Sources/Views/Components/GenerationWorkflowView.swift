@@ -348,6 +348,7 @@ extension ConfigurationFieldRow where Supporting == EmptyView {
 
 struct DeliveryControlsView: View {
     @Binding var emotion: String
+    var deliveryProfile: Binding<DeliveryProfile?>? = nil
     var accentColor: Color = AppTheme.accent
     var accessibilityPrefix: String = "delivery"
     var isCompact: Bool = false
@@ -356,6 +357,7 @@ struct DeliveryControlsView: View {
     var body: some View {
         EmotionPickerView(
             emotion: $emotion,
+            deliveryProfile: deliveryProfile,
             accentColor: accentColor,
             accessibilityPrefix: accessibilityPrefix,
             showsLabel: showsLabel

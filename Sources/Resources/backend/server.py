@@ -25,6 +25,16 @@ from importlib import metadata as importlib_metadata
 from collections import OrderedDict
 from datetime import datetime
 
+BACKEND_DIR = os.path.dirname(os.path.realpath(__file__))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from clone_delivery_pipeline import (
+    build_clone_delivery_plan,
+    delivery_profile_fingerprint,
+    parse_clone_delivery_profile,
+)
+
 # Suppress harmless library warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -72,6 +82,8 @@ PREWARM_MAX_TOKENS = 128
 PREWARM_TEXT = "The selected voice model is warming up."
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+GUIDED_CLONE_TARGET_SIMILARITY = 0.78
+GUIDED_CLONE_HARD_SIMILARITY = 0.72
 
 # Default paths — overridable via init params
 APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/QwenVoice")
@@ -149,6 +161,7 @@ _np = None
 _can_prepare_icl_fn = None
 _prepare_icl_context_fn = None
 _generate_prepared_icl_fn = None
+_generate_reference_conditioned_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
 _mlx_audio_version = None
@@ -159,6 +172,7 @@ def _ensure_mlx():
     """Lazy-import mlx_audio so we only load it when needed."""
     global _load_model_fn, _generate_audio_fn, _audio_write_fn
     global _mx, _np, _can_prepare_icl_fn, _prepare_icl_context_fn, _generate_prepared_icl_fn
+    global _generate_reference_conditioned_fn
     global _enable_speech_tokenizer_encoder_fn, _mlx_audio_version
     if _load_model_fn is None:
         import numpy as np
@@ -169,6 +183,7 @@ def _ensure_mlx():
         try:
             from mlx_audio_qwen_speed_patch import (
                 can_prepare_icl,
+                generate_with_reference_conditioning,
                 generate_with_prepared_icl,
                 prepare_icl_context,
                 try_enable_speech_tokenizer_encoder,
@@ -177,12 +192,14 @@ def _ensure_mlx():
             try:
                 from mlx_audio.qwenvoice_speed_patch import (
                     can_prepare_icl,
+                    generate_with_reference_conditioning,
                     generate_with_prepared_icl,
                     prepare_icl_context,
                     try_enable_speech_tokenizer_encoder,
                 )
             except ImportError:
                 can_prepare_icl = None
+                generate_with_reference_conditioning = None
                 generate_with_prepared_icl = None
                 prepare_icl_context = None
                 try_enable_speech_tokenizer_encoder = None
@@ -195,6 +212,7 @@ def _ensure_mlx():
         _can_prepare_icl_fn = can_prepare_icl
         _prepare_icl_context_fn = prepare_icl_context
         _generate_prepared_icl_fn = generate_with_prepared_icl
+        _generate_reference_conditioned_fn = generate_with_reference_conditioning
         _enable_speech_tokenizer_encoder_fn = try_enable_speech_tokenizer_encoder
         try:
             _mlx_audio_version = importlib_metadata.version("mlx-audio")
@@ -358,6 +376,286 @@ def _resolve_model_request(model_id=None, model_path=None):
 def _model_identity_key(resolved_model_id, model_path):
     """Return a stable per-process identity key for model warm-up tracking."""
     return resolved_model_id or os.path.realpath(model_path)
+
+
+def _has_meaningful_delivery_instruction(instruct):
+    trimmed = (instruct or "").strip()
+    return bool(trimmed) and trimmed.lower() != "normal tone"
+
+
+def _prewarm_identity_key(model_key, mode, voice=None, instruct=None, delivery_profile=None, ref_audio=None, ref_text=None):
+    """Return a stable warm-up key for the specific request shape."""
+    components = [model_key, mode or ""]
+
+    if mode == "clone":
+        components.extend([
+            os.path.realpath(ref_audio) if ref_audio else "",
+            (ref_text or "").strip(),
+            delivery_profile_fingerprint(delivery_profile, fallback_instruction=instruct),
+            (instruct or "").strip() if _has_meaningful_delivery_instruction(instruct) else "",
+        ])
+    else:
+        components.extend([
+            (voice or "").strip(),
+            (instruct or "").strip() if _has_meaningful_delivery_instruction(instruct) else "",
+        ])
+
+    return tuple(components)
+
+
+def _clone_delivery_strategy(prepared_context, instruct, delivery_profile=None):
+    """Return the clone generation strategy and whether delivery guidance is applied."""
+    if parse_clone_delivery_profile(delivery_profile, fallback_instruction=instruct) is not None:
+        if prepared_context is not None and _generate_prepared_icl_fn is not None:
+            return "guided_prepared_icl", True
+        if _generate_reference_conditioned_fn is not None:
+            return "guided_reference_conditioning", True
+        return "legacy_fallback", False
+
+    if prepared_context is not None and _generate_prepared_icl_fn is not None:
+        return "neutral_prepared_icl", False
+
+    return "neutral_fallback", False
+
+
+def _speaker_similarity_reference_vector(clean_ref_audio_path):
+    if _current_model is None or getattr(_current_model, "speaker_encoder", None) is None:
+        return None
+
+    from mlx_audio.utils import load_audio
+
+    reference_audio = load_audio(clean_ref_audio_path, sample_rate=_current_model.sample_rate)
+    reference_embedding = _current_model.extract_speaker_embedding(reference_audio)
+    _mx.eval(reference_embedding)
+    vector = _np.array(reference_embedding, dtype=_np.float32).reshape(-1)
+    if not vector.size:
+        return None
+    return vector
+
+
+def _speaker_similarity_from_generated_audio(reference_vector, generated_audio):
+    if reference_vector is None:
+        return None
+    if _current_model is None or getattr(_current_model, "speaker_encoder", None) is None:
+        return None
+
+    generated_embedding = _current_model.extract_speaker_embedding(generated_audio)
+    _mx.eval(generated_embedding)
+    generated_vector = _np.array(generated_embedding, dtype=_np.float32).reshape(-1)
+    if not generated_vector.size:
+        return None
+
+    denominator = _np.linalg.norm(reference_vector) * _np.linalg.norm(generated_vector)
+    if denominator <= 0:
+        return None
+    return float(_np.dot(reference_vector, generated_vector) / denominator)
+
+
+def _collect_single_generation_result(generator):
+    results = list(generator)
+    if not results:
+        raise RuntimeError("Generation produced no audio file")
+    return results[-1]
+
+
+def _finalize_generated_audio(result, final_path, streaming_used):
+    write_start = time.perf_counter()
+    _write_audio_file(
+        final_path,
+        result.audio,
+        result.sample_rate,
+    )
+    write_output_ms = int((time.perf_counter() - write_start) * 1000)
+    output_metadata = get_audio_metadata(final_path)
+    metrics = _metrics_from_generation_result(result, streaming_used=streaming_used)
+    response = {
+        "audio_path": final_path,
+        "duration_seconds": round(output_metadata["duration_seconds"], 2),
+    }
+    return response, metrics, output_metadata, write_output_ms
+
+
+def _stream_selected_audio(result, request_id, final_path, streaming_interval):
+    stream_start = time.perf_counter()
+    _write_audio_file(final_path, result.audio, result.sample_rate)
+    output_metadata = get_audio_metadata(final_path)
+    normalized_audio, _, nchannels = _flatten_audio_samples(result.audio)
+    session_dir = _make_stream_session_dir(request_id)
+
+    total_samples = int(normalized_audio.shape[0])
+    chunk_samples = max(1, int(result.sample_rate * max(streaming_interval, 0.16)))
+    cumulative_duration = 0.0
+    first_chunk_ms = None
+
+    for chunk_index, start in enumerate(range(0, total_samples, chunk_samples)):
+        end = min(start + chunk_samples, total_samples)
+        audio_chunk = normalized_audio[start:end] if normalized_audio.ndim == 1 else normalized_audio[start:end, :]
+        chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
+        _audio_write_fn(chunk_path, audio_chunk, result.sample_rate, format="wav")
+
+        chunk_sample_count = int(audio_chunk.shape[0])
+        chunk_duration_seconds = chunk_sample_count / float(result.sample_rate)
+        cumulative_duration += chunk_duration_seconds
+
+        if first_chunk_ms is None:
+            first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
+
+        send_generation_chunk(
+            request_id=request_id,
+            chunk_index=chunk_index,
+            chunk_path=chunk_path,
+            is_final=end >= total_samples,
+            chunk_duration_seconds=chunk_duration_seconds,
+            cumulative_duration_seconds=cumulative_duration,
+            stream_session_dir=session_dir,
+        )
+
+    metrics = _metrics_from_generation_result(result, streaming_used=True)
+    metrics["first_chunk_ms"] = first_chunk_ms or 0
+    response = {
+        "audio_path": final_path,
+        "duration_seconds": round(output_metadata["duration_seconds"], 2),
+        "stream_session_dir": session_dir,
+        "metrics": metrics,
+    }
+    write_output_ms = int((time.perf_counter() - stream_start) * 1000)
+    return response, write_output_ms, output_metadata
+
+
+def _generate_guided_clone_candidate(
+    text,
+    clean_ref_audio,
+    resolved_ref_text,
+    prepared_context,
+    plan,
+    effective_max_tokens,
+):
+    sampling_profile = plan.sampling_profile
+
+    if prepared_context is not None and _generate_prepared_icl_fn is not None:
+        generator = _generate_prepared_icl_fn(
+            _current_model,
+            plan.styled_text,
+            prepared_context,
+            instruct=plan.compiled_instruction,
+            temperature=sampling_profile["temperature"],
+            top_p=sampling_profile["top_p"],
+            repetition_penalty=sampling_profile["repetition_penalty"],
+            max_tokens=effective_max_tokens,
+            stream=False,
+        )
+        return _collect_single_generation_result(generator), "guided_prepared_icl", True
+
+    if _generate_reference_conditioned_fn is not None:
+        generator = _generate_reference_conditioned_fn(
+            _current_model,
+            plan.styled_text,
+            ref_audio=clean_ref_audio,
+            ref_text=resolved_ref_text,
+            instruct=plan.compiled_instruction,
+            temperature=sampling_profile["temperature"],
+            top_p=sampling_profile["top_p"],
+            repetition_penalty=sampling_profile["repetition_penalty"],
+            max_tokens=effective_max_tokens,
+            stream=False,
+        )
+        return _collect_single_generation_result(generator), "guided_reference_conditioning", False
+
+    fallback_kwargs = {
+        "text": plan.styled_text,
+        "ref_audio": clean_ref_audio,
+        "temperature": sampling_profile["temperature"],
+        "top_p": sampling_profile["top_p"],
+        "repetition_penalty": sampling_profile["repetition_penalty"],
+        "max_tokens": effective_max_tokens,
+        "verbose": False,
+        "instruct": plan.compiled_instruction,
+    }
+    if resolved_ref_text:
+        fallback_kwargs["ref_text"] = resolved_ref_text
+    return _collect_single_generation_result(_current_model.generate(**fallback_kwargs)), "legacy_fallback", False
+
+
+def _select_guided_clone_candidate(
+    text,
+    clean_ref_audio,
+    resolved_ref_text,
+    prepared_context,
+    delivery_profile,
+    instruct,
+    max_tokens,
+):
+    base_plan = build_clone_delivery_plan(
+        delivery_profile,
+        text,
+        has_reference_transcript=bool(resolved_ref_text),
+        fallback_instruction=instruct,
+    )
+    if base_plan is None:
+        return None
+
+    reference_vector = _speaker_similarity_reference_vector(clean_ref_audio)
+    best_candidate = None
+    attempts_run = 0
+    effective_max_tokens = int(max_tokens) if max_tokens is not None else 4096
+
+    for attempt_index, strength in enumerate(base_plan.fallback_ladder):
+        plan = build_clone_delivery_plan(
+            delivery_profile,
+            text,
+            has_reference_transcript=bool(resolved_ref_text),
+            strength_override=strength,
+            fallback_instruction=instruct,
+        )
+        candidate_result, strategy, prepared_clone_used = _generate_guided_clone_candidate(
+            text=text,
+            clean_ref_audio=clean_ref_audio,
+            resolved_ref_text=resolved_ref_text,
+            prepared_context=prepared_context,
+            plan=plan,
+            effective_max_tokens=effective_max_tokens,
+        )
+        similarity = _speaker_similarity_from_generated_audio(reference_vector, candidate_result.audio)
+        attempts_run = attempt_index + 1
+
+        candidate = {
+            "result": candidate_result,
+            "plan": plan,
+            "strategy": strategy,
+            "prepared_clone_used": prepared_clone_used,
+            "speaker_similarity": similarity,
+            "retry_count": attempt_index,
+            "delivery_compromised": False,
+        }
+
+        candidate_score = similarity if similarity is not None else 1.0
+        best_score = best_candidate["speaker_similarity"] if best_candidate and best_candidate["speaker_similarity"] is not None else (1.0 if best_candidate and best_candidate["speaker_similarity"] is None else float("-inf"))
+        if best_candidate is None or candidate_score > best_score:
+            best_candidate = candidate
+
+        if similarity is None or similarity >= GUIDED_CLONE_TARGET_SIMILARITY:
+            return candidate
+
+        _clear_mlx_cache()
+
+    if best_candidate is not None:
+        best_similarity = best_candidate["speaker_similarity"]
+        if best_similarity is None or best_similarity >= GUIDED_CLONE_HARD_SIMILARITY:
+            best_candidate["delivery_compromised"] = bool(
+                best_similarity is not None and best_similarity < GUIDED_CLONE_TARGET_SIMILARITY
+            )
+            best_candidate["retry_count"] = max(attempts_run - 1, 0)
+            return best_candidate
+
+    return {
+        "result": None,
+        "plan": base_plan,
+        "strategy": "neutral_fallback_after_similarity_guard",
+        "prepared_clone_used": False,
+        "speaker_similarity": None,
+        "retry_count": max(attempts_run - 1, 0),
+        "delivery_compromised": False,
+    }
 
 
 def _maybe_send_progress(percent, message, request_id=None):
@@ -969,7 +1267,7 @@ def handle_load_model(params, request_id=None):
     return result
 
 
-def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text=None):
+def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, ref_audio=None, ref_text=None):
     """Run a short in-memory generation to pay one-time model warm-up costs while idle."""
     if _current_model is None:
         raise RuntimeError("No model loaded. Call load_model first.")
@@ -980,6 +1278,12 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
     prepare_clone_context_ms = 0
     prepared_clone_used = False
     clone_cache_hit = None
+    delivery_instruction_applied = False
+    delivery_instruction_strategy = "not_applicable"
+    delivery_plan_strength = None
+    styled_text_applied = False
+    delivery_retry_count = 0
+    delivery_compromised = False
 
     if mode == "custom":
         warm_results = list(
@@ -1019,18 +1323,48 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
             resolved_ref_text,
         )
         prepare_clone_context_ms = int((time.perf_counter() - prepare_start) * 1000)
+        plan = build_clone_delivery_plan(
+            delivery_profile,
+            warmup_text,
+            has_reference_transcript=bool(resolved_ref_text),
+            fallback_instruction=instruct,
+        )
+        delivery_instruction_strategy, delivery_instruction_applied = _clone_delivery_strategy(
+            prepared_context,
+            instruct,
+            delivery_profile=delivery_profile,
+        )
 
-        if prepared_context is not None and not instruct:
+        if plan is not None:
+            delivery_plan_strength = plan.strength_level
+            styled_text_applied = plan.styled_text_applied
+
+        if delivery_instruction_strategy in {"guided_prepared_icl", "neutral_prepared_icl"}:
             prepared_clone_used = True
-            warm_results = list(
-                _generate_prepared_icl_fn(
-                    _current_model,
-                    warmup_text,
-                    prepared_context,
-                    temperature=0.6,
-                    max_tokens=PREWARM_MAX_TOKENS,
-                )
+            generator = _generate_prepared_icl_fn(
+                _current_model,
+                plan.styled_text if plan is not None else warmup_text,
+                prepared_context,
+                instruct=plan.compiled_instruction if plan is not None else (instruct if delivery_instruction_applied else None),
+                temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
+                top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
+                repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.5,
+                max_tokens=PREWARM_MAX_TOKENS,
             )
+            warm_results = list(generator)
+        elif delivery_instruction_strategy == "guided_reference_conditioning":
+            generator = _generate_reference_conditioned_fn(
+                _current_model,
+                plan.styled_text if plan is not None else warmup_text,
+                ref_audio=clean_ref_audio,
+                ref_text=resolved_ref_text,
+                instruct=plan.compiled_instruction if plan is not None else instruct,
+                temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
+                top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
+                repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.05,
+                max_tokens=PREWARM_MAX_TOKENS,
+            )
+            warm_results = list(generator)
         else:
             warm_kwargs = {
                 "text": warmup_text,
@@ -1056,6 +1390,12 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
         "generation": int((time.perf_counter() - generation_start) * 1000),
         "prepared_clone_used": prepared_clone_used,
         "clone_cache_hit": clone_cache_hit,
+        "delivery_instruction_applied": delivery_instruction_applied,
+        "delivery_instruction_strategy": delivery_instruction_strategy,
+        "delivery_plan_strength": delivery_plan_strength,
+        "styled_text_applied": styled_text_applied,
+        "delivery_retry_count": delivery_retry_count,
+        "delivery_compromised": delivery_compromised,
     }
 
 
@@ -1067,6 +1407,7 @@ def handle_prewarm_model(params, request_id=None):
     requested_mode = params.get("mode")
     voice = params.get("voice")
     instruct = params.get("instruct")
+    delivery_profile = params.get("delivery_profile")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
 
@@ -1089,7 +1430,17 @@ def handle_prewarm_model(params, request_id=None):
     if not warm_mode:
         raise RuntimeError("Could not determine which generation mode to prewarm")
 
-    already_prewarmed = model_key in _prewarmed_model_keys
+    prewarm_key = _prewarm_identity_key(
+        model_key,
+        warm_mode,
+        voice=voice,
+        instruct=instruct,
+        delivery_profile=delivery_profile,
+        ref_audio=ref_audio,
+        ref_text=ref_text,
+    )
+
+    already_prewarmed = prewarm_key in _prewarmed_model_keys
     prewarm_timings = {
         "normalize_reference": 0,
         "prepare_clone_context": 0,
@@ -1097,18 +1448,32 @@ def handle_prewarm_model(params, request_id=None):
     }
     prepared_clone_used = False
     clone_cache_hit = None
+    delivery_instruction_applied = False
+    delivery_instruction_strategy = "not_applicable"
 
     if not already_prewarmed:
         prewarm_timings = _run_model_prewarm(
             warm_mode,
             voice=voice,
             instruct=instruct,
+            delivery_profile=delivery_profile,
             ref_audio=ref_audio,
             ref_text=ref_text,
         )
         prepared_clone_used = prewarm_timings["prepared_clone_used"]
         clone_cache_hit = prewarm_timings["clone_cache_hit"]
-        _prewarmed_model_keys.add(model_key)
+        delivery_instruction_applied = prewarm_timings["delivery_instruction_applied"]
+        delivery_instruction_strategy = prewarm_timings["delivery_instruction_strategy"]
+        _prewarmed_model_keys.add(prewarm_key)
+    elif warm_mode == "clone":
+        delivery_instruction_applied = (
+            parse_clone_delivery_profile(delivery_profile, fallback_instruction=instruct) is not None
+        )
+        delivery_instruction_strategy = (
+            "guided_prewarmed"
+            if delivery_instruction_applied
+            else "neutral_prewarmed"
+        )
 
     result = {
         "success": True,
@@ -1117,12 +1482,24 @@ def handle_prewarm_model(params, request_id=None):
         "loaded_model_changed": loaded_model_changed,
         "already_prewarmed": already_prewarmed,
         "prewarm_applied": not already_prewarmed,
+        "delivery_instruction_applied": delivery_instruction_applied,
+        "delivery_instruction_strategy": delivery_instruction_strategy,
+        "delivery_plan_strength": prewarm_timings.get("delivery_plan_strength"),
+        "styled_text_applied": prewarm_timings.get("styled_text_applied", False),
+        "delivery_retry_count": prewarm_timings.get("delivery_retry_count", 0),
+        "delivery_compromised": prewarm_timings.get("delivery_compromised", False),
     }
     if benchmark:
         result["benchmark"] = {
             "mode": warm_mode,
             "prepared_clone_used": prepared_clone_used,
             "clone_cache_hit": clone_cache_hit,
+            "delivery_instruction_applied": delivery_instruction_applied,
+            "delivery_instruction_strategy": delivery_instruction_strategy,
+            "delivery_plan_strength": prewarm_timings.get("delivery_plan_strength"),
+            "styled_text_applied": prewarm_timings.get("styled_text_applied", False),
+            "delivery_retry_count": prewarm_timings.get("delivery_retry_count", 0),
+            "delivery_compromised": prewarm_timings.get("delivery_compromised", False),
             "timings_ms": {
                 "load_model_total": load_timings.get("load_model_total", 0),
                 "normalize_reference": prewarm_timings["normalize_reference"],
@@ -1158,6 +1535,7 @@ def handle_generate(params, request_id=None):
     requested_mode = params.get("mode")
     voice = params.get("voice")
     instruct = params.get("instruct")
+    delivery_profile = params.get("delivery_profile")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
     temperature = params.get("temperature", 0.6)
@@ -1192,6 +1570,13 @@ def handle_generate(params, request_id=None):
         "mode": benchmark_mode,
         "prepared_clone_used": False,
         "clone_cache_hit": None,
+        "delivery_instruction_applied": False,
+        "delivery_instruction_strategy": "not_applicable",
+        "delivery_plan_strength": None,
+        "styled_text_applied": False,
+        "speaker_similarity": None,
+        "delivery_retry_count": 0,
+        "delivery_compromised": False,
         "streaming_used": bool(stream and request_id is not None),
         "used_temp_reference": False,
         "request_temperature": temperature_value,
@@ -1268,27 +1653,36 @@ def handle_generate(params, request_id=None):
             benchmark_flags["clone_cache_hit"] = clone_cache_hit
 
             send_progress(30, "Preparing voice context...", request_id=request_id)
+            guided_candidate = _select_guided_clone_candidate(
+                text=text,
+                clean_ref_audio=clean_ref_audio,
+                resolved_ref_text=resolved_ref_text,
+                prepared_context=prepared_context,
+                delivery_profile=delivery_profile,
+                instruct=instruct,
+                max_tokens=effective_max_tokens,
+            )
 
-            if prepared_context is not None and not instruct:
-                benchmark_flags["prepared_clone_used"] = True
-                if effective_max_tokens is None:
-                    effective_max_tokens = 4096
-                    benchmark_flags["request_max_tokens"] = effective_max_tokens
+            if guided_candidate is not None and guided_candidate["result"] is not None:
+                selected_result = guided_candidate["result"]
+                selected_plan = guided_candidate["plan"]
+                benchmark_flags["prepared_clone_used"] = guided_candidate["prepared_clone_used"]
+                benchmark_flags["delivery_instruction_applied"] = True
+                benchmark_flags["delivery_instruction_strategy"] = guided_candidate["strategy"]
+                benchmark_flags["delivery_plan_strength"] = selected_plan.strength_level
+                benchmark_flags["styled_text_applied"] = selected_plan.styled_text_applied
+                benchmark_flags["speaker_similarity"] = guided_candidate["speaker_similarity"]
+                benchmark_flags["delivery_retry_count"] = guided_candidate["retry_count"]
+                benchmark_flags["delivery_compromised"] = guided_candidate["delivery_compromised"]
+
                 if stream and request_id is not None:
                     send_progress(55, "Streaming audio...", request_id=request_id)
                     generation_start = time.perf_counter()
-                    result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
-                        _generate_prepared_icl_fn(
-                            _current_model,
-                            text,
-                            prepared_context,
-                            temperature=temperature_value,
-                            max_tokens=effective_max_tokens,
-                            stream=True,
-                            streaming_interval=streaming_interval,
-                        ),
+                    result, benchmark_timings["write_output"], output_metadata = _stream_selected_audio(
+                        selected_result,
                         request_id=request_id,
                         final_path=final_path,
+                        streaming_interval=streaming_interval,
                     )
                     benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
                     stream_session_dirs.append(result["stream_session_dir"])
@@ -1296,81 +1690,97 @@ def handle_generate(params, request_id=None):
                 else:
                     send_progress(60, "Generating audio...", request_id=request_id)
                     generation_start = time.perf_counter()
-                    prepared_results = list(
-                        _generate_prepared_icl_fn(
-                            _current_model,
-                            text,
-                            prepared_context,
-                            temperature=temperature_value,
-                            max_tokens=effective_max_tokens,
-                        )
+                    result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                        selected_result,
+                        final_path=final_path,
+                        streaming_used=False,
                     )
                     benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-                    if not prepared_results:
-                        raise RuntimeError("Generation produced no audio file")
-                    send_progress(90, "Saving audio...", request_id=request_id)
-                    write_start = time.perf_counter()
-                    prepared_result = prepared_results[0]
-                    _write_audio_file(
-                        final_path,
-                        prepared_result.audio,
-                        prepared_result.sample_rate,
-                    )
-                    benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
-                    output_metadata = get_audio_metadata(final_path)
-                    metrics = _metrics_from_generation_result(prepared_result, streaming_used=False)
-                    result = {
-                        "audio_path": final_path,
-                        "duration_seconds": round(output_metadata["duration_seconds"], 2),
-                    }
             else:
-                generation_start = time.perf_counter()
-                fallback_kwargs = {
-                    "text": text,
-                    "temperature": temperature_value,
-                    "verbose": False,
-                }
-                if max_tokens is not None:
-                    fallback_kwargs["max_tokens"] = int(max_tokens)
-                fallback_kwargs["ref_audio"] = clean_ref_audio
-                if resolved_ref_text:
-                    fallback_kwargs["ref_text"] = resolved_ref_text
-                if instruct:
-                    fallback_kwargs["instruct"] = instruct
+                strategy, _ = _clone_delivery_strategy(
+                    prepared_context,
+                    instruct,
+                    delivery_profile=delivery_profile,
+                )
+                benchmark_flags["delivery_instruction_applied"] = False
+                benchmark_flags["delivery_instruction_strategy"] = (
+                    guided_candidate["strategy"] if guided_candidate is not None else strategy
+                )
+                if guided_candidate is not None:
+                    benchmark_flags["delivery_retry_count"] = guided_candidate["retry_count"]
 
-                if stream and request_id is not None:
-                    fallback_kwargs["stream"] = True
-                    fallback_kwargs["streaming_interval"] = streaming_interval
-                    send_progress(55, "Streaming audio...", request_id=request_id)
-                    result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
-                        _current_model.generate(**fallback_kwargs),
-                        request_id=request_id,
-                        final_path=final_path,
+                if prepared_context is not None and _generate_prepared_icl_fn is not None:
+                    benchmark_flags["prepared_clone_used"] = True
+                    if effective_max_tokens is None:
+                        effective_max_tokens = 4096
+                        benchmark_flags["request_max_tokens"] = effective_max_tokens
+                    generator = _generate_prepared_icl_fn(
+                        _current_model,
+                        text,
+                        prepared_context,
+                        instruct=None,
+                        temperature=temperature_value,
+                        max_tokens=effective_max_tokens,
+                        stream=bool(stream and request_id is not None),
+                        streaming_interval=streaming_interval,
                     )
-                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-                    stream_session_dirs.append(result["stream_session_dir"])
-                    metrics = dict(result.get("metrics") or {})
+                    if stream and request_id is not None:
+                        send_progress(55, "Streaming audio...", request_id=request_id)
+                        generation_start = time.perf_counter()
+                        result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                            generator,
+                            request_id=request_id,
+                            final_path=final_path,
+                        )
+                        benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        stream_session_dirs.append(result["stream_session_dir"])
+                        metrics = dict(result.get("metrics") or {})
+                    else:
+                        send_progress(60, "Generating audio...", request_id=request_id)
+                        generation_start = time.perf_counter()
+                        prepared_result = _collect_single_generation_result(generator)
+                        benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        send_progress(90, "Saving audio...", request_id=request_id)
+                        result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                            prepared_result,
+                            final_path=final_path,
+                            streaming_used=False,
+                        )
                 else:
-                    send_progress(60, "Generating audio...", request_id=request_id)
-                    fallback_results = list(_current_model.generate(**fallback_kwargs))
-                    benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
-                    if not fallback_results:
-                        raise RuntimeError("Generation produced no audio file")
-                    send_progress(90, "Saving audio...", request_id=request_id)
-                    write_start = time.perf_counter()
-                    fallback_result = fallback_results[0]
-                    _write_audio_file(
-                        final_path,
-                        fallback_result.audio,
-                        fallback_result.sample_rate,
-                    )
-                    benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
-                    output_metadata = get_audio_metadata(final_path)
-                    metrics = _metrics_from_generation_result(fallback_result, streaming_used=False)
-                    result = {
-                        "audio_path": final_path,
-                        "duration_seconds": round(output_metadata["duration_seconds"], 2),
+                    generation_start = time.perf_counter()
+                    fallback_kwargs = {
+                        "text": text,
+                        "temperature": temperature_value,
+                        "verbose": False,
                     }
+                    if max_tokens is not None:
+                        fallback_kwargs["max_tokens"] = int(max_tokens)
+                    fallback_kwargs["ref_audio"] = clean_ref_audio
+                    if resolved_ref_text:
+                        fallback_kwargs["ref_text"] = resolved_ref_text
+
+                    if stream and request_id is not None:
+                        fallback_kwargs["stream"] = True
+                        fallback_kwargs["streaming_interval"] = streaming_interval
+                        send_progress(55, "Streaming audio...", request_id=request_id)
+                        result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                            _current_model.generate(**fallback_kwargs),
+                            request_id=request_id,
+                            final_path=final_path,
+                        )
+                        benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        stream_session_dirs.append(result["stream_session_dir"])
+                        metrics = dict(result.get("metrics") or {})
+                    else:
+                        send_progress(60, "Generating audio...", request_id=request_id)
+                        fallback_result = _collect_single_generation_result(_current_model.generate(**fallback_kwargs))
+                        benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        send_progress(90, "Saving audio...", request_id=request_id)
+                        result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                            fallback_result,
+                            final_path=final_path,
+                            streaming_used=False,
+                        )
         elif stream and request_id is not None:
             stream_kwargs = {
                 "text": text,
@@ -1440,7 +1850,21 @@ def handle_generate(params, request_id=None):
         metrics.setdefault("streaming_used", bool(stream and request_id is not None))
         metrics["prepared_clone_used"] = benchmark_flags["prepared_clone_used"]
         metrics["clone_cache_hit"] = benchmark_flags["clone_cache_hit"]
+        metrics["delivery_instruction_applied"] = benchmark_flags["delivery_instruction_applied"]
+        metrics["delivery_instruction_strategy"] = benchmark_flags["delivery_instruction_strategy"]
+        metrics["delivery_plan_strength"] = benchmark_flags["delivery_plan_strength"]
+        metrics["styled_text_applied"] = benchmark_flags["styled_text_applied"]
+        metrics["speaker_similarity"] = benchmark_flags["speaker_similarity"]
+        metrics["delivery_retry_count"] = benchmark_flags["delivery_retry_count"]
+        metrics["delivery_compromised"] = benchmark_flags["delivery_compromised"]
         result["metrics"] = metrics
+        result["delivery_instruction_applied"] = benchmark_flags["delivery_instruction_applied"]
+        result["delivery_instruction_strategy"] = benchmark_flags["delivery_instruction_strategy"]
+        result["delivery_plan_strength"] = benchmark_flags["delivery_plan_strength"]
+        result["styled_text_applied"] = benchmark_flags["styled_text_applied"]
+        result["speaker_similarity"] = benchmark_flags["speaker_similarity"]
+        result["delivery_retry_count"] = benchmark_flags["delivery_retry_count"]
+        result["delivery_compromised"] = benchmark_flags["delivery_compromised"]
         return result, benchmark_flags, benchmark_timings, output_metadata
 
     request_succeeded = False
@@ -1535,6 +1959,11 @@ def handle_enroll_voice(params):
 
     target_wav = os.path.join(VOICES_DIR, f"{safe_name}.wav")
     target_txt = os.path.join(VOICES_DIR, f"{safe_name}.txt")
+
+    if os.path.exists(target_wav) or os.path.exists(target_txt):
+        raise ValueError(
+            f'A saved voice named "{safe_name}" already exists. Choose a different name.'
+        )
 
     shutil.copy(clean_wav, target_wav)
 

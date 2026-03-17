@@ -1,11 +1,11 @@
 import XCTest
 
-final class VoicesViewTests: QwenVoiceUITestBase {
+final class VoicesViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .voices }
 
     func testVoicesScreenAvailability() {
         _ = waitForScreen(.voices)
-        _ = waitForMainWindowTitle("Voices")
+        _ = waitForMainWindowTitle("Saved Voices")
         _ = waitForElement("voices_enrollButton", type: .button)
     }
 
@@ -13,7 +13,7 @@ final class VoicesViewTests: QwenVoiceUITestBase {
         _ = waitForScreen(.voices)
 
         let emptyState = app.descendants(matching: .any).matching(identifier: "voices_emptyState").firstMatch
-        let isLoading = app.staticTexts["Loading voices..."].exists
+        let isLoading = app.staticTexts["Loading saved voices..."].exists
         let isStarting = app.staticTexts["Starting backend..."].exists
         let hasRows = app.tables.firstMatch.exists || app.outlines.firstMatch.exists
 

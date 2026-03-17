@@ -10,7 +10,7 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 ## Contributor / Agent Docs
 
 - [`../AGENTS.md`](../AGENTS.md) — repository operating guide for coding agents
-- [`../GEMINI.md`](../GEMINI.md) — Gemini-oriented repo guide
+- [`../.codex/skills/`](../.codex/skills/) — repo-local QwenVoice skills for UI automation, RPC-boundary work, clone-tone probing, and shell chrome/Settings workflows
 - [`../cli/CLAUDE.md`](../cli/CLAUDE.md) — CLI-specific agent guide
 
 ## CLI Docs

@@ -1,0 +1,11 @@
+{
+  "scenario_id": "string",
+  "path_kind": "transcripted | no_transcript",
+  "requested_tone": "string",
+  "relative_contrast": "stronger | slightly_stronger | no_clear_difference | weaker",
+  "target_match": "clear | partial | poor",
+  "speaker_consistency": "preserved | slightly_shifted | changed",
+  "confidence": "low | medium | high",
+  "pass": true,
+  "notes": "string"
+}

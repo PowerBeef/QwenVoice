@@ -89,6 +89,7 @@ struct QwenVoiceApp: App {
     @StateObject private var audioPlayer = AudioPlayerViewModel()
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
+    @StateObject private var savedVoicesViewModel = SavedVoicesViewModel()
 
     init() {
         // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
@@ -106,6 +107,7 @@ struct QwenVoiceApp: App {
                         .environmentObject(audioPlayer)
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
+                        .environmentObject(savedVoicesViewModel)
                         .background(
                             UITestWindowSizeConfigurator(
                                 contentSize: AppLaunchConfiguration.current.uiTestWindowSize
@@ -179,7 +181,7 @@ struct QwenVoiceApp: App {
                 }
                 .keyboardShortcut("4", modifiers: .command)
 
-                Button("Voices") {
+                Button("Saved Voices") {
                     NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voices)
                 }
                 .keyboardShortcut("5", modifiers: .command)

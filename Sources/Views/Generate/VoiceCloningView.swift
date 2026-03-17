@@ -5,16 +5,19 @@ struct VoiceCloningView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
+    @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
+
+    @Binding var pendingSavedVoiceSelectionID: String?
+    let isActive: Bool
 
     @State private var referenceAudioPath: String?
     @State private var referenceTranscript = ""
     @State private var emotion = "Normal tone"
+    @State private var deliveryProfile: DeliveryProfile? = .neutral
     @State private var text = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
-    @State private var savedVoicesLoadError: String?
     @State private var transcriptLoadError: String?
-    @State private var savedVoices: [Voice] = []
     @State private var selectedVoice: Voice?
     @State private var isDragOver = false
     @State private var showingBatch = false
@@ -41,7 +44,20 @@ struct VoiceCloningView: View {
     }
 
     private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+        "\(isActive)-\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+    }
+
+    private var savedVoicesLoadTaskID: String {
+        "\(isActive)-\(pythonBridge.isReady)-\(pendingSavedVoiceSelectionID ?? "none")"
+    }
+
+    private var savedVoices: [Voice] {
+        savedVoicesViewModel.voices
+    }
+
+    private var savedVoicesLoadError: String? {
+        guard let loadError = savedVoicesViewModel.loadError else { return nil }
+        return "Couldn't load saved voices right now. You can still clone from a file. \(loadError)"
     }
 
     private var selectedSavedVoiceID: Binding<String?> {
@@ -83,14 +99,19 @@ struct VoiceCloningView: View {
                     .padding(8)
                 : nil
         )
-        .task {
-            if pythonBridge.isReady {
-                await loadSavedVoices()
+        .task(id: savedVoicesLoadTaskID) {
+            guard isActive, pythonBridge.isReady else { return }
+
+            if pendingSavedVoiceSelectionID != nil {
+                await savedVoicesViewModel.refresh(using: pythonBridge)
+            } else {
+                await savedVoicesViewModel.ensureLoaded(using: pythonBridge)
             }
+
+            syncSavedVoiceSelectionState()
         }
-        .onChange(of: pythonBridge.isReady) { _, isReady in
-            guard isReady else { return }
-            Task { await loadSavedVoices() }
+        .onChange(of: savedVoicesViewModel.voices) { _, _ in
+            syncSavedVoiceSelectionState()
         }
         .task(id: idlePrewarmTaskID) {
             await prewarmCloneModelIfNeeded()
@@ -99,6 +120,7 @@ struct VoiceCloningView: View {
             BatchGenerationSheet(
                 mode: .clone,
                 emotion: emotion,
+                deliveryProfile: deliveryProfile,
                 refAudio: referenceAudioPath,
                 refText: referenceTranscript.isEmpty ? nil : referenceTranscript
             )
@@ -186,7 +208,7 @@ private extension VoiceCloningView {
                     accessibilityIdentifier: "voiceCloning_savedVoicesWarning"
                 ) {
                     Button("Retry") {
-                        Task { await loadSavedVoices() }
+                        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
                     }
                     .buttonStyle(.bordered)
                     .tint(AppTheme.voiceCloning)
@@ -237,6 +259,7 @@ private extension VoiceCloningView {
         ) {
             DeliveryControlsView(
                 emotion: $emotion,
+                deliveryProfile: $deliveryProfile,
                 accentColor: AppTheme.voiceCloning,
                 isCompact: true,
                 showsLabel: false
@@ -486,6 +509,7 @@ private extension VoiceCloningView {
                     refAudio: refPath,
                     refText: referenceTranscript.isEmpty ? nil : referenceTranscript,
                     emotion: emotion,
+                    deliveryProfile: deliveryProfile,
                     outputPath: outputPath
                 )
 
@@ -561,6 +585,7 @@ private extension VoiceCloningView {
 
     func prewarmCloneModelIfNeeded() async {
         guard let model = cloneModel else { return }
+        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
         guard let refPath = referenceAudioPath else { return }
 
@@ -568,6 +593,7 @@ private extension VoiceCloningView {
             modelID: model.id,
             mode: .clone,
             instruct: PythonBridge.hasMeaningfulDeliveryInstruction(emotion) ? emotion : nil,
+            deliveryProfile: deliveryProfile,
             refAudio: refPath,
             refText: referenceTranscript.isEmpty ? nil : referenceTranscript
         )
@@ -576,7 +602,6 @@ private extension VoiceCloningView {
     func selectSavedVoice(_ voice: Voice) {
         selectedVoice = voice
         referenceAudioPath = voice.wavPath
-        savedVoicesLoadError = nil
         do {
             referenceTranscript = try voice.loadTranscript() ?? ""
             transcriptLoadError = nil
@@ -593,13 +618,17 @@ private extension VoiceCloningView {
         transcriptLoadError = nil
     }
 
-    func loadSavedVoices() async {
-        do {
-            let loadedVoices = try await pythonBridge.listVoices()
-            savedVoices = loadedVoices
-            savedVoicesLoadError = nil
-        } catch {
-            savedVoicesLoadError = "Couldn't load saved voices right now. You can still clone from a file. \(error.localizedDescription)"
+    func syncSavedVoiceSelectionState() {
+        if let pendingSavedVoiceSelectionID,
+           let voice = savedVoices.first(where: { $0.id == pendingSavedVoiceSelectionID }) {
+            selectSavedVoice(voice)
+            self.pendingSavedVoiceSelectionID = nil
+            return
+        }
+
+        if let selectedVoice,
+           !savedVoices.contains(where: { $0.id == selectedVoice.id }) {
+            clearReference()
         }
     }
 

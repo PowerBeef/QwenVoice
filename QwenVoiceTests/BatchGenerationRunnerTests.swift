@@ -120,6 +120,7 @@ final class BatchGenerationRunnerTests: XCTestCase {
             lines: lines,
             voice: TTSModel.defaultSpeaker,
             emotion: "Normal tone",
+            deliveryProfile: nil,
             voiceDescription: nil,
             refAudio: nil,
             refText: nil
@@ -194,6 +195,7 @@ private final class FakeBatchBridge: BatchGenerationBridging {
         refAudio: String,
         refText: String?,
         emotion: String,
+        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?

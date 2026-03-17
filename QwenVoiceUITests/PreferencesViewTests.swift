@@ -1,6 +1,6 @@
 import XCTest
 
-final class PreferencesViewTests: QwenVoiceUITestBase {
+final class PreferencesViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .preferences }
 
     func testPreferencesScreenAvailability() {

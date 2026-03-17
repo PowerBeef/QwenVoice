@@ -28,8 +28,8 @@ enum GenerationMode: String, CaseIterable, Codable, Hashable, Sendable {
     var iconName: String {
         switch self {
         case .custom: return "person.wave.2"
-        case .design: return "paintbrush"
-        case .clone: return "doc.on.doc"
+        case .design: return "text.bubble"
+        case .clone: return "waveform.badge.plus"
         }
     }
 }

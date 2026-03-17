@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import math
 import pathlib
+import struct
 import tempfile
 import unittest
+import wave
 
-from harness import BackendServerHarness, ROOT_DIR
+try:
+    from harness import BackendServerHarness, ROOT_DIR
+except ModuleNotFoundError:
+    from backend_tests.harness import BackendServerHarness, ROOT_DIR
 
 
 class ServerRPCTests(unittest.TestCase):
@@ -73,6 +79,33 @@ class ServerRPCTests(unittest.TestCase):
         self.assertEqual(len(response["result"]), 1)
         self.assertEqual(response["result"][0]["name"], "fixture_voice")
         self.assertTrue(response["result"][0]["has_transcript"])
+
+    def test_enroll_voice_rejects_duplicate_normalized_name(self) -> None:
+        self.harness.send_request("init", {"app_support_dir": str(self.app_support_dir)})
+
+        source_audio = self.app_support_dir / "reference.wav"
+        write_silent_wav(source_audio)
+
+        first = self.harness.send_request(
+            "enroll_voice",
+            {
+                "name": "Fixture Voice",
+                "audio_path": str(source_audio),
+                "transcript": "fixture transcript",
+            },
+        )
+        self.assertTrue(first["result"]["success"])
+
+        duplicate = self.harness.send_request(
+            "enroll_voice",
+            {
+                "name": "Fixture Voice",
+                "audio_path": str(source_audio),
+            },
+        )
+
+        self.assertEqual(duplicate["error"]["code"], -32000)
+        self.assertIn("already exists", duplicate["error"]["message"])
 
     def test_malformed_json_returns_parse_error(self) -> None:
         response = self.harness.send_raw("{not json")
@@ -188,6 +221,102 @@ class ServerRPCTests(unittest.TestCase):
         self.assertIn("peak_memory_usage", metrics)
         self.assertEqual(response["result"]["stream_session_dir"], first_chunk["stream_session_dir"])
 
+    def test_guided_clone_generation_applies_delivery_instruction_for_transcripted_reference(self) -> None:
+        clone_model_id = model_id_for_mode("clone")
+        if not model_is_installed(clone_model_id):
+            self.skipTest("Voice Cloning model is not installed locally")
+
+        self.harness.send_request("load_model", {"model_id": clone_model_id})
+
+        reference_path = self.app_support_dir / "reference.wav"
+        write_tone_wav(reference_path, frequency=220.0)
+
+        neutral_output = self.app_support_dir / "outputs" / "clone_neutral.wav"
+        guided_output = self.app_support_dir / "outputs" / "clone_guided.wav"
+        neutral_output.parent.mkdir(parents=True, exist_ok=True)
+
+        neutral = self.harness.send_request(
+            "generate",
+            {
+                "mode": "clone",
+                "text": "Hello there.",
+                "ref_audio": str(reference_path),
+                "ref_text": "Hello there.",
+                "temperature": 0,
+                "output_path": str(neutral_output),
+            },
+        )
+        guided = self.harness.send_request(
+            "generate",
+            {
+                "mode": "clone",
+                "text": "Hello there.",
+                "ref_audio": str(reference_path),
+                "ref_text": "Hello there.",
+                "instruct": "Furious and intensely angry, sharp and forceful delivery",
+                "delivery_profile": {
+                    "preset_id": "angry",
+                    "intensity": "strong",
+                    "final_instruction": "Furious and intensely angry, sharp and forceful delivery",
+                },
+                "temperature": 0,
+                "output_path": str(guided_output),
+            },
+        )
+
+        self.assertTrue(neutral_output.exists())
+        self.assertTrue(guided_output.exists())
+        self.assertFalse(neutral["result"]["delivery_instruction_applied"])
+        self.assertTrue(guided["result"]["delivery_instruction_applied"])
+        self.assertIn(
+            guided["result"]["delivery_instruction_strategy"],
+            {"guided_prepared_icl", "guided_reference_conditioning"},
+        )
+        self.assertIn(guided["result"]["delivery_plan_strength"], {"strong", "medium", "light"})
+        self.assertIn("speaker_similarity", guided["result"])
+        self.assertIn("styled_text_applied", guided["result"])
+        self.assertIn("delivery_retry_count", guided["result"])
+        self.assertNotEqual(neutral_output.read_bytes(), guided_output.read_bytes())
+
+    def test_guided_clone_generation_works_without_transcript(self) -> None:
+        clone_model_id = model_id_for_mode("clone")
+        if not model_is_installed(clone_model_id):
+            self.skipTest("Voice Cloning model is not installed locally")
+
+        self.harness.send_request("load_model", {"model_id": clone_model_id})
+
+        reference_path = self.app_support_dir / "reference_no_transcript.wav"
+        write_tone_wav(reference_path, frequency=330.0)
+
+        output_path = self.app_support_dir / "outputs" / "clone_guided_no_transcript.wav"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        guided = self.harness.send_request(
+            "generate",
+            {
+                "mode": "clone",
+                "text": "Hello there.",
+                "ref_audio": str(reference_path),
+                "instruct": "Happy and upbeat tone",
+                "delivery_profile": {
+                    "preset_id": "happy",
+                    "intensity": "normal",
+                    "final_instruction": "Happy and upbeat tone",
+                },
+                "temperature": 0,
+                "output_path": str(output_path),
+            },
+        )
+
+        self.assertTrue(output_path.exists())
+        self.assertTrue(guided["result"]["delivery_instruction_applied"])
+        self.assertIn(guided["result"]["delivery_plan_strength"], {"medium", "light"})
+        self.assertIn(
+            guided["result"]["delivery_instruction_strategy"],
+            {"guided_reference_conditioning", "guided_prepared_icl"},
+        )
+        self.assertIn("delivery_retry_count", guided["result"])
+
 
 def load_contract() -> dict:
     contract_path = ROOT_DIR / "Sources/Resources/qwenvoice_contract.json"
@@ -199,6 +328,37 @@ def model_is_installed(model_id: str) -> bool:
     model = next(item for item in contract["models"] if item["id"] == model_id)
     model_dir = pathlib.Path.home() / "Library/Application Support/QwenVoice/models" / model["folder"]
     return model_dir.exists()
+
+
+def model_id_for_mode(mode: str) -> str:
+    contract = load_contract()
+    model = next(item for item in contract["models"] if item["mode"] == mode)
+    return model["id"]
+
+
+def write_silent_wav(path: pathlib.Path) -> None:
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(24000)
+        wav_file.writeframes(b"\x00\x00" * 2400)
+
+
+def write_tone_wav(path: pathlib.Path, frequency: float, duration_seconds: float = 0.4) -> None:
+    sample_rate = 24000
+    sample_count = int(sample_rate * duration_seconds)
+    amplitude = 12000
+
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+
+        frames = bytearray()
+        for index in range(sample_count):
+            sample = int(amplitude * math.sin(2.0 * math.pi * frequency * index / sample_rate))
+            frames.extend(struct.pack("<h", sample))
+        wav_file.writeframes(bytes(frames))
 
 
 if __name__ == "__main__":

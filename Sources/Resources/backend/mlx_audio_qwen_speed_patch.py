@@ -152,6 +152,18 @@ def _load_reference_audio(model, ref_audio: Union[str, mx.array]) -> mx.array:
     return ref_audio
 
 
+def _build_instruct_embed(model, instruct: Optional[str]) -> Optional[mx.array]:
+    clean_instruct = (instruct or "").strip()
+    if not clean_instruct:
+        return None
+
+    instruct_text = f"<|im_start|>user\n{clean_instruct}<|im_end|>\n"
+    instruct_ids = mx.array(model.tokenizer.encode(instruct_text))[None, :]
+    return model.talker.text_projection(
+        model.talker.get_text_embeddings()(instruct_ids)
+    )
+
+
 def prepare_icl_context(
     model,
     ref_audio: Union[str, mx.array],
@@ -271,6 +283,7 @@ def prepare_icl_generation_inputs_from_context(
     model,
     text: str,
     prepared: PreparedICLContext,
+    instruct: Optional[str] = None,
 ) -> tuple[mx.array, mx.array, mx.array]:
     """Combine cached reference state with per-request target text state."""
     target_chat = (
@@ -306,7 +319,13 @@ def prepare_icl_generation_inputs_from_context(
     combined_prefix = mx.concatenate([pad_embeds, prepared.tts_bos_embed], axis=1)
     combined_prefix = combined_prefix + prepared.codec_prefix_embed[:, :-1, :]
 
-    input_embeds = mx.concatenate([role_embed, combined_prefix, icl_input_embed], axis=1)
+    input_parts = []
+    instruct_embed = _build_instruct_embed(model, instruct)
+    if instruct_embed is not None:
+        input_parts.append(instruct_embed)
+    input_parts.extend([role_embed, combined_prefix, icl_input_embed])
+
+    input_embeds = mx.concatenate(input_parts, axis=1)
     mx.eval(input_embeds)
 
     return input_embeds, prepared.tts_pad_embed, prepared.ref_codes
@@ -316,6 +335,7 @@ def generate_with_prepared_icl(
     model,
     text: str,
     prepared: PreparedICLContext,
+    instruct: Optional[str] = None,
     temperature: float = 0.9,
     max_tokens: int = 4096,
     top_k: int = 50,
@@ -327,7 +347,7 @@ def generate_with_prepared_icl(
     """Run the clone generation loop using a prepared ICL context."""
     start_time = time.perf_counter()
     input_embeds, tts_pad_embed, ref_codes = prepare_icl_generation_inputs_from_context(
-        model, text, prepared
+        model, text, prepared, instruct=instruct
     )
 
     target_token_count = len(model.tokenizer.encode(text))
@@ -536,6 +556,261 @@ def generate_with_prepared_icl(
     cut = int(ref_len / max(total_len, 1) * audio.shape[0])
     if 0 < cut < audio.shape[0]:
         audio = audio[cut:]
+
+    mx.eval(audio)
+
+    elapsed_time = time.perf_counter() - start_time
+    samples = audio.shape[0]
+    token_count = len(generated_codes)
+    duration_seconds = samples / model.sample_rate
+    rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0
+
+    yield GenerationResult(
+        audio=audio,
+        samples=samples,
+        sample_rate=model.sample_rate,
+        segment_idx=0,
+        token_count=token_count,
+        audio_duration=format_duration(duration_seconds),
+        real_time_factor=rtf,
+        prompt={
+            "tokens": token_count,
+            "tokens-per-sec": (token_count / elapsed_time if elapsed_time > 0 else 0),
+        },
+        audio_samples={
+            "samples": samples,
+            "samples-per-sec": (samples / elapsed_time if elapsed_time > 0 else 0),
+        },
+        processing_time_seconds=elapsed_time,
+        peak_memory_usage=mx.get_peak_memory() / 1e9,
+    )
+
+
+def generate_with_reference_conditioning(
+    model,
+    text: str,
+    ref_audio: Union[str, mx.array],
+    ref_text: Optional[str] = None,
+    instruct: Optional[str] = None,
+    language: str = "auto",
+    temperature: float = 0.9,
+    max_tokens: int = 4096,
+    top_k: int = 50,
+    top_p: float = 1.0,
+    repetition_penalty: float = 1.05,
+    stream: bool = False,
+    streaming_interval: float = 2.0,
+) -> Generator[GenerationResult, None, None]:
+    """Run clone generation with speaker conditioning and optional delivery guidance."""
+    start_time = time.perf_counter()
+    reference_audio = _load_reference_audio(model, ref_audio)
+    input_embeds, trailing_text_hidden, tts_pad_embed = model._prepare_generation_inputs(
+        text=text,
+        language=language,
+        ref_audio=reference_audio,
+        ref_text=ref_text,
+        instruct=instruct,
+    )
+
+    target_token_count = len(model.tokenizer.encode(text))
+    effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
+
+    cache = model.talker.make_cache()
+    code_cache = model.talker.code_predictor.make_cache()
+    generated_codes: List[mx.array] = []
+    generated_token_ids: List[int] = []
+    config = model.config.talker_config
+    eos_token_id = config.codec_eos_token_id
+    suppress_tokens = [
+        token_id
+        for token_id in range(config.vocab_size - 1024, config.vocab_size)
+        if token_id != eos_token_id
+    ]
+
+    trailing_idx = 0
+
+    if stream:
+        streaming_chunk_size = max(1, int(streaming_interval * 12.5))
+        decoded_tokens = 0
+        chunk_start_time = time.perf_counter()
+        model.speech_tokenizer.decoder.reset_streaming_state()
+
+    for step in range(effective_max_tokens):
+        logits, hidden = model.talker(input_embeds, cache=cache)
+
+        next_token = model._sample_token(
+            logits,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            generated_tokens=(generated_token_ids if generated_token_ids else None),
+            suppress_tokens=suppress_tokens,
+            eos_token_id=eos_token_id,
+        )
+
+        is_eos = next_token[0, 0] == eos_token_id
+
+        code_tokens = [next_token]
+        code_hidden = hidden[:, -1:, :]
+
+        for cache_entry in code_cache:
+            cache_entry.keys = None
+            cache_entry.values = None
+            cache_entry.offset = 0
+
+        for code_index in range(config.num_code_groups - 1):
+            if code_index == 0:
+                code_0_embed = model.talker.get_input_embeddings()(next_token)
+                code_input = mx.concatenate([code_hidden, code_0_embed], axis=1)
+            else:
+                code_embed = model.talker.code_predictor.codec_embedding[code_index - 1](
+                    code_tokens[-1]
+                )
+                code_input = code_embed
+
+            code_logits, code_cache, _ = model.talker.code_predictor(
+                code_input,
+                cache=code_cache,
+                generation_step=code_index,
+            )
+
+            next_code = model._sample_token(
+                code_logits,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+            )
+            code_tokens.append(next_code)
+
+        all_codes = mx.concatenate(code_tokens, axis=1)
+
+        if trailing_idx < trailing_text_hidden.shape[1]:
+            text_embed = trailing_text_hidden[:, trailing_idx : trailing_idx + 1, :]
+            trailing_idx += 1
+        else:
+            text_embed = tts_pad_embed
+
+        codec_embed = model.talker.get_input_embeddings()(next_token)
+        for index, code in enumerate(code_tokens[1:]):
+            codec_embed = codec_embed + model.talker.code_predictor.codec_embedding[index](
+                code
+            )
+
+        input_embeds = text_embed + codec_embed
+        mx.eval(input_embeds, is_eos)
+
+        if is_eos.item():
+            break
+
+        generated_token_ids.append(int(next_token[0, 0]))
+        generated_codes.append(all_codes)
+
+        if step > 0 and step % 50 == 0:
+            mx.clear_cache()
+
+        if stream and len(generated_codes) - decoded_tokens >= streaming_chunk_size:
+            new_tokens = len(generated_codes) - decoded_tokens
+            codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)
+            codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))
+            mx.eval(codes_for_decoder)
+
+            wav = model.speech_tokenizer.decoder.streaming_step(codes_for_decoder)
+            audio_chunk = wav.squeeze(1)[0]
+            mx.eval(audio_chunk)
+
+            decoded_tokens = len(generated_codes)
+
+            chunk_elapsed = time.perf_counter() - chunk_start_time
+            chunk_audio_dur = audio_chunk.shape[0] / model.sample_rate
+            chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+
+            yield GenerationResult(
+                audio=audio_chunk,
+                samples=audio_chunk.shape[0],
+                sample_rate=model.sample_rate,
+                segment_idx=0,
+                token_count=new_tokens,
+                audio_duration=format_duration(chunk_audio_dur),
+                real_time_factor=chunk_rtf,
+                prompt={
+                    "tokens": new_tokens,
+                    "tokens-per-sec": (
+                        new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0
+                    ),
+                },
+                audio_samples={
+                    "samples": audio_chunk.shape[0],
+                    "samples-per-sec": (
+                        audio_chunk.shape[0] / chunk_elapsed
+                        if chunk_elapsed > 0
+                        else 0
+                    ),
+                },
+                processing_time_seconds=chunk_elapsed,
+                peak_memory_usage=mx.get_peak_memory() / 1e9,
+                is_streaming_chunk=True,
+            )
+
+            chunk_start_time = time.perf_counter()
+            mx.clear_cache()
+
+    if stream:
+        if len(generated_codes) > decoded_tokens:
+            codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)
+            codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))
+            mx.eval(codes_for_decoder)
+
+            wav = model.speech_tokenizer.decoder.streaming_step(codes_for_decoder)
+            audio_chunk = wav.squeeze(1)[0]
+            mx.eval(audio_chunk)
+
+            new_tokens = len(generated_codes) - decoded_tokens
+            chunk_elapsed = time.perf_counter() - chunk_start_time
+            chunk_audio_dur = audio_chunk.shape[0] / model.sample_rate
+            chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+
+            yield GenerationResult(
+                audio=audio_chunk,
+                samples=audio_chunk.shape[0],
+                sample_rate=model.sample_rate,
+                segment_idx=0,
+                token_count=new_tokens,
+                audio_duration=format_duration(chunk_audio_dur),
+                real_time_factor=chunk_rtf,
+                prompt={
+                    "tokens": new_tokens,
+                    "tokens-per-sec": (
+                        new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0
+                    ),
+                },
+                audio_samples={
+                    "samples": audio_chunk.shape[0],
+                    "samples-per-sec": (
+                        audio_chunk.shape[0] / chunk_elapsed
+                        if chunk_elapsed > 0
+                        else 0
+                    ),
+                },
+                processing_time_seconds=chunk_elapsed,
+                peak_memory_usage=mx.get_peak_memory() / 1e9,
+                is_streaming_chunk=True,
+                is_final_chunk=True,
+            )
+
+        model.speech_tokenizer.decoder.reset_streaming_state()
+        return
+
+    if not generated_codes:
+        return
+
+    codes = mx.stack(generated_codes, axis=1)
+    audio, audio_lengths = model.speech_tokenizer.decode(codes)
+    audio = audio[0]
+
+    valid_len = int(audio_lengths[0])
+    if valid_len > 0 and valid_len < audio.shape[0]:
+        audio = audio[:valid_len]
 
     mx.eval(audio)
 

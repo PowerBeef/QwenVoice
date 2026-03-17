@@ -21,7 +21,7 @@ The app targets macOS 15+, Apple Silicon only, and currently ships six main-wind
 2. Voice Design
 3. Voice Cloning
 4. History
-5. Voices
+5. Saved Voices
 6. Models
 Voice Design is a standalone generation destination backed by `VoiceDesignView`. `CustomVoiceView` is now the preset-speaker-only surface. Preferences live in `PreferencesView` inside the app's `Settings` scene instead of the main sidebar.
 The current UI direction is native macOS first: the main shell uses `NavigationSplitView`, generation screens are compact editor-first workflows, and library/management surfaces are list-first with toolbar-driven actions.
@@ -38,7 +38,7 @@ Trust the live code and manifest before prose:
 6. `project.yml`
 7. prose docs
 
-Shared current repo facts live in [`docs/reference/current-state.md`](docs/reference/current-state.md). Keep this file and `GEMINI.md` aligned with it.
+Shared current repo facts live in [`docs/reference/current-state.md`](docs/reference/current-state.md). Keep this file aligned with it.
 
 ## Codex Workflow
 
@@ -61,6 +61,10 @@ This repository is a native macOS SwiftUI app. For normal QwenVoice work, prefer
 - On macOS, SwiftUI `Picker` and `Menu` controls often surface as `MenuButton` plus `MenuItem` in XCUI. Do not assume these controls are exposed as plain `.button` elements.
 - History uses shell-owned toolbar-native search and sort controls, including a native AppKit-backed toolbar search field. UI tests should prefer the dedicated helpers/fallbacks in `QwenVoiceUITestBase` instead of assuming a fixed search-field hierarchy or a specific XCUI element class for the sort control.
 - Preserve accessibility identifiers whenever control types change; many of the deterministic feature-matrix tests depend on stable IDs even when native control wrappers shift.
+- `QwenVoiceUITestBase` now uses an explicit launch-profile model. UI-test classes can control backend mode (`stub` vs `live`), state isolation, and launch policy (`sharedPerClass` vs `freshPerTest`) through `launchProfile`, and the default is now `freshPerTest` unless a class explicitly opts into shared sessions.
+- `StubbedQwenVoiceUITestBase` is the default base for smoke/layout/navigation/availability UI tests. It launches the app in `QWENVOICE_UI_TEST_BACKEND_MODE=stub` with isolated app-support/defaults state so these tests avoid live backend/bootstrap cost.
+- Test-only readiness sentinels now distinguish a visible window shell from a ready main window or ready Settings window. `QwenVoiceUITestBase` waits on those markers instead of treating `window.exists` as sufficient launch success.
+- Live backend macOS UI tests are now the exception rather than the default. Keep them for explicit end-to-end generation/integration coverage such as `GenerationFlowTests`, not for basic screen availability or layout assertions.
 
 ### Run / UI-test discipline
 
@@ -69,20 +73,9 @@ This repository is a native macOS SwiftUI app. For normal QwenVoice work, prefer
 - Keep at most one live app/test instance at a time.
 - Clean up those same processes again after the run completes.
 - Treat this discipline as part of reliable validation on QwenVoice, not optional housekeeping; it protects both machine stability and UI automation determinism.
-
-### Skill routing
-
-- `swiftui-design-review-loop` for SwiftUI layout, polish, interaction, and visual investigation work.
-- `swiftui-ui-patterns` for new or refactored SwiftUI screens and components.
-- `swiftui-view-refactor` for view cleanup, state ownership, Observation usage, and structure cleanup.
-- `swiftui-performance-audit` for SwiftUI lag, jank, invalidation churn, and layout-thrash investigations.
-- `swiftui-liquid-glass` only for explicit Liquid Glass work. It is non-default for QwenVoice's current native macOS direction.
-- `swift-concurrency-expert` for Swift 6.2 concurrency diagnostics, actor isolation, and compiler-safety fixes.
-- `github` for pull requests, issues, releases, and GitHub workflow investigation.
-- `app-store-changelog` for user-facing release notes.
-- `openai-docs` only for OpenAI API or product work, not normal QwenVoice development.
-- `ios-debugger-agent` is non-default and should only be used for explicitly requested iOS/simulator debugging.
-- `react-component-performance`, `vercel-deploy`, and `macos-spm-app-packaging` are generally out of scope for normal QwenVoice work unless the task clearly shifts into those domains.
+- `./scripts/run_tests.sh` now enforces this more aggressively: it performs repo-process cleanup and a short cooldown before runs, classifies XCTest infrastructure failures separately from assertion failures, and retries a single affected smoke filter or targeted run once after an automation bootstrap failure.
+- For smoke validation, prefer `./scripts/run_tests.sh --suite smoke` over ad hoc multi-test invocations. The smoke suite now runs sequentially, retries the current filter once on automation bootstrap failures, and then stops early if the infrastructure failure repeats.
+- For interrupted or unstable runs, inspect the generated `progress.txt`, `latest-progress.txt`, and `infrastructure-failure.txt` files under `build/test/results/` before assuming an app regression.
 
 ### MCP routing
 
@@ -196,9 +189,15 @@ xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
 ### Current test inventory
 
-- UI tests: 19 files / 50 test methods
-- Unit tests: 4 files / 17 test methods
-- Python backend tests: 16 `unittest` cases
+- UI tests: 19 files / 58 test methods
+- Unit tests: 4 files / 23 test methods
+- Python backend tests: 35 `unittest` cases
+
+Current automation split:
+
+- smoke/layout/navigation/availability UI tests default to stub-backed isolated launches
+- feature-matrix UI tests remain deterministic stub-backed coverage
+- live backend UI coverage is intentionally narrower and reserved for explicit generation/integration paths
 
 See [`docs/reference/testing.md`](docs/reference/testing.md) for the current test commands, suites, and caveats.
 
@@ -249,7 +248,7 @@ Before finishing:
 2. keep accessibility identifiers stable or update UI tests in the same change
 3. prefer the manifest over duplicated constants
 4. prefer `./scripts/regenerate_project.sh` over raw `xcodegen generate`
-5. keep `README.md`, `docs/reference/current-state.md`, `AGENTS.md`, and `GEMINI.md` aligned when broad repo facts change
+5. keep `README.md`, `docs/reference/current-state.md`, and `AGENTS.md` aligned when broad repo facts change
 6. if a change touches Preferences, validate the separate Settings-window path rather than only the main window
 7. if a change touches picker-like controls, verify the actual macOS XCUI exposure (`MenuButton` / `MenuItem` vs. button assumptions)
 8. if a change touches main-window toolbar or search chrome, verify the controls are owned by `ContentView` and disappear immediately when leaving the active sidebar destination

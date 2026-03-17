@@ -1,10 +1,13 @@
 import XCTest
 
-final class CustomVoiceViewTests: QwenVoiceUITestBase {
-    override class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
+final class CustomVoiceViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .customVoice }
     override class var additionalLaunchEnvironment: [String: String] {
         ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
+
+    override func configureStubFixture(_ fixture: StubFeatureFixture) throws {
+        fixture.installAllModels()
     }
 
     func testCustomVoiceScreenCoreLayout() {

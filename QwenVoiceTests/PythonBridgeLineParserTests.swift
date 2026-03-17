@@ -58,6 +58,49 @@ final class PythonBridgeLineParserTests: XCTestCase {
         XCTAssertFalse(PythonBridge.canSkipLoadModel(requestedID: "pro_design", loadedModelID: nil))
     }
 
+    func testPrewarmIdentityKeyDifferentiatesNeutralAndGuidedCloneRequests() {
+        let neutral = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_clone",
+            mode: .clone,
+            refAudio: "/tmp/reference.wav",
+            refText: "Hello there"
+        )
+        let guided = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_clone",
+            mode: .clone,
+            instruct: "Furious and intensely angry, sharp and forceful delivery",
+            deliveryProfile: DeliveryProfile(
+                presetID: "angry",
+                intensity: .strong,
+                customText: nil,
+                finalInstruction: "Furious and intensely angry, sharp and forceful delivery"
+            ),
+            refAudio: "/tmp/reference.wav",
+            refText: "Hello there"
+        )
+
+        XCTAssertNotEqual(neutral, guided)
+    }
+
+    func testPrewarmIdentityKeyDifferentiatesCloneReferences() {
+        let first = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_clone",
+            mode: .clone,
+            instruct: "Happy and upbeat tone",
+            refAudio: "/tmp/reference-a.wav",
+            refText: "Hello there"
+        )
+        let second = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_clone",
+            mode: .clone,
+            instruct: "Happy and upbeat tone",
+            refAudio: "/tmp/reference-b.wav",
+            refText: "Hello there"
+        )
+
+        XCTAssertNotEqual(first, second)
+    }
+
     func testGenerationResultParsesStreamingMetrics() {
         let result = GenerationResult(from: [
             "audio_path": .string("/tmp/output.wav"),
@@ -71,6 +114,13 @@ final class PythonBridgeLineParserTests: XCTestCase {
                 "prepared_clone_used": .bool(true),
                 "clone_cache_hit": .bool(true),
                 "first_chunk_ms": .int(240),
+                "delivery_instruction_applied": .bool(true),
+                "delivery_instruction_strategy": .string("guided_prepared_icl"),
+                "delivery_plan_strength": .string("strong"),
+                "styled_text_applied": .bool(true),
+                "speaker_similarity": .double(0.82),
+                "delivery_retry_count": .int(1),
+                "delivery_compromised": .bool(false),
             ]),
         ])
 
@@ -84,5 +134,12 @@ final class PythonBridgeLineParserTests: XCTestCase {
         XCTAssertEqual(result.metrics?.preparedCloneUsed, true)
         XCTAssertEqual(result.metrics?.cloneCacheHit, true)
         XCTAssertEqual(result.metrics?.firstChunkMs, 240)
+        XCTAssertEqual(result.metrics?.deliveryInstructionApplied, true)
+        XCTAssertEqual(result.metrics?.deliveryInstructionStrategy, "guided_prepared_icl")
+        XCTAssertEqual(result.metrics?.deliveryPlanStrength, "strong")
+        XCTAssertEqual(result.metrics?.styledTextApplied, true)
+        XCTAssertEqual(result.metrics?.speakerSimilarity, 0.82)
+        XCTAssertEqual(result.metrics?.deliveryRetryCount, 1)
+        XCTAssertEqual(result.metrics?.deliveryCompromised, false)
     }
 }

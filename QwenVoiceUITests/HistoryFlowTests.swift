@@ -59,4 +59,30 @@ final class HistoryFlowTests: FeatureMatrixUITestBase {
 
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5) || app.sheets.firstMatch.waitForExistence(timeout: 5))
     }
+
+    func testCloneRowsCanSaveToSavedVoices() {
+        launchStubApp(initialScreen: .history)
+        _ = waitForScreen(.history, timeout: 15)
+
+        XCTAssertTrue(
+            app.buttons["historyRow_saveVoice_generation-2"].firstMatch.exists,
+            "Clone history rows should expose Save to Saved Voices"
+        )
+
+        XCTAssertFalse(
+            app.buttons["historyRow_saveVoice_generation-1"].firstMatch.exists,
+            "Non-clone history rows should not expose Save to Saved Voices"
+        )
+
+        app.buttons["historyRow_saveVoice_generation-2"].firstMatch.click()
+
+        let transcriptField = app.descendants(matching: .any).matching(identifier: "voicesEnroll_transcriptField").firstMatch
+        XCTAssertTrue(transcriptField.waitForExistence(timeout: 5))
+        waitForElement("voicesEnroll_confirmButton", type: .button, timeout: 5).click()
+
+        XCTAssertTrue(
+            app.alerts.firstMatch.waitForExistence(timeout: 5) || app.sheets.firstMatch.waitForExistence(timeout: 5),
+            "Saving a clone into Saved Voices should confirm success"
+        )
+    }
 }

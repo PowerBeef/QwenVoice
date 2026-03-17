@@ -78,8 +78,8 @@ final class PythonBridge: ObservableObject {
     private var sidebarStatusResetTask: Task<Void, Never>?
     private var recentStderrLines: [String] = []
     private var loadedModelID: String?
-    private var prewarmedModelIDs: Set<String> = []
-    private var prewarmingModelIDs: Set<String> = []
+    private var prewarmedRequestKeys: Set<String> = []
+    private var prewarmingRequestKeys: Set<String> = []
     private var stubRequestSeed = 10_000
 
     private static let maxStoredStderrLines = 20
@@ -93,8 +93,8 @@ final class PythonBridge: ObservableObject {
         guard process == nil else { return }
         recentStderrLines = []
         loadedModelID = nil
-        prewarmedModelIDs = []
-        prewarmingModelIDs = []
+        prewarmedRequestKeys = []
+        prewarmingRequestKeys = []
 
         if isStubBackendMode {
             lastError = nil
@@ -196,8 +196,8 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
-        prewarmedModelIDs = []
-        prewarmingModelIDs = []
+        prewarmedRequestKeys = []
+        prewarmingRequestKeys = []
         recentStderrLines = []
         clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
@@ -227,6 +227,33 @@ final class PythonBridge: ObservableObject {
         return !trimmed.isEmpty && trimmed.caseInsensitiveCompare("Normal tone") != .orderedSame
     }
 
+    static func prewarmIdentityKey(
+        modelID: String,
+        mode: GenerationMode,
+        voice: String? = nil,
+        instruct: String? = nil,
+        deliveryProfile: DeliveryProfile? = nil,
+        refAudio: String? = nil,
+        refText: String? = nil
+    ) -> String {
+        let trimmedVoice = voice?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedRefAudio = refAudio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedInstruction = instruct?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedInstruction = Self.hasMeaningfulDeliveryInstruction(trimmedInstruction) ? trimmedInstruction : ""
+        let normalizedDeliveryProfile = Self.deliveryProfileFingerprint(deliveryProfile)
+
+        return [
+            modelID,
+            mode.rawValue,
+            trimmedVoice,
+            normalizedInstruction,
+            normalizedDeliveryProfile,
+            trimmedRefAudio,
+            trimmedRefText,
+        ].joined(separator: "|")
+    }
+
     private static func designInstruction(voiceDescription: String, emotion: String) -> String {
         let trimmedDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmotion = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,6 +264,37 @@ final class PythonBridge: ObservableObject {
         Voice description: \(trimmedDescription)
         Delivery style: \(trimmedEmotion)
         """
+    }
+
+    private static func deliveryProfileFingerprint(_ deliveryProfile: DeliveryProfile?) -> String {
+        guard let deliveryProfile else { return "" }
+        let presetID = deliveryProfile.presetID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let customText = deliveryProfile.trimmedCustomText ?? ""
+        let instruction = hasMeaningfulDeliveryInstruction(deliveryProfile.trimmedInstruction)
+            ? deliveryProfile.trimmedInstruction
+            : ""
+        let intensity = deliveryProfile.intensity?.rpcValue ?? ""
+        return [presetID, intensity, customText, instruction].joined(separator: "~")
+    }
+
+    private static func rpcValue(for deliveryProfile: DeliveryProfile?) -> RPCValue? {
+        guard let deliveryProfile else { return nil }
+
+        var object: [String: RPCValue] = [
+            "final_instruction": .string(deliveryProfile.finalInstruction)
+        ]
+
+        if let presetID = deliveryProfile.presetID, !presetID.isEmpty {
+            object["preset_id"] = .string(presetID)
+        }
+        if let intensity = deliveryProfile.intensity {
+            object["intensity"] = .string(intensity.rpcValue)
+        }
+        if let customText = deliveryProfile.trimmedCustomText, !customText.isEmpty {
+            object["custom_text"] = .string(customText)
+        }
+
+        return .object(object)
     }
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
@@ -440,25 +498,36 @@ final class PythonBridge: ObservableObject {
         mode: GenerationMode,
         voice: String? = nil,
         instruct: String? = nil,
+        deliveryProfile: DeliveryProfile? = nil,
         refAudio: String? = nil,
         refText: String? = nil
     ) async {
         guard isReady else { return }
         guard process?.isRunning == true || isStubBackendMode else { return }
         guard !isProcessing, activeGenerationSession == nil else { return }
-        guard loadedModelID != modelID else { return }
-        guard !prewarmedModelIDs.contains(modelID) else { return }
-        guard !prewarmingModelIDs.contains(modelID) else { return }
         if mode == .clone && (refAudio?.isEmpty ?? true) {
             return
         }
 
-        prewarmingModelIDs.insert(modelID)
-        defer { prewarmingModelIDs.remove(modelID) }
+        let prewarmKey = Self.prewarmIdentityKey(
+            modelID: modelID,
+            mode: mode,
+            voice: voice,
+            instruct: instruct,
+            deliveryProfile: deliveryProfile,
+            refAudio: refAudio,
+            refText: refText
+        )
+
+        guard !prewarmedRequestKeys.contains(prewarmKey) else { return }
+        guard !prewarmingRequestKeys.contains(prewarmKey) else { return }
+
+        prewarmingRequestKeys.insert(prewarmKey)
+        defer { prewarmingRequestKeys.remove(prewarmKey) }
 
         if isStubBackendMode {
             loadedModelID = modelID
-            prewarmedModelIDs.insert(modelID)
+            prewarmedRequestKeys.insert(prewarmKey)
             return
         }
 
@@ -471,6 +540,9 @@ final class PythonBridge: ObservableObject {
         }
         if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
             params["instruct"] = .string(instruct)
+        }
+        if mode == .clone, let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
+            params["delivery_profile"] = deliveryProfileValue
         }
         if let refAudio, !refAudio.isEmpty {
             params["ref_audio"] = .string(refAudio)
@@ -487,7 +559,7 @@ final class PythonBridge: ObservableObject {
                 resetLastError: false
             )
             loadedModelID = modelID
-            prewarmedModelIDs.insert(modelID)
+            prewarmedRequestKeys.insert(prewarmKey)
         } catch {
             #if DEBUG
             print("[Performance][PythonBridge] prewarm_model_failed id=\(modelID) error=\(error.localizedDescription)")
@@ -504,8 +576,8 @@ final class PythonBridge: ObservableObject {
             activeGenerationSession = nil
             activeStreamingRequests.removeAll()
             loadedModelID = nil
-            prewarmedModelIDs = []
-            prewarmingModelIDs = []
+            prewarmedRequestKeys = []
+            prewarmingRequestKeys = []
             recentStderrLines = []
             lastError = nil
             clearActiveProgressTracking()
@@ -527,8 +599,8 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
-        prewarmedModelIDs = []
-        prewarmingModelIDs = []
+        prewarmedRequestKeys = []
+        prewarmingRequestKeys = []
         recentStderrLines = []
         lastError = nil
         clearActiveProgressTracking()
@@ -627,6 +699,7 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
+        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -652,6 +725,9 @@ final class PythonBridge: ObservableObject {
         }
         if Self.hasMeaningfulDeliveryInstruction(emotion) {
             params["instruct"] = .string(emotion)
+        }
+        if let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
+            params["delivery_profile"] = deliveryProfileValue
         }
         if stream {
             params["stream"] = .bool(true)
@@ -771,6 +847,7 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
+        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -786,6 +863,7 @@ final class PythonBridge: ObservableObject {
                 refAudio: refAudio,
                 refText: refText,
                 emotion: emotion,
+                deliveryProfile: deliveryProfile,
                 outputPath: outputPath,
                 stream: false
             )
@@ -798,6 +876,7 @@ final class PythonBridge: ObservableObject {
         refAudio: String,
         refText: String?,
         emotion: String,
+        deliveryProfile: DeliveryProfile?,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -811,6 +890,7 @@ final class PythonBridge: ObservableObject {
                 refAudio: refAudio,
                 refText: refText,
                 emotion: emotion,
+                deliveryProfile: deliveryProfile,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(
@@ -843,10 +923,9 @@ final class PythonBridge: ObservableObject {
     }
 
     /// Enroll a new voice.
-    func enrollVoice(name: String, audioPath: String, transcript: String?) async throws {
+    func enrollVoice(name: String, audioPath: String, transcript: String?) async throws -> Voice {
         if isStubBackendMode {
-            try stubEnrollVoice(name: name, audioPath: audioPath, transcript: transcript)
-            return
+            return try stubEnrollVoice(name: name, audioPath: audioPath, transcript: transcript)
         }
         var params: [String: RPCValue] = [
             "name": .string(name),
@@ -855,7 +934,14 @@ final class PythonBridge: ObservableObject {
         if let transcript, !transcript.isEmpty {
             params["transcript"] = .string(transcript)
         }
-        _ = try await callDict("enroll_voice", params: params)
+        let response = try await callDict("enroll_voice", params: params)
+        let normalizedName = response["name"]?.stringValue ?? SavedVoiceNameSanitizer.normalizedName(name)
+        let wavPath = response["wav_path"]?.stringValue ?? ""
+        return Voice(
+            name: normalizedName,
+            wavPath: wavPath,
+            hasTranscript: !(transcript?.isEmpty ?? true)
+        )
     }
 
     /// Delete an enrolled voice.
@@ -1403,23 +1489,41 @@ final class PythonBridge: ObservableObject {
         return voices.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    private func stubEnrollVoice(name: String, audioPath: String, transcript: String?) throws {
+    private func stubEnrollVoice(name: String, audioPath: String, transcript: String?) throws -> Voice {
         let sourcePath = audioPath.isEmpty ? (UITestAutomationSupport.enrollAudioURL?.path ?? "") : audioPath
         guard !sourcePath.isEmpty, FileManager.default.fileExists(atPath: sourcePath) else {
             throw PythonBridgeError.rpcError(code: -32020, message: "Reference audio file not found.")
         }
 
         try FileManager.default.createDirectory(at: AppPaths.voicesDir, withIntermediateDirectories: true)
-        let destination = AppPaths.voicesDir.appendingPathComponent("\(name).wav")
-        let transcriptDestination = AppPaths.voicesDir.appendingPathComponent("\(name).txt")
+        let safeName = SavedVoiceNameSanitizer.normalizedName(name)
+        guard !safeName.isEmpty else {
+            throw PythonBridgeError.rpcError(code: -32022, message: "Invalid saved voice name.")
+        }
 
-        try? FileManager.default.removeItem(at: destination)
-        try? FileManager.default.removeItem(at: transcriptDestination)
+        let destination = AppPaths.voicesDir.appendingPathComponent("\(safeName).wav")
+        let transcriptDestination = AppPaths.voicesDir.appendingPathComponent("\(safeName).txt")
+
+        if FileManager.default.fileExists(atPath: destination.path)
+            || FileManager.default.fileExists(atPath: transcriptDestination.path)
+        {
+            throw PythonBridgeError.rpcError(
+                code: -32023,
+                message: "A saved voice named \"\(safeName)\" already exists. Choose a different name."
+            )
+        }
+
         try FileManager.default.copyItem(at: URL(fileURLWithPath: sourcePath), to: destination)
 
         if let transcript, !transcript.isEmpty {
             try transcript.write(to: transcriptDestination, atomically: true, encoding: .utf8)
         }
+
+        return Voice(
+            name: safeName,
+            wavPath: destination.path,
+            hasTranscript: !(transcript?.isEmpty ?? true)
+        )
     }
 
     private func stubDeleteVoice(name: String) throws {
@@ -1537,7 +1641,14 @@ final class PythonBridge: ObservableObject {
                 streamingUsed: stream,
                 preparedCloneUsed: mode == .clone,
                 cloneCacheHit: mode == .clone,
-                firstChunkMs: stream ? firstChunkMs : nil
+                firstChunkMs: stream ? firstChunkMs : nil,
+                deliveryInstructionApplied: nil,
+                deliveryInstructionStrategy: nil,
+                deliveryPlanStrength: nil,
+                styledTextApplied: nil,
+                speakerSimilarity: nil,
+                deliveryRetryCount: nil,
+                deliveryCompromised: nil
             )
         )
     }
@@ -1615,6 +1726,13 @@ struct GenerationResult {
         let preparedCloneUsed: Bool?
         let cloneCacheHit: Bool?
         let firstChunkMs: Int?
+        let deliveryInstructionApplied: Bool?
+        let deliveryInstructionStrategy: String?
+        let deliveryPlanStrength: String?
+        let styledTextApplied: Bool?
+        let speakerSimilarity: Double?
+        let deliveryRetryCount: Int?
+        let deliveryCompromised: Bool?
 
         init(
             tokenCount: Int?,
@@ -1623,7 +1741,14 @@ struct GenerationResult {
             streamingUsed: Bool,
             preparedCloneUsed: Bool?,
             cloneCacheHit: Bool?,
-            firstChunkMs: Int?
+            firstChunkMs: Int?,
+            deliveryInstructionApplied: Bool?,
+            deliveryInstructionStrategy: String?,
+            deliveryPlanStrength: String?,
+            styledTextApplied: Bool?,
+            speakerSimilarity: Double?,
+            deliveryRetryCount: Int?,
+            deliveryCompromised: Bool?
         ) {
             self.tokenCount = tokenCount
             self.processingTimeSeconds = processingTimeSeconds
@@ -1632,6 +1757,13 @@ struct GenerationResult {
             self.preparedCloneUsed = preparedCloneUsed
             self.cloneCacheHit = cloneCacheHit
             self.firstChunkMs = firstChunkMs
+            self.deliveryInstructionApplied = deliveryInstructionApplied
+            self.deliveryInstructionStrategy = deliveryInstructionStrategy
+            self.deliveryPlanStrength = deliveryPlanStrength
+            self.styledTextApplied = styledTextApplied
+            self.speakerSimilarity = speakerSimilarity
+            self.deliveryRetryCount = deliveryRetryCount
+            self.deliveryCompromised = deliveryCompromised
         }
 
         init?(from value: RPCValue?) {
@@ -1643,6 +1775,13 @@ struct GenerationResult {
             preparedCloneUsed = object["prepared_clone_used"]?.boolValue
             cloneCacheHit = object["clone_cache_hit"]?.boolValue
             firstChunkMs = object["first_chunk_ms"]?.intValue
+            deliveryInstructionApplied = object["delivery_instruction_applied"]?.boolValue
+            deliveryInstructionStrategy = object["delivery_instruction_strategy"]?.stringValue
+            deliveryPlanStrength = object["delivery_plan_strength"]?.stringValue
+            styledTextApplied = object["styled_text_applied"]?.boolValue
+            speakerSimilarity = object["speaker_similarity"]?.doubleValue
+            deliveryRetryCount = object["delivery_retry_count"]?.intValue
+            deliveryCompromised = object["delivery_compromised"]?.boolValue
         }
     }
 

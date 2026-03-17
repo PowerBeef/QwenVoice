@@ -1,9 +1,13 @@
 import XCTest
 
-final class VoiceCloningViewTests: QwenVoiceUITestBase {
+final class VoiceCloningViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { nil }
     override class var additionalLaunchEnvironment: [String: String] {
         ["QWENVOICE_UI_TEST_WINDOW_SIZE": "720x560"]
+    }
+
+    override func configureStubFixture(_ fixture: StubFeatureFixture) throws {
+        fixture.installAllModels()
     }
 
     func testVoiceCloningScreenCoreLayout() {

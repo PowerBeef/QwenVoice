@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EmotionPickerView: View {
     @Binding var emotion: String
+    var deliveryProfile: Binding<DeliveryProfile?>? = nil
     var title: String = "Tone"
     var accentColor: Color = AppTheme.accent
     var accessibilityPrefix: String = "delivery"
@@ -135,7 +136,7 @@ struct EmotionPickerView: View {
         .accessibilityIdentifier("\(accessibilityPrefix)_intensityPicker")
         .onChange(of: intensity) { _, _ in
             if let selectedPreset {
-                emotion = selectedPreset.instruction(for: intensity)
+                applyCurrentSelection()
             }
         }
     }
@@ -153,7 +154,9 @@ struct EmotionPickerView: View {
                 .disabled(!isCustomMode)
                 .accessibilityIdentifier("\(accessibilityPrefix)_toneField")
                 .onChange(of: customText) { _, newValue in
-                    emotion = newValue
+                    if isCustomMode {
+                        applyCurrentSelection()
+                    }
                 }
         }
     }
@@ -161,13 +164,14 @@ struct EmotionPickerView: View {
     private func selectPreset(_ preset: EmotionPreset) {
         selectedPreset = preset
         isCustomMode = false
-        emotion = preset.instruction(for: intensity)
+        customText = ""
+        applyCurrentSelection()
     }
 
     private func enterCustomMode() {
         selectedPreset = nil
         isCustomMode = true
-        emotion = customText
+        applyCurrentSelection()
     }
 
     private func syncSelectionFromText() {
@@ -177,6 +181,8 @@ struct EmotionPickerView: View {
                     selectedPreset = preset
                     intensity = level
                     isCustomMode = false
+                    customText = ""
+                    applyCurrentSelection()
                     return
                 }
             }
@@ -185,11 +191,30 @@ struct EmotionPickerView: View {
         if !emotion.isEmpty && emotion != "Normal tone" {
             isCustomMode = true
             customText = emotion
+            selectedPreset = nil
+            applyCurrentSelection()
         } else {
             selectedPreset = EmotionPreset.all.first
             isCustomMode = false
             customText = ""
+            intensity = .normal
+            applyCurrentSelection()
         }
+    }
+
+    private func applyCurrentSelection() {
+        let profile: DeliveryProfile
+
+        if isCustomMode {
+            profile = .custom(customText)
+        } else if let selectedPreset {
+            profile = .preset(selectedPreset, intensity: intensity)
+        } else {
+            profile = .neutral
+        }
+
+        emotion = profile.finalInstruction
+        deliveryProfile?.wrappedValue = profile
     }
 
     private var emotionValueAnchor: some View {

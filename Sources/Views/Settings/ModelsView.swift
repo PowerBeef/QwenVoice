@@ -3,6 +3,7 @@ import SwiftUI
 struct ModelsView: View {
     @EnvironmentObject private var viewModel: ModelManagerViewModel
 
+    let isActive: Bool
     @Binding var highlightedModelID: String?
 
     @State private var flashedModelID: String?
@@ -33,7 +34,7 @@ struct ModelsView: View {
                 if !installedModels.isEmpty {
                     Section("Installed") {
                         ForEach(installedModels) { model in
-                            ModelCard(
+                            ModelRow(
                                 model: model,
                                 viewModel: viewModel,
                                 isHighlighted: flashedModelID == model.id,
@@ -43,13 +44,15 @@ struct ModelsView: View {
                                 }
                             )
                             .id(model.id)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
                         }
                     }
                 }
 
-                Section(installedModels.isEmpty ? "Available Models" : "Available To Download") {
+                Section("Available To Download") {
                     ForEach(otherModels) { model in
-                        ModelCard(
+                        ModelRow(
                             model: model,
                             viewModel: viewModel,
                             isHighlighted: flashedModelID == model.id,
@@ -59,6 +62,8 @@ struct ModelsView: View {
                             }
                         )
                         .id(model.id)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -72,11 +77,13 @@ struct ModelsView: View {
                     .accessibilityIdentifier("models_title")
             }
             .accessibilityIdentifier("screen_models")
-            .task {
+            .task(id: isActive) {
+                guard isActive else { return }
                 await viewModel.refresh()
                 focusHighlightedModel(using: proxy)
             }
             .onChange(of: highlightedModelID) { _, _ in
+                guard isActive else { return }
                 focusHighlightedModel(using: proxy)
             }
         }
@@ -126,7 +133,7 @@ private extension ModelsView {
     }
 }
 
-struct ModelCard: View {
+struct ModelRow: View {
     let model: TTSModel
     @ObservedObject var viewModel: ModelManagerViewModel
     var isHighlighted: Bool = false
@@ -136,38 +143,46 @@ struct ModelCard: View {
         viewModel.statuses[model.id] ?? .checking
     }
 
-    private var modeColor: Color {
-        AppTheme.modeColor(for: model.mode)
-    }
-
     private var usageLabel: String {
         "Used by \(model.mode.displayName)"
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Label(model.name, systemImage: model.mode.iconName)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(modeColor)
-                .accessibilityIdentifier("models_card_\(model.id)")
+        HStack(alignment: .top, spacing: 12) {
+            modeIcon
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(usageLabel)
-                    .font(.footnote.weight(.medium))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(model.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(usageLabel)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
                 Text(model.folder)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
                 statusView
             }
 
-            Spacer()
-            actionView
+            Spacer(minLength: 16)
+
+            VStack(alignment: .trailing, spacing: 8) {
+                actionView
+            }
+            .frame(minWidth: 92, alignment: .trailing)
         }
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHighlighted ? modeColor.opacity(0.08) : .clear)
-        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(rowHighlight)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("models_card_\(model.id)")
     }
 
     @ViewBuilder
@@ -176,15 +191,17 @@ struct ModelCard: View {
         case .checking:
             Label("Checking local files...", systemImage: "hourglass")
                 .font(.caption)
+                .foregroundStyle(.secondary)
                 .accessibilityIdentifier("models_checking_\(model.id)")
         case .notDownloaded:
-            Text("Download this model to enable \(model.mode.displayName).")
+            Text("Download to enable \(model.mode.displayName).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .downloading(let downloadedBytes, let totalBytes):
             VStack(alignment: .leading, spacing: 4) {
                 if let totalBytes, totalBytes > 0 {
                     ProgressView(value: Double(downloadedBytes), total: Double(totalBytes))
+                        .tint(AppTheme.accent)
                     Text(
                         "\(ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
                     )
@@ -192,15 +209,22 @@ struct ModelCard: View {
                     .foregroundStyle(.secondary)
                 } else {
                     ProgressView()
+                        .tint(AppTheme.accent)
                     Text("Preparing download...")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         case .downloaded(let sizeBytes):
-            Text("Ready - \(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))")
-                .font(.caption)
-                .foregroundStyle(modeColor)
+            HStack(spacing: 8) {
+                Label("Ready", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(AppTheme.accent)
+
+                Text(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption.weight(.medium))
         case .error:
             Text("Download failed. Retry to keep using \(model.mode.displayName).")
                 .font(.caption)
@@ -219,7 +243,7 @@ struct ModelCard: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .tint(modeColor)
+            .tint(AppTheme.accent)
             .accessibilityIdentifier("models_download_\(model.id)")
         case .downloading:
             Button("Cancel") {
@@ -242,8 +266,28 @@ struct ModelCard: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .tint(modeColor)
+            .tint(AppTheme.accent)
             .accessibilityIdentifier("models_retry_\(model.id)")
         }
+    }
+
+    private var modeIcon: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(AppTheme.accent.opacity(isHighlighted ? 0.14 : 0.08))
+            .frame(width: 34, height: 34)
+            .overlay {
+                Image(systemName: model.mode.iconName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+            }
+    }
+
+    private var rowHighlight: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(isHighlighted ? AppTheme.accent.opacity(0.08) : .clear)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isHighlighted ? AppTheme.accent.opacity(0.18) : .clear, lineWidth: 1)
+            }
     }
 }

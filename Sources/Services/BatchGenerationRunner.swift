@@ -29,6 +29,7 @@ protocol BatchGenerationBridging: AnyObject {
         refAudio: String,
         refText: String?,
         emotion: String,
+        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         batchIndex: Int?,
         batchTotal: Int?
@@ -51,9 +52,32 @@ struct BatchGenerationRequest {
     let lines: [String]
     let voice: String?
     let emotion: String?
+    let deliveryProfile: DeliveryProfile?
     let voiceDescription: String?
     let refAudio: String?
     let refText: String?
+
+    init(
+        mode: GenerationMode,
+        model: TTSModel,
+        lines: [String],
+        voice: String?,
+        emotion: String?,
+        deliveryProfile: DeliveryProfile? = nil,
+        voiceDescription: String?,
+        refAudio: String?,
+        refText: String?
+    ) {
+        self.mode = mode
+        self.model = model
+        self.lines = lines
+        self.voice = voice
+        self.emotion = emotion
+        self.deliveryProfile = deliveryProfile
+        self.voiceDescription = voiceDescription
+        self.refAudio = refAudio
+        self.refText = refText
+    }
 
     func validationError(modelsDirectory: URL) -> String? {
         guard model.isAvailable(in: modelsDirectory) else {
@@ -343,6 +367,7 @@ final class BatchGenerationRunner {
                 refAudio: request.refAudio ?? "",
                 refText: request.refText,
                 emotion: request.emotion ?? "Normal tone",
+                deliveryProfile: request.deliveryProfile,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal

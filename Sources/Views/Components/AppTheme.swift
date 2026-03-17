@@ -29,9 +29,9 @@ enum AppTheme {
     }()
 
     static let accent = Color.accentColor
-    static let customVoice = Color.blue
-    static let voiceDesign = Color.teal
-    static let voiceCloning = Color.indigo
+    static let customVoice = accent
+    static let voiceDesign = accent
+    static let voiceCloning = accent
     static let history = accent
     static let voices = accent
     static let models = accent
@@ -80,37 +80,15 @@ enum AppTheme {
     }
 
     static func sidebarColor(for item: SidebarItem) -> Color {
-        modeColor(for: item.rawValue)
+        accent
     }
 
     static func modeColor(for mode: String) -> Color {
-        let normalizedMode = mode.lowercased()
-
-        if normalizedMode.contains("custom") {
-            return .blue
-        }
-        if normalizedMode.contains("design") {
-            return .teal
-        }
-        if normalizedMode.contains("clone") {
-            return .indigo
-        }
-        if normalizedMode.contains("history") {
-            return .secondary
-        }
-
-        return accent
+        accent
     }
 
     static func modeColor(for mode: GenerationMode) -> Color {
-        switch mode {
-        case .custom:
-            return .blue
-        case .design:
-            return .teal
-        case .clone:
-            return .indigo
-        }
+        accent
     }
 
     static let waveformGradient = LinearGradient(

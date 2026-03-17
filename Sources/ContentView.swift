@@ -12,7 +12,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case voiceDesign = "Voice Design"
     case voiceCloning = "Voice Cloning"
     case history = "History"
-    case voices = "Voices"
+    case voices = "Saved Voices"
     case models = "Models"
 
     var id: String { rawValue }
@@ -146,6 +146,7 @@ struct ContentView: View {
     @State private var historySearchText = ""
     @State private var historySortOrder: HistorySortOrder = .newest
     @State private var voicesEnrollRequestID: UUID?
+    @State private var pendingSavedVoiceSelectionID: String?
     @State private var voiceDesignVoiceDescription = ""
     @State private var didCompleteInitialAvailabilityRefresh = false
 
@@ -249,7 +250,7 @@ struct ContentView: View {
         ZStack {
             ForEach(SidebarItem.allCases) { item in
                 if activatedItems.contains(item) {
-                    screenView(for: item)
+                    screenView(for: item, isActive: selectedItem == item)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .opacity(selectedItem == item ? 1 : 0)
                         .allowsHitTesting(selectedItem == item)
@@ -266,23 +267,41 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func screenView(for item: SidebarItem) -> some View {
+    private func screenView(for item: SidebarItem, isActive: Bool) -> some View {
         switch item {
         case .customVoice:
-            CustomVoiceView()
+            CustomVoiceView(isActive: isActive)
         case .voiceDesign:
-            VoiceDesignView(voiceDescription: $voiceDesignVoiceDescription)
+            VoiceDesignView(
+                voiceDescription: $voiceDesignVoiceDescription,
+                isActive: isActive
+            )
         case .voiceCloning:
-            VoiceCloningView()
+            VoiceCloningView(
+                pendingSavedVoiceSelectionID: $pendingSavedVoiceSelectionID,
+                isActive: isActive
+            )
         case .history:
             HistoryView(
+                isActive: isActive,
                 searchText: $historySearchText,
                 sortOrder: $historySortOrder
             )
         case .voices:
-            VoicesView(enrollRequestID: voicesEnrollRequestID)
+            VoicesView(
+                isActive: isActive,
+                enrollRequestID: voicesEnrollRequestID,
+                canUseInVoiceCloning: !disabledSidebarItems.contains(.voiceCloning),
+                onUseInVoiceCloning: { voice in
+                    pendingSavedVoiceSelectionID = voice.id
+                    selectSidebarItemIfEnabled(.voiceCloning)
+                }
+            )
         case .models:
-            ModelsView(highlightedModelID: $pendingHighlightedModelID)
+            ModelsView(
+                isActive: isActive,
+                highlightedModelID: $pendingHighlightedModelID
+            )
         }
     }
 
@@ -315,7 +334,7 @@ struct ContentView: View {
 
         if selectedItem == .voices {
             ToolbarItem {
-                Button("Enroll Voice") {
+                Button("Add Voice Sample") {
                     voicesEnrollRequestID = UUID()
                 }
                 .buttonStyle(.borderedProminent)
@@ -338,6 +357,12 @@ struct ContentView: View {
                 value: currentDisabledSidebarIdentifiers,
                 identifier: "mainWindow_disabledSidebarItems"
             )
+            if UITestAutomationSupport.isEnabled {
+                hiddenMarker(
+                    value: currentActiveScreenID,
+                    identifier: "mainWindow_ready"
+                )
+            }
         }
     }
 
@@ -355,6 +380,7 @@ struct ContentView: View {
 
     private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
         guard !disabledSidebarItems.contains(item) else { return }
+        AppPerformanceSignposts.emit("Sidebar Selection")
         selectedItem = item
     }
 

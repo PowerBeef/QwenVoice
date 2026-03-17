@@ -7,6 +7,7 @@ struct VoiceDesignView: View {
     @EnvironmentObject var modelManager: ModelManagerViewModel
 
     @Binding private var voiceDescription: String
+    let isActive: Bool
     @State private var emotion = "Normal tone"
     @State private var text = ""
     @State private var isGenerating = false
@@ -44,11 +45,12 @@ struct VoiceDesignView: View {
     }
 
     private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
+        "\(isActive)-\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
     }
 
-    init(voiceDescription: Binding<String>) {
+    init(voiceDescription: Binding<String>, isActive: Bool) {
         _voiceDescription = voiceDescription
+        self.isActive = isActive
     }
 
     var body: some View {
@@ -417,6 +419,7 @@ private extension VoiceDesignView {
 
     func prewarmSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
+        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
 
         await pythonBridge.prewarmModelIfNeeded(

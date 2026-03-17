@@ -1,6 +1,6 @@
 import XCTest
 
-final class HistoryViewTests: QwenVoiceUITestBase {
+final class HistoryViewTests: StubbedQwenVoiceUITestBase {
     override class var initialScreen: UITestScreen? { .history }
 
     func testHistoryScreenAvailability() {

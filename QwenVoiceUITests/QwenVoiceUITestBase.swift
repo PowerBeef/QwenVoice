@@ -5,6 +5,31 @@ enum UITestLaunchPolicy {
     case freshPerTest
 }
 
+enum UITestBackendMode {
+    case live
+    case stub
+}
+
+enum UITestStateIsolation {
+    case sharedHostState
+    case isolatedFixture
+}
+
+struct UITestLaunchProfile {
+    let launchPolicy: UITestLaunchPolicy
+    let initialScreen: UITestScreen?
+    let additionalEnvironment: [String: String]
+    let backendMode: UITestBackendMode
+    let stateIsolation: UITestStateIsolation
+}
+
+struct UITestSharedLaunchSignature: Equatable {
+    let initialScreenRawValue: String?
+    let debugCapture: Bool
+    let additionalEnvironment: [String: String]
+    let stateIsolation: UITestStateIsolation
+}
+
 enum UITestScreen: String, CaseIterable {
     case customVoice
     case voiceDesign
@@ -66,17 +91,23 @@ final class QwenVoiceUITestSession {
     static let shared = QwenVoiceUITestSession()
 
     private var sharedApp: XCUIApplication?
+    private var sharedLaunchSignature: UITestSharedLaunchSignature?
 
     private init() { }
 
     func launchSharedApp(
         initialScreen: UITestScreen?,
         debugCapture: Bool,
-        additionalEnvironment: [String: String] = [:]
+        additionalEnvironment: [String: String] = [:],
+        launchSignature: UITestSharedLaunchSignature
     ) -> XCUIApplication {
-        if let sharedApp, sharedApp.state != .notRunning {
+        if let sharedApp, sharedApp.state != .notRunning, sharedLaunchSignature == launchSignature {
             sharedApp.activate()
             return sharedApp
+        }
+
+        if let sharedApp, sharedApp.state != .notRunning {
+            sharedApp.terminate()
         }
 
         let app = makeApplication(
@@ -86,18 +117,21 @@ final class QwenVoiceUITestSession {
         )
         app.launch()
         sharedApp = app
+        sharedLaunchSignature = launchSignature
         return app
     }
 
     func sharedApplication(
         initialScreen: UITestScreen?,
         debugCapture: Bool,
-        additionalEnvironment: [String: String] = [:]
+        additionalEnvironment: [String: String] = [:],
+        launchSignature: UITestSharedLaunchSignature
     ) -> XCUIApplication {
         launchSharedApp(
             initialScreen: initialScreen,
             debugCapture: debugCapture,
-            additionalEnvironment: additionalEnvironment
+            additionalEnvironment: additionalEnvironment,
+            launchSignature: launchSignature
         )
     }
 
@@ -121,6 +155,7 @@ final class QwenVoiceUITestSession {
             sharedApp.terminate()
         }
         self.sharedApp = nil
+        self.sharedLaunchSignature = nil
     }
 
     private func makeApplication(
@@ -148,13 +183,31 @@ final class QwenVoiceUITestSession {
 }
 
 /// Base class for all QwenVoice UI tests.
-/// Uses a shared app session per class by default to reduce launch overhead.
+/// Fresh launches are the default to prioritize UI automation stability.
 class QwenVoiceUITestBase: XCTestCase {
-    private(set) var app: XCUIApplication!
+    private enum EnvironmentKeys {
+        static let appSupportDir = "QWENVOICE_APP_SUPPORT_DIR"
+        static let defaultsSuite = "QWENVOICE_UI_TEST_DEFAULTS_SUITE"
+    }
 
-    class var launchPolicy: UITestLaunchPolicy { .sharedPerClass }
+    private(set) var app: XCUIApplication!
+    private var generatedIsolationRoot: URL?
+    private var generatedDefaultsSuiteName: String?
+
+    class var launchPolicy: UITestLaunchPolicy { .freshPerTest }
     class var initialScreen: UITestScreen? { nil }
     class var additionalLaunchEnvironment: [String: String] { [:] }
+    class var backendMode: UITestBackendMode { .live }
+    class var stateIsolation: UITestStateIsolation { .sharedHostState }
+    class var launchProfile: UITestLaunchProfile {
+        UITestLaunchProfile(
+            launchPolicy: launchPolicy,
+            initialScreen: initialScreen,
+            additionalEnvironment: additionalLaunchEnvironment,
+            backendMode: backendMode,
+            stateIsolation: stateIsolation
+        )
+    }
 
     private var debugCaptureEnabled: Bool {
         let flag = ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] ?? ""
@@ -163,18 +216,10 @@ class QwenVoiceUITestBase: XCTestCase {
 
     override class func setUp() {
         super.setUp()
-        if launchPolicy == .sharedPerClass {
-            _ = QwenVoiceUITestSession.shared.launchSharedApp(
-                initialScreen: initialScreen,
-                debugCapture: ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] == "1"
-                    || ProcessInfo.processInfo.environment["QWENVOICE_DEBUG_ON_FAIL"] == "true",
-                additionalEnvironment: additionalLaunchEnvironment
-            )
-        }
     }
 
     override class func tearDown() {
-        if launchPolicy == .sharedPerClass {
+        if launchProfile.launchPolicy == .sharedPerClass {
             QwenVoiceUITestSession.shared.terminateSharedApp()
         }
         super.tearDown()
@@ -182,28 +227,41 @@ class QwenVoiceUITestBase: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        let profile = type(of: self).launchProfile
+        let launchEnvironment = resolvedLaunchEnvironment()
+        let launchSignature = sharedLaunchSignature(
+            initialScreen: profile.initialScreen,
+            additionalEnvironment: launchEnvironment,
+            stateIsolation: profile.stateIsolation
+        )
 
-        switch type(of: self).launchPolicy {
+        switch profile.launchPolicy {
         case .sharedPerClass:
             app = QwenVoiceUITestSession.shared.sharedApplication(
-                initialScreen: type(of: self).initialScreen,
+                initialScreen: profile.initialScreen,
                 debugCapture: debugCaptureEnabled,
-                additionalEnvironment: type(of: self).additionalLaunchEnvironment
+                additionalEnvironment: launchEnvironment,
+                launchSignature: launchSignature
             )
         case .freshPerTest:
             app = QwenVoiceUITestSession.shared.launchFreshApp(
-                initialScreen: type(of: self).initialScreen,
+                initialScreen: profile.initialScreen,
                 debugCapture: debugCaptureEnabled,
-                additionalEnvironment: type(of: self).additionalLaunchEnvironment
+                additionalEnvironment: launchEnvironment
             )
         }
 
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.waitForExistence(timeout: 10), "App window should appear")
+        let didBecomeReady = waitForLaunchReadinessWithRecovery(
+            initialScreen: profile.initialScreen,
+            launchPolicy: profile.launchPolicy,
+            launchEnvironment: launchEnvironment,
+            launchSignature: launchSignature
+        )
+        XCTAssertTrue(didBecomeReady, "App should become ready for UI automation")
 
         dismissTransientUI()
 
-        if let initialScreen = type(of: self).initialScreen {
+        if let initialScreen = profile.initialScreen {
             resetToScreen(initialScreen)
         }
     }
@@ -211,20 +269,27 @@ class QwenVoiceUITestBase: XCTestCase {
     override func tearDownWithError() throws {
         attachFailureArtifactsIfNeeded()
 
-        if type(of: self).launchPolicy == .freshPerTest {
+        if type(of: self).launchProfile.launchPolicy == .freshPerTest {
             app.terminate()
         }
 
+        cleanupGeneratedIsolationArtifacts()
         app = nil
     }
 
     // MARK: - Navigation Helpers
 
     func launchSharedApp(initialScreen: UITestScreen? = nil) {
+        let launchEnvironment = resolvedLaunchEnvironment()
         app = QwenVoiceUITestSession.shared.launchSharedApp(
             initialScreen: initialScreen,
             debugCapture: debugCaptureEnabled,
-            additionalEnvironment: type(of: self).additionalLaunchEnvironment
+            additionalEnvironment: launchEnvironment,
+            launchSignature: sharedLaunchSignature(
+                initialScreen: initialScreen,
+                additionalEnvironment: launchEnvironment,
+                stateIsolation: type(of: self).launchProfile.stateIsolation
+            )
         )
     }
 
@@ -236,37 +301,203 @@ class QwenVoiceUITestBase: XCTestCase {
             app.terminate()
         }
 
-        let mergedEnvironment = type(of: self).additionalLaunchEnvironment
-            .merging(additionalEnvironment) { _, new in new }
-
+        let launchEnvironment = resolvedLaunchEnvironment(
+            additionalEnvironment: additionalEnvironment
+        )
         app = QwenVoiceUITestSession.shared.launchFreshApp(
             initialScreen: initialScreen,
             debugCapture: debugCaptureEnabled,
-            additionalEnvironment: mergedEnvironment
+            additionalEnvironment: launchEnvironment
         )
 
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.waitForExistence(timeout: 10), "App window should appear after relaunch")
+        let didBecomeReady = waitForLaunchReadinessWithRecovery(
+            initialScreen: initialScreen,
+            launchPolicy: .freshPerTest,
+            launchEnvironment: launchEnvironment,
+            launchSignature: sharedLaunchSignature(
+                initialScreen: initialScreen,
+                additionalEnvironment: launchEnvironment,
+                stateIsolation: type(of: self).launchProfile.stateIsolation
+            )
+        )
+        XCTAssertTrue(didBecomeReady, "App should become ready after relaunch")
         dismissTransientUI()
     }
 
-    func waitForScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) -> XCUIElement {
-        let element = screenElement(for: screen)
+    func resolvedLaunchEnvironment(additionalEnvironment: [String: String] = [:]) -> [String: String] {
+        var environment = type(of: self).launchProfile.additionalEnvironment
+            .merging(additionalEnvironment) { _, new in new }
+
+        if type(of: self).launchProfile.backendMode == .stub {
+            environment["QWENVOICE_UI_TEST_BACKEND_MODE"] = "stub"
+        }
+
+        if type(of: self).launchProfile.stateIsolation == .isolatedFixture {
+            let isolationDefaults = isolatedLaunchEnvironment()
+            environment = isolationDefaults.merging(environment) { _, new in new }
+
+            if environment[EnvironmentKeys.appSupportDir]?.isEmpty != false {
+                environment[EnvironmentKeys.appSupportDir] = isolatedAppSupportDirectoryURL().path
+            }
+
+            if environment[EnvironmentKeys.defaultsSuite]?.isEmpty != false {
+                environment[EnvironmentKeys.defaultsSuite] = isolatedDefaultsSuiteName()
+            }
+        }
+
+        return environment
+    }
+
+    func isolatedLaunchEnvironment() -> [String: String] { [:] }
+
+    func isolatedAppSupportDirectoryURL() -> URL {
+        if let generatedIsolationRoot {
+            return generatedIsolationRoot
+        }
+
+        if let customRoot = isolatedAppSupportDirectoryOverride() {
+            generatedIsolationRoot = customRoot
+            return customRoot
+        }
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QwenVoiceUITest-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        generatedIsolationRoot = root
+        return root
+    }
+
+    func isolatedDefaultsSuiteName() -> String {
+        if let generatedDefaultsSuiteName {
+            return generatedDefaultsSuiteName
+        }
+
+        if let customSuite = isolatedDefaultsSuiteOverride() {
+            generatedDefaultsSuiteName = customSuite
+            return customSuite
+        }
+
+        let suiteName = "QwenVoiceUITests.\(UUID().uuidString)"
+        generatedDefaultsSuiteName = suiteName
+        return suiteName
+    }
+
+    func isolatedAppSupportDirectoryOverride() -> URL? { nil }
+
+    func isolatedDefaultsSuiteOverride() -> String? { nil }
+
+    private func sharedLaunchSignature(
+        initialScreen: UITestScreen?,
+        additionalEnvironment: [String: String],
+        stateIsolation: UITestStateIsolation
+    ) -> UITestSharedLaunchSignature {
+        UITestSharedLaunchSignature(
+            initialScreenRawValue: initialScreen?.rawValue,
+            debugCapture: debugCaptureEnabled,
+            additionalEnvironment: additionalEnvironment,
+            stateIsolation: stateIsolation
+        )
+    }
+
+    private func waitForLaunchReadinessWithRecovery(
+        initialScreen: UITestScreen?,
+        launchPolicy: UITestLaunchPolicy,
+        launchEnvironment: [String: String],
+        launchSignature: UITestSharedLaunchSignature,
+        timeout: TimeInterval = 10
+    ) -> Bool {
+        if waitForLaunchReadiness(initialScreen: initialScreen, timeout: timeout) {
+            return true
+        }
+
+        guard launchPolicy == .sharedPerClass else {
+            return false
+        }
+
+        QwenVoiceUITestSession.shared.terminateSharedApp()
+        app = QwenVoiceUITestSession.shared.launchSharedApp(
+            initialScreen: initialScreen,
+            debugCapture: debugCaptureEnabled,
+            additionalEnvironment: launchEnvironment,
+            launchSignature: launchSignature
+        )
+
+        return waitForLaunchReadiness(initialScreen: initialScreen, timeout: timeout)
+    }
+
+    private func waitForLaunchReadiness(
+        initialScreen: UITestScreen?,
+        timeout: TimeInterval
+    ) -> Bool {
+        let window = app.windows.firstMatch
+        guard window.waitForExistence(timeout: timeout) else {
+            return false
+        }
+
+        if initialScreen == .preferences {
+            return waitForSettingsWindowReadiness(timeout: timeout)
+        }
+
+        return waitForMainWindowReadiness(expectedScreen: initialScreen, timeout: timeout)
+    }
+
+    private func waitForMainWindowReadiness(
+        expectedScreen: UITestScreen?,
+        timeout: TimeInterval
+    ) -> Bool {
+        let readyMarker = app.descendants(matching: .any).matching(identifier: "mainWindow_ready").firstMatch
+        guard readyMarker.waitForExistence(timeout: timeout) else {
+            return false
+        }
+
+        guard let expectedScreen else {
+            return true
+        }
+
+        return waitUntilScreenVisible(expectedScreen, timeout: timeout)
+    }
+
+    private func waitForSettingsWindowReadiness(timeout: TimeInterval) -> Bool {
+        let readyMarker = app.descendants(matching: .any).matching(identifier: "settingsWindow_ready").firstMatch
+        if readyMarker.waitForExistence(timeout: timeout) {
+            return true
+        }
+
+        return waitUntilScreenVisible(.preferences, timeout: timeout, allowSettingsRetry: true)
+    }
+
+    @discardableResult
+    private func waitUntilScreenVisible(
+        _ screen: UITestScreen,
+        timeout: TimeInterval,
+        allowSettingsRetry: Bool = false
+    ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         var lastSettingsOpenAttempt: Date?
 
         while Date() < deadline {
             if isScreenVisible(screen) {
-                return element
+                return true
             }
-            if screen == .preferences {
+
+            if allowSettingsRetry && screen == .preferences {
                 let shouldRetryOpen = lastSettingsOpenAttempt.map { Date().timeIntervalSince($0) > 1 } ?? true
                 if shouldRetryOpen {
                     openSettingsWindow()
                     lastSettingsOpenAttempt = Date()
                 }
             }
+
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        return isScreenVisible(screen)
+    }
+
+    func waitForScreen(_ screen: UITestScreen, timeout: TimeInterval = 5) -> XCUIElement {
+        let element = screenElement(for: screen)
+        if waitUntilScreenVisible(screen, timeout: timeout, allowSettingsRetry: screen == .preferences) {
+            return element
         }
 
         XCTAssertTrue(
@@ -638,6 +869,18 @@ class QwenVoiceUITestBase: XCTestCase {
     private func openSettingsWindow() {
         app.activate()
         app.typeKey(",", modifierFlags: .command)
+    }
+
+    private func cleanupGeneratedIsolationArtifacts() {
+        if let generatedIsolationRoot {
+            try? FileManager.default.removeItem(at: generatedIsolationRoot)
+            self.generatedIsolationRoot = nil
+        }
+
+        if let generatedDefaultsSuiteName {
+            UserDefaults(suiteName: generatedDefaultsSuiteName)?.removePersistentDomain(forName: generatedDefaultsSuiteName)
+            self.generatedDefaultsSuiteName = nil
+        }
     }
 
     func waitForElement(
