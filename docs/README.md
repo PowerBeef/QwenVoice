@@ -9,8 +9,7 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 
 ## Contributor / Agent Docs
 
-- [`../AGENTS.md`](../AGENTS.md) — repository operating guide for coding agents
-- [`../.codex/skills/`](../.codex/skills/) — repo-local QwenVoice skills for UI automation, RPC-boundary work, clone-tone probing, and shell chrome/Settings workflows
+- [`../CLAUDE.md`](../CLAUDE.md) — repository operating guide for Claude Code and coding agents
 - [`../cli/CLAUDE.md`](../cli/CLAUDE.md) — CLI-specific agent guide
 
 ## CLI Docs
@@ -21,7 +20,6 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts that are intentionally reused by the other docs
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, recent cleanup outcomes, and live caveats
-- [`reference/testing.md`](reference/testing.md) — current test inventory, commands, and caveats
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — bundled Python, vendored wheels, and runtime packaging notes
 
 ## Notes

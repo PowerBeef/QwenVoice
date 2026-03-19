@@ -107,38 +107,8 @@ The dual-release workflow builds:
 
 Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided.
 
-## Test Inventory
-
-Current tracked test coverage:
-
-- UI tests: 19 `*Tests.swift` files / 58 test methods in `QwenVoiceUITests/`
-- Unit tests: 4 `*Tests.swift` files / 23 test methods in `QwenVoiceTests/`
-- Python backend tests: 35 `unittest` cases under `backend_tests/`
-
-Primary commands:
-
-- `./scripts/run_tests.sh`
-- `./scripts/run_tests.sh --suite smoke`
-- `./scripts/run_tests.sh --suite ui`
-- `./scripts/run_tests.sh --suite integration`
-- `./scripts/run_tests.sh --suite debug`
-- `./scripts/run_tests.sh --suite feature-matrix`
-- `./scripts/run_tests.sh --probe clone-tone`
-- `./scripts/run_backend_tests.sh`
-- `./scripts/run_full_app_automation.sh`
-
-Current UI automation split:
-
-- smoke/layout/navigation/availability UI tests default to stub-backed isolated launches
-- live backend UI coverage is reserved for narrower explicit integration/generation flows
-- `QwenVoiceUITestBase` now defaults to fresh-per-test launches, enforces isolated app-support/defaults state when requested, and waits on test-only main-window / Settings readiness markers during startup
-- `scripts/run_tests.sh` now performs repo-process cleanup, cooldowns, infrastructure-failure classification, and one-time retry for both targeted runs and individual smoke filters on automation bootstrap failures
-- Voice Cloning tone-effect verification now also has an explicit opt-in multimodal probe via `./scripts/run_tests.sh --probe clone-tone`, which generates clone baselines/guided clips backend-first and asks the local Homebrew Gemini CLI to compare tone contrast while checking speaker consistency
-- The clone-tone probe currently defaults to `/opt/homebrew/bin/gemini`, injects `/opt/homebrew/bin` into `PATH`, and uses an explicit judge-model ladder (`gemini-3.1-pro-preview`, then `gemini-2.5-pro`, then `gemini-2.5-flash`, then `gemini-2.5-flash-lite`) instead of relying on the CLI default model
-
 ## Current Documentation Boundaries
 
 - `README.md` is the public GitHub landing page.
-- `AGENTS.md` is the repo-operating doc and should stay aligned with this file.
-- repo-local agent skills now live under `.codex/skills/`.
+- `CLAUDE.md` is the repo-operating doc and should stay aligned with this file.
 - `cli/README.md` documents the standalone CLI, which has a broader speaker map than the shipped GUI.

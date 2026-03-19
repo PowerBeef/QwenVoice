@@ -26,52 +26,16 @@ SAMPLING_PROFILES = {
     "strong": {"temperature": 1.02, "top_p": 0.95, "repetition_penalty": 1.0},
 }
 
-PRESET_PROSODY = {
-    "happy": {
-        "light": "Add a gentle smile to the delivery, slightly brighter pitch movement, quick but not rushed phrase endings, and lightly buoyant energy.",
-        "medium": "Use a clearly cheerful delivery with brighter pitch lifts, lively energy, clean forward pacing, and lightly playful phrase endings.",
-        "strong": "Use overt joy and enthusiasm with bright pitch arcs, energetic pacing, crisp attacks, tighter pauses, and celebratory emphasis.",
-    },
-    "sad": {
-        "light": "Keep the voice subdued with softer energy, longer vowels, slightly falling pitch, and gentler phrase endings.",
-        "medium": "Use a distinctly somber delivery with reduced energy, longer pauses, deeper falling pitch, and softened consonant attacks.",
-        "strong": "Use a deeply sorrowful delivery with heavy pacing, lingering vowels, weighted pauses, lower pitch centers, and a fragile emotional tone.",
-    },
-    "angry": {
-        "light": "Add restrained irritation with firmer consonants, tighter pacing, and sharper pitch drops at key words.",
-        "medium": "Use clear frustration with stronger attack, tense pacing, narrower pauses, and forceful emphasis on stressed words.",
-        "strong": "Use intense anger with high energy, forceful consonant attack, aggressive pitch drops, clipped pauses, and hard-edged emphasis.",
-    },
-    "fearful": {
-        "light": "Add unease with slightly quicker breaths, cautious pauses, and light pitch instability.",
-        "medium": "Use audible anxiety with tighter phrasing, smaller wavering pitch, faster phrase onsets, and fragile pauses.",
-        "strong": "Use palpable panic with urgent pacing, tremble-like pitch movement, uneven breathy pauses, and strained emphasis.",
-    },
-    "whisper": {
-        "light": "Keep the delivery soft and close with reduced projection, careful pacing, and short intimate pauses.",
-        "medium": "Use a hushed whisper with intimate pacing, softened attacks, and delicate phrase endings.",
-        "strong": "Use a very intimate whisper with barely projected onset, long close pauses, softened consonants, and a breathy confidential tone.",
-    },
-    "dramatic": {
-        "light": "Add mild theatrical emphasis with slightly wider pitch movement and more sculpted pauses.",
-        "medium": "Use expressive theatrical phrasing with deliberate pauses, larger pitch arcs, and bolder stress on key words.",
-        "strong": "Use highly dramatic phrasing with sweeping pitch movement, pronounced pauses, bold attacks, and stage-like emphasis.",
-    },
-    "calm": {
-        "light": "Keep the delivery relaxed with smooth phrase transitions, softer attack, and measured pacing.",
-        "medium": "Use a soothing reassuring delivery with steady pacing, smooth onset, warm held vowels, and unhurried pauses.",
-        "strong": "Use a deeply serene delivery with slow deliberate pacing, very smooth attacks, settled pitch, and spacious calming pauses.",
-    },
-    "excited": {
-        "light": "Add a little extra energy with brighter pitch and faster phrase endings.",
-        "medium": "Use an energetic enthusiastic delivery with lively pitch movement, quicker pacing, and eager emphasis.",
-        "strong": "Use very high excitement with fast energetic pacing, bright pitch jumps, emphatic attack, and eager compressed pauses.",
-    },
-    "neutral": {
-        "light": "Keep the delivery natural and clear.",
-        "medium": "Keep the delivery natural and clear.",
-        "strong": "Keep the delivery natural and clear.",
-    },
+CLONE_EMOTION_INSTRUCT = {
+    "happy": "Speak with a happy, cheerful tone.",
+    "sad": "Speak in a sad, melancholic tone.",
+    "angry": "Speak with an angry, frustrated tone.",
+    "fearful": "Speak in a fearful, anxious tone.",
+    "whisper": "Speak in a soft whisper.",
+    "dramatic": "Speak with dramatic, theatrical emphasis.",
+    "calm": "Speak in a calm, soothing tone.",
+    "excited": "Speak with excited, energetic enthusiasm.",
+    "neutral": None,
 }
 
 
@@ -114,12 +78,19 @@ class CloneDeliveryProfile:
 @dataclass(frozen=True)
 class CloneDeliveryPlan:
     profile: CloneDeliveryProfile
-    compiled_instruction: str
     styled_text: str
     strength_level: str
     sampling_profile: dict[str, float]
     fallback_ladder: list[str]
     styled_text_applied: bool
+
+    @property
+    def clone_instruct(self) -> Optional[str]:
+        if self.profile.is_custom:
+            custom = (self.profile.custom_text or "").strip()
+            return custom if custom else None
+        preset = (self.profile.preset_id or "neutral").strip().lower()
+        return CLONE_EMOTION_INSTRUCT.get(preset)
 
 
 def parse_clone_delivery_profile(raw_profile: Any, fallback_instruction: Optional[str] = None) -> Optional[CloneDeliveryProfile]:
@@ -159,7 +130,6 @@ def delivery_profile_fingerprint(raw_profile: Any, fallback_instruction: Optiona
 def build_clone_delivery_plan(
     raw_profile: Any,
     text: str,
-    has_reference_transcript: bool,
     strength_override: Optional[str] = None,
     fallback_instruction: Optional[str] = None,
 ) -> Optional[CloneDeliveryPlan]:
@@ -177,51 +147,14 @@ def build_clone_delivery_plan(
         strength=strength,
         is_custom=profile.is_custom,
     )
-    compiled_instruction = _compile_instruction(
-        profile=profile,
-        strength=strength,
-        has_reference_transcript=has_reference_transcript,
-    )
 
     return CloneDeliveryPlan(
         profile=profile,
-        compiled_instruction=compiled_instruction,
         styled_text=styled_text,
         strength_level=strength,
         sampling_profile=dict(SAMPLING_PROFILES[strength]),
         fallback_ladder=list(STRENGTH_FALLBACKS[strength]),
         styled_text_applied=styled_text != text,
-    )
-
-
-def _compile_instruction(
-    profile: CloneDeliveryProfile,
-    strength: str,
-    has_reference_transcript: bool,
-) -> str:
-    transcript_clause = (
-        "Use the transcript-aligned speaking rhythm from the reference as the identity anchor."
-        if has_reference_transcript
-        else "Lean on the reference timbre and speaker identity even without transcript alignment."
-    )
-
-    if profile.is_custom:
-        custom_text = _clean(profile.custom_text) or profile.trimmed_instruction
-        return (
-            "Keep the cloned speaker identity anchored to the reference voice. "
-            f"Deliver the new line with this requested style: {custom_text}. "
-            "Translate that style into noticeable prosody: adjust energy, pacing, pitch movement, "
-            "attack on stressed words, and pause shape without changing the spoken words. "
-            f"{transcript_clause}"
-        )
-
-    preset_id = (profile.preset_id or "neutral").strip().lower()
-    prosody = PRESET_PROSODY.get(preset_id, PRESET_PROSODY["neutral"])[strength]
-    return (
-        "Keep the cloned speaker identity anchored to the reference voice while changing only delivery. "
-        f"{prosody} "
-        "Do not drift into a different speaker identity. "
-        f"{transcript_clause}"
     )
 
 

@@ -56,6 +56,17 @@ def _env_flag(name, default=True):
     return raw not in {"0", "false", "False"}
 
 
+def _env_float(name, default):
+    """Read a float environment variable with a fallback default."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 def _resolve_cache_policy():
     raw = os.environ.get("QWENVOICE_CACHE_POLICY")
     if raw is not None:
@@ -76,14 +87,15 @@ def _resolve_cache_policy():
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
 CACHE_POLICY = _resolve_cache_policy()
-CLONE_CONTEXT_CACHE_CAPACITY = 8
+CLONE_CONTEXT_CACHE_CAPACITY = 16
 DEFAULT_STREAMING_INTERVAL = 2.0
 PREWARM_MAX_TOKENS = 128
 PREWARM_TEXT = "The selected voice model is warming up."
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
-GUIDED_CLONE_TARGET_SIMILARITY = 0.78
-GUIDED_CLONE_HARD_SIMILARITY = 0.72
+GUIDED_CLONE_TARGET_SIMILARITY = _env_float("QWENVOICE_CLONE_TARGET_SIMILARITY", 0.75)
+GUIDED_CLONE_HARD_SIMILARITY = _env_float("QWENVOICE_CLONE_HARD_SIMILARITY", 0.70)
+GUIDED_CLONE_EARLY_ABORT_MARGIN = _env_float("QWENVOICE_CLONE_EARLY_ABORT_MARGIN", 0.05)
 
 # Default paths — overridable via init params
 APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/QwenVoice")
@@ -164,8 +176,11 @@ _generate_prepared_icl_fn = None
 _generate_reference_conditioned_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
+_speaker_embedding_cache = OrderedDict()
 _mlx_audio_version = None
 _prewarmed_model_keys = set()
+
+SPEAKER_EMBEDDING_CACHE_CAPACITY = 8
 
 
 def _ensure_mlx():
@@ -327,6 +342,11 @@ def convert_audio_if_needed(input_path):
             pass
 
     temp_wav = os.path.join(OUTPUTS_DIR, f"temp_convert_{time.time_ns()}.wav")
+    if _audio_write_fn is not None:
+        try:
+            return _convert_audio_with_mlx(input_path, temp_wav)
+        except Exception:
+            pass
     return _convert_audio_to_wav(input_path, temp_wav)
 
 
@@ -422,6 +442,12 @@ def _speaker_similarity_reference_vector(clean_ref_audio_path):
     if _current_model is None or getattr(_current_model, "speaker_encoder", None) is None:
         return None
 
+    cache_key = (os.path.realpath(clean_ref_audio_path), _current_model_path)
+    cached = _speaker_embedding_cache.get(cache_key)
+    if cached is not None:
+        _speaker_embedding_cache.move_to_end(cache_key)
+        return cached
+
     from mlx_audio.utils import load_audio
 
     reference_audio = load_audio(clean_ref_audio_path, sample_rate=_current_model.sample_rate)
@@ -430,6 +456,12 @@ def _speaker_similarity_reference_vector(clean_ref_audio_path):
     vector = _np.array(reference_embedding, dtype=_np.float32).reshape(-1)
     if not vector.size:
         return None
+
+    _speaker_embedding_cache[cache_key] = vector
+    _speaker_embedding_cache.move_to_end(cache_key)
+    while len(_speaker_embedding_cache) > SPEAKER_EMBEDDING_CACHE_CAPACITY:
+        _speaker_embedding_cache.popitem(last=False)
+
     return vector
 
 
@@ -537,7 +569,7 @@ def _generate_guided_clone_candidate(
             _current_model,
             plan.styled_text,
             prepared_context,
-            instruct=plan.compiled_instruction,
+            instruct=plan.clone_instruct,
             temperature=sampling_profile["temperature"],
             top_p=sampling_profile["top_p"],
             repetition_penalty=sampling_profile["repetition_penalty"],
@@ -552,7 +584,7 @@ def _generate_guided_clone_candidate(
             plan.styled_text,
             ref_audio=clean_ref_audio,
             ref_text=resolved_ref_text,
-            instruct=plan.compiled_instruction,
+            instruct=plan.clone_instruct,
             temperature=sampling_profile["temperature"],
             top_p=sampling_profile["top_p"],
             repetition_penalty=sampling_profile["repetition_penalty"],
@@ -569,7 +601,6 @@ def _generate_guided_clone_candidate(
         "repetition_penalty": sampling_profile["repetition_penalty"],
         "max_tokens": effective_max_tokens,
         "verbose": False,
-        "instruct": plan.compiled_instruction,
     }
     if resolved_ref_text:
         fallback_kwargs["ref_text"] = resolved_ref_text
@@ -584,17 +615,24 @@ def _select_guided_clone_candidate(
     delivery_profile,
     instruct,
     max_tokens,
+    benchmark_timings=None,
 ):
+    guided_wall_start = time.perf_counter()
+
     base_plan = build_clone_delivery_plan(
         delivery_profile,
         text,
-        has_reference_transcript=bool(resolved_ref_text),
         fallback_instruction=instruct,
     )
     if base_plan is None:
         return None
 
+    ref_embed_start = time.perf_counter()
     reference_vector = _speaker_similarity_reference_vector(clean_ref_audio)
+    ref_embed_ms = int((time.perf_counter() - ref_embed_start) * 1000)
+    if benchmark_timings is not None:
+        benchmark_timings["guided_reference_embed_ms"] = ref_embed_ms
+
     best_candidate = None
     attempts_run = 0
     effective_max_tokens = int(max_tokens) if max_tokens is not None else 4096
@@ -603,10 +641,11 @@ def _select_guided_clone_candidate(
         plan = build_clone_delivery_plan(
             delivery_profile,
             text,
-            has_reference_transcript=bool(resolved_ref_text),
             strength_override=strength,
             fallback_instruction=instruct,
         )
+
+        gen_start = time.perf_counter()
         candidate_result, strategy, prepared_clone_used = _generate_guided_clone_candidate(
             text=text,
             clean_ref_audio=clean_ref_audio,
@@ -615,7 +654,16 @@ def _select_guided_clone_candidate(
             plan=plan,
             effective_max_tokens=effective_max_tokens,
         )
+        gen_ms = int((time.perf_counter() - gen_start) * 1000)
+
+        embed_start = time.perf_counter()
         similarity = _speaker_similarity_from_generated_audio(reference_vector, candidate_result.audio)
+        embed_ms = int((time.perf_counter() - embed_start) * 1000)
+
+        if benchmark_timings is not None:
+            benchmark_timings[f"guided_attempt_{attempt_index}_generation_ms"] = gen_ms
+            benchmark_timings[f"guided_attempt_{attempt_index}_output_embed_ms"] = embed_ms
+
         attempts_run = attempt_index + 1
 
         candidate = {
@@ -634,9 +682,24 @@ def _select_guided_clone_candidate(
             best_candidate = candidate
 
         if similarity is None or similarity >= GUIDED_CLONE_TARGET_SIMILARITY:
+            if benchmark_timings is not None:
+                benchmark_timings["guided_attempts_total"] = attempts_run
+                benchmark_timings["guided_total_ms"] = int((time.perf_counter() - guided_wall_start) * 1000)
             return candidate
 
         _clear_mlx_cache()
+
+        # Early abort: if similarity is far below the hard floor, remaining
+        # fallback attempts with weaker delivery strength won't help.
+        if (similarity is not None
+                and similarity < GUIDED_CLONE_HARD_SIMILARITY - GUIDED_CLONE_EARLY_ABORT_MARGIN):
+            if benchmark_timings is not None:
+                benchmark_timings["guided_early_abort"] = True
+            break
+
+    if benchmark_timings is not None:
+        benchmark_timings["guided_attempts_total"] = attempts_run
+        benchmark_timings["guided_total_ms"] = int((time.perf_counter() - guided_wall_start) * 1000)
 
     if best_candidate is not None:
         best_similarity = best_candidate["speaker_similarity"]
@@ -654,7 +717,7 @@ def _select_guided_clone_candidate(
         "prepared_clone_used": False,
         "speaker_similarity": None,
         "retry_count": max(attempts_run - 1, 0),
-        "delivery_compromised": False,
+        "delivery_compromised": True,
     }
 
 
@@ -779,6 +842,7 @@ def _discard_loaded_model():
     _current_model_path = None
     _current_model_id = None
     _clear_clone_context_cache()
+    _speaker_embedding_cache.clear()
     _perform_memory_recovery()
 
 
@@ -821,6 +885,22 @@ def _convert_audio_to_wav(input_path, output_path):
     except (subprocess.CalledProcessError, FileNotFoundError):
         raise RuntimeError("Could not convert audio. Is ffmpeg installed?")
 
+    return output_path
+
+
+def _convert_audio_with_mlx(input_path, output_path):
+    """Convert audio to 24kHz mono WAV using mlx_audio (no subprocess)."""
+    from mlx_audio.utils import load_audio
+
+    audio = load_audio(input_path, sample_rate=SAMPLE_RATE)
+    audio_np = _np.array(audio, dtype=_np.float32)
+    if audio_np.ndim > 1:
+        audio_np = audio_np.mean(axis=-1)
+
+    parent_dir = os.path.dirname(output_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    _audio_write_fn(output_path, audio_np, SAMPLE_RATE, format="wav")
     return output_path
 
 
@@ -903,7 +983,13 @@ def _normalize_audio_with_stable_cache(input_path):
             pass
         return cached_wav
 
-    converted = _convert_audio_to_wav(input_path, cached_wav)
+    if _audio_write_fn is not None:
+        try:
+            converted = _convert_audio_with_mlx(input_path, cached_wav)
+        except Exception:
+            converted = _convert_audio_to_wav(input_path, cached_wav)
+    else:
+        converted = _convert_audio_to_wav(input_path, cached_wav)
     _prune_normalized_clone_reference_cache()
     return converted
 
@@ -1297,15 +1383,9 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
             )
         )
     elif mode == "design":
-        warm_results = list(
-            _current_model.generate(
-                text=warmup_text,
-                instruct=instruct or "A calm, clear narrator with steady pacing.",
-                verbose=False,
-                temperature=0.6,
-                max_tokens=PREWARM_MAX_TOKENS,
-            )
-        )
+        # Model load alone warms Metal shader caches sufficiently for design mode.
+        # Benchmark data shows warmup generation is counterproductive (-16.2%).
+        warm_results = None
     elif mode == "clone":
         if not ref_audio:
             raise ValueError("Mode 'clone' prewarm requires ref_audio.")
@@ -1326,7 +1406,6 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
         plan = build_clone_delivery_plan(
             delivery_profile,
             warmup_text,
-            has_reference_transcript=bool(resolved_ref_text),
             fallback_instruction=instruct,
         )
         delivery_instruction_strategy, delivery_instruction_applied = _clone_delivery_strategy(
@@ -1345,7 +1424,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 _current_model,
                 plan.styled_text if plan is not None else warmup_text,
                 prepared_context,
-                instruct=plan.compiled_instruction if plan is not None else (instruct if delivery_instruction_applied else None),
+                instruct=plan.clone_instruct if plan is not None else None,
                 temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
                 top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
                 repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.5,
@@ -1358,7 +1437,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 plan.styled_text if plan is not None else warmup_text,
                 ref_audio=clean_ref_audio,
                 ref_text=resolved_ref_text,
-                instruct=plan.compiled_instruction if plan is not None else instruct,
+                instruct=plan.clone_instruct if plan is not None else None,
                 temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
                 top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
                 repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.05,
@@ -1375,13 +1454,11 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
             }
             if resolved_ref_text:
                 warm_kwargs["ref_text"] = resolved_ref_text
-            if instruct:
-                warm_kwargs["instruct"] = instruct
             warm_results = list(_current_model.generate(**warm_kwargs))
     else:
         raise ValueError(f"Unknown prewarm mode: {mode}")
 
-    if not warm_results:
+    if warm_results is not None and not warm_results:
         raise RuntimeError("Prewarm produced no generation output")
 
     return {
@@ -1533,6 +1610,7 @@ def handle_generate(params, request_id=None):
 
     output_path = params.get("output_path")
     requested_mode = params.get("mode")
+    model_id = params.get("model_id")
     voice = params.get("voice")
     instruct = params.get("instruct")
     delivery_profile = params.get("delivery_profile")
@@ -1552,9 +1630,13 @@ def handle_generate(params, request_id=None):
         raise ValueError(f"Unknown generation mode: {requested_mode}")
 
     if requested_mode and current_model_contract and current_model_contract["mode"] != requested_mode:
-        raise ValueError(
-            f"Requested mode '{requested_mode}' does not match loaded model '{_current_model_id}' ({current_model_contract['mode']})."
-        )
+        if model_id:
+            _load_model_request(model_id=model_id, benchmark=False, request_id=None)
+            current_model_contract = _current_model_contract()
+        else:
+            raise ValueError(
+                f"Requested mode '{requested_mode}' does not match loaded model '{_current_model_id}' ({current_model_contract['mode']})."
+            )
 
     if benchmark_mode == "custom" and not voice:
         raise ValueError("Mode 'custom' requires a voice.")
@@ -1661,6 +1743,7 @@ def handle_generate(params, request_id=None):
                 delivery_profile=delivery_profile,
                 instruct=instruct,
                 max_tokens=effective_max_tokens,
+                benchmark_timings=benchmark_timings if benchmark else None,
             )
 
             if guided_candidate is not None and guided_candidate["result"] is not None:

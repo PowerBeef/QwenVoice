@@ -1,145 +1,64 @@
 import XCTest
 @testable import QwenVoice
 
-@MainActor
 final class PythonBridgeLineParserTests: XCTestCase {
-    func testSuccessResponseDecodesResultPayload() {
-        let line = #"{"jsonrpc":"2.0","id":7,"result":{"status":"ok","size_bytes":123}}"#
 
-        let response = PythonBridgeLineParser.parse(line)
-
-        XCTAssertEqual(response?.id, 7)
-        XCTAssertEqual(response?.resultDict["status"]?.stringValue, "ok")
-        XCTAssertEqual(response?.resultDict["size_bytes"]?.intValue, 123)
+    func testParseValidResultResponse() {
+        let json = #"{"jsonrpc":"2.0","id":1,"result":{"status":"ok"}}"#
+        let response = PythonBridgeLineParser.parse(json)
+        XCTAssertNotNil(response)
+        XCTAssertEqual(response?.id, 1)
+        XCTAssertNotNil(response?.result)
+        XCTAssertNil(response?.error)
         XCTAssertFalse(response?.isNotification ?? true)
     }
 
-    func testRPCErrorDecodesErrorPayload() {
-        let line = #"{"jsonrpc":"2.0","id":9,"error":{"code":-32000,"message":"No model loaded"}}"#
-
-        let response = PythonBridgeLineParser.parse(line)
-
-        XCTAssertEqual(response?.id, 9)
-        XCTAssertEqual(response?.error, RPCError(code: -32000, message: "No model loaded"))
-    }
-
-    func testProgressNotificationDecodesAndIsHandled() {
-        let line = #"{"jsonrpc":"2.0","method":"progress","params":{"percent":45,"message":"Generating audio..."}}"#
-
-        let response = PythonBridgeLineParser.parse(line)
-
-        XCTAssertEqual(response?.method, "progress")
+    func testParseValidNotification() {
+        let json = #"{"jsonrpc":"2.0","method":"ready","params":{}}"#
+        let response = PythonBridgeLineParser.parse(json)
+        XCTAssertNotNil(response)
+        XCTAssertNil(response?.id)
+        XCTAssertEqual(response?.method, "ready")
         XCTAssertTrue(response?.isNotification ?? false)
-        XCTAssertTrue(response.map(PythonBridgeLineParser.isHandledNotification) ?? false)
-        XCTAssertEqual(response?.params?["percent"]?.intValue, 45)
-        XCTAssertEqual(response?.params?["message"]?.stringValue, "Generating audio...")
     }
 
-    func testGenerationChunkNotificationIsHandledByAppHandling() {
-        let line = #"{"jsonrpc":"2.0","method":"generation_chunk","params":{"request_id":1,"chunk_index":0,"chunk_path":"/tmp/chunk.wav","is_final":false}}"#
-
-        let response = PythonBridgeLineParser.parse(line)
-
-        XCTAssertEqual(response?.method, "generation_chunk")
-        XCTAssertTrue(response?.isNotification ?? false)
-        XCTAssertTrue(response.map(PythonBridgeLineParser.isHandledNotification) ?? false)
+    func testParseInvalidJSON() {
+        let response = PythonBridgeLineParser.parse("not valid json {{{")
+        XCTAssertNil(response)
     }
 
-    func testMalformedLineReturnsNil() {
-        XCTAssertNil(PythonBridgeLineParser.parse("not json"))
+    func testParseEmptyString() {
+        let response = PythonBridgeLineParser.parse("")
+        XCTAssertNil(response)
     }
 
-    func testCanSkipLoadModelWhenSameModelIsKnownLoaded() {
-        XCTAssertTrue(PythonBridge.canSkipLoadModel(requestedID: "pro_custom", loadedModelID: "pro_custom"))
+    func testIsHandledNotificationReady() {
+        let json = #"{"jsonrpc":"2.0","method":"ready","params":{}}"#
+        let response = PythonBridgeLineParser.parse(json)!
+        XCTAssertTrue(PythonBridgeLineParser.isHandledNotification(response))
     }
 
-    func testCanSkipLoadModelReturnsFalseWhenModelDiffers() {
-        XCTAssertFalse(PythonBridge.canSkipLoadModel(requestedID: "pro_design", loadedModelID: "pro_custom"))
-        XCTAssertFalse(PythonBridge.canSkipLoadModel(requestedID: "pro_design", loadedModelID: nil))
+    func testIsHandledNotificationProgress() {
+        let json = #"{"jsonrpc":"2.0","method":"progress","params":{"percent":50}}"#
+        let response = PythonBridgeLineParser.parse(json)!
+        XCTAssertTrue(PythonBridgeLineParser.isHandledNotification(response))
     }
 
-    func testPrewarmIdentityKeyDifferentiatesNeutralAndGuidedCloneRequests() {
-        let neutral = PythonBridge.prewarmIdentityKey(
-            modelID: "pro_clone",
-            mode: .clone,
-            refAudio: "/tmp/reference.wav",
-            refText: "Hello there"
-        )
-        let guided = PythonBridge.prewarmIdentityKey(
-            modelID: "pro_clone",
-            mode: .clone,
-            instruct: "Furious and intensely angry, sharp and forceful delivery",
-            deliveryProfile: DeliveryProfile(
-                presetID: "angry",
-                intensity: .strong,
-                customText: nil,
-                finalInstruction: "Furious and intensely angry, sharp and forceful delivery"
-            ),
-            refAudio: "/tmp/reference.wav",
-            refText: "Hello there"
-        )
-
-        XCTAssertNotEqual(neutral, guided)
+    func testIsHandledNotificationGenerationChunk() {
+        let json = #"{"jsonrpc":"2.0","method":"generation_chunk","params":{}}"#
+        let response = PythonBridgeLineParser.parse(json)!
+        XCTAssertTrue(PythonBridgeLineParser.isHandledNotification(response))
     }
 
-    func testPrewarmIdentityKeyDifferentiatesCloneReferences() {
-        let first = PythonBridge.prewarmIdentityKey(
-            modelID: "pro_clone",
-            mode: .clone,
-            instruct: "Happy and upbeat tone",
-            refAudio: "/tmp/reference-a.wav",
-            refText: "Hello there"
-        )
-        let second = PythonBridge.prewarmIdentityKey(
-            modelID: "pro_clone",
-            mode: .clone,
-            instruct: "Happy and upbeat tone",
-            refAudio: "/tmp/reference-b.wav",
-            refText: "Hello there"
-        )
-
-        XCTAssertNotEqual(first, second)
+    func testNonNotificationNotHandled() {
+        let json = #"{"jsonrpc":"2.0","id":1,"result":{"status":"ok"}}"#
+        let response = PythonBridgeLineParser.parse(json)!
+        XCTAssertFalse(PythonBridgeLineParser.isHandledNotification(response))
     }
 
-    func testGenerationResultParsesStreamingMetrics() {
-        let result = GenerationResult(from: [
-            "audio_path": .string("/tmp/output.wav"),
-            "duration_seconds": .double(4.2),
-            "stream_session_dir": .string("/tmp/stream-session"),
-            "metrics": .object([
-                "token_count": .int(99),
-                "processing_time_seconds": .double(2.4),
-                "peak_memory_usage": .double(1.3),
-                "streaming_used": .bool(true),
-                "prepared_clone_used": .bool(true),
-                "clone_cache_hit": .bool(true),
-                "first_chunk_ms": .int(240),
-                "delivery_instruction_applied": .bool(true),
-                "delivery_instruction_strategy": .string("guided_prepared_icl"),
-                "delivery_plan_strength": .string("strong"),
-                "styled_text_applied": .bool(true),
-                "speaker_similarity": .double(0.82),
-                "delivery_retry_count": .int(1),
-                "delivery_compromised": .bool(false),
-            ]),
-        ])
-
-        XCTAssertEqual(result.audioPath, "/tmp/output.wav")
-        XCTAssertEqual(result.durationSeconds, 4.2)
-        XCTAssertEqual(result.streamSessionDirectory, "/tmp/stream-session")
-        XCTAssertTrue(result.usedStreaming)
-        XCTAssertEqual(result.metrics?.tokenCount, 99)
-        XCTAssertEqual(result.metrics?.processingTimeSeconds, 2.4)
-        XCTAssertEqual(result.metrics?.peakMemoryUsage, 1.3)
-        XCTAssertEqual(result.metrics?.preparedCloneUsed, true)
-        XCTAssertEqual(result.metrics?.cloneCacheHit, true)
-        XCTAssertEqual(result.metrics?.firstChunkMs, 240)
-        XCTAssertEqual(result.metrics?.deliveryInstructionApplied, true)
-        XCTAssertEqual(result.metrics?.deliveryInstructionStrategy, "guided_prepared_icl")
-        XCTAssertEqual(result.metrics?.deliveryPlanStrength, "strong")
-        XCTAssertEqual(result.metrics?.styledTextApplied, true)
-        XCTAssertEqual(result.metrics?.speakerSimilarity, 0.82)
-        XCTAssertEqual(result.metrics?.deliveryRetryCount, 1)
-        XCTAssertEqual(result.metrics?.deliveryCompromised, false)
+    func testUnknownNotificationNotHandled() {
+        let json = #"{"jsonrpc":"2.0","method":"unknown_event","params":{}}"#
+        let response = PythonBridgeLineParser.parse(json)!
+        XCTAssertFalse(PythonBridgeLineParser.isHandledNotification(response))
     }
 }

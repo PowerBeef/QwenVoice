@@ -351,7 +351,7 @@ def generate_with_prepared_icl(
     )
 
     target_token_count = len(model.tokenizer.encode(text))
-    effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
+    effective_max_tokens = min(max_tokens, max(75, int(target_token_count * 4.5)))
 
     cache = model.talker.make_cache()
     code_cache = model.talker.code_predictor.make_cache()
@@ -613,7 +613,7 @@ def generate_with_reference_conditioning(
     )
 
     target_token_count = len(model.tokenizer.encode(text))
-    effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
+    effective_max_tokens = min(max_tokens, max(75, int(target_token_count * 4.5)))
 
     cache = model.talker.make_cache()
     code_cache = model.talker.code_predictor.make_cache()
@@ -753,7 +753,6 @@ def generate_with_reference_conditioning(
             )
 
             chunk_start_time = time.perf_counter()
-            mx.clear_cache()
 
     if stream:
         if len(generated_codes) > decoded_tokens:

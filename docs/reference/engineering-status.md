@@ -11,7 +11,6 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 - Batch generation cancel now interrupts in-flight work by restarting the backend instead of only stopping between items.
 - The dead `sortOrder` database column now has a real drop migration.
 - Single-generation GUI flows now use streamed chunk previews and live sidebar playback backed by the Python bridge and audio player.
-- The repo now includes focused Swift unit tests and a real Python backend test suite.
 
 ## Current Strengths
 
@@ -19,7 +18,6 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 - Shared manifest-driven contract between frontend and backend
 - Native model downloads and local persistence
 - Bundled Python + ffmpeg release pipeline
-- Meaningful UI, unit, and backend test coverage instead of UI-only smoke coverage
 
 ## Current Caveats
 
@@ -33,9 +31,6 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 When documentation and code drift, trust:
 
 1. `Sources/`
-2. `QwenVoiceUITests/`
-3. `QwenVoiceTests/`
-4. `backend_tests/`
-5. `scripts/`
-6. `project.yml`
-7. prose docs
+2. `scripts/`
+3. `project.yml`
+4. prose docs

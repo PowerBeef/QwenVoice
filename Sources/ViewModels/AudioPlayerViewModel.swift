@@ -23,7 +23,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var player: AVAudioPlayer?
     private var liveEngine: AVAudioEngine?
     private var livePlayerNode: AVAudioPlayerNode?
-    private var liveBuffers: [AVAudioPCMBuffer] = []
+    private var liveScheduledCount = 0
     private var liveFormat: AVAudioFormat?
     private var liveSessionID: String?
     private var liveSessionDirectory: String?
@@ -31,6 +31,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var liveAutoplayEnabled = false
     private var pendingFirstChunkInterval: AppPerformanceSignposts.Interval?
     private var pendingAutoplaySignpost = false
+    private var livePlaybackStarted = false
+    private var livePlaybackTimeOffset: TimeInterval = 0
+    private let livePreBufferThreshold = 2
     private var chunkObserver: NSObjectProtocol?
     private var timer: Timer?
 
@@ -171,7 +174,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         liveAutoplayEnabled = shouldAutoPlay
         pendingAutoplaySignpost = shouldAutoPlay
         pendingFirstChunkInterval = AppPerformanceSignposts.begin("Preview To First Chunk")
-        liveBuffers = []
+        liveScheduledCount = 0
+        livePlaybackStarted = false
+        livePlaybackTimeOffset = 0
         liveFormat = nil
         currentTitle = title
         currentFilePath = nil
@@ -200,15 +205,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
         duration = max(duration, result.durationSeconds)
 
-        if !shouldAutoPlay || !isPlaying {
-            switchToFinalFilePlayback(
-                preserveCurrentTime: shouldAutoPlay ? currentTime : 0,
-                autoPlay: false
-            )
-            return
-        }
-
-        extractWaveform(from: URL(fileURLWithPath: result.audioPath), replace: true)
+        switchToFinalFilePlayback(
+            preserveCurrentTime: 0,
+            autoPlay: shouldAutoPlay
+        )
     }
 
     func abortLivePreviewIfNeeded() {
@@ -271,7 +271,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         liveSessionDirectory = sessionDirectory
         liveFinalFilePath = nil
         liveAutoplayEnabled = autoPlay
-        liveBuffers = []
+        liveScheduledCount = 0
+        livePlaybackStarted = false
+        livePlaybackTimeOffset = 0
         liveFormat = nil
         currentTitle = title
         currentFilePath = nil
@@ -293,7 +295,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             configureLiveEngine(with: fileFormat)
         }
 
-        liveBuffers.append(buffer)
+        liveScheduledCount += 1
         scheduleLiveBuffer(buffer)
 
         duration = cumulativeDuration ?? (duration + TimeInterval(buffer.frameLength) / fileFormat.sampleRate)
@@ -303,7 +305,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             self.pendingFirstChunkInterval = nil
         }
 
-        if liveAutoplayEnabled {
+        if liveAutoplayEnabled,
+           liveScheduledCount >= livePreBufferThreshold || liveFinalFilePath != nil {
             attemptLivePlay()
         }
 
@@ -324,7 +327,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 try liveEngine.start()
             }
             if !livePlayerNode.isPlaying {
+                if livePlaybackStarted {
+                    livePlaybackTimeOffset = currentTime
+                    scheduleLeadingSilence()
+                }
                 livePlayerNode.play()
+                livePlaybackStarted = true
             }
             isPlaying = true
             playbackError = nil
@@ -353,26 +361,32 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
     }
 
+    private func scheduleLeadingSilence() {
+        guard let format = liveFormat, let livePlayerNode else { return }
+        let silenceFrames: AVAudioFrameCount = 1024
+        guard let silentBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: silenceFrames) else { return }
+        silentBuffer.frameLength = silenceFrames
+        // AVAudioPCMBuffer is zero-filled on creation
+        livePlayerNode.scheduleBuffer(silentBuffer)
+    }
+
     private func handleLiveBufferPlaybackCompletion() {
         guard playbackMode == .live else { return }
-        if !liveBuffers.isEmpty {
-            liveBuffers.removeFirst()
-        }
-
-        if liveBuffers.isEmpty {
+        liveScheduledCount = max(0, liveScheduledCount - 1)
+        if liveScheduledCount == 0, liveFinalFilePath != nil {
             finishLivePlaybackAfterDrainingBuffers()
         }
     }
 
     private func finishLivePlaybackAfterDrainingBuffers() {
-        let completedTime = duration > 0 ? duration : currentTime
+        let shouldAutoPlay = liveAutoplayEnabled
         stopLivePlayback(resetCurrentTime: false)
-        currentTime = completedTime
+        currentTime = 0
 
         if liveFinalFilePath != nil {
             switchToFinalFilePlayback(
-                preserveCurrentTime: completedTime,
-                autoPlay: false
+                preserveCurrentTime: 0,
+                autoPlay: shouldAutoPlay
             )
         }
     }
@@ -395,7 +409,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     private func teardownLivePlayback(clearSession: Bool) {
         stopLivePlayback(resetCurrentTime: true)
-        liveBuffers.removeAll()
+        liveScheduledCount = 0
+        livePlaybackStarted = false
+        livePlaybackTimeOffset = 0
         liveFormat = nil
         clearPendingFirstChunkInterval()
 
@@ -471,7 +487,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
         if transitionFromLive {
             stopLivePlayback(resetCurrentTime: false)
-            liveBuffers.removeAll()
+            liveScheduledCount = 0
+            livePlaybackStarted = false
+            livePlaybackTimeOffset = 0
             liveFormat = nil
             cleanupLiveSessionDirectory()
             liveSessionID = nil
@@ -605,15 +623,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                let playerTime = livePlayerNode.playerTime(forNodeTime: lastRenderTime),
                playerTime.sampleRate > 0 {
                 let renderedTime = Double(playerTime.sampleTime) / playerTime.sampleRate
-                currentTime = duration > 0 ? min(renderedTime, duration) : renderedTime
+                let adjustedTime = renderedTime + livePlaybackTimeOffset
+                currentTime = duration > 0 ? min(adjustedTime, duration) : adjustedTime
             }
 
-            if !livePlayerNode.isPlaying {
+            if !livePlayerNode.isPlaying, liveFinalFilePath != nil {
                 isPlaying = false
                 stopTimer()
-                if liveFinalFilePath != nil {
-                    switchToFinalFilePlayback(preserveCurrentTime: min(currentTime, duration), autoPlay: false)
-                }
+                switchToFinalFilePlayback(preserveCurrentTime: 0, autoPlay: liveAutoplayEnabled)
             }
         case .none:
             stopTimer()

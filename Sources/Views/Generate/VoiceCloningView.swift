@@ -21,6 +21,7 @@ struct VoiceCloningView: View {
     @State private var selectedVoice: Voice?
     @State private var isDragOver = false
     @State private var showingBatch = false
+    @State private var lastDeliveryCompromised = false
 
     private var cloneModel: TTSModel? {
         TTSModel.model(for: .clone)
@@ -44,7 +45,7 @@ struct VoiceCloningView: View {
     }
 
     private var idlePrewarmTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+        "\(isActive)-\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)-\(deliveryProfile?.finalInstruction ?? "normal")"
     }
 
     private var savedVoicesLoadTaskID: String {
@@ -264,6 +265,9 @@ private extension VoiceCloningView {
                 isCompact: true,
                 showsLabel: false
             )
+            Text("Delivery guides the model's tone while preserving the cloned speaker identity.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voiceCloning_toneSpeed")
@@ -425,6 +429,12 @@ private extension VoiceCloningView {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
             generationReadiness
 
+            if lastDeliveryCompromised {
+                Label("Delivery was softened to preserve speaker identity.", systemImage: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+            }
+
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundColor(.red)
@@ -485,6 +495,7 @@ private extension VoiceCloningView {
 
         isGenerating = true
         errorMessage = nil
+        lastDeliveryCompromised = false
 
         Task {
             do {
@@ -512,6 +523,8 @@ private extension VoiceCloningView {
                     deliveryProfile: deliveryProfile,
                     outputPath: outputPath
                 )
+
+                lastDeliveryCompromised = result.metrics?.deliveryCompromised == true
 
                 let voiceName = selectedVoice?.name ?? URL(fileURLWithPath: refPath).deletingPathExtension().lastPathComponent
                 var generation = Generation(

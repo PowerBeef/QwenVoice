@@ -628,6 +628,7 @@ final class PythonBridge: ObservableObject {
 
     /// Generate audio with custom voice mode.
     private func generateCustom(
+        modelID: String,
         text: String,
         voice: String,
         emotion: String,
@@ -646,6 +647,7 @@ final class PythonBridge: ObservableObject {
         }
 
         var params: [String: RPCValue] = [
+            "model_id": .string(modelID),
             "mode": .string(GenerationMode.custom.rawValue),
             "text": .string(text),
             "voice": .string(voice),
@@ -662,6 +664,7 @@ final class PythonBridge: ObservableObject {
 
     /// Generate audio with voice design mode.
     private func generateDesign(
+        modelID: String,
         text: String,
         voiceDescription: String,
         emotion: String,
@@ -680,6 +683,7 @@ final class PythonBridge: ObservableObject {
         }
 
         var params: [String: RPCValue] = [
+            "model_id": .string(modelID),
             "mode": .string(GenerationMode.design.rawValue),
             "text": .string(text),
             "instruct": .string(Self.designInstruction(voiceDescription: voiceDescription, emotion: emotion)),
@@ -695,6 +699,7 @@ final class PythonBridge: ObservableObject {
 
     /// Generate audio with voice cloning mode.
     private func generateClone(
+        modelID: String,
         text: String,
         refAudio: String,
         refText: String?,
@@ -715,6 +720,7 @@ final class PythonBridge: ObservableObject {
         }
 
         var params: [String: RPCValue] = [
+            "model_id": .string(modelID),
             "mode": .string(GenerationMode.clone.rawValue),
             "text": .string(text),
             "ref_audio": .string(refAudio),
@@ -753,6 +759,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: batchTotal
         ) {
             try await self.generateCustom(
+                modelID: modelID,
                 text: text,
                 voice: voice,
                 emotion: emotion,
@@ -776,6 +783,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: nil
         ) {
             try await self.generateCustom(
+                modelID: modelID,
                 text: text,
                 voice: voice,
                 emotion: emotion,
@@ -805,6 +813,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: batchTotal
         ) {
             try await self.generateDesign(
+                modelID: modelID,
                 text: text,
                 voiceDescription: voiceDescription,
                 emotion: emotion,
@@ -828,6 +837,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: nil
         ) {
             try await self.generateDesign(
+                modelID: modelID,
                 text: text,
                 voiceDescription: voiceDescription,
                 emotion: emotion,
@@ -859,6 +869,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: batchTotal
         ) {
             try await self.generateClone(
+                modelID: modelID,
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
@@ -886,6 +897,7 @@ final class PythonBridge: ObservableObject {
             batchTotal: nil
         ) {
             try await self.generateClone(
+                modelID: modelID,
                 text: text,
                 refAudio: refAudio,
                 refText: refText,

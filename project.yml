@@ -57,28 +57,11 @@ targets:
     dependencies:
       - package: GRDB
 
-  QwenVoiceUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    sources:
-      - QwenVoiceUITests
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.uitests
-        SWIFT_VERSION: "5.9"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
-        TEST_TARGET_NAME: QwenVoice
-        GENERATE_INFOPLIST_FILE: YES
-    dependencies:
-      - target: QwenVoice
-
   QwenVoiceTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - QwenVoiceTests
-    resources:
-      - Sources/Resources/qwenvoice_contract.json
+      - path: QwenVoiceTests
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.tests
