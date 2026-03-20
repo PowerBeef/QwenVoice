@@ -35,6 +35,7 @@ from .paths import (
 def run_tests(
     layer: str = "all",
     python_path: str | None = None,
+    artifact_dir: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run selected test layers and return suite results."""
     suites: list[dict[str, Any]] = []
@@ -58,6 +59,11 @@ def run_tests(
     if layer in ("all", "swift"):
         eprint("==> Running Swift unit tests...")
         suites.append(_run_swift_tests())
+
+    if layer in ("all", "audio"):
+        eprint("==> Running audio pipeline tests...")
+        from .audio_test_runner import run_audio_tests
+        suites.append(run_audio_tests(python_path=python_path, artifact_dir=artifact_dir))
 
     return suites
 

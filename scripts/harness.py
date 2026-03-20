@@ -32,6 +32,7 @@ def _run_test(args: argparse.Namespace) -> None:
     suites = run_tests(
         layer=args.layer,
         python_path=args.python or None,
+        artifact_dir=getattr(args, "artifact_dir", None),
     )
     duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("test", suites, duration_ms)
@@ -90,10 +91,12 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["pipeline", "rpc", "contract", "server", "swift", "all"],
+        choices=["pipeline", "rpc", "contract", "server", "swift", "audio", "all"],
         default="all",
     )
     p_test.add_argument("--python", default="", help="Explicit Python interpreter path")
+    p_test.add_argument("--artifact-dir", default=None,
+        help="Directory with chunk_*.wav + final.wav for offline audio analysis")
     p_test.set_defaults(func=_run_test)
 
     # bench

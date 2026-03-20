@@ -445,6 +445,9 @@ def generate_with_prepared_icl(
         generated_token_ids.append(int(next_token[0, 0]))
         generated_codes.append(all_codes)
 
+        if step > 0 and step % 50 == 0:
+            mx.clear_cache()
+
         if stream and len(generated_codes) - decoded_tokens >= streaming_chunk_size:
             new_tokens = len(generated_codes) - decoded_tokens
             codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)

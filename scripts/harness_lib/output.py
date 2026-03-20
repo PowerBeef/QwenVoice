@@ -39,8 +39,8 @@ def build_suite_result(
     duration_ms: int,
 ) -> dict[str, Any]:
     """Build a per-suite summary."""
-    pass_count = sum(1 for r in results if r.get("passed"))
     skip_count = sum(1 for r in results if r.get("skip_reason"))
+    pass_count = sum(1 for r in results if r.get("passed") and not r.get("skip_reason"))
     fail_count = len(results) - pass_count - skip_count
     return {
         "name": name,
