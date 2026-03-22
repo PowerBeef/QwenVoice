@@ -63,6 +63,7 @@ struct VoiceDesignView: View {
         ) {
             configurationPanel
             composerPanel
+                .layoutPriority(1)
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
@@ -105,6 +106,7 @@ private extension VoiceDesignView {
                 identifier: "voiceDesign_configuration"
             )
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     var composerPanel: some View {
@@ -143,13 +145,10 @@ private extension VoiceDesignView {
     }
 
     var deliverySettings: some View {
-        ConfigurationFieldRow(
-            label: "Delivery",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Delivery")
+                .font(.subheadline.weight(.semibold))
+
             DeliveryControlsView(
                 emotion: $emotion,
                 accentColor: AppTheme.voiceDesign,
@@ -157,6 +156,7 @@ private extension VoiceDesignView {
                 showsLabel: false
             )
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voiceDesign_toneSpeed")
     }
@@ -306,24 +306,22 @@ private struct VoiceDesignBriefSettings: View {
     @Binding var voiceDescription: String
 
     var body: some View {
-        ConfigurationFieldRow(
-            label: "Voice brief",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Voice brief")
+                .font(.subheadline.weight(.semibold))
+
             ContinuousVoiceDescriptionField(
                 text: $voiceDescription,
                 placeholder: "A warm, deep narrator with a subtle British accent.",
                 accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-        } supporting: {
+
             Text("Describe timbre, accent, or delivery style in one tight sentence.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .overlay(alignment: .topLeading) {
             voiceDescriptionValueAnchor
         }

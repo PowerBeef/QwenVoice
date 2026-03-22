@@ -155,7 +155,7 @@ struct SavedVoiceSheet: View {
                             if #available(macOS 26, *) {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .fill(.clear)
-                                    .glassEffect(in: .rect(cornerRadius: 10))
+                                    .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 10))
                             } else {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)

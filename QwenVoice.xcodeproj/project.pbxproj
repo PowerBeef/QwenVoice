@@ -834,6 +834,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;
 				SWIFT_VERSION = 6;
 				WRAPPER_NAME = QwenVoice.app;
 			};
@@ -859,6 +860,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;
 				SWIFT_VERSION = 6;
 				WRAPPER_NAME = QwenVoice.app;
 			};

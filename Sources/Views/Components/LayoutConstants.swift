@@ -41,7 +41,7 @@ enum LayoutConstants {
     static let composerEmbeddedPlaceholderVerticalPadding: CGFloat = 12
     static let generationComposerFooterMinHeight: CGFloat = 60
     static let generationPageTopPadding: CGFloat = 4
-    static let generationPageBottomPadding: CGFloat = 12
+    static let generationPageBottomPadding: CGFloat = 8
 }
 
 struct ContentColumnModifier: ViewModifier {

@@ -47,6 +47,7 @@ targets:
         MARKETING_VERSION: "1.1.7"
         CURRENT_PROJECT_VERSION: "10"
         SWIFT_VERSION: "6"
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         INFOPLIST_FILE: Sources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements

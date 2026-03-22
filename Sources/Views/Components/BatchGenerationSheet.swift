@@ -88,38 +88,40 @@ struct BatchGenerationSheet: View {
             .accessibilityIdentifier("batch_deliverySummary")
         }
 
-        TextEditor(text: $batchText)
-            .font(.body)
-            .scrollContentBackground(.hidden)
-            .focusEffectDisabled()
-            .padding(8)
-            .frame(minHeight: 220)
-            #if QW_UI_LIQUID
-            .background {
-                if #available(macOS 26, *) {
+        ScriptTextEditor(
+            text: $batchText,
+            placeholder: "Enter one line per generation...",
+            font: .systemFont(ofSize: NSFont.systemFontSize),
+            isFocused: .constant(false)
+        )
+        .padding(8)
+        .frame(minHeight: 220)
+        #if QW_UI_LIQUID
+        .background {
+            if #available(macOS 26, *) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 10))
+            } else {
+                ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.clear)
-                        .glassEffect(in: .rect(cornerRadius: 10))
-                } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
-                    }
+                        .fill(Color(nsColor: .textBackgroundColor))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
                 }
             }
-            #else
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(nsColor: .textBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
-            )
-            #endif
-            .disabled(coordinator.isProcessing)
+        }
+        #else
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
+        )
+        #endif
+        .disabled(coordinator.isProcessing)
 
         if coordinator.isProcessing {
             VStack(alignment: .leading, spacing: 8) {

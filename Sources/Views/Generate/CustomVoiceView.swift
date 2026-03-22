@@ -57,6 +57,7 @@ struct CustomVoiceView: View {
         ) {
             configurationPanel
             composerPanel
+                .layoutPriority(1)
         }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
@@ -99,6 +100,7 @@ private extension CustomVoiceView {
             )
         }
         .animation(.none, value: selectedSpeaker)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     var composerPanel: some View {
@@ -137,13 +139,10 @@ private extension CustomVoiceView {
     }
 
     var deliverySettings: some View {
-        ConfigurationFieldRow(
-            label: "Delivery",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Delivery")
+                .font(.subheadline.weight(.semibold))
+
             DeliveryControlsView(
                 emotion: $emotion,
                 accentColor: AppTheme.customVoice,
@@ -151,6 +150,7 @@ private extension CustomVoiceView {
                 showsLabel: false
             )
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("customVoice_toneSpeed")
     }
@@ -298,33 +298,26 @@ private struct SpeakerPickerRow: View {
     @Binding var selectedSpeaker: String
 
     var body: some View {
-        ConfigurationFieldRow(
-            label: "Speaker",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
-            HStack(spacing: 10) {
-                Picker("Speaker", selection: $selectedSpeaker) {
-                    ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                        Text(speaker.capitalized).tag(speaker)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .transaction { $0.animation = nil }
-                .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
-                .accessibilityValue(selectedSpeaker.capitalized)
-                .accessibilityIdentifier("customVoice_speakerPicker")
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Speaker")
+                .font(.subheadline.weight(.semibold))
 
-                Spacer(minLength: 0)
+            Picker("Speaker", selection: $selectedSpeaker) {
+                ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
+                    Text(speaker.capitalized).tag(speaker)
+                }
             }
-        } supporting: {
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
+            .accessibilityValue(selectedSpeaker.capitalized)
+            .accessibilityIdentifier("customVoice_speakerPicker")
+
             Text("Choose the built-in speaker that should deliver this line.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .overlay(alignment: .topLeading) {
             Text(selectedSpeaker.capitalized)
                 .font(.caption2)

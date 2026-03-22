@@ -87,7 +87,6 @@ struct EmotionPickerView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .transaction { $0.animation = nil }
         .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 240, alignment: .leading)
         .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
     }
@@ -130,11 +129,11 @@ struct EmotionPickerView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .transaction { $0.animation = nil }
         .frame(minWidth: 112, maxWidth: 152, alignment: .leading)
         .tint(showsIntensityPicker ? AppTheme.emotionColor(for: selectedPreset?.id ?? "neutral") : .secondary)
         .opacity(showsIntensityPicker ? 1 : 0.6)
         .disabled(!showsIntensityPicker)
+        .animation(.easeInOut(duration: 0.2), value: showsIntensityPicker)
         .accessibilityIdentifier("\(accessibilityPrefix)_intensityPicker")
         .onChange(of: intensity) { _, _ in
             if let selectedPreset {

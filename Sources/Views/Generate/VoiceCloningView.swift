@@ -86,6 +86,7 @@ struct VoiceCloningView: View {
         ) {
             configurationPanel
             composerPanel
+                .layoutPriority(1)
         }
         .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in
             handleDrop(providers)
@@ -131,9 +132,9 @@ struct VoiceCloningView: View {
 private extension VoiceCloningView {
     var configurationPanel: some View {
         CompactConfigurationSection(
-            title: "Reference",
-            detail: "Choose a saved voice or clip, then set the delivery and optional transcript.",
-            iconName: "waveform",
+            title: "Configuration",
+            detail: "Choose a saved voice or import a reference clip, then add an optional transcript.",
+            iconName: "slider.horizontal.3",
             accentColor: AppTheme.voiceCloning,
             trailingText: activeReferenceLabel,
             rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
@@ -152,6 +153,7 @@ private extension VoiceCloningView {
                 identifier: "voiceCloning_configuration"
             )
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     var composerPanel: some View {
@@ -186,15 +188,12 @@ private extension VoiceCloningView {
     }
 
     var referenceSettings: some View {
-        ConfigurationFieldRow(
-            label: "Source",
-            rowVerticalPadding: max(LayoutConstants.generationConfigurationRowVerticalPadding - 2, 2),
-            horizontalSpacing: 12,
-            stackedSpacing: max(LayoutConstants.generationConfigurationRowSpacing - 2, 2),
-            supportingSpacing: 3
-        ) {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Source")
+                .font(.subheadline.weight(.semibold))
+
             sourceRow
-        } supporting: {
+
             referenceStatus
 
             if let savedVoicesLoadError {
@@ -219,19 +218,16 @@ private extension VoiceCloningView {
                 )
             }
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voiceCloning_voiceSetup")
     }
 
     var transcriptSettings: some View {
-        ConfigurationFieldRow(
-            label: "Transcript",
-            rowVerticalPadding: max(LayoutConstants.generationConfigurationRowVerticalPadding - 2, 2),
-            horizontalSpacing: 12,
-            stackedSpacing: max(LayoutConstants.generationConfigurationRowSpacing - 2, 2),
-            supportingSpacing: 3,
-            accessibilityIdentifier: "voiceCloning_transcriptField"
-        ) {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Transcript")
+                .font(.subheadline.weight(.semibold))
+
             TextField(
                 "What does the reference audio say? (optional)",
                 text: $referenceTranscript
@@ -242,7 +238,9 @@ private extension VoiceCloningView {
             .accessibilityLabel("Transcript")
             .accessibilityIdentifier("voiceCloning_transcriptInput")
         }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceCloning_transcriptField")
     }
 
     var sourceRow: some View {
@@ -559,25 +557,14 @@ private struct CloneSourceRow: View {
     let referenceAudioPath: String?
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 8) {
-                if !savedVoices.isEmpty {
-                    savedVoicePicker
-                }
-
-                importButton
-
-                Spacer(minLength: 0)
+        HStack(alignment: .center, spacing: 8) {
+            if !savedVoices.isEmpty {
+                savedVoicePicker
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                if !savedVoices.isEmpty {
-                    savedVoicePicker
-                }
+            importButton
 
-                importButton
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -595,7 +582,7 @@ private struct CloneSourceRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 240, alignment: .leading)
+            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 180, alignment: .leading)
             .accessibilityValue(savedVoices.first(where: { $0.id == selectedSavedVoiceID })?.name ?? "")
             .accessibilityIdentifier("voiceCloning_savedVoicePicker")
         }

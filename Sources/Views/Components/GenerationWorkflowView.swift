@@ -254,7 +254,7 @@ struct CompactConfigurationSection<Content: View>: View {
                 if #available(macOS 26, *) {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(.clear)
-                        .glassEffect(in: .rect(cornerRadius: 12))
+                        .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
                 } else {
                     compactPanelLegacyBackground
                 }

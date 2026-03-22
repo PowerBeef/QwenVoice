@@ -37,7 +37,7 @@ private struct SidebarRow: View {
             } else if isHovered {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.clear)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 8))
+                    .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
             } else {
                 Color.clear
             }

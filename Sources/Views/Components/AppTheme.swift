@@ -29,6 +29,7 @@ enum AppTheme {
     }()
 
     static let accent = Color.accentColor
+    static let smokedGlassTint = Color(white: 0.15, opacity: 0.6)
     static let customVoice = accent
     static let voiceDesign = accent
     static let voiceCloning = accent
@@ -119,7 +120,7 @@ private struct NativeSurfaceStyle: ViewModifier {
         if #available(macOS 26, *) {
             content
                 .padding(padding)
-                .glassEffect(in: .rect(cornerRadius: radius))
+                .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
         } else {
             legacyBody(content: content)
         }
@@ -313,7 +314,11 @@ struct AuroraBackground: View {
     var body: some View {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
-            Color.clear.ignoresSafeArea()
+            LinearGradient(
+                colors: [Color(white: 0.06), Color(white: 0.10)],
+                startPoint: .top,
+                endPoint: .bottom
+            ).ignoresSafeArea()
         } else {
             AppTheme.canvasBackground.ignoresSafeArea()
         }
@@ -374,7 +379,7 @@ struct GlassGroupBoxStyle: GroupBoxStyle {
             configuration.content
         }
         .padding(12)
-        .glassEffect(in: .rect(cornerRadius: 16))
+        .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 16))
     }
 }
 #endif
@@ -428,7 +433,7 @@ extension View {
             if let tint {
                 self.glassEffect(.regular.tint(tint), in: .capsule)
             } else {
-                self.glassEffect(in: .capsule)
+                self.glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .capsule)
             }
         } else { self }
         #else
