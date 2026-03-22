@@ -233,10 +233,16 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
         duration = max(duration, result.durationSeconds)
 
-        switchToFinalFilePlayback(
-            preserveCurrentTime: 0,
-            autoPlay: shouldAutoPlay
-        )
+        // Only transition immediately if live playback never started or all
+        // buffers have already drained. Otherwise the existing buffer-drain
+        // mechanism (handleLiveBufferPlaybackCompletion → finishLivePlaybackAfterDrainingBuffers)
+        // handles the transition to avoid replaying audio that was already heard.
+        if !livePlaybackStarted || liveScheduledCount == 0 {
+            switchToFinalFilePlayback(
+                preserveCurrentTime: 0,
+                autoPlay: shouldAutoPlay
+            )
+        }
     }
 
     func abortLivePreviewIfNeeded() {
@@ -419,14 +425,15 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func finishLivePlaybackAfterDrainingBuffers() {
-        let shouldAutoPlay = liveAutoplayEnabled
         stopLivePlayback(resetCurrentTime: false)
         currentTime = 0
 
         if liveFinalFilePath != nil {
+            // Don't autoplay — the user already heard the audio via live chunks.
+            // Just load the final file so the player supports seek/replay.
             switchToFinalFilePlayback(
                 preserveCurrentTime: 0,
-                autoPlay: shouldAutoPlay
+                autoPlay: false
             )
         }
     }
