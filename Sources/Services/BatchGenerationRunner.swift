@@ -138,6 +138,7 @@ final class BatchGenerationCoordinator: ObservableObject {
     @Published private(set) var currentIndex = 0
     @Published private(set) var totalItems = 0
     @Published var errorMessage: String?
+    @Published private(set) var outcome: BatchGenerationOutcome?
 
     private var runner: BatchGenerationRunner?
     private var runTask: Task<Void, Never>?
@@ -148,8 +149,7 @@ final class BatchGenerationCoordinator: ObservableObject {
         batchText: String,
         requestBuilder: ([String]) -> BatchGenerationRequest?,
         bridge: any BatchGenerationBridging,
-        store: any GenerationPersisting = DatabaseService.shared,
-        dismiss: @escaping () -> Void
+        store: any GenerationPersisting = DatabaseService.shared
     ) {
         let lines = batchText.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -178,6 +178,7 @@ final class BatchGenerationCoordinator: ObservableObject {
         isProcessing = true
         isCancelling = false
         errorMessage = nil
+        outcome = nil
         totalItems = lines.count
         currentIndex = 0
 
@@ -210,7 +211,7 @@ final class BatchGenerationCoordinator: ObservableObject {
                 self.isCancelling = false
                 self.runner = nil
                 self.runTask = nil
-                dismiss()
+                self.outcome = outcome
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.isProcessing = false

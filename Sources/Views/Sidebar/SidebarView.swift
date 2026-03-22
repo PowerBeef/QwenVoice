@@ -150,7 +150,8 @@ private struct SidebarRow: View {
         }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 34)
             .background(rowBackground)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onTapGesture {
