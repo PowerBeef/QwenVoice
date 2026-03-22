@@ -64,7 +64,7 @@ struct PageScaffold<Header: View, Content: View>: View {
                 contentColumn(viewportHeight: fillsViewportHeight ? proxy.size.height : nil)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .profileBackground(Color(nsColor: .windowBackgroundColor))
         }
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
@@ -200,7 +200,7 @@ struct StudioSectionCard<Content: View>: View {
                 }
             }
         }
-        .groupBoxStyle(.automatic)
+        .profileGroupBoxStyle()
         .frame(maxHeight: fillsAvailableHeight ? .infinity : nil, alignment: .topLeading)
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
@@ -249,6 +249,17 @@ struct CompactConfigurationSection<Content: View>: View {
             panelBody
             .padding(.horizontal, panelPadding)
             .padding(.vertical, max(panelPadding - 1, 0))
+            #if QW_UI_LIQUID
+            .background {
+                if #available(macOS 26, *) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(in: .rect(cornerRadius: 12))
+                } else {
+                    compactPanelLegacyBackground
+                }
+            }
+            #else
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(AppTheme.inlineFill.opacity(0.58))
@@ -257,6 +268,7 @@ struct CompactConfigurationSection<Content: View>: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(AppTheme.inlineStroke.opacity(0.24), lineWidth: 1)
             )
+            #endif
         }
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
@@ -279,6 +291,17 @@ struct CompactConfigurationSection<Content: View>: View {
             }
         }
     }
+
+    #if QW_UI_LIQUID
+    private var compactPanelLegacyBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppTheme.inlineFill.opacity(0.58))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppTheme.inlineStroke.opacity(0.12), lineWidth: 0.5)
+        }
+    }
+    #endif
 }
 
 struct ConfigurationFieldRow<Content: View, Supporting: View>: View {

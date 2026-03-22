@@ -91,7 +91,7 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["pipeline", "rpc", "contract", "server", "swift", "audio", "all"],
+        choices=["pipeline", "rpc", "contract", "server", "swift", "audio", "ui", "design", "perf", "all"],
         default="all",
     )
     p_test.add_argument("--python", default="", help="Explicit Python interpreter path")

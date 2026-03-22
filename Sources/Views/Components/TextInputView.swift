@@ -30,6 +30,7 @@ struct TextInputView: View {
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .focused($isEditorFocused)
+                .focusEffectDisabled()
                 .padding(isEmbedded ? LayoutConstants.composerEmbeddedEditorInset : 8)
                 .frame(
                     maxWidth: .infinity,
@@ -37,6 +38,25 @@ struct TextInputView: View {
                     maxHeight: usesFlexibleEmbeddedHeight && isEmbedded ? .infinity : LayoutConstants.textEditorMaxHeight,
                     alignment: .topLeading
                 )
+                #if QW_UI_LIQUID
+                .background {
+                    if #available(macOS 26, *) {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.clear)
+                            .glassEffect(
+                                isEditorFocused ? .regular.tint(buttonColor) : .regular,
+                                in: .rect(cornerRadius: 10)
+                            )
+                    } else {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(nsColor: .textBackgroundColor))
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(isEditorFocused ? buttonColor.opacity(0.3) : AppTheme.cardStroke.opacity(0.15), lineWidth: 0.5)
+                        }
+                    }
+                }
+                #else
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color(nsColor: .textBackgroundColor))
@@ -45,6 +65,7 @@ struct TextInputView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(isEditorFocused ? buttonColor.opacity(0.45) : AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
                 )
+                #endif
                 .accessibilityIdentifier("textInput_textEditor")
 
             if text.isEmpty {

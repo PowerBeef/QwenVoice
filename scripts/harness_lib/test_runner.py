@@ -65,6 +65,15 @@ def run_tests(
         from .audio_test_runner import run_audio_tests
         suites.append(run_audio_tests(python_path=python_path, artifact_dir=artifact_dir))
 
+    if layer == "ui":
+        suites.append(_run_ui_tests())
+
+    if layer == "design":
+        suites.append(_run_design_tests())
+
+    if layer == "perf":
+        suites.append(_run_perf_audit())
+
     return suites
 
 
@@ -700,6 +709,235 @@ def _run_contract_tests(python_path: str | None = None) -> dict[str, Any]:
     return build_suite_result("contract_validation", results, duration_ms)
 
 
+def _run_ui_tests() -> dict[str, Any]:
+    """Run UI tests via HTTP state server (no XCUI dependency)."""
+    import signal
+    from .ui_state_client import UIStateClient
+
+    start = time.perf_counter()
+    results: list[dict[str, Any]] = []
+
+    # 1. Build the app
+    eprint("  Building app...")
+    build_proc = subprocess.run(
+        ["xcodebuild", "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
+         "-scheme", "QwenVoice", "build", "-quiet"],
+        capture_output=True, text=True, timeout=300,
+    )
+    if build_proc.returncode != 0:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        results.append(build_test_result("build", passed=False, details={"error": "build_failed"}))
+        return build_suite_result("ui_http_tests", results, duration_ms)
+
+    # 2. Find the built app binary
+    settings = subprocess.run(
+        ["xcodebuild", "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
+         "-scheme", "QwenVoice", "-showBuildSettings"],
+        capture_output=True, text=True, timeout=30,
+    )
+    app_dir = None
+    for line in settings.stdout.splitlines():
+        if "BUILT_PRODUCTS_DIR" in line:
+            app_dir = line.split("=", 1)[1].strip()
+            break
+    if not app_dir:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        results.append(build_test_result("find_app", passed=False, details={"error": "no_build_dir"}))
+        return build_suite_result("ui_http_tests", results, duration_ms)
+
+    app_binary = os.path.join(app_dir, "QwenVoice.app", "Contents", "MacOS", "QwenVoice")
+
+    # 3. Kill existing instances
+    subprocess.run(["killall", "QwenVoice"], capture_output=True)
+    time.sleep(0.5)
+
+    # 4. Launch with test mode
+    eprint("  Launching app with test state server...")
+    env = dict(os.environ)
+    env["QWENVOICE_UI_TEST"] = "1"
+    env["QWENVOICE_UI_TEST_BACKEND_MODE"] = "stub"
+    env["QWENVOICE_UI_TEST_SETUP_SCENARIO"] = "success"
+    env["QWENVOICE_UI_TEST_SETUP_DELAY_MS"] = "1"
+    app_proc = subprocess.Popen(
+        [app_binary, "--uitest", "--uitest-disable-animations", "--uitest-fast-idle"],
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+    client = UIStateClient()
+
+    try:
+        # 5. Wait for ready
+        t0 = time.perf_counter()
+        ready = client.wait_for_ready(timeout=15)
+        ready_ms = int((time.perf_counter() - t0) * 1000)
+        results.append(build_test_result(
+            "app_launch_to_ready",
+            passed=ready,
+            duration_ms=ready_ms,
+            details={"ready_ms": ready_ms},
+        ))
+        if not ready:
+            eprint(f"  App did not become ready within 15s")
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("ui_http_tests", results, duration_ms)
+
+        # 6. Check default screen
+        state = client.query_state()
+        default_ok = "customVoice" in state.get("activeScreen", "")
+        results.append(build_test_result(
+            "default_screen_is_customVoice",
+            passed=default_ok,
+            details={"activeScreen": state.get("activeScreen")},
+        ))
+
+        # 7. Test each screen by relaunching with --uitest-screen=X
+        screens = [
+            ("history", "screen_history"),
+            ("voices", "screen_voices"),
+            ("models", "screen_models"),
+            ("voiceDesign", "screen_voiceDesign"),
+            ("voiceCloning", "screen_voiceCloning"),
+        ]
+        for screen_arg, expected_id in screens:
+            # Kill current instance
+            app_proc.terminate()
+            try:
+                app_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                app_proc.kill()
+            time.sleep(0.5)
+
+            # Relaunch with target screen
+            t0 = time.perf_counter()
+            app_proc = subprocess.Popen(
+                [app_binary, "--uitest", "--uitest-disable-animations",
+                 "--uitest-fast-idle", f"--uitest-screen={screen_arg}"],
+                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            screen_ready = client.wait_for_ready(timeout=10)
+            if screen_ready:
+                state = client.query_state()
+                actual = state.get("activeScreen", "")
+            else:
+                actual = "not_ready"
+            launch_ms = int((time.perf_counter() - t0) * 1000)
+
+            results.append(build_test_result(
+                f"screen_{screen_arg}",
+                passed=(actual == expected_id),
+                duration_ms=launch_ms,
+                details={"expected": expected_id, "actual": actual, "launch_ms": launch_ms},
+            ))
+
+    finally:
+        # 8. Cleanup
+        app_proc.terminate()
+        try:
+            app_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            app_proc.kill()
+
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    return build_suite_result("ui_http_tests", results, duration_ms)
+
+
+def _run_design_tests() -> dict[str, Any]:
+    """Compare captured screenshots against baselines."""
+    start = time.perf_counter()
+
+    baselines_dir = str(PROJECT_DIR / "tests" / "screenshots" / "baselines")
+    captures_dir = str(PROJECT_DIR / "build" / "test" / "screenshots")
+    diffs_dir = str(PROJECT_DIR / "tests" / "screenshots" / "diffs")
+    os.makedirs(diffs_dir, exist_ok=True)
+
+    results: list[dict[str, Any]] = []
+
+    if not os.path.isdir(baselines_dir) or not os.listdir(baselines_dir):
+        eprint("  No baselines found. Run --layer ui first to capture screenshots, then copy to tests/screenshots/baselines/")
+        results.append(build_test_result("no_baselines", passed=True, details={"status": "skipped_no_baselines"}))
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("design_comparison", results, duration_ms)
+
+    if not os.path.isdir(captures_dir):
+        eprint("  No captured screenshots found. Run --layer ui first.")
+        results.append(build_test_result("no_captures", passed=False, details={"error": "missing_captures_dir"}))
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("design_comparison", results, duration_ms)
+
+    try:
+        from .screenshot_diff import compare_screenshots
+    except ImportError:
+        eprint("  screenshot_diff module not available")
+        results.append(build_test_result("import_error", passed=False, details={"error": "screenshot_diff_import_failed"}))
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("design_comparison", results, duration_ms)
+
+    for name in sorted(os.listdir(baselines_dir)):
+        if not name.endswith(".png"):
+            continue
+        baseline_path = os.path.join(baselines_dir, name)
+        capture_path = os.path.join(captures_dir, name)
+        diff_path = os.path.join(diffs_dir, name.replace(".png", "_diff.png"))
+
+        if not os.path.exists(capture_path):
+            results.append(build_test_result(name, passed=False, details={"error": "capture_not_found"}))
+            continue
+
+        diff_result = compare_screenshots(baseline_path, capture_path, diff_path, max_diff_percent=1.0)
+        results.append(build_test_result(name, passed=diff_result["passed"], details=diff_result))
+
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    return build_suite_result("design_comparison", results, duration_ms)
+
+
+def _run_perf_audit() -> dict[str, Any]:
+    """Run performance audit tests and check against thresholds."""
+    import shutil
+
+    start = time.perf_counter()
+
+    # Run only PerformanceAuditTests
+    result_bundle = str(PROJECT_DIR / "build" / "test" / "results" / "PerfAudit.xcresult")
+    if os.path.exists(result_bundle):
+        shutil.rmtree(result_bundle)
+
+    cmd = [
+        "xcodebuild", "test",
+        "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
+        "-scheme", "QwenVoice",
+        "-destination", "platform=macOS,arch=arm64",
+        "-only-testing:QwenVoiceUITests/PerformanceAuditTests",
+        "CODE_SIGN_IDENTITY=-",
+        "CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES",
+        "-resultBundlePath", result_bundle,
+    ]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        eprint("Performance audit timed out after 300s")
+        results = [build_test_result("perf_audit_suite", passed=False, duration_ms=duration_ms, details={"error": "timeout_300s"})]
+        return build_suite_result("perf_audit", results, duration_ms)
+    duration_ms = int((time.perf_counter() - start) * 1000)
+
+    results: list[dict[str, Any]] = []
+    results.append(build_test_result(
+        "perf_audit_suite",
+        passed=(proc.returncode == 0),
+        duration_ms=duration_ms,
+        details={"return_code": proc.returncode},
+    ))
+
+    if proc.returncode != 0:
+        eprint(f"Performance audit failed (exit {proc.returncode})")
+        stderr_lines = proc.stderr.strip().split("\n")
+        for line in stderr_lines[-20:]:
+            eprint(f"  {line}")
+
+    return build_suite_result("perf_audit", results, duration_ms)
+
+
 def _run_swift_tests() -> dict[str, Any]:
     """Run Swift unit tests via xcodebuild."""
     start = time.perf_counter()
@@ -719,8 +957,9 @@ def _run_swift_tests() -> dict[str, Any]:
             [
                 "xcodebuild", "test",
                 "-project", str(xcodeproj),
-                "-scheme", "QwenVoiceTests",
-                "-destination", "platform=macOS",
+                "-scheme", "QwenVoice",
+                "-only-testing:QwenVoiceTests",
+                "-destination", "platform=macOS,arch=arm64",
                 "-quiet",
             ],
             capture_output=True,

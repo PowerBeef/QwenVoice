@@ -1,5 +1,6 @@
-import Foundation
+import Combine
 import CryptoKit
+import Foundation
 
 /// Manages the Python virtual environment lifecycle: check, create, install dependencies, validate.
 @MainActor
@@ -45,6 +46,35 @@ final class PythonEnvironmentManager: ObservableObject {
     private static var markerFile: URL {
         venvDir.appendingPathComponent(".setup-complete")
     }
+
+    // MARK: - Init
+
+    init() {
+        // In UI test mode, eagerly trigger setup and publish readiness
+        // to the test state provider. This ensures the HTTP state server
+        // reports isReady=true even if onAppear hasn't fired yet.
+        if UITestAutomationSupport.isEnabled {
+            ensureEnvironment()
+            // Observe state changes and publish to TestStateProvider
+            $state.sink { [weak self] newState in
+                guard self != nil else { return }
+                if case .ready = newState {
+                    Task { @MainActor in
+                        TestStateProvider.shared.isReady = true
+                        if TestStateProvider.shared.activeScreen.isEmpty {
+                            let initial = AppLaunchConfiguration.current.initialSidebarItem
+                            let screenID = initial?.screenAccessibilityID ?? "screen_customVoice"
+                            let title = initial?.rawValue ?? "Custom Voice"
+                            TestStateProvider.shared.activeScreen = screenID
+                            TestStateProvider.shared.windowTitle = title
+                        }
+                    }
+                }
+            }.store(in: &cancellables)
+        }
+    }
+
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Public
 
@@ -308,13 +338,13 @@ final class PythonEnvironmentManager: ObservableObject {
         // Check versioned Homebrew paths first (most likely on macOS)
         let versionedPaths = [
             "/opt/homebrew/bin/python3.13",
-            "/opt/homebrew/bin/python3.14",
             "/opt/homebrew/bin/python3.12",
             "/opt/homebrew/bin/python3.11",
+            "/opt/homebrew/bin/python3.14",
             "/usr/local/bin/python3.13",
-            "/usr/local/bin/python3.14",
             "/usr/local/bin/python3.12",
             "/usr/local/bin/python3.11",
+            "/usr/local/bin/python3.14",
         ]
         for path in versionedPaths {
             if fm.fileExists(atPath: path) {

@@ -87,6 +87,7 @@ struct EmotionPickerView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .transaction { $0.animation = nil }
         .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 240, alignment: .leading)
         .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
     }
@@ -129,6 +130,7 @@ struct EmotionPickerView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .transaction { $0.animation = nil }
         .frame(minWidth: 112, maxWidth: 152, alignment: .leading)
         .tint(showsIntensityPicker ? AppTheme.emotionColor(for: selectedPreset?.id ?? "neutral") : .secondary)
         .opacity(showsIntensityPicker ? 1 : 0.6)
@@ -149,6 +151,7 @@ struct EmotionPickerView: View {
 
             TextField("Describe the delivery in your own words", text: $customText)
                 .textFieldStyle(.roundedBorder)
+                .focusEffectDisabled()
                 .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: .infinity, alignment: .leading)
                 .opacity(isCustomMode ? 1 : 0.6)
                 .disabled(!isCustomMode)

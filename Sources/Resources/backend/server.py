@@ -345,7 +345,7 @@ def convert_audio_if_needed(input_path):
     if _audio_write_fn is not None:
         try:
             return _convert_audio_with_mlx(input_path, temp_wav)
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             pass
     return _convert_audio_to_wav(input_path, temp_wav)
 
@@ -677,7 +677,12 @@ def _select_guided_clone_candidate(
         }
 
         candidate_score = similarity if similarity is not None else 1.0
-        best_score = best_candidate["speaker_similarity"] if best_candidate and best_candidate["speaker_similarity"] is not None else (1.0 if best_candidate and best_candidate["speaker_similarity"] is None else float("-inf"))
+        if best_candidate is None:
+            best_score = float("-inf")
+        elif best_candidate["speaker_similarity"] is not None:
+            best_score = best_candidate["speaker_similarity"]
+        else:
+            best_score = 1.0
         if best_candidate is None or candidate_score > best_score:
             best_candidate = candidate
 
@@ -939,22 +944,13 @@ def _prune_normalized_clone_reference_cache():
             except OSError:
                 pass
 
-    if len(entries) <= NORMALIZED_CLONE_REF_CACHE_LIMIT:
+    remaining = [(p, m, s) for p, m, s in entries
+                 if now - m <= NORMALIZED_CLONE_REF_MAX_AGE_SECONDS]
+    if len(remaining) <= NORMALIZED_CLONE_REF_CACHE_LIMIT:
         return
 
-    remaining = []
-    for name in os.listdir(CLONE_REF_CACHE_DIR):
-        if not name.endswith(".wav"):
-            continue
-        path = os.path.join(CLONE_REF_CACHE_DIR, name)
-        try:
-            stat_result = os.stat(path)
-        except OSError:
-            continue
-        remaining.append((path, stat_result.st_mtime))
-
     remaining.sort(key=lambda item: item[1], reverse=True)
-    for path, _ in remaining[NORMALIZED_CLONE_REF_CACHE_LIMIT:]:
+    for path, _, _ in remaining[NORMALIZED_CLONE_REF_CACHE_LIMIT:]:
         try:
             os.remove(path)
         except OSError:
@@ -1995,8 +1991,17 @@ def handle_convert_audio(params):
     wav_path = convert_audio_if_needed(input_path)
 
     if output_path and wav_path and wav_path != input_path:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        shutil.move(wav_path, output_path)
+        parent = os.path.dirname(output_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        try:
+            shutil.move(wav_path, output_path)
+        except Exception:
+            try:
+                os.remove(wav_path)
+            except OSError:
+                pass
+            raise
         wav_path = output_path
 
     return {"wav_path": wav_path}

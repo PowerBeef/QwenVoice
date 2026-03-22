@@ -26,14 +26,21 @@ enum UITestAutomationSupport {
 
     static var isEnabled: Bool {
         isTruthy(environment[uiTestEnvironmentKey])
+            || ProcessInfo.processInfo.arguments.contains("--uitest")
     }
 
     static var backendMode: UITestBackendMode {
         guard isEnabled else { return .live }
+        // Check env var first, fall back to launch arg
         let value = environment[backendModeEnvironmentKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        return value == "stub" ? .stub : .live
+        if value == "stub" { return .stub }
+        // --uitest launch arg implies stub mode when env var is absent
+        if ProcessInfo.processInfo.arguments.contains("--uitest") && value == nil {
+            return .stub
+        }
+        return .live
     }
 
     static var isStubBackendMode: Bool {

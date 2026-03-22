@@ -168,7 +168,22 @@ struct SidebarStatusView: View {
 
     // MARK: - Shared Background
 
+    @ViewBuilder
     private func statusBackground(color: Color, fillOpacity: Double, strokeOpacity: Double) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.clear)
+                .glassEffect(.regular.tint(color), in: .rect(cornerRadius: 8))
+        } else {
+            statusBackgroundLegacy(color: color, fillOpacity: fillOpacity, strokeOpacity: strokeOpacity)
+        }
+        #else
+        statusBackgroundLegacy(color: color, fillOpacity: fillOpacity, strokeOpacity: strokeOpacity)
+        #endif
+    }
+
+    private func statusBackgroundLegacy(color: Color, fillOpacity: Double, strokeOpacity: Double) -> some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(color.opacity(fillOpacity))
             .overlay(

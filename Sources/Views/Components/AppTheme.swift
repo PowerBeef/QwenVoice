@@ -48,7 +48,13 @@ enum AppTheme {
     static let railStroke = Color.clear
     static let stageGlow = Color.clear
 
-    static var windowTitlebarSeparatorStyle: NSTitlebarSeparatorStyle { .automatic }
+    static var windowTitlebarSeparatorStyle: NSTitlebarSeparatorStyle {
+        #if QW_UI_LIQUID
+        return .none
+        #else
+        return .automatic
+        #endif
+    }
     static var splitDividerStyle: NSSplitView.DividerStyle { .thin }
     static var legacyDividerBlendInset: CGFloat { 0 }
     static var legacyDividerBlendAlpha: CGFloat { 0 }
@@ -109,6 +115,20 @@ private struct NativeSurfaceStyle: ViewModifier {
     let fill: Color
 
     func body(content: Content) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            content
+                .padding(padding)
+                .glassEffect(in: .rect(cornerRadius: radius))
+        } else {
+            legacyBody(content: content)
+        }
+        #else
+        legacyBody(content: content)
+        #endif
+    }
+
+    private func legacyBody(content: Content) -> some View {
         content
             .padding(padding)
             .background(
@@ -117,7 +137,7 @@ private struct NativeSurfaceStyle: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
+                    .stroke(AppTheme.cardStroke.opacity(0.18), lineWidth: 0.5)
             )
     }
 }
@@ -127,6 +147,24 @@ private struct StudioChipStyle: ViewModifier {
     let color: Color
 
     func body(content: Content) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            content
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .foregroundStyle(isSelected ? color : .primary)
+                .glassEffect(isSelected ? .regular.tint(color) : .regular, in: .capsule)
+                .appAnimation(.easeInOut(duration: 0.15), value: isSelected)
+        } else {
+            legacyBody(content: content)
+        }
+        #else
+        legacyBody(content: content)
+        #endif
+    }
+
+    private func legacyBody(content: Content) -> some View {
         content
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 12)
@@ -207,6 +245,25 @@ struct GlowingGradientButtonStyle: ButtonStyle {
     let baseColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            configuration.label
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.tint(baseColor), in: .rect(cornerRadius: 8))
+                .opacity(configuration.isPressed ? 0.75 : 1.0)
+                .appAnimation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+        } else {
+            legacyBody(configuration: configuration)
+        }
+        #else
+        legacyBody(configuration: configuration)
+        #endif
+    }
+
+    private func legacyBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
             .foregroundStyle(.white)
@@ -224,6 +281,23 @@ struct CompactGenerateButtonStyle: ButtonStyle {
     let baseColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            configuration.label
+                .foregroundStyle(.white)
+                .padding(12)
+                .glassEffect(.regular.tint(baseColor), in: .circle)
+                .opacity(configuration.isPressed ? 0.75 : 1.0)
+                .appAnimation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+        } else {
+            legacyBody(configuration: configuration)
+        }
+        #else
+        legacyBody(configuration: configuration)
+        #endif
+    }
+
+    private func legacyBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
             .padding(12)
@@ -237,8 +311,15 @@ struct CompactGenerateButtonStyle: ButtonStyle {
 
 struct AuroraBackground: View {
     var body: some View {
-        AppTheme.canvasBackground
-            .ignoresSafeArea()
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            Color.clear.ignoresSafeArea()
+        } else {
+            AppTheme.canvasBackground.ignoresSafeArea()
+        }
+        #else
+        AppTheme.canvasBackground.ignoresSafeArea()
+        #endif
     }
 }
 
@@ -259,5 +340,99 @@ extension View {
 
     func emptyStateStyle() -> some View {
         modifier(EmptyStateStyle())
+    }
+}
+
+// MARK: - Studio GroupBox Style (material-based legacy fallback)
+
+struct StudioGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            configuration.label
+            configuration.content
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppTheme.cardFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppTheme.cardStroke.opacity(0.18), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Liquid Glass Convenience Extensions
+
+#if QW_UI_LIQUID
+@available(macOS 26, *)
+struct GlassGroupBoxStyle: GroupBoxStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            configuration.label
+            configuration.content
+        }
+        .padding(12)
+        .glassEffect(in: .rect(cornerRadius: 16))
+    }
+}
+#endif
+
+extension View {
+    /// Wraps content in a GlassEffectContainer on liquid builds.
+    @ViewBuilder
+    func liquidGlassContainer(spacing: CGFloat = 8) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { self }
+        } else { self }
+        #else
+        self
+        #endif
+    }
+
+    /// Profile-aware background: clear for liquid, specified color for legacy.
+    @ViewBuilder
+    func profileBackground(_ legacyColor: Color) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            self.background(.clear)
+        } else {
+            self.background(legacyColor)
+        }
+        #else
+        self.background(legacyColor)
+        #endif
+    }
+
+    /// Applies profile-aware GroupBox style.
+    @ViewBuilder
+    func profileGroupBoxStyle() -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            self.groupBoxStyle(GlassGroupBoxStyle())
+        } else {
+            self.groupBoxStyle(StudioGroupBoxStyle())
+        }
+        #else
+        self.groupBoxStyle(.automatic)
+        #endif
+    }
+
+    /// Profile-aware glass capsule badge background.
+    @ViewBuilder
+    func glassBadge(tint: Color? = nil) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            if let tint {
+                self.glassEffect(.regular.tint(tint), in: .capsule)
+            } else {
+                self.glassEffect(in: .capsule)
+            }
+        } else { self }
+        #else
+        self
+        #endif
     }
 }

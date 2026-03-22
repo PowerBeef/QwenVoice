@@ -26,7 +26,30 @@ private struct SidebarRow: View {
         selection == item
     }
 
+    @ViewBuilder
     private var rowBackground: some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(.accentColor).interactive(), in: .rect(cornerRadius: 8))
+            } else if isHovered {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 8))
+            } else {
+                Color.clear
+            }
+        } else {
+            legacyRowBackground
+        }
+        #else
+        legacyRowBackground
+        #endif
+    }
+
+    private var legacyRowBackground: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(backgroundColor)
             .overlay {
@@ -37,15 +60,15 @@ private struct SidebarRow: View {
 
     private var backgroundColor: Color {
         if isDisabled {
-            return isSelected ? Color.secondary.opacity(0.08) : .clear
+            return isSelected ? Color.secondary.opacity(0.06) : .clear
         }
 
         if isSelected {
-            return .accentColor.opacity(0.12)
+            return .accentColor.opacity(0.08)
         }
 
         if isHovered {
-            return Color.primary.opacity(0.05)
+            return Color.primary.opacity(0.04)
         }
 
         return .clear
@@ -226,6 +249,6 @@ private struct SidebarFooterRegion: View {
             .padding(.bottom, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .profileBackground(Color(nsColor: .windowBackgroundColor))
     }
 }

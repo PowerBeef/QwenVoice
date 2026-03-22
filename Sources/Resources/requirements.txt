@@ -1,7 +1,6 @@
 anyio==4.12.1
 audioop-lts==0.2.2; python_version >= "3.13"
 audioread==3.1.0
-blobfile==3.1.0
 certifi==2026.1.4
 cffi==2.0.0
 charset-normalizer==3.4.4
@@ -20,13 +19,12 @@ joblib==1.5.3
 lazy_loader==0.4
 librosa==0.11.0
 llvmlite==0.46.0
-lxml==6.0.2
 MarkupSafe==3.0.3
 miniaudio==1.61
-mlx==0.30.3
+mlx==0.31.1
 mlx-audio==0.4.1
-mlx-lm==0.30.5
-mlx-metal==0.30.3
+mlx-lm==0.31.1
+mlx-metal==0.31.1
 msgpack==1.1.2
 numba==0.63.1
 numpy==2.3.5
@@ -35,7 +33,6 @@ platformdirs==4.5.1
 pooch==1.8.2
 protobuf==6.33.5
 pycparser==3.0
-pycryptodomex==3.23.0
 pyloudnorm==0.2.0
 PyYAML==6.0.3
 regex==2026.1.15
@@ -52,10 +49,9 @@ standard-aifc==3.13.0
 standard-chunk==3.13.0
 standard-sunau==3.13.0
 threadpoolctl==3.6.0
-tiktoken==0.12.0
 tokenizers==0.22.2
 tqdm==4.67.1
-transformers==5.0.0rc3
+transformers==5.0.0
 typer-slim==0.21.1
 typing_extensions==4.15.0
 urllib3==2.6.3

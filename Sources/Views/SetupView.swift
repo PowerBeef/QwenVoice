@@ -20,10 +20,23 @@ struct SetupView: View {
 
             stateContent
                 .frame(maxWidth: 480, alignment: .leading)
+                .profileGroupBoxStyle()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
-        .background(AppTheme.canvasBackground)
+        .profileBackground(AppTheme.canvasBackground)
+        .overlay(alignment: .topLeading) {
+            if UITestAutomationSupport.isEnabled {
+                Text("setup")
+                    .font(.system(size: 1))
+                    .opacity(0.01)
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityIdentifier("setupView_visible")
+                    .accessibilityHidden(false)
+            }
+        }
     }
 }
 

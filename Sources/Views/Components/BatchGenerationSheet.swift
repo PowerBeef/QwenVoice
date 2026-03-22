@@ -61,8 +61,25 @@ struct BatchGenerationSheet: View {
             TextEditor(text: $batchText)
                 .font(.body)
                 .scrollContentBackground(.hidden)
+                .focusEffectDisabled()
                 .padding(8)
                 .frame(minHeight: 220)
+                #if QW_UI_LIQUID
+                .background {
+                    if #available(macOS 26, *) {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.clear)
+                            .glassEffect(in: .rect(cornerRadius: 10))
+                    } else {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(nsColor: .textBackgroundColor))
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
+                        }
+                    }
+                }
+                #else
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color(nsColor: .textBackgroundColor))
@@ -71,6 +88,7 @@ struct BatchGenerationSheet: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
                 )
+                #endif
                 .disabled(coordinator.isProcessing)
 
             if coordinator.isProcessing {
@@ -113,7 +131,7 @@ struct BatchGenerationSheet: View {
         }
         .padding(24)
         .frame(minWidth: 520, minHeight: 440)
-        .background(AppTheme.canvasBackground)
+        .profileBackground(AppTheme.canvasBackground)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
             provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { data, _ in

@@ -6,11 +6,7 @@ This file gives Claude-oriented guidance for the standalone CLI under `cli/`.
 
 This directory is the standalone Python CLI companion to QwenVoice. It is useful for manual experimentation, but it is not the source of truth for the shipped GUI app.
 
-Repo root:
-
-```bash
-cd /Users/patricedery/Coding_Projects/QwenVoice/cli
-```
+All paths below are relative to the `cli/` subdirectory of the repo root.
 
 ## Current CLI Reality
 
