@@ -281,11 +281,11 @@ struct ModelRow: View {
         if #available(macOS 26, *) {
             Color.clear
                 .frame(width: 34, height: 34)
-                .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 8))
+                .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 8))
                 .overlay {
                     Image(systemName: model.mode.iconName)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(.white)
                 }
         } else {
             modeIconLegacy
