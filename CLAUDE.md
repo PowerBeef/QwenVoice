@@ -149,6 +149,8 @@ These skills are web-focused and irrelevant to this native macOS app:
 - macOS `Picker`/`Menu` controls surface as `MenuButton`/`MenuItem` in XCUI — do not assume `.button` elements
 - History uses a native AppKit-backed toolbar search field
 - `SetupView` uses `@ObservedObject var envManager` (not `@EnvironmentObject`) because it's rendered in `QwenVoiceApp` BEFORE `.environmentObject()` is attached — do not change this to `@EnvironmentObject`
+- Voice Cloning does not support delivery/emotion instructions — the Qwen3-TTS Base model ignores them in clone mode. Do not add a Delivery picker to Voice Cloning.
+- `TextInputView` uses `ScriptTextEditor` (NSTextView wrapper) for precise placeholder alignment and auto-hiding scrollbars — do not replace with SwiftUI `TextEditor`
 
 ## Key Change Patterns
 
