@@ -46,8 +46,10 @@ struct ModelsView: View {
                             .id(model.id)
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
+                    .listSectionSeparator(.hidden)
                 }
 
                 Section("Available To Download") {
@@ -64,8 +66,10 @@ struct ModelsView: View {
                         .id(model.id)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
+                .listSectionSeparator(.hidden)
             }
             .listStyle(.inset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
