@@ -16,6 +16,7 @@ final class ModelManagerViewModel: ObservableObject {
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
+    private var lastProgressPublishTimes: [String: ContinuousClock.Instant] = [:]
     private var stubDownloadTasks: [String: Task<Void, Never>] = [:]
     private var refreshTask: Task<Void, Never>?
 
@@ -122,6 +123,15 @@ final class ModelManagerViewModel: ObservableObject {
                 guard let self = self else { return }
                 guard self.isCurrentEpoch(epoch, for: model.id) else { return }
                 guard case .downloading = self.statuses[model.id] else { return }
+
+                // Throttle UI updates to ~10Hz to avoid excessive re-renders.
+                let now = ContinuousClock.now
+                if let lastPublish = self.lastProgressPublishTimes[model.id],
+                   now - lastPublish < .milliseconds(100) {
+                    return
+                }
+                self.lastProgressPublishTimes[model.id] = now
+
                 self.statuses[model.id] = .downloading(
                     downloadedBytes: bytesDownloaded,
                     totalBytes: bytesTotal > 0 ? bytesTotal : nil
@@ -162,6 +172,7 @@ final class ModelManagerViewModel: ObservableObject {
             guard isCurrentEpoch(epoch, for: model.id) else { return }
             downloaders.removeValue(forKey: model.id)
             downloadTasks.removeValue(forKey: model.id)
+            lastProgressPublishTimes.removeValue(forKey: model.id)
         }
         downloadTasks[model.id] = task
     }

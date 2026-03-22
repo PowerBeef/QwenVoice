@@ -22,8 +22,8 @@ QwenVoice is a native macOS SwiftUI app (macOS 15+, Apple Silicon only) that run
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice clean build
 
-# Swift unit tests
-xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoiceTests -destination 'platform=macOS'
+# Swift unit tests (only-testing restricts to unit tests, excludes UI tests)
+xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoice -only-testing:QwenVoiceTests -destination 'platform=macOS'
 
 # Local release DMG
 ./scripts/release.sh
@@ -31,6 +31,7 @@ xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoiceTests -destination
 # GitHub Actions release workflows
 # .github/workflows/project-inputs.yml  — validation
 # .github/workflows/release-dual-ui.yml — builds QwenVoice-macos26.dmg + QwenVoice-macos15.dmg
+# .github/workflows/test-suite.yml     — unit tests, UI tests, perf audit on PRs
 ```
 
 ## Agent Tooling
@@ -53,6 +54,41 @@ Prefer repo scripts and `xcodebuild` shell flows for all normal build and valida
 - `playwright` / `chrome-devtools` — browser-based docs or tools only
 - `openaiDeveloperDocs` — only for OpenAI API or OpenAI documentation tasks
 
+## Skill Usage
+
+This is a native macOS SwiftUI app. No Apple-platform-specific skills are installed; use general-purpose skills and repo scripts instead.
+
+### Activity → Skill mapping
+
+| When you are… | Use |
+|---|---|
+| Starting a new feature or creative work | `superpowers:brainstorming` |
+| Planning multi-step implementation | `superpowers:writing-plans` |
+| Executing a written plan | `superpowers:executing-plans` |
+| Adding or modifying tests, doing TDD | `superpowers:test-driven-development` |
+| Debugging a bug or test failure | `superpowers:systematic-debugging` |
+| About to claim work is complete | `superpowers:verification-before-completion` |
+| Finishing a development branch | `superpowers:finishing-a-development-branch` |
+| Reviewing a PR | `code-review:code-review` |
+| Guided feature development | `feature-dev:feature-dev` |
+| Editing SwiftUI views, navigation, sheets, state patterns | `swiftui-ui-patterns` |
+| Refactoring or splitting large SwiftUI view files | `swiftui-view-refactor` |
+| Working with Liquid Glass / dual-build UI profiles | `swiftui-liquid-glass` |
+| Reviewing Swift concurrency (async/await, actors, Sendable) | `swift-concurrency-expert` |
+| Diagnosing SwiftUI performance (jank, re-renders, memory) | `swiftui-performance-audit` |
+| Reviewing changed code for quality, reuse, efficiency | `simplify-code` |
+| Running tests, benchmarks, or diagnostics | `python3 scripts/harness.py …` (direct, no skill) |
+
+### RPC contract changes
+
+When changes touch `server.py`, `PythonBridge.swift`, `RPCMessage.swift`, or `qwenvoice_contract.json`, manually verify Swift/Python RPC consistency (no dedicated agent installed).
+
+### Do not use
+
+These skills are web-focused and irrelevant to this native macOS app:
+
+- `vercel:*`, `frontend-design`, `chrome-devtools-mcp:*`
+
 ## Architecture
 
 ### Source of Truth Priority
@@ -70,7 +106,13 @@ Prefer repo scripts and `xcodebuild` shell flows for all normal build and valida
 - `CustomVoiceView` — preset-speaker generation; `VoiceDesignView` — standalone voice design generation; `VoiceCloningView` — clone-from-reference generation
 - All three generation views can present `BatchGenerationSheet`; single-generation flows use live streaming preview
 - `GenerationWorkflowView` and related shared components drive the compact editor-first generation layout
+- `WindowChromeConfigurator` — NSViewRepresentable controlling main-window titlebar appearance; referenced by `ContentView`
+- `GenerationPersistence` — shared persist-to-database and autoplay logic used by all three generation views
+- `SavedVoiceSheet` — standalone sheet for saving/editing enrolled voices; used by `VoicesView` and `HistoryView`
+- `ContinuousVoiceDescriptionField` — NSViewRepresentable for the voice brief text field in `VoiceDesignView`
 - `AudioPlayerViewModel` — persistent sidebar player; supports two-mode playback (file and live streaming) with pre-buffered chunk scheduling and automatic transition to final file on completion
+  - Contains nested `PlaybackProgress` ObservableObject isolating timer-frequency properties (`currentTime`, `duration`) to prevent 10Hz fan-out to all screens that observe the parent ViewModel
+- `ModelManagerViewModel` — model download/delete lifecycle; `SavedVoicesViewModel` — enrolled voice CRUD and voice picker state
 - `HistoryView`, `VoicesView`, `ModelsView` — list-first management surfaces; toolbar/search affordances are owned by `ContentView`, not by these views
 - `PreferencesView` lives in the app's `Settings` scene (opened via Cmd-,), not the main sidebar
 
@@ -106,6 +148,7 @@ Prefer repo scripts and `xcodebuild` shell flows for all normal build and valida
 - When automating Preferences, explicitly open the Settings window (`Cmd-,` / `showSettingsWindow:`) and scroll before interacting with lower controls
 - macOS `Picker`/`Menu` controls surface as `MenuButton`/`MenuItem` in XCUI — do not assume `.button` elements
 - History uses a native AppKit-backed toolbar search field
+- `SetupView` uses `@ObservedObject var envManager` (not `@EnvironmentObject`) because it's rendered in `QwenVoiceApp` BEFORE `.environmentObject()` is attached — do not change this to `@EnvironmentObject`
 
 ## Key Change Patterns
 
@@ -134,9 +177,21 @@ Run `python3 scripts/harness.py test --layer pipeline` to verify. Add tests in `
 ### Modifying live playback or AudioPlayerViewModel
 Run `python3 scripts/harness.py test --layer swift` to verify. Manual smoke test: generate in all 3 modes with long text (forces multiple chunks), verify no clicks during streaming and smooth transition to final file playback.
 
+### Modifying AudioPlayerViewModel published state
+Timer-frequency properties (`currentTime`, `duration`) live in the nested `PlaybackProgress` object, not as `@Published` on the parent. Only `SidebarPlayerView` subscribes to `PlaybackProgress`. Do not move these back to `@Published` on the parent — it causes all 6 screens to re-render 10x/sec during playback.
+
+### Modifying generation persistence or autoplay
+All three generation views (Custom, Design, Cloning) use `GenerationPersistence.persistAndAutoplay()`. Update the shared helper in `Sources/Services/GenerationPersistence.swift`, not the individual views.
+
+### Modifying PythonBridge.call() task group
+The `call()` method uses a task group to race an RPC response against a timeout. The continuation registration runs inside a `Task { @MainActor in ... }` within a nonisolated `group.addTask` closure. This structure works around a Swift 6 region-based isolation checker bug — do not simplify by adding `@MainActor` directly to the `addTask` closure.
+
+### Modifying history or database access
+`DatabaseService` is `@MainActor`. Do not call `DatabaseService.shared` from `Task.detached` or nonisolated contexts — access it from MainActor-isolated code or use `await MainActor.run`.
+
 ## Project File Management
 
-`project.yml` is the XcodeGen source for `QwenVoice.xcodeproj`. Defines two targets: `QwenVoice` (application) and `QwenVoiceTests` (unit-test bundle). Always use `./scripts/regenerate_project.sh` (not raw `xcodegen generate`) when regeneration is needed. Current version: `1.1.7` / build `10`.
+`project.yml` is the XcodeGen source for `QwenVoice.xcodeproj`. Defines three targets: `QwenVoice` (application), `QwenVoiceTests` (unit-test bundle), and `QwenVoiceUITests` (UI-test bundle). XcodeGen only creates one scheme (`QwenVoice`); use `-only-testing:` to restrict test runs. Always use `./scripts/regenerate_project.sh` (not raw `xcodegen generate`) when regeneration is needed. Current version: `1.1.7` / build `10`. Swift language mode: `6`.
 
 ## Test & Benchmark Harness
 
@@ -150,9 +205,12 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer pipeline    # Clone delivery pipeline pure-function tests (no deps)
 python3 scripts/harness.py test --layer server      # server.py pure-function tests (no deps)
 python3 scripts/harness.py test --layer contract    # Contract cross-validation (no deps)
-python3 scripts/harness.py test --layer swift       # Swift unit tests via xcodebuild (QwenVoiceTests scheme)
+python3 scripts/harness.py test --layer swift       # Swift unit tests via xcodebuild
 python3 scripts/harness.py test --layer rpc         # RPC integration (needs app venv + installed model)
-python3 scripts/harness.py test --layer all         # All layers
+python3 scripts/harness.py test --layer ui          # XCUI tests (stub backend, no Python/ML required)
+python3 scripts/harness.py test --layer design      # Screenshot baseline comparison
+python3 scripts/harness.py test --layer perf        # Performance threshold audit
+python3 scripts/harness.py test --layer all         # All layers (excludes ui/design/perf)
 
 # Benchmarks (need app venv + installed models)
 ~/Library/Application\ Support/QwenVoice/python/bin/python3 scripts/harness.py bench --category latency --runs 3
@@ -171,8 +229,13 @@ python3 scripts/harness.py diagnose
 - `scripts/harness_lib/contract.py` — contract loader, `model_ids()`, `speaker_list()`, `model_is_installed()`
 - `scripts/harness_lib/stats.py` — `summarize_numeric()` for benchmark statistics
 - `scripts/harness_lib/backend_client.py` — canonical JSON-RPC client (context manager, `call()`, `call_collecting_notifications()`, `stderr_excerpt()`)
-- `scripts/harness_lib/test_runner.py` — test subcommand with 4 layers (pipeline, server, RPC, contract) + Swift xcodebuild
+- `scripts/harness_lib/test_runner.py` — test subcommand with layers (pipeline, server, RPC, contract, swift, audio, ui, design, perf)
 - `scripts/harness_lib/bench_runner.py` — bench subcommand with 4 categories (latency, load, quality, release)
+- `scripts/harness_lib/perf_profiler.py` — multi-tier performance profiler with bottleneck analysis
+- `scripts/harness_lib/screenshot_diff.py` — pixel-level screenshot comparison for design regression
+- `scripts/harness_lib/audio_test_runner.py` — audio pipeline chunk/property/tone tests
+- `scripts/harness_lib/audio_analysis.py` — audio analysis utilities for quality benchmarks
+- `scripts/harness_lib/ui_state_client.py` — client for querying app UI state during test runs
 - `scripts/harness_lib/diagnose_runner.py` — diagnose subcommand (backend health, runtime env, model/voice inventory, history DB, disk usage)
 - `scripts/harness_lib/validate_runner.py` — validate subcommand (contract consistency, backend importable, project inputs)
 
@@ -180,15 +243,41 @@ python3 scripts/harness.py diagnose
 
 ### Swift Unit Tests
 
-`QwenVoiceTests/` (scheme: `QwenVoiceTests`, target type: `bundle.unit-test`):
+`QwenVoiceTests/` (target type: `bundle.unit-test`, run with `-only-testing:QwenVoiceTests`):
 - `PythonBridgeLineParserTests.swift` — JSON-RPC line parsing, notification handling
 - `RPCMessageTests.swift` — RPCValue encoding/decoding round-trips, RPCResponse/RPCRequest variants
 - `TTSContractTests.swift` — contract manifest validation, model-for-mode lookup, no-duplicate checks
 
+### XCUI Tests
+
+`QwenVoiceUITests/` (target type: `bundle.ui-testing`, run with `--layer ui`):
+- 15 files (13 test + 2 support) covering sidebar navigation, all 6 views, setup flow, player bar, performance audit, screenshot capture
+- Uses stub backend mode (`QWENVOICE_UI_TEST=1`, `QWENVOICE_UI_TEST_BACKEND_MODE=stub`) — no Python/ML required
+- Screenshot baselines stored in `tests/screenshots/baselines/`
+- Performance thresholds in `tests/perf/thresholds.json`
+
+## Dual-Build UI Profiles
+
+The app supports two visual profiles via compile-time flags:
+- `QW_UI_LIQUID` — Liquid Glass (macOS 26+, `.glassEffect()` API)
+- `QW_UI_LEGACY_GLASS` — Legacy styling (macOS 15, solid fills + strokes)
+
+`AppTheme.swift` centralizes all profile-aware styling via `#if QW_UI_LIQUID` with `if #available(macOS 26, *)` runtime checks. The CI workflow (`release-dual-ui.yml`) builds both profiles in parallel.
+
+## Python Environment (Dev Builds)
+
+Dev builds use `PythonEnvironmentManager` to create a venv from system Python. The search order deprioritizes Python 3.14 (poor wheel availability) — prefers 3.13 > 3.12 > 3.11 > 3.14. The bundled release runtime is Python 3.13.
+
 ## Documentation
 
 - `docs/reference/current-state.md` — shared factual reference; keep aligned with this file
+- `docs/reference/vendoring-runtime.md` — Python runtime bundling for release builds
 - `qwen_tone.md` — tone/emotion guidance for Custom Voice and Voice Design
+
+## Operational Safety
+
+- **NEVER launch QwenVoice without killing existing instances first.** Each instance loads ML models and consumes significant RAM. Always `killall QwenVoice` before `open *.app`.
+- Prefer asking the user before launching the app rather than launching automatically after builds.
 
 ## Practical Review Checklist
 

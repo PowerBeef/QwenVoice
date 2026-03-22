@@ -4,19 +4,27 @@ import SwiftUI
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = layout(proposal: proposal, subviews: subviews)
-        return result.size
+    struct CacheData {
+        var size: CGSize = .zero
+        var positions: [CGPoint] = []
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = layout(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
+    func makeCache(subviews: Subviews) -> CacheData {
+        CacheData()
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) -> CGSize {
+        cache = computeLayout(proposal: proposal, subviews: subviews)
+        return cache.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) {
+        for (index, position) in cache.positions.enumerated() {
             subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
         }
     }
 
-    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+    private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> CacheData {
         let maxWidth = proposal.width ?? .infinity
         var positions: [CGPoint] = []
         var x: CGFloat = 0
@@ -35,6 +43,6 @@ struct FlowLayout: Layout {
             x += size.width + spacing
         }
 
-        return (CGSize(width: maxWidth, height: y + rowHeight), positions)
+        return CacheData(size: CGSize(width: maxWidth, height: y + rowHeight), positions: positions)
     }
 }

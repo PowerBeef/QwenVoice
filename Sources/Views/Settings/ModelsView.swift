@@ -135,7 +135,7 @@ private extension ModelsView {
 
 struct ModelRow: View {
     let model: TTSModel
-    @ObservedObject var viewModel: ModelManagerViewModel
+    let viewModel: ModelManagerViewModel
     var isHighlighted: Bool = false
     var onDelete: (() -> Void)? = nil
 
@@ -271,7 +271,27 @@ struct ModelRow: View {
         }
     }
 
+    @ViewBuilder
     private var modeIcon: some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            Color.clear
+                .frame(width: 34, height: 34)
+                .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 8))
+                .overlay {
+                    Image(systemName: model.mode.iconName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+        } else {
+            modeIconLegacy
+        }
+        #else
+        modeIconLegacy
+        #endif
+    }
+
+    private var modeIconLegacy: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(AppTheme.accent.opacity(isHighlighted ? 0.14 : 0.08))
             .frame(width: 34, height: 34)
@@ -282,7 +302,26 @@ struct ModelRow: View {
             }
     }
 
+    @ViewBuilder
     private var rowHighlight: some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 10))
+            } else {
+                Color.clear
+            }
+        } else {
+            rowHighlightLegacy
+        }
+        #else
+        rowHighlightLegacy
+        #endif
+    }
+
+    private var rowHighlightLegacy: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(isHighlighted ? AppTheme.accent.opacity(0.08) : .clear)
             .overlay {

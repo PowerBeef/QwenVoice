@@ -101,6 +101,6 @@ final class SavedVoicesViewModel: ObservableObject {
     }
 }
 
-private enum SavedVoicesSessionCache {
+@MainActor private enum SavedVoicesSessionCache {
     static var voices: [Voice] = []
 }

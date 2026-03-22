@@ -47,6 +47,13 @@ jobs:
           ref: ${{ inputs.git_ref }}
           fetch-depth: 0
 
+      - name: Select Xcode
+        run: |
+          case "${{ matrix.variant.runner }}" in
+            macos-15) sudo xcode-select -s /Applications/Xcode_16.3.app ;;
+            macos-26) sudo xcode-select -s /Applications/Xcode_26.0.app ;;
+          esac
+
       - name: Print build context
         run: |
           echo "variant: ${{ matrix.variant.id }}"

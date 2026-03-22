@@ -3,6 +3,7 @@ import SwiftUI
 /// Compact vertical audio player designed for the sidebar's narrow width.
 struct SidebarPlayerView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject var playbackProgress: AudioPlayerViewModel.PlaybackProgress
 
     var body: some View {
         if audioPlayer.hasAudio {
@@ -23,10 +24,14 @@ struct SidebarPlayerView: View {
                             .foregroundStyle(AppTheme.accent)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
+                            #if QW_UI_LIQUID
+                            .glassBadge(tint: AppTheme.accent)
+                            #else
                             .background(
                                 Capsule()
                                     .fill(AppTheme.accent.opacity(0.14))
                             )
+                            #endif
                             .accessibilityIdentifier("sidebarPlayer_liveBadge")
                     }
 
@@ -46,7 +51,7 @@ struct SidebarPlayerView: View {
                 }
 
                 GeometryReader { geo in
-                    WaveformView(samples: audioPlayer.waveformSamples, progress: audioPlayer.progress)
+                    WaveformView(samples: audioPlayer.waveformSamples, progress: playbackProgress.progress)
                         .contentShape(Rectangle())
                         .onTapGesture { location in
                             guard audioPlayer.canSeek else { return }
@@ -75,7 +80,7 @@ struct SidebarPlayerView: View {
                     .accessibilityIdentifier("sidebarPlayer_playPause")
                     .accessibilityValue(audioPlayer.isPlaying ? "pause" : "play")
 
-                    Text("\(audioPlayer.formattedCurrentTime) / \(audioPlayer.durationDisplayText)")
+                    Text("\(playbackProgress.formattedCurrentTime) / \(audioPlayer.durationDisplayText)")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("sidebarPlayer_time")

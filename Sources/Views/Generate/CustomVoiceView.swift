@@ -98,6 +98,7 @@ private extension CustomVoiceView {
                 identifier: "customVoice_configuration"
             )
         }
+        .animation(.none, value: selectedSpeaker)
     }
 
     var composerPanel: some View {
@@ -132,27 +133,7 @@ private extension CustomVoiceView {
     }
 
     var speakerSettings: some View {
-        ConfigurationFieldRow(
-            label: "Speaker",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
-            HStack(spacing: 10) {
-                speakerPicker
-                Spacer(minLength: 0)
-            }
-        } supporting: {
-            Text("Choose the built-in speaker that should deliver this line.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .overlay(alignment: .topLeading) {
-            selectedSpeakerValueAnchor
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("customVoice_voiceSetup")
+        SpeakerPickerRow(selectedSpeaker: $selectedSpeaker)
     }
 
     var deliverySettings: some View {
@@ -174,18 +155,7 @@ private extension CustomVoiceView {
         .accessibilityIdentifier("customVoice_toneSpeed")
     }
 
-    var speakerPicker: some View {
-        Picker("Speaker", selection: $selectedSpeaker) {
-            ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                Text(speaker.capitalized).tag(speaker)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
-        .accessibilityValue(selectedSpeaker.capitalized)
-        .accessibilityIdentifier("customVoice_speakerPicker")
-    }
+    // speakerPicker moved to SpeakerPickerRow struct for rebuild isolation
 
     var generationReadiness: some View {
         WorkflowReadinessNote(
@@ -223,17 +193,7 @@ private extension CustomVoiceView {
         return "Everything is in place for a live preview and a saved generation."
     }
 
-    var selectedSpeakerValueAnchor: some View {
-        Text(selectedSpeaker.capitalized)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(selectedSpeaker.capitalized)
-            .accessibilityValue(selectedSpeaker.capitalized)
-            .accessibilityIdentifier("customVoice_selectedSpeaker")
-    }
+    // selectedSpeakerValueAnchor moved to SpeakerPickerRow struct
 
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
@@ -303,7 +263,10 @@ private extension CustomVoiceView {
                     createdAt: Date()
                 )
 
-                try persistGenerationAndMaybeAutoplay(&generation, result: result)
+                try GenerationPersistence.persistAndAutoplay(
+                    &generation, result: result, text: text,
+                    audioPlayer: audioPlayer, caller: "CustomVoiceView"
+                )
                 UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
@@ -313,53 +276,6 @@ private extension CustomVoiceView {
 
             isGenerating = false
         }
-    }
-
-    func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
-        AppPerformanceSignposts.emit("Final File Ready")
-
-        var persistenceError: Error?
-        do {
-            let saveStart = DispatchTime.now().uptimeNanoseconds
-            try DatabaseService.shared.saveGeneration(&generation)
-            #if DEBUG
-            print("[Performance][CustomVoiceView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
-            #endif
-
-            let notificationStart = DispatchTime.now().uptimeNanoseconds
-            NotificationCenter.default.post(name: .generationSaved, object: nil)
-            #if DEBUG
-            print("[Performance][CustomVoiceView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
-            #endif
-        } catch {
-            persistenceError = error
-        }
-
-        if result.usedStreaming {
-            audioPlayer.completeStreamingPreview(
-                result: result,
-                title: String(text.prefix(40)),
-                shouldAutoPlay: AudioService.shouldAutoPlay
-            )
-        } else if AudioService.shouldAutoPlay {
-            let autoplayStart = DispatchTime.now().uptimeNanoseconds
-            audioPlayer.playFile(
-                result.audioPath,
-                title: String(text.prefix(40)),
-                isAutoplay: true
-            )
-            #if DEBUG
-            print("[Performance][CustomVoiceView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
-            #endif
-        }
-
-        if let persistenceError {
-            throw persistenceError
-        }
-    }
-
-    func elapsedMs(since start: UInt64) -> Int {
-        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
     func prewarmSelectedModelIfNeeded() async {
@@ -373,5 +289,54 @@ private extension CustomVoiceView {
             voice: selectedSpeaker,
             instruct: emotion
         )
+    }
+}
+
+// MARK: - Isolated Speaker Picker (prevents parent view rebuild cascade)
+
+private struct SpeakerPickerRow: View {
+    @Binding var selectedSpeaker: String
+
+    var body: some View {
+        ConfigurationFieldRow(
+            label: "Speaker",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
+            HStack(spacing: 10) {
+                Picker("Speaker", selection: $selectedSpeaker) {
+                    ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
+                        Text(speaker.capitalized).tag(speaker)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .transaction { $0.animation = nil }
+                .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
+                .accessibilityValue(selectedSpeaker.capitalized)
+                .accessibilityIdentifier("customVoice_speakerPicker")
+
+                Spacer(minLength: 0)
+            }
+        } supporting: {
+            Text("Choose the built-in speaker that should deliver this line.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .overlay(alignment: .topLeading) {
+            Text(selectedSpeaker.capitalized)
+                .font(.caption2)
+                .foregroundStyle(.clear)
+                .opacity(0.01)
+                .frame(width: 1, height: 1, alignment: .leading)
+                .allowsHitTesting(false)
+                .accessibilityLabel(selectedSpeaker.capitalized)
+                .accessibilityValue(selectedSpeaker.capitalized)
+                .accessibilityIdentifier("customVoice_selectedSpeaker")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("customVoice_voiceSetup")
     }
 }

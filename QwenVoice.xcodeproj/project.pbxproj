@@ -8,23 +8,37 @@
 
 /* Begin PBXBuildFile section */
 		019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */; };
+		0C44B4243F2AFE09B2B2899E /* QwenVoiceUITestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */; };
 		0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */; };
+		0FD1F6EE2257C0314EFAA6F4 /* HistoryViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */; };
 		102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */; };
 		13462F046FE8C8196DE2BD97 /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A539A647083CC4810F72FE /* WaveformService.swift */; };
 		1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281629E0EE8593C8F69031A6 /* ModelsView.swift */; };
 		1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */; };
 		1E794E6C7666C278A151F811 /* mlx_audio_qwen_speed_patch.py in Resources */ = {isa = PBXBuildFile; fileRef = F75A879B8DA7C5F5AEC99D00 /* mlx_audio_qwen_speed_patch.py */; };
 		1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BA97E899E616829A78233A /* Generation.swift */; };
+		297B74A5A5D3A5FB7C1EB7CE /* SidebarNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */; };
+		2A689847327A7165F6E2A2E6 /* VoicesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */; };
 		2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = E876590A12FADBE38100CD17 /* LayoutConstants.swift */; };
+		300CAC911A13A25260815630 /* PlayerBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C927A0519C4B746668E5FC3 /* PlayerBarTests.swift */; };
+		33F2612C7D0236463E7CD53E /* GenerationPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE484A43E26B45CCB9B9703D /* GenerationPersistence.swift */; };
 		369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */; };
+		3E7879D3644E06670F306F6F /* TestStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */; };
+		44FF0435B940C5B1E34352D2 /* SetupFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB1F0A25C5A26E0CFB7932F /* SetupFlowTests.swift */; };
 		47047F5254483416802EA6E7 /* TTSContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */; };
 		4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D22F70AB025CF59B428113 /* HistoryView.swift */; };
+		4E143AC96C8ABA269C3929AE /* SavedVoiceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFE0839E5278349D1087CB9 /* SavedVoiceSheet.swift */; };
+		4F1EBFC3163C497229ACCAA7 /* TestStateServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */; };
 		4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */; };
+		502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */; };
+		59EF7FDB9556E1860DC2FF67 /* ContinuousVoiceDescriptionField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70E509E03D5758CB0D6C0388 /* ContinuousVoiceDescriptionField.swift */; };
 		5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */; };
 		5D23FDB4CC008D1E909414A8 /* SidebarStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16357673B0524D933999409E /* SidebarStatusView.swift */; };
 		5E975521FC8B355333145278 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */; };
+		6372B1BA2D355FCF7BCB6BD5 /* StubFixtureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FE3BE8AF9BD231F3C3CA853 /* StubFixtureSupport.swift */; };
 		6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */; };
 		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
+		7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */; };
 		782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9B899A22B7619F15A40FC99C /* Assets.xcassets */; };
 		7966E1A03049D6A9F427AA40 /* clone_delivery_pipeline.py in Resources */ = {isa = PBXBuildFile; fileRef = EF5CD755DB3306C3935B67BE /* clone_delivery_pipeline.py */; };
 		7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637866C95AC607A5E0509956 /* SidebarView.swift */; };
@@ -33,11 +47,13 @@
 		8612AA28117CF2FDD46D401A /* AppPerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */; };
 		8D6183A2086E6C2AD0F8E32A /* requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = 9A5EED3BA5A17E54C8B5E699 /* requirements.txt */; };
 		9506A9366B29D225A10210E7 /* VoiceCloningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */; };
+		9675A026BBEEBA968579A386 /* DebugHierarchyTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9C19A5B1A1BAA500D359B1 /* DebugHierarchyTest.swift */; };
 		9AD93240195D2474CD96EB6B /* SavedVoicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8A61CE5C27E5BDC4EE04BA /* SavedVoicesViewModel.swift */; };
 		9C7F54D72E62B1918F56298B /* TTSContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56DB3F2A6729473A3816C4C /* TTSContract.swift */; };
 		9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */; };
 		9F33BE2BD7E13711926ED9B8 /* UITestAutomationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */; };
 		A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */; };
+		AB87F901E753DA2B3DC66096 /* PerformanceAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98AD34E571030FFA2B990B5 /* PerformanceAuditTests.swift */; };
 		AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */; };
 		B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3C6777F2ABFE603D026E0D /* VoicesView.swift */; };
 		B1D83CB652CC883A7A1DDC65 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6436F73812606485A0589C35 /* AppPaths.swift */; };
@@ -45,8 +61,11 @@
 		B55FAB38F675B5E5826F7A50 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 890E011F57EAC237416DDF0F /* AppTheme.swift */; };
 		B6824C9F4B35990C52CCDDB8 /* GenerationWorkflowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */; };
 		B7962EA5C5AE26BE94E09309 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = A6529F131AAB6D76EF97AA1B /* server.py */; };
+		BAFA99B95D495C9303E851D1 /* ModelsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */; };
 		BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */; };
+		BE958EFC766206F91BAA2FAD /* ScreenshotCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D6C6FCFF2654F27862BD50 /* ScreenshotCaptureTests.swift */; };
 		BFB9538DB6144B9BD8E227DE /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652CF3434A19FF8823B9CCA2 /* WaveformView.swift */; };
+		C48D4D80BF6A0E8A29A6BC0D /* CustomVoiceViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */; };
 		C7614DCEA3F190692321161D /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4BA2E12FB2E8DADF0D68B35C /* GRDB */; };
 		C838C6E3E59717F67F49C45C /* SidebarPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */; };
 		CD868F54EB56E87BE5F00283 /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927B9E942C6EACB0CD15D12D /* PythonBridge.swift */; };
@@ -55,6 +74,7 @@
 		E5E94AD88F173238332FECF7 /* UITestFaultInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */; };
 		EBEA2649BF9590A6E3334F65 /* BatchGenerationRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */; };
 		EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52130E590A4CD0ED7447B159 /* EmotionPreset.swift */; };
+		F1765EDC9FF7FC4205AE7D44 /* VoiceDesignViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */; };
 		F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006AC6BD98420562AC6A931C /* AudioService.swift */; };
 		FB7787825792B2182031F43C /* WindowChromeConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4ED24544C9C26510DFCFE5C /* WindowChromeConfigurator.swift */; };
 		FDC2379CA4DB15F84DB80A3C /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8DE0E108884A82B4A671FE5 /* Voice.swift */; };
@@ -70,42 +90,66 @@
 			remoteGlobalIDString = 939725D6CC844653EA90F39E;
 			remoteInfo = QwenVoice;
 		};
+		EA0D8C61643DA3D8AF942659 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 939725D6CC844653EA90F39E;
+			remoteInfo = QwenVoice;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		006AC6BD98420562AC6A931C /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
+		0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignViewTests.swift; sourceTree = "<group>"; };
 		04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestFaultInjection.swift; sourceTree = "<group>"; };
 		0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
 		0D3C6777F2ABFE603D026E0D /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
 		16357673B0524D933999409E /* SidebarStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarStatusView.swift; sourceTree = "<group>"; };
+		1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStateServer.swift; sourceTree = "<group>"; };
 		19325A900F8A145530EF0CC1 /* QwenVoiceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QwenVoiceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A8A61CE5C27E5BDC4EE04BA /* SavedVoicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedVoicesViewModel.swift; sourceTree = "<group>"; };
+		1C927A0519C4B746668E5FC3 /* PlayerBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBarTests.swift; sourceTree = "<group>"; };
 		1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestAutomationSupport.swift; sourceTree = "<group>"; };
+		1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewTests.swift; sourceTree = "<group>"; };
 		23A356AF30C23A234B739A2F /* PythonBridgeLineParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridgeLineParser.swift; sourceTree = "<group>"; };
 		281629E0EE8593C8F69031A6 /* ModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsView.swift; sourceTree = "<group>"; };
 		297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationRunner.swift; sourceTree = "<group>"; };
+		2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QwenVoiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2FE3BE8AF9BD231F3C3CA853 /* StubFixtureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubFixtureSupport.swift; sourceTree = "<group>"; };
+		3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesViewTests.swift; sourceTree = "<group>"; };
 		3ADE213695C11F46205AE6DC /* QwenVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QwenVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonEnvironmentManager.swift; sourceTree = "<group>"; };
 		4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerViewModel.swift; sourceTree = "<group>"; };
+		5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesViewTests.swift; sourceTree = "<group>"; };
 		50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPerformanceSignposts.swift; sourceTree = "<group>"; };
 		52130E590A4CD0ED7447B159 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
 		53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
 		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
 		5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationWorkflowView.swift; sourceTree = "<group>"; };
 		617BE72142511CD5043C341E /* qwenvoice_contract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = qwenvoice_contract.json; sourceTree = "<group>"; };
+		61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarNavigationTests.swift; sourceTree = "<group>"; };
 		637866C95AC607A5E0509956 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		6436F73812606485A0589C35 /* AppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPaths.swift; sourceTree = "<group>"; };
 		652CF3434A19FF8823B9CCA2 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		6A9C19A5B1A1BAA500D359B1 /* DebugHierarchyTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHierarchyTest.swift; sourceTree = "<group>"; };
+		6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceUITestBase.swift; sourceTree = "<group>"; };
+		6CFE0839E5278349D1087CB9 /* SavedVoiceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedVoiceSheet.swift; sourceTree = "<group>"; };
+		70E509E03D5758CB0D6C0388 /* ContinuousVoiceDescriptionField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContinuousVoiceDescriptionField.swift; sourceTree = "<group>"; };
 		7282AD0029C4CFDAEF69F9DB /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		73E54443E1EBBA56D347EB18 /* PythonBridgeLineParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridgeLineParserTests.swift; sourceTree = "<group>"; };
 		78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
 		802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
+		87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStateProvider.swift; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		927B9E942C6EACB0CD15D12D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		958B08B9790BD411BEE24FA0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9A5EED3BA5A17E54C8B5E699 /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
 		9B899A22B7619F15A40FC99C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A6529F131AAB6D76EF97AA1B /* server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = server.py; sourceTree = "<group>"; };
+		AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningViewTests.swift; sourceTree = "<group>"; };
+		ABB1F0A25C5A26E0CFB7932F /* SetupFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupFlowTests.swift; sourceTree = "<group>"; };
+		AE484A43E26B45CCB9B9703D /* GenerationPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationPersistence.swift; sourceTree = "<group>"; };
 		AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceDownloader.swift; sourceTree = "<group>"; };
 		B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B62852B52626359D53D76C11 /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
@@ -114,15 +158,19 @@
 		C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCMessage.swift; sourceTree = "<group>"; };
 		C1BA97E899E616829A78233A /* Generation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Generation.swift; sourceTree = "<group>"; };
 		C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPlayerView.swift; sourceTree = "<group>"; };
+		CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceViewTests.swift; sourceTree = "<group>"; };
 		D2A539A647083CC4810F72FE /* WaveformService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformService.swift; sourceTree = "<group>"; };
 		D4ED24544C9C26510DFCFE5C /* WindowChromeConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChromeConfigurator.swift; sourceTree = "<group>"; };
 		D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
+		D98AD34E571030FFA2B990B5 /* PerformanceAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceAuditTests.swift; sourceTree = "<group>"; };
 		DA0B1D8FD5B2DB216E702532 /* RPCMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCMessageTests.swift; sourceTree = "<group>"; };
+		DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsViewTests.swift; sourceTree = "<group>"; };
 		E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationSheet.swift; sourceTree = "<group>"; };
 		E4D22F70AB025CF59B428113 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		E56DB3F2A6729473A3816C4C /* TTSContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSContract.swift; sourceTree = "<group>"; };
 		E876590A12FADBE38100CD17 /* LayoutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConstants.swift; sourceTree = "<group>"; };
 		E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceApp.swift; sourceTree = "<group>"; };
+		E8D6C6FCFF2654F27862BD50 /* ScreenshotCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCaptureTests.swift; sourceTree = "<group>"; };
 		EF5CD755DB3306C3935B67BE /* clone_delivery_pipeline.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = clone_delivery_pipeline.py; sourceTree = "<group>"; };
 		F1B9A406B3FB86D1CB132845 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSContractTests.swift; sourceTree = "<group>"; };
@@ -195,6 +243,28 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		4DED610FE952BB74012461B6 /* QwenVoiceUITests */ = {
+			isa = PBXGroup;
+			children = (
+				CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */,
+				6A9C19A5B1A1BAA500D359B1 /* DebugHierarchyTest.swift */,
+				1F1DEC40E4AB28DA76022BAA /* HistoryViewTests.swift */,
+				DDB5B3ED6FAD23BA09F242EC /* ModelsViewTests.swift */,
+				D98AD34E571030FFA2B990B5 /* PerformanceAuditTests.swift */,
+				1C927A0519C4B746668E5FC3 /* PlayerBarTests.swift */,
+				3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */,
+				6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */,
+				E8D6C6FCFF2654F27862BD50 /* ScreenshotCaptureTests.swift */,
+				ABB1F0A25C5A26E0CFB7932F /* SetupFlowTests.swift */,
+				61FBE029933A97A77649CCFC /* SidebarNavigationTests.swift */,
+				2FE3BE8AF9BD231F3C3CA853 /* StubFixtureSupport.swift */,
+				AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */,
+				0271FFE66EAA10CA0DA36FDC /* VoiceDesignViewTests.swift */,
+				5041FCDAC8C3CFEA672B0B5A /* VoicesViewTests.swift */,
+			);
+			path = QwenVoiceUITests;
+			sourceTree = "<group>";
+		};
 		4F37CA228E18DE12CE0F1A43 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -227,6 +297,7 @@
 			children = (
 				3ADE213695C11F46205AE6DC /* QwenVoice.app */,
 				19325A900F8A145530EF0CC1 /* QwenVoiceTests.xctest */,
+				2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -252,10 +323,13 @@
 				006AC6BD98420562AC6A931C /* AudioService.swift */,
 				297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */,
 				0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */,
+				AE484A43E26B45CCB9B9703D /* GenerationPersistence.swift */,
 				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
 				23A356AF30C23A234B739A2F /* PythonBridgeLineParser.swift */,
 				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
+				87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */,
+				1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */,
 				1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */,
 				04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */,
 				D2A539A647083CC4810F72FE /* WaveformService.swift */,
@@ -267,6 +341,7 @@
 			isa = PBXGroup;
 			children = (
 				3335A2C55708EA04625018B2 /* QwenVoiceTests */,
+				4DED610FE952BB74012461B6 /* QwenVoiceUITests */,
 				4F37CA228E18DE12CE0F1A43 /* Sources */,
 				75A09AA27103DA1825A1703A /* Products */,
 			);
@@ -277,6 +352,7 @@
 			children = (
 				890E011F57EAC237416DDF0F /* AppTheme.swift */,
 				E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */,
+				70E509E03D5758CB0D6C0388 /* ContinuousVoiceDescriptionField.swift */,
 				5A9B0840026EFF26202877BF /* EmotionPickerView.swift */,
 				D8C22183F1D9A8DC478C8B8B /* FlowLayout.swift */,
 				5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */,
@@ -295,6 +371,7 @@
 			isa = PBXGroup;
 			children = (
 				E4D22F70AB025CF59B428113 /* HistoryView.swift */,
+				6CFE0839E5278349D1087CB9 /* SavedVoiceSheet.swift */,
 				0D3C6777F2ABFE603D026E0D /* VoicesView.swift */,
 			);
 			path = Library;
@@ -328,6 +405,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0318FC467E67E44AA3398017 /* QwenVoiceUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2999130BC4DA1F68F96D8FC4 /* Build configuration list for PBXNativeTarget "QwenVoiceUITests" */;
+			buildPhases = (
+				E3A418DF3D9CA19A6EF76F75 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F3A0EA7F3D56843512BAC348 /* PBXTargetDependency */,
+			);
+			name = QwenVoiceUITests;
+			packageProductDependencies = (
+			);
+			productName = QwenVoiceUITests;
+			productReference = 2AA58AEA639D96A91136276A /* QwenVoiceUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		35AB9A9686024F8ED928C1BC /* QwenVoiceTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5F406344467223EB921FDBBD /* Build configuration list for PBXNativeTarget "QwenVoiceTests" */;
@@ -375,6 +470,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
+					0318FC467E67E44AA3398017 = {
+						TestTargetID = 939725D6CC844653EA90F39E;
+					};
 				};
 			};
 			buildConfigurationList = A3D129E6D5A19BBE074BCC71 /* Build configuration list for PBXProject "QwenVoice" */;
@@ -396,6 +494,7 @@
 			targets = (
 				939725D6CC844653EA90F39E /* QwenVoice */,
 				35AB9A9686024F8ED928C1BC /* QwenVoiceTests */,
+				0318FC467E67E44AA3398017 /* QwenVoiceUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -429,12 +528,14 @@
 				EBEA2649BF9590A6E3334F65 /* BatchGenerationRunner.swift in Sources */,
 				9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */,
 				BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */,
+				59EF7FDB9556E1860DC2FF67 /* ContinuousVoiceDescriptionField.swift in Sources */,
 				369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */,
 				6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */,
 				6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */,
 				EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */,
 				5E975521FC8B355333145278 /* FlowLayout.swift in Sources */,
 				1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */,
+				33F2612C7D0236463E7CD53E /* GenerationPersistence.swift in Sources */,
 				B6824C9F4B35990C52CCDDB8 /* GenerationWorkflowView.swift in Sources */,
 				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
 				102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */,
@@ -447,6 +548,7 @@
 				5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */,
 				A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */,
 				4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */,
+				4E143AC96C8ABA269C3929AE /* SavedVoiceSheet.swift in Sources */,
 				9AD93240195D2474CD96EB6B /* SavedVoicesViewModel.swift in Sources */,
 				D43105145129C9FECE338221 /* SetupView.swift in Sources */,
 				C838C6E3E59717F67F49C45C /* SidebarPlayerView.swift in Sources */,
@@ -454,6 +556,8 @@
 				7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */,
 				9C7F54D72E62B1918F56298B /* TTSContract.swift in Sources */,
 				019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */,
+				3E7879D3644E06670F306F6F /* TestStateProvider.swift in Sources */,
+				4F1EBFC3163C497229ACCAA7 /* TestStateServer.swift in Sources */,
 				1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */,
 				9F33BE2BD7E13711926ED9B8 /* UITestAutomationSupport.swift in Sources */,
 				E5E94AD88F173238332FECF7 /* UITestFaultInjection.swift in Sources */,
@@ -477,6 +581,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E3A418DF3D9CA19A6EF76F75 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C48D4D80BF6A0E8A29A6BC0D /* CustomVoiceViewTests.swift in Sources */,
+				9675A026BBEEBA968579A386 /* DebugHierarchyTest.swift in Sources */,
+				0FD1F6EE2257C0314EFAA6F4 /* HistoryViewTests.swift in Sources */,
+				BAFA99B95D495C9303E851D1 /* ModelsViewTests.swift in Sources */,
+				AB87F901E753DA2B3DC66096 /* PerformanceAuditTests.swift in Sources */,
+				300CAC911A13A25260815630 /* PlayerBarTests.swift in Sources */,
+				7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */,
+				0C44B4243F2AFE09B2B2899E /* QwenVoiceUITestBase.swift in Sources */,
+				BE958EFC766206F91BAA2FAD /* ScreenshotCaptureTests.swift in Sources */,
+				44FF0435B940C5B1E34352D2 /* SetupFlowTests.swift in Sources */,
+				297B74A5A5D3A5FB7C1EB7CE /* SidebarNavigationTests.swift in Sources */,
+				6372B1BA2D355FCF7BCB6BD5 /* StubFixtureSupport.swift in Sources */,
+				502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */,
+				F1765EDC9FF7FC4205AE7D44 /* VoiceDesignViewTests.swift in Sources */,
+				2A689847327A7165F6E2A2E6 /* VoicesViewTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -485,9 +611,52 @@
 			target = 939725D6CC844653EA90F39E /* QwenVoice */;
 			targetProxy = 607312F861B239764BE84D22 /* PBXContainerItemProxy */;
 		};
+		F3A0EA7F3D56843512BAC348 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 939725D6CC844653EA90F39E /* QwenVoice */;
+			targetProxy = EA0D8C61643DA3D8AF942659 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		19E6E37C5DE0859273A29730 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6;
+				TEST_TARGET_NAME = QwenVoice;
+			};
+			name = Release;
+		};
+		1B0556E15C198BD39C309CE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6;
+				TEST_TARGET_NAME = QwenVoice;
+			};
+			name = Debug;
+		};
 		346A27324B03F671F09E2022 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -502,7 +671,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.tests;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
+				SWIFT_VERSION = 6;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QwenVoice.app/Contents/MacOS/QwenVoice";
 			};
 			name = Release;
@@ -640,7 +809,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.tests;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
+				SWIFT_VERSION = 6;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QwenVoice.app/Contents/MacOS/QwenVoice";
 			};
 			name = Debug;
@@ -651,6 +820,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
+				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -664,7 +834,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
+				SWIFT_VERSION = 6;
 				WRAPPER_NAME = QwenVoice.app;
 			};
 			name = Release;
@@ -675,6 +845,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
+				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -688,7 +859,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.9;
+				SWIFT_VERSION = 6;
 				WRAPPER_NAME = QwenVoice.app;
 			};
 			name = Debug;
@@ -696,6 +867,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2999130BC4DA1F68F96D8FC4 /* Build configuration list for PBXNativeTarget "QwenVoiceUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B0556E15C198BD39C309CE6 /* Debug */,
+				19E6E37C5DE0859273A29730 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		2BBBE90B1D4F2BB23C26AB97 /* Build configuration list for PBXNativeTarget "QwenVoice" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -4,9 +4,30 @@ import AVFoundation
 /// Manages playback state for the persistent sidebar player bar.
 @MainActor
 final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
+
+    // MARK: - High-frequency playback progress (isolated to avoid fan-out)
+
+    /// Lightweight observable that holds timer-driven properties (currentTime, duration).
+    /// Only views that need per-frame progress (e.g. SidebarPlayerView) should subscribe.
+    @MainActor
+    final class PlaybackProgress: ObservableObject {
+        @Published var currentTime: TimeInterval = 0
+        @Published var duration: TimeInterval = 0
+
+        var progress: Double {
+            guard duration > 0 else { return 0 }
+            return min(max(currentTime / duration, 0), 1)
+        }
+
+        var formattedCurrentTime: String { AudioPlayerViewModel.formatTime(currentTime) }
+        var formattedDuration: String { AudioPlayerViewModel.formatTime(duration) }
+    }
+
+    let playbackProgress = PlaybackProgress()
+
+    // MARK: - Published State (low-frequency)
+
     @Published var isPlaying = false
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
     @Published var currentFilePath: String?
     @Published var currentTitle: String = ""
     @Published var waveformSamples: [Float] = []
@@ -39,13 +60,17 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     var hasAudio: Bool { currentFilePath != nil || isLiveStream || liveSessionID != nil }
     var canSeek: Bool { playbackMode == .file || liveFinalFilePath != nil }
-    var formattedCurrentTime: String { Self.formatTime(currentTime) }
-    var formattedDuration: String { Self.formatTime(duration) }
-    var durationDisplayText: String { isLiveStream && liveFinalFilePath == nil ? "Live" : formattedDuration }
+    var durationDisplayText: String { isLiveStream && liveFinalFilePath == nil ? "Live" : playbackProgress.formattedDuration }
 
-    var progress: Double {
-        guard duration > 0 else { return 0 }
-        return min(max(currentTime / duration, 0), 1)
+    /// Non-published pass-through for callers that need the current value without subscribing.
+    var currentTime: TimeInterval {
+        get { playbackProgress.currentTime }
+        set { playbackProgress.currentTime = newValue }
+    }
+
+    var duration: TimeInterval {
+        get { playbackProgress.duration }
+        set { playbackProgress.duration = newValue }
     }
 
     override init() {
@@ -54,8 +79,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     deinit {
-        if let chunkObserver {
-            NotificationCenter.default.removeObserver(chunkObserver)
+        MainActor.assumeIsolated {
+            timer?.invalidate()
+            if let chunkObserver {
+                NotificationCenter.default.removeObserver(chunkObserver)
+            }
         }
     }
 
@@ -218,44 +246,56 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     // MARK: - Notifications
 
+    private struct ChunkInfo: Sendable {
+        let requestID: Int
+        let title: String
+        let chunkPath: String
+        let sessionDirectory: String?
+        let cumulativeDuration: Double?
+    }
+
     private func bindNotifications() {
         chunkObserver = NotificationCenter.default.addObserver(
             forName: .generationChunkReceived,
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            guard let userInfo = notification.userInfo,
+                  let requestID = userInfo["requestID"] as? Int,
+                  let title = userInfo["title"] as? String,
+                  let chunkPath = userInfo["chunkPath"] as? String
+            else { return }
+            let chunk = ChunkInfo(
+                requestID: requestID,
+                title: title,
+                chunkPath: chunkPath,
+                sessionDirectory: userInfo["streamSessionDirectory"] as? String,
+                cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
+            )
             Task { @MainActor [weak self] in
-                self?.handleGenerationChunk(notification)
+                self?.handleGenerationChunk(chunk)
             }
         }
     }
 
-    private func handleGenerationChunk(_ notification: Notification) {
+    private func handleGenerationChunk(_ chunk: ChunkInfo) {
         UITestAutomationSupport.recordAction("sidebar-preview-chunk", appSupportDir: AppPaths.appSupportDir)
-        guard
-            let userInfo = notification.userInfo,
-            let requestID = userInfo["requestID"] as? Int,
-            let title = userInfo["title"] as? String,
-            let chunkPath = userInfo["chunkPath"] as? String
-        else {
-            return
-        }
 
-        let sessionID = String(requestID)
-        let sessionDirectory = userInfo["streamSessionDirectory"] as? String
-        let cumulativeDuration = userInfo["cumulativeDurationSeconds"] as? Double
+        let sessionID = String(chunk.requestID)
+        let sessionDirectory = chunk.sessionDirectory
+        let cumulativeDuration = chunk.cumulativeDuration
 
         if liveSessionID != sessionID {
             startLiveSession(
                 id: sessionID,
-                title: title,
+                title: chunk.title,
                 sessionDirectory: sessionDirectory,
                 autoPlay: AudioService.shouldAutoPlay
             )
         }
 
         appendLiveChunk(
-            from: URL(fileURLWithPath: chunkPath),
+            from: URL(fileURLWithPath: chunk.chunkPath),
             cumulativeDuration: cumulativeDuration
         )
     }
@@ -676,7 +716,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     // MARK: - Formatting
 
-    private static func formatTime(_ time: TimeInterval) -> String {
+    static func formatTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
@@ -685,10 +725,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     // MARK: - AVAudioPlayerDelegate
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let snapshotTime = player.currentTime
+        let playerID = ObjectIdentifier(player)
         Task { @MainActor [weak self] in
-            guard let self, self.player === player else { return }
+            guard let self, self.player.map(ObjectIdentifier.init) == playerID else { return }
             self.isPlaying = false
-            self.currentTime = flag ? self.duration : player.currentTime
+            self.currentTime = flag ? self.duration : snapshotTime
             self.stopTimer()
             if !flag {
                 self.playbackError = "Playback stopped unexpectedly."

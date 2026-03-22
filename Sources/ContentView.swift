@@ -114,7 +114,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         return modelManager.isAvailable(requiredModel)
     }
 
-    static func defaultInitialSelection(
+    @MainActor static func defaultInitialSelection(
         launchOverride: SidebarItem? = AppLaunchConfiguration.current.initialSidebarItem,
         modelsDirectory: URL = QwenVoiceApp.modelsDir
     ) -> SidebarItem {
@@ -206,42 +206,26 @@ struct ContentView: View {
         }
         .navigationTitle(currentWindowTitle)
         .toolbar {
-            mainWindowToolbarContent
+            MainWindowToolbar(
+                selectedItem: selectedItem,
+                historySortOrder: $historySortOrder,
+                historySearchText: $historySearchText,
+                voicesEnrollRequestID: $voicesEnrollRequestID
+            )
         }
         .navigationSplitViewStyle(.balanced)
-        .onAppear {
-            if let selectedItem {
-                activatedItems.insert(selectedItem)
+        .onAppear(perform: handleAppear)
+        .onReceive(NotificationCenter.default.publisher(for: .testNavigateToScreen)) { notification in
+            guard let screen = notification.userInfo?["screen"] as? String else { return }
+            if let item = SidebarItem(testScreenID: screen) {
+                selectedItem = item
             }
         }
-        .task {
-            await modelManager.refresh()
-            didCompleteInitialAvailabilityRefresh = true
-            if !isPreservingLaunchOverrideSelection {
-                reconcileSelectionWithAvailability()
-            }
-        }
-        .onChange(of: selectedItem) { _, newValue in
-            if let newValue {
-                activatedItems.insert(newValue)
-            }
-
-            if let protectedLaunchOverride, newValue != protectedLaunchOverride {
-                self.protectedLaunchOverride = nil
-            }
-        }
-        .onChange(of: modelManager.statuses) { _, _ in
-            guard didCompleteInitialAvailabilityRefresh else { return }
-            guard !isPreservingLaunchOverrideSelection else { return }
-            reconcileSelectionWithAvailability()
-        }
+        .task { await handleInitialLoad() }
+        .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
+        .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
-            if let item = notification.object as? SidebarItem {
-                selectSidebarItemIfEnabled(item)
-            } else if let screenID = notification.object as? String,
-                      let item = SidebarItem(testScreenID: screenID) {
-                selectSidebarItemIfEnabled(item)
-            }
+            handleNavigateToSidebarItem(notification)
         }
     }
 
@@ -260,9 +244,13 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .profileBackground(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .topLeading) {
-            hiddenWindowMarkers
+            HiddenWindowMarkers(
+                windowTitle: currentWindowTitle,
+                activeScreenID: currentActiveScreenID,
+                disabledIdentifiers: currentDisabledSidebarIdentifiers
+            )
         }
     }
 
@@ -305,8 +293,135 @@ struct ContentView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var mainWindowToolbarContent: some ToolbarContent {
+    // MARK: - Inline closure methods
+
+    private func handleAppear() {
+        if let selectedItem {
+            activatedItems.insert(selectedItem)
+        }
+
+        if UITestAutomationSupport.isEnabled {
+            TestStateProvider.shared.activeScreen = currentActiveScreenID
+            TestStateProvider.shared.windowTitle = currentWindowTitle
+            TestStateProvider.shared.isReady = true
+        }
+    }
+
+    private func handleInitialLoad() async {
+        await modelManager.refresh()
+        didCompleteInitialAvailabilityRefresh = true
+        if !isPreservingLaunchOverrideSelection {
+            reconcileSelectionWithAvailability()
+        }
+    }
+
+    private func handleSelectionChange(_ newValue: SidebarItem?) {
+        if let newValue {
+            activatedItems.insert(newValue)
+        }
+
+        if let protectedLaunchOverride, newValue != protectedLaunchOverride {
+            self.protectedLaunchOverride = nil
+        }
+
+        if UITestAutomationSupport.isEnabled {
+            TestStateProvider.shared.activeScreen = newValue?.screenAccessibilityID ?? ""
+            TestStateProvider.shared.windowTitle = newValue?.rawValue ?? "QwenVoice"
+            TestStateProvider.shared.isReady = true
+            TestStateProvider.shared.disabledSidebarItems = currentDisabledSidebarIdentifiers
+        }
+    }
+
+    private func handleStatusesChange() {
+        guard didCompleteInitialAvailabilityRefresh else { return }
+        guard !isPreservingLaunchOverrideSelection else { return }
+        reconcileSelectionWithAvailability()
+    }
+
+    private func handleNavigateToSidebarItem(_ notification: Notification) {
+        if let item = notification.object as? SidebarItem {
+            selectSidebarItemIfEnabled(item)
+        } else if let screenID = notification.object as? String,
+                  let item = SidebarItem(testScreenID: screenID) {
+            selectSidebarItemIfEnabled(item)
+        }
+    }
+
+    // MARK: - Helper methods
+
+    private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
+        guard !disabledSidebarItems.contains(item) else { return }
+        AppPerformanceSignposts.emit("Sidebar Selection")
+        selectedItem = item
+    }
+
+    private func reconcileSelectionWithAvailability() {
+        guard let selectedItem, disabledSidebarItems.contains(selectedItem) else {
+            return
+        }
+
+        if let modelID = selectedItem.requiredModel?.id {
+            pendingHighlightedModelID = modelID
+        }
+
+        self.selectedItem = .models
+        activatedItems.insert(.models)
+    }
+}
+
+// MARK: - HiddenWindowMarkers
+
+private struct HiddenWindowMarkers: View {
+    let windowTitle: String
+    let activeScreenID: String
+    let disabledIdentifiers: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            hiddenMarker(
+                value: windowTitle,
+                identifier: "mainWindow_activeTitle"
+            )
+            hiddenMarker(
+                value: activeScreenID,
+                identifier: "mainWindow_activeScreen"
+            )
+            hiddenMarker(
+                value: disabledIdentifiers,
+                identifier: "mainWindow_disabledSidebarItems"
+            )
+            if UITestAutomationSupport.isEnabled {
+                hiddenMarker(
+                    value: activeScreenID,
+                    identifier: "mainWindow_ready"
+                )
+            }
+        }
+    }
+
+    private func hiddenMarker(value: String, identifier: String) -> some View {
+        Text(value)
+            .font(.system(size: 1))
+            .opacity(0.01)
+            .frame(width: 1, height: 1)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(value)
+            .accessibilityValue(value)
+            .accessibilityIdentifier(identifier)
+            .accessibilityHidden(false)
+    }
+}
+
+// MARK: - MainWindowToolbar
+
+private struct MainWindowToolbar: ToolbarContent {
+    let selectedItem: SidebarItem?
+    @Binding var historySortOrder: HistorySortOrder
+    @Binding var historySearchText: String
+    @Binding var voicesEnrollRequestID: UUID?
+
+    var body: some ToolbarContent {
         if selectedItem == .history {
             ToolbarItem {
                 HStack(spacing: 10) {
@@ -342,61 +457,9 @@ struct ContentView: View {
             }
         }
     }
-
-    private var hiddenWindowMarkers: some View {
-        VStack(spacing: 0) {
-            hiddenMarker(
-                value: currentWindowTitle,
-                identifier: "mainWindow_activeTitle"
-            )
-            hiddenMarker(
-                value: currentActiveScreenID,
-                identifier: "mainWindow_activeScreen"
-            )
-            hiddenMarker(
-                value: currentDisabledSidebarIdentifiers,
-                identifier: "mainWindow_disabledSidebarItems"
-            )
-            if UITestAutomationSupport.isEnabled {
-                hiddenMarker(
-                    value: currentActiveScreenID,
-                    identifier: "mainWindow_ready"
-                )
-            }
-        }
-    }
-
-    private func hiddenMarker(value: String, identifier: String) -> some View {
-        Text(value)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(value)
-            .accessibilityValue(value)
-            .accessibilityIdentifier(identifier)
-    }
-
-    private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
-        guard !disabledSidebarItems.contains(item) else { return }
-        AppPerformanceSignposts.emit("Sidebar Selection")
-        selectedItem = item
-    }
-
-    private func reconcileSelectionWithAvailability() {
-        guard let selectedItem, disabledSidebarItems.contains(selectedItem) else {
-            return
-        }
-
-        if let modelID = selectedItem.requiredModel?.id {
-            pendingHighlightedModelID = modelID
-        }
-
-        self.selectedItem = .models
-        activatedItems.insert(.models)
-    }
 }
+
+// MARK: - ToolbarSearchField
 
 private struct ToolbarSearchField: NSViewRepresentable {
     @Binding var text: String

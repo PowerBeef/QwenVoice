@@ -13,7 +13,7 @@ struct AppLaunchConfiguration {
         arguments: ProcessInfo.processInfo.arguments,
         environment: ProcessInfo.processInfo.environment
     )
-    private static var openedInitialSettingsWindow = false
+    @MainActor private static var openedInitialSettingsWindow = false
 
     init(arguments: [String], environment: [String: String]) {
         let inferredUITest = arguments.contains("--uitest")
@@ -56,7 +56,7 @@ struct AppLaunchConfiguration {
         withAnimation(current.animation(animation), updates)
     }
 
-    static func openSettingsWindowIfNeeded() {
+    @MainActor static func openSettingsWindowIfNeeded() {
         guard current.shouldOpenSettingsOnLaunch, !openedInitialSettingsWindow else { return }
         openedInitialSettingsWindow = true
         DispatchQueue.main.async {
@@ -90,11 +90,20 @@ struct QwenVoiceApp: App {
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
     @StateObject private var savedVoicesViewModel = SavedVoicesViewModel()
+    private let testStateServer = TestStateServer()
 
     init() {
         // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
         // (e.g. Python backend terminates between isRunning check and write)
         signal(SIGPIPE, SIG_IGN)
+
+        // In UI test mode, start the test state HTTP server and force activate.
+        if AppLaunchConfiguration.current.isUITest {
+            testStateServer.start()
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     var body: some Scene {
@@ -105,6 +114,7 @@ struct QwenVoiceApp: App {
                     ContentView()
                         .environmentObject(pythonBridge)
                         .environmentObject(audioPlayer)
+                        .environmentObject(audioPlayer.playbackProgress)
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
                         .environmentObject(savedVoicesViewModel)
@@ -122,7 +132,7 @@ struct QwenVoiceApp: App {
                             startBackend(pythonPath: pythonPath)
                         }
                 case .idle:
-                    Color.clear
+                    SetupView(envManager: envManager)
                         .frame(minWidth: 500, minHeight: 400)
                 default:
                     SetupView(envManager: envManager)
@@ -134,6 +144,11 @@ struct QwenVoiceApp: App {
                 setupAppSupport()
                 envManager.ensureEnvironment()
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
+            }
+            .onChange(of: envManager.state) { _, newState in
+                if UITestAutomationSupport.isEnabled, case .ready = newState {
+                    TestStateProvider.shared.isReady = true
+                }
             }
         }
         .defaultSize(width: 720, height: 560)
@@ -212,6 +227,7 @@ struct QwenVoiceApp: App {
     }
 
     private func startBackend(pythonPath: String) {
+        guard !UITestAutomationSupport.isStubBackendMode else { return }
         guard !pythonBridge.isReady else { return }
         pythonBridge.start(pythonPath: pythonPath)
         Task {
@@ -252,7 +268,7 @@ struct QwenVoiceApp: App {
     static var voicesDir: URL { AppPaths.voicesDir }
 }
 
-private enum UITestWindowSizingState {
+@MainActor private enum UITestWindowSizingState {
     static var configuredWindows: Set<ObjectIdentifier> = []
 }
 

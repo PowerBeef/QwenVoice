@@ -2,53 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct SavedVoiceSheetConfiguration: Identifiable {
-    let id = UUID()
-    let title: String
-    let subtitle: String
-    let confirmLabel: String
-    let initialName: String
-    let initialAudioPath: String
-    let initialTranscript: String
-
-    static let manualAdd = SavedVoiceSheetConfiguration(
-        title: "Add Voice Sample",
-        subtitle: "Save a reference clip here, then use it in Voice Cloning.",
-        confirmLabel: "Add Saved Voice",
-        initialName: "",
-        initialAudioPath: "",
-        initialTranscript: ""
-    )
-
-    static func cloneResult(
-        suggestedName: String,
-        audioPath: String,
-        transcript: String
-    ) -> SavedVoiceSheetConfiguration {
-        SavedVoiceSheetConfiguration(
-            title: "Save to Saved Voices",
-            subtitle: "Keep this clone as a reusable reference for Voice Cloning.",
-            confirmLabel: "Save to Saved Voices",
-            initialName: suggestedName,
-            initialAudioPath: audioPath,
-            initialTranscript: transcript
-        )
-    }
-}
-
-enum SavedVoiceNameSanitizer {
-    static func normalizedName(_ rawName: String) -> String {
-        rawName
-            .replacingOccurrences(
-                of: #"[^\w\s-]"#,
-                with: "",
-                options: .regularExpression
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
-    }
-}
-
 private struct VoicesAlertState: Identifiable {
     let id = UUID()
     let title: String
@@ -107,9 +60,7 @@ struct VoicesView: View {
             }
             .sheet(item: $savedVoiceSheetConfiguration) { configuration in
                 SavedVoiceSheet(configuration: configuration) { voice in
-                    pendingRevealVoiceID = voice.id
-                    savedVoicesViewModel.insertOrReplace(voice)
-                    Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+                    handleSavedVoiceSheetCompletion(voice)
                 }
                 .environmentObject(pythonBridge)
             }
@@ -118,10 +69,7 @@ struct VoicesView: View {
                     voiceToDelete = nil
                 }
                 Button("Delete", role: .destructive) {
-                    if let voice = voiceToDelete {
-                        deleteVoice(voice)
-                    }
-                    voiceToDelete = nil
+                    confirmDeleteVoice()
                 }
             } message: {
                 if let voice = voiceToDelete {
@@ -160,7 +108,7 @@ struct VoicesView: View {
                     )
 
                     Button("Try Again") {
-                        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+                        retryLoadVoices()
                     }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("voices_retryButton")
@@ -195,11 +143,10 @@ struct VoicesView: View {
                                 onUseInVoiceCloning(voice)
                             },
                             onPlay: {
-                                audioPlayer.playFile(voice.wavPath, title: voice.name)
+                                playVoicePreview(voice)
                             },
                             onDelete: {
-                                voiceToDelete = voice
-                                showDeleteConfirmation = true
+                                requestDeleteVoice(voice)
                             }
                         )
                         .id(voice.id)
@@ -240,6 +187,32 @@ private extension VoicesView {
 
     func presentAddSavedVoiceSheet() {
         savedVoiceSheetConfiguration = .manualAdd
+    }
+
+    func handleSavedVoiceSheetCompletion(_ voice: Voice) {
+        pendingRevealVoiceID = voice.id
+        savedVoicesViewModel.insertOrReplace(voice)
+        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+    }
+
+    func retryLoadVoices() {
+        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+    }
+
+    func playVoicePreview(_ voice: Voice) {
+        audioPlayer.playFile(voice.wavPath, title: voice.name)
+    }
+
+    func requestDeleteVoice(_ voice: Voice) {
+        voiceToDelete = voice
+        showDeleteConfirmation = true
+    }
+
+    func confirmDeleteVoice() {
+        if let voice = voiceToDelete {
+            deleteVoice(voice)
+        }
+        voiceToDelete = nil
     }
 
     func revealVoice(_ voiceID: String, using proxy: ScrollViewProxy) {
@@ -326,6 +299,22 @@ private struct VoiceRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 6)
+        #if QW_UI_LIQUID
+        .background {
+            if #available(macOS 26, *), isHighlighted {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.clear)
+                    .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(highlightFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(highlightStroke, lineWidth: isHighlighted ? 1 : 0)
+                    )
+            }
+        }
+        #else
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(highlightFill)
@@ -334,25 +323,75 @@ private struct VoiceRow: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(highlightStroke, lineWidth: isHighlighted ? 1 : 0)
         )
+        #endif
     }
 
-    private var metadataBlock: some View {
+    private var wideRowLayout: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VoiceRowMetadata(
+                voiceName: voice.name,
+                voiceID: voice.id,
+                transcriptStatus: transcriptStatus,
+                detailCopy: detailCopy
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VoiceRowActions(
+                voiceID: voice.id,
+                canUseInVoiceCloning: canUseInVoiceCloning,
+                onPlay: onPlay,
+                onUseInVoiceCloning: onUseInVoiceCloning,
+                onDelete: onDelete
+            )
+        }
+    }
+
+    private var stackedRowLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VoiceRowMetadata(
+                voiceName: voice.name,
+                voiceID: voice.id,
+                transcriptStatus: transcriptStatus,
+                detailCopy: detailCopy
+            )
+            VoiceRowActions(
+                voiceID: voice.id,
+                canUseInVoiceCloning: canUseInVoiceCloning,
+                onPlay: onPlay,
+                onUseInVoiceCloning: onUseInVoiceCloning,
+                onDelete: onDelete
+            )
+        }
+    }
+}
+
+private struct VoiceRowMetadata: View {
+    let voiceName: String
+    let voiceID: String
+    let transcriptStatus: String
+    let detailCopy: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(voice.name)
+                Text(voiceName)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
-                    .accessibilityIdentifier("voicesRow_\(voice.id)")
+                    .accessibilityIdentifier("voicesRow_\(voiceID)")
 
                 Text(transcriptStatus)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
+                    #if QW_UI_LIQUID
+                    .glassBadge()
+                    #else
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.secondary.opacity(0.12))
                     )
+                    #endif
             }
 
             Text(detailCopy)
@@ -361,8 +400,16 @@ private struct VoiceRow: View {
                 .lineLimit(2)
         }
     }
+}
 
-    private var actionCluster: some View {
+private struct VoiceRowActions: View {
+    let voiceID: String
+    let canUseInVoiceCloning: Bool
+    let onPlay: () -> Void
+    let onUseInVoiceCloning: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
         HStack(spacing: 8) {
             Button("Open in Cloning", action: onUseInVoiceCloning)
                 .buttonStyle(.bordered)
@@ -370,242 +417,21 @@ private struct VoiceRow: View {
                 .disabled(!canUseInVoiceCloning)
                 .fixedSize(horizontal: true, vertical: false)
                 .help(canUseInVoiceCloning ? "Open Voice Cloning with this saved voice selected." : "Install the Voice Cloning model in Models to open this saved voice there.")
-                .accessibilityIdentifier("voicesRow_use_\(voice.id)")
+                .accessibilityIdentifier("voicesRow_use_\(voiceID)")
 
             Button("Preview", action: onPlay)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize(horizontal: true, vertical: false)
-                .accessibilityIdentifier("voicesRow_play_\(voice.id)")
+                .accessibilityIdentifier("voicesRow_play_\(voiceID)")
 
             Button(role: .destructive, action: onDelete) {
                 Image(systemName: "trash")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityIdentifier("voicesRow_delete_\(voice.id)")
+            .accessibilityIdentifier("voicesRow_delete_\(voiceID)")
         }
         .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var wideRowLayout: some View {
-        HStack(alignment: .center, spacing: 14) {
-            metadataBlock
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            actionCluster
-        }
-    }
-
-    private var stackedRowLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            metadataBlock
-            actionCluster
-        }
-    }
-}
-
-struct SavedVoiceSheet: View {
-    @EnvironmentObject private var pythonBridge: PythonBridge
-    @Environment(\.dismiss) private var dismiss
-
-    let configuration: SavedVoiceSheetConfiguration
-    let onComplete: (Voice) -> Void
-
-    @State private var name: String
-    @State private var audioPath: String
-    @State private var transcript: String
-    @State private var isSaving = false
-    @State private var errorMessage: String?
-    @State private var existingNormalizedNames: Set<String> = []
-
-    init(
-        configuration: SavedVoiceSheetConfiguration,
-        onComplete: @escaping (Voice) -> Void
-    ) {
-        self.configuration = configuration
-        self.onComplete = onComplete
-        _name = State(initialValue: configuration.initialName)
-        _audioPath = State(initialValue: configuration.initialAudioPath)
-        _transcript = State(initialValue: configuration.initialTranscript)
-    }
-
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var normalizedName: String {
-        SavedVoiceNameSanitizer.normalizedName(trimmedName)
-    }
-
-    private var validationMessage: String? {
-        guard !trimmedName.isEmpty else { return nil }
-
-        if normalizedName.isEmpty {
-            return "Enter a name with letters or numbers."
-        }
-
-        if existingNormalizedNames.contains(normalizedName) {
-            return "A saved voice named \"\(normalizedName)\" already exists. Choose a different name."
-        }
-
-        return nil
-    }
-
-    private var canSubmit: Bool {
-        !trimmedName.isEmpty
-            && !audioPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && validationMessage == nil
-            && !isSaving
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(configuration.title)
-                .font(.title2.weight(.bold))
-
-            Text(configuration.subtitle)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Name")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    TextField("Saved voice name", text: $name)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("voicesEnroll_nameField")
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Audio")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    HStack {
-                        TextField("Reference audio file", text: $audioPath)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("voicesEnroll_audioPathField")
-
-                        Button("Browse...") {
-                            browseForAudio()
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("voicesEnroll_browseButton")
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Transcript (optional but recommended)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    TextEditor(text: $transcript)
-                        .font(.body)
-                        .frame(minHeight: 100)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color(nsColor: .textBackgroundColor))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
-                        )
-                        .accessibilityIdentifier("voicesEnroll_transcriptField")
-                }
-            }
-
-            if let activeMessage = validationMessage ?? errorMessage {
-                Text(activeMessage)
-                    .foregroundStyle(.red)
-                    .font(.callout)
-                    .accessibilityIdentifier("voicesEnroll_errorMessage")
-            }
-
-            HStack {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-                .accessibilityIdentifier("voicesEnroll_cancelButton")
-
-                Spacer()
-
-                Button(configuration.confirmLabel) {
-                    saveVoice()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSubmit)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("voicesEnroll_confirmButton")
-            }
-        }
-        .padding(20)
-        .frame(width: 520)
-        .task {
-            await loadExistingVoiceNames()
-        }
-        .onChange(of: name) { _, _ in
-            errorMessage = nil
-        }
-    }
-
-    private func loadExistingVoiceNames() async {
-        do {
-            let voices = try await pythonBridge.listVoices()
-            await MainActor.run {
-                existingNormalizedNames = Set(voices.map(\.id))
-            }
-        } catch {
-            await MainActor.run {
-                existingNormalizedNames = []
-            }
-        }
-    }
-
-    private func browseForAudio() {
-        if UITestAutomationSupport.isStubBackendMode,
-           let url = UITestAutomationSupport.enrollAudioURL {
-            audioPath = url.path
-            return
-        }
-
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
-        if panel.runModal() == .OK, let url = panel.url {
-            audioPath = url.path
-        }
-    }
-
-    private func saveVoice() {
-        guard validationMessage == nil else { return }
-
-        isSaving = true
-        errorMessage = nil
-
-        Task {
-            do {
-                let savedVoice = try await pythonBridge.enrollVoice(
-                    name: trimmedName,
-                    audioPath: audioPath.trimmingCharacters(in: .whitespacesAndNewlines),
-                    transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? nil
-                        : transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                await MainActor.run {
-                    onComplete(savedVoice)
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                }
-            }
-            await MainActor.run {
-                isSaving = false
-            }
-        }
     }
 }

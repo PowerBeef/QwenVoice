@@ -46,10 +46,11 @@ targets:
         WRAPPER_NAME: QwenVoice.app
         MARKETING_VERSION: "1.1.7"
         CURRENT_PROJECT_VERSION: "10"
-        SWIFT_VERSION: "5.9"
+        SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         INFOPLIST_FILE: Sources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
+        CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -65,8 +66,23 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.tests
-        SWIFT_VERSION: "5.9"
+        SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: QwenVoice
+
+  QwenVoiceUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: QwenVoiceUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.uitests
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: QwenVoice
     dependencies:
       - target: QwenVoice

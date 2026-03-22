@@ -1,0 +1,128 @@
+name: Test Suite
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit & Contract Tests (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          case "${{ matrix.runner }}" in
+            macos-15) sudo xcode-select -s /Applications/Xcode_16.3.app ;;
+            macos-26) sudo xcode-select -s /Applications/Xcode_26.0.app ;;
+          esac
+          xcodebuild -version
+
+      - name: Ensure XcodeGen
+        run: which xcodegen || brew install xcodegen
+
+      - name: Regenerate project
+        run: ./scripts/regenerate_project.sh
+
+      - name: Validate
+        run: python3 scripts/harness.py validate
+
+      - name: Swift unit tests
+        run: python3 scripts/harness.py test --layer swift
+
+      - name: Contract tests
+        run: python3 scripts/harness.py test --layer contract
+
+      - name: Pipeline tests
+        run: python3 scripts/harness.py test --layer pipeline
+
+      - name: Server tests
+        run: python3 scripts/harness.py test --layer server
+
+      - name: Verify strict concurrency
+        run: |
+          xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build \
+            OTHER_SWIFT_FLAGS='-strict-concurrency=complete' 2>&1 \
+            | tee /tmp/concurrency-check.log
+          WARNINGS=$(grep -c 'warning:.*concurren\|warning:.*[Ss]endable\|warning:.*actor\|warning:.*isolation' /tmp/concurrency-check.log || true)
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::error::$WARNINGS strict concurrency warnings found"
+            grep 'warning:.*concurren\|warning:.*[Ss]endable\|warning:.*actor\|warning:.*isolation' /tmp/concurrency-check.log
+            exit 1
+          fi
+          echo "No strict concurrency warnings."
+
+  ui-tests:
+    name: UI Tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.3.app
+          xcodebuild -version
+
+      - name: Ensure XcodeGen
+        run: which xcodegen || brew install xcodegen
+
+      - name: Regenerate project
+        run: ./scripts/regenerate_project.sh
+
+      - name: Run XCUI tests
+        run: python3 scripts/harness.py test --layer ui
+
+      - name: Upload xcresult bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: build/test/results/**/*.xcresult
+          if-no-files-found: warn
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: build/test/screenshots/
+          if-no-files-found: warn
+
+  perf-audit:
+    name: Performance Audit (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          case "${{ matrix.runner }}" in
+            macos-15) sudo xcode-select -s /Applications/Xcode_16.3.app ;;
+            macos-26) sudo xcode-select -s /Applications/Xcode_26.0.app ;;
+          esac
+          xcodebuild -version
+
+      - name: Ensure XcodeGen
+        run: which xcodegen || brew install xcodegen
+
+      - name: Regenerate project
+        run: ./scripts/regenerate_project.sh
+
+      - name: Run performance audit
+        run: python3 scripts/harness.py test --layer perf

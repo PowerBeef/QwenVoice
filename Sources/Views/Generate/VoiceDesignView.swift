@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 struct VoiceDesignView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
@@ -140,30 +139,7 @@ private extension VoiceDesignView {
     }
 
     var briefSettings: some View {
-        ConfigurationFieldRow(
-            label: "Voice brief",
-            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
-            horizontalSpacing: 12,
-            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
-            supportingSpacing: 4
-        ) {
-            ContinuousVoiceDescriptionField(
-                text: $voiceDescription,
-                placeholder: "A warm, deep narrator with a subtle British accent.",
-                accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } supporting: {
-            Text("Describe timbre, accent, or delivery style in one tight sentence.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .overlay(alignment: .topLeading) {
-            voiceDescriptionValueAnchor
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceDesign_voiceSetup")
-        .accessibilityValue(voiceDescription)
+        VoiceDesignBriefSettings(voiceDescription: $voiceDescription)
     }
 
     var deliverySettings: some View {
@@ -227,18 +203,6 @@ private extension VoiceDesignView {
         return "Everything is in place for a live preview and a saved generation."
     }
 
-    var voiceDescriptionValueAnchor: some View {
-        Text(voiceDescription.isEmpty ? " " : voiceDescription)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(voiceDescription)
-            .accessibilityValue(voiceDescription)
-            .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
-    }
-
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
             generationReadiness
@@ -254,57 +218,6 @@ private extension VoiceDesignView {
             minHeight: LayoutConstants.generationComposerFooterMinHeight,
             alignment: .topLeading
         )
-    }
-}
-
-private struct ContinuousVoiceDescriptionField: NSViewRepresentable {
-    @Binding var text: String
-    let placeholder: String
-    let accessibilityIdentifier: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(string: text)
-        field.delegate = context.coordinator
-        field.isBordered = true
-        field.isBezeled = true
-        field.bezelStyle = .roundedBezel
-        field.usesSingleLineMode = true
-        field.lineBreakMode = .byTruncatingTail
-        configure(field)
-        return field
-    }
-
-    func updateNSView(_ nsView: NSTextField, context: Context) {
-        context.coordinator.text = $text
-        if nsView.stringValue != text {
-            nsView.stringValue = text
-        }
-        configure(nsView)
-    }
-
-    private func configure(_ field: NSTextField) {
-        field.placeholderString = placeholder
-        field.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
-        field.setAccessibilityIdentifier(accessibilityIdentifier)
-        field.setAccessibilityLabel("Voice brief")
-        field.setAccessibilityValue(field.stringValue)
-    }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var text: Binding<String>
-
-        init(text: Binding<String>) {
-            self.text = text
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text.wrappedValue = field.stringValue
-        }
     }
 }
 
@@ -358,7 +271,10 @@ private extension VoiceDesignView {
                     createdAt: Date()
                 )
 
-                try persistGenerationAndMaybeAutoplay(&generation, result: result)
+                try GenerationPersistence.persistAndAutoplay(
+                    &generation, result: result, text: text,
+                    audioPlayer: audioPlayer, caller: "VoiceDesignView"
+                )
                 UITestAutomationSupport.recordAction("design-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("design-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
@@ -368,53 +284,6 @@ private extension VoiceDesignView {
 
             isGenerating = false
         }
-    }
-
-    func persistGenerationAndMaybeAutoplay(_ generation: inout Generation, result: GenerationResult) throws {
-        AppPerformanceSignposts.emit("Final File Ready")
-
-        var persistenceError: Error?
-        do {
-            let saveStart = DispatchTime.now().uptimeNanoseconds
-            try DatabaseService.shared.saveGeneration(&generation)
-            #if DEBUG
-            print("[Performance][VoiceDesignView] db_save_wall_ms=\(elapsedMs(since: saveStart))")
-            #endif
-
-            let notificationStart = DispatchTime.now().uptimeNanoseconds
-            NotificationCenter.default.post(name: .generationSaved, object: nil)
-            #if DEBUG
-            print("[Performance][VoiceDesignView] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
-            #endif
-        } catch {
-            persistenceError = error
-        }
-
-        if result.usedStreaming {
-            audioPlayer.completeStreamingPreview(
-                result: result,
-                title: String(text.prefix(40)),
-                shouldAutoPlay: AudioService.shouldAutoPlay
-            )
-        } else if AudioService.shouldAutoPlay {
-            let autoplayStart = DispatchTime.now().uptimeNanoseconds
-            audioPlayer.playFile(
-                result.audioPath,
-                title: String(text.prefix(40)),
-                isAutoplay: true
-            )
-            #if DEBUG
-            print("[Performance][VoiceDesignView] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
-            #endif
-        }
-
-        if let persistenceError {
-            throw persistenceError
-        }
-    }
-
-    func elapsedMs(since start: UInt64) -> Int {
-        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
     func prewarmSelectedModelIfNeeded() async {
@@ -428,5 +297,50 @@ private extension VoiceDesignView {
             voice: nil,
             instruct: emotion
         )
+    }
+}
+
+// MARK: - Voice Design Brief Settings
+
+private struct VoiceDesignBriefSettings: View {
+    @Binding var voiceDescription: String
+
+    var body: some View {
+        ConfigurationFieldRow(
+            label: "Voice brief",
+            rowVerticalPadding: LayoutConstants.generationConfigurationRowVerticalPadding,
+            horizontalSpacing: 12,
+            stackedSpacing: LayoutConstants.generationConfigurationRowSpacing,
+            supportingSpacing: 4
+        ) {
+            ContinuousVoiceDescriptionField(
+                text: $voiceDescription,
+                placeholder: "A warm, deep narrator with a subtle British accent.",
+                accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } supporting: {
+            Text("Describe timbre, accent, or delivery style in one tight sentence.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .overlay(alignment: .topLeading) {
+            voiceDescriptionValueAnchor
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceDesign_voiceSetup")
+        .accessibilityValue(voiceDescription)
+    }
+
+    private var voiceDescriptionValueAnchor: some View {
+        Text(voiceDescription.isEmpty ? " " : voiceDescription)
+            .font(.caption2)
+            .foregroundStyle(.clear)
+            .opacity(0.01)
+            .frame(width: 1, height: 1, alignment: .leading)
+            .allowsHitTesting(false)
+            .accessibilityLabel(voiceDescription)
+            .accessibilityValue(voiceDescription)
+            .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
     }
 }

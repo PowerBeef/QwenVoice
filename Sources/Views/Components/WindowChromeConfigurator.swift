@@ -16,9 +16,9 @@ private enum WindowChromeState {
     static let dividerOverlayLeadingEdgeLayerName = "QwenVoiceLegacyDividerLeadingEdge"
     static let dividerOverlayTrailingEdgeLayerName = "QwenVoiceLegacyDividerTrailingEdge"
 
-    static var splitObservers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
-    static var observedSplitViews: [ObjectIdentifier: WeakSplitViewBox] = [:]
-    static var windowToSplit: [ObjectIdentifier: ObjectIdentifier] = [:]
+    @MainActor static var splitObservers: [ObjectIdentifier: [NSObjectProtocol]] = [:]
+    @MainActor static var observedSplitViews: [ObjectIdentifier: WeakSplitViewBox] = [:]
+    @MainActor static var windowToSplit: [ObjectIdentifier: ObjectIdentifier] = [:]
 }
 
 struct WindowChromeConfigurator: NSViewRepresentable {

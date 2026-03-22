@@ -44,7 +44,7 @@ protocol GenerationPersisting {
 }
 
 extension PythonBridge: BatchGenerationBridging { }
-extension DatabaseService: GenerationPersisting { }
+extension DatabaseService: @MainActor GenerationPersisting { }
 
 struct BatchGenerationRequest {
     let mode: GenerationMode

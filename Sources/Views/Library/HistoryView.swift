@@ -31,7 +31,7 @@ private struct HistoryActionAlert: Identifiable {
     let message: String
 }
 
-private enum HistorySessionCache {
+@MainActor private enum HistorySessionCache {
     static var generations: [Generation] = []
 }
 
@@ -84,53 +84,28 @@ struct HistoryView: View {
     @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
     @State private var needsReloadWhenActive = false
     @State private var pendingReloadAfterCurrentLoad = false
-
-    private var filteredItems: [HistoryListItem] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        var result = query.isEmpty ? items : items.filter { $0.searchKey.contains(query) }
-
-        switch sortOrder {
-        case .newest:
-            result.sort { $0.generation.createdAt > $1.generation.createdAt }
-        case .oldest:
-            result.sort { $0.generation.createdAt < $1.generation.createdAt }
-        case .longestDuration:
-            result.sort { ($0.generation.duration ?? 0) > ($1.generation.duration ?? 0) }
-        case .shortestDuration:
-            result.sort { ($0.generation.duration ?? 0) < ($1.generation.duration ?? 0) }
-        case .mode:
-            result.sort { $0.generation.mode < $1.generation.mode }
-        }
-
-        return result
-    }
+    @State private var filteredItems: [HistoryListItem] = []
+    @State private var itemsRevision = 0
+    @State private var searchDebounceTask: Task<Void, Never>?
 
     var body: some View {
         content
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityIdentifier("screen_history")
-        .onAppear {
-            if isActive && items.isEmpty {
-                reloadHistory()
+        .onAppear(perform: handleAppear)
+        .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in handleGenerationSaved() }
+        .onChange(of: isActive) { _, val in handleActiveChange(val) }
+        .onChange(of: itemsRevision) { _, _ in recomputeFilteredItems() }
+        .onChange(of: sortOrder) { _, _ in recomputeFilteredItems() }
+        .onChange(of: searchText) { _, _ in
+            searchDebounceTask?.cancel()
+            searchDebounceTask = Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                recomputeFilteredItems()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
-            if isActive {
-                reloadHistory()
-            } else {
-                needsReloadWhenActive = true
-            }
-        }
-        .onChange(of: isActive) { _, isActive in
-            guard isActive else { return }
-            guard items.isEmpty || needsReloadWhenActive || loadError != nil else { return }
-            needsReloadWhenActive = false
-            reloadHistory()
-        }
-        .onDisappear {
-            loadTask?.cancel()
-            loadTask = nil
-        }
+        .onDisappear(perform: handleDisappear)
         .alert("Delete Generation?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {
                 itemToDelete = nil
@@ -153,12 +128,7 @@ struct HistoryView: View {
         }
         .sheet(item: $savedVoiceSheetConfiguration) { configuration in
             SavedVoiceSheet(configuration: configuration) { voice in
-                savedVoicesViewModel.insertOrReplace(voice)
-                Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
-                presentActionAlert(
-                    title: "Saved Voice Added",
-                    message: "\"\(voice.name)\" is ready in Saved Voices."
-                )
+                handleSavedVoice(voice)
             }
             .environmentObject(pythonBridge)
         }
@@ -232,6 +202,62 @@ struct HistoryView: View {
 }
 
 private extension HistoryView {
+    func handleAppear() {
+        if isActive && items.isEmpty {
+            reloadHistory()
+        }
+    }
+
+    func handleGenerationSaved() {
+        if isActive {
+            reloadHistory()
+        } else {
+            needsReloadWhenActive = true
+        }
+    }
+
+    func handleActiveChange(_ isActive: Bool) {
+        guard isActive else { return }
+        guard items.isEmpty || needsReloadWhenActive || loadError != nil else { return }
+        needsReloadWhenActive = false
+        reloadHistory()
+    }
+
+    func handleDisappear() {
+        loadTask?.cancel()
+        loadTask = nil
+        searchDebounceTask?.cancel()
+    }
+
+    func handleSavedVoice(_ voice: Voice) {
+        savedVoicesViewModel.insertOrReplace(voice)
+        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        presentActionAlert(
+            title: "Saved Voice Added",
+            message: "\"\(voice.name)\" is ready in Saved Voices."
+        )
+    }
+
+    func recomputeFilteredItems() {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var result = query.isEmpty ? items : items.filter { $0.searchKey.contains(query) }
+
+        switch sortOrder {
+        case .newest:
+            result.sort { $0.generation.createdAt > $1.generation.createdAt }
+        case .oldest:
+            result.sort { $0.generation.createdAt < $1.generation.createdAt }
+        case .longestDuration:
+            result.sort { ($0.generation.duration ?? 0) > ($1.generation.duration ?? 0) }
+        case .shortestDuration:
+            result.sort { ($0.generation.duration ?? 0) < ($1.generation.duration ?? 0) }
+        case .mode:
+            result.sort { $0.generation.mode < $1.generation.mode }
+        }
+
+        filteredItems = result
+    }
+
     @ViewBuilder
     func historyStateContainer<Content: View>(
         identifier: String,
@@ -278,16 +304,16 @@ private extension HistoryView {
             }
 
             do {
-                let loadedItems = try await Task.detached(priority: .userInitiated) {
-                    if hasExistingItems {
-                        try UITestFaultInjection.throwIfEnabled(.historyFetch)
-                    }
-                    return try DatabaseService.shared.fetchAllGenerations().map(HistoryListItem.init)
-                }.value
+                if hasExistingItems {
+                    try UITestFaultInjection.throwIfEnabled(.historyFetch)
+                }
+                let generations = try DatabaseService.shared.fetchAllGenerations()
+                let loadedItems = generations.map(HistoryListItem.init)
 
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     items = loadedItems
+                    itemsRevision &+= 1
                     HistorySessionCache.generations = loadedItems.map(\.generation)
                     loadError = nil
                     isLoading = false
@@ -410,6 +436,7 @@ private extension HistoryView {
         }
 
         items.removeAll { $0.id == item.id }
+        itemsRevision &+= 1
         HistorySessionCache.generations.removeAll { generation in
             guard let generationID = generation.id, let itemID = item.generation.id else {
                 return generation.audioPath == item.generation.audioPath
@@ -432,6 +459,79 @@ private extension HistoryView {
 
     func presentActionAlert(title: String, message: String) {
         actionAlert = HistoryActionAlert(title: title, message: message)
+    }
+}
+
+private struct HistoryRowMetadata: View {
+    let mode: String
+    let voice: String?
+    let formattedDate: String
+    let modeColor: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(mode.capitalized)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                #if QW_UI_LIQUID
+                .glassBadge(tint: modeColor)
+                #else
+                .background(
+                    Capsule()
+                        .fill(modeColor.opacity(0.15))
+                )
+                #endif
+
+            if let voice, !voice.isEmpty {
+                Text(voice)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Text(formattedDate)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct HistoryRowActions: View {
+    let audioFileExists: Bool
+    let onSaveToSavedVoices: (() -> Void)?
+    let onSaveAs: () -> Void
+    let onDelete: () -> Void
+    let itemID: String
+
+    var body: some View {
+        ControlGroup {
+            if let onSaveToSavedVoices {
+                Button(action: onSaveToSavedVoices) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!audioFileExists)
+                .accessibilityLabel("Save to Saved Voices")
+                .accessibilityIdentifier("historyRow_saveVoice_\(itemID)")
+            }
+
+            Button(action: onSaveAs) {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!audioFileExists)
+            .accessibilityIdentifier("historyRow_saveAs")
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityIdentifier("historyRow_delete")
+        }
     }
 }
 
@@ -471,27 +571,12 @@ private struct HistoryRow: View {
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text(item.generation.mode.capitalized)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(modeColor.opacity(0.15))
-                        )
-
-                    if let voice = item.generation.voice, !voice.isEmpty {
-                        Text(voice)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Text(item.formattedDate)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                HistoryRowMetadata(
+                    mode: item.generation.mode,
+                    voice: item.generation.voice,
+                    formattedDate: item.formattedDate,
+                    modeColor: modeColor
+                )
             }
 
             Spacer()
@@ -500,33 +585,13 @@ private struct HistoryRow: View {
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
 
-            ControlGroup {
-                if let onSaveToSavedVoices {
-                    Button(action: onSaveToSavedVoices) {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(!item.audioFileExists)
-                    .accessibilityLabel("Save to Saved Voices")
-                    .accessibilityIdentifier("historyRow_saveVoice_\(item.id)")
-                }
-
-                Button(action: onSaveAs) {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!item.audioFileExists)
-                .accessibilityIdentifier("historyRow_saveAs")
-
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityIdentifier("historyRow_delete")
-            }
+            HistoryRowActions(
+                audioFileExists: item.audioFileExists,
+                onSaveToSavedVoices: onSaveToSavedVoices,
+                onSaveAs: onSaveAs,
+                onDelete: onDelete,
+                itemID: item.id
+            )
         }
         .padding(.vertical, 4)
         .accessibilityIdentifier("historyRow_\(item.id)")

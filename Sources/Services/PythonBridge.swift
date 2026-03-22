@@ -24,8 +24,8 @@ final class PythonBridge: ObservableObject {
         didSet { syncSidebarStatusFromSystemState() }
     }
     @Published private(set) var isProcessing = false
-    @Published private(set) var progressPercent: Int = 0
-    @Published private(set) var progressMessage: String = ""
+    private(set) var progressPercent: Int = 0
+    private(set) var progressMessage: String = ""
     @Published private(set) var sidebarStatus: SidebarStatus = .starting
     @Published var lastError: String? {
         didSet { syncSidebarStatusFromSystemState() }
@@ -185,6 +185,8 @@ final class PythonBridge: ObservableObject {
     /// Stop the Python backend process.
     func stop() {
         let proc = process
+        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+        stderrPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil
         stdinPipe = nil
         stdoutPipe = nil
@@ -353,50 +355,71 @@ final class PythonBridge: ObservableObject {
 
         let timeout = method == "ping" ? Self.pingTimeout : Self.defaultTimeout
 
-        return try await withThrowingTaskGroup(of: RPCValue.self) { group in
-            group.addTask { @MainActor in
-                try await withCheckedThrowingContinuation { continuation in
-                    self.pendingRequests[id] = PendingRequest(
-                        continuation: continuation,
-                        reportsErrors: reportsErrors
-                    )
-                    guard let pipe = self.stdinPipe else {
-                        self.pendingRequests.removeValue(forKey: id)
-                        continuation.resume(throwing: PythonBridgeError.processNotRunning)
-                        return
+        // Register continuation and write to pipe (both MainActor-safe since we're already on it)
+        let result: RPCValue
+        do {
+            result = try await withThrowingTaskGroup(of: RPCValue.self) { group in
+                group.addTask { [self] in
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<RPCValue, any Error>) in
+                        Task { @MainActor in
+                            self.pendingRequests[id] = PendingRequest(
+                                continuation: continuation,
+                                reportsErrors: reportsErrors
+                            )
+                            guard let pipe = self.stdinPipe else {
+                                self.pendingRequests.removeValue(forKey: id)
+                                continuation.resume(throwing: PythonBridgeError.processNotRunning)
+                                return
+                            }
+                            pipe.fileHandleForWriting.write(lineData)
+                        }
                     }
-                    pipe.fileHandleForWriting.write(lineData)
                 }
-            }
 
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeout * 1_000_000_000)
-                throw PythonBridgeError.timeout(seconds: Int(timeout))
-            }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: timeout * 1_000_000_000)
+                    throw PythonBridgeError.timeout(seconds: Int(timeout))
+                }
 
-            defer {
+                guard let first = try await group.next() else {
+                    throw PythonBridgeError.timeout(seconds: Int(timeout))
+                }
                 group.cancelAll()
-                pendingRequests.removeValue(forKey: id)
-                isProcessing = false
-                progressPercent = 0
-                progressMessage = ""
-                if activeProgressRequestID == id {
-                    clearActiveProgressTracking()
-                }
-                if var session = activeGenerationSession, session.currentRequestID == id {
-                    session.currentRequestID = nil
-                    activeGenerationSession = session
-                }
-                if streamingContext != nil {
-                    activeStreamingRequests.removeValue(forKey: id)
-                }
+                return first
             }
-
-            guard let result = try await group.next() else {
-                throw PythonBridgeError.timeout(seconds: Int(timeout))
+        } catch {
+            pendingRequests.removeValue(forKey: id)
+            isProcessing = false
+            progressPercent = 0
+            progressMessage = ""
+            if activeProgressRequestID == id {
+                clearActiveProgressTracking()
             }
-            return result
+            if var session = activeGenerationSession, session.currentRequestID == id {
+                session.currentRequestID = nil
+                activeGenerationSession = session
+            }
+            if streamingContext != nil {
+                activeStreamingRequests.removeValue(forKey: id)
+            }
+            throw error
         }
+
+        pendingRequests.removeValue(forKey: id)
+        isProcessing = false
+        progressPercent = 0
+        progressMessage = ""
+        if activeProgressRequestID == id {
+            clearActiveProgressTracking()
+        }
+        if var session = activeGenerationSession, session.currentRequestID == id {
+            session.currentRequestID = nil
+            activeGenerationSession = session
+        }
+        if streamingContext != nil {
+            activeStreamingRequests.removeValue(forKey: id)
+        }
+        return result
     }
 
     /// Send a JSON-RPC request expecting a dict result.
@@ -589,6 +612,8 @@ final class PythonBridge: ObservableObject {
         cancelAllPending(error: PythonBridgeError.cancelled)
 
         let proc = process
+        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+        stderrPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil
         stdinPipe = nil
         stdoutPipe = nil

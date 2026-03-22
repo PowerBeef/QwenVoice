@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 
 /// Manages SQLite database for generation history.
+@MainActor
 final class DatabaseService {
     static let shared = DatabaseService()
 
