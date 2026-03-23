@@ -17,7 +17,7 @@ enum AudioService {
         let configuredPath = (defaults.string(forKey: "outputDirectory") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if configuredPath.isEmpty {
-            return QwenVoiceApp.outputsDir
+            return AppPaths.outputsDir
         }
 
         let expandedPath = (configuredPath as NSString).expandingTildeInPath

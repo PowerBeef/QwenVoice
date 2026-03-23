@@ -253,7 +253,7 @@ struct CompactConfigurationSection<Content: View>: View {
             .background {
                 if #available(macOS 26, *) {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(white: 0.13))
+                        .fill(.clear)
                         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
                         .glass3DDepth(radius: 12)
                 } else {

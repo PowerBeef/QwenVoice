@@ -121,8 +121,10 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             object: splitView,
             queue: .main
         ) { [weak splitView] _ in
-            guard let splitView else { return }
-            applyLegacyDividerBlendIfNeeded(to: splitView)
+            MainActor.assumeIsolated {
+                guard let splitView else { return }
+                applyLegacyDividerBlendIfNeeded(to: splitView)
+            }
         }
 
         let frameToken = center.addObserver(
@@ -130,8 +132,10 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             object: splitView,
             queue: .main
         ) { [weak splitView] _ in
-            guard let splitView else { return }
-            applyLegacyDividerBlendIfNeeded(to: splitView)
+            MainActor.assumeIsolated {
+                guard let splitView else { return }
+                applyLegacyDividerBlendIfNeeded(to: splitView)
+            }
         }
 
         WindowChromeState.splitObservers[key] = [resizeToken, frameToken]
