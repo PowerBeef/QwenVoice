@@ -13,9 +13,17 @@ struct ContinuousVoiceDescriptionField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(string: text)
         field.delegate = context.coordinator
+        #if QW_UI_LIQUID
+        field.isBordered = false
+        field.isBezeled = false
+        field.backgroundColor = .clear
+        field.drawsBackground = false
+        field.focusRingType = .none
+        #else
         field.isBordered = true
         field.isBezeled = true
         field.bezelStyle = .roundedBezel
+        #endif
         field.usesSingleLineMode = true
         field.lineBreakMode = .byTruncatingTail
         configure(field)

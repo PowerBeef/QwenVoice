@@ -121,6 +121,7 @@ private struct NativeSurfaceStyle: ViewModifier {
             content
                 .padding(padding)
                 .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
+                .glass3DDepth(radius: radius)
         } else {
             legacyBody(content: content)
         }
@@ -380,6 +381,7 @@ struct GlassGroupBoxStyle: GroupBoxStyle {
         }
         .padding(12)
         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 16))
+        .glass3DDepth(radius: 16)
     }
 }
 #endif
@@ -440,4 +442,56 @@ extension View {
         self
         #endif
     }
+
+    /// Profile-aware glass text field background with 3D depth.
+    @ViewBuilder
+    func glassTextField(radius: CGFloat = 8) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            self
+                .background {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
+                }
+        } else {
+            self
+                .background(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .stroke(AppTheme.cardStroke.opacity(0.15), lineWidth: 0.5)
+                )
+        }
+        #else
+        self
+        #endif
+    }
+
+    /// Adds 3D depth to glass surfaces: top-edge highlight gradient + drop shadow.
+    @ViewBuilder
+    func glass3DDepth(radius: CGFloat = 12, intensity: Double = 1.0) -> some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            self
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.25 * intensity), .white.opacity(0.04 * intensity), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                }
+                .shadow(color: .black.opacity(0.45 * intensity), radius: 4, y: 3)
+        } else { self }
+        #else
+        self
+        #endif
+    }
+
 }

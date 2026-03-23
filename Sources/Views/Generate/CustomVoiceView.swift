@@ -309,6 +309,7 @@ private struct SpeakerPickerRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .focusEffectDisabled()
             .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
             .accessibilityValue(selectedSpeaker.capitalized)
             .accessibilityIdentifier("customVoice_speakerPicker")

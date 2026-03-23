@@ -118,7 +118,11 @@ struct SavedVoiceSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     TextField("Saved voice name", text: $name)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .focusEffectDisabled()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .glassTextField(radius: 8)
                         .accessibilityIdentifier("voicesEnroll_nameField")
                 }
 
@@ -129,7 +133,11 @@ struct SavedVoiceSheet: View {
 
                     HStack {
                         TextField("Reference audio file", text: $audioPath)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain)
+                            .focusEffectDisabled()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .glassTextField(radius: 8)
                             .accessibilityIdentifier("voicesEnroll_audioPathField")
 
                         Button("Browse...") {

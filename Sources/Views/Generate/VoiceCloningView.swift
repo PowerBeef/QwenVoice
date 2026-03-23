@@ -136,7 +136,7 @@ private extension VoiceCloningView {
             detail: "Choose a saved voice or import a reference clip, then add an optional transcript.",
             iconName: "slider.horizontal.3",
             accentColor: AppTheme.voiceCloning,
-            trailingText: activeReferenceLabel,
+            trailingText: nil,
             rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
             panelPadding: LayoutConstants.generationConfigurationPanelPadding,
             contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
@@ -232,9 +232,12 @@ private extension VoiceCloningView {
                 "What does the reference audio say? (optional)",
                 text: $referenceTranscript
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.plain)
             .focusEffectDisabled()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .glassTextField(radius: 8)
             .accessibilityLabel("Transcript")
             .accessibilityIdentifier("voiceCloning_transcriptInput")
         }
@@ -582,6 +585,7 @@ private struct CloneSourceRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .focusEffectDisabled()
             .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 180, alignment: .leading)
             .accessibilityValue(savedVoices.first(where: { $0.id == selectedSavedVoiceID })?.name ?? "")
             .accessibilityIdentifier("voiceCloning_savedVoicePicker")

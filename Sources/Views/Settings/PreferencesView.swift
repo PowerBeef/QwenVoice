@@ -54,8 +54,12 @@ struct PreferencesView: View {
                 LabeledContent("Output directory") {
                     VStack(alignment: .trailing, spacing: 8) {
                         TextField("Output directory", text: $outputDirectory)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain)
+                            .focusEffectDisabled()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
                             .frame(minWidth: 260)
+                            .glassTextField(radius: 8)
                             .accessibilityIdentifier("preferences_outputDirectory")
 
                         HStack {

@@ -89,7 +89,7 @@ private extension VoiceDesignView {
             detail: "Describe the voice, set the delivery, then keep the script front and center.",
             iconName: "slider.horizontal.3",
             accentColor: AppTheme.voiceDesign,
-            trailingText: voiceDescription.isEmpty ? "Brief required" : "Brief ready",
+            trailingText: nil,
             rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
             panelPadding: LayoutConstants.generationConfigurationPanelPadding,
             contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
@@ -315,7 +315,10 @@ private struct VoiceDesignBriefSettings: View {
                 placeholder: "A warm, deep narrator with a subtle British accent.",
                 accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
             )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .glassTextField(radius: 8)
 
             Text("Describe timbre, accent, or delivery style in one tight sentence.")
                 .font(.caption)

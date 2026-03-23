@@ -255,6 +255,7 @@ struct CompactConfigurationSection<Content: View>: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(.clear)
                         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
+                        .glass3DDepth(radius: 12)
                 } else {
                     compactPanelLegacyBackground
                 }

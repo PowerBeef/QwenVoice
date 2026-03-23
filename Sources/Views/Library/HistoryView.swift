@@ -194,7 +194,7 @@ struct HistoryView: View {
                     }
                     .disabled(!item.audioFileExists)
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
             .listStyle(.inset)
         }

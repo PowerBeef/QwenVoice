@@ -32,12 +32,14 @@ private struct SidebarRow: View {
         if #available(macOS 26, *) {
             if isSelected {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.clear)
+                    .fill(Color.white.opacity(0.04))
                     .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
+                    .glass3DDepth(radius: 8, intensity: 0.5)
             } else if isHovered {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(.clear)
+                    .fill(Color.white.opacity(0.03))
                     .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
+                    .glass3DDepth(radius: 8, intensity: 0.25)
             } else {
                 Color.clear
             }
@@ -245,9 +247,9 @@ private struct SidebarFooterRegion: View {
 
                 SidebarStatusView()
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
+            .padding(.horizontal, LayoutConstants.shellPadding)
+            .padding(.top, LayoutConstants.generationSectionSpacing)
+            .padding(.bottom, LayoutConstants.shellPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .profileBackground(Color(nsColor: .windowBackgroundColor))

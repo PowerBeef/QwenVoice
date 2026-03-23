@@ -176,7 +176,7 @@ struct BatchGenerationSheet: View {
 
             Image(systemName: isCompleted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(isCompleted ? .green : .orange)
+                .foregroundStyle(isCompleted ? AppTheme.accent : .orange)
 
             Text(isCompleted ? "Batch Complete" : "Batch Cancelled")
                 .font(.title2.weight(.bold))
