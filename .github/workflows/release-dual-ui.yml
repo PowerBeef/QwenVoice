@@ -250,12 +250,23 @@ jobs:
           MODERN_BASE="QwenVoice-macos26"
           LEGACY_BASE="QwenVoice-macos15"
 
-          test -f "dist/QwenVoice-macos26.dmg"
-          test -f "dist/QwenVoice-macos26.dmg.sha256"
-          test -f "dist/release-metadata-modern-liquid.txt"
-          test -f "dist/QwenVoice-macos15.dmg"
-          test -f "dist/QwenVoice-macos15.dmg.sha256"
-          test -f "dist/release-metadata-legacy-glass.txt"
+          MISSING=0
+          for f in \
+            "dist/QwenVoice-macos26.dmg" \
+            "dist/QwenVoice-macos26.dmg.sha256" \
+            "dist/release-metadata-modern-liquid.txt" \
+            "dist/QwenVoice-macos15.dmg" \
+            "dist/QwenVoice-macos15.dmg.sha256" \
+            "dist/release-metadata-legacy-glass.txt"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required artifact: $f"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ "$MISSING" -gt 0 ]; then
+            echo "::error::$MISSING release artifact(s) missing — aborting upload"
+            exit 1
+          fi
 
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" \
             "dist/QwenVoice-macos26.dmg#${MODERN_BASE}.dmg" \

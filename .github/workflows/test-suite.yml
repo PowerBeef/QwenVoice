@@ -62,6 +62,21 @@ jobs:
           fi
           echo "No strict concurrency warnings."
 
+      - name: Verify alternate UI profile compiles
+        run: |
+          case "${{ matrix.runner }}" in
+            macos-15)
+              echo "Building with QW_UI_LEGACY_GLASS flag..."
+              xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build \
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS='QW_UI_LEGACY_GLASS' 2>&1 | tail -5
+              ;;
+            macos-26)
+              echo "Building with QW_UI_LIQUID flag..."
+              xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build \
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS='QW_UI_LIQUID' 2>&1 | tail -5
+              ;;
+          esac
+
   ui-tests:
     name: UI Tests
     runs-on: macos-15
@@ -82,6 +97,10 @@ jobs:
 
       - name: Run XCUI tests
         run: python3 scripts/harness.py test --layer ui
+
+      - name: Run screenshot regression tests
+        if: always()
+        run: python3 scripts/harness.py test --layer design
 
       - name: Upload xcresult bundle
         if: always()

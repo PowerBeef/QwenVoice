@@ -225,9 +225,11 @@ if [ -f "$APP_RESOURCES/ffmpeg" ]; then
     codesign --force --sign - "$APP_RESOURCES/ffmpeg"
 fi
 
-if [ -f "$APP_RESOURCES/python/bin/python3.13" ]; then
-    codesign --force --sign - "$APP_RESOURCES/python/bin/python3.13"
-fi
+for py_bin in "$APP_RESOURCES"/python/bin/python3.*; do
+    if [ -f "$py_bin" ] && [ -x "$py_bin" ]; then
+        codesign --force --sign - "$py_bin"
+    fi
+done
 
 while IFS= read -r -d '' native_file; do
     codesign --force --sign - "$native_file"
@@ -238,6 +240,12 @@ codesign --force --sign - \
     --options runtime \
     --preserve-metadata=entitlements,requirements,flags \
     "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+
+echo ""
+
+echo "Verifying code signature..."
+codesign -v --deep --strict "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+echo "Code signature verified."
 
 echo ""
 echo "[5/8] Re-sign final app bundle — done ($(step_time $STEP_START))"

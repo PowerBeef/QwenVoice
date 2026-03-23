@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.qwenvoice
   deploymentTarget:
     macOS: "15.0"
-  xcodeVersion: "15.0"
+  xcodeVersion: "16.3"
   generateEmptyDirectories: true
 
 packages:
