@@ -39,12 +39,13 @@ protocol BatchGenerationBridging: AnyObject {
     func clearGenerationActivity()
 }
 
+@MainActor
 protocol GenerationPersisting {
     func saveGeneration(_ generation: inout Generation) throws
 }
 
 extension PythonBridge: BatchGenerationBridging { }
-extension DatabaseService: @MainActor GenerationPersisting { }
+extension DatabaseService: GenerationPersisting { }
 
 struct BatchGenerationRequest {
     let mode: GenerationMode

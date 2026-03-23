@@ -31,11 +31,11 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     /// Callback: (bytesDownloaded, bytesTotal)
     nonisolated(unsafe) var onProgress: ((Int64, Int64) -> Void)?
 
-    private var _isCancelled = false
-    private var session: URLSession!
+    nonisolated(unsafe) private var _isCancelled = false
+    nonisolated(unsafe) private var session: URLSession!
 
     /// Tracks the active download task for cancellation.
-    private var _activeTask: URLSessionDownloadTask?
+    nonisolated(unsafe) private var _activeTask: URLSessionDownloadTask?
 
     /// Protects concurrent access to continuations, destinations, and progress state
     /// (written on caller thread, read on URLSession delegate queue).
@@ -43,8 +43,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
     /// Bridge from delegate callbacks to async/await.
     /// Keyed by task.taskIdentifier.
-    private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
-    private var destinations: [Int: URL] = [:]
+    nonisolated(unsafe) private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
+    nonisolated(unsafe) private var destinations: [Int: URL] = [:]
 
     override init() {
         super.init()
@@ -137,8 +137,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     // MARK: - Private: Download Single File
 
     /// Bytes written by the currently active download task (updated by delegate).
-    private var currentTaskBytesWritten: Int64 = 0
-    private var currentProgressHandler: ((Int64) -> Void)?
+    nonisolated(unsafe) private var currentTaskBytesWritten: Int64 = 0
+    nonisolated(unsafe) private var currentProgressHandler: ((Int64) -> Void)?
 
     private func withLock<Result>(_ body: () -> Result) -> Result {
         lock.lock()

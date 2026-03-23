@@ -362,11 +362,12 @@ private extension VoiceCloningView {
 
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
+        let allowedExtensions = Self.allowedAudioExtensions
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
             guard let data = data as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
             let ext = url.pathExtension.lowercased()
-            guard Self.allowedAudioExtensions.contains(ext) else {
+            guard allowedExtensions.contains(ext) else {
                 Task { @MainActor in
                     errorMessage = "Unsupported file type '.\(ext)'. Drop an audio file (WAV, MP3, AIFF, M4A, FLAC, or OGG)."
                 }

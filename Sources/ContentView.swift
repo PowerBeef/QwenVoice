@@ -496,7 +496,7 @@ private struct ToolbarSearchField: NSViewRepresentable {
         field.setAccessibilityLabel(placeholder)
     }
 
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
+    @MainActor final class Coordinator: NSObject, NSSearchFieldDelegate {
         var text: Binding<String>
 
         init(text: Binding<String>) {
