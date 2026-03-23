@@ -29,7 +29,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     }
 
     /// Callback: (bytesDownloaded, bytesTotal)
-    var onProgress: ((Int64, Int64) -> Void)?
+    nonisolated(unsafe) var onProgress: ((Int64, Int64) -> Void)?
 
     private var _isCancelled = false
     private var session: URLSession!
