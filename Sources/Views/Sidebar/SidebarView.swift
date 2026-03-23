@@ -202,6 +202,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .windowBackgroundColor))
         .safeAreaInset(edge: .bottom) {
             SidebarFooterRegion()
                 .environmentObject(audioPlayer)

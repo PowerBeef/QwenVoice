@@ -75,7 +75,7 @@ struct PageScaffold<Header: View, Content: View>: View {
             header()
             content()
         }
-        .padding(.horizontal, LayoutConstants.canvasPadding)
+        .padding(.horizontal, 8)
         .padding(.top, topPadding)
         .padding(.bottom, bottomPadding)
         .contentColumn(maxWidth: contentMaxWidth)
@@ -253,7 +253,7 @@ struct CompactConfigurationSection<Content: View>: View {
             .background {
                 if #available(macOS 26, *) {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.clear)
+                        .fill(Color(white: 0.13))
                         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
                         .glass3DDepth(radius: 12)
                 } else {

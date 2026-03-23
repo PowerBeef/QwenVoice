@@ -120,6 +120,7 @@ private struct NativeSurfaceStyle: ViewModifier {
         if #available(macOS 26, *) {
             content
                 .padding(padding)
+                .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Color(white: 0.13)))
                 .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
                 .glass3DDepth(radius: radius)
         } else {
@@ -380,6 +381,7 @@ struct GlassGroupBoxStyle: GroupBoxStyle {
             configuration.content
         }
         .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(white: 0.13)))
         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 16))
         .glass3DDepth(radius: 16)
     }
@@ -451,7 +453,7 @@ extension View {
             self
                 .background {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(.clear)
+                        .fill(Color(white: 0.16))
                         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
                 }
         } else {
@@ -480,14 +482,14 @@ extension View {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
-                                colors: [.white.opacity(0.25 * intensity), .white.opacity(0.04 * intensity), .clear],
+                                colors: [.white.opacity(0.12 * intensity), .white.opacity(0.02 * intensity), .clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             ),
-                            lineWidth: 1
+                            lineWidth: 0.75
                         )
                 }
-                .shadow(color: .black.opacity(0.45 * intensity), radius: 4, y: 3)
+                .shadow(color: .black.opacity(0.20 * intensity), radius: 2, y: 2)
         } else { self }
         #else
         self

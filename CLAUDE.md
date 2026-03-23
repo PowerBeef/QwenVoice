@@ -151,6 +151,8 @@ These skills are web-focused and irrelevant to this native macOS app:
 - `SetupView` uses `@ObservedObject var envManager` (not `@EnvironmentObject`) because it's rendered in `QwenVoiceApp` BEFORE `.environmentObject()` is attached — do not change this to `@EnvironmentObject`
 - Voice Cloning does not support delivery/emotion instructions — the Qwen3-TTS Base model ignores them in clone mode. Do not add a Delivery picker to Voice Cloning.
 - `TextInputView` uses `ScriptTextEditor` (NSTextView wrapper) for precise placeholder alignment and auto-hiding scrollbars — do not replace with SwiftUI `TextEditor`
+- The sidebar `List` uses `.listStyle(.sidebar)` which renders with macOS translucent material by default. To make it opaque, add `.scrollContentBackground(.hidden)` + `.background(Color(nsColor: .windowBackgroundColor))`
+- `PageScaffold` uses `.padding(.horizontal, 8)` for uniform left/right margins and `generationSectionSpacing: 8` for vertical gaps between panels — these values are intentionally aligned
 
 ## Key Change Patterns
 
@@ -265,6 +267,9 @@ The app supports two visual profiles via compile-time flags:
 - `QW_UI_LEGACY_GLASS` — Legacy styling (macOS 15, solid fills + strokes)
 
 `AppTheme.swift` centralizes all profile-aware styling via `#if QW_UI_LIQUID` with `if #available(macOS 26, *)` runtime checks. The CI workflow (`release-dual-ui.yml`) builds both profiles in parallel.
+
+### Modifying Liquid Glass styling
+`AppTheme.swift` contains three key glass modifiers: `glass3DDepth(radius:intensity:)` (top highlight gradient + shadow), `glassTextField(radius:)` (glass background for text fields), and `smokedGlassTint` (shared tint color). `NativeSurfaceStyle` and `GlassGroupBoxStyle` are the two shared card styles — changes propagate globally. All glass surfaces use a solid dark fill (`.fill(Color(white: 0.13))` for cards, `0.16` for text fields) behind `.glassEffect()` to prevent transparency. Do not use `.glassEffect()` alone without a solid fill — it will be translucent. Picker controls use native macOS chrome with `.focusEffectDisabled()` — do not wrap them in glass backgrounds.
 
 ## Python Environment (Dev Builds)
 

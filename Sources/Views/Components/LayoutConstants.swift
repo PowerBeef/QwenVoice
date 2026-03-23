@@ -8,7 +8,7 @@ enum LayoutConstants {
     static let shellPadding: CGFloat = 12
     static let canvasPadding: CGFloat = 18
     static let sectionSpacing: CGFloat = 12
-    static let generationSectionSpacing: CGFloat = 10
+    static let generationSectionSpacing: CGFloat = 8
     static let generationShellSpacing: CGFloat = 14
     static let pageHeaderSpacing: CGFloat = 8
     static let compactGap: CGFloat = 8

@@ -43,7 +43,7 @@ struct TextInputView: View {
         .background {
             if #available(macOS 26, *) {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.clear)
+                    .fill(Color(white: 0.16))
                     .glassEffect(
                         .regular.tint(AppTheme.smokedGlassTint),
                         in: .rect(cornerRadius: 10)
