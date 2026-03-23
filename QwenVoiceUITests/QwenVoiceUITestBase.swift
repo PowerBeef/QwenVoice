@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 class QwenVoiceUITestBase: XCTestCase {
     var app: XCUIApplication!
 
