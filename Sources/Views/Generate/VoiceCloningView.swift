@@ -75,6 +75,38 @@ struct VoiceCloningView: View {
         )
     }
 
+    private var readinessTitle: String {
+        if !pythonBridge.isReady {
+            return "Engine starting"
+        }
+        if !isModelAvailable {
+            return "Install the active model"
+        }
+        if referenceAudioPath == nil {
+            return "Add a reference"
+        }
+        if text.isEmpty {
+            return "Add a script"
+        }
+        return "Review the take"
+    }
+
+    private var readinessDetail: String {
+        if !pythonBridge.isReady {
+            return "QwenVoice is still preparing the generation engine."
+        }
+        if !isModelAvailable {
+            return "Install \(modelDisplayName) in Models to enable generation."
+        }
+        if referenceAudioPath == nil {
+            return "Saved voices or imported clips both work here. Choose one before writing the final line."
+        }
+        if text.isEmpty {
+            return "Your reference is ready. Add the line you want the cloned voice to perform."
+        }
+        return "Everything is in place for a live preview and a saved clone."
+    }
+
     var body: some View {
         PageScaffold(
             accessibilityIdentifier: "screen_voiceCloning",
@@ -127,7 +159,7 @@ struct VoiceCloningView: View {
     }
 }
 
-// MARK: - Subviews
+// MARK: - Panel Layout
 
 private extension VoiceCloningView {
     var configurationPanel: some View {
@@ -143,8 +175,18 @@ private extension VoiceCloningView {
             accessibilityIdentifier: "voiceCloning_configuration"
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                referenceSettings
-                transcriptSettings
+                VoiceCloningReferenceSettings(
+                    savedVoices: savedVoices,
+                    selectedSavedVoiceID: selectedSavedVoiceID,
+                    referenceAudioPath: referenceAudioPath,
+                    selectedVoice: selectedVoice,
+                    savedVoicesLoadError: savedVoicesLoadError,
+                    transcriptLoadError: transcriptLoadError,
+                    browseForAudio: browseForAudio,
+                    clearReference: clearReference,
+                    retrySavedVoices: { Task { await savedVoicesViewModel.refresh(using: pythonBridge) } }
+                )
+                VoiceCloningTranscriptSettings(referenceTranscript: $referenceTranscript)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -179,161 +221,18 @@ private extension VoiceCloningView {
                 )
                 .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
 
-                composerFooter
+                VoiceCloningComposerFooter(
+                    canGenerate: canGenerate,
+                    readinessTitle: readinessTitle,
+                    readinessDetail: readinessDetail,
+                    errorMessage: errorMessage
+                )
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
     }
-
-    var referenceSettings: some View {
-        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
-            Text("Source")
-                .font(.subheadline.weight(.semibold))
-
-            sourceRow
-
-            referenceStatus
-
-            if let savedVoicesLoadError {
-                CloneWarningCard(
-                    message: savedVoicesLoadError,
-                    actionLabel: "Retry",
-                    action: { Task { await savedVoicesViewModel.refresh(using: pythonBridge) } },
-                    accentColor: AppTheme.voiceCloning,
-                    accessibilityIdentifier: "voiceCloning_savedVoicesWarning",
-                    actionAccessibilityIdentifier: "voiceCloning_savedVoicesRetry"
-                )
-            }
-
-            if let transcriptLoadError {
-                CloneWarningCard(
-                    message: transcriptLoadError,
-                    actionLabel: nil,
-                    action: nil,
-                    accentColor: AppTheme.voiceCloning,
-                    accessibilityIdentifier: "voiceCloning_transcriptWarning",
-                    actionAccessibilityIdentifier: nil
-                )
-            }
-        }
-        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceCloning_voiceSetup")
-    }
-
-    var transcriptSettings: some View {
-        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
-            Text("Transcript")
-                .font(.subheadline.weight(.semibold))
-
-            TextField(
-                "What does the reference audio say? (optional)",
-                text: $referenceTranscript
-            )
-            .textFieldStyle(.plain)
-            .focusEffectDisabled()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassTextField(radius: 8)
-            .accessibilityLabel("Transcript")
-            .accessibilityIdentifier("voiceCloning_transcriptInput")
-        }
-        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceCloning_transcriptField")
-    }
-
-    var sourceRow: some View {
-        CloneSourceRow(
-            savedVoices: savedVoices,
-            selectedSavedVoiceID: selectedSavedVoiceID,
-            browseForAudio: browseForAudio,
-            referenceAudioPath: referenceAudioPath
-        )
-    }
-
-    var referenceStatus: some View {
-        CloneReferenceStatus(
-            referenceAudioPath: referenceAudioPath,
-            selectedVoice: selectedVoice,
-            clearReference: clearReference,
-            accentColor: AppTheme.voiceCloning
-        )
-    }
-
-    var activeReferenceLabel: String {
-        if let selectedVoice {
-            return selectedVoice.name
-        }
-        if let referenceAudioPath {
-            return URL(fileURLWithPath: referenceAudioPath).lastPathComponent
-        }
-        return "Required"
-    }
-
-    var generationReadiness: some View {
-        WorkflowReadinessNote(
-            isReady: canGenerate,
-            title: canGenerate ? "Ready to generate" : readinessTitle,
-            detail: readinessDetail,
-            accentColor: AppTheme.voiceCloning,
-            accessibilityIdentifier: "voiceCloning_readiness"
-        )
-    }
-
-    var readinessTitle: String {
-        if !pythonBridge.isReady {
-            return "Engine starting"
-        }
-        if !isModelAvailable {
-            return "Install the active model"
-        }
-        if referenceAudioPath == nil {
-            return "Add a reference"
-        }
-        if text.isEmpty {
-            return "Add a script"
-        }
-        return "Review the take"
-    }
-
-    var readinessDetail: String {
-        if !pythonBridge.isReady {
-            return "QwenVoice is still preparing the generation engine."
-        }
-        if !isModelAvailable {
-            return "Install \(modelDisplayName) in Models to enable generation."
-        }
-        if referenceAudioPath == nil {
-            return "Saved voices or imported clips both work here. Choose one before writing the final line."
-        }
-        if text.isEmpty {
-            return "Your reference is ready. Add the line you want the cloned voice to perform."
-        }
-        return "Everything is in place for a live preview and a saved clone."
-    }
-
-    var composerFooter: some View {
-        VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
-            generationReadiness
-
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .foregroundColor(.red)
-                    .font(.callout)
-            }
-        }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: LayoutConstants.generationComposerFooterMinHeight,
-            alignment: .topLeading
-        )
-    }
-
-    // warningCard is now CloneWarningCard (struct below)
 }
 
 // MARK: - Actions
@@ -502,7 +401,128 @@ private extension VoiceCloningView {
     }
 }
 
-// MARK: - Extracted Subview Structs
+// MARK: - Reference Settings
+
+private struct VoiceCloningReferenceSettings: View {
+    let savedVoices: [Voice]
+    @Binding var selectedSavedVoiceID: String?
+    let referenceAudioPath: String?
+    let selectedVoice: Voice?
+    let savedVoicesLoadError: String?
+    let transcriptLoadError: String?
+    let browseForAudio: () -> Void
+    let clearReference: () -> Void
+    let retrySavedVoices: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Source")
+                .font(.subheadline.weight(.semibold))
+
+            CloneSourceRow(
+                savedVoices: savedVoices,
+                selectedSavedVoiceID: $selectedSavedVoiceID,
+                browseForAudio: browseForAudio,
+                referenceAudioPath: referenceAudioPath
+            )
+
+            CloneReferenceStatus(
+                referenceAudioPath: referenceAudioPath,
+                selectedVoice: selectedVoice,
+                clearReference: clearReference,
+                accentColor: AppTheme.voiceCloning
+            )
+
+            if let savedVoicesLoadError {
+                CloneWarningCard(
+                    message: savedVoicesLoadError,
+                    actionLabel: "Retry",
+                    action: retrySavedVoices,
+                    accentColor: AppTheme.voiceCloning,
+                    accessibilityIdentifier: "voiceCloning_savedVoicesWarning",
+                    actionAccessibilityIdentifier: "voiceCloning_savedVoicesRetry"
+                )
+            }
+
+            if let transcriptLoadError {
+                CloneWarningCard(
+                    message: transcriptLoadError,
+                    actionLabel: nil,
+                    action: nil,
+                    accentColor: AppTheme.voiceCloning,
+                    accessibilityIdentifier: "voiceCloning_transcriptWarning",
+                    actionAccessibilityIdentifier: nil
+                )
+            }
+        }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceCloning_voiceSetup")
+    }
+}
+
+// MARK: - Transcript Settings
+
+private struct VoiceCloningTranscriptSettings: View {
+    @Binding var referenceTranscript: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
+            Text("Transcript")
+                .font(.subheadline.weight(.semibold))
+
+            TextField(
+                "What does the reference audio say? (optional)",
+                text: $referenceTranscript
+            )
+            .textFieldStyle(.plain)
+            .focusEffectDisabled()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassTextField(radius: 8)
+            .accessibilityLabel("Transcript")
+            .accessibilityIdentifier("voiceCloning_transcriptInput")
+        }
+        .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voiceCloning_transcriptField")
+    }
+}
+
+// MARK: - Composer Footer
+
+private struct VoiceCloningComposerFooter: View {
+    let canGenerate: Bool
+    let readinessTitle: String
+    let readinessDetail: String
+    let errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            WorkflowReadinessNote(
+                isReady: canGenerate,
+                title: canGenerate ? "Ready to generate" : readinessTitle,
+                detail: readinessDetail,
+                accentColor: AppTheme.voiceCloning,
+                accessibilityIdentifier: "voiceCloning_readiness"
+            )
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.red)
+                    .font(.callout)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: LayoutConstants.generationComposerFooterMinHeight,
+            alignment: .topLeading
+        )
+    }
+}
+
+// MARK: - Reference Status
 
 private struct CloneReferenceStatus: View {
     let referenceAudioPath: String?
@@ -552,6 +572,8 @@ private struct CloneReferenceStatus: View {
         }
     }
 }
+
+// MARK: - Source Row
 
 private struct CloneSourceRow: View {
     let savedVoices: [Voice]
@@ -605,6 +627,8 @@ private struct CloneSourceRow: View {
         .accessibilityIdentifier("voiceCloning_importButton")
     }
 }
+
+// MARK: - Warning Card
 
 private struct CloneWarningCard: View {
     let message: String
