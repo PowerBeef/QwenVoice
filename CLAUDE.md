@@ -153,6 +153,10 @@ These skills are web-focused and irrelevant to this native macOS app:
 - `TextInputView` uses `ScriptTextEditor` (NSTextView wrapper) for precise placeholder alignment and auto-hiding scrollbars — do not replace with SwiftUI `TextEditor`
 - The sidebar `List` uses `.listStyle(.sidebar)` which renders with macOS translucent material by default. To make it opaque, add `.scrollContentBackground(.hidden)` + `.background(Color(nsColor: .windowBackgroundColor))`
 - `PageScaffold` uses `.padding(.horizontal, 8)` for uniform left/right margins and `generationSectionSpacing: 8` for vertical gaps between panels — these values are intentionally aligned
+- Do not wrap native macOS Picker controls in `.glassTextField()` or glass backgrounds — they have their own chrome. Only add `.focusEffectDisabled()` to suppress the blue focus ring.
+- ModelsView model icons use white SF Symbols (`.foregroundStyle(.white)`) on smoked glass background — intentional contrast choice for the dark theme
+- `extension Type: @MainActor Protocol { }` is Swift 6.2+ syntax — does not compile on Xcode 16.3 (macOS 15 runner). Use `@MainActor protocol` instead.
+- `HuggingFaceDownloader` is an NSObject/Sendable subclass with NSLock-based thread safety. All mutable stored properties must use `nonisolated(unsafe)` — the compiler flags them otherwise under strict concurrency.
 
 ## Key Change Patterns
 
