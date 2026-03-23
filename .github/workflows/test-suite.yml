@@ -31,6 +31,18 @@ jobs:
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
 
+      - name: Set UI profile for runner
+        run: |
+          case "${{ matrix.runner }}" in
+            macos-15)
+              echo "Patching project.yml to use QW_UI_LEGACY_GLASS for macOS 15 SDK..."
+              sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
+              ;;
+            macos-26)
+              echo "Using default QW_UI_LIQUID for macOS 26 SDK"
+              ;;
+          esac
+
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
 
@@ -66,14 +78,12 @@ jobs:
         run: |
           case "${{ matrix.runner }}" in
             macos-15)
+              echo "Skipping — QW_UI_LIQUID requires macOS 26 SDK (Xcode 26+)"
+              ;;
+            macos-26)
               echo "Building with QW_UI_LEGACY_GLASS flag..."
               xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build \
                 SWIFT_ACTIVE_COMPILATION_CONDITIONS='QW_UI_LEGACY_GLASS' 2>&1 | tail -5
-              ;;
-            macos-26)
-              echo "Building with QW_UI_LIQUID flag..."
-              xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build \
-                SWIFT_ACTIVE_COMPILATION_CONDITIONS='QW_UI_LIQUID' 2>&1 | tail -5
               ;;
           esac
 
@@ -91,6 +101,10 @@ jobs:
 
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
+
+      - name: Set UI profile for macOS 15
+        run: |
+          sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
@@ -139,6 +153,14 @@ jobs:
 
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
+
+      - name: Set UI profile for runner
+        run: |
+          case "${{ matrix.runner }}" in
+            macos-15)
+              sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
+              ;;
+          esac
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
