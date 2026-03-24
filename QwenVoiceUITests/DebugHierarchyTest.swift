@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class DebugHierarchyTest: XCTestCase {
     func testDumpHierarchy() {
         continueAfterFailure = true
