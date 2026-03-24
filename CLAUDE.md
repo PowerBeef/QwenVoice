@@ -157,6 +157,9 @@ These skills are web-focused and irrelevant to this native macOS app:
 - ModelsView model icons use white SF Symbols (`.foregroundStyle(.white)`) on smoked glass background — intentional contrast choice for the dark theme
 - `extension Type: @MainActor Protocol { }` is Swift 6.2+ syntax — does not compile on Xcode 16.3 (macOS 15 runner). Use `@MainActor protocol` instead.
 - `HuggingFaceDownloader` is an NSObject/Sendable subclass with NSLock-based thread safety. All mutable stored properties must use `nonisolated(unsafe)` — the compiler flags them otherwise under strict concurrency.
+- `QW_UI_LIQUID` requires the macOS 26 SDK (Xcode 26+). On macOS 15 runners (Xcode 16.3), `.glassEffect()` doesn't exist even inside `if #available(macOS 26, *)` — the compiler still type-checks it. CI patches project.yml to `QW_UI_LEGACY_GLASS` on macOS 15 runners.
+- Do not chain `.fill(Color(...)).glassEffect(...)` — `.fill()` changes the type to `_ShapeView` which has no `glassEffect` on Xcode 16.3. Use `.fill(.clear)` or apply solid fill as a separate `.background()`.
+- All XCUI test classes (including those extending `XCTestCase` directly, not just `QwenVoiceUITestBase`) must be annotated `@MainActor` — XCUIElement APIs are MainActor-isolated in Swift 6.
 
 ## Key Change Patterns
 
