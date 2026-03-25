@@ -72,8 +72,6 @@ if [[ "$OUTPUT_NAME" == *"/"* ]]; then
     exit 1
 fi
 
-SWIFT_FLAGS_VALUE="\$(inherited) -D $UI_SWIFT_DEFINE"
-
 step_time() {
     local start=$1
     local end=$(date +%s)
@@ -139,7 +137,7 @@ else
         -configuration Release \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-        OTHER_SWIFT_FLAGS="$SWIFT_FLAGS_VALUE" \
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$UI_SWIFT_DEFINE" \
         build | tail -5
 
     echo ""
@@ -166,7 +164,7 @@ else
     cd "$PROJECT_DIR"
     BUILT_PRODUCTS_DIR=$(xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
-        OTHER_SWIFT_FLAGS="$SWIFT_FLAGS_VALUE" \
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$UI_SWIFT_DEFINE" \
         -showBuildSettings 2>/dev/null \
         | grep '^\s*BUILT_PRODUCTS_DIR' \
         | sed 's/.*= //')
