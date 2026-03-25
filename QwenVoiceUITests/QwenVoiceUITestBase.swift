@@ -108,7 +108,7 @@ class QwenVoiceUITestBase: XCTestCase {
     func waitForReadiness(timeout: TimeInterval = 0) {
         let effectiveTimeout = timeout > 0 ? timeout : defaultReadinessTimeout
         // Phase 1: Wait for the app to be in the foreground
-        let foreground = withApplicationOnMainActor { application in
+        let foreground = boolFromApplicationOnMainActor { application in
             application.wait(for: .runningForeground, timeout: min(effectiveTimeout, 10))
         }
         guard foreground else {
@@ -135,7 +135,7 @@ class QwenVoiceUITestBase: XCTestCase {
     // MARK: - Navigation
 
     func navigateTo(_ sidebarID: String, expectScreen: String, timeout: TimeInterval = 5) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let row = application.descendants(matching: .any)[sidebarID]
             XCTAssertTrue(row.waitForExistence(timeout: 3), "Sidebar item \(sidebarID) not found")
             row.click()
@@ -144,7 +144,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func navigateToExpectingActiveScreen(_ sidebarID: String, expectScreen: String, timeout: TimeInterval = 5) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let row = application.descendants(matching: .any)[sidebarID]
             XCTAssertTrue(row.waitForExistence(timeout: 3), "Sidebar item \(sidebarID) not found")
             row.click()
@@ -153,7 +153,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func waitForScreen(_ screenID: String, timeout: TimeInterval = 5) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let screen = application.descendants(matching: .any)[screenID]
             XCTAssertTrue(screen.waitForExistence(timeout: timeout), "Screen \(screenID) did not appear within \(timeout)s")
         }
@@ -182,26 +182,26 @@ class QwenVoiceUITestBase: XCTestCase {
     // MARK: - Screenshots
 
     func captureScreenshot(name: String) {
-        let screenshot = MainActor.assumeIsolated {
-            XCUIScreen.main.screenshot()
-        }
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        MainActor.assumeIsolated {
+            let screenshot = XCUIScreen.main.screenshot()
+            let attachment = XCTAttachment(screenshot: screenshot)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
 
-        let outputDir = ProcessInfo.processInfo.environment["QWENVOICE_UITEST_SCREENSHOT_DIR"]
-            ?? NSTemporaryDirectory() + "QwenVoiceUITestScreenshots"
-        let fm = FileManager.default
-        try? fm.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
-        let path = (outputDir as NSString).appendingPathComponent("\(name).png")
-        try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: path))
+            let outputDir = ProcessInfo.processInfo.environment["QWENVOICE_UITEST_SCREENSHOT_DIR"]
+                ?? NSTemporaryDirectory() + "QwenVoiceUITestScreenshots"
+            let fm = FileManager.default
+            try? fm.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
+            let path = (outputDir as NSString).appendingPathComponent("\(name).png")
+            try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: path))
+        }
     }
 
     // MARK: - Assertions
 
     func assertElementExists(_ identifier: String, type: XCUIElement.ElementType = .any, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let element: XCUIElement
             if type == .any {
                 element = application.descendants(matching: .any)[identifier]
@@ -212,18 +212,16 @@ class QwenVoiceUITestBase: XCTestCase {
         }
     }
 
-    @discardableResult
-    func clickElement(_ identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
-        withApplicationOnMainActor { application in
+    func clickElement(_ identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
+        performWithApplicationOnMainActor { application in
             let element = application.descendants(matching: .any)[identifier]
             XCTAssertTrue(element.waitForExistence(timeout: timeout), "Element '\(identifier)' not found within \(timeout)s", file: file, line: line)
             element.click()
-            return element
         }
     }
 
     func typeInTextEditor(_ text: String, identifier: String = "textInput_textEditor", file: StaticString = #filePath, line: UInt = #line) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let textView = application.textViews.firstMatch
             if textView.waitForExistence(timeout: 3) {
                 textView.click()
@@ -239,7 +237,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func typeInTextField(_ identifier: String, text: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
-        withApplicationOnMainActor { application in
+        performWithApplicationOnMainActor { application in
             let field = application.descendants(matching: .any)[identifier]
             XCTAssertTrue(field.waitForExistence(timeout: timeout), "Field '\(identifier)' not found within \(timeout)s", file: file, line: line)
             field.click()
@@ -248,7 +246,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func stringValue(for identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) -> String? {
-        withApplicationOnMainActor { application in
+        stringFromApplicationOnMainActor { application in
             let element = application.descendants(matching: .any)[identifier]
             XCTAssertTrue(element.waitForExistence(timeout: timeout), "Element '\(identifier)' not found within \(timeout)s", file: file, line: line)
             return Self.elementStringValue(element)
@@ -276,13 +274,13 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     private func elementExists(identifier: String) -> Bool {
-        withApplicationOnMainActor { application in
+        boolFromApplicationOnMainActor { application in
             application.descendants(matching: .any)[identifier].exists
         }
     }
 
     private func elementStringValue(identifier: String) -> String? {
-        withApplicationOnMainActor { application in
+        stringFromApplicationOnMainActor { application in
             let element = application.descendants(matching: .any)[identifier]
             return Self.elementStringValue(element)
         }
@@ -297,7 +295,21 @@ class QwenVoiceUITestBase: XCTestCase {
         return element.label.isEmpty ? nil : element.label
     }
 
-    private func withApplicationOnMainActor<T>(_ body: @MainActor (XCUIApplication) -> T) -> T {
+    private func performWithApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> Void) {
+        let application = app!
+        MainActor.assumeIsolated {
+            body(application)
+        }
+    }
+
+    private func boolFromApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> Bool) -> Bool {
+        let application = app!
+        return MainActor.assumeIsolated {
+            body(application)
+        }
+    }
+
+    private func stringFromApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> String?) -> String? {
         let application = app!
         return MainActor.assumeIsolated {
             body(application)
