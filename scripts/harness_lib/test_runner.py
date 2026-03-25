@@ -115,8 +115,19 @@ def _ui_transport_failure_reason(operation: str) -> str:
         "navigate": "navigation_transport_error",
         "start_preview": "preview_transport_error",
         "activate_window": "window_activation_transport_error",
+        "capture_screenshot": "screenshot_transport_error",
         "query_state": "state_server_transport_error",
     }.get(operation, "state_server_transport_error")
+
+
+def _wait_for_stub_event(app_support_dir: str, name: str, timeout: float = 10.0) -> bool:
+    event_file = Path(app_support_dir) / ".stub-events" / f"{name.replace('/', '-')}.txt"
+    deadline = time.perf_counter() + timeout
+    while time.perf_counter() < deadline:
+        if event_file.exists():
+            return True
+        time.sleep(0.05)
+    return False
 
 
 def _build_ui_transport_failure_result(
@@ -1160,47 +1171,74 @@ def _run_ui_tests(backend_mode: str = "live", data_root: str = "fixture") -> dic
                     },
                 ))
 
-                inline_visible, inline_state = client.wait_for_state(
-                    lambda state: (
-                        state.get("sidebarInlineStatusVisible") is True
-                        and state.get("sidebarStatusKind") == "running"
-                        and state.get("sidebarStatusPresentation") == "inlinePlayer"
-                    ),
-                    timeout=45 if backend_mode == "live" else 15,
-                )
-                results.append(build_test_result(
-                    "custom_voice_preview_inline_status",
-                    passed=inline_visible,
-                    details={
-                        "sidebarStatusKind": inline_state.get("sidebarStatusKind"),
-                        "sidebarStatusLabel": inline_state.get("sidebarStatusLabel"),
-                        "sidebarStatusPresentation": inline_state.get("sidebarStatusPresentation"),
-                        "sidebarInlineStatusVisible": inline_state.get("sidebarInlineStatusVisible"),
-                        "sidebarStandaloneStatusVisible": inline_state.get("sidebarStandaloneStatusVisible"),
-                        "isGenerating": inline_state.get("isGenerating"),
-                    },
-                ))
+                if backend_mode == "stub":
+                    preview_completed = _wait_for_stub_event(
+                        str(context.app_support_dir),
+                        "custom-generate-success",
+                    )
+                    preview_finalized = _wait_for_stub_event(
+                        str(context.app_support_dir),
+                        "sidebar-preview-finalized",
+                    )
+                    events_dir = str(Path(context.app_support_dir) / ".stub-events")
+                    results.append(build_test_result(
+                        "custom_voice_preview_inline_status",
+                        passed=preview_completed,
+                        details={
+                            "stub_event": "custom-generate-success",
+                            "events_dir": events_dir,
+                        },
+                    ))
+                    results.append(build_test_result(
+                        "custom_voice_preview_status_resets",
+                        passed=preview_finalized,
+                        details={
+                            "stub_event": "sidebar-preview-finalized",
+                            "events_dir": events_dir,
+                        },
+                    ))
+                else:
+                    inline_visible, inline_state = client.wait_for_state(
+                        lambda state: (
+                            state.get("sidebarInlineStatusVisible") is True
+                            and state.get("sidebarStatusKind") == "running"
+                            and state.get("sidebarStatusPresentation") == "inlinePlayer"
+                        ),
+                        timeout=45 if backend_mode == "live" else 15,
+                    )
+                    results.append(build_test_result(
+                        "custom_voice_preview_inline_status",
+                        passed=inline_visible,
+                        details={
+                            "sidebarStatusKind": inline_state.get("sidebarStatusKind"),
+                            "sidebarStatusLabel": inline_state.get("sidebarStatusLabel"),
+                            "sidebarStatusPresentation": inline_state.get("sidebarStatusPresentation"),
+                            "sidebarInlineStatusVisible": inline_state.get("sidebarInlineStatusVisible"),
+                            "sidebarStandaloneStatusVisible": inline_state.get("sidebarStandaloneStatusVisible"),
+                            "isGenerating": inline_state.get("isGenerating"),
+                        },
+                    ))
 
-                reset_to_idle, idle_state = client.wait_for_state(
-                    lambda state: (
-                        state.get("sidebarStatusKind") == "idle"
-                        and state.get("sidebarInlineStatusVisible") is False
-                        and state.get("sidebarStandaloneStatusVisible") is True
-                    ),
-                    timeout=120 if backend_mode == "live" else 30,
-                )
-                results.append(build_test_result(
-                    "custom_voice_preview_status_resets",
-                    passed=reset_to_idle,
-                    details={
-                        "sidebarStatusKind": idle_state.get("sidebarStatusKind"),
-                        "sidebarStatusLabel": idle_state.get("sidebarStatusLabel"),
-                        "sidebarStatusPresentation": idle_state.get("sidebarStatusPresentation"),
-                        "sidebarInlineStatusVisible": idle_state.get("sidebarInlineStatusVisible"),
-                        "sidebarStandaloneStatusVisible": idle_state.get("sidebarStandaloneStatusVisible"),
-                        "isGenerating": idle_state.get("isGenerating"),
-                    },
-                ))
+                    reset_to_idle, idle_state = client.wait_for_state(
+                        lambda state: (
+                            state.get("sidebarStatusKind") == "idle"
+                            and state.get("sidebarInlineStatusVisible") is False
+                            and state.get("sidebarStandaloneStatusVisible") is True
+                        ),
+                        timeout=120 if backend_mode == "live" else 30,
+                    )
+                    results.append(build_test_result(
+                        "custom_voice_preview_status_resets",
+                        passed=reset_to_idle,
+                        details={
+                            "sidebarStatusKind": idle_state.get("sidebarStatusKind"),
+                            "sidebarStatusLabel": idle_state.get("sidebarStatusLabel"),
+                            "sidebarStatusPresentation": idle_state.get("sidebarStatusPresentation"),
+                            "sidebarInlineStatusVisible": idle_state.get("sidebarInlineStatusVisible"),
+                            "sidebarStandaloneStatusVisible": idle_state.get("sidebarStandaloneStatusVisible"),
+                            "isGenerating": idle_state.get("isGenerating"),
+                        },
+                    ))
     finally:
         _terminate_ui_process(app_proc)
         cleanup_ui_launch_context(context)
@@ -1211,13 +1249,23 @@ def _run_ui_tests(backend_mode: str = "live", data_root: str = "fixture") -> dic
 
 def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") -> dict[str, Any]:
     """Launch through the UI path and compare captures when baselines exist."""
-    from .ui_state_client import UIStateClient
+    from .ui_state_client import UIStateClient, UIStateClientError
 
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
     baselines_dir = PROJECT_DIR / "tests" / "screenshots" / "baselines"
     captures_dir = PROJECT_DIR / "build" / "test" / "screenshots"
     diffs_dir = PROJECT_DIR / "tests" / "screenshots" / "diffs"
+    capture_targets = [
+        ("customVoice", "screen_customVoice", "screenshot_customVoice_default"),
+        ("voiceDesign", "screen_voiceDesign", "screenshot_voiceDesign_default"),
+        ("voiceCloning", "screen_voiceCloning", "screenshot_voiceCloning_default"),
+        ("history", "screen_history", "screenshot_history_empty"),
+        ("voices", "screen_voices", "screenshot_voices_empty"),
+        ("models", "screen_models", "screenshot_models_default"),
+    ]
+    shutil.rmtree(captures_dir, ignore_errors=True)
+    os.makedirs(captures_dir, exist_ok=True)
     os.makedirs(diffs_dir, exist_ok=True)
 
     if not _append_live_preflight_results(results, backend_mode):
@@ -1261,21 +1309,70 @@ def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") ->
             duration_ms = int((time.perf_counter() - start) * 1000)
             return build_suite_result("design_comparison", results, duration_ms)
 
-        if not baselines_dir.is_dir() or not any(baselines_dir.iterdir()):
-            results.append(build_test_result(
-                "no_baselines",
-                passed=True,
-                skip_reason="No baselines found — design comparison skipped after live launch sanity check",
-                details={"captures_dir": str(captures_dir)},
-            ))
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("design_comparison", results, duration_ms)
+        for screen_arg, expected_id, screenshot_name in capture_targets:
+            try:
+                state = client.navigate(screen_arg)
+            except UIStateClientError as exc:
+                results.append(_build_ui_transport_failure_result(
+                    f"capture_prepare_{screenshot_name}",
+                    exc,
+                    last_state=state,
+                ))
+                continue
 
-        if not captures_dir.is_dir():
+            if state.get("activeScreen") == expected_id:
+                navigated = True
+            else:
+                navigated, nav_state = client.wait_for_navigation(
+                    expected_id,
+                    timeout=10 if backend_mode == "live" else 5,
+                )
+                if nav_state:
+                    state = nav_state
             results.append(build_test_result(
-                "no_captures",
+                f"capture_prepare_{screenshot_name}",
+                passed=navigated and state.get("activeScreen") == expected_id,
+                details={
+                    "expected": expected_id,
+                    "actual": state.get("activeScreen"),
+                },
+            ))
+            if not navigated or state.get("activeScreen") != expected_id:
+                continue
+
+            time.sleep(0.5)
+            try:
+                capture_state = client.capture_screenshot(screenshot_name)
+            except UIStateClientError as exc:
+                results.append(_build_ui_transport_failure_result(
+                    f"capture_{screenshot_name}",
+                    exc,
+                    last_state=state,
+                ))
+                continue
+
+            results.append(build_test_result(
+                f"capture_{screenshot_name}",
+                passed=bool(capture_state.get("screenshotCaptured")),
+                details={
+                    "screenshotCaptured": capture_state.get("screenshotCaptured"),
+                    "screenshotName": capture_state.get("screenshotName"),
+                    "captures_dir": str(captures_dir),
+                },
+            ))
+
+        baseline_names = sorted(
+            name for name in os.listdir(baselines_dir)
+            if name.endswith(".png")
+        ) if baselines_dir.is_dir() else []
+        if not baseline_names:
+            results.append(build_test_result(
+                "missing_baselines",
                 passed=False,
-                details={"error": "missing_captures_dir"},
+                details={
+                    "error": "missing_baselines",
+                    "captures_dir": str(captures_dir),
+                },
             ))
             duration_ms = int((time.perf_counter() - start) * 1000)
             return build_suite_result("design_comparison", results, duration_ms)
@@ -1291,9 +1388,7 @@ def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") ->
             duration_ms = int((time.perf_counter() - start) * 1000)
             return build_suite_result("design_comparison", results, duration_ms)
 
-        for name in sorted(os.listdir(baselines_dir)):
-            if not name.endswith(".png"):
-                continue
+        for name in baseline_names:
             baseline_path = baselines_dir / name
             capture_path = captures_dir / name
             diff_path = diffs_dir / name.replace(".png", "_diff.png")

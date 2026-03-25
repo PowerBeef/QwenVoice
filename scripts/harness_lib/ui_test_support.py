@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contract import model_ids, model_is_installed
+from .contract import load_contract, model_ids, model_is_installed
 from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, APP_VENV_PYTHON, PROJECT_DIR, ensure_directory
 
 
@@ -48,6 +48,7 @@ def prepare_ui_launch_context(
     if backend_mode == "stub":
         fixture_root = Path(tempfile.mkdtemp(prefix="qwenvoice_ui_stub_"))
         _create_base_directories(fixture_root)
+        _install_stub_models(fixture_root)
         return UILaunchContext(
             backend_mode=backend_mode,
             data_root="fixture",
@@ -252,3 +253,18 @@ def _copy_optional_file(source: Path, destination: Path) -> None:
         return
     ensure_directory(destination.parent)
     shutil.copy2(source, destination)
+
+
+def _install_stub_models(root: Path) -> None:
+    contract = load_contract()
+    models_root = root / "models"
+    for model in contract.get("models", []):
+        folder = model.get("folder")
+        if not folder:
+            continue
+        model_root = models_root / folder
+        ensure_directory(model_root)
+        for relative_path in model.get("requiredRelativePaths", []):
+            file_path = model_root / relative_path
+            ensure_directory(file_path.parent)
+            file_path.touch(exist_ok=True)

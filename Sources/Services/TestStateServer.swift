@@ -68,6 +68,8 @@ final class TestStateServer: @unchecked Sendable {
             handleNavigate(path: p, connection: connection)
         case let p where p.hasPrefix("/activate-window"):
             handleActivateWindow(path: p, connection: connection)
+        case let p where p.hasPrefix("/capture-screenshot"):
+            handleCaptureScreenshot(path: p, connection: connection)
         case let p where p.hasPrefix("/start-preview"):
             handleStartPreview(path: p, connection: connection)
         default:
@@ -100,6 +102,21 @@ final class TestStateServer: @unchecked Sendable {
         Task { @MainActor in
             _ = await UITestWindowCoordinator.shared.activateMainWindow(reason: reason)
             let state = TestStateProvider.shared.snapshot()
+            self.sendJSON(state, connection: connection)
+        }
+    }
+
+    private func handleCaptureScreenshot(path: String, connection: NWConnection) {
+        guard let name = extractQueryParam(from: path, key: "name"), !name.isEmpty else {
+            sendJSON(["error": "missing_name_param"], status: 400, connection: connection)
+            return
+        }
+
+        Task { @MainActor in
+            let captured = UITestWindowCoordinator.shared.captureMainWindowScreenshot(name: name)
+            var state = TestStateProvider.shared.snapshot()
+            state["screenshotCaptured"] = captured
+            state["screenshotName"] = name
             self.sendJSON(state, connection: connection)
         }
     }

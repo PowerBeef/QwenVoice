@@ -19,6 +19,7 @@ enum UITestAutomationSupport {
     static let importAudioPathEnvironmentKey = "QWENVOICE_UI_TEST_IMPORT_AUDIO_PATH"
     static let enrollAudioPathEnvironmentKey = "QWENVOICE_UI_TEST_ENROLL_AUDIO_PATH"
     static let outputDirectoryEnvironmentKey = "QWENVOICE_UI_TEST_OUTPUT_DIRECTORY"
+    static let screenshotDirectoryEnvironmentKey = "QWENVOICE_UITEST_SCREENSHOT_DIR"
     static let defaultsSuiteEnvironmentKey = "QWENVOICE_UI_TEST_DEFAULTS_SUITE"
     static let setupScenarioEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_SCENARIO"
     static let setupDelayEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_DELAY_MS"
@@ -66,6 +67,10 @@ enum UITestAutomationSupport {
 
     static var outputDirectoryURL: URL? {
         pathURL(for: outputDirectoryEnvironmentKey)
+    }
+
+    static var screenshotDirectoryURL: URL? {
+        pathURL(for: screenshotDirectoryEnvironmentKey)
     }
 
     static var appStorage: UserDefaults {

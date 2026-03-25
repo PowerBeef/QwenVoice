@@ -55,6 +55,14 @@ class UIStateClient:
             operation="activate_window",
         )
 
+    def capture_screenshot(self, name: str) -> dict:
+        encoded_name = urllib.parse.quote(name)
+        return self._request_json(
+            f"/capture-screenshot?name={encoded_name}",
+            timeout=10,
+            operation="capture_screenshot",
+        )
+
     def wait_for_ready(
         self,
         timeout: float = 15,

@@ -111,7 +111,9 @@ final class UITestWindowCoordinator {
 
         for name in names {
             let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.syncVisibleMainWindowState()
+                Task { @MainActor [weak self] in
+                    self?.syncVisibleMainWindowState()
+                }
             }
             observationTokens.append(token)
         }
@@ -156,6 +158,61 @@ final class UITestWindowCoordinator {
             hasVisibleMainWindow: hasVisibleMainWindow
         )
         return hasVisibleMainWindow
+    }
+
+    func captureMainWindowScreenshot(name: String) -> Bool {
+        guard UITestAutomationSupport.isEnabled,
+              let screenshotDirectory = UITestAutomationSupport.screenshotDirectoryURL,
+              let window = preferredMainWindow() else {
+            return false
+        }
+
+        try? FileManager.default.createDirectory(
+            at: screenshotDirectory,
+            withIntermediateDirectories: true
+        )
+        let destinationURL = screenshotDirectory.appendingPathComponent("\(name).png")
+        return captureWindowImage(window, to: destinationURL) || captureWindowContent(window, to: destinationURL)
+    }
+
+    private func captureWindowImage(_ window: NSWindow, to destinationURL: URL) -> Bool {
+        window.displayIfNeeded()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", "\(window.windowNumber)", destinationURL.path]
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return false
+        }
+
+        return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: destinationURL.path)
+    }
+
+    private func captureWindowContent(_ window: NSWindow, to destinationURL: URL) -> Bool {
+        guard let contentView = window.contentView else { return false }
+        let bounds = contentView.bounds
+        guard !bounds.isEmpty,
+              let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+            return false
+        }
+
+        contentView.layoutSubtreeIfNeeded()
+        contentView.displayIfNeeded()
+        contentView.cacheDisplay(in: bounds, to: bitmap)
+
+        guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            return false
+        }
+
+        do {
+            try pngData.write(to: destinationURL)
+            return true
+        } catch {
+            return false
+        }
     }
 
     @discardableResult
@@ -265,6 +322,7 @@ struct QwenVoiceApp: App {
                         .environmentObject(savedVoicesViewModel)
                         .frame(minWidth: 720, minHeight: 560)
                         .onAppear {
+                            syncUITestEnvironmentReadiness(for: .ready(pythonPath: pythonPath))
                             if envManager.needsBackendRestart {
                                 pythonBridge.stop()
                                 envManager.needsBackendRestart = false
@@ -386,7 +444,17 @@ struct QwenVoiceApp: App {
     }
 
     private func startBackend(pythonPath: String) {
-        guard !UITestAutomationSupport.isStubBackendMode else { return }
+        if UITestAutomationSupport.isStubBackendMode {
+            guard !pythonBridge.isReady else { return }
+            Task {
+                do {
+                    try await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)
+                } catch {
+                    pythonBridge.lastError = "Backend initialization failed: \(error.localizedDescription)"
+                }
+            }
+            return
+        }
         guard !pythonBridge.isReady else { return }
         pythonBridge.start(pythonPath: pythonPath)
         Task {
