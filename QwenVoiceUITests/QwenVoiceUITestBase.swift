@@ -51,14 +51,21 @@ class QwenVoiceUITestBase: XCTestCase {
         prepareLaunchContextIfNeeded()
         configureAppForLaunch()
 
-        app.launch()
+        let application = app!
+        performOnMainActor(with: application) { app in
+            app.launch()
+        }
         if shouldWaitForInitialReadiness {
             waitForReadiness()
         }
     }
 
     override func tearDown() {
-        app?.terminate()
+        if let application = app {
+            performOnMainActor(with: application) { app in
+                app.terminate()
+            }
+        }
         sleep(1)
         app = nil
         if fixtureShouldCleanup, let fixtureRoot {
@@ -76,31 +83,44 @@ class QwenVoiceUITestBase: XCTestCase {
     func configureAppForLaunch() {
         prepareLaunchContextIfNeeded()
 
-        app = XCUIApplication()
-        app.launchArguments = ["--uitest", "--uitest-disable-animations"]
-        if includesFastIdleLaunchArgument {
-            app.launchArguments += ["--uitest-fast-idle"]
-        }
-        if let screen = initialScreen {
-            app.launchArguments += ["--uitest-screen=\(screen)"]
+        let application = XCUIApplication()
+        let includesFastIdleLaunchArgument = includesFastIdleLaunchArgument
+        let initialScreen = initialScreen
+        let backendMode = uiTestBackendMode
+        let setupScenario = uiTestSetupScenario
+        let setupDelayMilliseconds = uiTestSetupDelayMilliseconds
+        let defaultsSuiteName = defaultsSuiteName
+        let fixtureRoot = fixtureRoot
+        let extraEnvironment = additionalLaunchEnvironment(fixtureRoot: fixtureRoot)
+
+        performOnMainActor(with: application) { app in
+            app.launchArguments = ["--uitest", "--uitest-disable-animations"]
+            if includesFastIdleLaunchArgument {
+                app.launchArguments += ["--uitest-fast-idle"]
+            }
+            if let screen = initialScreen {
+                app.launchArguments += ["--uitest-screen=\(screen)"]
+            }
+
+            app.launchEnvironment["QWENVOICE_UI_TEST"] = "1"
+            app.launchEnvironment["QWENVOICE_UI_TEST_BACKEND_MODE"] = backendMode.rawValue
+            app.launchEnvironment["QWENVOICE_UI_TEST_SETUP_SCENARIO"] = setupScenario
+            app.launchEnvironment["QWENVOICE_UI_TEST_SETUP_DELAY_MS"] = setupDelayMilliseconds
+            app.launchEnvironment["QWENVOICE_UI_TEST_DEFAULTS_SUITE"] = defaultsSuiteName
+            app.launchEnvironment.removeValue(forKey: "QWENVOICE_UI_TEST_FIXTURE_ROOT")
+            app.launchEnvironment.removeValue(forKey: "QWENVOICE_APP_SUPPORT_DIR")
+            switch backendMode {
+            case .stub:
+                app.launchEnvironment["QWENVOICE_UI_TEST_FIXTURE_ROOT"] = fixtureRoot
+            case .live:
+                app.launchEnvironment["QWENVOICE_APP_SUPPORT_DIR"] = fixtureRoot
+            }
+            for (key, value) in extraEnvironment {
+                app.launchEnvironment[key] = value
+            }
         }
 
-        app.launchEnvironment["QWENVOICE_UI_TEST"] = "1"
-        app.launchEnvironment["QWENVOICE_UI_TEST_BACKEND_MODE"] = uiTestBackendMode.rawValue
-        app.launchEnvironment["QWENVOICE_UI_TEST_SETUP_SCENARIO"] = uiTestSetupScenario
-        app.launchEnvironment["QWENVOICE_UI_TEST_SETUP_DELAY_MS"] = uiTestSetupDelayMilliseconds
-        app.launchEnvironment["QWENVOICE_UI_TEST_DEFAULTS_SUITE"] = defaultsSuiteName
-        app.launchEnvironment.removeValue(forKey: "QWENVOICE_UI_TEST_FIXTURE_ROOT")
-        app.launchEnvironment.removeValue(forKey: "QWENVOICE_APP_SUPPORT_DIR")
-        switch uiTestBackendMode {
-        case .stub:
-            app.launchEnvironment["QWENVOICE_UI_TEST_FIXTURE_ROOT"] = fixtureRoot
-        case .live:
-            app.launchEnvironment["QWENVOICE_APP_SUPPORT_DIR"] = fixtureRoot
-        }
-        for (key, value) in additionalLaunchEnvironment(fixtureRoot: fixtureRoot) {
-            app.launchEnvironment[key] = value
-        }
+        app = application
     }
 
     // MARK: - Readiness
@@ -184,11 +204,6 @@ class QwenVoiceUITestBase: XCTestCase {
     func captureScreenshot(name: String) {
         MainActor.assumeIsolated {
             let screenshot = XCUIScreen.main.screenshot()
-            let attachment = XCTAttachment(screenshot: screenshot)
-            attachment.name = name
-            attachment.lifetime = .keepAlways
-            add(attachment)
-
             let outputDir = ProcessInfo.processInfo.environment["QWENVOICE_UITEST_SCREENSHOT_DIR"]
                 ?? NSTemporaryDirectory() + "QwenVoiceUITestScreenshots"
             let fm = FileManager.default
@@ -296,10 +311,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     private func performWithApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> Void) {
-        let application = app!
-        MainActor.assumeIsolated {
-            body(application)
-        }
+        performOnMainActor(with: app!, body)
     }
 
     private func boolFromApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> Bool) -> Bool {
@@ -312,6 +324,12 @@ class QwenVoiceUITestBase: XCTestCase {
     private func stringFromApplicationOnMainActor(_ body: @MainActor (XCUIApplication) -> String?) -> String? {
         let application = app!
         return MainActor.assumeIsolated {
+            body(application)
+        }
+    }
+
+    private func performOnMainActor(with application: XCUIApplication, _ body: @MainActor (XCUIApplication) -> Void) {
+        MainActor.assumeIsolated {
             body(application)
         }
     }
