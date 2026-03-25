@@ -122,7 +122,7 @@ class QwenVoiceUITestBase: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         } while Date() < deadline
 
-        let setupVisible = app.descendants(matching: .any)["setupView_visible"].exists
+        let setupVisible = elementExists(identifier: "setupView_visible")
         if setupVisible {
             XCTFail("App remained in setup instead of becoming \(readinessDescription) within \(effectiveTimeout)s")
         } else {
@@ -168,9 +168,7 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     func activeScreenValue() -> String? {
-        let marker = app.descendants(matching: .any)["mainWindow_activeScreen"]
-        guard marker.exists else { return nil }
-        return marker.value as? String
+        elementStringValue(identifier: "mainWindow_activeScreen")
     }
 
     // MARK: - Screenshots
@@ -232,11 +230,9 @@ class QwenVoiceUITestBase: XCTestCase {
     func stringValue(for identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) -> String? {
         let element = app.descendants(matching: .any)[identifier]
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "Element '\(identifier)' not found within \(timeout)s", file: file, line: line)
-        if let value = element.value as? String, !value.isEmpty {
-            return value
+        return MainActor.assumeIsolated {
+            elementStringValue(element)
         }
-        let label = element.label
-        return label.isEmpty ? nil : label
     }
 
     func assertStringValue(_ expected: String, for identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
@@ -256,12 +252,29 @@ class QwenVoiceUITestBase: XCTestCase {
     }
 
     private func readinessMarkerValue() -> String? {
-        let marker = app.descendants(matching: .any)[readinessMarkerIdentifier]
-        guard marker.exists else { return nil }
-        if let value = marker.value as? String, !value.isEmpty {
+        elementStringValue(identifier: readinessMarkerIdentifier)
+    }
+
+    private func elementExists(identifier: String) -> Bool {
+        MainActor.assumeIsolated {
+            app.descendants(matching: .any)[identifier].exists
+        }
+    }
+
+    private func elementStringValue(identifier: String) -> String? {
+        MainActor.assumeIsolated {
+            let element = app.descendants(matching: .any)[identifier]
+            return elementStringValue(element)
+        }
+    }
+
+    @MainActor
+    private func elementStringValue(_ element: XCUIElement) -> String? {
+        guard element.exists else { return nil }
+        if let value = element.value as? String, !value.isEmpty {
             return value
         }
-        return marker.label.isEmpty ? nil : marker.label
+        return element.label.isEmpty ? nil : element.label
     }
 
     private func prepareLaunchContextIfNeeded() {
