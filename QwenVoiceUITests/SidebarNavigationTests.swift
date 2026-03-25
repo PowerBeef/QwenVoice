@@ -20,6 +20,7 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         waitForScreen("screen_customVoice")
     }
 
+    @MainActor
     func testSidebarItemsExist() {
         for (sidebarID, _) in screens {
             let element = app.descendants(matching: .any)[sidebarID]

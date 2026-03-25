@@ -7,6 +7,7 @@ final class SetupFlowTests: QwenVoiceUITestBase {
     override var shouldWaitForInitialReadiness: Bool { false }
     override var includesFastIdleLaunchArgument: Bool { false }
 
+    @MainActor
     func testSetupFailureShowsRetryButton() {
         let retryButton = app.buttons["setup_retryButton"]
         XCTAssertTrue(retryButton.waitForExistence(timeout: 15), "Retry button should appear after setup failure")

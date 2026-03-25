@@ -3,6 +3,7 @@ import XCTest
 final class PreferencesViewTests: QwenVoiceUITestBase {
     override var initialScreen: String? { "preferences" }
 
+    @MainActor
     func testPreferencesScreenLoads() {
         // Preferences opens in a separate Settings window
         let settingsReady = app.descendants(matching: .any)["settingsWindow_ready"]
@@ -12,6 +13,7 @@ final class PreferencesViewTests: QwenVoiceUITestBase {
         assertElementExists("screen_preferences")
     }
 
+    @MainActor
     func testScreenshotCapture() {
         let settingsReady = app.descendants(matching: .any)["settingsWindow_ready"]
         _ = settingsReady.waitForExistence(timeout: 5)

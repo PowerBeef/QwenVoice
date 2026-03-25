@@ -9,6 +9,7 @@ final class CustomVoiceViewTests: QwenVoiceUITestBase {
         assertElementExists("textInput_charCount")
     }
 
+    @MainActor
     func testGenerateButtonDisabledWhenEmpty() {
         let button = app.buttons["textInput_generateButton"]
         XCTAssertTrue(button.waitForExistence(timeout: 3))

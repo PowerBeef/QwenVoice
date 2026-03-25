@@ -29,6 +29,7 @@ final class VoiceDesignViewTests: QwenVoiceUITestBase {
         assertStringValue(brief, for: "voiceDesign_voiceDescriptionValue")
     }
 
+    @MainActor
     func testDesignedVoiceCanBeSavedToSavedVoices() {
         let brief = "Warm narrator"
         let script = "Save this designed voice for cloning."

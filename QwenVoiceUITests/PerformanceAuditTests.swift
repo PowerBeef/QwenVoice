@@ -1,6 +1,7 @@
 import XCTest
 
 final class PerformanceAuditTests: QwenVoiceUITestBase {
+    @MainActor
     func testAppLaunchToReady() {
         app.terminate()
         sleep(1)
@@ -21,6 +22,7 @@ final class PerformanceAuditTests: QwenVoiceUITestBase {
         add(attachment)
     }
 
+    @MainActor
     func testSidebarNavigationLatency() {
         let screens: [(String, String)] = [
             ("sidebar_voiceDesign", "screen_voiceDesign"),

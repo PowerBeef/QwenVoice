@@ -3,6 +3,7 @@ import XCTest
 final class PlayerBarTests: QwenVoiceUITestBase {
     override var initialScreen: String? { "customVoice" }
 
+    @MainActor
     func testPlayerBarNotVisibleWithoutAudio() {
         // With no audio loaded, the player controls should not become actionable.
         let playPause = app.buttons["sidebarPlayer_playPause"]
