@@ -31,8 +31,13 @@ jobs:
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
 
-      - name: Ensure Python test dependencies
-        run: python3 -m pip install --quiet numpy pillow
+      - name: Set up Python test environment
+        run: |
+          python3 -m venv .ci-python
+          . .ci-python/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet numpy pillow
+          echo "$PWD/.ci-python/bin" >> "$GITHUB_PATH"
 
       - name: Set UI profile for runner
         run: |
@@ -112,8 +117,13 @@ jobs:
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
 
-      - name: Ensure Python test dependencies
-        run: python3 -m pip install --quiet numpy pillow
+      - name: Set up Python test environment
+        run: |
+          python3 -m venv .ci-python
+          . .ci-python/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet numpy pillow
+          echo "$PWD/.ci-python/bin" >> "$GITHUB_PATH"
 
       - name: Set UI profile for runner
         run: |
@@ -165,8 +175,13 @@ jobs:
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
 
-      - name: Ensure Python test dependencies
-        run: python3 -m pip install --quiet numpy pillow
+      - name: Set up Python test environment
+        run: |
+          python3 -m venv .ci-python
+          . .ci-python/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet numpy pillow
+          echo "$PWD/.ci-python/bin" >> "$GITHUB_PATH"
 
       - name: Set UI profile for runner
         run: |
