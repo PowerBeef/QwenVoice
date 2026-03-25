@@ -1,17 +1,48 @@
 import SwiftUI
 
+private struct VoiceDesignActionAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+struct VoiceDesignSavedVoiceCandidate: Equatable {
+    let audioPath: String
+    let transcript: String
+    let suggestedName: String
+    let voiceDescription: String
+    let emotion: String
+    let text: String
+    private(set) var savedVoiceName: String?
+
+    var isSaved: Bool {
+        savedVoiceName != nil
+    }
+
+    func matches(draft: VoiceDesignDraft) -> Bool {
+        voiceDescription == draft.voiceDescription
+            && emotion == draft.emotion
+            && text == draft.text
+    }
+
+    mutating func markSaved(as voiceName: String) {
+        savedVoiceName = voiceName
+    }
+}
+
 struct VoiceDesignView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
+    @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
 
-    @Binding private var voiceDescription: String
-    let isActive: Bool
-    @State private var emotion = "Normal tone"
-    @State private var text = ""
+    @Binding private var draft: VoiceDesignDraft
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var showingBatch = false
+    @State private var actionAlert: VoiceDesignActionAlert?
+    @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
+    @State private var latestSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate?
 
     private var activeMode: GenerationMode {
         .design
@@ -33,23 +64,30 @@ struct VoiceDesignView: View {
     private var canGenerate: Bool {
         pythonBridge.isReady
             && isModelAvailable
-            && !text.isEmpty
-            && !voiceDescription.isEmpty
+            && !draft.text.isEmpty
+            && !draft.voiceDescription.isEmpty
     }
 
     private var canRunBatch: Bool {
         pythonBridge.isReady
             && isModelAvailable
-            && !voiceDescription.isEmpty
+            && !draft.voiceDescription.isEmpty
     }
 
     private var idlePrewarmTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
+        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
     }
 
-    init(voiceDescription: Binding<String>, isActive: Bool) {
-        _voiceDescription = voiceDescription
-        self.isActive = isActive
+    private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
+        guard let latestSavedVoiceCandidate,
+              latestSavedVoiceCandidate.matches(draft: draft) else {
+            return nil
+        }
+        return latestSavedVoiceCandidate
+    }
+
+    init(draft: Binding<VoiceDesignDraft>) {
+        _draft = draft
     }
 
     var body: some View {
@@ -68,11 +106,24 @@ struct VoiceDesignView: View {
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .design,
-                emotion: emotion,
-                voiceDescription: voiceDescription
+                emotion: draft.emotion,
+                voiceDescription: draft.voiceDescription
             )
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
+        }
+        .sheet(item: $savedVoiceSheetConfiguration) { configuration in
+            SavedVoiceSheet(configuration: configuration) { voice in
+                handleSavedVoice(voice)
+            }
+            .environmentObject(pythonBridge)
+        }
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .task(id: idlePrewarmTaskID) {
             await prewarmSelectedModelIfNeeded()
@@ -120,13 +171,13 @@ private extension VoiceDesignView {
         ) {
             VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
-                    text: $text,
+                    text: $draft.text,
                     isGenerating: isGenerating,
                     placeholder: "What should I say?",
                     buttonColor: AppTheme.voiceDesign,
                     batchAction: { showingBatch = true },
                     batchDisabled: !canRunBatch,
-                    generateDisabled: !pythonBridge.isReady || !isModelAvailable || voiceDescription.isEmpty,
+                    generateDisabled: !pythonBridge.isReady || !isModelAvailable || draft.voiceDescription.isEmpty,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
@@ -141,7 +192,7 @@ private extension VoiceDesignView {
     }
 
     var briefSettings: some View {
-        VoiceDesignBriefSettings(voiceDescription: $voiceDescription)
+        VoiceDesignBriefSettings(voiceDescription: $draft.voiceDescription)
     }
 
     var deliverySettings: some View {
@@ -150,7 +201,7 @@ private extension VoiceDesignView {
                 .font(.subheadline.weight(.semibold))
 
             DeliveryControlsView(
-                emotion: $emotion,
+                emotion: $draft.emotion,
                 accentColor: AppTheme.voiceDesign,
                 isCompact: true,
                 showsLabel: false
@@ -178,10 +229,10 @@ private extension VoiceDesignView {
         if !isModelAvailable {
             return "Install the active model"
         }
-        if voiceDescription.isEmpty {
+        if draft.voiceDescription.isEmpty {
             return "Add a voice brief"
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "Add a script"
         }
         return "Review the take"
@@ -194,10 +245,10 @@ private extension VoiceDesignView {
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."
         }
-        if voiceDescription.isEmpty {
+        if draft.voiceDescription.isEmpty {
             return "Describe the voice you want before writing the final line."
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "Once the line is written, the generated voice will use this brief and delivery."
         }
         return "Everything is in place for a live preview and a saved generation."
@@ -206,6 +257,7 @@ private extension VoiceDesignView {
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
             generationReadiness
+            saveVoiceAction
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
@@ -219,13 +271,35 @@ private extension VoiceDesignView {
             alignment: .topLeading
         )
     }
+
+    @ViewBuilder
+    var saveVoiceAction: some View {
+        if let candidate = currentSavedVoiceCandidate {
+            if candidate.isSaved {
+                Label("Saved to Saved Voices", systemImage: "checkmark.circle.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("voiceDesign_saveVoiceCompleted")
+                    .accessibilityValue(candidate.savedVoiceName ?? "")
+            } else {
+                Button {
+                    presentSavedVoiceSheet()
+                } label: {
+                    Label("Save to Saved Voices", systemImage: "person.crop.circle.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityIdentifier("voiceDesign_saveVoiceButton")
+            }
+        }
+    }
 }
 
 // MARK: - Actions
 
 private extension VoiceDesignView {
     func generate() {
-        guard !text.isEmpty, !voiceDescription.isEmpty, pythonBridge.isReady else { return }
+        guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
@@ -234,6 +308,10 @@ private extension VoiceDesignView {
 
         isGenerating = true
         errorMessage = nil
+        latestSavedVoiceCandidate = nil
+        let text = draft.text
+        let voiceDescription = draft.voiceDescription
+        let emotion = draft.emotion
 
         Task {
             do {
@@ -275,10 +353,20 @@ private extension VoiceDesignView {
                     &generation, result: result, text: text,
                     audioPlayer: audioPlayer, caller: "VoiceDesignView"
                 )
+                latestSavedVoiceCandidate = VoiceDesignSavedVoiceCandidate(
+                    audioPath: generation.audioPath,
+                    transcript: text,
+                    suggestedName: SavedVoiceNameSuggestion.designResultName(from: voiceDescription),
+                    voiceDescription: voiceDescription,
+                    emotion: emotion,
+                    text: text
+                )
                 UITestAutomationSupport.recordAction("design-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("design-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
-                audioPlayer.abortLivePreviewIfNeeded()
+                if (error as? GenerationPersistence.PersistenceError) == nil {
+                    audioPlayer.abortLivePreviewIfNeeded()
+                }
                 errorMessage = error.localizedDescription
             }
 
@@ -288,14 +376,33 @@ private extension VoiceDesignView {
 
     func prewarmSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
-        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
 
         await pythonBridge.prewarmModelIfNeeded(
             modelID: model.id,
-            mode: activeMode,
-            voice: nil,
-            instruct: emotion
+            mode: activeMode
+        )
+    }
+
+    func presentSavedVoiceSheet() {
+        guard let candidate = currentSavedVoiceCandidate else { return }
+        savedVoiceSheetConfiguration = .designResult(
+            voiceDescription: candidate.voiceDescription,
+            audioPath: candidate.audioPath,
+            transcript: candidate.transcript
+        )
+    }
+
+    func handleSavedVoice(_ voice: Voice) {
+        if var candidate = latestSavedVoiceCandidate, candidate.matches(draft: draft) {
+            candidate.markSaved(as: voice.name)
+            latestSavedVoiceCandidate = candidate
+        }
+        savedVoicesViewModel.insertOrReplace(voice)
+        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        actionAlert = VoiceDesignActionAlert(
+            title: "Saved Voice Added",
+            message: "\"\(voice.name)\" is ready in Saved Voices."
         )
     }
 }

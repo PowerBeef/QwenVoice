@@ -13,7 +13,6 @@ struct VoicesView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
 
-    let isActive: Bool
     let enrollRequestID: UUID?
     let canUseInVoiceCloning: Bool
     let onUseInVoiceCloning: (Voice) -> Void
@@ -39,7 +38,7 @@ struct VoicesView: View {
     }
 
     private var loadTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)"
+        "\(pythonBridge.isReady)"
     }
 
     var body: some View {
@@ -47,8 +46,8 @@ struct VoicesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_voices")
             .task(id: loadTaskID) {
-                guard isActive, pythonBridge.isReady else { return }
-                await savedVoicesViewModel.ensureLoaded(using: pythonBridge)
+                guard pythonBridge.isReady else { return }
+                await savedVoicesViewModel.refresh(using: pythonBridge)
             }
             .onChange(of: enrollRequestID) { _, newValue in
                 guard newValue != nil else { return }

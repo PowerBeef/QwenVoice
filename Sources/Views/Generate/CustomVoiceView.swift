@@ -5,11 +5,7 @@ struct CustomVoiceView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
 
-    let isActive: Bool
-
-    @State private var selectedSpeaker = TTSModel.defaultSpeaker
-    @State private var emotion = "Normal tone"
-    @State private var text = ""
+    @Binding private var draft: CustomVoiceDraft
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var showingBatch = false
@@ -34,7 +30,7 @@ struct CustomVoiceView: View {
     private var canGenerate: Bool {
         pythonBridge.isReady
             && isModelAvailable
-            && !text.isEmpty
+            && !draft.text.isEmpty
     }
 
     private var canRunBatch: Bool {
@@ -42,8 +38,12 @@ struct CustomVoiceView: View {
             && isModelAvailable
     }
 
-    private var idlePrewarmTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)"
+    private var modelPreparationTaskID: String {
+        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)-\(isGenerating)"
+    }
+
+    init(draft: Binding<CustomVoiceDraft>) {
+        _draft = draft
     }
 
     var body: some View {
@@ -62,14 +62,22 @@ struct CustomVoiceView: View {
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .custom,
-                voice: selectedSpeaker,
-                emotion: emotion
+                voice: draft.selectedSpeaker,
+                emotion: draft.emotion
             )
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
         }
-        .task(id: idlePrewarmTaskID) {
-            await prewarmSelectedModelIfNeeded()
+        .task(id: modelPreparationTaskID) {
+            await prepareSelectedModelIfNeeded()
+        }
+        .onAppear(perform: syncUITestState)
+        .onChange(of: draft.selectedSpeaker) { _, _ in syncUITestState() }
+        .onChange(of: draft.emotion) { _, _ in syncUITestState() }
+        .onChange(of: draft.text) { _, _ in syncUITestState() }
+        .onChange(of: isGenerating) { _, _ in syncUITestState() }
+        .onReceive(NotificationCenter.default.publisher(for: .testStartLivePreview)) { notification in
+            handleTestStartLivePreview(notification)
         }
     }
 }
@@ -99,7 +107,7 @@ private extension CustomVoiceView {
                 identifier: "customVoice_configuration"
             )
         }
-        .animation(.none, value: selectedSpeaker)
+        .animation(.none, value: draft.selectedSpeaker)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -114,7 +122,7 @@ private extension CustomVoiceView {
         ) {
             VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
-                    text: $text,
+                    text: $draft.text,
                     isGenerating: isGenerating,
                     placeholder: "What should I say?",
                     buttonColor: AppTheme.customVoice,
@@ -135,7 +143,7 @@ private extension CustomVoiceView {
     }
 
     var speakerSettings: some View {
-        SpeakerPickerRow(selectedSpeaker: $selectedSpeaker)
+        SpeakerPickerRow(selectedSpeaker: $draft.selectedSpeaker)
     }
 
     var deliverySettings: some View {
@@ -144,7 +152,7 @@ private extension CustomVoiceView {
                 .font(.subheadline.weight(.semibold))
 
             DeliveryControlsView(
-                emotion: $emotion,
+                emotion: $draft.emotion,
                 accentColor: AppTheme.customVoice,
                 isCompact: true,
                 showsLabel: false
@@ -174,7 +182,7 @@ private extension CustomVoiceView {
         if !isModelAvailable {
             return "Install the active model"
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "Add a script"
         }
         return "Review the take"
@@ -187,7 +195,7 @@ private extension CustomVoiceView {
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "The selected speaker and delivery settings are ready as soon as the line is written."
         }
         return "Everything is in place for a live preview and a saved generation."
@@ -216,8 +224,29 @@ private extension CustomVoiceView {
 // MARK: - Actions
 
 private extension CustomVoiceView {
+    func syncUITestState() {
+        guard UITestAutomationSupport.isEnabled else { return }
+        TestStateProvider.shared.selectedSpeaker = draft.selectedSpeaker
+        TestStateProvider.shared.emotion = draft.emotion
+        TestStateProvider.shared.text = draft.text
+        TestStateProvider.shared.isGenerating = isGenerating
+    }
+
+    func handleTestStartLivePreview(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled,
+              let screen = notification.userInfo?["screen"] as? String,
+              screen == "customVoice" else { return }
+
+        if let text = notification.userInfo?["text"] as? String,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.text = text
+        }
+
+        generate()
+    }
+
     func generate() {
-        guard !text.isEmpty, pythonBridge.isReady else { return }
+        guard !draft.text.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
@@ -237,26 +266,26 @@ private extension CustomVoiceView {
                     return
                 }
 
-                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
+                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: draft.text)
                 audioPlayer.prepareStreamingPreview(
-                    title: String(text.prefix(40)),
+                    title: String(draft.text.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
 
                 let result = try await pythonBridge.generateCustomStreamingFlow(
                     modelID: model.id,
-                    text: text,
-                    voice: selectedSpeaker,
-                    emotion: emotion,
+                    text: draft.text,
+                    voice: draft.selectedSpeaker,
+                    emotion: draft.emotion,
                     outputPath: outputPath
                 )
 
                 var generation = Generation(
-                    text: text,
+                    text: draft.text,
                     mode: model.mode.rawValue,
                     modelTier: model.tier,
-                    voice: selectedSpeaker,
-                    emotion: emotion,
+                    voice: draft.selectedSpeaker,
+                    emotion: draft.emotion,
                     speed: nil,
                     audioPath: result.audioPath,
                     duration: result.durationSeconds,
@@ -264,31 +293,27 @@ private extension CustomVoiceView {
                 )
 
                 try GenerationPersistence.persistAndAutoplay(
-                    &generation, result: result, text: text,
+                    &generation, result: result, text: draft.text,
                     audioPlayer: audioPlayer, caller: "CustomVoiceView"
                 )
                 UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
-                audioPlayer.abortLivePreviewIfNeeded()
+                if (error as? GenerationPersistence.PersistenceError) == nil {
+                    audioPlayer.abortLivePreviewIfNeeded()
+                }
                 errorMessage = error.localizedDescription
             }
 
             isGenerating = false
+            syncUITestState()
         }
     }
 
-    func prewarmSelectedModelIfNeeded() async {
+    func prepareSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
-        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-
-        await pythonBridge.prewarmModelIfNeeded(
-            modelID: model.id,
-            mode: activeMode,
-            voice: selectedSpeaker,
-            instruct: emotion
-        )
+        await pythonBridge.ensureModelLoadedIfNeeded(id: model.id)
     }
 }
 

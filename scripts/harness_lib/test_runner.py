@@ -12,6 +12,7 @@ import importlib
 import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,12 +31,24 @@ from .paths import (
     SERVER_PATH,
     resolve_backend_python,
 )
+from .ui_test_support import (
+    build_app_binary,
+    build_ui_launch_environment,
+    check_live_prerequisites,
+    cleanup_ui_launch_context,
+    describe_launch_context,
+    kill_running_app_instances,
+    launch_ui_app,
+    prepare_ui_launch_context,
+)
 
 
 def run_tests(
     layer: str = "all",
     python_path: str | None = None,
     artifact_dir: str | None = None,
+    ui_backend_mode: str = "live",
+    ui_data_root: str = "fixture",
 ) -> list[dict[str, Any]]:
     """Run selected test layers and return suite results."""
     suites: list[dict[str, Any]] = []
@@ -66,13 +79,13 @@ def run_tests(
         suites.append(run_audio_tests(python_path=python_path, artifact_dir=artifact_dir))
 
     if layer == "ui":
-        suites.append(_run_ui_tests())
+        suites.append(_run_ui_tests(backend_mode=ui_backend_mode, data_root=ui_data_root))
 
     if layer == "design":
-        suites.append(_run_design_tests())
+        suites.append(_run_design_tests(backend_mode=ui_backend_mode, data_root=ui_data_root))
 
     if layer == "perf":
-        suites.append(_run_perf_audit())
+        suites.append(_run_perf_audit(backend_mode=ui_backend_mode, data_root=ui_data_root))
 
     return suites
 
@@ -95,6 +108,37 @@ def _timed_test(name: str, fn: Any) -> dict[str, Any]:
     except Exception as exc:
         duration_ms = int((time.perf_counter() - start) * 1000)
         return build_test_result(name, passed=False, error=str(exc), duration_ms=duration_ms)
+
+
+def _ui_transport_failure_reason(operation: str) -> str:
+    return {
+        "navigate": "navigation_transport_error",
+        "start_preview": "preview_transport_error",
+        "activate_window": "window_activation_transport_error",
+        "query_state": "state_server_transport_error",
+    }.get(operation, "state_server_transport_error")
+
+
+def _build_ui_transport_failure_result(
+    name: str,
+    exc: Any,
+    *,
+    last_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    details = {
+        "failure_reason": _ui_transport_failure_reason(getattr(exc, "operation", "")),
+        "operation": getattr(exc, "operation", "unknown"),
+        "error_kind": getattr(exc, "kind", "transport"),
+        "error_detail": getattr(exc, "detail", str(exc)),
+        "url": getattr(exc, "url", ""),
+        "state": last_state or {},
+    }
+    return build_test_result(
+        name,
+        passed=False,
+        error=getattr(exc, "detail", str(exc)),
+        details=details,
+    )
 
 
 def _load_module_from_path(name: str, path: Path) -> Any:
@@ -292,6 +336,76 @@ def _run_pipeline_tests() -> dict[str, Any]:
         assert set(pipeline.CLONE_EMOTION_INSTRUCT.keys()) == expected_emotions
         assert pipeline.CLONE_EMOTION_INSTRUCT["neutral"] is None
 
+    def test_ui_state_client_wraps_transport_errors():
+        from .ui_state_client import UIStateClient, UIStateClientError
+
+        client = UIStateClient(base_url="http://127.0.0.1:1")
+        try:
+            client.navigate("history")
+        except UIStateClientError as exc:
+            assert exc.operation == "navigate"
+            assert exc.kind == "transport"
+            assert exc.url.endswith("/navigate?screen=history")
+        else:
+            raise AssertionError("Expected UIStateClientError for refused connection")
+
+    def test_build_ui_transport_failure_result():
+        from .ui_state_client import UIStateClientError
+
+        exc = UIStateClientError(
+            "navigate",
+            "http://localhost:19876/navigate?screen=history",
+            "transport",
+            "[Errno 61] Connection refused",
+        )
+        result = _build_ui_transport_failure_result(
+            "sidebar_history_run_1",
+            exc,
+            last_state={"activeScreen": "screen_customVoice"},
+        )
+        assert result["passed"] is False
+        assert result["details"]["failure_reason"] == "navigation_transport_error"
+        assert result["details"]["state"]["activeScreen"] == "screen_customVoice"
+
+    def test_click_detection_ignores_matching_final_boundary_transient():
+        import numpy as np
+
+        from .audio_analysis import check_click_detection
+
+        chunk_a = np.linspace(0.0, 0.12, 64, dtype=np.float32)
+        chunk_b = np.concatenate((
+            np.array([0.95], dtype=np.float32),
+            np.linspace(0.94, 0.2, 63, dtype=np.float32),
+        ))
+        final_audio = np.concatenate((chunk_a, chunk_b))
+        result = check_click_detection(
+            [(chunk_a, 24000), (chunk_b, 24000)],
+            final_audio=final_audio,
+        )
+        assert result["passed"] is True
+
+    def test_click_detection_detects_boundary_not_present_in_final_audio():
+        import numpy as np
+
+        from .audio_analysis import check_click_detection
+
+        chunk_a = np.linspace(0.0, 0.12, 64, dtype=np.float32)
+        chunk_b = np.concatenate((
+            np.array([0.95], dtype=np.float32),
+            np.linspace(0.94, 0.2, 63, dtype=np.float32),
+        ))
+        final_audio = np.concatenate((
+            chunk_a[:-1],
+            np.array([0.13, 0.14], dtype=np.float32),
+            np.linspace(0.15, 0.2, 63, dtype=np.float32),
+        ))
+        result = check_click_detection(
+            [(chunk_a, 24000), (chunk_b, 24000)],
+            final_audio=final_audio,
+        )
+        assert result["passed"] is False
+        assert result["clicks"]
+
     tests = [
         ("parse_profile_preset", test_parse_profile_preset),
         ("parse_profile_custom_text", test_parse_profile_custom_text),
@@ -316,6 +430,10 @@ def _run_pipeline_tests() -> dict[str, Any]:
         ("sampling_profiles_keys", test_sampling_profiles_keys),
         ("strength_fallbacks_keys", test_strength_fallbacks_keys),
         ("clone_emotion_instruct_entries", test_clone_emotion_instruct_entries),
+        ("ui_state_client_wraps_transport_errors", test_ui_state_client_wraps_transport_errors),
+        ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
+        ("click_detection_ignores_matching_final_boundary_transient", test_click_detection_ignores_matching_final_boundary_transient),
+        ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
     ]
 
     for name, fn in tests:
@@ -397,6 +515,55 @@ def _run_server_tests() -> dict[str, Any]:
         assert server._has_meaningful_delivery_instruction(None) is False
         assert server._has_meaningful_delivery_instruction("  ") is False
 
+    def test_design_prewarm_identity_ignores_instruction():
+        calm_key = server._prewarm_identity_key(
+            "pro_design",
+            "design",
+            instruct="Calm narration",
+        )
+        energetic_key = server._prewarm_identity_key(
+            "pro_design",
+            "design",
+            instruct="Energetic narration",
+        )
+        assert calm_key == energetic_key
+
+    def test_custom_prewarm_identity_tracks_voice_and_instruction():
+        base_key = server._prewarm_identity_key(
+            "pro_custom",
+            "custom",
+            voice="vivian",
+            instruct="Conversational",
+        )
+        changed_voice_key = server._prewarm_identity_key(
+            "pro_custom",
+            "custom",
+            voice="ethan",
+            instruct="Conversational",
+        )
+        changed_instruction_key = server._prewarm_identity_key(
+            "pro_custom",
+            "custom",
+            voice="vivian",
+            instruct="Dramatic",
+        )
+        assert base_key != changed_voice_key
+        assert base_key != changed_instruction_key
+
+    def test_collect_generation_result_with_timings_captures_first_yield():
+        class FakeResult:
+            def __init__(self, value: int) -> None:
+                self.value = value
+
+        def fake_generator():
+            yield FakeResult(1)
+            yield FakeResult(2)
+
+        result, timings = server._collect_generation_result_with_timings(fake_generator())
+        assert result.value == 2
+        assert timings["first_generator_yield"] >= 0
+        assert timings["collect_generation"] >= timings["first_generator_yield"]
+
     # _infer_legacy_mode tests
     def test_infer_legacy_mode():
         assert server._infer_legacy_mode(voice="ryan") == "custom"
@@ -459,6 +626,74 @@ def _run_server_tests() -> dict[str, Any]:
         assert server.GUIDED_CLONE_EARLY_ABORT_MARGIN > 0
         assert server.GUIDED_CLONE_EARLY_ABORT_MARGIN < server.GUIDED_CLONE_HARD_SIMILARITY
 
+    def test_stream_selected_audio_emits_chunks_before_final_write():
+        import numpy as np
+
+        events: list[str] = []
+        original_np = server._np
+        original_make_session_dir = server._make_stream_session_dir
+        original_audio_write_fn = server._audio_write_fn
+        original_write_audio_file = server._write_audio_file
+        original_get_audio_metadata = server.get_audio_metadata
+        original_send_generation_chunk = server.send_generation_chunk
+
+        class FakeResult:
+            def __init__(self) -> None:
+                self.audio = np.linspace(-0.25, 0.25, 2400, dtype=np.float32)
+                self.sample_rate = 24000
+                self.token_count = 4
+                self.processing_time_seconds = 0.2
+                self.peak_memory_usage = 0.1
+
+        with tempfile.TemporaryDirectory(prefix="qwenvoice_stream_selected_audio_") as tmp_dir:
+            final_path = os.path.join(tmp_dir, "final.wav")
+            session_dir = os.path.join(tmp_dir, "stream")
+            os.makedirs(session_dir, exist_ok=True)
+
+            try:
+                server._np = np
+                server._make_stream_session_dir = lambda request_id: session_dir
+
+                def fake_chunk_write(path, audio, sample_rate, format="wav"):
+                    events.append(f"chunk_write:{os.path.basename(path)}")
+
+                def fake_final_write(path, audio, sample_rate):
+                    events.append("final_write")
+                    with open(path, "wb") as handle:
+                        handle.write(b"RIFF")
+
+                def fake_get_audio_metadata(path):
+                    events.append("metadata_lookup")
+                    return {"duration_seconds": 0.1}
+
+                def fake_send_generation_chunk(**kwargs):
+                    events.append(f"notify:{kwargs['chunk_index']}")
+
+                server._audio_write_fn = fake_chunk_write
+                server._write_audio_file = fake_final_write
+                server.get_audio_metadata = fake_get_audio_metadata
+                server.send_generation_chunk = fake_send_generation_chunk
+
+                response, _, _, breakdown = server._stream_selected_audio(
+                    FakeResult(),
+                    request_id="req-1",
+                    final_path=final_path,
+                    streaming_interval=0.05,
+                )
+            finally:
+                server._np = original_np
+                server._make_stream_session_dir = original_make_session_dir
+                server._audio_write_fn = original_audio_write_fn
+                server._write_audio_file = original_write_audio_file
+                server.get_audio_metadata = original_get_audio_metadata
+                server.send_generation_chunk = original_send_generation_chunk
+
+        assert events[0].startswith("chunk_write:")
+        assert "final_write" in events
+        assert events.index("notify:0") < events.index("final_write")
+        assert response["stream_session_dir"] == session_dir
+        assert breakdown["first_stream_chunk"] >= 0
+
     tests = [
         ("env_flag_true", test_env_flag_true),
         ("env_flag_false", test_env_flag_false),
@@ -468,6 +703,10 @@ def _run_server_tests() -> dict[str, Any]:
         ("env_float_missing", test_env_float_missing),
         ("early_abort_margin_positive", test_early_abort_margin_positive),
         ("meaningful_delivery_instruction", test_meaningful_delivery_various),
+        ("design_prewarm_identity_ignores_instruction", test_design_prewarm_identity_ignores_instruction),
+        ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
+        ("collect_generation_result_with_timings", test_collect_generation_result_with_timings_captures_first_yield),
+        ("stream_selected_audio_emits_chunks_before_final_write", test_stream_selected_audio_emits_chunks_before_final_write),
         ("infer_legacy_mode", test_infer_legacy_mode),
         ("make_output_path", test_make_output_path),
         ("get_audio_metadata_missing", test_get_audio_metadata_missing),
@@ -488,6 +727,7 @@ def _run_server_tests() -> dict[str, Any]:
 def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
+    app_support_tmp: tempfile.TemporaryDirectory[str] | None = None
 
     try:
         resolved_python = resolve_backend_python(python_path)
@@ -512,6 +752,14 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
 
     client: BackendClient | None = None
     try:
+        app_support_tmp = tempfile.TemporaryDirectory(prefix="qwenvoice_rpc_test_")
+        app_support_dir = Path(app_support_tmp.name)
+        models_dir = app_support_dir / "models"
+        try:
+            models_dir.symlink_to(APP_MODELS_DIR, target_is_directory=True)
+        except OSError:
+            shutil.copytree(APP_MODELS_DIR, models_dir)
+
         # Test: backend starts
         def test_backend_starts():
             nonlocal client
@@ -534,9 +782,8 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
 
         # Test: init
         def test_init():
-            with tempfile.TemporaryDirectory() as tmp:
-                result = client.call("init", {"app_support_dir": tmp}, timeout=30)
-                assert "status" in result or result == {}, f"Unexpected init result: {result}"
+            result = client.call("init", {"app_support_dir": str(app_support_dir)}, timeout=30)
+            assert "status" in result or result == {}, f"Unexpected init result: {result}"
 
         results.append(_timed_test("init", test_init))
 
@@ -599,7 +846,7 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
                             # Skip if no reference audio available
                             return {"skip_reason": "No reference audio for clone smoke test"}
                         elif m == "design":
-                            params["voice_description"] = "A young female speaker"
+                            params["instruct"] = "A young female speaker"
 
                         result = client.call("generate", params, timeout=300)
                         actual_path = result.get("audio_path", output_path)
@@ -635,6 +882,8 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
     finally:
         if client is not None:
             client.stop()
+        if app_support_tmp is not None:
+            app_support_tmp.cleanup()
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("rpc_integration", results, duration_ms)
@@ -709,232 +958,472 @@ def _run_contract_tests(python_path: str | None = None) -> dict[str, Any]:
     return build_suite_result("contract_validation", results, duration_ms)
 
 
-def _run_ui_tests() -> dict[str, Any]:
-    """Run UI tests via HTTP state server (no XCUI dependency)."""
-    import signal
-    from .ui_state_client import UIStateClient
+def _ui_ready_field(backend_mode: str) -> str:
+    return "interactiveReady" if backend_mode == "live" else "isReady"
+
+
+def _ui_ready_timeout(backend_mode: str) -> float:
+    return 60.0 if backend_mode == "live" else 15.0
+
+
+def _wait_for_ui_launch_ready(
+    client: Any,
+    backend_mode: str,
+) -> tuple[bool, dict[str, Any], str]:
+    ready_field = _ui_ready_field(backend_mode)
+    return client.wait_for_ready(
+        timeout=_ui_ready_timeout(backend_mode),
+        ready_field=ready_field,
+    )
+
+
+def _append_live_preflight_results(results: list[dict[str, Any]], backend_mode: str) -> bool:
+    if backend_mode != "live":
+        results.append(build_test_result(
+            "ui_launch_mode",
+            passed=True,
+            details={"backend_mode": backend_mode},
+        ))
+        return True
+
+    prerequisites = check_live_prerequisites()
+    python_ok = prerequisites["python_exists"]
+    models_ok = bool(prerequisites["installed_models"])
+    results.append(build_test_result(
+        "live_backend_python_available",
+        passed=python_ok,
+        details={"python_path": prerequisites["python_path"]},
+    ))
+    results.append(build_test_result(
+        "live_models_available",
+        passed=models_ok,
+        details={
+            "models_dir": prerequisites["models_dir"],
+            "installed_models": prerequisites["installed_models"],
+        },
+    ))
+    return python_ok and models_ok
+
+
+def _terminate_ui_process(app_proc: subprocess.Popen[Any] | None) -> None:
+    if app_proc is None:
+        kill_running_app_instances()
+        return
+    app_proc.terminate()
+    try:
+        app_proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        app_proc.kill()
+    kill_running_app_instances()
+
+
+def _run_ui_tests(backend_mode: str = "live", data_root: str = "fixture") -> dict[str, Any]:
+    """Run UI smoke coverage via the test-state server."""
+    from .ui_state_client import UIStateClient, UIStateClientError
 
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
 
-    # 1. Build the app
+    if not _append_live_preflight_results(results, backend_mode):
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("ui_http_tests", results, duration_ms)
+
     eprint("  Building app...")
-    build_proc = subprocess.run(
-        ["xcodebuild", "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
-         "-scheme", "QwenVoice", "build", "-quiet"],
-        capture_output=True, text=True, timeout=300,
-    )
-    if build_proc.returncode != 0:
+    built, app_binary, build_details = build_app_binary()
+    results.append(build_test_result("build_app", passed=built, details=build_details))
+    if not built or not app_binary:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        results.append(build_test_result("build", passed=False, details={"error": "build_failed"}))
         return build_suite_result("ui_http_tests", results, duration_ms)
 
-    # 2. Find the built app binary
-    settings = subprocess.run(
-        ["xcodebuild", "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
-         "-scheme", "QwenVoice", "-showBuildSettings"],
-        capture_output=True, text=True, timeout=30,
-    )
-    app_dir = None
-    for line in settings.stdout.splitlines():
-        if "BUILT_PRODUCTS_DIR" in line:
-            app_dir = line.split("=", 1)[1].strip()
-            break
-    if not app_dir:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        results.append(build_test_result("find_app", passed=False, details={"error": "no_build_dir"}))
-        return build_suite_result("ui_http_tests", results, duration_ms)
+    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
+    results.append(build_test_result(
+        "ui_launch_context",
+        passed=True,
+        details=describe_launch_context(context),
+    ))
 
-    app_binary = os.path.join(app_dir, "QwenVoice.app", "Contents", "MacOS", "QwenVoice")
-
-    # 3. Kill existing instances
-    subprocess.run(["killall", "QwenVoice"], capture_output=True)
-    time.sleep(0.5)
-
-    # 4. Launch with test mode
-    eprint("  Launching app with test state server...")
-    env = dict(os.environ)
-    env["QWENVOICE_UI_TEST"] = "1"
-    env["QWENVOICE_UI_TEST_BACKEND_MODE"] = "stub"
-    env["QWENVOICE_UI_TEST_SETUP_SCENARIO"] = "success"
-    env["QWENVOICE_UI_TEST_SETUP_DELAY_MS"] = "1"
-    app_proc = subprocess.Popen(
-        [app_binary, "--uitest", "--uitest-disable-animations", "--uitest-fast-idle"],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-
+    app_proc: subprocess.Popen[Any] | None = None
     client = UIStateClient()
-
     try:
-        # 5. Wait for ready
-        t0 = time.perf_counter()
-        ready = client.wait_for_ready(timeout=15)
-        ready_ms = int((time.perf_counter() - t0) * 1000)
+        kill_running_app_instances()
+        results.append(build_test_result("terminate_existing_instances", passed=True))
+
+        eprint("  Launching app with test state server...")
+        env = build_ui_launch_environment(context)
+        launch_start = time.perf_counter()
+        app_proc = launch_ui_app(app_binary, env)
+        ready, state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
+        ready_ms = int((time.perf_counter() - launch_start) * 1000)
         results.append(build_test_result(
             "app_launch_to_ready",
             passed=ready,
             duration_ms=ready_ms,
-            details={"ready_ms": ready_ms},
+            details={
+                "ready_ms": ready_ms,
+                "ready_field": _ui_ready_field(backend_mode),
+                "failure_reason": failure_reason,
+                "state": state,
+            },
         ))
         if not ready:
-            eprint(f"  App did not become ready within 15s")
             duration_ms = int((time.perf_counter() - start) * 1000)
             return build_suite_result("ui_http_tests", results, duration_ms)
 
-        # 6. Check default screen
-        state = client.query_state()
-        default_ok = "customVoice" in state.get("activeScreen", "")
+        disabled_sidebar_items = {
+            item for item in state.get("disabledSidebarItems", "").split(",")
+            if item and item != "none"
+        }
+        expected_default_screen = (
+            "screen_models"
+            if "sidebar_customVoice" in disabled_sidebar_items
+            else "screen_customVoice"
+        )
+        default_ok = state.get("activeScreen") == expected_default_screen
         results.append(build_test_result(
             "default_screen_is_customVoice",
             passed=default_ok,
-            details={"activeScreen": state.get("activeScreen")},
+            details={
+                "activeScreen": state.get("activeScreen"),
+                "expected": expected_default_screen,
+                "disabledSidebarItems": sorted(disabled_sidebar_items),
+            },
         ))
 
-        # 7. Test each screen by relaunching with --uitest-screen=X
         screens = [
-            ("history", "screen_history"),
-            ("voices", "screen_voices"),
-            ("models", "screen_models"),
-            ("voiceDesign", "screen_voiceDesign"),
-            ("voiceCloning", "screen_voiceCloning"),
+            ("history", "screen_history", "sidebar_history"),
+            ("voices", "screen_voices", "sidebar_voices"),
+            ("models", "screen_models", "sidebar_models"),
+            ("voiceDesign", "screen_voiceDesign", "sidebar_voiceDesign"),
+            ("voiceCloning", "screen_voiceCloning", "sidebar_voiceCloning"),
+            ("customVoice", "screen_customVoice", "sidebar_customVoice"),
         ]
-        for screen_arg, expected_id in screens:
-            # Kill current instance
-            app_proc.terminate()
+        for screen_arg, expected_id, sidebar_id in screens:
+            if sidebar_id in disabled_sidebar_items:
+                results.append(build_test_result(
+                    f"screen_{screen_arg}",
+                    passed=True,
+                    skip_reason=f"{sidebar_id} is disabled in the current launch context",
+                    details={"disabledSidebarItems": sorted(disabled_sidebar_items)},
+                ))
+                continue
+            nav_start = time.perf_counter()
             try:
-                app_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                app_proc.kill()
-            time.sleep(0.5)
-
-            # Relaunch with target screen
-            t0 = time.perf_counter()
-            app_proc = subprocess.Popen(
-                [app_binary, "--uitest", "--uitest-disable-animations",
-                 "--uitest-fast-idle", f"--uitest-screen={screen_arg}"],
-                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                state = client.navigate(screen_arg)
+            except UIStateClientError as exc:
+                results.append(_build_ui_transport_failure_result(
+                    f"screen_{screen_arg}",
+                    exc,
+                    last_state=state,
+                ))
+                continue
+            navigated, nav_state = client.wait_for_navigation(
+                expected_id,
+                timeout=15 if backend_mode == "live" else 5,
             )
-            screen_ready = client.wait_for_ready(timeout=10)
-            if screen_ready:
-                state = client.query_state()
-                actual = state.get("activeScreen", "")
-            else:
-                actual = "not_ready"
-            launch_ms = int((time.perf_counter() - t0) * 1000)
-
+            if nav_state:
+                state = nav_state
+            nav_ms = int((time.perf_counter() - nav_start) * 1000)
             results.append(build_test_result(
                 f"screen_{screen_arg}",
-                passed=(actual == expected_id),
-                duration_ms=launch_ms,
-                details={"expected": expected_id, "actual": actual, "launch_ms": launch_ms},
+                passed=navigated and nav_state.get("activeScreen") == expected_id,
+                duration_ms=nav_ms,
+                details={
+                    "expected": expected_id,
+                    "actual": nav_state.get("activeScreen"),
+                    "navigation_wall_ms": nav_ms,
+                    "app_navigation_duration_ms": nav_state.get("lastNavigationDurationMS"),
+                    "backend_mode": backend_mode,
+                    "data_root": data_root,
+                },
             ))
 
+        if "sidebar_customVoice" not in disabled_sidebar_items:
+            try:
+                state = client.navigate("customVoice")
+                preview_started = client.start_preview("customVoice", "Hello there buddy")
+                state = preview_started
+            except UIStateClientError as exc:
+                preview_started = None
+                results.append(_build_ui_transport_failure_result(
+                    "custom_voice_preview_start",
+                    exc,
+                    last_state=state,
+                ))
+            if preview_started is not None:
+                results.append(build_test_result(
+                    "custom_voice_preview_start",
+                    passed=preview_started.get("activeScreen") == "screen_customVoice",
+                    details={
+                        "activeScreen": preview_started.get("activeScreen"),
+                        "text": preview_started.get("text"),
+                        "selectedSpeaker": preview_started.get("selectedSpeaker"),
+                    },
+                ))
+
+                inline_visible, inline_state = client.wait_for_state(
+                    lambda state: (
+                        state.get("sidebarInlineStatusVisible") is True
+                        and state.get("sidebarStatusKind") == "running"
+                        and state.get("sidebarStatusPresentation") == "inlinePlayer"
+                    ),
+                    timeout=45 if backend_mode == "live" else 15,
+                )
+                results.append(build_test_result(
+                    "custom_voice_preview_inline_status",
+                    passed=inline_visible,
+                    details={
+                        "sidebarStatusKind": inline_state.get("sidebarStatusKind"),
+                        "sidebarStatusLabel": inline_state.get("sidebarStatusLabel"),
+                        "sidebarStatusPresentation": inline_state.get("sidebarStatusPresentation"),
+                        "sidebarInlineStatusVisible": inline_state.get("sidebarInlineStatusVisible"),
+                        "sidebarStandaloneStatusVisible": inline_state.get("sidebarStandaloneStatusVisible"),
+                        "isGenerating": inline_state.get("isGenerating"),
+                    },
+                ))
+
+                reset_to_idle, idle_state = client.wait_for_state(
+                    lambda state: (
+                        state.get("sidebarStatusKind") == "idle"
+                        and state.get("sidebarInlineStatusVisible") is False
+                        and state.get("sidebarStandaloneStatusVisible") is True
+                    ),
+                    timeout=120 if backend_mode == "live" else 30,
+                )
+                results.append(build_test_result(
+                    "custom_voice_preview_status_resets",
+                    passed=reset_to_idle,
+                    details={
+                        "sidebarStatusKind": idle_state.get("sidebarStatusKind"),
+                        "sidebarStatusLabel": idle_state.get("sidebarStatusLabel"),
+                        "sidebarStatusPresentation": idle_state.get("sidebarStatusPresentation"),
+                        "sidebarInlineStatusVisible": idle_state.get("sidebarInlineStatusVisible"),
+                        "sidebarStandaloneStatusVisible": idle_state.get("sidebarStandaloneStatusVisible"),
+                        "isGenerating": idle_state.get("isGenerating"),
+                    },
+                ))
     finally:
-        # 8. Cleanup
-        app_proc.terminate()
-        try:
-            app_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            app_proc.kill()
+        _terminate_ui_process(app_proc)
+        cleanup_ui_launch_context(context)
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("ui_http_tests", results, duration_ms)
 
 
-def _run_design_tests() -> dict[str, Any]:
-    """Compare captured screenshots against baselines."""
-    start = time.perf_counter()
+def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") -> dict[str, Any]:
+    """Launch through the UI path and compare captures when baselines exist."""
+    from .ui_state_client import UIStateClient
 
-    baselines_dir = str(PROJECT_DIR / "tests" / "screenshots" / "baselines")
-    captures_dir = str(PROJECT_DIR / "build" / "test" / "screenshots")
-    diffs_dir = str(PROJECT_DIR / "tests" / "screenshots" / "diffs")
+    start = time.perf_counter()
+    results: list[dict[str, Any]] = []
+    baselines_dir = PROJECT_DIR / "tests" / "screenshots" / "baselines"
+    captures_dir = PROJECT_DIR / "build" / "test" / "screenshots"
+    diffs_dir = PROJECT_DIR / "tests" / "screenshots" / "diffs"
     os.makedirs(diffs_dir, exist_ok=True)
 
-    results: list[dict[str, Any]] = []
-
-    if not os.path.isdir(baselines_dir) or not os.listdir(baselines_dir):
-        eprint("  No baselines found. Run --layer ui first to capture screenshots, then copy to tests/screenshots/baselines/")
-        results.append(build_test_result("no_baselines", passed=True, details={"status": "skipped_no_baselines"}))
+    if not _append_live_preflight_results(results, backend_mode):
         duration_ms = int((time.perf_counter() - start) * 1000)
         return build_suite_result("design_comparison", results, duration_ms)
 
-    if not os.path.isdir(captures_dir):
-        eprint("  No captured screenshots found. Run --layer ui first.")
-        results.append(build_test_result("no_captures", passed=False, details={"error": "missing_captures_dir"}))
+    built, app_binary, build_details = build_app_binary()
+    results.append(build_test_result("build_app", passed=built, details=build_details))
+    if not built or not app_binary:
         duration_ms = int((time.perf_counter() - start) * 1000)
         return build_suite_result("design_comparison", results, duration_ms)
 
+    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
+    results.append(build_test_result(
+        "design_launch_context",
+        passed=True,
+        details=describe_launch_context(context),
+    ))
+
+    app_proc: subprocess.Popen[Any] | None = None
+    client = UIStateClient()
     try:
-        from .screenshot_diff import compare_screenshots
-    except ImportError:
-        eprint("  screenshot_diff module not available")
-        results.append(build_test_result("import_error", passed=False, details={"error": "screenshot_diff_import_failed"}))
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("design_comparison", results, duration_ms)
+        kill_running_app_instances()
+        env = build_ui_launch_environment(context, screenshot_dir=str(captures_dir))
+        launch_start = time.perf_counter()
+        app_proc = launch_ui_app(app_binary, env)
+        ready, state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
+        ready_ms = int((time.perf_counter() - launch_start) * 1000)
+        results.append(build_test_result(
+            "design_launch_to_ready",
+            passed=ready,
+            duration_ms=ready_ms,
+            details={
+                "ready_ms": ready_ms,
+                "ready_field": _ui_ready_field(backend_mode),
+                "failure_reason": failure_reason,
+                "state": state,
+            },
+        ))
+        if not ready:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("design_comparison", results, duration_ms)
 
-    for name in sorted(os.listdir(baselines_dir)):
-        if not name.endswith(".png"):
-            continue
-        baseline_path = os.path.join(baselines_dir, name)
-        capture_path = os.path.join(captures_dir, name)
-        diff_path = os.path.join(diffs_dir, name.replace(".png", "_diff.png"))
+        if not baselines_dir.is_dir() or not any(baselines_dir.iterdir()):
+            results.append(build_test_result(
+                "no_baselines",
+                passed=True,
+                skip_reason="No baselines found — design comparison skipped after live launch sanity check",
+                details={"captures_dir": str(captures_dir)},
+            ))
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("design_comparison", results, duration_ms)
 
-        if not os.path.exists(capture_path):
-            results.append(build_test_result(name, passed=False, details={"error": "capture_not_found"}))
-            continue
+        if not captures_dir.is_dir():
+            results.append(build_test_result(
+                "no_captures",
+                passed=False,
+                details={"error": "missing_captures_dir"},
+            ))
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("design_comparison", results, duration_ms)
 
-        diff_result = compare_screenshots(baseline_path, capture_path, diff_path, max_diff_percent=1.0)
-        results.append(build_test_result(name, passed=diff_result["passed"], details=diff_result))
+        try:
+            from .screenshot_diff import compare_screenshots
+        except ImportError:
+            results.append(build_test_result(
+                "import_error",
+                passed=False,
+                details={"error": "screenshot_diff_import_failed"},
+            ))
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("design_comparison", results, duration_ms)
+
+        for name in sorted(os.listdir(baselines_dir)):
+            if not name.endswith(".png"):
+                continue
+            baseline_path = baselines_dir / name
+            capture_path = captures_dir / name
+            diff_path = diffs_dir / name.replace(".png", "_diff.png")
+
+            if not capture_path.exists():
+                results.append(build_test_result(name, passed=False, details={"error": "capture_not_found"}))
+                continue
+
+            diff_result = compare_screenshots(
+                str(baseline_path),
+                str(capture_path),
+                str(diff_path),
+                max_diff_percent=1.0,
+            )
+            results.append(build_test_result(name, passed=diff_result["passed"], details=diff_result))
+    finally:
+        _terminate_ui_process(app_proc)
+        cleanup_ui_launch_context(context)
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("design_comparison", results, duration_ms)
 
 
-def _run_perf_audit() -> dict[str, Any]:
-    """Run performance audit tests and check against thresholds."""
-    import shutil
+def _run_perf_audit(backend_mode: str = "live", data_root: str = "fixture") -> dict[str, Any]:
+    """Run live-backed launch and sidebar navigation measurements."""
+    from .ui_state_client import UIStateClient, UIStateClientError
 
     start = time.perf_counter()
-
-    # Run only PerformanceAuditTests
-    result_bundle = str(PROJECT_DIR / "build" / "test" / "results" / "PerfAudit.xcresult")
-    if os.path.exists(result_bundle):
-        shutil.rmtree(result_bundle)
-
-    cmd = [
-        "xcodebuild", "test",
-        "-project", str(PROJECT_DIR / "QwenVoice.xcodeproj"),
-        "-scheme", "QwenVoice",
-        "-destination", "platform=macOS,arch=arm64",
-        "-only-testing:QwenVoiceUITests/PerformanceAuditTests",
-        "CODE_SIGN_IDENTITY=-",
-        "CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES",
-        "-resultBundlePath", result_bundle,
-    ]
-
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    except subprocess.TimeoutExpired:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        eprint("Performance audit timed out after 300s")
-        results = [build_test_result("perf_audit_suite", passed=False, duration_ms=duration_ms, details={"error": "timeout_300s"})]
-        return build_suite_result("perf_audit", results, duration_ms)
-    duration_ms = int((time.perf_counter() - start) * 1000)
-
     results: list[dict[str, Any]] = []
+
+    if not _append_live_preflight_results(results, backend_mode):
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("perf_audit", results, duration_ms)
+
+    built, app_binary, build_details = build_app_binary()
+    results.append(build_test_result("build_app", passed=built, details=build_details))
+    if not built or not app_binary:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("perf_audit", results, duration_ms)
+
+    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
     results.append(build_test_result(
-        "perf_audit_suite",
-        passed=(proc.returncode == 0),
-        duration_ms=duration_ms,
-        details={"return_code": proc.returncode},
+        "perf_launch_context",
+        passed=True,
+        details=describe_launch_context(context),
     ))
 
-    if proc.returncode != 0:
-        eprint(f"Performance audit failed (exit {proc.returncode})")
-        stderr_lines = proc.stderr.strip().split("\n")
-        for line in stderr_lines[-20:]:
-            eprint(f"  {line}")
+    app_proc: subprocess.Popen[Any] | None = None
+    client = UIStateClient()
+    try:
+        kill_running_app_instances()
+        env = build_ui_launch_environment(context)
+        launch_start = time.perf_counter()
+        app_proc = launch_ui_app(app_binary, env)
+        ready, ready_state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
+        ready_ms = int((time.perf_counter() - launch_start) * 1000)
+        results.append(build_test_result(
+            "launch_to_interactive_ready",
+            passed=ready,
+            duration_ms=ready_ms,
+            details={
+                "ready_ms": ready_ms,
+                "ready_field": _ui_ready_field(backend_mode),
+                "failure_reason": failure_reason,
+                "state": ready_state,
+            },
+        ))
+        if not ready:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("perf_audit", results, duration_ms)
 
+        navigation_loop = [
+            ("voiceDesign", "screen_voiceDesign"),
+            ("voiceCloning", "screen_voiceCloning"),
+            ("history", "screen_history"),
+            ("models", "screen_models"),
+            ("customVoice", "screen_customVoice"),
+        ]
+        aggregate_wall: dict[str, list[int]] = {screen: [] for _, screen in navigation_loop}
+        aggregate_app: dict[str, list[int]] = {screen: [] for _, screen in navigation_loop}
+        last_state = ready_state
+
+        for run_index in range(2):
+            for screen_arg, expected_id in navigation_loop:
+                nav_start = time.perf_counter()
+                try:
+                    last_state = client.navigate(screen_arg)
+                except UIStateClientError as exc:
+                    results.append(_build_ui_transport_failure_result(
+                        f"sidebar_{screen_arg}_run_{run_index + 1}",
+                        exc,
+                        last_state=last_state,
+                    ))
+                    continue
+                navigated, nav_state = client.wait_for_navigation(expected_id, timeout=15)
+                wall_ms = int((time.perf_counter() - nav_start) * 1000)
+                if nav_state:
+                    last_state = nav_state
+                app_duration = nav_state.get("lastNavigationDurationMS")
+                if isinstance(app_duration, int):
+                    aggregate_app[expected_id].append(app_duration)
+                aggregate_wall[expected_id].append(wall_ms)
+                results.append(build_test_result(
+                    f"sidebar_{screen_arg}_run_{run_index + 1}",
+                    passed=navigated and nav_state.get("activeScreen") == expected_id,
+                    duration_ms=wall_ms,
+                    details={
+                        "expected": expected_id,
+                        "actual": nav_state.get("activeScreen"),
+                        "wall_ms": wall_ms,
+                        "app_navigation_duration_ms": app_duration,
+                        "lastNavigationTargetScreen": nav_state.get("lastNavigationTargetScreen"),
+                        "lastNavigationCompletedScreen": nav_state.get("lastNavigationCompletedScreen"),
+                    },
+                ))
+
+        results.append(build_test_result(
+            "sidebar_navigation_summary",
+            passed=True,
+            details={
+                "wall_ms_by_screen": aggregate_wall,
+                "app_navigation_duration_ms_by_screen": aggregate_app,
+                "runs_per_screen": 2,
+            },
+        ))
+    finally:
+        _terminate_ui_process(app_proc)
+        cleanup_ui_launch_context(context)
+
+    duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("perf_audit", results, duration_ms)
 
 

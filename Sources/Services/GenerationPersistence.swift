@@ -4,6 +4,17 @@ import Foundation
 @MainActor
 enum GenerationPersistence {
 
+    enum PersistenceError: LocalizedError {
+        case postPlaybackPersistenceFailed(Swift.Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .postPlaybackPersistenceFailed(let underlyingError):
+                return underlyingError.localizedDescription
+            }
+        }
+    }
+
     /// Saves a generation to the database, posts a notification, and triggers autoplay if configured.
     static func persistAndAutoplay(
         _ generation: inout Generation,
@@ -14,7 +25,28 @@ enum GenerationPersistence {
     ) throws {
         AppPerformanceSignposts.emit("Final File Ready")
 
-        var persistenceError: Error?
+        var didHandoffPlayback = false
+        if result.usedStreaming {
+            audioPlayer.completeStreamingPreview(
+                result: result,
+                title: String(text.prefix(40)),
+                shouldAutoPlay: AudioService.shouldAutoPlay
+            )
+            didHandoffPlayback = true
+        } else if AudioService.shouldAutoPlay {
+            let autoplayStart = DispatchTime.now().uptimeNanoseconds
+            audioPlayer.playFile(
+                result.audioPath,
+                title: String(text.prefix(40)),
+                isAutoplay: true
+            )
+            didHandoffPlayback = true
+            #if DEBUG
+            print("[Performance][\(caller)] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
+            #endif
+        }
+
+        var persistenceError: Swift.Error?
         do {
             let saveStart = DispatchTime.now().uptimeNanoseconds
             try DatabaseService.shared.saveGeneration(&generation)
@@ -31,25 +63,10 @@ enum GenerationPersistence {
             persistenceError = error
         }
 
-        if result.usedStreaming {
-            audioPlayer.completeStreamingPreview(
-                result: result,
-                title: String(text.prefix(40)),
-                shouldAutoPlay: AudioService.shouldAutoPlay
-            )
-        } else if AudioService.shouldAutoPlay {
-            let autoplayStart = DispatchTime.now().uptimeNanoseconds
-            audioPlayer.playFile(
-                result.audioPath,
-                title: String(text.prefix(40)),
-                isAutoplay: true
-            )
-            #if DEBUG
-            print("[Performance][\(caller)] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
-            #endif
-        }
-
         if let persistenceError {
+            if didHandoffPlayback {
+                throw PersistenceError.postPlaybackPersistenceFailed(persistenceError)
+            }
             throw persistenceError
         }
     }

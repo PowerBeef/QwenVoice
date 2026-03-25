@@ -1,4 +1,3 @@
-import Combine
 import CryptoKit
 import Foundation
 
@@ -25,6 +24,8 @@ final class PythonEnvironmentManager: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published var needsBackendRestart = false
+    private var setupTask: Task<Void, Never>?
+    private var setupTaskID: UUID?
     private static let minimumSupportedMacOSMajor = 15
     private static let minimumSupportedMacOSMinor = 0
     private static let minimumSupportedMacOSVersionString = "15.0"
@@ -49,42 +50,18 @@ final class PythonEnvironmentManager: ObservableObject {
 
     // MARK: - Init
 
-    init() {
-        // In UI test mode, eagerly trigger setup and publish readiness
-        // to the test state provider. This ensures the HTTP state server
-        // reports isReady=true even if onAppear hasn't fired yet.
-        if UITestAutomationSupport.isEnabled {
-            ensureEnvironment()
-            // Observe state changes and publish to TestStateProvider
-            $state.sink { [weak self] newState in
-                guard self != nil else { return }
-                if case .ready = newState {
-                    Task { @MainActor in
-                        TestStateProvider.shared.isReady = true
-                        if TestStateProvider.shared.activeScreen.isEmpty {
-                            let initial = AppLaunchConfiguration.current.initialSidebarItem
-                            let screenID = initial?.screenAccessibilityID ?? "screen_customVoice"
-                            let title = initial?.rawValue ?? "Custom Voice"
-                            TestStateProvider.shared.activeScreen = screenID
-                            TestStateProvider.shared.windowTitle = title
-                        }
-                    }
-                }
-            }.store(in: &cancellables)
-        }
-    }
-
-    private var cancellables = Set<AnyCancellable>()
+    init() {}
 
     // MARK: - Public
 
     func ensureEnvironment() {
-        // Don't re-check if already resolved
-        if case .ready = state { return }
+        guard Self.shouldStartSetupTask(for: state, hasInFlightTask: setupTask != nil) else {
+            return
+        }
 
         if UITestAutomationSupport.isStubBackendMode {
             state = .checking
-            Task.detached(priority: .userInitiated) { [weak self] in
+            launchSetupTask { [weak self] in
                 await self?.runStubSetup()
             }
             return
@@ -109,7 +86,7 @@ final class PythonEnvironmentManager: ObservableObject {
         // In packaged builds this is the only acceptable runtime.
         if let bundledPython = bundledPythonPath() {
             state = .checking
-            Task.detached(priority: .userInitiated) { [weak self] in
+            launchSetupTask { [weak self] in
                 await self?.validateBundledRuntimeAndUpdateState(bundledPython)
             }
             return
@@ -131,7 +108,7 @@ final class PythonEnvironmentManager: ObservableObject {
 
         // --- Slow path: needs async work ---
         state = .checking
-        Task.detached(priority: .userInitiated) { [weak self] in
+        launchSetupTask { [weak self] in
             await self?.runSetupSlowPath()
         }
     }
@@ -144,6 +121,8 @@ final class PythonEnvironmentManager: ObservableObject {
         if UITestAutomationSupport.isStubBackendMode {
             needsBackendRestart = true
             state = .idle
+            setupTask = nil
+            setupTaskID = nil
             ensureEnvironment()
             return
         }
@@ -154,7 +133,9 @@ final class PythonEnvironmentManager: ObservableObject {
                 return
             }
             state = .checking
-            Task.detached(priority: .userInitiated) { [weak self] in
+            setupTask = nil
+            setupTaskID = nil
+            launchSetupTask { [weak self] in
                 await self?.validateBundledRuntimeAndUpdateState(bundledPython)
             }
             return
@@ -167,7 +148,24 @@ final class PythonEnvironmentManager: ObservableObject {
         }
         needsBackendRestart = true
         state = .idle
+        setupTask = nil
+        setupTaskID = nil
         ensureEnvironment()
+    }
+
+    nonisolated static func shouldStartSetupTask(for state: State, hasInFlightTask: Bool) -> Bool {
+        if case .ready = state {
+            return false
+        }
+
+        guard hasInFlightTask else { return true }
+
+        switch state {
+        case .checking, .settingUp:
+            return false
+        case .idle, .ready, .failed:
+            return true
+        }
     }
 
     // MARK: - Setup Logic
@@ -243,6 +241,22 @@ final class PythonEnvironmentManager: ObservableObject {
         }
 
         await installDependencies(venvPython: venvPython, requirementsPath: requirementsPath, vendorDir: vendorDir)
+    }
+
+    private func launchSetupTask(_ operation: @escaping @Sendable () async -> Void) {
+        let taskID = UUID()
+        let task = Task.detached(priority: .userInitiated) {
+            await operation()
+        }
+        setupTask = task
+        setupTaskID = taskID
+
+        Task { @MainActor [weak self] in
+            _ = await task.result
+            guard let self, self.setupTaskID == taskID else { return }
+            self.setupTask = nil
+            self.setupTaskID = nil
+        }
     }
 
     private func installDependencies(venvPython: String, requirementsPath: String, vendorDir: String?) async {

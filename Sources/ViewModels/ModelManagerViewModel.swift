@@ -13,12 +13,26 @@ final class ModelManagerViewModel: ObservableObject {
     }
 
     @Published var statuses: [String: ModelStatus] = [:]
+    private let fileManager: FileManager
+    private let modelsDirectory: URL
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
     private var lastProgressPublishTimes: [String: ContinuousClock.Instant] = [:]
     private var stubDownloadTasks: [String: Task<Void, Never>] = [:]
     private var refreshTask: Task<Void, Never>?
+
+    init(
+        fileManager: FileManager = .default,
+        modelsDirectory: URL = QwenVoiceApp.modelsDir
+    ) {
+        self.fileManager = fileManager
+        self.modelsDirectory = modelsDirectory
+
+        for model in TTSModel.all {
+            statuses[model.id] = initialStatus(for: model)
+        }
+    }
 
     func refresh() async {
         if let refreshTask {
@@ -43,17 +57,14 @@ final class ModelManagerViewModel: ObservableObject {
     }
 
     private func performRefresh() async {
-        let modelsDir = QwenVoiceApp.modelsDir
-        let fileManager = FileManager.default
         var candidates: [(model: TTSModel, epoch: Int)] = []
 
         for model in TTSModel.all {
             if case .downloading = statuses[model.id] { continue }
 
             let epoch = beginEpoch(for: model.id)
-            let modelDir = model.installDirectory(in: modelsDir)
 
-            if fileManager.fileExists(atPath: modelDir.path) {
+            if isLikelyInstalled(model) {
                 statuses[model.id] = .checking
                 candidates.append((model: model, epoch: epoch))
             } else {
@@ -62,11 +73,12 @@ final class ModelManagerViewModel: ObservableObject {
         }
 
         guard !candidates.isEmpty else { return }
+        let modelsDirectory = self.modelsDirectory
 
         let results: [(String, Int, Bool, Int)] = await Task.detached(priority: .utility) {
             candidates.map { candidate in
-                let modelDir = candidate.model.installDirectory(in: modelsDir)
-                let isComplete = candidate.model.isAvailable(in: modelsDir)
+                let modelDir = candidate.model.installDirectory(in: modelsDirectory)
+                let isComplete = candidate.model.isAvailable(in: modelsDirectory)
                 let size = isComplete ? Self.directorySize(url: modelDir) : 0
                 return (candidate.model.id, candidate.epoch, isComplete, size)
             }
@@ -85,8 +97,12 @@ final class ModelManagerViewModel: ObservableObject {
         case .downloading, .notDownloaded:
             return false
         case .checking, .error, .none:
-            return model.isAvailable(in: QwenVoiceApp.modelsDir)
+            return model.isAvailable(in: modelsDirectory)
         }
+    }
+
+    func isLikelyInstalled(_ model: TTSModel) -> Bool {
+        model.isAvailable(in: modelsDirectory, fileManager: fileManager)
     }
 
     func download(_ model: TTSModel) async {
@@ -101,8 +117,8 @@ final class ModelManagerViewModel: ObservableObject {
         let epoch = beginEpoch(for: model.id)
         statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: nil)
 
-        let modelsDir = QwenVoiceApp.modelsDir
-        let targetDir = model.installDirectory(in: modelsDir)
+        let targetDir = model.installDirectory(in: modelsDirectory)
+        let modelsDirectory = self.modelsDirectory
 
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
@@ -110,10 +126,10 @@ final class ModelManagerViewModel: ObservableObject {
         downloadTasks.removeValue(forKey: model.id)
 
         // Remove any partial directory from a previous failed attempt
-        try? FileManager.default.removeItem(at: targetDir)
+        try? fileManager.removeItem(at: targetDir)
 
         // Ensure models directory exists (first-ever download)
-        try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
 
         let downloader = HuggingFaceDownloader()
         downloaders[model.id] = downloader
@@ -144,13 +160,13 @@ final class ModelManagerViewModel: ObservableObject {
                 try await downloader.downloadRepo(repo: model.huggingFaceRepo, to: targetDir)
                 guard isCurrentEpoch(epoch, for: model.id) else { return }
                 let finalizedDownload = await Task.detached(priority: .utility) { () -> (isComplete: Bool, size: Int) in
-                    let isComplete = model.isAvailable(in: modelsDir)
+                    let isComplete = model.isAvailable(in: modelsDirectory)
                     let size = isComplete ? Self.directorySize(url: targetDir) : 0
                     return (isComplete, size)
                 }.value
                 guard finalizedDownload.isComplete else {
                     statuses[model.id] = .error(message: "Download incomplete")
-                    try? FileManager.default.removeItem(at: targetDir)
+                    try? fileManager.removeItem(at: targetDir)
                     return
                 }
                 statuses[model.id] = .downloaded(sizeBytes: finalizedDownload.size)
@@ -162,12 +178,12 @@ final class ModelManagerViewModel: ObservableObject {
                     // cancelDownload() already set status — no-op
                 } else {
                     statuses[model.id] = .error(message: dlError.localizedDescription)
-                    try? FileManager.default.removeItem(at: targetDir)
+                    try? fileManager.removeItem(at: targetDir)
                 }
             } catch {
                 guard isCurrentEpoch(epoch, for: model.id) else { return }
                 statuses[model.id] = .error(message: error.localizedDescription)
-                try? FileManager.default.removeItem(at: targetDir)
+                try? fileManager.removeItem(at: targetDir)
             }
             guard isCurrentEpoch(epoch, for: model.id) else { return }
             downloaders.removeValue(forKey: model.id)
@@ -183,8 +199,8 @@ final class ModelManagerViewModel: ObservableObject {
         if UITestAutomationSupport.isStubBackendMode {
             stubDownloadTasks[model.id]?.cancel()
             stubDownloadTasks.removeValue(forKey: model.id)
-            let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
-            try? FileManager.default.removeItem(at: targetDir)
+            let targetDir = model.installDirectory(in: modelsDirectory)
+            try? fileManager.removeItem(at: targetDir)
             statuses[model.id] = .notDownloaded
             return
         }
@@ -200,8 +216,8 @@ final class ModelManagerViewModel: ObservableObject {
         statuses[model.id] = .notDownloaded
 
         // Clean up partial download directory
-        let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
-        try? FileManager.default.removeItem(at: targetDir)
+        let targetDir = model.installDirectory(in: modelsDirectory)
+        try? fileManager.removeItem(at: targetDir)
     }
 
     func delete(_ model: TTSModel) {
@@ -210,8 +226,8 @@ final class ModelManagerViewModel: ObservableObject {
         if UITestAutomationSupport.isStubBackendMode {
             stubDownloadTasks[model.id]?.cancel()
             stubDownloadTasks.removeValue(forKey: model.id)
-            let modelDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
-            try? FileManager.default.removeItem(at: modelDir)
+            let modelDir = model.installDirectory(in: modelsDirectory)
+            try? fileManager.removeItem(at: modelDir)
             statuses[model.id] = .notDownloaded
             return
         }
@@ -221,8 +237,8 @@ final class ModelManagerViewModel: ObservableObject {
         downloadTasks[model.id]?.cancel()
         downloadTasks.removeValue(forKey: model.id)
 
-        let modelDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
-        try? FileManager.default.removeItem(at: modelDir)
+        let modelDir = model.installDirectory(in: modelsDirectory)
+        try? fileManager.removeItem(at: modelDir)
         statuses[model.id] = .notDownloaded
     }
 
@@ -230,6 +246,10 @@ final class ModelManagerViewModel: ObservableObject {
         let nextEpoch = (stateEpochs[modelID] ?? 0) + 1
         stateEpochs[modelID] = nextEpoch
         return nextEpoch
+    }
+
+    private func initialStatus(for model: TTSModel) -> ModelStatus {
+        isLikelyInstalled(model) ? .checking : .notDownloaded
     }
 
     private func isCurrentEpoch(_ epoch: Int, for modelID: String) -> Bool {
@@ -250,11 +270,11 @@ final class ModelManagerViewModel: ObservableObject {
 
     private func downloadStub(_ model: TTSModel) async {
         let epoch = beginEpoch(for: model.id)
-        let targetDir = model.installDirectory(in: QwenVoiceApp.modelsDir)
+        let targetDir = model.installDirectory(in: modelsDirectory)
 
         stubDownloadTasks[model.id]?.cancel()
         stubDownloadTasks.removeValue(forKey: model.id)
-        try? FileManager.default.removeItem(at: targetDir)
+        try? fileManager.removeItem(at: targetDir)
         statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: 3)
 
         let shouldFailOnce = UITestAutomationSupport.modelDownloadFailOnceIDs.contains(model.id)
@@ -281,11 +301,11 @@ final class ModelManagerViewModel: ObservableObject {
 
             for relativePath in model.requiredRelativePaths {
                 let fileURL = targetDir.appendingPathComponent(relativePath)
-                try? FileManager.default.createDirectory(
+                try? fileManager.createDirectory(
                     at: fileURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
-                FileManager.default.createFile(atPath: fileURL.path, contents: Data())
+                fileManager.createFile(atPath: fileURL.path, contents: Data())
             }
 
             guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }

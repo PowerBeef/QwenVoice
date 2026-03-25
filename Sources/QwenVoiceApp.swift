@@ -83,6 +83,131 @@ struct AppLaunchConfiguration {
     }
 }
 
+@MainActor
+final class UITestWindowCoordinator {
+    static let shared = UITestWindowCoordinator()
+    static let mainContentWindowIdentifier = NSUserInterfaceItemIdentifier("QwenVoiceMainContentWindow")
+
+    private var observationTokens: [NSObjectProtocol] = []
+    private var recoveryTask: Task<Void, Never>?
+
+    private init() {}
+
+    func start() {
+        guard observationTokens.isEmpty else { return }
+
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [
+            NSApplication.didBecomeActiveNotification,
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didBecomeKeyNotification,
+            NSWindow.didResignMainNotification,
+            NSWindow.didResignKeyNotification,
+            NSWindow.didMiniaturizeNotification,
+            NSWindow.didDeminiaturizeNotification,
+            NSWindow.didExposeNotification,
+            NSWindow.willCloseNotification,
+        ]
+
+        for name in names {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.syncVisibleMainWindowState()
+            }
+            observationTokens.append(token)
+        }
+
+        syncVisibleMainWindowState()
+    }
+
+    func scheduleRecoveryIfNeeded(reason: String) {
+        guard UITestAutomationSupport.isEnabled else { return }
+
+        recoveryTask?.cancel()
+        recoveryTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard let self, !Task.isCancelled else { return }
+            await self.runRecoveryIfNeeded(reason: reason)
+        }
+    }
+
+    func activateMainWindow(reason: String) async -> Bool {
+        guard UITestAutomationSupport.isEnabled else { return false }
+
+        let application = NSApplication.shared
+        let targetWindow = preferredMainWindow()
+
+        application.unhide(nil)
+        application.activate(ignoringOtherApps: true)
+
+        if let targetWindow {
+            if targetWindow.isMiniaturized {
+                targetWindow.deminiaturize(nil)
+            }
+            targetWindow.makeKeyAndOrderFront(nil)
+            targetWindow.orderFrontRegardless()
+        } else {
+            application.arrangeInFront(nil)
+        }
+
+        try? await Task.sleep(for: .milliseconds(250))
+        let hasVisibleMainWindow = syncVisibleMainWindowState()
+        TestStateProvider.shared.recordWindowActivationAttempt(
+            reason: reason,
+            hasVisibleMainWindow: hasVisibleMainWindow
+        )
+        return hasVisibleMainWindow
+    }
+
+    @discardableResult
+    func syncVisibleMainWindowState() -> Bool {
+        let hasVisibleMainWindow = mainWindows().contains { window in
+            window.isVisible && !window.isMiniaturized
+        }
+        TestStateProvider.shared.setVisibleMainWindow(hasVisibleMainWindow)
+        return hasVisibleMainWindow
+    }
+
+    private func runRecoveryIfNeeded(reason: String) async {
+        syncVisibleMainWindowState()
+        guard TestStateProvider.shared.environmentReady,
+              !TestStateProvider.shared.windowMounted else {
+            return
+        }
+
+        _ = await activateMainWindow(reason: reason)
+
+        guard TestStateProvider.shared.environmentReady,
+              !TestStateProvider.shared.windowMounted else {
+            return
+        }
+
+        try? await Task.sleep(for: .milliseconds(450))
+        guard TestStateProvider.shared.environmentReady,
+              !TestStateProvider.shared.windowMounted else {
+            return
+        }
+
+        _ = await activateMainWindow(reason: "\(reason)_retry")
+    }
+
+    private func preferredMainWindow() -> NSWindow? {
+        let windows = mainWindows()
+        return windows.first(where: { $0.isVisible && !$0.isMiniaturized }) ?? windows.first
+    }
+
+    private func mainWindows() -> [NSWindow] {
+        Self.trackedMainWindows(in: NSApplication.shared.windows)
+    }
+
+    static func trackedMainWindows(in windows: [NSWindow]) -> [NSWindow] {
+        windows.filter { window in
+            window.identifier == mainContentWindowIdentifier
+                && window.canBecomeMain
+                && !window.isExcludedFromWindowsMenu
+        }
+    }
+}
+
 @main
 struct QwenVoiceApp: App {
     @StateObject private var pythonBridge = PythonBridge()
@@ -99,10 +224,30 @@ struct QwenVoiceApp: App {
 
         // In UI test mode, start the test state HTTP server and force activate.
         if AppLaunchConfiguration.current.isUITest {
+            let windowCoordinator = UITestWindowCoordinator.shared
             testStateServer.start()
+            windowCoordinator.start()
             DispatchQueue.main.async {
-                NSApp.activate(ignoringOtherApps: true)
+                Task { @MainActor in
+                    _ = await windowCoordinator.activateMainWindow(reason: "launch_init")
+                }
             }
+        }
+    }
+
+    private func syncUITestEnvironmentReadiness(for state: PythonEnvironmentManager.State) {
+        guard UITestAutomationSupport.isEnabled else { return }
+
+        let isEnvironmentReady: Bool
+        if case .ready = state {
+            isEnvironmentReady = true
+        } else {
+            isEnvironmentReady = false
+        }
+
+        TestStateProvider.shared.setEnvironmentReady(isEnvironmentReady)
+        if isEnvironmentReady {
+            UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
         }
     }
 
@@ -118,11 +263,6 @@ struct QwenVoiceApp: App {
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
                         .environmentObject(savedVoicesViewModel)
-                        .background(
-                            UITestWindowSizeConfigurator(
-                                contentSize: AppLaunchConfiguration.current.uiTestWindowSize
-                            )
-                        )
                         .frame(minWidth: 720, minHeight: 560)
                         .onAppear {
                             if envManager.needsBackendRestart {
@@ -140,15 +280,34 @@ struct QwenVoiceApp: App {
                 }
             }
             .defaultAppStorage(UITestAutomationSupport.appStorage)
+            .background(
+                UITestWindowSizeConfigurator(
+                    contentSize: AppLaunchConfiguration.current.uiTestWindowSize
+                )
+            )
             .onAppear {
                 setupAppSupport()
+                if UITestAutomationSupport.isEnabled {
+                    UITestWindowCoordinator.shared.syncVisibleMainWindowState()
+                    TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode)
+                }
                 envManager.ensureEnvironment()
+                syncUITestEnvironmentReadiness(for: envManager.state)
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
             .onChange(of: envManager.state) { _, newState in
-                if UITestAutomationSupport.isEnabled, case .ready = newState {
-                    TestStateProvider.shared.isReady = true
+                syncUITestEnvironmentReadiness(for: newState)
+            }
+            .onReceive(pythonBridge.$isReady) { isReady in
+                guard UITestAutomationSupport.isEnabled else { return }
+                TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode || isReady)
+                if isReady {
+                    UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "backend_ready")
                 }
+            }
+            .onReceive(pythonBridge.$sidebarStatus) { status in
+                guard UITestAutomationSupport.isEnabled else { return }
+                TestStateProvider.shared.setSidebarStatus(status)
             }
         }
         .defaultSize(width: 720, height: 560)
@@ -278,20 +437,27 @@ private struct UITestWindowSizeConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async {
-            applyWindowSizeIfNeeded(for: view)
+            applyWindowConfigurationIfNeeded(for: view)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
-            applyWindowSizeIfNeeded(for: nsView)
+            applyWindowConfigurationIfNeeded(for: nsView)
         }
     }
 
-    private func applyWindowSizeIfNeeded(for view: NSView) {
-        guard let contentSize,
-              let window = view.window else {
+    private func applyWindowConfigurationIfNeeded(for view: NSView) {
+        guard let window = view.window else {
+            return
+        }
+
+        if UITestAutomationSupport.isEnabled {
+            window.identifier = UITestWindowCoordinator.mainContentWindowIdentifier
+        }
+
+        guard let contentSize else {
             return
         }
 

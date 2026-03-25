@@ -29,6 +29,14 @@ enum AppTheme {
     }()
 
     static let accent = Color.accentColor
+    static let inlinePreviewProgressTint = Color(
+        light: Color(red: 0.30, green: 0.53, blue: 0.88),
+        dark: Color(red: 0.43, green: 0.65, blue: 0.97)
+    )
+    static let statusProgressTint = Color(
+        light: Color(red: 0.34, green: 0.56, blue: 0.91),
+        dark: Color(red: 0.47, green: 0.68, blue: 0.98)
+    )
     static let smokedGlassTint = Color(white: 0.15, opacity: 0.6)
     static let customVoice = accent
     static let voiceDesign = accent

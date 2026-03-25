@@ -1,5 +1,20 @@
 import SwiftUI
 
+struct SidebarFooterPresentation: Equatable {
+    let inlinePlayerActivity: ActivityStatus?
+    let showsStandaloneStatus: Bool
+
+    static func resolve(sidebarStatus: SidebarStatus, isLiveStream: Bool) -> Self {
+        guard isLiveStream,
+              case .running(let activity) = sidebarStatus,
+              activity.presentation == .inlinePlayer else {
+            return Self(inlinePlayerActivity: nil, showsStandaloneStatus: true)
+        }
+
+        return Self(inlinePlayerActivity: activity, showsStandaloneStatus: false)
+    }
+}
+
 struct SidebarStatusView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
 
@@ -92,7 +107,7 @@ struct SidebarStatusView: View {
             if let fraction = activity.fraction {
                 HStack(spacing: 8) {
                     ProgressView(value: min(max(fraction, 0.0), 1.0), total: 1.0)
-                        .tint(AppTheme.accent)
+                        .tint(AppTheme.statusProgressTint)
                         .scaleEffect(y: 0.6)
                     Text("\(percent)%")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))

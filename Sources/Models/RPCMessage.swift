@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - JSON-RPC Request
 
-struct RPCRequest: Encodable {
+struct RPCRequest: Encodable, Sendable {
     let jsonrpc = "2.0"
     let id: Int
     let method: String
@@ -11,7 +11,7 @@ struct RPCRequest: Encodable {
 
 // MARK: - JSON-RPC Response
 
-struct RPCResponse: Decodable, Equatable {
+struct RPCResponse: Decodable, Equatable, Sendable {
     let jsonrpc: String
     let id: Int?
     let result: RPCValue?
@@ -32,14 +32,14 @@ struct RPCResponse: Decodable, Equatable {
     }
 }
 
-struct RPCError: Decodable, Equatable {
+struct RPCError: Decodable, Equatable, Sendable {
     let code: Int
     let message: String
 }
 
 // MARK: - RPCValue — type-safe JSON value
 
-enum RPCValue: Codable, Equatable {
+enum RPCValue: Codable, Equatable, Sendable {
     case string(String)
     case int(Int)
     case double(Double)

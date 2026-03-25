@@ -87,6 +87,7 @@ KATHLEEN_STEMS = [
     "data/arctic_a0003_1592748511",
     "data/arctic_a0004_1592748478",
 ]
+APP_STREAMING_INTERVAL = 0.32
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -163,6 +164,8 @@ def _make_generate_params(
         "benchmark": True,
         "stream": stream,
     }
+    if stream:
+        params["streaming_interval"] = APP_STREAMING_INTERVAL
     if benchmark_label:
         params["benchmark_label"] = benchmark_label
     if mode == "custom":
@@ -505,6 +508,7 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
         # Without prewarm
         client.call("load_model", {"model_id": mid, "benchmark": True}, timeout=120)
         no_prewarm_times: list[float] = []
+        no_prewarm_records: list[dict[str, Any]] = []
         for i in range(runs):
             eprint(f"    No-prewarm generate {mid} run {i + 1}/{runs}...")
             with tempfile.TemporaryDirectory() as tmp:
@@ -513,9 +517,10 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
                     benchmark_label="no_prewarm",
                     **clone_kwargs,
                 )
-                t0 = time.perf_counter()
-                client.call_collecting_notifications_timed("generate", params, timeout=300)
-                no_prewarm_times.append((time.perf_counter() - t0) * 1000)
+                rec = _run_single_generation(client, params, timeout=300)
+                rec["scenario"] = "no_prewarm"
+                no_prewarm_records.append(rec)
+                no_prewarm_times.append(rec["wall_ms"])
         client.call("unload_model", timeout=30)
 
         # With prewarm
@@ -527,6 +532,7 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
             prewarm_params["ref_text"] = clone_kwargs["ref_text"]
         client.call("prewarm_model", prewarm_params, timeout=120)
         prewarm_times: list[float] = []
+        prewarm_records: list[dict[str, Any]] = []
         for i in range(runs):
             eprint(f"    With-prewarm generate {mid} run {i + 1}/{runs}...")
             with tempfile.TemporaryDirectory() as tmp:
@@ -535,9 +541,10 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
                     benchmark_label="with_prewarm",
                     **clone_kwargs,
                 )
-                t0 = time.perf_counter()
-                client.call_collecting_notifications_timed("generate", params, timeout=300)
-                prewarm_times.append((time.perf_counter() - t0) * 1000)
+                rec = _run_single_generation(client, params, timeout=300)
+                rec["scenario"] = "with_prewarm"
+                prewarm_records.append(rec)
+                prewarm_times.append(rec["wall_ms"])
         client.call("unload_model", timeout=30)
 
         no_prewarm_mean = summarize_numeric(no_prewarm_times)["mean"]
@@ -554,6 +561,7 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
                 "no_prewarm_ms": summarize_numeric(no_prewarm_times),
                 "with_prewarm_ms": summarize_numeric(prewarm_times),
                 "speedup_pct": speedup_pct,
+                "raw_records": no_prewarm_records + prewarm_records,
             },
         ))
 
@@ -722,6 +730,8 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
     eprint("    Clone context cache test...")
     cache_miss_times: list[float] = []
     cache_hit_times: list[float] = []
+    cache_miss_prepare_times: list[float] = []
+    cache_hit_prepare_times: list[float] = []
 
     for i in range(runs):
         # Unload/reload to force cache miss
@@ -737,6 +747,9 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
             )
             rec = _run_single_generation(client, params)
             cache_miss_times.append(rec["wall_ms"])
+            prepare_ms = rec.get("server_timings_ms", {}).get("prepare_clone_context")
+            if prepare_ms is not None:
+                cache_miss_prepare_times.append(float(prepare_ms))
 
         # Second generation with same ref = cache hit
         with tempfile.TemporaryDirectory() as tmp:
@@ -747,6 +760,9 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
             )
             rec = _run_single_generation(client, params)
             cache_hit_times.append(rec["wall_ms"])
+            prepare_ms = rec.get("server_timings_ms", {}).get("prepare_clone_context")
+            if prepare_ms is not None:
+                cache_hit_prepare_times.append(float(prepare_ms))
 
     results.append(build_test_result(
         "clone_context_cache",
@@ -754,6 +770,8 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
         details={
             "cache_miss_ms": summarize_numeric(cache_miss_times),
             "cache_hit_ms": summarize_numeric(cache_hit_times),
+            "cache_miss_prepare_clone_context_ms": summarize_numeric(cache_miss_prepare_times) if cache_miss_prepare_times else None,
+            "cache_hit_prepare_clone_context_ms": summarize_numeric(cache_hit_prepare_times) if cache_hit_prepare_times else None,
             "speedup_pct": round(
                 (1 - summarize_numeric(cache_hit_times)["mean"] / max(summarize_numeric(cache_miss_times)["mean"], 0.01)) * 100,
                 1,
@@ -816,6 +834,21 @@ def analyze_bottlenecks(tier_results: dict[str, dict[str, Any]]) -> dict[str, An
                 if isinstance(rec, dict) and "server_timings_ms" in rec and "wall_ms" in rec:
                     all_timings.append(rec["server_timings_ms"])
                     all_wall_times.append(rec["wall_ms"])
+
+            if details and not details.get("raw_records"):
+                summary_timings = {
+                    key.removeprefix("server_").removesuffix("_ms"): value.get("mean")
+                    for key, value in details.items()
+                    if key.startswith("server_")
+                    and key.endswith("_ms")
+                    and isinstance(value, dict)
+                    and value.get("mean") is not None
+                }
+                wall_summary = details.get("wall_ms")
+                if summary_timings:
+                    all_timings.append(summary_timings)
+                    if isinstance(wall_summary, dict) and wall_summary.get("mean") is not None:
+                        all_wall_times.append(float(wall_summary["mean"]))
 
     if not all_timings:
         return {"top_bottlenecks": [], "recommendations": ["No timing data collected."]}

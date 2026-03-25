@@ -236,6 +236,22 @@ struct SidebarView: View {
 
 private struct SidebarFooterRegion: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var pythonBridge: PythonBridge
+
+    private var footerPresentation: SidebarFooterPresentation {
+        SidebarFooterPresentation.resolve(
+            sidebarStatus: pythonBridge.sidebarStatus,
+            isLiveStream: audioPlayer.isLiveStream
+        )
+    }
+
+    private func syncUITestFooterState() {
+        guard UITestAutomationSupport.isEnabled else { return }
+        TestStateProvider.shared.setSidebarFooter(
+            inlineStatusVisible: footerPresentation.inlinePlayerActivity != nil,
+            standaloneStatusVisible: footerPresentation.showsStandaloneStatus
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -243,11 +259,16 @@ private struct SidebarFooterRegion: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 if audioPlayer.hasAudio {
-                    SidebarPlayerView()
-                    Divider()
+                    SidebarPlayerView(inlinePlayerActivity: footerPresentation.inlinePlayerActivity)
+
+                    if footerPresentation.showsStandaloneStatus {
+                        Divider()
+                    }
                 }
 
-                SidebarStatusView()
+                if footerPresentation.showsStandaloneStatus {
+                    SidebarStatusView()
+                }
             }
             .padding(.horizontal, LayoutConstants.shellPadding)
             .padding(.top, LayoutConstants.generationSectionSpacing)
@@ -255,5 +276,8 @@ private struct SidebarFooterRegion: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .profileBackground(Color(nsColor: .windowBackgroundColor))
+        .onAppear(perform: syncUITestFooterState)
+        .onChange(of: pythonBridge.sidebarStatus) { _, _ in syncUITestFooterState() }
+        .onChange(of: audioPlayer.isLiveStream) { _, _ in syncUITestFooterState() }
     }
 }

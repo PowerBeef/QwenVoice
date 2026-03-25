@@ -140,14 +140,14 @@ struct ContentView: View {
     private let launchSidebarOverride: SidebarItem?
 
     @State private var selectedItem: SidebarItem?
-    @State private var activatedItems: Set<SidebarItem>
     @State private var protectedLaunchOverride: SidebarItem?
     @State private var pendingHighlightedModelID: String?
     @State private var historySearchText = ""
     @State private var historySortOrder: HistorySortOrder = .newest
     @State private var voicesEnrollRequestID: UUID?
-    @State private var pendingSavedVoiceSelectionID: String?
-    @State private var voiceDesignVoiceDescription = ""
+    @State private var customVoiceDraft = CustomVoiceDraft()
+    @State private var voiceDesignDraft = VoiceDesignDraft()
+    @State private var voiceCloningDraft = VoiceCloningDraft()
     @State private var didCompleteInitialAvailabilityRefresh = false
 
     private var currentWindowTitle: String {
@@ -190,7 +190,6 @@ struct ContentView: View {
             launchOverride: launchSidebarOverride
         )
         _selectedItem = State(initialValue: initialSelection)
-        _activatedItems = State(initialValue: [initialSelection])
         _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
     }
 
@@ -215,10 +214,15 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear(perform: handleAppear)
+        .onDisappear {
+            if UITestAutomationSupport.isEnabled {
+                TestStateProvider.shared.markWindowUnmounted()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .testNavigateToScreen)) { notification in
             guard let screen = notification.userInfo?["screen"] as? String else { return }
             if let item = SidebarItem(testScreenID: screen) {
-                selectedItem = item
+                selectSidebarItemIfEnabled(item)
             }
         }
         .task { await handleInitialLoad() }
@@ -231,16 +235,12 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        ZStack {
-            ForEach(SidebarItem.allCases) { item in
-                if activatedItems.contains(item) {
-                    screenView(for: item, isActive: selectedItem == item)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .opacity(selectedItem == item ? 1 : 0)
-                        .allowsHitTesting(selectedItem == item)
-                        .accessibilityHidden(selectedItem != item)
-                        .zIndex(selectedItem == item ? 1 : 0)
-                }
+        Group {
+            if let selectedItem {
+                screenView(for: selectedItem)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                Color.clear
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -255,55 +255,44 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func screenView(for item: SidebarItem, isActive: Bool) -> some View {
+    private func screenView(for item: SidebarItem) -> some View {
         switch item {
         case .customVoice:
-            CustomVoiceView(isActive: isActive)
+            CustomVoiceView(draft: $customVoiceDraft)
         case .voiceDesign:
-            VoiceDesignView(
-                voiceDescription: $voiceDesignVoiceDescription,
-                isActive: isActive
-            )
+            VoiceDesignView(draft: $voiceDesignDraft)
         case .voiceCloning:
-            VoiceCloningView(
-                pendingSavedVoiceSelectionID: $pendingSavedVoiceSelectionID,
-                isActive: isActive
-            )
+            VoiceCloningView(draft: $voiceCloningDraft)
         case .history:
             HistoryView(
-                isActive: isActive,
                 searchText: $historySearchText,
                 sortOrder: $historySortOrder
             )
         case .voices:
             VoicesView(
-                isActive: isActive,
                 enrollRequestID: voicesEnrollRequestID,
                 canUseInVoiceCloning: !disabledSidebarItems.contains(.voiceCloning),
                 onUseInVoiceCloning: { voice in
-                    pendingSavedVoiceSelectionID = voice.id
+                    voiceCloningDraft.selectedSavedVoiceID = voice.id
+                    voiceCloningDraft.referenceAudioPath = voice.wavPath
+                    voiceCloningDraft.referenceTranscript = ""
                     selectSidebarItemIfEnabled(.voiceCloning)
                 }
             )
         case .models:
-            ModelsView(
-                isActive: isActive,
-                highlightedModelID: $pendingHighlightedModelID
-            )
+            ModelsView(highlightedModelID: $pendingHighlightedModelID)
         }
     }
 
     // MARK: - Inline closure methods
 
     private func handleAppear() {
-        if let selectedItem {
-            activatedItems.insert(selectedItem)
-        }
-
         if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.activeScreen = currentActiveScreenID
-            TestStateProvider.shared.windowTitle = currentWindowTitle
-            TestStateProvider.shared.isReady = true
+            TestStateProvider.shared.markWindowMounted(
+                activeScreen: currentActiveScreenID,
+                windowTitle: currentWindowTitle,
+                disabledSidebarItems: currentDisabledSidebarIdentifiers
+            )
         }
     }
 
@@ -316,19 +305,16 @@ struct ContentView: View {
     }
 
     private func handleSelectionChange(_ newValue: SidebarItem?) {
-        if let newValue {
-            activatedItems.insert(newValue)
-        }
-
         if let protectedLaunchOverride, newValue != protectedLaunchOverride {
             self.protectedLaunchOverride = nil
         }
 
         if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.activeScreen = newValue?.screenAccessibilityID ?? ""
-            TestStateProvider.shared.windowTitle = newValue?.rawValue ?? "QwenVoice"
-            TestStateProvider.shared.isReady = true
-            TestStateProvider.shared.disabledSidebarItems = currentDisabledSidebarIdentifiers
+            TestStateProvider.shared.markSidebarSelectionCompleted(
+                activeScreen: newValue?.screenAccessibilityID ?? "",
+                windowTitle: newValue?.rawValue ?? "QwenVoice",
+                disabledSidebarItems: currentDisabledSidebarIdentifiers
+            )
         }
     }
 
@@ -351,7 +337,20 @@ struct ContentView: View {
 
     private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
         guard !disabledSidebarItems.contains(item) else { return }
+        if UITestAutomationSupport.isEnabled {
+            TestStateProvider.shared.markSidebarSelectionStarted(targetScreen: item.screenAccessibilityID)
+        }
         AppPerformanceSignposts.emit("Sidebar Selection")
+        if selectedItem == item {
+            if UITestAutomationSupport.isEnabled {
+                TestStateProvider.shared.markSidebarSelectionCompleted(
+                    activeScreen: item.screenAccessibilityID,
+                    windowTitle: item.rawValue,
+                    disabledSidebarItems: currentDisabledSidebarIdentifiers
+                )
+            }
+            return
+        }
         selectedItem = item
     }
 
@@ -365,13 +364,13 @@ struct ContentView: View {
         }
 
         self.selectedItem = .models
-        activatedItems.insert(.models)
     }
 }
 
 // MARK: - HiddenWindowMarkers
 
 private struct HiddenWindowMarkers: View {
+    @ObservedObject private var testState = TestStateProvider.shared
     let windowTitle: String
     let activeScreenID: String
     let disabledIdentifiers: String
@@ -392,8 +391,20 @@ private struct HiddenWindowMarkers: View {
             )
             if UITestAutomationSupport.isEnabled {
                 hiddenMarker(
-                    value: activeScreenID,
+                    value: "true",
                     identifier: "mainWindow_ready"
+                )
+                hiddenMarker(
+                    value: testState.environmentReady ? "true" : "false",
+                    identifier: "mainWindow_environmentReady"
+                )
+                hiddenMarker(
+                    value: testState.backendReady ? "true" : "false",
+                    identifier: "mainWindow_backendReady"
+                )
+                hiddenMarker(
+                    value: testState.interactiveReady ? "true" : "false",
+                    identifier: "mainWindow_interactiveReady"
                 )
             }
         }

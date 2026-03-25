@@ -126,7 +126,7 @@ struct BatchGenerationSheet: View {
         if coordinator.isProcessing {
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: Double(coordinator.currentIndex), total: Double(coordinator.totalItems))
-                    .tint(themeColor)
+                    .tint(AppTheme.statusProgressTint)
                 Text(progressLabel)
                     .font(.callout)
                     .foregroundStyle(.secondary)

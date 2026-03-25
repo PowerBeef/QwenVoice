@@ -9,8 +9,9 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 
 ## Contributor / Agent Docs
 
-- [`../CLAUDE.md`](../CLAUDE.md) — repository operating guide for Claude Code and coding agents
-- [`../cli/CLAUDE.md`](../cli/CLAUDE.md) — CLI-specific agent guide
+- [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents
+- [`../CLAUDE.md`](../CLAUDE.md) — Claude Code-specific supplement to `AGENTS.md`
+- [`../cli/CLAUDE.md`](../cli/CLAUDE.md) — CLI-specific agent supplement
 
 ## CLI Docs
 

@@ -20,7 +20,7 @@ The app currently exposes six sidebar destinations in the main window, plus a de
 4. History
 5. Saved Voices
 6. Models
-Voice Design now has its own sidebar destination and screen (`VoiceDesignView`) alongside `CustomVoiceView` and `VoiceCloningView`. `ContentView` keeps activated generation screens alive so Custom Voice and Voice Design preserve independent draft state while you move through the sidebar. `PreferencesView` now lives in the app's `Settings` scene instead of the main sidebar.
+Voice Design now has its own sidebar destination and screen (`VoiceDesignView`) alongside `CustomVoiceView` and `VoiceCloningView`. `ContentView` owns persisted generation drafts above the individual screens so Custom Voice, Voice Design, and Voice Cloning preserve authored inputs while the inactive views themselves can unmount across sidebar navigation. `PreferencesView` now lives in the app's `Settings` scene instead of the main sidebar.
 
 The shipping SwiftUI app uses live streaming preview for single-generation flows:
 
@@ -106,6 +106,8 @@ The dual-release workflow builds:
 - `QwenVoice-macos15.dmg` for the legacy glass UI profile
 
 Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided.
+
+The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) now default to live backend mode with an isolated app-support fixture. Those runs reuse the installed runtime and models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the backend initialization handshake has completed.
 
 ## Current Documentation Boundaries
 

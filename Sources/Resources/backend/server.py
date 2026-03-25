@@ -89,8 +89,23 @@ FILENAME_MAX_LEN = 20
 CACHE_POLICY = _resolve_cache_policy()
 CLONE_CONTEXT_CACHE_CAPACITY = 16
 DEFAULT_STREAMING_INTERVAL = 2.0
-PREWARM_MAX_TOKENS = 128
-PREWARM_TEXT = "The selected voice model is warming up."
+PREWARM_PROFILES = {
+    "custom": {
+        "text": "Voice warmup.",
+        "max_tokens": 48,
+        "run_generation": True,
+    },
+    "design": {
+        "text": "",
+        "max_tokens": 0,
+        "run_generation": False,
+    },
+    "clone": {
+        "text": "The selected voice model is warming up.",
+        "max_tokens": 128,
+        "run_generation": True,
+    },
+}
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 GUIDED_CLONE_TARGET_SIMILARITY = _env_float("QWENVOICE_CLONE_TARGET_SIMILARITY", 0.75)
@@ -414,6 +429,8 @@ def _prewarm_identity_key(model_key, mode, voice=None, instruct=None, delivery_p
             delivery_profile_fingerprint(delivery_profile, fallback_instruction=instruct),
             (instruct or "").strip() if _has_meaningful_delivery_instruction(instruct) else "",
         ])
+    elif mode == "design":
+        return tuple(components)
     else:
         components.extend([
             (voice or "").strip(),
@@ -484,10 +501,132 @@ def _speaker_similarity_from_generated_audio(reference_vector, generated_audio):
 
 
 def _collect_single_generation_result(generator):
-    results = list(generator)
-    if not results:
+    result, _ = _collect_generation_result_with_timings(generator)
+    return result
+
+
+def _collect_generation_result_with_timings(generator):
+    collect_start = time.perf_counter()
+    first_yield_ms = None
+    last_result = None
+
+    for result in generator:
+        if first_yield_ms is None:
+            first_yield_ms = int((time.perf_counter() - collect_start) * 1000)
+        last_result = result
+
+    if last_result is None:
         raise RuntimeError("Generation produced no audio file")
-    return results[-1]
+
+    return last_result, {
+        "first_generator_yield": first_yield_ms or 0,
+        "collect_generation": int((time.perf_counter() - collect_start) * 1000),
+    }
+
+
+def _prewarm_profile(mode):
+    profile = PREWARM_PROFILES.get(mode)
+    if profile is None:
+        raise ValueError(f"Unknown prewarm mode: {mode}")
+    return profile
+
+
+def _timing_breakdown_template():
+    return {
+        "first_generator_yield": 0,
+        "collect_generation": 0,
+        "audio_file_write": 0,
+        "metadata_lookup": 0,
+        "chunk_file_write": 0,
+        "chunk_notifications": 0,
+        "first_stream_chunk": 0,
+    }
+
+
+def _apply_timing_breakdown(target, breakdown):
+    for key, value in breakdown.items():
+        target[key] = int(value)
+
+
+def _build_generation_kwargs(
+    text,
+    temperature,
+    max_tokens=None,
+    *,
+    voice=None,
+    instruct=None,
+    ref_audio=None,
+    ref_text=None,
+    stream=False,
+    streaming_interval=None,
+):
+    kwargs = {
+        "text": text,
+        "temperature": temperature,
+        "verbose": False,
+    }
+    if max_tokens is not None:
+        kwargs["max_tokens"] = int(max_tokens)
+    if voice:
+        kwargs["voice"] = voice
+    if instruct:
+        kwargs["instruct"] = instruct
+    if ref_audio:
+        kwargs["ref_audio"] = ref_audio
+    if ref_text:
+        kwargs["ref_text"] = ref_text
+    if stream:
+        kwargs["stream"] = True
+        if streaming_interval is not None:
+            kwargs["streaming_interval"] = streaming_interval
+    return kwargs
+
+
+def _build_standard_generator(model, text, temperature, max_tokens=None, *, voice=None, instruct=None, stream=False, streaming_interval=None):
+    return model.generate(
+        **_build_generation_kwargs(
+            text=text,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            voice=voice,
+            instruct=instruct,
+            stream=stream,
+            streaming_interval=streaming_interval,
+        )
+    )
+
+
+def _build_clone_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, max_tokens=None, *, stream=False, streaming_interval=None):
+    return model.generate(
+        **_build_generation_kwargs(
+            text=text,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            ref_audio=clean_ref_audio,
+            ref_text=resolved_ref_text,
+            stream=stream,
+            streaming_interval=streaming_interval,
+        )
+    )
+
+
+def _stream_generator_to_output(generator, request_id, final_path):
+    response, write_output_ms, output_metadata, stream_breakdown = _consume_streaming_generator(
+        generator,
+        request_id=request_id,
+        final_path=final_path,
+    )
+    return response, write_output_ms, output_metadata, stream_breakdown
+
+
+def _stream_prepared_result_to_output(result, request_id, final_path, streaming_interval):
+    response, write_output_ms, output_metadata, stream_breakdown = _stream_selected_audio(
+        result,
+        request_id=request_id,
+        final_path=final_path,
+        streaming_interval=streaming_interval,
+    )
+    return response, write_output_ms, output_metadata, stream_breakdown
 
 
 def _finalize_generated_audio(result, final_path, streaming_used):
@@ -497,20 +636,24 @@ def _finalize_generated_audio(result, final_path, streaming_used):
         result.audio,
         result.sample_rate,
     )
-    write_output_ms = int((time.perf_counter() - write_start) * 1000)
+    audio_file_write_ms = int((time.perf_counter() - write_start) * 1000)
+    metadata_start = time.perf_counter()
     output_metadata = get_audio_metadata(final_path)
+    metadata_lookup_ms = int((time.perf_counter() - metadata_start) * 1000)
     metrics = _metrics_from_generation_result(result, streaming_used=streaming_used)
     response = {
         "audio_path": final_path,
         "duration_seconds": round(output_metadata["duration_seconds"], 2),
     }
-    return response, metrics, output_metadata, write_output_ms
+    write_output_ms = audio_file_write_ms + metadata_lookup_ms
+    return response, metrics, output_metadata, write_output_ms, {
+        "audio_file_write": audio_file_write_ms,
+        "metadata_lookup": metadata_lookup_ms,
+    }
 
 
 def _stream_selected_audio(result, request_id, final_path, streaming_interval):
     stream_start = time.perf_counter()
-    _write_audio_file(final_path, result.audio, result.sample_rate)
-    output_metadata = get_audio_metadata(final_path)
     normalized_audio, _, nchannels = _flatten_audio_samples(result.audio)
     session_dir = _make_stream_session_dir(request_id)
 
@@ -518,12 +661,16 @@ def _stream_selected_audio(result, request_id, final_path, streaming_interval):
     chunk_samples = max(1, int(result.sample_rate * max(streaming_interval, 0.16)))
     cumulative_duration = 0.0
     first_chunk_ms = None
+    chunk_file_write_seconds = 0.0
+    chunk_notification_seconds = 0.0
 
     for chunk_index, start in enumerate(range(0, total_samples, chunk_samples)):
         end = min(start + chunk_samples, total_samples)
         audio_chunk = normalized_audio[start:end] if normalized_audio.ndim == 1 else normalized_audio[start:end, :]
         chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
+        chunk_write_start = time.perf_counter()
         _audio_write_fn(chunk_path, audio_chunk, result.sample_rate, format="wav")
+        chunk_file_write_seconds += time.perf_counter() - chunk_write_start
 
         chunk_sample_count = int(audio_chunk.shape[0])
         chunk_duration_seconds = chunk_sample_count / float(result.sample_rate)
@@ -532,6 +679,7 @@ def _stream_selected_audio(result, request_id, final_path, streaming_interval):
         if first_chunk_ms is None:
             first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
 
+        notification_start = time.perf_counter()
         send_generation_chunk(
             request_id=request_id,
             chunk_index=chunk_index,
@@ -541,6 +689,22 @@ def _stream_selected_audio(result, request_id, final_path, streaming_interval):
             cumulative_duration_seconds=cumulative_duration,
             stream_session_dir=session_dir,
         )
+        chunk_notification_seconds += time.perf_counter() - notification_start
+
+    file_write_start = time.perf_counter()
+    try:
+        _write_audio_file(final_path, result.audio, result.sample_rate)
+    except Exception:
+        if final_path and os.path.exists(final_path):
+            try:
+                os.remove(final_path)
+            except OSError:
+                pass
+        raise
+    audio_file_write_ms = int((time.perf_counter() - file_write_start) * 1000)
+    metadata_start = time.perf_counter()
+    output_metadata = get_audio_metadata(final_path)
+    metadata_lookup_ms = int((time.perf_counter() - metadata_start) * 1000)
 
     metrics = _metrics_from_generation_result(result, streaming_used=True)
     metrics["first_chunk_ms"] = first_chunk_ms or 0
@@ -551,7 +715,13 @@ def _stream_selected_audio(result, request_id, final_path, streaming_interval):
         "metrics": metrics,
     }
     write_output_ms = int((time.perf_counter() - stream_start) * 1000)
-    return response, write_output_ms, output_metadata
+    return response, write_output_ms, output_metadata, {
+        "audio_file_write": audio_file_write_ms,
+        "metadata_lookup": metadata_lookup_ms,
+        "chunk_file_write": int(chunk_file_write_seconds * 1000),
+        "chunk_notifications": int(chunk_notification_seconds * 1000),
+        "first_stream_chunk": first_chunk_ms or 0,
+    }
 
 
 def _generate_guided_clone_candidate(
@@ -1203,9 +1373,15 @@ def _consume_streaming_generator(generator, request_id, final_path):
     wav_writer = None
     expected_sample_rate = None
     expected_channels = None
+    chunk_file_write_seconds = 0.0
+    chunk_notification_seconds = 0.0
 
     try:
         for chunk in generator:
+            chunk_received_at = time.perf_counter()
+            if first_chunk_ms is None:
+                first_chunk_ms = int((chunk_received_at - stream_start) * 1000)
+
             normalized_audio, samples_flat, nchannels = _flatten_audio_samples(chunk.audio)
             chunk_sample_rate = int(getattr(chunk, "sample_rate", 0) or 0)
             if chunk_sample_rate <= 0:
@@ -1225,8 +1401,10 @@ def _consume_streaming_generator(generator, request_id, final_path):
                 raise RuntimeError("Streaming generation produced incompatible audio chunk formats")
 
             chunk_path = os.path.join(session_dir, f"chunk_{chunk_index:03d}.wav")
+            chunk_write_start = time.perf_counter()
             _audio_write_fn(chunk_path, normalized_audio, chunk_sample_rate, format="wav")
             wav_writer.writeframes(samples_flat.tobytes())
+            chunk_file_write_seconds += time.perf_counter() - chunk_write_start
 
             sample_count = int(getattr(chunk, "samples", 0) or 0)
             if sample_count <= 0:
@@ -1240,9 +1418,7 @@ def _consume_streaming_generator(generator, request_id, final_path):
                 float(getattr(chunk, "peak_memory_usage", 0.0) or 0.0),
             )
 
-            if first_chunk_ms is None:
-                first_chunk_ms = int((time.perf_counter() - stream_start) * 1000)
-
+            notification_start = time.perf_counter()
             send_generation_chunk(
                 request_id=request_id,
                 chunk_index=chunk_index,
@@ -1252,6 +1428,7 @@ def _consume_streaming_generator(generator, request_id, final_path):
                 cumulative_duration_seconds=cumulative_duration,
                 stream_session_dir=session_dir,
             )
+            chunk_notification_seconds += time.perf_counter() - notification_start
             last_chunk = chunk
             chunk_index += 1
     finally:
@@ -1262,6 +1439,9 @@ def _consume_streaming_generator(generator, request_id, final_path):
         raise RuntimeError("Generation produced no audio file")
 
     write_output_ms = int((time.perf_counter() - write_start) * 1000)
+    metadata_start = time.perf_counter()
+    output_metadata = get_audio_metadata(final_path)
+    metadata_lookup_ms = int((time.perf_counter() - metadata_start) * 1000)
 
     metrics = _metrics_from_generation_result(last_chunk, streaming_used=True)
     metrics["token_count"] = total_token_count
@@ -1277,7 +1457,14 @@ def _consume_streaming_generator(generator, request_id, final_path):
             "metrics": metrics,
         },
         write_output_ms,
-        get_audio_metadata(final_path),
+        output_metadata,
+        {
+            "first_generator_yield": first_chunk_ms or 0,
+            "collect_generation": int((time.perf_counter() - stream_start) * 1000),
+            "chunk_file_write": int(chunk_file_write_seconds * 1000),
+            "chunk_notifications": int(chunk_notification_seconds * 1000),
+            "metadata_lookup": metadata_lookup_ms,
+        },
     )
 
 
@@ -1354,7 +1541,9 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
     if _current_model is None:
         raise RuntimeError("No model loaded. Call load_model first.")
 
-    warmup_text = PREWARM_TEXT
+    profile = _prewarm_profile(mode)
+    warmup_text = profile["text"]
+    warmup_max_tokens = profile["max_tokens"]
     generation_start = time.perf_counter()
     normalize_reference_ms = 0
     prepare_clone_context_ms = 0
@@ -1366,22 +1555,24 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
     styled_text_applied = False
     delivery_retry_count = 0
     delivery_compromised = False
+    generation_ms = 0
 
     if mode == "custom":
         warm_results = list(
-            _current_model.generate(
+            _build_standard_generator(
+                _current_model,
                 text=warmup_text,
+                temperature=0.6,
+                max_tokens=warmup_max_tokens,
                 voice=voice or DEFAULT_SPEAKER,
                 instruct=instruct or "Normal tone",
-                verbose=False,
-                temperature=0.6,
-                max_tokens=PREWARM_MAX_TOKENS,
             )
         )
+        generation_ms = int((time.perf_counter() - generation_start) * 1000)
     elif mode == "design":
         # Model load alone warms Metal shader caches sufficiently for design mode.
-        # Benchmark data shows warmup generation is counterproductive (-16.2%).
         warm_results = None
+        generation_ms = int((time.perf_counter() - generation_start) * 1000)
     elif mode == "clone":
         if not ref_audio:
             raise ValueError("Mode 'clone' prewarm requires ref_audio.")
@@ -1424,7 +1615,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
                 top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
                 repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.5,
-                max_tokens=PREWARM_MAX_TOKENS,
+                max_tokens=warmup_max_tokens,
             )
             warm_results = list(generator)
         elif delivery_instruction_strategy == "guided_reference_conditioning":
@@ -1437,7 +1628,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 temperature=plan.sampling_profile["temperature"] if plan is not None else 0.6,
                 top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
                 repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.05,
-                max_tokens=PREWARM_MAX_TOKENS,
+                max_tokens=warmup_max_tokens,
             )
             warm_results = list(generator)
         else:
@@ -1446,11 +1637,12 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 "ref_audio": clean_ref_audio,
                 "verbose": False,
                 "temperature": 0.6,
-                "max_tokens": PREWARM_MAX_TOKENS,
+                "max_tokens": warmup_max_tokens,
             }
             if resolved_ref_text:
                 warm_kwargs["ref_text"] = resolved_ref_text
             warm_results = list(_current_model.generate(**warm_kwargs))
+        generation_ms = int((time.perf_counter() - generation_start) * 1000)
     else:
         raise ValueError(f"Unknown prewarm mode: {mode}")
 
@@ -1460,7 +1652,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
     return {
         "normalize_reference": normalize_reference_ms,
         "prepare_clone_context": prepare_clone_context_ms,
-        "generation": int((time.perf_counter() - generation_start) * 1000),
+        "generation": generation_ms,
         "prepared_clone_used": prepared_clone_used,
         "clone_cache_hit": clone_cache_hit,
         "delivery_instruction_applied": delivery_instruction_applied,
@@ -1469,6 +1661,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
         "styled_text_applied": styled_text_applied,
         "delivery_retry_count": delivery_retry_count,
         "delivery_compromised": delivery_compromised,
+        "prewarm_max_tokens": warmup_max_tokens,
     }
 
 
@@ -1518,6 +1711,7 @@ def handle_prewarm_model(params, request_id=None):
         "normalize_reference": 0,
         "prepare_clone_context": 0,
         "generation": 0,
+        "prewarm_max_tokens": 0,
     }
     prepared_clone_used = False
     clone_cache_hit = None
@@ -1573,6 +1767,7 @@ def handle_prewarm_model(params, request_id=None):
             "styled_text_applied": prewarm_timings.get("styled_text_applied", False),
             "delivery_retry_count": prewarm_timings.get("delivery_retry_count", 0),
             "delivery_compromised": prewarm_timings.get("delivery_compromised", False),
+            "prewarm_max_tokens": prewarm_timings.get("prewarm_max_tokens", 0),
             "timings_ms": {
                 "load_model_total": load_timings.get("load_model_total", 0),
                 "normalize_reference": prewarm_timings["normalize_reference"],
@@ -1711,6 +1906,7 @@ def handle_generate(params, request_id=None):
             "generation": 0,
             "write_output": 0,
         }
+        benchmark_timings.update(_timing_breakdown_template())
         metrics = None
 
         if ref_audio:
@@ -1757,24 +1953,26 @@ def handle_generate(params, request_id=None):
                 if stream and request_id is not None:
                     send_progress(55, "Streaming audio...", request_id=request_id)
                     generation_start = time.perf_counter()
-                    result, benchmark_timings["write_output"], output_metadata = _stream_selected_audio(
+                    result, benchmark_timings["write_output"], output_metadata, stream_breakdown = _stream_prepared_result_to_output(
                         selected_result,
                         request_id=request_id,
                         final_path=final_path,
                         streaming_interval=streaming_interval,
                     )
                     benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    _apply_timing_breakdown(benchmark_timings, stream_breakdown)
                     stream_session_dirs.append(result["stream_session_dir"])
                     metrics = dict(result.get("metrics") or {})
                 else:
                     send_progress(60, "Generating audio...", request_id=request_id)
                     generation_start = time.perf_counter()
-                    result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                    result, metrics, output_metadata, benchmark_timings["write_output"], finalize_breakdown = _finalize_generated_audio(
                         selected_result,
                         final_path=final_path,
                         streaming_used=False,
                     )
                     benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                    _apply_timing_breakdown(benchmark_timings, finalize_breakdown)
             else:
                 strategy, _ = _clone_delivery_strategy(
                     prepared_context,
@@ -1806,124 +2004,107 @@ def handle_generate(params, request_id=None):
                     if stream and request_id is not None:
                         send_progress(55, "Streaming audio...", request_id=request_id)
                         generation_start = time.perf_counter()
-                        result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
+                        result, benchmark_timings["write_output"], output_metadata, stream_breakdown = _stream_generator_to_output(
                             generator,
                             request_id=request_id,
                             final_path=final_path,
                         )
                         benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        _apply_timing_breakdown(benchmark_timings, stream_breakdown)
                         stream_session_dirs.append(result["stream_session_dir"])
                         metrics = dict(result.get("metrics") or {})
                     else:
                         send_progress(60, "Generating audio...", request_id=request_id)
                         generation_start = time.perf_counter()
-                        prepared_result = _collect_single_generation_result(generator)
+                        prepared_result, collection_breakdown = _collect_generation_result_with_timings(generator)
                         benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        _apply_timing_breakdown(benchmark_timings, collection_breakdown)
                         send_progress(90, "Saving audio...", request_id=request_id)
-                        result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                        result, metrics, output_metadata, benchmark_timings["write_output"], finalize_breakdown = _finalize_generated_audio(
                             prepared_result,
                             final_path=final_path,
                             streaming_used=False,
                         )
+                        _apply_timing_breakdown(benchmark_timings, finalize_breakdown)
                 else:
                     generation_start = time.perf_counter()
-                    fallback_kwargs = {
-                        "text": text,
-                        "temperature": temperature_value,
-                        "verbose": False,
-                    }
-                    if max_tokens is not None:
-                        fallback_kwargs["max_tokens"] = int(max_tokens)
-                    fallback_kwargs["ref_audio"] = clean_ref_audio
-                    if resolved_ref_text:
-                        fallback_kwargs["ref_text"] = resolved_ref_text
-
+                    generator = _build_clone_fallback_generator(
+                        _current_model,
+                        text=text,
+                        temperature=temperature_value,
+                        clean_ref_audio=clean_ref_audio,
+                        resolved_ref_text=resolved_ref_text,
+                        max_tokens=max_tokens,
+                        stream=bool(stream and request_id is not None),
+                        streaming_interval=streaming_interval,
+                    )
                     if stream and request_id is not None:
-                        fallback_kwargs["stream"] = True
-                        fallback_kwargs["streaming_interval"] = streaming_interval
                         send_progress(55, "Streaming audio...", request_id=request_id)
-                        result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
-                            _current_model.generate(**fallback_kwargs),
+                        result, benchmark_timings["write_output"], output_metadata, stream_breakdown = _stream_generator_to_output(
+                            generator,
                             request_id=request_id,
                             final_path=final_path,
                         )
                         benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        _apply_timing_breakdown(benchmark_timings, stream_breakdown)
                         stream_session_dirs.append(result["stream_session_dir"])
                         metrics = dict(result.get("metrics") or {})
                     else:
                         send_progress(60, "Generating audio...", request_id=request_id)
-                        fallback_result = _collect_single_generation_result(_current_model.generate(**fallback_kwargs))
+                        fallback_result, collection_breakdown = _collect_generation_result_with_timings(generator)
                         benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+                        _apply_timing_breakdown(benchmark_timings, collection_breakdown)
                         send_progress(90, "Saving audio...", request_id=request_id)
-                        result, metrics, output_metadata, benchmark_timings["write_output"] = _finalize_generated_audio(
+                        result, metrics, output_metadata, benchmark_timings["write_output"], finalize_breakdown = _finalize_generated_audio(
                             fallback_result,
                             final_path=final_path,
                             streaming_used=False,
                         )
+                        _apply_timing_breakdown(benchmark_timings, finalize_breakdown)
         elif stream and request_id is not None:
-            stream_kwargs = {
-                "text": text,
-                "temperature": temperature_value,
-                "verbose": False,
-                "stream": True,
-                "streaming_interval": streaming_interval,
-            }
-            if max_tokens is not None:
-                stream_kwargs["max_tokens"] = int(max_tokens)
-            if voice:
-                stream_kwargs["voice"] = voice
-            if instruct:
-                stream_kwargs["instruct"] = instruct
+            generator = _build_standard_generator(
+                _current_model,
+                text=text,
+                temperature=temperature_value,
+                max_tokens=max_tokens,
+                voice=voice,
+                instruct=instruct,
+                stream=True,
+                streaming_interval=streaming_interval,
+            )
             send_progress(35, "Streaming audio...", request_id=request_id)
             generation_start = time.perf_counter()
-            result, benchmark_timings["write_output"], output_metadata = _consume_streaming_generator(
-                _current_model.generate(**stream_kwargs),
+            result, benchmark_timings["write_output"], output_metadata, stream_breakdown = _stream_generator_to_output(
+                generator,
                 request_id=request_id,
                 final_path=final_path,
             )
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+            _apply_timing_breakdown(benchmark_timings, stream_breakdown)
             stream_session_dirs.append(result["stream_session_dir"])
             metrics = dict(result.get("metrics") or {})
             send_progress(85, "Saving audio...", request_id=request_id)
         else:
-            gen_kwargs = {
-                "model": _current_model,
-                "text": text,
-                "output_path": target_dir,
-                "file_prefix": target_stem,
-                "verbose": False,
-                "temperature": temperature_value,
-            }
-            if max_tokens is not None:
-                gen_kwargs["max_tokens"] = int(max_tokens)
-            if voice:
-                gen_kwargs["voice"] = voice
-                if instruct:
-                    gen_kwargs["instruct"] = instruct
-            elif instruct:
-                gen_kwargs["instruct"] = instruct
-
+            generator = _build_standard_generator(
+                _current_model,
+                text=text,
+                temperature=temperature_value,
+                max_tokens=max_tokens,
+                voice=voice,
+                instruct=instruct,
+            )
             generation_start = time.perf_counter()
             send_progress(45, "Generating audio...", request_id=request_id)
-            _generate_audio_fn(**gen_kwargs)
+            collected_result, collection_breakdown = _collect_generation_result_with_timings(generator)
             benchmark_timings["generation"] = int((time.perf_counter() - generation_start) * 1000)
+            _apply_timing_breakdown(benchmark_timings, collection_breakdown)
             send_progress(85, "Saving audio...", request_id=request_id)
-
-            write_start = time.perf_counter()
-            if not os.path.exists(generated_path):
-                raise RuntimeError("Generation produced no audio file")
-            if generated_path != final_path:
-                os.replace(generated_path, final_path)
-            benchmark_timings["write_output"] = int((time.perf_counter() - write_start) * 1000)
-            output_metadata = get_audio_metadata(final_path)
-            metrics = {
-                "processing_time_seconds": round(benchmark_timings["generation"] / 1000.0, 4),
-                "streaming_used": False,
-            }
-            result = {
-                "audio_path": final_path,
-                "duration_seconds": round(output_metadata["duration_seconds"], 2),
-            }
+            result, metrics, output_metadata, benchmark_timings["write_output"], finalize_breakdown = _finalize_generated_audio(
+                collected_result,
+                final_path=final_path,
+                streaming_used=False,
+            )
+            _apply_timing_breakdown(benchmark_timings, finalize_breakdown)
 
         metrics = dict(metrics or {})
         metrics.setdefault("streaming_used", bool(stream and request_id is not None))

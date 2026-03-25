@@ -7,16 +7,10 @@ struct VoiceCloningView: View {
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
 
-    @Binding var pendingSavedVoiceSelectionID: String?
-    let isActive: Bool
-
-    @State private var referenceAudioPath: String?
-    @State private var referenceTranscript = ""
-    @State private var text = ""
+    @Binding private var draft: VoiceCloningDraft
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var transcriptLoadError: String?
-    @State private var selectedVoice: Voice?
     @State private var isDragOver = false
     @State private var showingBatch = false
 
@@ -34,23 +28,28 @@ struct VoiceCloningView: View {
     }
 
     private var canGenerate: Bool {
-        pythonBridge.isReady && isModelAvailable && referenceAudioPath != nil && !text.isEmpty
+        pythonBridge.isReady && isModelAvailable && draft.referenceAudioPath != nil && !draft.text.isEmpty
     }
 
     private var canRunBatch: Bool {
-        pythonBridge.isReady && referenceAudioPath != nil && isModelAvailable
+        pythonBridge.isReady && draft.referenceAudioPath != nil && isModelAvailable
     }
 
     private var idlePrewarmTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(referenceAudioPath ?? "none")-\(isModelAvailable)"
+        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(draft.referenceAudioPath ?? "none")-\(draft.referenceTranscript)-\(isModelAvailable)"
     }
 
     private var savedVoicesLoadTaskID: String {
-        "\(isActive)-\(pythonBridge.isReady)-\(pendingSavedVoiceSelectionID ?? "none")"
+        "\(pythonBridge.isReady)-\(draft.selectedSavedVoiceID ?? "none")"
     }
 
     private var savedVoices: [Voice] {
         savedVoicesViewModel.voices
+    }
+
+    private var selectedVoice: Voice? {
+        guard let selectedSavedVoiceID = draft.selectedSavedVoiceID else { return nil }
+        return savedVoices.first(where: { $0.id == selectedSavedVoiceID })
     }
 
     private var savedVoicesLoadError: String? {
@@ -60,10 +59,10 @@ struct VoiceCloningView: View {
 
     private var selectedSavedVoiceID: Binding<String?> {
         Binding(
-            get: { selectedVoice?.id },
+            get: { draft.selectedSavedVoiceID },
             set: { newID in
                 guard let newID else {
-                    if selectedVoice != nil {
+                    if draft.referenceAudioPath != nil || draft.selectedSavedVoiceID != nil {
                         clearReference()
                     }
                     return
@@ -82,10 +81,10 @@ struct VoiceCloningView: View {
         if !isModelAvailable {
             return "Install the active model"
         }
-        if referenceAudioPath == nil {
+        if draft.referenceAudioPath == nil {
             return "Add a reference"
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "Add a script"
         }
         return "Review the take"
@@ -98,13 +97,17 @@ struct VoiceCloningView: View {
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."
         }
-        if referenceAudioPath == nil {
+        if draft.referenceAudioPath == nil {
             return "Saved voices or imported clips both work here. Choose one before writing the final line."
         }
-        if text.isEmpty {
+        if draft.text.isEmpty {
             return "Your reference is ready. Add the line you want the cloned voice to perform."
         }
         return "Everything is in place for a live preview and a saved clone."
+    }
+
+    init(draft: Binding<VoiceCloningDraft>) {
+        _draft = draft
     }
 
     var body: some View {
@@ -131,9 +134,9 @@ struct VoiceCloningView: View {
                 : nil
         )
         .task(id: savedVoicesLoadTaskID) {
-            guard isActive, pythonBridge.isReady else { return }
+            guard pythonBridge.isReady else { return }
 
-            if pendingSavedVoiceSelectionID != nil {
+            if draft.selectedSavedVoiceID != nil {
                 await savedVoicesViewModel.refresh(using: pythonBridge)
             } else {
                 await savedVoicesViewModel.ensureLoaded(using: pythonBridge)
@@ -150,8 +153,8 @@ struct VoiceCloningView: View {
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .clone,
-                refAudio: referenceAudioPath,
-                refText: referenceTranscript.isEmpty ? nil : referenceTranscript
+                refAudio: draft.referenceAudioPath,
+                refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
             )
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
@@ -178,7 +181,7 @@ private extension VoiceCloningView {
                 VoiceCloningReferenceSettings(
                     savedVoices: savedVoices,
                     selectedSavedVoiceID: selectedSavedVoiceID,
-                    referenceAudioPath: referenceAudioPath,
+                    referenceAudioPath: draft.referenceAudioPath,
                     selectedVoice: selectedVoice,
                     savedVoicesLoadError: savedVoicesLoadError,
                     transcriptLoadError: transcriptLoadError,
@@ -186,7 +189,7 @@ private extension VoiceCloningView {
                     clearReference: clearReference,
                     retrySavedVoices: { Task { await savedVoicesViewModel.refresh(using: pythonBridge) } }
                 )
-                VoiceCloningTranscriptSettings(referenceTranscript: $referenceTranscript)
+                VoiceCloningTranscriptSettings(referenceTranscript: $draft.referenceTranscript)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -209,7 +212,7 @@ private extension VoiceCloningView {
         ) {
             VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
-                    text: $text,
+                    text: $draft.text,
                     isGenerating: isGenerating,
                     placeholder: "What should the cloned voice say?",
                     buttonColor: AppTheme.voiceCloning,
@@ -219,7 +222,7 @@ private extension VoiceCloningView {
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
                 )
-                .disabled(!pythonBridge.isReady || !isModelAvailable || referenceAudioPath == nil)
+                .disabled(!pythonBridge.isReady || !isModelAvailable || draft.referenceAudioPath == nil)
 
                 VoiceCloningComposerFooter(
                     canGenerate: canGenerate,
@@ -239,9 +242,9 @@ private extension VoiceCloningView {
 
 private extension VoiceCloningView {
     func generate() {
-        guard !text.isEmpty else { return }
+        guard !draft.text.isEmpty else { return }
 
-        guard let refPath = referenceAudioPath else {
+        guard let refPath = draft.referenceAudioPath else {
             errorMessage = "Select a reference audio file before generating."
             return
         }
@@ -266,8 +269,8 @@ private extension VoiceCloningView {
                     return
                 }
 
-                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                let title = String(text.prefix(40))
+                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: draft.text)
+                let title = String(draft.text.prefix(40))
                 audioPlayer.prepareStreamingPreview(
                     title: title,
                     shouldAutoPlay: AudioService.shouldAutoPlay
@@ -275,9 +278,9 @@ private extension VoiceCloningView {
 
                 let result = try await pythonBridge.generateCloneStreamingFlow(
                     modelID: model.id,
-                    text: text,
+                    text: draft.text,
                     refAudio: refPath,
-                    refText: referenceTranscript.isEmpty ? nil : referenceTranscript,
+                    refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
                     emotion: "Normal tone",
                     deliveryProfile: nil,
                     outputPath: outputPath
@@ -285,7 +288,7 @@ private extension VoiceCloningView {
 
                 let voiceName = selectedVoice?.name ?? URL(fileURLWithPath: refPath).deletingPathExtension().lastPathComponent
                 var generation = Generation(
-                    text: text,
+                    text: draft.text,
                     mode: model.mode.rawValue,
                     modelTier: model.tier,
                     voice: voiceName,
@@ -296,13 +299,15 @@ private extension VoiceCloningView {
                     createdAt: Date()
                 )
                 try GenerationPersistence.persistAndAutoplay(
-                    &generation, result: result, text: text,
+                    &generation, result: result, text: draft.text,
                     audioPlayer: audioPlayer, caller: "VoiceCloningView"
                 )
                 UITestAutomationSupport.recordAction("clone-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 UITestAutomationSupport.recordAction("clone-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
-                audioPlayer.abortLivePreviewIfNeeded()
+                if (error as? GenerationPersistence.PersistenceError) == nil {
+                    audioPlayer.abortLivePreviewIfNeeded()
+                }
                 errorMessage = error.localizedDescription
             }
             isGenerating = false
@@ -311,47 +316,42 @@ private extension VoiceCloningView {
 
     func prewarmCloneModelIfNeeded() async {
         guard let model = cloneModel else { return }
-        guard isActive else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        guard let refPath = referenceAudioPath else { return }
+        guard let refPath = draft.referenceAudioPath else { return }
 
         await pythonBridge.prewarmModelIfNeeded(
             modelID: model.id,
             mode: .clone,
             refAudio: refPath,
-            refText: referenceTranscript.isEmpty ? nil : referenceTranscript
+            refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
         )
     }
 
     func selectSavedVoice(_ voice: Voice) {
-        selectedVoice = voice
-        referenceAudioPath = voice.wavPath
+        draft.selectedSavedVoiceID = voice.id
+        draft.referenceAudioPath = voice.wavPath
         do {
-            referenceTranscript = try voice.loadTranscript() ?? ""
+            draft.referenceTranscript = try voice.loadTranscript() ?? ""
             transcriptLoadError = nil
         } catch {
-            referenceTranscript = ""
+            draft.referenceTranscript = ""
             transcriptLoadError = "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
         }
     }
 
     func clearReference() {
-        referenceAudioPath = nil
-        referenceTranscript = ""
-        selectedVoice = nil
+        draft.clearReference()
         transcriptLoadError = nil
     }
 
     func syncSavedVoiceSelectionState() {
-        if let pendingSavedVoiceSelectionID,
-           let voice = savedVoices.first(where: { $0.id == pendingSavedVoiceSelectionID }) {
+        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
+           let voice = savedVoices.first(where: { $0.id == selectedSavedVoiceID }) {
             selectSavedVoice(voice)
-            self.pendingSavedVoiceSelectionID = nil
             return
         }
 
-        if let selectedVoice,
-           !savedVoices.contains(where: { $0.id == selectedVoice.id }) {
+        if draft.selectedSavedVoiceID != nil {
             clearReference()
         }
     }
@@ -374,8 +374,8 @@ private extension VoiceCloningView {
                 return
             }
             Task { @MainActor in
-                referenceAudioPath = url.path
-                selectedVoice = nil
+                draft.referenceAudioPath = url.path
+                draft.selectedSavedVoiceID = nil
                 transcriptLoadError = nil
             }
         }
@@ -385,8 +385,8 @@ private extension VoiceCloningView {
     func browseForAudio() {
         if UITestAutomationSupport.isStubBackendMode,
            let url = UITestAutomationSupport.importAudioURL {
-            referenceAudioPath = url.path
-            selectedVoice = nil
+            draft.referenceAudioPath = url.path
+            draft.selectedSavedVoiceID = nil
             transcriptLoadError = nil
             return
         }
@@ -395,8 +395,8 @@ private extension VoiceCloningView {
         panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
-            referenceAudioPath = url.path
-            selectedVoice = nil
+            draft.referenceAudioPath = url.path
+            draft.selectedSavedVoiceID = nil
             transcriptLoadError = nil
         }
     }

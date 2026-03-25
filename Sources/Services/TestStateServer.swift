@@ -66,6 +66,10 @@ final class TestStateServer: @unchecked Sendable {
             }
         case let p where p.hasPrefix("/navigate"):
             handleNavigate(path: p, connection: connection)
+        case let p where p.hasPrefix("/activate-window"):
+            handleActivateWindow(path: p, connection: connection)
+        case let p where p.hasPrefix("/start-preview"):
+            handleStartPreview(path: p, connection: connection)
         default:
             sendJSON(["error": "not_found", "path": path], status: 404, connection: connection)
         }
@@ -84,6 +88,39 @@ final class TestStateServer: @unchecked Sendable {
                 userInfo: ["screen": screen]
             )
             // Brief delay for navigation to take effect
+            try? await Task.sleep(for: .milliseconds(200))
+            let state = TestStateProvider.shared.snapshot()
+            self.sendJSON(state, connection: connection)
+        }
+    }
+
+    private func handleActivateWindow(path: String, connection: NWConnection) {
+        let reason = extractQueryParam(from: path, key: "reason") ?? "remote_request"
+
+        Task { @MainActor in
+            _ = await UITestWindowCoordinator.shared.activateMainWindow(reason: reason)
+            let state = TestStateProvider.shared.snapshot()
+            self.sendJSON(state, connection: connection)
+        }
+    }
+
+    private func handleStartPreview(path: String, connection: NWConnection) {
+        guard let screen = extractQueryParam(from: path, key: "screen") else {
+            sendJSON(["error": "missing_screen_param"], status: 400, connection: connection)
+            return
+        }
+
+        let text = extractQueryParam(from: path, key: "text") ?? ""
+
+        Task { @MainActor in
+            NotificationCenter.default.post(
+                name: .testStartLivePreview,
+                object: nil,
+                userInfo: [
+                    "screen": screen,
+                    "text": text,
+                ]
+            )
             try? await Task.sleep(for: .milliseconds(200))
             let state = TestStateProvider.shared.snapshot()
             self.sendJSON(state, connection: connection)
@@ -128,4 +165,5 @@ final class TestStateServer: @unchecked Sendable {
 
 extension Notification.Name {
     static let testNavigateToScreen = Notification.Name("testNavigateToScreen")
+    static let testStartLivePreview = Notification.Name("testStartLivePreview")
 }

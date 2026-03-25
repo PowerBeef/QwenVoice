@@ -4,6 +4,7 @@ import SwiftUI
 struct SidebarPlayerView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var playbackProgress: AudioPlayerViewModel.PlaybackProgress
+    let inlinePlayerActivity: ActivityStatus?
 
     var body: some View {
         if audioPlayer.hasAudio {
@@ -92,6 +93,10 @@ struct SidebarPlayerView: View {
                         .foregroundStyle(.tertiary)
                 }
 
+                if let inlinePlayerActivity {
+                    InlineLivePreviewStatusView(activity: inlinePlayerActivity)
+                }
+
                 if let playbackError = audioPlayer.playbackError {
                     Text(playbackError)
                         .font(.caption2)
@@ -109,5 +114,56 @@ struct SidebarPlayerView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("sidebarPlayer_bar")
         }
+    }
+}
+
+private struct InlineLivePreviewStatusView: View {
+    let activity: ActivityStatus
+
+    private var progressFraction: Double? {
+        guard let fraction = activity.fraction else { return nil }
+        return min(max(fraction, 0.0), 1.0)
+    }
+
+    private var percentLabel: String? {
+        guard let progressFraction else { return nil }
+        let percent = Int((progressFraction * 100.0).rounded())
+        return "\(percent)%"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+
+                Text(activity.label)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                if let percentLabel {
+                    Text(percentLabel)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            if let progressFraction {
+                ProgressView(value: progressFraction, total: 1.0)
+                    .tint(AppTheme.inlinePreviewProgressTint)
+                    .scaleEffect(y: 0.5, anchor: .center)
+                    .accessibilityIdentifier("sidebarPlayer_liveProgress")
+                    .accessibilityValue(percentLabel ?? "in progress")
+            }
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebarPlayer_liveStatus")
+        .accessibilityLabel(activity.label)
+        .accessibilityValue(percentLabel ?? "in progress")
     }
 }

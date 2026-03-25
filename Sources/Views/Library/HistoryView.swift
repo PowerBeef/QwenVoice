@@ -70,7 +70,6 @@ struct HistoryView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
-    let isActive: Bool
     @Binding var searchText: String
     @Binding var sortOrder: HistorySortOrder
 
@@ -82,7 +81,6 @@ struct HistoryView: View {
     @State private var itemToDelete: HistoryListItem?
     @State private var actionAlert: HistoryActionAlert?
     @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
-    @State private var needsReloadWhenActive = false
     @State private var pendingReloadAfterCurrentLoad = false
     @State private var filteredItems: [HistoryListItem] = []
     @State private var itemsRevision = 0
@@ -90,48 +88,47 @@ struct HistoryView: View {
 
     var body: some View {
         content
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .accessibilityIdentifier("screen_history")
-        .onAppear(perform: handleAppear)
-        .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in handleGenerationSaved() }
-        .onChange(of: isActive) { _, val in handleActiveChange(val) }
-        .onChange(of: itemsRevision) { _, _ in recomputeFilteredItems() }
-        .onChange(of: sortOrder) { _, _ in recomputeFilteredItems() }
-        .onChange(of: searchText) { _, _ in
-            searchDebounceTask?.cancel()
-            searchDebounceTask = Task {
-                try? await Task.sleep(for: .milliseconds(200))
-                guard !Task.isCancelled else { return }
-                recomputeFilteredItems()
-            }
-        }
-        .onDisappear(perform: handleDisappear)
-        .alert("Delete Generation?", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {
-                itemToDelete = nil
-            }
-            Button("Delete", role: .destructive) {
-                if let item = itemToDelete {
-                    confirmDelete(item)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .accessibilityIdentifier("screen_history")
+            .onAppear(perform: handleAppear)
+            .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in handleGenerationSaved() }
+            .onChange(of: itemsRevision) { _, _ in recomputeFilteredItems() }
+            .onChange(of: sortOrder) { _, _ in recomputeFilteredItems() }
+            .onChange(of: searchText) { _, _ in
+                searchDebounceTask?.cancel()
+                searchDebounceTask = Task {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    guard !Task.isCancelled else { return }
+                    recomputeFilteredItems()
                 }
-                itemToDelete = nil
             }
-        } message: {
-            Text("This will permanently delete the generation and its audio file.")
-        }
-        .alert(item: $actionAlert) { alert in
-            Alert(
-                title: Text(alert.title),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .sheet(item: $savedVoiceSheetConfiguration) { configuration in
-            SavedVoiceSheet(configuration: configuration) { voice in
-                handleSavedVoice(voice)
+            .onDisappear(perform: handleDisappear)
+            .alert("Delete Generation?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    itemToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let item = itemToDelete {
+                        confirmDelete(item)
+                    }
+                    itemToDelete = nil
+                }
+            } message: {
+                Text("This will permanently delete the generation and its audio file.")
             }
-            .environmentObject(pythonBridge)
-        }
+            .alert(item: $actionAlert) { alert in
+                Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+            .sheet(item: $savedVoiceSheetConfiguration) { configuration in
+                SavedVoiceSheet(configuration: configuration) { voice in
+                    handleSavedVoice(voice)
+                }
+                .environmentObject(pythonBridge)
+            }
     }
 
     @ViewBuilder
@@ -164,20 +161,17 @@ struct HistoryView: View {
             }
         } else {
             List(filteredItems) { item in
+                let saveVoiceConfiguration = saveVoiceConfiguration(for: item)
                 HistoryRow(
                     item: item,
                     onPlay: {
                         audioPlayer.playFile(item.generation.audioPath, title: item.textPreview)
                     },
-                    onSaveToSavedVoices: item.generation.mode == GenerationMode.clone.rawValue
-                        ? {
-                            savedVoiceSheetConfiguration = SavedVoiceSheetConfiguration.cloneResult(
-                                suggestedName: suggestedSavedVoiceName(for: item),
-                                audioPath: item.generation.audioPath,
-                                transcript: item.generation.text
-                            )
+                    onSaveToSavedVoices: saveVoiceConfiguration.map { configuration in
+                        {
+                            savedVoiceSheetConfiguration = configuration
                         }
-                        : nil,
+                    },
                     onSaveAs: {
                         exportGeneration(item)
                     },
@@ -202,24 +196,30 @@ struct HistoryView: View {
 }
 
 private extension HistoryView {
-    func handleAppear() {
-        if isActive && items.isEmpty {
-            reloadHistory()
+    func saveVoiceConfiguration(for item: HistoryListItem) -> SavedVoiceSheetConfiguration? {
+        switch item.generation.mode {
+        case GenerationMode.clone.rawValue:
+            return .cloneResult(
+                suggestedName: suggestedSavedVoiceName(for: item),
+                audioPath: item.generation.audioPath,
+                transcript: item.generation.text
+            )
+        case GenerationMode.design.rawValue:
+            return .designResult(
+                voiceDescription: item.generation.voice ?? "",
+                audioPath: item.generation.audioPath,
+                transcript: item.generation.text
+            )
+        default:
+            return nil
         }
+    }
+
+    func handleAppear() {
+        reloadHistory()
     }
 
     func handleGenerationSaved() {
-        if isActive {
-            reloadHistory()
-        } else {
-            needsReloadWhenActive = true
-        }
-    }
-
-    func handleActiveChange(_ isActive: Bool) {
-        guard isActive else { return }
-        guard items.isEmpty || needsReloadWhenActive || loadError != nil else { return }
-        needsReloadWhenActive = false
         reloadHistory()
     }
 

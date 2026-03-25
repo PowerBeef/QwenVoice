@@ -32,4 +32,20 @@ final class SidebarNavigationTests: QwenVoiceUITestBase {
         navigateTo("sidebar_history", expectScreen: "screen_history")
         navigateTo("sidebar_customVoice", expectScreen: "screen_customVoice")
     }
+
+    func testRepeatedSidebarNavigationTracksActiveScreen() {
+        let navigationLoop: [(sidebarID: String, elementID: String)] = [
+            ("sidebar_voiceDesign", "voiceDesign_voiceDescriptionField"),
+            ("sidebar_models", "models_title"),
+            ("sidebar_voiceCloning", "voiceCloning_importButton"),
+            ("sidebar_customVoice", "customVoice_speakerPicker"),
+        ]
+
+        for _ in 0..<2 {
+            for (sidebarID, elementID) in navigationLoop {
+                clickElement(sidebarID)
+                assertElementExists(elementID)
+            }
+        }
+    }
 }

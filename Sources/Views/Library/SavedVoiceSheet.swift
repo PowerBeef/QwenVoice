@@ -34,6 +34,21 @@ struct SavedVoiceSheetConfiguration: Identifiable {
             initialTranscript: transcript
         )
     }
+
+    static func designResult(
+        voiceDescription: String,
+        audioPath: String,
+        transcript: String
+    ) -> SavedVoiceSheetConfiguration {
+        SavedVoiceSheetConfiguration(
+            title: "Save Designed Voice",
+            subtitle: "Keep this designed voice as a reusable reference for Voice Cloning.",
+            confirmLabel: "Save to Saved Voices",
+            initialName: SavedVoiceNameSuggestion.designResultName(from: voiceDescription),
+            initialAudioPath: audioPath,
+            initialTranscript: transcript
+        )
+    }
 }
 
 enum SavedVoiceNameSanitizer {
@@ -46,6 +61,38 @@ enum SavedVoiceNameSanitizer {
             )
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: " ", with: "_")
+    }
+}
+
+enum SavedVoiceNameSuggestion {
+    static let designedVoiceFallback = "Designed_Voice"
+
+    static func designResultName(
+        from voiceDescription: String,
+        fallback: String = designedVoiceFallback,
+        maxLength: Int = 36
+    ) -> String {
+        let normalized = SavedVoiceNameSanitizer.normalizedName(voiceDescription)
+        guard !normalized.isEmpty else { return fallback }
+        guard normalized.count > maxLength else { return normalized }
+
+        let components = normalized.split(separator: "_")
+        var shortened = ""
+        for component in components {
+            let separator = shortened.isEmpty ? "" : "_"
+            let candidate = shortened + separator + component
+            if candidate.count > maxLength {
+                break
+            }
+            shortened = candidate
+        }
+
+        if shortened.isEmpty {
+            shortened = String(normalized.prefix(maxLength))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "_-"))
+        }
+
+        return shortened.isEmpty ? fallback : shortened
     }
 }
 

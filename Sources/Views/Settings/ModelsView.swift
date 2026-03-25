@@ -3,7 +3,6 @@ import SwiftUI
 struct ModelsView: View {
     @EnvironmentObject private var viewModel: ModelManagerViewModel
 
-    let isActive: Bool
     @Binding var highlightedModelID: String?
 
     @State private var flashedModelID: String?
@@ -11,21 +10,11 @@ struct ModelsView: View {
     @State private var showDeleteConfirmation = false
 
     private var installedModels: [TTSModel] {
-        TTSModel.all.filter { model in
-            if case .downloaded = viewModel.statuses[model.id] {
-                return true
-            }
-            return false
-        }
+        TTSModel.all.filter(isInstalledModel)
     }
 
     private var otherModels: [TTSModel] {
-        TTSModel.all.filter { model in
-            if case .downloaded = viewModel.statuses[model.id] {
-                return false
-            }
-            return true
-        }
+        TTSModel.all.filter { !isInstalledModel($0) }
     }
 
     var body: some View {
@@ -81,13 +70,11 @@ struct ModelsView: View {
                     .accessibilityIdentifier("models_title")
             }
             .accessibilityIdentifier("screen_models")
-            .task(id: isActive) {
-                guard isActive else { return }
+            .task {
                 await viewModel.refresh()
                 focusHighlightedModel(using: proxy)
             }
             .onChange(of: highlightedModelID) { _, _ in
-                guard isActive else { return }
                 focusHighlightedModel(using: proxy)
             }
         }
@@ -117,6 +104,17 @@ struct ModelsView: View {
 }
 
 private extension ModelsView {
+    func isInstalledModel(_ model: TTSModel) -> Bool {
+        switch viewModel.statuses[model.id] {
+        case .downloaded:
+            return true
+        case .checking:
+            return viewModel.isLikelyInstalled(model)
+        default:
+            return false
+        }
+    }
+
     func focusHighlightedModel(using proxy: ScrollViewProxy) {
         guard let highlightedModelID else { return }
         let modelID = highlightedModelID
@@ -205,7 +203,7 @@ struct ModelRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let totalBytes, totalBytes > 0 {
                     ProgressView(value: Double(downloadedBytes), total: Double(totalBytes))
-                        .tint(AppTheme.accent)
+                        .tint(AppTheme.statusProgressTint)
                     Text(
                         "\(ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
                     )
@@ -213,7 +211,7 @@ struct ModelRow: View {
                     .foregroundStyle(.secondary)
                 } else {
                     ProgressView()
-                        .tint(AppTheme.accent)
+                        .tint(AppTheme.statusProgressTint)
                     Text("Preparing download...")
                         .font(.caption)
                         .foregroundStyle(.secondary)

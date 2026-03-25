@@ -61,4 +61,100 @@ final class PythonBridgeLineParserTests: XCTestCase {
         let response = PythonBridgeLineParser.parse(json)!
         XCTAssertFalse(PythonBridgeLineParser.isHandledNotification(response))
     }
+
+    func testSidebarFooterPresentationInlinesLivePreviewActivity() {
+        let activity = ActivityStatus(
+            label: "Streaming audio...",
+            fraction: 0.45,
+            presentation: .inlinePlayer
+        )
+
+        let presentation = SidebarFooterPresentation.resolve(
+            sidebarStatus: .running(activity),
+            isLiveStream: true
+        )
+
+        XCTAssertEqual(presentation.inlinePlayerActivity, activity)
+        XCTAssertFalse(presentation.showsStandaloneStatus)
+    }
+
+    func testSidebarFooterPresentationKeepsStandaloneStatusForRegularWork() {
+        let activity = ActivityStatus(
+            label: "Preparing model...",
+            fraction: 0.12,
+            presentation: .standaloneCard
+        )
+
+        let presentation = SidebarFooterPresentation.resolve(
+            sidebarStatus: .running(activity),
+            isLiveStream: true
+        )
+
+        XCTAssertNil(presentation.inlinePlayerActivity)
+        XCTAssertTrue(presentation.showsStandaloneStatus)
+    }
+
+    func testSidebarFooterPresentationFallsBackToStandaloneWhenPlayerIsNotLive() {
+        let activity = ActivityStatus(
+            label: "Streaming audio...",
+            fraction: 0.45,
+            presentation: .inlinePlayer
+        )
+
+        let presentation = SidebarFooterPresentation.resolve(
+            sidebarStatus: .running(activity),
+            isLiveStream: false
+        )
+
+        XCTAssertNil(presentation.inlinePlayerActivity)
+        XCTAssertTrue(presentation.showsStandaloneStatus)
+    }
+
+    @MainActor
+    func testDesignPrewarmIdentityIgnoresEmotionOnlyChanges() {
+        let calmKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_design",
+            mode: .design,
+            instruct: "Calm"
+        )
+        let intenseKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_design",
+            mode: .design,
+            instruct: "Intense"
+        )
+
+        XCTAssertEqual(calmKey, intenseKey)
+    }
+
+    @MainActor
+    func testCustomPrewarmIdentityStillTracksVoiceAndDeliveryChanges() {
+        let baseKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_custom",
+            mode: .custom,
+            voice: "Vivian",
+            instruct: "Conversational"
+        )
+        let voiceChangedKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_custom",
+            mode: .custom,
+            voice: "Ethan",
+            instruct: "Conversational"
+        )
+        let instructionChangedKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_custom",
+            mode: .custom,
+            voice: "Vivian",
+            instruct: "Dramatic"
+        )
+
+        XCTAssertNotEqual(baseKey, voiceChangedKey)
+        XCTAssertNotEqual(baseKey, instructionChangedKey)
+    }
+
+    @MainActor
+    func testIdlePrewarmPolicySkipsCustomMode() {
+        XCTAssertFalse(PythonBridge.supportsIdlePrewarm(mode: .custom))
+        XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .design))
+        XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .clone))
+    }
 }

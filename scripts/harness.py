@@ -33,6 +33,8 @@ def _run_test(args: argparse.Namespace) -> None:
         layer=args.layer,
         python_path=args.python or None,
         artifact_dir=getattr(args, "artifact_dir", None),
+        ui_backend_mode=getattr(args, "ui_backend_mode", "live"),
+        ui_data_root=getattr(args, "ui_data_root", "fixture"),
     )
     duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("test", suites, duration_ms)
@@ -97,6 +99,18 @@ def main() -> None:
     p_test.add_argument("--python", default="", help="Explicit Python interpreter path")
     p_test.add_argument("--artifact-dir", default=None,
         help="Directory with chunk_*.wav + final.wav for offline audio analysis")
+    p_test.add_argument(
+        "--ui-backend-mode",
+        choices=["live", "stub"],
+        default="live",
+        help="Backend mode for UI/design/perf layers",
+    )
+    p_test.add_argument(
+        "--ui-data-root",
+        choices=["fixture", "real"],
+        default="fixture",
+        help="App data root for live UI/design/perf layers",
+    )
     p_test.set_defaults(func=_run_test)
 
     # bench

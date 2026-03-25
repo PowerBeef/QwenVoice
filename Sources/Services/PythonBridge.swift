@@ -1,8 +1,14 @@
 import Foundation
 
 struct ActivityStatus: Equatable {
+    enum Presentation: Equatable {
+        case standaloneCard
+        case inlinePlayer
+    }
+
     let label: String
     let fraction: Double?
+    let presentation: Presentation
 }
 
 enum SidebarStatus: Equatable {
@@ -39,6 +45,7 @@ final class PythonBridge: ObservableObject {
         var batchTotal: Int?
         var currentPhase: GenerationPhase
         var currentRequestID: Int?
+        var activityPresentation: ActivityStatus.Presentation
     }
 
     private enum GenerationPhase {
@@ -57,6 +64,12 @@ final class PythonBridge: ObservableObject {
         let context: StreamingRequestContext
         var streamSessionDirectory: String?
         var cumulativeDurationSeconds: Double
+    }
+
+    private struct InFlightModelLoad {
+        let token: UUID
+        let id: String
+        let task: Task<[String: RPCValue], Error>
     }
 
     private struct PendingRequest {
@@ -78,6 +91,7 @@ final class PythonBridge: ObservableObject {
     private var sidebarStatusResetTask: Task<Void, Never>?
     private var recentStderrLines: [String] = []
     private var loadedModelID: String?
+    private var inFlightModelLoad: InFlightModelLoad?
     private var prewarmedRequestKeys: Set<String> = []
     private var prewarmingRequestKeys: Set<String> = []
     private var stubRequestSeed = 10_000
@@ -150,6 +164,7 @@ final class PythonBridge: ObservableObject {
                 self.activeGenerationSession = nil
                 self.activeStreamingRequests.removeAll()
                 self.loadedModelID = nil
+                self.inFlightModelLoad = nil
                 self.clearActiveProgressTracking()
                 if shouldReportCrash {
                     self.lastError = self.recentStderrLines.last ?? PythonBridgeError.processTerminated.localizedDescription
@@ -198,6 +213,7 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
+        inFlightModelLoad = nil
         prewarmedRequestKeys = []
         prewarmingRequestKeys = []
         recentStderrLines = []
@@ -229,6 +245,12 @@ final class PythonBridge: ObservableObject {
         return !trimmed.isEmpty && trimmed.caseInsensitiveCompare("Normal tone") != .orderedSame
     }
 
+    static func supportsIdlePrewarm(mode: GenerationMode) -> Bool {
+        // Custom prewarm has not produced stable wins in shipped-path testing.
+        // Keep idle prewarm focused on the modes that materially benefit from it.
+        mode != .custom
+    }
+
     static func prewarmIdentityKey(
         modelID: String,
         mode: GenerationMode,
@@ -244,16 +266,35 @@ final class PythonBridge: ObservableObject {
         let trimmedInstruction = instruct?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let normalizedInstruction = Self.hasMeaningfulDeliveryInstruction(trimmedInstruction) ? trimmedInstruction : ""
         let normalizedDeliveryProfile = Self.deliveryProfileFingerprint(deliveryProfile)
+        let identityParts: [String]
 
-        return [
-            modelID,
-            mode.rawValue,
-            trimmedVoice,
-            normalizedInstruction,
-            normalizedDeliveryProfile,
-            trimmedRefAudio,
-            trimmedRefText,
-        ].joined(separator: "|")
+        switch mode {
+        case .custom:
+            identityParts = [
+                modelID,
+                mode.rawValue,
+                trimmedVoice,
+                normalizedInstruction,
+            ]
+        case .design:
+            // Voice design prewarm only ensures the model is loaded, so emotion
+            // changes should not create a new idle prewarm identity.
+            identityParts = [
+                modelID,
+                mode.rawValue,
+            ]
+        case .clone:
+            identityParts = [
+                modelID,
+                mode.rawValue,
+                normalizedInstruction,
+                normalizedDeliveryProfile,
+                trimmedRefAudio,
+                trimmedRefText,
+            ]
+        }
+
+        return identityParts.joined(separator: "|")
     }
 
     private static func designInstruction(voiceDescription: String, emotion: String) -> String {
@@ -478,6 +519,14 @@ final class PythonBridge: ObservableObject {
 
     /// Load a model by its ID (e.g. "pro_custom").
     func loadModel(id: String) async throws -> [String: RPCValue] {
+        try await loadModel(id: id, reportsErrors: true, resetLastError: true)
+    }
+
+    private func loadModel(
+        id: String,
+        reportsErrors: Bool,
+        resetLastError: Bool
+    ) async throws -> [String: RPCValue] {
         if Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) {
             return [
                 "success": .bool(true),
@@ -486,24 +535,80 @@ final class PythonBridge: ObservableObject {
             ]
         }
 
-        if isStubBackendMode {
-            guard let model = TTSModel.model(id: id) else {
-                throw PythonBridgeError.rpcError(code: -32001, message: "Unknown model '\(id)'")
-            }
-            guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
-                throw PythonBridgeError.rpcError(code: -32010, message: "Model '\(model.name)' is unavailable or incomplete.")
+        if let inFlightModelLoad {
+            if inFlightModelLoad.id == id {
+                return try await inFlightModelLoad.task.value
             }
 
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            loadedModelID = id
-            return stubModelLoadResult(for: model, cached: false)
+            _ = try? await inFlightModelLoad.task.value
+            if Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) {
+                return [
+                    "success": .bool(true),
+                    "cached": .bool(true),
+                    "model_id": .string(id),
+                ]
+            }
         }
 
-        let result = try await callDict("load_model", params: [
-            "model_id": .string(id)
-        ])
-        loadedModelID = id
-        return result
+        let token = UUID()
+        let task = Task { @MainActor [self] () throws -> [String: RPCValue] in
+            if isStubBackendMode {
+                guard let model = TTSModel.model(id: id) else {
+                    throw PythonBridgeError.rpcError(code: -32001, message: "Unknown model '\(id)'")
+                }
+                guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
+                    throw PythonBridgeError.rpcError(code: -32010, message: "Model '\(model.name)' is unavailable or incomplete.")
+                }
+
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                loadedModelID = id
+                return stubModelLoadResult(for: model, cached: false)
+            }
+
+            let result = try await callDict(
+                "load_model",
+                params: [
+                    "model_id": .string(id)
+                ],
+                reportsErrors: reportsErrors,
+                resetLastError: resetLastError
+            )
+            loadedModelID = id
+            return result
+        }
+        inFlightModelLoad = InFlightModelLoad(token: token, id: id, task: task)
+
+        do {
+            let result = try await task.value
+            if inFlightModelLoad?.token == token {
+                inFlightModelLoad = nil
+            }
+            return result
+        } catch {
+            if inFlightModelLoad?.token == token {
+                inFlightModelLoad = nil
+            }
+            throw error
+        }
+    }
+
+    func ensureModelLoadedIfNeeded(id: String) async {
+        guard isReady else { return }
+        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard activeGenerationSession == nil else { return }
+        guard !Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) else { return }
+
+        if isProcessing, inFlightModelLoad?.id != id {
+            return
+        }
+
+        do {
+            _ = try await loadModel(id: id, reportsErrors: false, resetLastError: false)
+        } catch {
+            #if DEBUG
+            print("[Performance][PythonBridge] ensure_model_loaded_failed id=\(id) error=\(error.localizedDescription)")
+            #endif
+        }
     }
 
     /// Unload the current model.
@@ -528,6 +633,7 @@ final class PythonBridge: ObservableObject {
         guard isReady else { return }
         guard process?.isRunning == true || isStubBackendMode else { return }
         guard !isProcessing, activeGenerationSession == nil else { return }
+        guard Self.supportsIdlePrewarm(mode: mode) else { return }
         if mode == .clone && (refAudio?.isEmpty ?? true) {
             return
         }
@@ -558,20 +664,29 @@ final class PythonBridge: ObservableObject {
             "model_id": .string(modelID),
             "mode": .string(mode.rawValue),
         ]
-        if let voice, !voice.isEmpty {
-            params["voice"] = .string(voice)
-        }
-        if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
-            params["instruct"] = .string(instruct)
-        }
-        if mode == .clone, let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
-            params["delivery_profile"] = deliveryProfileValue
-        }
-        if let refAudio, !refAudio.isEmpty {
-            params["ref_audio"] = .string(refAudio)
-        }
-        if let refText, !refText.isEmpty {
-            params["ref_text"] = .string(refText)
+        switch mode {
+        case .custom:
+            if let voice, !voice.isEmpty {
+                params["voice"] = .string(voice)
+            }
+            if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
+                params["instruct"] = .string(instruct)
+            }
+        case .design:
+            break
+        case .clone:
+            if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
+                params["instruct"] = .string(instruct)
+            }
+            if let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
+                params["delivery_profile"] = deliveryProfileValue
+            }
+            if let refAudio, !refAudio.isEmpty {
+                params["ref_audio"] = .string(refAudio)
+            }
+            if let refText, !refText.isEmpty {
+                params["ref_text"] = .string(refText)
+            }
         }
 
         do {
@@ -624,6 +739,7 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
+        inFlightModelLoad = nil
         prewarmedRequestKeys = []
         prewarmingRequestKeys = []
         recentStderrLines = []
@@ -805,7 +921,8 @@ final class PythonBridge: ObservableObject {
             mode: .custom,
             modelID: modelID,
             batchIndex: nil,
-            batchTotal: nil
+            batchTotal: nil,
+            activityPresentation: .inlinePlayer
         ) {
             try await self.generateCustom(
                 modelID: modelID,
@@ -859,7 +976,8 @@ final class PythonBridge: ObservableObject {
             mode: .design,
             modelID: modelID,
             batchIndex: nil,
-            batchTotal: nil
+            batchTotal: nil,
+            activityPresentation: .inlinePlayer
         ) {
             try await self.generateDesign(
                 modelID: modelID,
@@ -919,7 +1037,8 @@ final class PythonBridge: ObservableObject {
             mode: .clone,
             modelID: modelID,
             batchIndex: nil,
-            batchTotal: nil
+            batchTotal: nil,
+            activityPresentation: .inlinePlayer
         ) {
             try await self.generateClone(
                 modelID: modelID,
@@ -1021,9 +1140,15 @@ final class PythonBridge: ObservableObject {
         modelID: String,
         batchIndex: Int?,
         batchTotal: Int?,
+        activityPresentation: ActivityStatus.Presentation = .standaloneCard,
         generate: () async throws -> GenerationResult
     ) async throws -> GenerationResult {
-        beginGenerationSession(mode: mode, batchIndex: batchIndex, batchTotal: batchTotal)
+        beginGenerationSession(
+            mode: mode,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal,
+            activityPresentation: activityPresentation
+        )
 
         do {
             let loadStart = DispatchTime.now().uptimeNanoseconds
@@ -1059,7 +1184,12 @@ final class PythonBridge: ObservableObject {
         }
     }
 
-    private func beginGenerationSession(mode: GenerationMode, batchIndex: Int?, batchTotal: Int?) {
+    private func beginGenerationSession(
+        mode: GenerationMode,
+        batchIndex: Int?,
+        batchTotal: Int?,
+        activityPresentation: ActivityStatus.Presentation
+    ) {
         sidebarStatusResetTask?.cancel()
         sidebarStatusResetTask = nil
         activeGenerationSession = GenerationSession(
@@ -1067,7 +1197,8 @@ final class PythonBridge: ObservableObject {
             batchIndex: batchIndex,
             batchTotal: batchTotal,
             currentPhase: .loadingModel,
-            currentRequestID: nil
+            currentRequestID: nil,
+            activityPresentation: activityPresentation
         )
         lastError = nil
         updateCurrentSession(
@@ -1142,7 +1273,13 @@ final class PythonBridge: ObservableObject {
         activeGenerationSession = session
         let overallFraction = overallFraction(for: session, requestFraction: requestFraction)
         let label = sidebarLabel(for: session, message: message)
-        sidebarStatus = .running(ActivityStatus(label: label, fraction: overallFraction))
+        sidebarStatus = .running(
+            ActivityStatus(
+                label: label,
+                fraction: overallFraction,
+                presentation: session.activityPresentation
+            )
+        )
     }
 
     private func phaseForProgress(method: String, message: String, mode: GenerationMode) -> GenerationPhase {

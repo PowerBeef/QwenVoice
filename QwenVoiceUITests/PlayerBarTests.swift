@@ -1,9 +1,10 @@
 import XCTest
 
 final class PlayerBarTests: QwenVoiceUITestBase {
+    override var initialScreen: String? { "customVoice" }
+
     func testPlayerBarNotVisibleWithoutAudio() {
-        // In stub mode with no audio loaded, player bar should not be prominent
-        // The player area exists but hasAudio should be false
+        // With no audio loaded, the player controls should not become actionable.
         let playPause = app.buttons["sidebarPlayer_playPause"]
         // Play/pause button may not exist if no audio is loaded — this is expected
         if playPause.exists {
