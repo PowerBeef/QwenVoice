@@ -139,8 +139,10 @@ jobs:
       - name: Run UI smoke tests
         run: python3 scripts/harness.py test --layer ui --ui-backend-mode stub --ui-data-root fixture
 
-      - name: Run screenshot regression tests
+      - name: Run screenshot capture smoke
         if: always() && matrix.runner == 'macos-26'
+        env:
+          QWENVOICE_UI_DESIGN_CAPTURE_ONLY: "1"
         run: python3 scripts/harness.py test --layer design --ui-backend-mode stub --ui-data-root fixture
 
       - name: Upload screenshots

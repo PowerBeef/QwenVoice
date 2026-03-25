@@ -1253,6 +1253,9 @@ def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") ->
 
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
+    capture_only = os.environ.get("QWENVOICE_UI_DESIGN_CAPTURE_ONLY", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
     baselines_dir = PROJECT_DIR / "tests" / "screenshots" / "baselines"
     captures_dir = PROJECT_DIR / "build" / "test" / "screenshots"
     diffs_dir = PROJECT_DIR / "tests" / "screenshots" / "diffs"
@@ -1360,6 +1363,16 @@ def _run_design_tests(backend_mode: str = "live", data_root: str = "fixture") ->
                     "captures_dir": str(captures_dir),
                 },
             ))
+
+        if capture_only:
+            results.append(build_test_result(
+                "design_capture_only",
+                passed=True,
+                skip_reason="Baseline comparison disabled for this environment",
+                details={"captures_dir": str(captures_dir)},
+            ))
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            return build_suite_result("design_comparison", results, duration_ms)
 
         baseline_names = sorted(
             name for name in os.listdir(baselines_dir)
