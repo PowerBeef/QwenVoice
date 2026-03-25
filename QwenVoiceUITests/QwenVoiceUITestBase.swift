@@ -83,7 +83,10 @@ class QwenVoiceUITestBase: XCTestCase {
     func configureAppForLaunch() {
         prepareLaunchContextIfNeeded()
 
-        let application = XCUIApplication()
+        var application: XCUIApplication!
+        MainActor.assumeIsolated {
+            application = XCUIApplication()
+        }
         let includesFastIdleLaunchArgument = includesFastIdleLaunchArgument
         let initialScreen = initialScreen
         let backendMode = uiTestBackendMode
