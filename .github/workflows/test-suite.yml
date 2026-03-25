@@ -18,7 +18,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
@@ -104,7 +104,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload screenshots
         if: always() && matrix.runner == 'macos-26'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: screenshots-${{ matrix.runner }}
           path: |
@@ -164,7 +164,7 @@ jobs:
       matrix:
         runner: [macos-15, macos-26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: |
