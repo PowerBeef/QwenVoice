@@ -102,17 +102,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Ensure bundled Python exists
+      - name: Ensure runtime parity inputs exist
         run: |
-          test -x Sources/Resources/python/bin/python3 || test -x Sources/Resources/python/bin/python3.13
+          test -f Sources/Resources/requirements.txt
+          test -f Sources/Resources/vendor/mlx_audio-0.4.1.post1-py3-none-any.whl
 
       - name: Create clean parity environment
         run: |
-          PYTHON_BIN="Sources/Resources/python/bin/python3"
-          if [ ! -x "$PYTHON_BIN" ]; then
-            PYTHON_BIN="Sources/Resources/python/bin/python3.13"
-          fi
-          "$PYTHON_BIN" -m venv .runtime-parity
+          python3 -m venv .runtime-parity
           . .runtime-parity/bin/activate
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet --find-links Sources/Resources/vendor -r Sources/Resources/requirements.txt
