@@ -19,6 +19,7 @@ APP_PATH="$1"
 if [ ! -d "$APP_PATH" ]; then
     fail "App bundle not found: $APP_PATH"
 fi
+APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 
 RESOURCES_DIR="$APP_PATH/Contents/Resources"
 APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
