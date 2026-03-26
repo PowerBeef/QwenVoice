@@ -78,6 +78,11 @@ step_time() {
     echo "$((end - start))s"
 }
 
+release_fail() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
 echo "=== QwenVoice: Release Build ==="
 echo ""
 if $SKIP_DEPS; then echo "  (skipping dependency bundling)"; fi
@@ -194,14 +199,14 @@ if [ -d "$RESOURCES_SRC/python" ]; then
     rm -rf "$APP_RESOURCES/python"
     cp -a "$RESOURCES_SRC/python" "$APP_RESOURCES/python"
 else
-    echo "Warning: No bundled Python found at $RESOURCES_SRC/python"
+    release_fail "Bundled Python missing at $RESOURCES_SRC/python"
 fi
 
 if [ -f "$RESOURCES_SRC/ffmpeg" ]; then
     echo "[4/8] Copying bundled ffmpeg into .app..."
     cp -f "$RESOURCES_SRC/ffmpeg" "$APP_RESOURCES/ffmpeg"
 else
-    echo "Warning: No bundled ffmpeg found at $RESOURCES_SRC/ffmpeg"
+    release_fail "Bundled ffmpeg missing at $RESOURCES_SRC/ffmpeg"
 fi
 
 echo "[4/8] Removing build-only resource artifacts..."
@@ -209,6 +214,13 @@ rm -rf "$APP_RESOURCES/vendor" 2>/dev/null || true
 find "$APP_RESOURCES" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.pyc" -delete 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.whl" -delete 2>/dev/null || true
+
+[ -d "$APP_RESOURCES/python" ] || release_fail "Packaged app is missing Contents/Resources/python"
+[ -f "$APP_RESOURCES/python/.qwenvoice-runtime-manifest.json" ] || release_fail "Packaged app is missing the bundled runtime manifest"
+[ -x "$APP_RESOURCES/ffmpeg" ] || release_fail "Packaged app is missing an executable bundled ffmpeg binary"
+if [ ! -f "$APP_RESOURCES/server.py" ] && [ ! -f "$APP_RESOURCES/backend/server.py" ]; then
+    release_fail "Packaged app is missing the bundled backend entrypoint"
+fi
 
 echo "[4/8] Copy .app + deps — done ($(step_time $STEP_START))"
 echo ""
@@ -304,6 +316,34 @@ if [ -z "$COMMIT_SHA" ]; then
     COMMIT_SHA="unknown"
 fi
 
+MANIFEST_PATH="$BUILD_DIR/$APP_BUNDLE_NAME.app/Contents/Resources/python/.qwenvoice-runtime-manifest.json"
+if [ ! -f "$MANIFEST_PATH" ]; then
+    echo "Error: release manifest missing at $MANIFEST_PATH"
+    exit 1
+fi
+
+CORE_VERSIONS="$(
+python3 - "$MANIFEST_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+fields = [
+    "mlx_version",
+    "mlx_metal_version",
+    "mlx_lm_version",
+    "mlx_audio_version",
+    "transformers_version",
+]
+for field in fields:
+    value = manifest.get(field)
+    if not value:
+        raise SystemExit(f"Missing {field} in runtime manifest")
+    print(f"{field}={value}")
+PY
+)"
+
 METADATA_PATH="$BUILD_DIR/release-metadata.txt"
 {
     echo "commit_sha=$COMMIT_SHA"
@@ -313,6 +353,7 @@ METADATA_PATH="$BUILD_DIR/release-metadata.txt"
     echo "app_minos=$APP_MINOS"
     echo "dmg_name=$OUTPUT_NAME.dmg"
     echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    printf '%s\n' "$CORE_VERSIONS"
 } > "$METADATA_PATH"
 
 echo "[8/8] Release complete!"

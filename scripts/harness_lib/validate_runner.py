@@ -6,11 +6,31 @@ import json
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from .contract import load_contract
 from .output import build_suite_result, build_test_result, eprint
-from .paths import BACKEND_DIR, PROJECT_DIR, resolve_backend_python
+from .paths import (
+    APP_VENV_PYTHON,
+    BACKEND_DIR,
+    BUNDLED_PYTHON_BIN,
+    BUNDLED_RUNTIME_MANIFEST,
+    PROJECT_DIR,
+    resolve_backend_python,
+)
+from .runtime_alignment import (
+    app_core_requirements,
+    cli_core_requirements,
+    compare_expected_versions,
+    describe_version_alignment,
+    inspect_python_environment,
+    load_runtime_manifest,
+    manifest_core_versions,
+    read_mlx_audio_target_version,
+    read_pythonbridge_mlx_audio_versions,
+    resolved_python_for_environment,
+)
 
 
 def run_validate(python_path: str | None = None) -> list[dict[str, Any]]:
@@ -80,10 +100,102 @@ def run_validate(python_path: str | None = None) -> list[dict[str, Any]]:
                 f"Project inputs check failed: {proc.stderr.strip()}"
             )
 
+    def test_runtime_pin_consistency():
+        expected = app_core_requirements()
+        cli_versions = cli_core_requirements()
+        cli_mismatches = compare_expected_versions(expected, cli_versions)
+        if cli_mismatches:
+            raise AssertionError(
+                f"CLI shared core pins drifted from app requirements: {json.dumps(cli_mismatches, sort_keys=True)}"
+            )
+
+        target_version = read_mlx_audio_target_version()
+        if target_version != expected["mlx-audio"]:
+            raise AssertionError(
+                "scripts/build_mlx_audio_wheel.sh TARGET_VERSION drifted from app requirements: "
+                f"{target_version} != {expected['mlx-audio']}"
+            )
+
+        swift_versions = read_pythonbridge_mlx_audio_versions()
+        if swift_versions != {expected["mlx-audio"]}:
+            raise AssertionError(
+                "PythonBridge stub mlx_audio_version drifted from app requirements: "
+                f"{sorted(swift_versions)} != {[expected['mlx-audio']]}"
+            )
+
+        return {
+            "expected": expected,
+            "cli_versions": cli_versions,
+            "mlx_audio_target_version": target_version,
+            "pythonbridge_mlx_audio_versions": sorted(swift_versions),
+        }
+
+    def test_explicit_python_alignment():
+        if not python_path:
+            return {"skip_reason": "no explicit --python supplied"}
+
+        resolved = Path(python_path)
+        if not resolved.exists():
+            return {"skip_reason": f"explicit python not found: {resolved}"}
+
+        expected = app_core_requirements()
+        actual = inspect_python_environment(str(resolved))
+        details = describe_version_alignment("explicit_python", expected, actual)
+        if details["mismatches"]:
+            raise AssertionError(json.dumps(details["mismatches"], sort_keys=True))
+        return details
+
+    def test_local_app_venv_alignment():
+        resolved = resolved_python_for_environment(APP_VENV_PYTHON)
+        if resolved is None:
+            return {"skip_reason": f"app venv missing at {APP_VENV_PYTHON.parent}"}
+
+        expected = app_core_requirements()
+        actual = inspect_python_environment(resolved)
+        details = describe_version_alignment("app_support_venv", expected, actual)
+        if details["mismatches"]:
+            raise AssertionError(json.dumps(details["mismatches"], sort_keys=True))
+        return details
+
+    def test_bundled_runtime_alignment():
+        resolved = resolved_python_for_environment(BUNDLED_PYTHON_BIN)
+        if resolved is None:
+            return {"skip_reason": f"bundled python missing at {BUNDLED_PYTHON_BIN.parent}"}
+
+        expected = app_core_requirements()
+        actual = inspect_python_environment(resolved)
+        details = describe_version_alignment("bundled_runtime", expected, actual)
+        if details["mismatches"]:
+            raise AssertionError(json.dumps(details["mismatches"], sort_keys=True))
+
+        if not BUNDLED_RUNTIME_MANIFEST.exists():
+            raise AssertionError(f"Bundled runtime manifest missing at {BUNDLED_RUNTIME_MANIFEST}")
+
+        manifest = load_runtime_manifest(BUNDLED_RUNTIME_MANIFEST)
+        manifest_versions = manifest_core_versions(manifest)
+        manifest_mismatches = compare_expected_versions(expected, manifest_versions)
+        details["manifest_versions"] = manifest_versions
+        if manifest_mismatches:
+            raise AssertionError(
+                f"Bundled runtime manifest drifted from app requirements: {json.dumps(manifest_mismatches, sort_keys=True)}"
+            )
+
+        runtime_manifest_mismatches = compare_expected_versions(actual, manifest_versions)
+        if runtime_manifest_mismatches:
+            raise AssertionError(
+                "Bundled runtime manifest does not match installed bundled packages: "
+                f"{json.dumps(runtime_manifest_mismatches, sort_keys=True)}"
+            )
+        return details
+
     tests = [
         ("contract_consistency", test_contract_consistency),
         ("backend_importable", test_backend_importable),
         ("project_inputs_clean", test_project_inputs),
+        ("runtime_pin_consistency", test_runtime_pin_consistency),
+        ("explicit_python_alignment", test_explicit_python_alignment),
+        ("local_app_venv_alignment", test_local_app_venv_alignment),
+        ("bundled_runtime_alignment", test_bundled_runtime_alignment),
     ]
 
     for name, fn in tests:

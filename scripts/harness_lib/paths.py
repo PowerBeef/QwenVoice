@@ -8,6 +8,13 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 SERVER_PATH = PROJECT_DIR / "Sources" / "Resources" / "backend" / "server.py"
 CONTRACT_PATH = PROJECT_DIR / "Sources" / "Resources" / "qwenvoice_contract.json"
+APP_REQUIREMENTS_PATH = PROJECT_DIR / "Sources" / "Resources" / "requirements.txt"
+CLI_REQUIREMENTS_PATH = PROJECT_DIR / "cli" / "requirements.txt"
+BUILD_MLX_AUDIO_WHEEL_SCRIPT = PROJECT_DIR / "scripts" / "build_mlx_audio_wheel.sh"
+PYTHON_BRIDGE_PATH = PROJECT_DIR / "Sources" / "Services" / "PythonBridge.swift"
+BUNDLED_PYTHON_ROOT = PROJECT_DIR / "Sources" / "Resources" / "python"
+BUNDLED_PYTHON_BIN = BUNDLED_PYTHON_ROOT / "bin" / "python3"
+BUNDLED_RUNTIME_MANIFEST = BUNDLED_PYTHON_ROOT / ".qwenvoice-runtime-manifest.json"
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "QwenVoice"
 APP_VENV_PYTHON = APP_SUPPORT_DIR / "python" / "bin" / "python3"
 APP_MODELS_DIR = APP_SUPPORT_DIR / "models"

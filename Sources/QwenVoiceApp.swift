@@ -296,16 +296,36 @@ struct QwenVoiceApp: App {
         guard UITestAutomationSupport.isEnabled else { return }
 
         let isEnvironmentReady: Bool
+        let activePythonPath: String?
         if case .ready = state {
             isEnvironmentReady = true
         } else {
             isEnvironmentReady = false
         }
+        if case .ready(let pythonPath) = state {
+            activePythonPath = pythonPath
+        } else {
+            activePythonPath = nil
+        }
 
+        let runtimeSource = TestStateProvider.runtimeSource(
+            for: activePythonPath,
+            bundledRuntimeRoot: bundledRuntimeRoot(),
+            devVenvRoot: AppPaths.pythonVenvDir.path,
+            stubPythonPath: UITestAutomationSupport.stubPythonPath()
+        )
+
+        TestStateProvider.shared.setRuntimeStatus(source: runtimeSource, pythonPath: activePythonPath)
         TestStateProvider.shared.setEnvironmentReady(isEnvironmentReady)
         if isEnvironmentReady {
             UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
         }
+    }
+
+    private func bundledRuntimeRoot() -> String? {
+        Bundle.main.resourceURL?
+            .appendingPathComponent("python", isDirectory: true)
+            .path
     }
 
     var body: some Scene {

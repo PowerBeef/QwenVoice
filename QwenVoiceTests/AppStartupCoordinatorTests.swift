@@ -34,6 +34,39 @@ final class AppStartupCoordinatorTests: XCTestCase {
         )
     }
 
+    func testRuntimeSourcePrefersBundledRuntimeForPackagedPath() {
+        let source = TestStateProvider.runtimeSource(
+            for: "/Applications/QwenVoice.app/Contents/Resources/python/bin/python3",
+            bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
+            devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
+            stubPythonPath: UITestAutomationSupport.stubPythonPath()
+        )
+
+        XCTAssertEqual(source, .bundled)
+    }
+
+    func testRuntimeSourceIdentifiesDevVenvAndStub() {
+        XCTAssertEqual(
+            TestStateProvider.runtimeSource(
+                for: "/Users/test/Library/Application Support/QwenVoice/python/bin/python3",
+                bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
+                devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
+                stubPythonPath: UITestAutomationSupport.stubPythonPath()
+            ),
+            .devVenv
+        )
+
+        XCTAssertEqual(
+            TestStateProvider.runtimeSource(
+                for: UITestAutomationSupport.stubPythonPath(),
+                bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
+                devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
+                stubPythonPath: UITestAutomationSupport.stubPythonPath()
+            ),
+            .stub
+        )
+    }
+
     @MainActor
     func testTrackedMainWindowsIgnoresNonContentWindows() {
         let mainWindow = MainCapableTestWindow(

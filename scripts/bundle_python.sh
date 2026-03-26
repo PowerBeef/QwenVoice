@@ -132,6 +132,39 @@ if [ "$INSTALLED_MLX_AUDIO_VERSION" != "$EXPECTED_MLX_AUDIO_VERSION" ]; then
     echo "Error: Expected mlx-audio $EXPECTED_MLX_AUDIO_VERSION but found $INSTALLED_MLX_AUDIO_VERSION"
     exit 1
 fi
+CORE_VERSIONS=$("$PYTHON_BUNDLE/bin/python3" - <<'PY'
+from importlib.metadata import version
+
+packages = {
+    "mlx_version": "mlx",
+    "mlx_metal_version": "mlx-metal",
+    "mlx_lm_version": "mlx-lm",
+    "mlx_audio_version": "mlx-audio",
+    "transformers_version": "transformers",
+}
+for key, package in packages.items():
+    print(f"{key}={version(package)}")
+PY
+)
+INSTALLED_MLX_VERSION=""
+INSTALLED_MLX_METAL_VERSION=""
+INSTALLED_MLX_LM_VERSION=""
+INSTALLED_TRANSFORMERS_VERSION=""
+while IFS='=' read -r key value; do
+    case "$key" in
+        mlx_version) INSTALLED_MLX_VERSION="$value" ;;
+        mlx_metal_version) INSTALLED_MLX_METAL_VERSION="$value" ;;
+        mlx_lm_version) INSTALLED_MLX_LM_VERSION="$value" ;;
+        mlx_audio_version) INSTALLED_MLX_AUDIO_VERSION="$value" ;;
+        transformers_version) INSTALLED_TRANSFORMERS_VERSION="$value" ;;
+    esac
+done <<< "$CORE_VERSIONS"
+
+if [ -z "$INSTALLED_MLX_VERSION" ] || [ -z "$INSTALLED_MLX_METAL_VERSION" ] || [ -z "$INSTALLED_MLX_LM_VERSION" ] || [ -z "$INSTALLED_TRANSFORMERS_VERSION" ]; then
+    rm -f "$TARBALL"
+    echo "Error: Failed to capture installed core runtime versions"
+    exit 1
+fi
 COMPATIBILITY_INFO=$("$PYTHON_BUNDLE/bin/python3" - "$SITE_PACKAGES" "$APP_MIN_MACOS_VERSION" <<'PY'
 import re
 import subprocess
@@ -210,7 +243,11 @@ if [ -z "$MLX_WHEEL_TAG" ] || [ -z "$MLX_METAL_WHEEL_TAG" ] || [ -z "$MLX_CORE_M
     exit 1
 fi
 echo "    All core imports OK"
+echo "    mlx: $INSTALLED_MLX_VERSION"
+echo "    mlx-metal: $INSTALLED_MLX_METAL_VERSION"
+echo "    mlx-lm: $INSTALLED_MLX_LM_VERSION"
 echo "    mlx-audio: $INSTALLED_MLX_AUDIO_VERSION"
+echo "    transformers: $INSTALLED_TRANSFORMERS_VERSION"
 echo "    mlx wheel tag: $MLX_WHEEL_TAG"
 echo "    mlx-metal wheel tag: $MLX_METAL_WHEEL_TAG"
 echo "    mlx core minos: $MLX_CORE_MINOS"
@@ -223,7 +260,11 @@ cat > "$MANIFEST_PATH" <<EOF
   "python_short_version": "$PYTHON_SHORT_VERSION",
   "requirements_path": "$REQUIREMENTS",
   "requirements_sha256": "$REQUIREMENTS_HASH",
+  "mlx_version": "$INSTALLED_MLX_VERSION",
+  "mlx_metal_version": "$INSTALLED_MLX_METAL_VERSION",
+  "mlx_lm_version": "$INSTALLED_MLX_LM_VERSION",
   "mlx_audio_version": "$INSTALLED_MLX_AUDIO_VERSION",
+  "transformers_version": "$INSTALLED_TRANSFORMERS_VERSION",
   "mlx_wheel_tag": "$MLX_WHEEL_TAG",
   "mlx_metal_wheel_tag": "$MLX_METAL_WHEEL_TAG",
   "mlx_core_minos": "$MLX_CORE_MINOS",

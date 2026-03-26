@@ -7,8 +7,8 @@ VENDOR_DIR="$ROOT_DIR/Sources/Resources/vendor"
 SOURCE_HELPER="$PATCH_DIR/qwenvoice_speed_patch.py"
 BACKEND_HELPER="$ROOT_DIR/Sources/Resources/backend/mlx_audio_qwen_speed_patch.py"
 PATCH_NOTE="$PATCH_DIR/qwenvoice-speed.patch"
-BASE_VERSION="0.4.0"
-TARGET_VERSION="0.4.0.post1"
+BASE_VERSION="0.4.1"
+TARGET_VERSION="0.4.1.post1"
 
 if [[ ! -f "$SOURCE_HELPER" ]]; then
   echo "Missing helper source: $SOURCE_HELPER" >&2

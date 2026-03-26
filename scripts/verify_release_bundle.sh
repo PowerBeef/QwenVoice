@@ -21,6 +21,7 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 
 RESOURCES_DIR="$APP_PATH/Contents/Resources"
+APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
 PYTHON_ROOT="$RESOURCES_DIR/python"
 PYTHON_BIN="$PYTHON_ROOT/bin/python3"
 FFMPEG_BIN="$RESOURCES_DIR/ffmpeg"
@@ -35,7 +36,8 @@ export PYTHONDONTWRITEBYTECODE=1
 echo "=== QwenVoice: Verify Release Bundle ==="
 echo ""
 
-echo "[1/7] Checking required files..."
+echo "[1/8] Checking required files..."
+[ -x "$APP_BINARY" ] || fail "App binary missing: $APP_BINARY"
 [ -x "$PYTHON_BIN" ] || fail "Bundled Python missing: $PYTHON_BIN"
 [ -x "$FFMPEG_BIN" ] || fail "Bundled ffmpeg missing: $FFMPEG_BIN"
 [ -f "$SERVER_SCRIPT" ] || fail "Bundled backend missing: $SERVER_SCRIPT"
@@ -46,40 +48,41 @@ fi
 if find "$RESOURCES_DIR" \( -name "*.pyc" -o -type d -name "__pycache__" \) -print -quit | grep -q .; then
     fail "Compiled Python artifacts should not be packaged into the app bundle"
 fi
-echo "[1/7] Required files OK"
+echo "[1/8] Required files OK"
 echo ""
 
-echo "[2/7] Verifying bundled Python executable..."
+echo "[2/8] Verifying bundled Python executable..."
 "$PYTHON_BIN" --version >/dev/null
-echo "[2/7] Bundled Python runs"
+echo "[2/8] Bundled Python runs"
 echo ""
 
-echo "[3/7] Verifying bundled Python imports..."
+echo "[3/8] Verifying bundled Python imports..."
 "$PYTHON_BIN" -c "import mlx; import mlx.core as mx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub; x = mx.array([1.0], dtype=mx.float32); mx.eval(x)"
-echo "[3/7] Core imports OK"
+echo "[3/8] Core imports OK"
 echo ""
 
-echo "[4/7] Verifying bundled mlx-audio helper..."
+echo "[4/8] Verifying bundled mlx-audio helper..."
 "$PYTHON_BIN" -c "import mlx_audio.qwenvoice_speed_patch as p; import sys; sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)"
-echo "[4/7] Helper is present"
+echo "[4/8] Helper is present"
 echo ""
 
-echo "[5/7] Verifying bundled ffmpeg..."
+echo "[5/8] Verifying bundled ffmpeg..."
 "$FFMPEG_BIN" -version >/dev/null
-echo "[5/7] Bundled ffmpeg runs"
+echo "[5/8] Bundled ffmpeg runs"
 echo ""
 
-echo "[6/7] Verifying runtime manifest and native-library linkage..."
+echo "[6/8] Verifying runtime manifest and native-library linkage..."
 EXPECTED_REQUIREMENTS_HASH="$(shasum -a 256 "$REQUIREMENTS_PATH" | awk '{print $1}')"
-"$PYTHON_BIN" - "$MANIFEST_PATH" "$EXPECTED_REQUIREMENTS_HASH" "$APP_MIN_MACOS_VERSION" <<'PY'
+"$PYTHON_BIN" - "$MANIFEST_PATH" "$REQUIREMENTS_PATH" "$EXPECTED_REQUIREMENTS_HASH" "$APP_MIN_MACOS_VERSION" <<'PY'
 import json
 import re
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
-expected_hash = sys.argv[2]
-supported_macos = sys.argv[3]
+requirements_path = Path(sys.argv[2])
+expected_hash = sys.argv[3]
+supported_macos = sys.argv[4]
 data = json.loads(manifest_path.read_text(encoding="utf-8"))
 
 required_keys = {
@@ -87,7 +90,11 @@ required_keys = {
     "python_short_version",
     "requirements_path",
     "requirements_sha256",
+    "mlx_version",
+    "mlx_metal_version",
+    "mlx_lm_version",
     "mlx_audio_version",
+    "transformers_version",
     "mlx_wheel_tag",
     "mlx_metal_wheel_tag",
     "mlx_core_minos",
@@ -108,6 +115,34 @@ if data["supported_minimum_macos"] != supported_macos:
     raise SystemExit(
         f"Manifest minimum macOS mismatch: {data['supported_minimum_macos']} != {supported_macos}"
     )
+
+expected_core_versions = {}
+for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#") or line.startswith("--"):
+        continue
+    requirement = line.split(";", 1)[0].strip()
+    if "==" not in requirement:
+        continue
+    package, version = requirement.split("==", 1)
+    package = package.strip()
+    if package in {"mlx", "mlx-metal", "mlx-lm", "mlx-audio", "transformers"}:
+        expected_core_versions[package] = version.strip()
+
+required_manifest_versions = {
+    "mlx": "mlx_version",
+    "mlx-metal": "mlx_metal_version",
+    "mlx-lm": "mlx_lm_version",
+    "mlx-audio": "mlx_audio_version",
+    "transformers": "transformers_version",
+}
+for package, manifest_key in required_manifest_versions.items():
+    expected_version = expected_core_versions.get(package)
+    actual_version = data.get(manifest_key)
+    if expected_version != actual_version:
+        raise SystemExit(
+            f"Manifest {manifest_key} mismatch: {actual_version} != {expected_version}"
+        )
 
 def parse_version(value: str) -> tuple[int, int]:
     parts = value.split(".")
@@ -135,6 +170,7 @@ if parse_version(data["mlx_core_minos"]) > max_version:
 PY
 
 "$PYTHON_BIN" - "$PYTHON_ROOT" "$APP_MIN_MACOS_VERSION" <<'PY'
+import json
 import re
 import subprocess
 import sys
@@ -159,6 +195,8 @@ site_packages_candidates = sorted(python_root.glob("lib/python*/site-packages"))
 if not site_packages_candidates:
     raise SystemExit(f"Could not locate site-packages under {python_root}")
 site_packages = site_packages_candidates[0]
+
+from importlib.metadata import version
 
 def read_wheel_tag(prefix: str) -> str:
     matches = sorted(site_packages.glob(f"{prefix}*.dist-info"))
@@ -187,6 +225,29 @@ if parse_version(minos_match.group(1)) > max_version:
     raise SystemExit(
         f"mlx core extension minos is incompatible with macOS {supported_macos}: {minos_match.group(1)}"
     )
+
+resolved_versions = {
+    "mlx": version("mlx"),
+    "mlx-metal": version("mlx-metal"),
+    "mlx-lm": version("mlx-lm"),
+    "mlx-audio": version("mlx-audio"),
+    "transformers": version("transformers"),
+}
+manifest_path = python_root / ".qwenvoice-runtime-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest_versions = {
+    "mlx": manifest["mlx_version"],
+    "mlx-metal": manifest["mlx_metal_version"],
+    "mlx-lm": manifest["mlx_lm_version"],
+    "mlx-audio": manifest["mlx_audio_version"],
+    "transformers": manifest["transformers_version"],
+}
+for package, actual_version in resolved_versions.items():
+    if manifest_versions[package] != actual_version:
+        raise SystemExit(
+            f"Bundled runtime resolved {package}={actual_version}, "
+            f"but manifest recorded {manifest_versions[package]}"
+        )
 PY
 
 LEAKED_LIBS=0
@@ -205,13 +266,22 @@ done < <(find "$PYTHON_ROOT" \( -name "*.so" -o -name "*.dylib" \) -print0)
 if [ "$LEAKED_LIBS" -ne 0 ]; then
     fail "Embedded native libraries link against host-specific paths"
 fi
-echo "[6/7] Manifest and linkage checks OK"
+echo "[6/8] Manifest and linkage checks OK"
 echo ""
 
-echo "[7/7] Running backend smoke test..."
+echo "[7/8] Running backend smoke test..."
 TMP_APP_SUPPORT="$(mktemp -d)"
+TMP_UI_HOME=""
+TMP_UI_FIXTURE=""
+TMP_UI_STDOUT=""
+TMP_UI_STDERR=""
 cleanup() {
+    pkill -x QwenVoice 2>/dev/null || true
     rm -rf "$TMP_APP_SUPPORT"
+    [ -n "$TMP_UI_HOME" ] && rm -rf "$TMP_UI_HOME"
+    [ -n "$TMP_UI_FIXTURE" ] && rm -rf "$TMP_UI_FIXTURE"
+    [ -n "$TMP_UI_STDOUT" ] && rm -f "$TMP_UI_STDOUT"
+    [ -n "$TMP_UI_STDERR" ] && rm -f "$TMP_UI_STDERR"
 }
 trap cleanup EXIT
 
@@ -288,6 +358,97 @@ finally:
         proc.wait(timeout=5)
 PY
 
-echo "[7/7] Backend smoke test OK"
+echo "[7/8] Backend smoke test OK"
+echo ""
+
+echo "[8/8] Running isolated packaged-app startup smoke..."
+TMP_UI_HOME="$(mktemp -d)"
+TMP_UI_FIXTURE="$(mktemp -d)"
+TMP_UI_STDOUT="$(mktemp)"
+TMP_UI_STDERR="$(mktemp)"
+
+pkill -x QwenVoice 2>/dev/null || true
+sleep 1
+
+env -i \
+    HOME="$TMP_UI_HOME" \
+    PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+    TMPDIR="${TMPDIR:-/tmp}" \
+    SHELL="/bin/zsh" \
+    USER="${USER:-$(id -un)}" \
+    LOGNAME="${LOGNAME:-${USER:-$(id -un)}}" \
+    PYTHONDONTWRITEBYTECODE="1" \
+    QWENVOICE_UI_TEST="1" \
+    QWENVOICE_UI_TEST_BACKEND_MODE="stub" \
+    QWENVOICE_UI_TEST_SETUP_DELAY_MS="1" \
+    QWENVOICE_UI_TEST_FIXTURE_ROOT="$TMP_UI_FIXTURE" \
+    QWENVOICE_UI_TEST_DEFAULTS_SUITE="QwenVoiceReleaseSmoke.$RANDOM.$RANDOM" \
+    /usr/bin/open -n "$APP_PATH" --args \
+    --uitest \
+    --uitest-disable-animations \
+    --uitest-fast-idle \
+    >"$TMP_UI_STDOUT" 2>"$TMP_UI_STDERR"
+
+if ! "$PYTHON_BIN" - "$PYTHON_ROOT" <<'PY'
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+
+python_root = sys.argv[1]
+base_url = "http://127.0.0.1:19876"
+deadline = time.time() + 60
+last_state = {}
+health_seen = False
+
+while time.time() < deadline:
+    try:
+        with urllib.request.urlopen(f"{base_url}/health", timeout=1.5):
+            health_seen = True
+    except Exception:
+        time.sleep(0.5)
+        continue
+
+    try:
+        with urllib.request.urlopen(f"{base_url}/state", timeout=2) as response:
+            last_state = json.load(response)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        time.sleep(0.5)
+        continue
+
+    if last_state.get("interactiveReady") is True:
+        runtime_source = last_state.get("runtimeSource")
+        active_python_path = last_state.get("activePythonPath", "")
+        expected_prefix = python_root.rstrip("/") + "/"
+        if runtime_source != "bundled":
+            raise SystemExit(
+                f"Packaged app reported unexpected runtimeSource={runtime_source!r}; state={last_state}"
+            )
+        if not active_python_path.startswith(expected_prefix):
+            raise SystemExit(
+                "Packaged app did not resolve the bundled Python runtime: "
+                f"activePythonPath={active_python_path!r} expected_prefix={expected_prefix!r}"
+            )
+        sys.exit(0)
+
+    time.sleep(0.5)
+
+reason = "state_server_unreachable"
+if health_seen:
+    reason = last_state.get("readinessBlocker") or last_state.get("launchPhase") or "interactive_ready_timeout"
+raise SystemExit(
+    f"Timed out waiting for packaged app readiness: reason={reason} last_state={last_state}"
+)
+PY
+then
+    echo "Packaged-app smoke stdout tail:" >&2
+    tail -n 40 "$TMP_UI_STDOUT" >&2 || true
+    echo "Packaged-app smoke stderr tail:" >&2
+    tail -n 80 "$TMP_UI_STDERR" >&2 || true
+    fail "Isolated packaged-app startup smoke failed"
+fi
+
+echo "[8/8] Packaged app startup smoke OK"
 echo ""
 echo "Release bundle verification passed."

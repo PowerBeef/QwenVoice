@@ -95,6 +95,32 @@ jobs:
               ;;
           esac
 
+  runtime-parity:
+    name: Runtime Parity
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure bundled Python exists
+        run: |
+          test -x Sources/Resources/python/bin/python3 || test -x Sources/Resources/python/bin/python3.13
+
+      - name: Create clean parity environment
+        run: |
+          PYTHON_BIN="Sources/Resources/python/bin/python3"
+          if [ ! -x "$PYTHON_BIN" ]; then
+            PYTHON_BIN="Sources/Resources/python/bin/python3.13"
+          fi
+          "$PYTHON_BIN" -m venv .runtime-parity
+          . .runtime-parity/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet --find-links Sources/Resources/vendor -r Sources/Resources/requirements.txt
+
+      - name: Validate runtime alignment
+        run: |
+          .runtime-parity/bin/python scripts/harness.py validate --python "$PWD/.runtime-parity/bin/python"
+
   ui-tests:
     name: UI Tests (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}

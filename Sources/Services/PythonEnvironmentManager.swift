@@ -59,14 +59,6 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        if UITestAutomationSupport.isStubBackendMode {
-            state = .checking
-            launchSetupTask { [weak self] in
-                await self?.runStubSetup()
-            }
-            return
-        }
-
         // --- Synchronous fast path (no Task, no dispatch) ---
 
         // Architecture check (instant)
@@ -95,6 +87,14 @@ final class PythonEnvironmentManager: ObservableObject {
             state = .failed(
                 message: "The bundled Python runtime is present but could not be located.\n\nThis is a packaging issue. Reinstall the app or use a new release build."
             )
+            return
+        }
+
+        if UITestAutomationSupport.isStubBackendMode {
+            state = .checking
+            launchSetupTask { [weak self] in
+                await self?.runStubSetup()
+            }
             return
         }
 

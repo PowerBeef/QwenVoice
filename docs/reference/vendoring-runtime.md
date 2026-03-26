@@ -34,7 +34,7 @@ The release pipeline also:
 
 ## Vendored Wheel Strategy
 
-The app currently vendors a repacked `mlx-audio==0.4.0.post1` wheel that includes a QwenVoice runtime helper module used by the backend.
+The app currently vendors a repacked `mlx-audio==0.4.1.post1` wheel that includes a QwenVoice runtime helper module used by the backend.
 
 Relevant locations:
 

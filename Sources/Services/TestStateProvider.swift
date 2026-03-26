@@ -4,6 +4,14 @@ import Foundation
 /// Only active when UITestAutomationSupport.isEnabled.
 @MainActor
 final class TestStateProvider: ObservableObject {
+    enum RuntimeSource: String {
+        case none
+        case bundled
+        case devVenv = "dev_venv"
+        case stub
+        case other
+    }
+
     static let shared = TestStateProvider()
 
     @Published var activeScreen: String = ""
@@ -34,6 +42,8 @@ final class TestStateProvider: ObservableObject {
     @Published var windowActivationAttemptCount: Int = 0
     @Published var lastWindowActivationReason: String = ""
     @Published var lastWindowActivationAtMS: Int = 0
+    @Published var runtimeSource: String = RuntimeSource.none.rawValue
+    @Published var activePythonPath: String = ""
 
     func setEnvironmentReady(_ ready: Bool) {
         environmentReady = ready
@@ -104,6 +114,11 @@ final class TestStateProvider: ObservableObject {
         refreshInteractiveReady()
     }
 
+    func setRuntimeStatus(source: RuntimeSource, pythonPath: String?) {
+        runtimeSource = source.rawValue
+        activePythonPath = pythonPath ?? ""
+    }
+
     func setSidebarStatus(_ status: SidebarStatus) {
         switch status {
         case .idle:
@@ -169,7 +184,46 @@ final class TestStateProvider: ObservableObject {
             "windowActivationAttemptCount": windowActivationAttemptCount,
             "lastWindowActivationReason": lastWindowActivationReason,
             "lastWindowActivationAtMS": lastWindowActivationAtMS,
+            "runtimeSource": runtimeSource,
+            "activePythonPath": activePythonPath,
         ]
+    }
+
+    nonisolated static func runtimeSource(
+        for pythonPath: String?,
+        bundledRuntimeRoot: String?,
+        devVenvRoot: String,
+        stubPythonPath: String
+    ) -> RuntimeSource {
+        guard let pythonPath,
+              !pythonPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .none
+        }
+
+        let normalizedPythonPath = normalizePath(pythonPath)
+        if normalizedPythonPath == normalizePath(stubPythonPath) {
+            return .stub
+        }
+
+        if let bundledRuntimeRoot,
+           isPath(normalizedPythonPath, inside: bundledRuntimeRoot) {
+            return .bundled
+        }
+
+        if isPath(normalizedPythonPath, inside: devVenvRoot) {
+            return .devVenv
+        }
+
+        return .other
+    }
+
+    private nonisolated static func normalizePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
+    private nonisolated static func isPath(_ path: String, inside root: String) -> Bool {
+        let normalizedRoot = normalizePath(root)
+        return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
     }
 
     private func refreshInteractiveReady() {

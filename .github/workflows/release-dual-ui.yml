@@ -85,7 +85,7 @@ jobs:
             --ui-profile "${{ matrix.variant.ui_profile }}" \
             --output-name "${{ matrix.variant.output_name }}"
 
-      - name: Verify bundled dependencies in final app
+      - name: Verify bundled dependencies and isolated startup in final app
         run: |
           APP_PATH="build/QwenVoice.app"
           RESOURCES_PATH="$APP_PATH/Contents/Resources"
@@ -130,6 +130,11 @@ jobs:
 
           META_UI_PROFILE="$(grep -E '^ui_profile=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
           META_DMG_NAME="$(grep -E '^dmg_name=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_MLX_VERSION="$(grep -E '^mlx_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_MLX_METAL_VERSION="$(grep -E '^mlx_metal_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_MLX_LM_VERSION="$(grep -E '^mlx_lm_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_MLX_AUDIO_VERSION="$(grep -E '^mlx_audio_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_TRANSFORMERS_VERSION="$(grep -E '^transformers_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
 
           if [ "$APP_MINOS" != "15.0" ]; then
             echo "Error: app minOS is $APP_MINOS (expected 15.0)"
@@ -144,6 +149,17 @@ jobs:
             echo "Error: metadata dmg_name is '$META_DMG_NAME' (expected '$EXPECTED_DMG_NAME')"
             exit 1
           fi
+          for value_name in \
+            META_MLX_VERSION \
+            META_MLX_METAL_VERSION \
+            META_MLX_LM_VERSION \
+            META_MLX_AUDIO_VERSION \
+            META_TRANSFORMERS_VERSION; do
+            if [ -z "${!value_name}" ]; then
+              echo "Error: release metadata is missing $value_name"
+              exit 1
+            fi
+          done
 
           if ! printf '%s' "$APP_SDK_MAJOR" | grep -Eq '^[0-9]+$'; then
             echo "Error: could not parse SDK major from '$APP_SDK'"
