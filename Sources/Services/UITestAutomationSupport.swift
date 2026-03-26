@@ -5,6 +5,11 @@ enum UITestBackendMode {
     case stub
 }
 
+enum UITestScreenshotCaptureMode: String {
+    case content
+    case system
+}
+
 enum UITestSetupScenario: String {
     case success
     case failOnce = "fail_once"
@@ -20,6 +25,7 @@ enum UITestAutomationSupport {
     static let enrollAudioPathEnvironmentKey = "QWENVOICE_UI_TEST_ENROLL_AUDIO_PATH"
     static let outputDirectoryEnvironmentKey = "QWENVOICE_UI_TEST_OUTPUT_DIRECTORY"
     static let screenshotDirectoryEnvironmentKey = "QWENVOICE_UITEST_SCREENSHOT_DIR"
+    static let screenshotCaptureModeEnvironmentKey = "QWENVOICE_UITEST_CAPTURE_MODE"
     static let defaultsSuiteEnvironmentKey = "QWENVOICE_UI_TEST_DEFAULTS_SUITE"
     static let setupScenarioEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_SCENARIO"
     static let setupDelayEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_DELAY_MS"
@@ -71,6 +77,10 @@ enum UITestAutomationSupport {
 
     static var screenshotDirectoryURL: URL? {
         pathURL(for: screenshotDirectoryEnvironmentKey)
+    }
+
+    static var screenshotCaptureMode: UITestScreenshotCaptureMode {
+        screenshotCaptureMode(from: environment)
     }
 
     static var appStorage: UserDefaults {
@@ -149,6 +159,18 @@ enum UITestAutomationSupport {
         default:
             return false
         }
+    }
+
+    static func screenshotCaptureMode(
+        from environment: [String: String]
+    ) -> UITestScreenshotCaptureMode {
+        guard let rawValue = environment[screenshotCaptureModeEnvironmentKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            let mode = UITestScreenshotCaptureMode(rawValue: rawValue) else {
+            return .content
+        }
+        return mode
     }
 
     private static func pathURL(for key: String) -> URL? {

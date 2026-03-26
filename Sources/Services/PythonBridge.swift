@@ -1551,7 +1551,7 @@ final class PythonBridge: ObservableObject {
         return nil
     }
 
-    private static func findFFmpeg() -> String? {
+    static func findFFmpeg() -> String? {
         if let bundlePath = Bundle.main.path(forResource: "ffmpeg", ofType: nil) {
             return bundlePath
         }

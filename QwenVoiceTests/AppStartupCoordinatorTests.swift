@@ -67,6 +67,34 @@ final class AppStartupCoordinatorTests: XCTestCase {
         )
     }
 
+    func testScreenshotCaptureModeDefaultsToContent() {
+        XCTAssertEqual(
+            UITestAutomationSupport.screenshotCaptureMode(from: [:]),
+            .content
+        )
+        XCTAssertEqual(
+            UITestAutomationSupport.screenshotCaptureMode(from: [
+                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "content"
+            ]),
+            .content
+        )
+    }
+
+    func testScreenshotCaptureModeSupportsExplicitSystemOverride() {
+        XCTAssertEqual(
+            UITestAutomationSupport.screenshotCaptureMode(from: [
+                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "system"
+            ]),
+            .system
+        )
+        XCTAssertEqual(
+            UITestAutomationSupport.screenshotCaptureMode(from: [
+                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "invalid"
+            ]),
+            .content
+        )
+    }
+
     @MainActor
     func testTrackedMainWindowsIgnoresNonContentWindows() {
         let mainWindow = MainCapableTestWindow(

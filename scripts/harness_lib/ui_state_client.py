@@ -40,11 +40,43 @@ class UIStateClient:
         )
 
     def start_preview(self, screen: str, text: str) -> dict:
-        encoded_text = urllib.parse.quote(text)
-        return self._request_json(
-            f"/start-preview?screen={screen}&text={encoded_text}",
-            timeout=10,
+        return self.start_generation(
+            screen,
+            text,
             operation="start_preview",
+            endpoint="/start-preview",
+        )
+
+    def start_generation(
+        self,
+        screen: str,
+        text: str,
+        *,
+        voice_description: str | None = None,
+        emotion: str | None = None,
+        reference_audio_path: str | None = None,
+        reference_transcript: str | None = None,
+        operation: str = "start_generation",
+        endpoint: str = "/start-generation",
+    ) -> dict:
+        query = {
+            "screen": screen,
+            "text": text,
+        }
+        if voice_description:
+            query["voiceDescription"] = voice_description
+        if emotion:
+            query["emotion"] = emotion
+        if reference_audio_path:
+            query["referenceAudioPath"] = reference_audio_path
+        if reference_transcript:
+            query["referenceTranscript"] = reference_transcript
+
+        encoded_query = urllib.parse.urlencode(query, quote_via=urllib.parse.quote)
+        return self._request_json(
+            f"{endpoint}?{encoded_query}",
+            timeout=10,
+            operation=operation,
         )
 
     def activate_window(self, reason: str = "remote_request") -> dict:

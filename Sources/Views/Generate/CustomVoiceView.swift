@@ -76,8 +76,8 @@ struct CustomVoiceView: View {
         .onChange(of: draft.emotion) { _, _ in syncUITestState() }
         .onChange(of: draft.text) { _, _ in syncUITestState() }
         .onChange(of: isGenerating) { _, _ in syncUITestState() }
-        .onReceive(NotificationCenter.default.publisher(for: .testStartLivePreview)) { notification in
-            handleTestStartLivePreview(notification)
+        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
+            handleTestStartGeneration(notification)
         }
     }
 }
@@ -232,7 +232,7 @@ private extension CustomVoiceView {
         TestStateProvider.shared.isGenerating = isGenerating
     }
 
-    func handleTestStartLivePreview(_ notification: Notification) {
+    func handleTestStartGeneration(_ notification: Notification) {
         guard UITestAutomationSupport.isEnabled,
               let screen = notification.userInfo?["screen"] as? String,
               screen == "customVoice" else { return }

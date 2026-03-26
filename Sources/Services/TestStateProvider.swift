@@ -44,6 +44,13 @@ final class TestStateProvider: ObservableObject {
     @Published var lastWindowActivationAtMS: Int = 0
     @Published var runtimeSource: String = RuntimeSource.none.rawValue
     @Published var activePythonPath: String = ""
+    @Published var activeFFmpegPath: String = ""
+    @Published var previewPreparedCount: Int = 0
+    @Published var previewPreparedAtMS: Int = 0
+    @Published var previewChunkCount: Int = 0
+    @Published var previewChunkAtMS: Int = 0
+    @Published var previewFinalizedCount: Int = 0
+    @Published var previewFinalizedAtMS: Int = 0
 
     func setEnvironmentReady(_ ready: Bool) {
         environmentReady = ready
@@ -114,9 +121,25 @@ final class TestStateProvider: ObservableObject {
         refreshInteractiveReady()
     }
 
-    func setRuntimeStatus(source: RuntimeSource, pythonPath: String?) {
+    func setRuntimeStatus(source: RuntimeSource, pythonPath: String?, ffmpegPath: String?) {
         runtimeSource = source.rawValue
         activePythonPath = pythonPath ?? ""
+        activeFFmpegPath = ffmpegPath ?? ""
+    }
+
+    func recordPreviewPrepared() {
+        previewPreparedCount += 1
+        previewPreparedAtMS = Self.monotonicMilliseconds
+    }
+
+    func recordPreviewChunk() {
+        previewChunkCount += 1
+        previewChunkAtMS = Self.monotonicMilliseconds
+    }
+
+    func recordPreviewFinalized() {
+        previewFinalizedCount += 1
+        previewFinalizedAtMS = Self.monotonicMilliseconds
     }
 
     func setSidebarStatus(_ status: SidebarStatus) {
@@ -186,6 +209,13 @@ final class TestStateProvider: ObservableObject {
             "lastWindowActivationAtMS": lastWindowActivationAtMS,
             "runtimeSource": runtimeSource,
             "activePythonPath": activePythonPath,
+            "activeFFmpegPath": activeFFmpegPath,
+            "previewPreparedCount": previewPreparedCount,
+            "previewPreparedAtMS": previewPreparedAtMS,
+            "previewChunkCount": previewChunkCount,
+            "previewChunkAtMS": previewChunkAtMS,
+            "previewFinalizedCount": previewFinalizedCount,
+            "previewFinalizedAtMS": previewFinalizedAtMS,
         ]
     }
 

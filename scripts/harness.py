@@ -35,6 +35,9 @@ def _run_test(args: argparse.Namespace) -> None:
         artifact_dir=getattr(args, "artifact_dir", None),
         ui_backend_mode=getattr(args, "ui_backend_mode", "live"),
         ui_data_root=getattr(args, "ui_data_root", "fixture"),
+        app_bundle=getattr(args, "app_bundle", None),
+        dmg=getattr(args, "dmg", None),
+        artifacts_root=getattr(args, "artifacts_root", None),
     )
     duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("test", suites, duration_ms)
@@ -93,12 +96,15 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["pipeline", "rpc", "contract", "server", "swift", "audio", "ui", "design", "perf", "all"],
+        choices=["pipeline", "rpc", "contract", "server", "swift", "audio", "ui", "design", "perf", "release", "all"],
         default="all",
     )
     p_test.add_argument("--python", default="", help="Explicit Python interpreter path")
     p_test.add_argument("--artifact-dir", default=None,
         help="Directory with chunk_*.wav + final.wav for offline audio analysis")
+    p_test.add_argument("--app-bundle", default=None, help="Explicit QwenVoice.app bundle path")
+    p_test.add_argument("--dmg", default=None, help="Explicit QwenVoice release DMG path")
+    p_test.add_argument("--artifacts-root", default=None, help="Release artifacts root directory for --layer release")
     p_test.add_argument(
         "--ui-backend-mode",
         choices=["live", "stub"],

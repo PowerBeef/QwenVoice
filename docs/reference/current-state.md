@@ -109,6 +109,8 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 
 The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) now default to live backend mode with an isolated app-support fixture. Those runs reuse the installed runtime and models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the backend initialization handshake has completed.
 
+Screenshot-based harness runs now default to permissionless in-app window-content capture via `QWENVOICE_UITEST_CAPTURE_MODE=content`. The legacy system capture path remains available only as an explicit opt-in with `QWENVOICE_UITEST_CAPTURE_MODE=system`; true pre-approval for that macOS permission requires device-management/PPPC policy, not an app-side setting.
+
 ## Current Documentation Boundaries
 
 - `README.md` is the public GitHub landing page.

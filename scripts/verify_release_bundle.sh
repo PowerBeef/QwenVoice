@@ -286,16 +286,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-QWENVOICE_FFMPEG_PATH="$FFMPEG_BIN" "$PYTHON_BIN" - "$PYTHON_BIN" "$SERVER_SCRIPT" "$TMP_APP_SUPPORT" <<'PY'
+PATH="/usr/bin:/bin:/usr/sbin:/sbin" QWENVOICE_FFMPEG_PATH="$FFMPEG_BIN" "$PYTHON_BIN" - "$PYTHON_BIN" "$SERVER_SCRIPT" "$TMP_APP_SUPPORT" "$FFMPEG_BIN" <<'PY'
 import json
 import os
 import subprocess
 import sys
 import time
+import wave
+from pathlib import Path
 
 python_bin = sys.argv[1]
 server_script = sys.argv[2]
 app_support_dir = sys.argv[3]
+ffmpeg_bin = sys.argv[4]
 
 proc = subprocess.Popen(
     [python_bin, "-u", server_script],
@@ -350,6 +353,71 @@ try:
                 break
         else:
             raise RuntimeError(f"Timed out waiting for {request['method']} response")
+
+    work_dir = Path(app_support_dir)
+    source_wav = work_dir / "verify_source.wav"
+    encoded_input = work_dir / "verify_source.m4a"
+    converted_output = work_dir / "verify_converted.wav"
+
+    with wave.open(str(source_wav), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(24000)
+        handle.writeframes(b"\x00\x00" * 2400)
+
+    encode_proc = subprocess.run(
+        [
+            ffmpeg_bin,
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            str(source_wav),
+            str(encoded_input),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if encode_proc.returncode != 0:
+        raise RuntimeError(
+            "Bundled ffmpeg failed to create the verification input: "
+            + (encode_proc.stderr.strip() or f"exit {encode_proc.returncode}")
+        )
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "convert_audio",
+        "params": {
+            "input_path": str(encoded_input),
+            "output_path": str(converted_output),
+        },
+    }
+    proc.stdin.write(json.dumps(request) + "\n")
+    proc.stdin.flush()
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                raise RuntimeError("Backend exited during convert_audio")
+            continue
+        message = json.loads(line)
+        if message.get("id") != 3:
+            continue
+        if "error" in message:
+            raise RuntimeError(
+                "convert_audio returned error: "
+                + message["error"].get("message", "unknown error")
+            )
+        wav_path = message.get("result", {}).get("wav_path")
+        if not wav_path or not Path(wav_path).exists():
+            raise RuntimeError(f"convert_audio returned missing wav_path: {message}")
+        break
+    else:
+        raise RuntimeError("Timed out waiting for convert_audio response")
 finally:
     proc.terminate()
     try:
@@ -392,6 +460,7 @@ env -i \
 
 if ! "$PYTHON_BIN" - "$PYTHON_ROOT" <<'PY'
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -421,15 +490,26 @@ while time.time() < deadline:
     if last_state.get("interactiveReady") is True:
         runtime_source = last_state.get("runtimeSource")
         active_python_path = last_state.get("activePythonPath", "")
+        active_ffmpeg_path = last_state.get("activeFFmpegPath", "")
         expected_prefix = python_root.rstrip("/") + "/"
+        expected_ffmpeg = python_root.rsplit("/python", 1)[0] + "/ffmpeg"
+        normalized_active_python_path = os.path.realpath(active_python_path) if active_python_path else ""
+        normalized_expected_prefix = os.path.realpath(expected_prefix.rstrip("/")) + "/"
+        normalized_active_ffmpeg_path = os.path.realpath(active_ffmpeg_path) if active_ffmpeg_path else ""
+        normalized_expected_ffmpeg = os.path.realpath(expected_ffmpeg)
         if runtime_source != "bundled":
             raise SystemExit(
                 f"Packaged app reported unexpected runtimeSource={runtime_source!r}; state={last_state}"
             )
-        if not active_python_path.startswith(expected_prefix):
+        if not normalized_active_python_path.startswith(normalized_expected_prefix):
             raise SystemExit(
                 "Packaged app did not resolve the bundled Python runtime: "
                 f"activePythonPath={active_python_path!r} expected_prefix={expected_prefix!r}"
+            )
+        if normalized_active_ffmpeg_path != normalized_expected_ffmpeg:
+            raise SystemExit(
+                "Packaged app did not resolve the bundled ffmpeg binary: "
+                f"activeFFmpegPath={active_ffmpeg_path!r} expected={expected_ffmpeg!r}"
             )
         sys.exit(0)
 

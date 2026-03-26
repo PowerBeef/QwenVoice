@@ -70,8 +70,10 @@ final class TestStateServer: @unchecked Sendable {
             handleActivateWindow(path: p, connection: connection)
         case let p where p.hasPrefix("/capture-screenshot"):
             handleCaptureScreenshot(path: p, connection: connection)
+        case let p where p.hasPrefix("/start-generation"):
+            handleStartGeneration(path: p, connection: connection)
         case let p where p.hasPrefix("/start-preview"):
-            handleStartPreview(path: p, connection: connection)
+            handleStartGeneration(path: p, connection: connection, legacyPreviewRoute: true)
         default:
             sendJSON(["error": "not_found", "path": path], status: 404, connection: connection)
         }
@@ -113,30 +115,54 @@ final class TestStateServer: @unchecked Sendable {
         }
 
         Task { @MainActor in
-            let captured = UITestWindowCoordinator.shared.captureMainWindowScreenshot(name: name)
+            let result = UITestWindowCoordinator.shared.captureMainWindowScreenshot(name: name)
             var state = TestStateProvider.shared.snapshot()
-            state["screenshotCaptured"] = captured
+            state["screenshotCaptured"] = result.captured
             state["screenshotName"] = name
+            state["screenshotCaptureMode"] = result.mode.rawValue
+            state["screenshotFailureReason"] = result.failureReason ?? ""
             self.sendJSON(state, connection: connection)
         }
     }
 
-    private func handleStartPreview(path: String, connection: NWConnection) {
+    private func handleStartGeneration(
+        path: String,
+        connection: NWConnection,
+        legacyPreviewRoute: Bool = false
+    ) {
         guard let screen = extractQueryParam(from: path, key: "screen") else {
             sendJSON(["error": "missing_screen_param"], status: 400, connection: connection)
             return
         }
 
         let text = extractQueryParam(from: path, key: "text") ?? ""
+        let voiceDescription = extractQueryParam(from: path, key: "voiceDescription")
+        let emotion = extractQueryParam(from: path, key: "emotion")
+        let referenceAudioPath = extractQueryParam(from: path, key: "referenceAudioPath")
+        let referenceTranscript = extractQueryParam(from: path, key: "referenceTranscript")
 
         Task { @MainActor in
+            var userInfo: [String: String] = [
+                "screen": screen,
+                "text": text,
+            ]
+            if let voiceDescription, !voiceDescription.isEmpty {
+                userInfo["voiceDescription"] = voiceDescription
+            }
+            if let emotion, !emotion.isEmpty {
+                userInfo["emotion"] = emotion
+            }
+            if let referenceAudioPath, !referenceAudioPath.isEmpty {
+                userInfo["referenceAudioPath"] = referenceAudioPath
+            }
+            if let referenceTranscript, !referenceTranscript.isEmpty {
+                userInfo["referenceTranscript"] = referenceTranscript
+            }
+
             NotificationCenter.default.post(
-                name: .testStartLivePreview,
+                name: .testStartGeneration,
                 object: nil,
-                userInfo: [
-                    "screen": screen,
-                    "text": text,
-                ]
+                userInfo: userInfo
             )
             try? await Task.sleep(for: .milliseconds(200))
             let state = TestStateProvider.shared.snapshot()
@@ -183,4 +209,5 @@ final class TestStateServer: @unchecked Sendable {
 extension Notification.Name {
     static let testNavigateToScreen = Notification.Name("testNavigateToScreen")
     static let testStartLivePreview = Notification.Name("testStartLivePreview")
+    static let testStartGeneration = Notification.Name("testStartGeneration")
 }

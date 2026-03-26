@@ -128,6 +128,9 @@ struct VoiceDesignView: View {
         .task(id: idlePrewarmTaskID) {
             await prewarmSelectedModelIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
+            handleTestStartGeneration(notification)
+        }
     }
 }
 
@@ -298,6 +301,27 @@ private extension VoiceDesignView {
 // MARK: - Actions
 
 private extension VoiceDesignView {
+    func handleTestStartGeneration(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled,
+              let screen = notification.userInfo?["screen"] as? String,
+              screen == "voiceDesign" else { return }
+
+        if let text = notification.userInfo?["text"] as? String,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.text = text
+        }
+        if let voiceDescription = notification.userInfo?["voiceDescription"] as? String,
+           !voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.voiceDescription = voiceDescription
+        }
+        if let emotion = notification.userInfo?["emotion"] as? String,
+           !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.emotion = emotion
+        }
+
+        generate()
+    }
+
     func generate() {
         guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, pythonBridge.isReady else { return }
 

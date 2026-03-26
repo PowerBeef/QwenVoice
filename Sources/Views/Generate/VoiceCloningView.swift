@@ -150,6 +150,9 @@ struct VoiceCloningView: View {
         .task(id: idlePrewarmTaskID) {
             await prewarmCloneModelIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
+            handleTestStartGeneration(notification)
+        }
         .sheet(isPresented: $showingBatch) {
             BatchGenerationSheet(
                 mode: .clone,
@@ -241,6 +244,27 @@ private extension VoiceCloningView {
 // MARK: - Actions
 
 private extension VoiceCloningView {
+    func handleTestStartGeneration(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled,
+              let screen = notification.userInfo?["screen"] as? String,
+              screen == "voiceCloning" else { return }
+
+        if let text = notification.userInfo?["text"] as? String,
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.text = text
+        }
+        if let referenceAudioPath = notification.userInfo?["referenceAudioPath"] as? String,
+           !referenceAudioPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.selectedSavedVoiceID = nil
+            draft.referenceAudioPath = referenceAudioPath
+        }
+        if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
+            draft.referenceTranscript = referenceTranscript
+        }
+
+        generate()
+    }
+
     func generate() {
         guard !draft.text.isEmpty else { return }
 

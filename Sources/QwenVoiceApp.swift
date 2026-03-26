@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreGraphics
 
 struct AppLaunchConfiguration {
     let isUITest: Bool
@@ -85,6 +86,12 @@ struct AppLaunchConfiguration {
 
 @MainActor
 final class UITestWindowCoordinator {
+    struct ScreenshotCaptureResult {
+        let captured: Bool
+        let mode: UITestScreenshotCaptureMode
+        let failureReason: String?
+    }
+
     static let shared = UITestWindowCoordinator()
     static let mainContentWindowIdentifier = NSUserInterfaceItemIdentifier("QwenVoiceMainContentWindow")
 
@@ -160,11 +167,29 @@ final class UITestWindowCoordinator {
         return hasVisibleMainWindow
     }
 
-    func captureMainWindowScreenshot(name: String) -> Bool {
-        guard UITestAutomationSupport.isEnabled,
-              let screenshotDirectory = UITestAutomationSupport.screenshotDirectoryURL,
-              let window = preferredMainWindow() else {
-            return false
+    func captureMainWindowScreenshot(name: String) -> ScreenshotCaptureResult {
+        let mode = UITestAutomationSupport.screenshotCaptureMode
+
+        guard UITestAutomationSupport.isEnabled else {
+            return ScreenshotCaptureResult(
+                captured: false,
+                mode: mode,
+                failureReason: "ui_test_automation_disabled"
+            )
+        }
+        guard let screenshotDirectory = UITestAutomationSupport.screenshotDirectoryURL else {
+            return ScreenshotCaptureResult(
+                captured: false,
+                mode: mode,
+                failureReason: "screenshot_directory_unavailable"
+            )
+        }
+        guard let window = preferredMainWindow() else {
+            return ScreenshotCaptureResult(
+                captured: false,
+                mode: mode,
+                failureReason: "main_window_unavailable"
+            )
         }
 
         try? FileManager.default.createDirectory(
@@ -172,7 +197,30 @@ final class UITestWindowCoordinator {
             withIntermediateDirectories: true
         )
         let destinationURL = screenshotDirectory.appendingPathComponent("\(name).png")
-        return captureWindowImage(window, to: destinationURL) || captureWindowContent(window, to: destinationURL)
+
+        switch mode {
+        case .content:
+            let captured = captureWindowContent(window, to: destinationURL)
+            return ScreenshotCaptureResult(
+                captured: captured,
+                mode: mode,
+                failureReason: captured ? nil : "content_capture_failed"
+            )
+        case .system:
+            if !canUseSystemScreenCapture() {
+                return ScreenshotCaptureResult(
+                    captured: false,
+                    mode: mode,
+                    failureReason: "screen_capture_permission_required"
+                )
+            }
+            let captured = captureWindowImage(window, to: destinationURL)
+            return ScreenshotCaptureResult(
+                captured: captured,
+                mode: mode,
+                failureReason: captured ? nil : "system_capture_failed"
+            )
+        }
     }
 
     private func captureWindowImage(_ window: NSWindow, to destinationURL: URL) -> Bool {
@@ -193,15 +241,16 @@ final class UITestWindowCoordinator {
 
     private func captureWindowContent(_ window: NSWindow, to destinationURL: URL) -> Bool {
         guard let contentView = window.contentView else { return false }
-        let bounds = contentView.bounds
+        let renderView = contentView.superview ?? contentView
+        let bounds = renderView.bounds
         guard !bounds.isEmpty,
-              let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+              let bitmap = renderView.bitmapImageRepForCachingDisplay(in: bounds) else {
             return false
         }
 
-        contentView.layoutSubtreeIfNeeded()
-        contentView.displayIfNeeded()
-        contentView.cacheDisplay(in: bounds, to: bitmap)
+        renderView.layoutSubtreeIfNeeded()
+        renderView.displayIfNeeded()
+        renderView.cacheDisplay(in: bounds, to: bitmap)
 
         guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
             return false
@@ -213,6 +262,10 @@ final class UITestWindowCoordinator {
         } catch {
             return false
         }
+    }
+
+    private func canUseSystemScreenCapture() -> Bool {
+        CGPreflightScreenCaptureAccess()
     }
 
     @discardableResult
@@ -314,8 +367,13 @@ struct QwenVoiceApp: App {
             devVenvRoot: AppPaths.pythonVenvDir.path,
             stubPythonPath: UITestAutomationSupport.stubPythonPath()
         )
+        let activeFFmpegPath = PythonBridge.findFFmpeg()
 
-        TestStateProvider.shared.setRuntimeStatus(source: runtimeSource, pythonPath: activePythonPath)
+        TestStateProvider.shared.setRuntimeStatus(
+            source: runtimeSource,
+            pythonPath: activePythonPath,
+            ffmpegPath: activeFFmpegPath
+        )
         TestStateProvider.shared.setEnvironmentReady(isEnvironmentReady)
         if isEnvironmentReady {
             UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
