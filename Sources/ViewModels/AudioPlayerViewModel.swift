@@ -400,7 +400,9 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func scheduleLiveBuffer(_ buffer: AVAudioPCMBuffer) {
-        livePlayerNode?.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+        livePlayerNode?.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { @Sendable [weak self] _ in
+            // AVFAudio invokes completion handlers on its own queue, so keep
+            // the callback nonisolated and hop back to MainActor explicitly.
             Task { @MainActor [weak self] in
                 self?.handleLiveBufferPlaybackCompletion()
             }
