@@ -692,6 +692,74 @@ def _run_server_tests() -> dict[str, Any]:
         os.environ.pop("_HARNESS_TEST_FLOAT_MISSING", None)
         assert server._env_float("_HARNESS_TEST_FLOAT_MISSING", 0.78) == 0.78
 
+    def test_resolve_internal_kv_cache_settings_missing_defaults_to_dense():
+        settings = server._resolve_internal_kv_cache_settings({})
+        assert settings == {
+            "kv_cache_strategy": server.DEFAULT_KV_CACHE_STRATEGY,
+            "kv_quant_target": server.DEFAULT_KV_QUANT_TARGET,
+        }
+
+    def test_resolve_internal_kv_cache_settings_mlx_quantized_defaults():
+        settings = server._resolve_internal_kv_cache_settings(
+            {"kv_cache_strategy": "mlx_quantized"}
+        )
+        assert settings == {
+            "kv_cache_strategy": "mlx_quantized",
+            "kv_bits": server.DEFAULT_KV_BITS,
+            "kv_group_size": server.DEFAULT_KV_GROUP_SIZE,
+            "quantized_kv_start": server.DEFAULT_QUANTIZED_KV_START,
+            "kv_quant_target": server.DEFAULT_KV_QUANT_TARGET,
+        }
+
+    def test_resolve_internal_kv_cache_settings_mlx_quantized_custom_values():
+        settings = server._resolve_internal_kv_cache_settings(
+            {
+                "kv_cache_strategy": "mlx_quantized",
+                "kv_bits": "8",
+                "kv_group_size": 32,
+                "quantized_kv_start": 256,
+                "kv_quant_target": "talker",
+            }
+        )
+        assert settings == {
+            "kv_cache_strategy": "mlx_quantized",
+            "kv_bits": 8,
+            "kv_group_size": 32,
+            "quantized_kv_start": 256,
+            "kv_quant_target": "talker",
+        }
+
+    def test_resolve_internal_kv_cache_settings_turboquant_defaults():
+        settings = server._resolve_internal_kv_cache_settings(
+            {"kv_cache_strategy": "turboquant"}
+        )
+        assert settings == {
+            "kv_cache_strategy": "turboquant",
+            "turboquant_profile": server.DEFAULT_TURBOQUANT_PROFILE,
+            "turboquant_sink_tokens": server.DEFAULT_TURBOQUANT_SINK_TOKENS,
+            "turboquant_chunk_size": server.DEFAULT_TURBOQUANT_CHUNK_SIZE,
+            "turboquant_seed": server.DEFAULT_TURBOQUANT_SEED,
+            "kv_quant_target": server.DEFAULT_KV_QUANT_TARGET,
+        }
+
+    def test_resolve_internal_kv_cache_settings_rejects_invalid_target():
+        try:
+            server._resolve_internal_kv_cache_settings({"kv_quant_target": "code_predictor"})
+        except ValueError as exc:
+            assert "kv_quant_target" in str(exc)
+        else:
+            raise AssertionError("Expected invalid kv_quant_target to raise")
+
+    def test_resolve_internal_kv_cache_settings_rejects_invalid_bits():
+        try:
+            server._resolve_internal_kv_cache_settings(
+                {"kv_cache_strategy": "mlx_quantized", "kv_bits": 0}
+            )
+        except ValueError as exc:
+            assert "kv_bits" in str(exc)
+        else:
+            raise AssertionError("Expected invalid kv_bits to raise")
+
     # Early-abort constant validation
     def test_early_abort_margin_positive():
         assert server.GUIDED_CLONE_EARLY_ABORT_MARGIN > 0
@@ -772,6 +840,12 @@ def _run_server_tests() -> dict[str, Any]:
         ("env_float_valid", test_env_float_valid),
         ("env_float_invalid", test_env_float_invalid),
         ("env_float_missing", test_env_float_missing),
+        ("kv_cache_settings_missing", test_resolve_internal_kv_cache_settings_missing_defaults_to_dense),
+        ("kv_cache_settings_mlx_defaults", test_resolve_internal_kv_cache_settings_mlx_quantized_defaults),
+        ("kv_cache_settings_mlx_custom", test_resolve_internal_kv_cache_settings_mlx_quantized_custom_values),
+        ("kv_cache_settings_turboquant_defaults", test_resolve_internal_kv_cache_settings_turboquant_defaults),
+        ("kv_cache_settings_invalid_target", test_resolve_internal_kv_cache_settings_rejects_invalid_target),
+        ("kv_cache_settings_invalid_bits", test_resolve_internal_kv_cache_settings_rejects_invalid_bits),
         ("early_abort_margin_positive", test_early_abort_margin_positive),
         ("meaningful_delivery_instruction", test_meaningful_delivery_various),
         ("design_prewarm_identity_ignores_instruction", test_design_prewarm_identity_ignores_instruction),

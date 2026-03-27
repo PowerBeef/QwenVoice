@@ -89,6 +89,15 @@ FILENAME_MAX_LEN = 20
 CACHE_POLICY = _resolve_cache_policy()
 CLONE_CONTEXT_CACHE_CAPACITY = 16
 DEFAULT_STREAMING_INTERVAL = 2.0
+DEFAULT_KV_CACHE_STRATEGY = "dense"
+DEFAULT_KV_BITS = 4
+DEFAULT_KV_GROUP_SIZE = 64
+DEFAULT_QUANTIZED_KV_START = 128
+DEFAULT_KV_QUANT_TARGET = "talker"
+DEFAULT_TURBOQUANT_PROFILE = "tq35"
+DEFAULT_TURBOQUANT_SINK_TOKENS = 128
+DEFAULT_TURBOQUANT_CHUNK_SIZE = 128
+DEFAULT_TURBOQUANT_SEED = 42
 PREWARM_PROFILES = {
     "custom": {
         "text": "Voice warmup.",
@@ -548,6 +557,143 @@ def _apply_timing_breakdown(target, breakdown):
         target[key] = int(value)
 
 
+def _parse_optional_int(raw_value, field_name):
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+
+
+def _resolve_internal_kv_cache_settings(params):
+    raw_strategy = params.get("kv_cache_strategy")
+    raw_bits = params.get("kv_bits")
+    raw_group_size = params.get("kv_group_size")
+    raw_quantized_start = params.get("quantized_kv_start")
+    raw_profile = params.get("turboquant_profile")
+    raw_sink_tokens = params.get("turboquant_sink_tokens")
+    raw_chunk_size = params.get("turboquant_chunk_size")
+    raw_seed = params.get("turboquant_seed")
+    raw_target = params.get("kv_quant_target")
+
+    if not raw_strategy and all(
+        value is None
+        for value in (
+            raw_bits,
+            raw_group_size,
+            raw_quantized_start,
+            raw_profile,
+            raw_sink_tokens,
+            raw_chunk_size,
+            raw_seed,
+            raw_target,
+        )
+    ):
+        return {
+            "kv_cache_strategy": DEFAULT_KV_CACHE_STRATEGY,
+            "kv_quant_target": DEFAULT_KV_QUANT_TARGET,
+        }
+
+    strategy = (
+        (str(raw_strategy).strip().lower() if raw_strategy is not None else "")
+        or ("mlx_quantized" if raw_bits is not None else DEFAULT_KV_CACHE_STRATEGY)
+    )
+    if strategy not in {"dense", "mlx_quantized", "turboquant"}:
+        raise ValueError(
+            "kv_cache_strategy must be one of: dense, mlx_quantized, turboquant"
+        )
+
+    target = (
+        (str(raw_target).strip().lower() if raw_target is not None else "")
+        or DEFAULT_KV_QUANT_TARGET
+    )
+    if target != "talker":
+        raise ValueError("kv_quant_target must be 'talker' for this prototype")
+
+    settings = {
+        "kv_cache_strategy": strategy,
+        "kv_quant_target": target,
+    }
+    if strategy == "dense":
+        return settings
+
+    if strategy == "mlx_quantized":
+        kv_bits = (
+            DEFAULT_KV_BITS
+            if raw_bits is None
+            else _parse_optional_int(raw_bits, "kv_bits")
+        )
+        kv_group_size = (
+            DEFAULT_KV_GROUP_SIZE
+            if raw_group_size is None
+            else _parse_optional_int(raw_group_size, "kv_group_size")
+        )
+        quantized_kv_start = (
+            DEFAULT_QUANTIZED_KV_START
+            if raw_quantized_start is None
+            else _parse_optional_int(raw_quantized_start, "quantized_kv_start")
+        )
+        if kv_bits is None or kv_bits <= 0:
+            raise ValueError("kv_bits must be a positive integer")
+        if kv_group_size is None or kv_group_size <= 0:
+            raise ValueError("kv_group_size must be a positive integer")
+        if quantized_kv_start is None or quantized_kv_start < 0:
+            raise ValueError("quantized_kv_start must be zero or a positive integer")
+        settings.update(
+            {
+                "kv_bits": kv_bits,
+                "kv_group_size": kv_group_size,
+                "quantized_kv_start": quantized_kv_start,
+            }
+        )
+        return settings
+
+    profile = (
+        (str(raw_profile).strip().lower() if raw_profile is not None else "")
+        or DEFAULT_TURBOQUANT_PROFILE
+    )
+    if profile != DEFAULT_TURBOQUANT_PROFILE:
+        raise ValueError("Only turboquant_profile='tq35' is supported")
+    sink_tokens = (
+        DEFAULT_TURBOQUANT_SINK_TOKENS
+        if raw_sink_tokens is None
+        else _parse_optional_int(raw_sink_tokens, "turboquant_sink_tokens")
+    )
+    chunk_size = (
+        DEFAULT_TURBOQUANT_CHUNK_SIZE
+        if raw_chunk_size is None
+        else _parse_optional_int(raw_chunk_size, "turboquant_chunk_size")
+    )
+    seed = (
+        DEFAULT_TURBOQUANT_SEED
+        if raw_seed is None
+        else _parse_optional_int(raw_seed, "turboquant_seed")
+    )
+    if sink_tokens is None or sink_tokens < 0:
+        raise ValueError("turboquant_sink_tokens must be zero or a positive integer")
+    if chunk_size is None or chunk_size <= 0:
+        raise ValueError("turboquant_chunk_size must be a positive integer")
+    if seed is None:
+        raise ValueError("turboquant_seed must be an integer")
+    settings.update(
+        {
+            "turboquant_profile": profile,
+            "turboquant_sink_tokens": sink_tokens,
+            "turboquant_chunk_size": chunk_size,
+            "turboquant_seed": seed,
+        }
+    )
+    return settings
+
+
+def _kv_generate_kwargs(kv_settings):
+    return dict(kv_settings) if kv_settings else {}
+
+
+_resolve_internal_kv_quant_settings = _resolve_internal_kv_cache_settings
+
+
 def _build_generation_kwargs(
     text,
     temperature,
@@ -559,6 +705,7 @@ def _build_generation_kwargs(
     ref_text=None,
     stream=False,
     streaming_interval=None,
+    kv_settings=None,
 ):
     kwargs = {
         "text": text,
@@ -579,10 +726,23 @@ def _build_generation_kwargs(
         kwargs["stream"] = True
         if streaming_interval is not None:
             kwargs["streaming_interval"] = streaming_interval
+    if kv_settings:
+        kwargs.update(_kv_generate_kwargs(kv_settings))
     return kwargs
 
 
-def _build_standard_generator(model, text, temperature, max_tokens=None, *, voice=None, instruct=None, stream=False, streaming_interval=None):
+def _build_standard_generator(
+    model,
+    text,
+    temperature,
+    max_tokens=None,
+    *,
+    voice=None,
+    instruct=None,
+    stream=False,
+    streaming_interval=None,
+    kv_settings=None,
+):
     return model.generate(
         **_build_generation_kwargs(
             text=text,
@@ -592,11 +752,23 @@ def _build_standard_generator(model, text, temperature, max_tokens=None, *, voic
             instruct=instruct,
             stream=stream,
             streaming_interval=streaming_interval,
+            kv_settings=kv_settings,
         )
     )
 
 
-def _build_clone_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, max_tokens=None, *, stream=False, streaming_interval=None):
+def _build_clone_fallback_generator(
+    model,
+    text,
+    temperature,
+    clean_ref_audio,
+    resolved_ref_text,
+    max_tokens=None,
+    *,
+    stream=False,
+    streaming_interval=None,
+    kv_settings=None,
+):
     return model.generate(
         **_build_generation_kwargs(
             text=text,
@@ -606,6 +778,7 @@ def _build_clone_fallback_generator(model, text, temperature, clean_ref_audio, r
             ref_text=resolved_ref_text,
             stream=stream,
             streaming_interval=streaming_interval,
+            kv_settings=kv_settings,
         )
     )
 
@@ -731,6 +904,7 @@ def _generate_guided_clone_candidate(
     prepared_context,
     plan,
     effective_max_tokens,
+    kv_settings=None,
 ):
     sampling_profile = plan.sampling_profile
 
@@ -745,6 +919,7 @@ def _generate_guided_clone_candidate(
             repetition_penalty=sampling_profile["repetition_penalty"],
             max_tokens=effective_max_tokens,
             stream=False,
+            **_kv_generate_kwargs(kv_settings),
         )
         return _collect_single_generation_result(generator), "guided_prepared_icl", True
 
@@ -760,6 +935,7 @@ def _generate_guided_clone_candidate(
             repetition_penalty=sampling_profile["repetition_penalty"],
             max_tokens=effective_max_tokens,
             stream=False,
+            **_kv_generate_kwargs(kv_settings),
         )
         return _collect_single_generation_result(generator), "guided_reference_conditioning", False
 
@@ -774,6 +950,7 @@ def _generate_guided_clone_candidate(
     }
     if resolved_ref_text:
         fallback_kwargs["ref_text"] = resolved_ref_text
+    fallback_kwargs.update(_kv_generate_kwargs(kv_settings))
     return _collect_single_generation_result(_current_model.generate(**fallback_kwargs)), "legacy_fallback", False
 
 
@@ -786,6 +963,7 @@ def _select_guided_clone_candidate(
     instruct,
     max_tokens,
     benchmark_timings=None,
+    kv_settings=None,
 ):
     guided_wall_start = time.perf_counter()
 
@@ -823,6 +1001,7 @@ def _select_guided_clone_candidate(
             prepared_context=prepared_context,
             plan=plan,
             effective_max_tokens=effective_max_tokens,
+            kv_settings=kv_settings,
         )
         gen_ms = int((time.perf_counter() - gen_start) * 1000)
 
@@ -1352,12 +1531,29 @@ def _metrics_from_generation_result(result, streaming_used):
     if result is None:
         return {"streaming_used": streaming_used}
 
-    return {
+    metrics = {
         "token_count": int(getattr(result, "token_count", 0) or 0),
         "processing_time_seconds": round(float(getattr(result, "processing_time_seconds", 0.0) or 0.0), 4),
         "peak_memory_usage": round(float(getattr(result, "peak_memory_usage", 0.0) or 0.0), 4),
         "streaming_used": streaming_used,
     }
+    talker_cache_bytes = getattr(result, "talker_cache_bytes", None)
+    dense_equivalent = getattr(result, "talker_cache_dense_equivalent_bytes", None)
+    compression_ratio = getattr(result, "talker_cache_compression_ratio", None)
+    if talker_cache_bytes is not None:
+        metrics["talker_cache_bytes"] = int(talker_cache_bytes)
+    if dense_equivalent is not None:
+        metrics["talker_cache_dense_equivalent_bytes"] = int(dense_equivalent)
+    if compression_ratio is not None:
+        metrics["talker_cache_compression_ratio"] = float(compression_ratio)
+    return metrics
+
+
+def _benchmark_peak_memory_mb(metrics):
+    peak_memory_usage = float((metrics or {}).get("peak_memory_usage", 0.0) or 0.0)
+    if peak_memory_usage <= 0.0:
+        return None
+    return round(peak_memory_usage * 1000.0, 1)
 
 
 def _consume_streaming_generator(generator, request_id, final_path):
@@ -1629,6 +1825,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, delivery_profile=None, r
                 top_p=plan.sampling_profile["top_p"] if plan is not None else 1.0,
                 repetition_penalty=plan.sampling_profile["repetition_penalty"] if plan is not None else 1.05,
                 max_tokens=warmup_max_tokens,
+                **_kv_generate_kwargs(kv_settings),
             )
             warm_results = list(generator)
         else:
@@ -1814,6 +2011,7 @@ def handle_generate(params, request_id=None):
     streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
     benchmark = bool(params.get("benchmark", False))
     benchmark_label = params.get("benchmark_label")
+    kv_settings = _resolve_internal_kv_cache_settings(params)
     benchmark_mode = _resolve_generation_mode(requested_mode, voice=voice, ref_audio=ref_audio)
     current_model_contract = _current_model_contract()
 
@@ -1860,6 +2058,16 @@ def handle_generate(params, request_id=None):
         "cache_policy": CACHE_POLICY,
         "allocation_retry_attempted": False,
         "allocation_retry_succeeded": False,
+        "kv_cache_strategy": kv_settings["kv_cache_strategy"],
+        "kv_quant_enabled": kv_settings["kv_cache_strategy"] != DEFAULT_KV_CACHE_STRATEGY,
+        "kv_bits": kv_settings.get("kv_bits"),
+        "kv_group_size": kv_settings.get("kv_group_size"),
+        "quantized_kv_start": kv_settings.get("quantized_kv_start"),
+        "turboquant_profile": kv_settings.get("turboquant_profile"),
+        "turboquant_sink_tokens": kv_settings.get("turboquant_sink_tokens"),
+        "turboquant_chunk_size": kv_settings.get("turboquant_chunk_size"),
+        "turboquant_seed": kv_settings.get("turboquant_seed"),
+        "kv_quant_target": kv_settings["kv_quant_target"],
     }
     overall_start = time.perf_counter()
     final_path = _resolve_final_output_path(output_path, text, mode=benchmark_mode, voice=voice, ref_audio=ref_audio)
@@ -1936,6 +2144,7 @@ def handle_generate(params, request_id=None):
                 instruct=instruct,
                 max_tokens=effective_max_tokens,
                 benchmark_timings=benchmark_timings if benchmark else None,
+                kv_settings=kv_settings,
             )
 
             if guided_candidate is not None and guided_candidate["result"] is not None:
@@ -2000,6 +2209,7 @@ def handle_generate(params, request_id=None):
                         max_tokens=effective_max_tokens,
                         stream=bool(stream and request_id is not None),
                         streaming_interval=streaming_interval,
+                        **_kv_generate_kwargs(kv_settings),
                     )
                     if stream and request_id is not None:
                         send_progress(55, "Streaming audio...", request_id=request_id)
@@ -2037,6 +2247,7 @@ def handle_generate(params, request_id=None):
                         max_tokens=max_tokens,
                         stream=bool(stream and request_id is not None),
                         streaming_interval=streaming_interval,
+                        kv_settings=kv_settings,
                     )
                     if stream and request_id is not None:
                         send_progress(55, "Streaming audio...", request_id=request_id)
@@ -2071,6 +2282,7 @@ def handle_generate(params, request_id=None):
                 instruct=instruct,
                 stream=True,
                 streaming_interval=streaming_interval,
+                kv_settings=kv_settings,
             )
             send_progress(35, "Streaming audio...", request_id=request_id)
             generation_start = time.perf_counter()
@@ -2092,6 +2304,7 @@ def handle_generate(params, request_id=None):
                 max_tokens=max_tokens,
                 voice=voice,
                 instruct=instruct,
+                kv_settings=kv_settings,
             )
             generation_start = time.perf_counter()
             send_progress(45, "Generating audio...", request_id=request_id)
@@ -2125,14 +2338,14 @@ def handle_generate(params, request_id=None):
         result["speaker_similarity"] = benchmark_flags["speaker_similarity"]
         result["delivery_retry_count"] = benchmark_flags["delivery_retry_count"]
         result["delivery_compromised"] = benchmark_flags["delivery_compromised"]
-        return result, benchmark_flags, benchmark_timings, output_metadata
+        return result, metrics, benchmark_flags, benchmark_timings, output_metadata
 
     request_succeeded = False
     retried_after_allocation_failure = False
 
     try:
         try:
-            result, benchmark_flags, benchmark_timings, output_metadata = generate_once()
+            result, metrics, benchmark_flags, benchmark_timings, output_metadata = generate_once()
         except Exception as error:
             if not _is_retryable_allocation_error(error):
                 raise
@@ -2140,7 +2353,7 @@ def handle_generate(params, request_id=None):
             retried_after_allocation_failure = True
             cleanup_partial_outputs()
             _perform_memory_recovery()
-            result, benchmark_flags, benchmark_timings, output_metadata = generate_once()
+            result, metrics, benchmark_flags, benchmark_timings, output_metadata = generate_once()
 
         request_succeeded = True
         benchmark_timings["total_backend"] = int((time.perf_counter() - overall_start) * 1000)
@@ -2151,6 +2364,17 @@ def handle_generate(params, request_id=None):
         if benchmark:
             result["benchmark"] = {
                 **benchmark_flags,
+                "token_count": metrics.get("token_count"),
+                "processing_time_seconds": metrics.get("processing_time_seconds"),
+                "peak_memory_usage": metrics.get("peak_memory_usage"),
+                "peak_memory_mb": _benchmark_peak_memory_mb(metrics),
+                "talker_cache_bytes": metrics.get("talker_cache_bytes"),
+                "talker_cache_dense_equivalent_bytes": metrics.get(
+                    "talker_cache_dense_equivalent_bytes"
+                ),
+                "talker_cache_compression_ratio": metrics.get(
+                    "talker_cache_compression_ratio"
+                ),
                 "output_duration_seconds": round(output_metadata["duration_seconds"], 4),
                 "output_frames": output_metadata["frames"],
                 "timings_ms": benchmark_timings,

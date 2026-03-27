@@ -25,7 +25,7 @@ Generate speech with the app’s built-in English speakers:
 
 ### Voice Design
 
-Voice Design is a standalone destination. Describe the voice you want, then shape tone before generating.
+Voice Design is a standalone destination. Describe the voice you want, then shape tone before generating. You can also save a designed result to Saved Voices for later reuse in Voice Cloning.
 
 ### Voice Cloning
 
@@ -47,6 +47,7 @@ For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENV
 - Native model downloads from Hugging Face
 - Live streaming preview for single generations
 - Local generation history stored in SQLite via GRDB
+- Saved Voices library for reusable cloning references
 - Batch generation for multi-line jobs
 - Sidebar waveform playback UI
 - Configurable output directory and autoplay preference
@@ -94,8 +95,8 @@ Source-build prerequisites:
 
 - macOS 15+
 - Apple Silicon
-- Xcode 15+
 - XcodeGen
+- Xcode 26 with the macOS 26 SDK for the default liquid profile
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -103,6 +104,8 @@ cd QwenVoice
 ./scripts/regenerate_project.sh
 open QwenVoice.xcodeproj
 ```
+
+The checked-in project defaults to the `QW_UI_LIQUID` profile, which requires the macOS 26 SDK. If you need to source-build on macOS 15 with Xcode 16.3, switch `project.yml` to `QW_UI_LEGACY_GLASS` before regenerating the project, mirroring the CI workflow.
 
 Build the `QwenVoice` scheme from Xcode, or use:
 
@@ -114,8 +117,11 @@ Useful local checks:
 
 ```sh
 ./scripts/check_project_inputs.sh
-./scripts/run_tests.sh
-./scripts/run_backend_tests.sh
+python3 scripts/harness.py validate
+python3 scripts/harness.py test --layer swift
+python3 scripts/harness.py test --layer server
+python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer ui
 ```
 
 ### Development-mode Python behavior
@@ -134,9 +140,10 @@ For a local release build and DMG:
 
 ```sh
 ./scripts/release.sh
+./scripts/verify_release_bundle.sh build/QwenVoice.app
 ```
 
-That script bundles Python and ffmpeg, builds the Release app, verifies the bundle, and by default produces `build/QwenVoice.dmg`.
+That flow bundles Python and ffmpeg, builds the Release app, verifies the final app bundle, and by default produces `build/QwenVoice.dmg`.
 
 ## Tone and Emotion Control
 
@@ -182,7 +189,6 @@ Start here:
 
 - [`docs/README.md`](docs/README.md) — documentation index
 - [`docs/reference/current-state.md`](docs/reference/current-state.md) — current repo facts
-- [`docs/reference/testing.md`](docs/reference/testing.md) — test inventory and commands
 - [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — current strengths and caveats
 
 ## Credits

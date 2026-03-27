@@ -1,19 +1,23 @@
 This repository vendors `mlx-audio` as a repacked wheel rather than rebuilding
 the full source tree.
 
-The QwenVoice-specific runtime helper consists of injecting:
+QwenVoice carries two kinds of `mlx-audio` customization:
 
-- `mlx_audio/qwenvoice_speed_patch.py`
+- helper injection:
+  - `mlx_audio/qwenvoice_speed_patch.py`
+  - sourced from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`
+- source patches applied to the unpacked wheel:
+  - `third_party_patches/mlx-audio/wheel_patches/*.patch`
 
-from:
+`scripts/build_mlx_audio_wheel.sh` is the source of truth for this flow. It:
 
-- `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`
+1. downloads upstream `mlx-audio==0.4.1`
+2. unpacks the wheel
+3. applies every patch in `third_party_patches/mlx-audio/wheel_patches/`
+4. injects `mlx_audio/qwenvoice_speed_patch.py`
+5. repacks the result as `mlx-audio==0.4.1.post2`
+6. syncs the backend fallback helper to
+   `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 
-and then repacking the upstream `mlx-audio==0.4.1` wheel as
-`mlx-audio==0.4.1.post1`.
-
-Use:
-
-- [build_mlx_audio_wheel.sh](/Users/patricedery/Coding_Projects/QwenVoice/scripts/build_mlx_audio_wheel.sh)
-
+Use [build_mlx_audio_wheel.sh](/Users/patricedery/Coding_Projects/QwenVoice/scripts/build_mlx_audio_wheel.sh)
 to reproduce the vendored wheel.

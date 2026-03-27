@@ -34,15 +34,25 @@ The release pipeline also:
 
 ## Vendored Wheel Strategy
 
-The app currently vendors a repacked `mlx-audio==0.4.1.post1` wheel that includes a QwenVoice runtime helper module used by the backend.
+The app currently vendors a repacked `mlx-audio==0.4.1.post2` wheel that includes:
+
+- a QwenVoice runtime helper module used by the backend
+- repo-owned source patches applied to the unpacked upstream wheel before repacking
 
 Relevant locations:
 
 - `Sources/Resources/vendor/`
 - `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 - `third_party_patches/mlx-audio/`
+- `third_party_patches/mlx-audio/wheel_patches/`
 
-`scripts/build_mlx_audio_wheel.sh` is the source of truth for rebuilding that wheel and also syncs the backend fallback helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py` before repacking.
+`scripts/build_mlx_audio_wheel.sh` is the source of truth for rebuilding that wheel. It now:
+
+1. downloads the upstream wheel
+2. unpacks it
+3. applies every patch from `third_party_patches/mlx-audio/wheel_patches/`
+4. injects `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`
+5. syncs the backend fallback helper before repacking
 
 If the GUI app’s `mlx-audio` version changes, the vendored wheel and vendoring notes must be updated together.
 

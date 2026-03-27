@@ -18,6 +18,11 @@ on:
         required: false
         default: ""
         type: string
+      release_notes_path:
+        description: "Required when release_tag is set. Path to a checked-in markdown file used as the release body."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -228,6 +233,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 1
+
+      - name: Validate release notes input
+        run: |
+          RELEASE_NOTES_PATH="${{ inputs.release_notes_path }}"
+          if [ -z "$RELEASE_NOTES_PATH" ]; then
+            echo "::error::release_notes_path is required when release_tag is set"
+            exit 1
+          fi
+          if [ ! -f "$RELEASE_NOTES_PATH" ]; then
+            echo "::error::Release notes file not found: $RELEASE_NOTES_PATH"
+            exit 1
+          fi
+          if [ ! -s "$RELEASE_NOTES_PATH" ]; then
+            echo "::error::Release notes file is empty: $RELEASE_NOTES_PATH"
+            exit 1
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v6
         with:
@@ -238,25 +265,30 @@ jobs:
       - name: Show artifact files
         run: find dist -maxdepth 2 -type f | sort
 
-      - name: Ensure release exists
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.release_tag }}"
-          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
-            exit 0
-          fi
-
+          RELEASE_NOTES_PATH="${{ inputs.release_notes_path }}"
+          TITLE="QwenVoice ${TAG#v}"
           COMMIT_SHA="$(grep -h '^commit_sha=' dist/release-metadata-*.txt | head -n1 | cut -d= -f2-)"
           if [ -z "$COMMIT_SHA" ]; then
             COMMIT_SHA="$GITHUB_SHA"
           fi
 
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Updating title and notes."
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes-file "$RELEASE_NOTES_PATH"
+            exit 0
+          fi
+
           gh release create "$TAG" -R "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
-            --title "QwenVoice ${TAG#v}" \
-            --notes "Dual UI artifact release built from ${{ inputs.git_ref }}."
+            --title "$TITLE" \
+            --notes-file "$RELEASE_NOTES_PATH"
 
       - name: Upload assets to release
         env:

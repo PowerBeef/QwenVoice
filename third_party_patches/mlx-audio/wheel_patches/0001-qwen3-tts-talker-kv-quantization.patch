@@ -1,0 +1,482 @@
+--- a/mlx_audio/tts/models/qwen3_tts/talker.py
++++ b/mlx_audio/tts/models/qwen3_tts/talker.py
+@@ -5,6 +5,7 @@
+ 
+ import mlx.core as mx
+ import mlx.nn as nn
++from mlx_lm.models.base import scaled_dot_product_attention
+ from mlx_lm.models.cache import KVCache
+ 
+ from .config import Qwen3TTSTalkerCodePredictorConfig, Qwen3TTSTalkerConfig
+@@ -300,9 +301,8 @@
+         if cache is not None:
+             k, v = cache.update_and_fetch(k, v)
+ 
+-        # Use fast scaled dot product attention with GQA support
+-        output = mx.fast.scaled_dot_product_attention(
+-            q, k, v, scale=self.scale, mask=mask
++        output = scaled_dot_product_attention(
++            q, k, v, cache=cache, scale=self.scale, mask=mask
+         )
+ 
+         # Reshape back
+--- a/mlx_audio/tts/models/qwen3_tts/qwen3_tts.py
++++ b/mlx_audio/tts/models/qwen3_tts/qwen3_tts.py
+@@ -18,6 +18,12 @@
+ from mlx_audio.dsp import mel_filters, stft
+ from mlx_audio.tts.models.base import BatchGenerationResult, GenerationResult
+ from mlx_audio.utils import load_audio
++from mlx_audio.qwenvoice_turboquant import (
++    attach_talker_cache_stats,
++    build_talker_cache,
++    normalize_talker_cache_settings,
++    update_talker_cache_after_forward,
++)
+ 
+ from .config import (
+     ModelConfig,
+@@ -132,6 +138,30 @@
+     minutes = int((seconds % 3600) // 60)
+     secs = seconds % 60
+     return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
++
++
++def _resolve_talker_cache_settings(
++    kv_cache_strategy: Optional[str] = None,
++    kv_bits: Optional[int] = None,
++    kv_group_size: int = 64,
++    quantized_kv_start: int = 0,
++    turboquant_profile: Optional[str] = None,
++    turboquant_sink_tokens: int = 128,
++    turboquant_chunk_size: int = 128,
++    turboquant_seed: int = 42,
++    kv_quant_target: Optional[str] = None,
++) -> dict[str, object]:
++    return normalize_talker_cache_settings(
++        kv_cache_strategy=kv_cache_strategy,
++        kv_bits=kv_bits,
++        kv_group_size=kv_group_size,
++        quantized_kv_start=quantized_kv_start,
++        turboquant_profile=turboquant_profile,
++        turboquant_sink_tokens=turboquant_sink_tokens,
++        turboquant_chunk_size=turboquant_chunk_size,
++        turboquant_seed=turboquant_seed,
++        kv_quant_target=kv_quant_target,
++    )
+ 
+ 
+ class Model(nn.Module):
+@@ -912,6 +942,18 @@
+         if ref_audio is not None:
+             ref_audio = load_audio(ref_audio, sample_rate=self.sample_rate)
+ 
++        talker_cache_settings = _resolve_talker_cache_settings(
++            kv_cache_strategy=kwargs.get("kv_cache_strategy"),
++            kv_bits=kwargs.get("kv_bits"),
++            kv_group_size=kwargs.get("kv_group_size", 64),
++            quantized_kv_start=kwargs.get("quantized_kv_start", 0),
++            turboquant_profile=kwargs.get("turboquant_profile"),
++            turboquant_sink_tokens=kwargs.get("turboquant_sink_tokens", 128),
++            turboquant_chunk_size=kwargs.get("turboquant_chunk_size", 128),
++            turboquant_seed=kwargs.get("turboquant_seed", 42),
++            kv_quant_target=kwargs.get("kv_quant_target"),
++        )
++
+         # Route to appropriate method based on model type
+         tts_model_type = getattr(self.config, "tts_model_type", "base")
+ 
+@@ -933,6 +975,15 @@
+                 verbose=verbose,
+                 stream=stream,
+                 streaming_interval=streaming_interval,
++                kv_cache_strategy=str(talker_cache_settings["kv_cache_strategy"]),
++                kv_bits=talker_cache_settings.get("kv_bits"),
++                kv_group_size=int(talker_cache_settings.get("kv_group_size", 64)),
++                quantized_kv_start=int(talker_cache_settings.get("quantized_kv_start", 0)),
++                turboquant_profile=talker_cache_settings.get("turboquant_profile"),
++                turboquant_sink_tokens=int(talker_cache_settings.get("turboquant_sink_tokens", 128)),
++                turboquant_chunk_size=int(talker_cache_settings.get("turboquant_chunk_size", 128)),
++                turboquant_seed=int(talker_cache_settings.get("turboquant_seed", 42)),
++                kv_quant_target=str(talker_cache_settings["kv_quant_target"]),
+             )
+             return
+ 
+@@ -955,6 +1006,15 @@
+                 verbose=verbose,
+                 stream=stream,
+                 streaming_interval=streaming_interval,
++                kv_cache_strategy=str(talker_cache_settings["kv_cache_strategy"]),
++                kv_bits=talker_cache_settings.get("kv_bits"),
++                kv_group_size=int(talker_cache_settings.get("kv_group_size", 64)),
++                quantized_kv_start=int(talker_cache_settings.get("quantized_kv_start", 0)),
++                turboquant_profile=talker_cache_settings.get("turboquant_profile"),
++                turboquant_sink_tokens=int(talker_cache_settings.get("turboquant_sink_tokens", 128)),
++                turboquant_chunk_size=int(talker_cache_settings.get("turboquant_chunk_size", 128)),
++                turboquant_seed=int(talker_cache_settings.get("turboquant_seed", 42)),
++                kv_quant_target=str(talker_cache_settings["kv_quant_target"]),
+             )
+             return
+ 
+@@ -986,6 +1046,15 @@
+                 verbose=verbose,
+                 stream=stream,
+                 streaming_interval=streaming_interval,
++                kv_cache_strategy=str(talker_cache_settings["kv_cache_strategy"]),
++                kv_bits=talker_cache_settings.get("kv_bits"),
++                kv_group_size=int(talker_cache_settings.get("kv_group_size", 64)),
++                quantized_kv_start=int(talker_cache_settings.get("quantized_kv_start", 0)),
++                turboquant_profile=talker_cache_settings.get("turboquant_profile"),
++                turboquant_sink_tokens=int(talker_cache_settings.get("turboquant_sink_tokens", 128)),
++                turboquant_chunk_size=int(talker_cache_settings.get("turboquant_chunk_size", 128)),
++                turboquant_seed=int(talker_cache_settings.get("turboquant_seed", 42)),
++                kv_quant_target=str(talker_cache_settings["kv_quant_target"]),
+             )
+             return
+ 
+@@ -1022,7 +1091,7 @@
+             )
+ 
+             # Initialize cache using mlx_lm's KVCache
+-            cache = self.talker.make_cache()
++            cache = build_talker_cache(self.talker, talker_cache_settings)
+             code_cache = self.talker.code_predictor.make_cache()
+             generated_codes = []
+             generated_token_ids = []
+@@ -1050,6 +1119,7 @@
+                     input_embeds,
+                     cache=cache,
+                 )
++                update_talker_cache_after_forward(cache, talker_cache_settings)
+ 
+                 # Sample first codebook token (with special token suppression)
+                 next_token = self._sample_token(
+@@ -1166,7 +1236,7 @@
+                         chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+                     )
+ 
+-                    yield GenerationResult(
++                    yield attach_talker_cache_stats(GenerationResult(
+                         audio=audio_chunk,
+                         samples=audio_chunk.shape[0],
+                         sample_rate=self.sample_rate,
+@@ -1192,7 +1262,7 @@
+                         processing_time_seconds=chunk_elapsed,
+                         peak_memory_usage=mx.get_peak_memory() / 1e9,
+                         is_streaming_chunk=True,
+-                    )
++                    ), cache)
+ 
+                     chunk_start_time = time.time()
+                     mx.clear_cache()
+@@ -1220,7 +1290,7 @@
+                         chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+                     )
+ 
+-                    yield GenerationResult(
++                    yield attach_talker_cache_stats(GenerationResult(
+                         audio=audio_chunk,
+                         samples=audio_chunk.shape[0],
+                         sample_rate=self.sample_rate,
+@@ -1246,7 +1316,7 @@
+                         peak_memory_usage=mx.get_peak_memory() / 1e9,
+                         is_streaming_chunk=True,
+                         is_final_chunk=True,
+-                    )
++                    ), cache)
+                 self.speech_tokenizer.decoder.reset_streaming_state()
+                 continue
+ 
+@@ -1277,7 +1347,7 @@
+             duration_seconds = samples / self.sample_rate
+             rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0
+ 
+-            yield GenerationResult(
++            yield attach_talker_cache_stats(GenerationResult(
+                 audio=audio,
+                 samples=samples,
+                 sample_rate=self.sample_rate,
+@@ -1299,7 +1369,7 @@
+                 },
+                 processing_time_seconds=elapsed_time,
+                 peak_memory_usage=mx.get_peak_memory() / 1e9,
+-            )
++            ), cache)
+ 
+             # Clear cache between segments
+ 
+@@ -1694,6 +1764,15 @@
+         verbose: bool = False,
+         stream: bool = False,
+         streaming_interval: float = 2.0,
++        kv_cache_strategy: Optional[str] = None,
++        kv_bits: Optional[int] = None,
++        kv_group_size: int = 64,
++        quantized_kv_start: int = 0,
++        turboquant_profile: Optional[str] = None,
++        turboquant_sink_tokens: int = 128,
++        turboquant_chunk_size: int = 128,
++        turboquant_seed: int = 42,
++        kv_quant_target: Optional[str] = None,
+     ) -> Generator[GenerationResult, None, None]:
+         """Generate speech with the CustomVoice model using a predefined speaker.
+ 
+@@ -1755,6 +1834,15 @@
+             verbose=verbose,
+             stream=stream,
+             streaming_interval=streaming_interval,
++            kv_cache_strategy=kv_cache_strategy,
++            kv_bits=kv_bits,
++            kv_group_size=kv_group_size,
++            quantized_kv_start=quantized_kv_start,
++            turboquant_profile=turboquant_profile,
++            turboquant_sink_tokens=turboquant_sink_tokens,
++            turboquant_chunk_size=turboquant_chunk_size,
++            turboquant_seed=turboquant_seed,
++            kv_quant_target=kv_quant_target,
+         )
+ 
+     def generate_voice_design(
+@@ -1770,6 +1858,15 @@
+         verbose: bool = False,
+         stream: bool = False,
+         streaming_interval: float = 2.0,
++        kv_cache_strategy: Optional[str] = None,
++        kv_bits: Optional[int] = None,
++        kv_group_size: int = 64,
++        quantized_kv_start: int = 0,
++        turboquant_profile: Optional[str] = None,
++        turboquant_sink_tokens: int = 128,
++        turboquant_chunk_size: int = 128,
++        turboquant_seed: int = 42,
++        kv_quant_target: Optional[str] = None,
+     ) -> Generator[GenerationResult, None, None]:
+         """Generate speech with the VoiceDesign model using natural language voice description.
+ 
+@@ -1816,6 +1913,15 @@
+             verbose=verbose,
+             stream=stream,
+             streaming_interval=streaming_interval,
++            kv_cache_strategy=kv_cache_strategy,
++            kv_bits=kv_bits,
++            kv_group_size=kv_group_size,
++            quantized_kv_start=quantized_kv_start,
++            turboquant_profile=turboquant_profile,
++            turboquant_sink_tokens=turboquant_sink_tokens,
++            turboquant_chunk_size=turboquant_chunk_size,
++            turboquant_seed=turboquant_seed,
++            kv_quant_target=kv_quant_target,
+         )
+ 
+     def _generate_icl(
+@@ -1833,6 +1939,15 @@
+         stream: bool = False,
+         streaming_interval: float = 2.0,
+         streaming_context_size: int = 25,
++        kv_cache_strategy: Optional[str] = None,
++        kv_bits: Optional[int] = None,
++        kv_group_size: int = 64,
++        quantized_kv_start: int = 0,
++        turboquant_profile: Optional[str] = None,
++        turboquant_sink_tokens: int = 128,
++        turboquant_chunk_size: int = 128,
++        turboquant_seed: int = 42,
++        kv_quant_target: Optional[str] = None,
+     ) -> Generator[GenerationResult, None, None]:
+         """Generate speech using ICL (In-Context Learning) voice cloning.
+ 
+@@ -1845,6 +1960,18 @@
+         if verbose:
+             print(f"ICL generation: {text[:50]}...")
+ 
++        talker_cache_settings = _resolve_talker_cache_settings(
++            kv_cache_strategy=kv_cache_strategy,
++            kv_bits=kv_bits,
++            kv_group_size=kv_group_size,
++            quantized_kv_start=quantized_kv_start,
++            turboquant_profile=turboquant_profile,
++            turboquant_sink_tokens=turboquant_sink_tokens,
++            turboquant_chunk_size=turboquant_chunk_size,
++            turboquant_seed=turboquant_seed,
++            kv_quant_target=kv_quant_target,
++        )
++
+         # Prepare ICL inputs
+         input_embeds, trailing_text_hidden, tts_pad_embed, ref_codes = (
+             self._prepare_icl_generation_inputs(
+@@ -1863,7 +1990,7 @@
+         effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
+ 
+         # Initialize cache
+-        cache = self.talker.make_cache()
++        cache = build_talker_cache(self.talker, talker_cache_settings)
+         code_cache = self.talker.code_predictor.make_cache()
+         generated_codes = []
+         generated_token_ids = []
+@@ -1895,6 +2022,7 @@
+         for step in range(effective_max_tokens):
+             # Forward pass through talker
+             logits, hidden = self.talker(input_embeds, cache=cache)
++            update_talker_cache_after_forward(cache, talker_cache_settings)
+ 
+             # Sample first codebook token
+             next_token = self._sample_token(
+@@ -1995,7 +2123,7 @@
+                 chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate
+                 chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+ 
+-                yield GenerationResult(
++                yield attach_talker_cache_stats(GenerationResult(
+                     audio=audio_chunk,
+                     samples=audio_chunk.shape[0],
+                     sample_rate=self.sample_rate,
+@@ -2020,7 +2148,7 @@
+                     processing_time_seconds=chunk_elapsed,
+                     peak_memory_usage=mx.get_peak_memory() / 1e9,
+                     is_streaming_chunk=True,
+-                )
++                ), cache)
+ 
+                 chunk_start_time = time.time()
+                 mx.clear_cache()
+@@ -2044,7 +2172,7 @@
+                 chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate
+                 chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+ 
+-                yield GenerationResult(
++                yield attach_talker_cache_stats(GenerationResult(
+                     audio=audio_chunk,
+                     samples=audio_chunk.shape[0],
+                     sample_rate=self.sample_rate,
+@@ -2070,7 +2198,7 @@
+                     peak_memory_usage=mx.get_peak_memory() / 1e9,
+                     is_streaming_chunk=True,
+                     is_final_chunk=True,
+-                )
++                ), cache)
+             self.speech_tokenizer.decoder.reset_streaming_state()
+             return
+ 
+@@ -2113,7 +2241,7 @@
+         duration_seconds = samples / self.sample_rate
+         rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0
+ 
+-        yield GenerationResult(
++        yield attach_talker_cache_stats(GenerationResult(
+             audio=audio,
+             samples=samples,
+             sample_rate=self.sample_rate,
+@@ -2133,7 +2261,7 @@
+             },
+             processing_time_seconds=elapsed_time,
+             peak_memory_usage=mx.get_peak_memory() / 1e9,
+-        )
++        ), cache)
+ 
+         mx.clear_cache()
+ 
+@@ -2151,6 +2279,15 @@
+         verbose: bool,
+         stream: bool = False,
+         streaming_interval: float = 2.0,
++        kv_cache_strategy: Optional[str] = None,
++        kv_bits: Optional[int] = None,
++        kv_group_size: int = 64,
++        quantized_kv_start: int = 0,
++        turboquant_profile: Optional[str] = None,
++        turboquant_sink_tokens: int = 128,
++        turboquant_chunk_size: int = 128,
++        turboquant_seed: int = 42,
++        kv_quant_target: Optional[str] = None,
+         streaming_context_size: int = 25,
+     ) -> Generator[GenerationResult, None, None]:
+         """Internal method for generation with instruct support."""
+@@ -2159,6 +2296,18 @@
+ 
+         start_time = time.time()
+ 
++        talker_cache_settings = _resolve_talker_cache_settings(
++            kv_cache_strategy=kv_cache_strategy,
++            kv_bits=kv_bits,
++            kv_group_size=kv_group_size,
++            quantized_kv_start=quantized_kv_start,
++            turboquant_profile=turboquant_profile,
++            turboquant_sink_tokens=turboquant_sink_tokens,
++            turboquant_chunk_size=turboquant_chunk_size,
++            turboquant_seed=turboquant_seed,
++            kv_quant_target=kv_quant_target,
++        )
++
+         # Prepare inputs with instruct
+         input_embeds, trailing_text_hidden, tts_pad_embed = (
+             self._prepare_generation_inputs(
+@@ -2177,7 +2326,7 @@
+         effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
+ 
+         # Initialize cache
+-        cache = self.talker.make_cache()
++        cache = build_talker_cache(self.talker, talker_cache_settings)
+         code_cache = self.talker.code_predictor.make_cache()
+         generated_codes = []
+         generated_token_ids = []
+@@ -2209,6 +2358,7 @@
+         for step in range(effective_max_tokens):
+             # Forward pass through talker
+             logits, hidden = self.talker(input_embeds, cache=cache)
++            update_talker_cache_after_forward(cache, talker_cache_settings)
+ 
+             # Sample first codebook token
+             next_token = self._sample_token(
+@@ -2309,7 +2459,7 @@
+                 chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate
+                 chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+ 
+-                yield GenerationResult(
++                yield attach_talker_cache_stats(GenerationResult(
+                     audio=audio_chunk,
+                     samples=audio_chunk.shape[0],
+                     sample_rate=self.sample_rate,
+@@ -2334,7 +2484,7 @@
+                     processing_time_seconds=chunk_elapsed,
+                     peak_memory_usage=mx.get_peak_memory() / 1e9,
+                     is_streaming_chunk=True,
+-                )
++                ), cache)
+ 
+                 chunk_start_time = time.time()
+                 mx.clear_cache()
+@@ -2358,7 +2508,7 @@
+                 chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate
+                 chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
+ 
+-                yield GenerationResult(
++                yield attach_talker_cache_stats(GenerationResult(
+                     audio=audio_chunk,
+                     samples=audio_chunk.shape[0],
+                     sample_rate=self.sample_rate,
+@@ -2384,7 +2534,7 @@
+                     peak_memory_usage=mx.get_peak_memory() / 1e9,
+                     is_streaming_chunk=True,
+                     is_final_chunk=True,
+-                )
++                ), cache)
+             self.speech_tokenizer.decoder.reset_streaming_state()
+             return
+ 
+@@ -2412,7 +2562,7 @@
+         duration_seconds = samples / self.sample_rate
+         rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0
+ 
+-        yield GenerationResult(
++        yield attach_talker_cache_stats(GenerationResult(
+             audio=audio,
+             samples=samples,
+             sample_rate=self.sample_rate,
+@@ -2430,7 +2580,7 @@
+             },
+             processing_time_seconds=elapsed_time,
+             peak_memory_usage=mx.get_peak_memory() / 1e9,
+-        )
++        ), cache)
+ 
+         mx.clear_cache()
+ 

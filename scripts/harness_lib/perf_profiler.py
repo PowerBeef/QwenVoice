@@ -88,6 +88,40 @@ KATHLEEN_STEMS = [
     "data/arctic_a0004_1592748478",
 ]
 APP_STREAMING_INTERVAL = 0.32
+STRESS_GENERATION_COUNT = 6
+DETERMINISTIC_TEMPERATURE = 0.0
+TALKER_KV_MLX_QUANT_EXPERIMENT: dict[str, Any] = {
+    "kv_cache_strategy": "mlx_quantized",
+    "kv_bits": 4,
+    "kv_group_size": 64,
+    "quantized_kv_start": 128,
+    "kv_quant_target": "talker",
+}
+TALKER_TURBOQUANT_EXPERIMENT: dict[str, Any] = {
+    "kv_cache_strategy": "turboquant",
+    "turboquant_profile": "tq35",
+    "turboquant_sink_tokens": 128,
+    "turboquant_chunk_size": 128,
+    "turboquant_seed": 42,
+    "kv_quant_target": "talker",
+}
+KV_STRATEGY_CONFIGS: list[tuple[str, dict[str, Any] | None]] = [
+    ("dense", {"kv_cache_strategy": "dense", "kv_quant_target": "talker"}),
+    ("mlx_quantized", TALKER_KV_MLX_QUANT_EXPERIMENT),
+    ("turboquant", TALKER_TURBOQUANT_EXPERIMENT),
+]
+KV_FLAG_KEYS = (
+    "kv_cache_strategy",
+    "kv_quant_enabled",
+    "kv_bits",
+    "kv_group_size",
+    "quantized_kv_start",
+    "turboquant_profile",
+    "turboquant_sink_tokens",
+    "turboquant_chunk_size",
+    "turboquant_seed",
+    "kv_quant_target",
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -144,6 +178,23 @@ def _extract_benchmark_flags(result: dict[str, Any]) -> dict[str, Any]:
     return flags
 
 
+def _extract_peak_memory_mb(result: dict[str, Any]) -> float | None:
+    """Extract peak memory in MB from the benchmark payload when available."""
+    benchmark = result.get("benchmark", {})
+    peak_memory_mb = benchmark.get("peak_memory_mb")
+    if peak_memory_mb is not None:
+        return float(peak_memory_mb)
+
+    peak_memory_usage = benchmark.get("peak_memory_usage")
+    if peak_memory_usage is not None:
+        return round(float(peak_memory_usage) * 1000.0, 1)
+    return None
+
+
+def _extract_benchmark_value(result: dict[str, Any], key: str) -> Any:
+    return result.get("benchmark", {}).get(key)
+
+
 def _make_generate_params(
     mode: str,
     text: str,
@@ -156,6 +207,8 @@ def _make_generate_params(
     stream: bool = True,
     delivery_profile: dict[str, Any] | None = None,
     benchmark_label: str | None = None,
+    kv_config: dict[str, Any] | None = None,
+    temperature: float | None = None,
 ) -> dict[str, Any]:
     """Build a generate RPC params dict."""
     params: dict[str, Any] = {
@@ -168,6 +221,8 @@ def _make_generate_params(
         params["streaming_interval"] = APP_STREAMING_INTERVAL
     if benchmark_label:
         params["benchmark_label"] = benchmark_label
+    if temperature is not None:
+        params["temperature"] = temperature
     if mode == "custom":
         params["voice"] = voice or "vivian"
     elif mode == "design":
@@ -179,6 +234,8 @@ def _make_generate_params(
             params["ref_text"] = ref_text
         if delivery_profile:
             params["delivery_profile"] = delivery_profile
+    if kv_config:
+        params.update(kv_config)
     return params
 
 
@@ -198,12 +255,28 @@ def _run_single_generation(
     first_chunk = _first_chunk_ms(notifications)
     server_timings = _extract_benchmark_timings(result)
     server_flags = _extract_benchmark_flags(result)
+    peak_memory_mb = _extract_peak_memory_mb(result)
+    token_count = _extract_benchmark_value(result, "token_count")
+    output_duration_seconds = _extract_benchmark_value(result, "output_duration_seconds")
+    talker_cache_bytes = _extract_benchmark_value(result, "talker_cache_bytes")
+    talker_cache_dense_equivalent_bytes = _extract_benchmark_value(
+        result, "talker_cache_dense_equivalent_bytes"
+    )
+    talker_cache_compression_ratio = _extract_benchmark_value(
+        result, "talker_cache_compression_ratio"
+    )
     server_total = server_timings.get("total_backend", 0)
     rpc_overhead = round(wall_ms - server_total, 2) if server_total else None
 
     return {
         "wall_ms": wall_ms,
         "first_chunk_ms": first_chunk,
+        "peak_memory_mb": peak_memory_mb,
+        "token_count": token_count,
+        "output_duration_seconds": output_duration_seconds,
+        "talker_cache_bytes": talker_cache_bytes,
+        "talker_cache_dense_equivalent_bytes": talker_cache_dense_equivalent_bytes,
+        "talker_cache_compression_ratio": talker_cache_compression_ratio,
         "rpc_overhead_ms": rpc_overhead,
         "rss_before_mb": rss_before,
         "rss_after_mb": rss_after,
@@ -244,6 +317,27 @@ def _multi_run(
         summary["wall_ms"] = summarize_numeric(wall_times)
     if first_chunks:
         summary["first_chunk_ms"] = summarize_numeric(first_chunks)
+    peak_memory_values = [
+        rec["peak_memory_mb"]
+        for rec in records
+        if rec.get("peak_memory_mb") is not None
+    ]
+    if peak_memory_values:
+        summary["peak_memory_mb"] = summarize_numeric(peak_memory_values)
+    for metric_key in (
+        "token_count",
+        "output_duration_seconds",
+        "talker_cache_bytes",
+        "talker_cache_dense_equivalent_bytes",
+        "talker_cache_compression_ratio",
+    ):
+        metric_values = [
+            rec[metric_key]
+            for rec in records
+            if rec.get(metric_key) is not None
+        ]
+        if metric_values:
+            summary[metric_key] = summarize_numeric([float(v) for v in metric_values])
 
     # Aggregate server timing keys
     timing_keys: set[str] = set()
@@ -263,8 +357,89 @@ def _multi_run(
     if rss_afters:
         summary["rss_after_mb"] = summarize_numeric(rss_afters)
 
+    for rec in records:
+        flags = rec.get("server_flags")
+        if isinstance(flags, dict) and flags:
+            summary["server_flags"] = flags
+            summary["kv_flags"] = {key: flags.get(key) for key in KV_FLAG_KEYS}
+            break
+
     summary["raw_records"] = records
     return summary
+
+
+def _summary_mean(summary: dict[str, Any], key: str) -> float | None:
+    value = summary.get(key)
+    if isinstance(value, dict):
+        mean = value.get("mean")
+        if mean is not None:
+            return float(mean)
+    return None
+
+
+def _kv_strategy_timeout(
+    mode: str,
+    lane_label: str,
+    strategy_label: str,
+) -> float:
+    if mode == "clone" and strategy_label == "turboquant":
+        return 480.0 if lane_label == "deterministic" else 420.0
+    return 300.0
+
+
+def _build_compare_details(
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    baseline_wall = _summary_mean(baseline, "wall_ms")
+    candidate_wall = _summary_mean(candidate, "wall_ms")
+    baseline_first_chunk = _summary_mean(baseline, "first_chunk_ms")
+    candidate_first_chunk = _summary_mean(candidate, "first_chunk_ms")
+    baseline_peak_memory = _summary_mean(baseline, "peak_memory_mb")
+    candidate_peak_memory = _summary_mean(candidate, "peak_memory_mb")
+    baseline_rss = _summary_mean(baseline, "rss_after_mb")
+    candidate_rss = _summary_mean(candidate, "rss_after_mb")
+    baseline_tokens = _summary_mean(baseline, "token_count")
+    candidate_tokens = _summary_mean(candidate, "token_count")
+    baseline_duration = _summary_mean(baseline, "output_duration_seconds")
+    candidate_duration = _summary_mean(candidate, "output_duration_seconds")
+    baseline_cache_bytes = _summary_mean(baseline, "talker_cache_bytes")
+    candidate_cache_bytes = _summary_mean(candidate, "talker_cache_bytes")
+    baseline_cache_ratio = _summary_mean(baseline, "talker_cache_compression_ratio")
+    candidate_cache_ratio = _summary_mean(candidate, "talker_cache_compression_ratio")
+
+    def delta_pct(new: float | None, old: float | None) -> float | None:
+        if new is None or old in (None, 0):
+            return None
+        return round(((new / old) - 1.0) * 100.0, 1)
+
+    details: dict[str, Any] = {
+        "baseline": baseline,
+        "candidate": candidate,
+        "wall_ms_delta_pct": delta_pct(candidate_wall, baseline_wall),
+        "first_chunk_ms_delta_pct": delta_pct(candidate_first_chunk, baseline_first_chunk),
+    }
+    if baseline_peak_memory is not None and candidate_peak_memory is not None:
+        details["peak_memory_mb_delta"] = round(candidate_peak_memory - baseline_peak_memory, 1)
+        details["peak_memory_mb_delta_pct"] = delta_pct(candidate_peak_memory, baseline_peak_memory)
+    if baseline_rss is not None and candidate_rss is not None:
+        details["rss_after_mb_delta"] = round(candidate_rss - baseline_rss, 1)
+        details["rss_after_mb_delta_pct"] = delta_pct(candidate_rss, baseline_rss)
+    if baseline_tokens is not None and candidate_tokens is not None:
+        details["token_count_delta_pct"] = delta_pct(candidate_tokens, baseline_tokens)
+    if baseline_duration is not None and candidate_duration is not None:
+        details["output_duration_seconds_delta_pct"] = delta_pct(
+            candidate_duration, baseline_duration
+        )
+    if baseline_cache_bytes is not None and candidate_cache_bytes is not None:
+        details["talker_cache_bytes_delta_pct"] = delta_pct(
+            candidate_cache_bytes, baseline_cache_bytes
+        )
+    if baseline_cache_ratio is not None and candidate_cache_ratio is not None:
+        details["talker_cache_compression_ratio_delta_pct"] = delta_pct(
+            candidate_cache_ratio, baseline_cache_ratio
+        )
+    return details
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +534,57 @@ def _run_tier1(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
 
             summary = _multi_run(client, params, runs, label)
             results.append(build_test_result(label, passed=True, details=summary))
+
+        # --- 1a.1: Long-form cache-strategy comparisons ---
+        for lane_label, lane_temperature in (
+            ("deterministic", DETERMINISTIC_TEMPERATURE),
+            ("live", None),
+        ):
+            lane_summaries: dict[str, dict[str, Any]] = {}
+            for strategy_label, kv_config in KV_STRATEGY_CONFIGS:
+                benchmark_label = f"kvq_{lane_label}_{strategy_label}_{mode}"
+                params = _make_generate_params(
+                    mode,
+                    TEXT_EXTRA_LONG,
+                    "/tmp/placeholder.wav",
+                    benchmark_label=benchmark_label,
+                    kv_config=kv_config,
+                    temperature=lane_temperature,
+                )
+                if mode == "clone":
+                    if kathleen_ref is None:
+                        eprint("    Preparing Kathleen reference audio...")
+                        kathleen_ref = _prepare_kathleen_reference(work_dir)
+                    params["ref_audio"] = kathleen_ref[0]
+                    params["ref_text"] = kathleen_ref[1]
+                summary = _multi_run(
+                    client,
+                    params,
+                    runs,
+                    benchmark_label,
+                    timeout=_kv_strategy_timeout(mode, lane_label, strategy_label),
+                )
+                lane_summaries[strategy_label] = summary
+                results.append(
+                    build_test_result(benchmark_label, passed=True, details=summary)
+                )
+
+            baseline_summary = lane_summaries.get("dense")
+            if baseline_summary is not None:
+                for strategy_label in ("mlx_quantized", "turboquant"):
+                    candidate_summary = lane_summaries.get(strategy_label)
+                    if candidate_summary is None:
+                        continue
+                    results.append(
+                        build_test_result(
+                            f"kvq_compare_{lane_label}_{strategy_label}_{mode}",
+                            passed=True,
+                            details=_build_compare_details(
+                                baseline_summary,
+                                candidate_summary,
+                            ),
+                        )
+                    )
 
         # --- 1b: Speaker comparison (custom mode only) ---
         if mode == "custom":
@@ -643,55 +869,95 @@ def _run_tier3(client: Any, contract: dict, runs: int, work_dir: Path | None = N
             },
         ))
 
-    # --- 3b: Rapid back-to-back stress (10 generations) ---
-    model_def = installed[0]
-    mid = model_def["id"]
-    mode = model_def["mode"]
-    stress_clone_kw = _clone_kwargs_for(mode)
-    eprint(f"    Rapid stress test ({mid}, 10 generations)...")
-    client.call("load_model", {"model_id": mid, "benchmark": True}, timeout=120)
+    # --- 3b: Rapid back-to-back stress (baseline vs quantized per model) ---
+    for model_def in installed:
+        mid = model_def["id"]
+        mode = model_def["mode"]
+        stress_clone_kw = _clone_kwargs_for(mode)
+        if mode == "clone" and not stress_clone_kw:
+            results.append(build_test_result(
+                f"stress_compare_{mid}",
+                passed=True,
+                skip_reason="No reference audio for clone stress benchmark",
+            ))
+            continue
 
-    stress_times: list[float] = []
-    stress_rss: list[float] = []
-    for i in range(10):
-        with tempfile.TemporaryDirectory() as tmp:
-            params = _make_generate_params(
-                mode, TEXT_MEDIUM, os.path.join(tmp, f"stress_{i}.wav"),
-                benchmark_label=f"stress_{i}",
-                **stress_clone_kw,
+        compare_payload: dict[str, Any] = {}
+        for variant_label, kv_config in KV_STRATEGY_CONFIGS:
+            eprint(
+                f"    Rapid stress test ({mid}, {variant_label}, {STRESS_GENERATION_COUNT} generations)..."
             )
-            t0 = time.perf_counter()
-            client.call_collecting_notifications_timed("generate", params, timeout=300)
-            stress_times.append((time.perf_counter() - t0) * 1000)
-            rss = client.get_process_rss_mb()
-            if rss is not None:
-                stress_rss.append(rss)
+            client.call("load_model", {"model_id": mid, "benchmark": True}, timeout=120)
 
-    client.call("unload_model", timeout=30)
+            stress_times: list[float] = []
+            stress_rss: list[float] = []
+            raw_records: list[dict[str, Any]] = []
+            last_server_flags: dict[str, Any] = {}
+            for i in range(STRESS_GENERATION_COUNT):
+                with tempfile.TemporaryDirectory() as tmp:
+                    params = _make_generate_params(
+                        mode,
+                        TEXT_MEDIUM,
+                        os.path.join(tmp, f"stress_{variant_label}_{i}.wav"),
+                        benchmark_label=f"stress_{variant_label}_{i}",
+                        kv_config=kv_config,
+                        **stress_clone_kw,
+                    )
+                    rec = _run_single_generation(client, params, timeout=300)
+                    raw_records.append(rec)
+                    stress_times.append(rec["wall_ms"])
+                    last_server_flags = rec.get("server_flags", {}) or last_server_flags
+                    rss = client.get_process_rss_mb()
+                    if rss is not None:
+                        stress_rss.append(rss)
 
-    # Check for degradation: is last-3 avg > first-3 avg by >10%?
-    degradation = None
-    if len(stress_times) >= 6:
-        first3 = sum(stress_times[:3]) / 3
-        last3 = sum(stress_times[-3:]) / 3
-        degradation = round((last3 / max(first3, 0.01) - 1) * 100, 1)
+            client.call("unload_model", timeout=30)
 
-    # Check for memory leak: is last RSS > first RSS by >5%?
-    memory_leak = None
-    if len(stress_rss) >= 6:
-        memory_leak = round(stress_rss[-1] - stress_rss[0], 1)
+            degradation = None
+            if len(stress_times) >= 6:
+                first3 = sum(stress_times[:3]) / 3
+                last3 = sum(stress_times[-3:]) / 3
+                degradation = round((last3 / max(first3, 0.01) - 1) * 100, 1)
 
-    results.append(build_test_result(
-        f"stress_{mid}",
-        passed=True,
-        details={
-            "wall_ms": summarize_numeric(stress_times),
-            "rss_progression_mb": stress_rss,
-            "degradation_pct": degradation,
-            "memory_drift_mb": memory_leak,
-            "raw_times_ms": [round(t, 1) for t in stress_times],
-        },
-    ))
+            memory_drift = None
+            if len(stress_rss) >= 2:
+                memory_drift = round(stress_rss[-1] - stress_rss[0], 1)
+
+            details = {
+                "wall_ms": summarize_numeric(stress_times),
+                "rss_progression_mb": stress_rss,
+                "degradation_pct": degradation,
+                "memory_drift_mb": memory_drift,
+                "raw_times_ms": [round(t, 1) for t in stress_times],
+                "raw_records": raw_records,
+                "server_flags": last_server_flags,
+                "kv_flags": {key: last_server_flags.get(key) for key in KV_FLAG_KEYS},
+            }
+            compare_payload[variant_label] = details
+            results.append(
+                build_test_result(
+                    f"stress_{mid}_{variant_label}",
+                    passed=True,
+                    details=details,
+                )
+            )
+
+        baseline_summary = compare_payload.get("dense")
+        if baseline_summary is not None:
+            for strategy_label in ("mlx_quantized", "turboquant"):
+                candidate_summary = compare_payload.get(strategy_label)
+                if candidate_summary is None:
+                    continue
+                results.append(
+                    build_test_result(
+                        f"stress_compare_{mid}_{strategy_label}",
+                        passed=True,
+                        details=_build_compare_details(
+                            baseline_summary,
+                            candidate_summary,
+                        ),
+                    )
+                )
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("tier3_system", results, duration_ms)

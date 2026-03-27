@@ -19,6 +19,21 @@ from mlx_audio.tts.models.base import GenerationResult
 from mlx_audio.tts.models.qwen3_tts.qwen3_tts import format_duration
 from mlx_audio.utils import load_audio
 
+try:
+    from mlx_audio_qwen_turboquant import (
+        attach_talker_cache_stats,
+        build_talker_cache,
+        normalize_talker_cache_settings,
+        update_talker_cache_after_forward,
+    )
+except ImportError:
+    from .qwenvoice_turboquant import (
+        attach_talker_cache_stats,
+        build_talker_cache,
+        normalize_talker_cache_settings,
+        update_talker_cache_after_forward,
+    )
+
 
 @dataclass
 class PreparedICLContext:
@@ -32,6 +47,30 @@ class PreparedICLContext:
     codec_pad_embed: mx.array
     codec_with_text_pad: mx.array
     codec_prefix_embed: mx.array
+
+def _resolve_talker_cache_settings(
+    *,
+    kv_cache_strategy: Optional[str] = None,
+    kv_bits: Optional[int] = None,
+    kv_group_size: int = 64,
+    quantized_kv_start: int = 0,
+    turboquant_profile: Optional[str] = None,
+    turboquant_sink_tokens: int = 128,
+    turboquant_chunk_size: int = 128,
+    turboquant_seed: int = 42,
+    kv_quant_target: Optional[str] = None,
+) -> dict[str, object]:
+    return normalize_talker_cache_settings(
+        kv_cache_strategy=kv_cache_strategy,
+        kv_bits=kv_bits,
+        kv_group_size=kv_group_size,
+        quantized_kv_start=quantized_kv_start,
+        turboquant_profile=turboquant_profile,
+        turboquant_sink_tokens=turboquant_sink_tokens,
+        turboquant_chunk_size=turboquant_chunk_size,
+        turboquant_seed=turboquant_seed,
+        kv_quant_target=kv_quant_target,
+    )
 
 
 def can_prepare_icl(model) -> bool:
@@ -316,6 +355,7 @@ def generate_with_prepared_icl(
     model,
     text: str,
     prepared: PreparedICLContext,
+    instruct: Optional[str] = None,
     temperature: float = 0.9,
     max_tokens: int = 4096,
     top_k: int = 50,
@@ -323,17 +363,37 @@ def generate_with_prepared_icl(
     repetition_penalty: float = 1.5,
     stream: bool = False,
     streaming_interval: float = 2.0,
+    kv_cache_strategy: Optional[str] = None,
+    kv_bits: Optional[int] = None,
+    kv_group_size: int = 64,
+    quantized_kv_start: int = 0,
+    turboquant_profile: Optional[str] = None,
+    turboquant_sink_tokens: int = 128,
+    turboquant_chunk_size: int = 128,
+    turboquant_seed: int = 42,
+    kv_quant_target: Optional[str] = None,
 ) -> Generator[GenerationResult, None, None]:
     """Run the clone generation loop using a prepared ICL context."""
     start_time = time.perf_counter()
     input_embeds, tts_pad_embed, ref_codes = prepare_icl_generation_inputs_from_context(
         model, text, prepared
     )
+    talker_cache_settings = _resolve_talker_cache_settings(
+        kv_cache_strategy=kv_cache_strategy,
+        kv_bits=kv_bits,
+        kv_group_size=kv_group_size,
+        quantized_kv_start=quantized_kv_start,
+        turboquant_profile=turboquant_profile,
+        turboquant_sink_tokens=turboquant_sink_tokens,
+        turboquant_chunk_size=turboquant_chunk_size,
+        turboquant_seed=turboquant_seed,
+        kv_quant_target=kv_quant_target,
+    )
 
     target_token_count = len(model.tokenizer.encode(text))
     effective_max_tokens = min(max_tokens, max(75, target_token_count * 6))
 
-    cache = model.talker.make_cache()
+    cache = build_talker_cache(model.talker, talker_cache_settings)
     code_cache = model.talker.code_predictor.make_cache()
     generated_codes: List[mx.array] = []
     generated_token_ids: List[int] = []
@@ -356,6 +416,7 @@ def generate_with_prepared_icl(
 
     for step in range(effective_max_tokens):
         logits, hidden = model.talker(input_embeds, cache=cache)
+        update_talker_cache_after_forward(cache, talker_cache_settings)
 
         next_token = model._sample_token(
             logits,
@@ -441,7 +502,7 @@ def generate_with_prepared_icl(
             chunk_audio_dur = audio_chunk.shape[0] / model.sample_rate
             chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
 
-            yield GenerationResult(
+            yield attach_talker_cache_stats(GenerationResult(
                 audio=audio_chunk,
                 samples=audio_chunk.shape[0],
                 sample_rate=model.sample_rate,
@@ -466,7 +527,7 @@ def generate_with_prepared_icl(
                 processing_time_seconds=chunk_elapsed,
                 peak_memory_usage=mx.get_peak_memory() / 1e9,
                 is_streaming_chunk=True,
-            )
+            ), cache)
 
             chunk_start_time = time.perf_counter()
 
@@ -485,7 +546,7 @@ def generate_with_prepared_icl(
             chunk_audio_dur = audio_chunk.shape[0] / model.sample_rate
             chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0
 
-            yield GenerationResult(
+            yield attach_talker_cache_stats(GenerationResult(
                 audio=audio_chunk,
                 samples=audio_chunk.shape[0],
                 sample_rate=model.sample_rate,
@@ -511,7 +572,7 @@ def generate_with_prepared_icl(
                 peak_memory_usage=mx.get_peak_memory() / 1e9,
                 is_streaming_chunk=True,
                 is_final_chunk=True,
-            )
+            ), cache)
 
         model.speech_tokenizer.decoder.reset_streaming_state()
         return
@@ -545,7 +606,7 @@ def generate_with_prepared_icl(
     duration_seconds = samples / model.sample_rate
     rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0
 
-    yield GenerationResult(
+    yield attach_talker_cache_stats(GenerationResult(
         audio=audio,
         samples=samples,
         sample_rate=model.sample_rate,
@@ -563,4 +624,53 @@ def generate_with_prepared_icl(
         },
         processing_time_seconds=elapsed_time,
         peak_memory_usage=mx.get_peak_memory() / 1e9,
-    )
+    ), cache)
+
+
+def generate_with_reference_conditioning(
+    model,
+    text: str,
+    ref_audio: Union[str, mx.array],
+    ref_text: str,
+    instruct: Optional[str] = None,
+    temperature: float = 0.9,
+    max_tokens: int = 4096,
+    top_k: int = 50,
+    top_p: float = 1.0,
+    repetition_penalty: float = 1.5,
+    stream: bool = False,
+    streaming_interval: float = 2.0,
+    kv_cache_strategy: Optional[str] = None,
+    kv_bits: Optional[int] = None,
+    kv_group_size: int = 64,
+    quantized_kv_start: int = 0,
+    turboquant_profile: Optional[str] = None,
+    turboquant_sink_tokens: int = 128,
+    turboquant_chunk_size: int = 128,
+    turboquant_seed: int = 42,
+    kv_quant_target: Optional[str] = None,
+):
+    """Pass through to mlx-audio's guided clone path with cache strategy kwargs."""
+    kwargs = {
+        "text": text,
+        "ref_audio": ref_audio,
+        "ref_text": ref_text,
+        "instruct": instruct,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "top_k": top_k,
+        "top_p": top_p,
+        "repetition_penalty": repetition_penalty,
+        "stream": stream,
+        "streaming_interval": streaming_interval,
+        "kv_cache_strategy": kv_cache_strategy,
+        "kv_bits": kv_bits,
+        "kv_group_size": kv_group_size,
+        "quantized_kv_start": quantized_kv_start,
+        "turboquant_profile": turboquant_profile,
+        "turboquant_sink_tokens": turboquant_sink_tokens,
+        "turboquant_chunk_size": turboquant_chunk_size,
+        "turboquant_seed": turboquant_seed,
+        "kv_quant_target": kv_quant_target,
+    }
+    return model.generate(**kwargs)

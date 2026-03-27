@@ -3,15 +3,23 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATCH_DIR="$ROOT_DIR/third_party_patches/mlx-audio"
+WHEEL_PATCH_DIR="$PATCH_DIR/wheel_patches"
 VENDOR_DIR="$ROOT_DIR/Sources/Resources/vendor"
 SOURCE_HELPER="$PATCH_DIR/qwenvoice_speed_patch.py"
+SOURCE_TURBOQUANT_HELPER="$PATCH_DIR/qwenvoice_turboquant.py"
 BACKEND_HELPER="$ROOT_DIR/Sources/Resources/backend/mlx_audio_qwen_speed_patch.py"
+BACKEND_TURBOQUANT_HELPER="$ROOT_DIR/Sources/Resources/backend/mlx_audio_qwen_turboquant.py"
 PATCH_NOTE="$PATCH_DIR/qwenvoice-speed.patch"
 BASE_VERSION="0.4.1"
-TARGET_VERSION="0.4.1.post1"
+TARGET_VERSION="0.4.1.post2"
 
 if [[ ! -f "$SOURCE_HELPER" ]]; then
   echo "Missing helper source: $SOURCE_HELPER" >&2
+  exit 1
+fi
+
+if [[ ! -f "$SOURCE_TURBOQUANT_HELPER" ]]; then
+  echo "Missing helper source: $SOURCE_TURBOQUANT_HELPER" >&2
   exit 1
 fi
 
@@ -20,8 +28,14 @@ if [[ ! -f "$PATCH_NOTE" ]]; then
   exit 1
 fi
 
+if ! command -v patch >/dev/null 2>&1; then
+  echo "Missing required tool: patch" >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$BACKEND_HELPER")"
 cp "$SOURCE_HELPER" "$BACKEND_HELPER"
+cp "$SOURCE_TURBOQUANT_HELPER" "$BACKEND_TURBOQUANT_HELPER"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -45,7 +59,15 @@ fi
 
 unzip -q "$SOURCE_WHEEL" -d "$UNPACK_DIR"
 
+if [[ -d "$WHEEL_PATCH_DIR" ]]; then
+  while IFS= read -r -d '' patch_file; do
+    echo "Applying $(basename "$patch_file")"
+    patch -d "$UNPACK_DIR" -p1 < "$patch_file"
+  done < <(find "$WHEEL_PATCH_DIR" -maxdepth 1 -type f -name '*.patch' -print0 | sort -z)
+fi
+
 cp "$SOURCE_HELPER" "$UNPACK_DIR/mlx_audio/qwenvoice_speed_patch.py"
+cp "$SOURCE_TURBOQUANT_HELPER" "$UNPACK_DIR/mlx_audio/qwenvoice_turboquant.py"
 
 VERSION_FILE="$UNPACK_DIR/mlx_audio/version.py"
 if [[ -f "$VERSION_FILE" ]]; then
