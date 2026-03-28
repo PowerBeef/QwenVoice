@@ -258,50 +258,14 @@ def _run_quality_bench(
     output_dir: str | None,
 ) -> dict[str, Any]:
     start = time.perf_counter()
-    results: list[dict[str, Any]] = []
-
-    # Try to import evaluate_pair from the acoustic evaluator
-    try:
-        scripts_dir = PROJECT_DIR / "scripts"
-        sys.path.insert(0, str(scripts_dir))
-        from evaluate_clone_tone_acoustic import evaluate_pair, evaluate_directory
-    except ImportError as exc:
-        results.append(build_test_result(
-            "acoustic_evaluator_available", passed=True,
-            skip_reason=f"Cannot import acoustic evaluator: {exc}",
-        ))
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("clone_quality", results, duration_ms)
-
-    # Check for existing evaluation artifacts
-    eval_dirs = sorted(
-        (PROJECT_DIR / "build" / "tone-evals").glob("acoustic-run-*")
-    ) if (PROJECT_DIR / "build" / "tone-evals").is_dir() else []
-
-    if eval_dirs:
-        latest = eval_dirs[-1]
-        eprint(f"  Evaluating existing artifacts in {latest.name}...")
-        try:
-            eval_result = evaluate_directory(latest)
-            results.append(build_test_result(
-                "acoustic_eval_existing",
-                passed=eval_result.get("overall_pass", False),
-                details={
-                    "source": str(latest),
-                    "scenario_count": eval_result.get("scenario_count", 0),
-                    "pass_count": eval_result.get("pass_count", 0),
-                    "fail_count": eval_result.get("fail_count", 0),
-                },
-            ))
-        except Exception as exc:
-            results.append(build_test_result(
-                "acoustic_eval_existing", passed=False, error=str(exc),
-            ))
-    else:
-        results.append(build_test_result(
-            "acoustic_eval_existing", passed=True,
-            skip_reason="No existing tone-eval artifacts found",
-        ))
+    _ = python_path, output_dir
+    results = [
+        build_test_result(
+            "clone_quality_retired",
+            passed=True,
+            skip_reason="Clone tone acoustic evaluator removed during clone-delivery cleanup",
+        )
+    ]
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("clone_quality", results, duration_ms)

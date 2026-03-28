@@ -1,0 +1,125 @@
+---
+name: qwenvoice-packaged-validation
+description: Validate QwenVoice dev builds, packaged apps, and downloaded release artifacts with the repo harness and bundle checks. Use when asked to run automated testing, verify both macOS variants, check UI smoothness, confirm bundled Python or ffmpeg usage, investigate screenshot-capture prompts, or explain why a packaged validation lane failed.
+---
+
+# QwenVoice Packaged Validation
+
+## Overview
+
+Use this skill for QwenVoice validation requests that go beyond a plain local build. Favor the repo harness, packaged-app flows, and bundled-runtime checks over one-off manual app launches.
+
+## Workflow
+
+### 1. Confirm the target surface
+
+Classify the request before running anything:
+
+- **Source sanity**: repo inputs, Swift tests, pure Python tests.
+- **Dev app validation**: local app built from the checkout.
+- **Packaged app validation**: `.app` bundle copied from a build artifact.
+- **Release artifact validation**: downloaded dual-UI DMGs or a release-artifact root.
+
+Prefer the most specific surface that matches the request. Do not treat a source build as proof that the packaged app is healthy.
+
+### 2. Start with repo truth
+
+Run the fast gates first unless the user explicitly wants only one narrow lane:
+
+```bash
+./scripts/check_project_inputs.sh
+python3 scripts/harness.py validate
+```
+
+Add only the layers that match the requested scope:
+
+```bash
+python3 scripts/harness.py test --layer swift
+python3 scripts/harness.py test --layer server
+python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer ui
+python3 scripts/harness.py test --layer design
+python3 scripts/harness.py test --layer perf
+```
+
+Remember that `test --layer all` excludes `ui`, `design`, and `perf`.
+
+### 3. Prefer the packaged-release lane for shipped-artifact checks
+
+When the request is about the actual release packages, prefer the packaged flow:
+
+```bash
+python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
+```
+
+Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as install-and-test flows:
+
+- mount the DMG
+- copy `QwenVoice.app` into a disposable temp install root
+- clear quarantine on the temp copy if needed
+- test the copied app, not the mounted app
+
+### 4. Keep UI screenshot capture permissionless by default
+
+For `ui` and `design` lanes, default to:
+
+```bash
+QWENVOICE_UITEST_CAPTURE_MODE=content
+```
+
+Use `system` mode only when the user explicitly wants real system capture fidelity. If `system` mode fails because Screen Recording permission is missing, report that as an expected TCC limitation instead of treating it as a general app failure.
+
+### 5. Prove bundled dependencies, not just startup
+
+When validating packaged apps, run the bundle verifier:
+
+```bash
+./scripts/verify_release_bundle.sh <path-to-app-or-build/QwenVoice.app>
+```
+
+Treat the following as the packaged-runtime acceptance checks:
+
+- `runtimeSource == bundled`
+- bundled Python path resolves under `QwenVoice.app/Contents/Resources/python`
+- bundled ffmpeg path resolves under `QwenVoice.app/Contents/Resources/ffmpeg`
+- packaged backend smoke passes
+
+If the request is about “using bundled dependencies,” do not stop at launch success.
+
+### 6. Handle live-model blockers explicitly
+
+The `ui`, `design`, `perf`, and `release` lanes default to live backend mode with a fixture data root. If installed models are missing under `~/Library/Application Support/QwenVoice/models`, say so directly and separate:
+
+- what passed with stub or packaged structural checks
+- what could not be proven live because the machine lacks models
+
+Do not blur “packaged app launches” into “full live generation works.”
+
+### 7. Report with acceptance gates
+
+When summarizing results, group findings by:
+
+- source sanity
+- packaged startup and bundle verification
+- UI and screenshot behavior
+- live generation coverage
+- blockers or missing prerequisites
+
+Call out the exact lane that failed and the first concrete blocker.
+
+## Common Commands
+
+```bash
+python3 scripts/harness.py diagnose
+python3 scripts/harness.py test --layer ui --dmg <path-to-dmg> --ui-backend-mode live --ui-data-root fixture
+python3 scripts/harness.py test --layer perf --app-bundle <path-to-app> --ui-backend-mode live --ui-data-root fixture
+python3 scripts/harness.py test --layer design --ui-backend-mode stub
+```
+
+## Failure Shields
+
+- Do not hand-roll alternate test flows when the harness already has a lane.
+- Do not assume the mounted DMG app is the real test target.
+- Do not treat missing live models as a code regression.
+- Do not default screenshot tests to `QWENVOICE_UITEST_CAPTURE_MODE=system`.
+- Do not claim success on bundled dependencies unless `verify_release_bundle.sh` or equivalent runtime diagnostics prove it.

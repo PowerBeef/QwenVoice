@@ -256,7 +256,6 @@ final class PythonBridge: ObservableObject {
         mode: GenerationMode,
         voice: String? = nil,
         instruct: String? = nil,
-        deliveryProfile: DeliveryProfile? = nil,
         refAudio: String? = nil,
         refText: String? = nil
     ) -> String {
@@ -265,7 +264,6 @@ final class PythonBridge: ObservableObject {
         let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedInstruction = instruct?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let normalizedInstruction = Self.hasMeaningfulDeliveryInstruction(trimmedInstruction) ? trimmedInstruction : ""
-        let normalizedDeliveryProfile = Self.deliveryProfileFingerprint(deliveryProfile)
         let identityParts: [String]
 
         switch mode {
@@ -287,8 +285,6 @@ final class PythonBridge: ObservableObject {
             identityParts = [
                 modelID,
                 mode.rawValue,
-                normalizedInstruction,
-                normalizedDeliveryProfile,
                 trimmedRefAudio,
                 trimmedRefText,
             ]
@@ -307,37 +303,6 @@ final class PythonBridge: ObservableObject {
         Voice description: \(trimmedDescription)
         Delivery style: \(trimmedEmotion)
         """
-    }
-
-    private static func deliveryProfileFingerprint(_ deliveryProfile: DeliveryProfile?) -> String {
-        guard let deliveryProfile else { return "" }
-        let presetID = deliveryProfile.presetID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let customText = deliveryProfile.trimmedCustomText ?? ""
-        let instruction = hasMeaningfulDeliveryInstruction(deliveryProfile.trimmedInstruction)
-            ? deliveryProfile.trimmedInstruction
-            : ""
-        let intensity = deliveryProfile.intensity?.rpcValue ?? ""
-        return [presetID, intensity, customText, instruction].joined(separator: "~")
-    }
-
-    private static func rpcValue(for deliveryProfile: DeliveryProfile?) -> RPCValue? {
-        guard let deliveryProfile else { return nil }
-
-        var object: [String: RPCValue] = [
-            "final_instruction": .string(deliveryProfile.finalInstruction)
-        ]
-
-        if let presetID = deliveryProfile.presetID, !presetID.isEmpty {
-            object["preset_id"] = .string(presetID)
-        }
-        if let intensity = deliveryProfile.intensity {
-            object["intensity"] = .string(intensity.rpcValue)
-        }
-        if let customText = deliveryProfile.trimmedCustomText, !customText.isEmpty {
-            object["custom_text"] = .string(customText)
-        }
-
-        return .object(object)
     }
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
@@ -626,7 +591,6 @@ final class PythonBridge: ObservableObject {
         mode: GenerationMode,
         voice: String? = nil,
         instruct: String? = nil,
-        deliveryProfile: DeliveryProfile? = nil,
         refAudio: String? = nil,
         refText: String? = nil
     ) async {
@@ -643,7 +607,6 @@ final class PythonBridge: ObservableObject {
             mode: mode,
             voice: voice,
             instruct: instruct,
-            deliveryProfile: deliveryProfile,
             refAudio: refAudio,
             refText: refText
         )
@@ -675,12 +638,6 @@ final class PythonBridge: ObservableObject {
         case .design:
             break
         case .clone:
-            if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
-                params["instruct"] = .string(instruct)
-            }
-            if let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
-                params["delivery_profile"] = deliveryProfileValue
-            }
             if let refAudio, !refAudio.isEmpty {
                 params["ref_audio"] = .string(refAudio)
             }
@@ -844,8 +801,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
-        emotion: String,
-        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         stream: Bool = false,
         streamingContext: StreamingRequestContext? = nil
@@ -869,12 +824,6 @@ final class PythonBridge: ObservableObject {
         ]
         if let refText, !refText.isEmpty {
             params["ref_text"] = .string(refText)
-        }
-        if Self.hasMeaningfulDeliveryInstruction(emotion) {
-            params["instruct"] = .string(emotion)
-        }
-        if let deliveryProfileValue = Self.rpcValue(for: deliveryProfile) {
-            params["delivery_profile"] = deliveryProfileValue
         }
         if stream {
             params["stream"] = .bool(true)
@@ -999,8 +948,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
-        emotion: String,
-        deliveryProfile: DeliveryProfile?,
         outputPath: String,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -1016,8 +963,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
-                emotion: emotion,
-                deliveryProfile: deliveryProfile,
                 outputPath: outputPath,
                 stream: false
             )
@@ -1029,8 +974,6 @@ final class PythonBridge: ObservableObject {
         text: String,
         refAudio: String,
         refText: String?,
-        emotion: String,
-        deliveryProfile: DeliveryProfile?,
         outputPath: String
     ) async throws -> GenerationResult {
         try await performGenerationFlow(
@@ -1045,8 +988,6 @@ final class PythonBridge: ObservableObject {
                 text: text,
                 refAudio: refAudio,
                 refText: refText,
-                emotion: emotion,
-                deliveryProfile: deliveryProfile,
                 outputPath: outputPath,
                 stream: true,
                 streamingContext: StreamingRequestContext(
@@ -1815,14 +1756,7 @@ final class PythonBridge: ObservableObject {
                 streamingUsed: stream,
                 preparedCloneUsed: mode == .clone,
                 cloneCacheHit: mode == .clone,
-                firstChunkMs: stream ? firstChunkMs : nil,
-                deliveryInstructionApplied: nil,
-                deliveryInstructionStrategy: nil,
-                deliveryPlanStrength: nil,
-                styledTextApplied: nil,
-                speakerSimilarity: nil,
-                deliveryRetryCount: nil,
-                deliveryCompromised: nil
+                firstChunkMs: stream ? firstChunkMs : nil
             )
         )
     }
@@ -1900,13 +1834,6 @@ struct GenerationResult {
         let preparedCloneUsed: Bool?
         let cloneCacheHit: Bool?
         let firstChunkMs: Int?
-        let deliveryInstructionApplied: Bool?
-        let deliveryInstructionStrategy: String?
-        let deliveryPlanStrength: String?
-        let styledTextApplied: Bool?
-        let speakerSimilarity: Double?
-        let deliveryRetryCount: Int?
-        let deliveryCompromised: Bool?
 
         init(
             tokenCount: Int?,
@@ -1915,14 +1842,7 @@ struct GenerationResult {
             streamingUsed: Bool,
             preparedCloneUsed: Bool?,
             cloneCacheHit: Bool?,
-            firstChunkMs: Int?,
-            deliveryInstructionApplied: Bool?,
-            deliveryInstructionStrategy: String?,
-            deliveryPlanStrength: String?,
-            styledTextApplied: Bool?,
-            speakerSimilarity: Double?,
-            deliveryRetryCount: Int?,
-            deliveryCompromised: Bool?
+            firstChunkMs: Int?
         ) {
             self.tokenCount = tokenCount
             self.processingTimeSeconds = processingTimeSeconds
@@ -1931,13 +1851,6 @@ struct GenerationResult {
             self.preparedCloneUsed = preparedCloneUsed
             self.cloneCacheHit = cloneCacheHit
             self.firstChunkMs = firstChunkMs
-            self.deliveryInstructionApplied = deliveryInstructionApplied
-            self.deliveryInstructionStrategy = deliveryInstructionStrategy
-            self.deliveryPlanStrength = deliveryPlanStrength
-            self.styledTextApplied = styledTextApplied
-            self.speakerSimilarity = speakerSimilarity
-            self.deliveryRetryCount = deliveryRetryCount
-            self.deliveryCompromised = deliveryCompromised
         }
 
         init?(from value: RPCValue?) {
@@ -1949,13 +1862,6 @@ struct GenerationResult {
             preparedCloneUsed = object["prepared_clone_used"]?.boolValue
             cloneCacheHit = object["clone_cache_hit"]?.boolValue
             firstChunkMs = object["first_chunk_ms"]?.intValue
-            deliveryInstructionApplied = object["delivery_instruction_applied"]?.boolValue
-            deliveryInstructionStrategy = object["delivery_instruction_strategy"]?.stringValue
-            deliveryPlanStrength = object["delivery_plan_strength"]?.stringValue
-            styledTextApplied = object["styled_text_applied"]?.boolValue
-            speakerSimilarity = object["speaker_similarity"]?.doubleValue
-            deliveryRetryCount = object["delivery_retry_count"]?.intValue
-            deliveryCompromised = object["delivery_compromised"]?.boolValue
         }
     }
 

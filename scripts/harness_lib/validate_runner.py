@@ -71,7 +71,6 @@ def run_validate(python_path: str | None = None) -> list[dict[str, Any]]:
             [
                 py, "-c",
                 "import sys; sys.path.insert(0, '{}'); "
-                "import clone_delivery_pipeline; "
                 "import server".format(str(BACKEND_DIR)),
             ],
             capture_output=True,

@@ -26,7 +26,6 @@ from .paths import (
     APP_MODELS_DIR,
     BACKEND_DIR,
     CONTRACT_PATH,
-    PIPELINE_PATH,
     PROJECT_DIR,
     SERVER_PATH,
     resolve_backend_python,
@@ -204,178 +203,7 @@ def _load_module_from_path(name: str, path: Path) -> Any:
 
 def _run_pipeline_tests() -> dict[str, Any]:
     start = time.perf_counter()
-    pipeline = _load_module_from_path("clone_delivery_pipeline", PIPELINE_PATH)
     results: list[dict[str, Any]] = []
-
-    # parse_clone_delivery_profile tests
-    def test_parse_profile_preset():
-        for emotion in ["happy", "sad", "angry", "fearful", "whisper", "dramatic", "calm", "excited"]:
-            profile = pipeline.parse_clone_delivery_profile(
-                {"preset_id": emotion, "intensity": "normal", "final_instruction": f"{emotion} tone"}
-            )
-            assert profile is not None, f"Expected profile for {emotion}"
-            assert profile.preset_id == emotion
-
-    def test_parse_profile_custom_text():
-        profile = pipeline.parse_clone_delivery_profile(
-            {"custom_text": "Speak like a pirate", "final_instruction": "Speak like a pirate"}
-        )
-        assert profile is not None
-        assert profile.is_custom
-
-    def test_parse_profile_neutral_returns_none():
-        profile = pipeline.parse_clone_delivery_profile(
-            {"preset_id": "neutral", "final_instruction": "Normal tone"}
-        )
-        assert profile is None, "Neutral profile should return None"
-
-    def test_parse_profile_empty_returns_none():
-        profile = pipeline.parse_clone_delivery_profile({})
-        assert profile is None
-
-    def test_parse_profile_already_parsed():
-        original = pipeline.CloneDeliveryProfile(
-            preset_id="happy", intensity="normal", custom_text=None, final_instruction="Happy tone"
-        )
-        result = pipeline.parse_clone_delivery_profile(original)
-        assert result is original
-
-    # build_clone_delivery_plan tests
-    def test_build_plan_all_emotions():
-        text = "Hello world"
-        for emotion in ["happy", "sad", "angry", "fearful", "whisper", "dramatic", "calm", "excited"]:
-            for intensity in ["subtle", "normal", "strong"]:
-                plan = pipeline.build_clone_delivery_plan(
-                    {"preset_id": emotion, "intensity": intensity, "final_instruction": f"{emotion} tone"},
-                    text=text,
-                )
-                assert plan is not None, f"Expected plan for {emotion}/{intensity}"
-                assert plan.strength_level in ("light", "medium", "strong")
-                assert plan.sampling_profile is not None
-
-    def test_build_plan_custom_profile():
-        plan = pipeline.build_clone_delivery_plan(
-            {"custom_text": "Speak warmly", "final_instruction": "Speak warmly"},
-            text="Test text",
-        )
-        assert plan is not None
-        assert plan.profile.is_custom
-
-    def test_build_plan_strength_override():
-        plan = pipeline.build_clone_delivery_plan(
-            {"preset_id": "happy", "intensity": "subtle", "final_instruction": "Happy tone"},
-            text="Test",
-            strength_override="strong",
-        )
-        assert plan is not None
-        assert plan.strength_level == "strong"
-
-    # CloneDeliveryPlan.clone_instruct tests
-    def test_plan_clone_instruct_preset():
-        for preset, expected in pipeline.CLONE_EMOTION_INSTRUCT.items():
-            if preset == "neutral":
-                continue
-            plan = pipeline.build_clone_delivery_plan(
-                {"preset_id": preset, "intensity": "normal", "final_instruction": f"{preset} tone"},
-                text="Test",
-            )
-            assert plan is not None
-            assert plan.clone_instruct == expected, f"Expected {expected} for {preset}, got {plan.clone_instruct}"
-
-    # delivery_profile_fingerprint tests
-    def test_fingerprint_stable():
-        profile = {"preset_id": "happy", "intensity": "normal", "final_instruction": "Happy tone"}
-        fp1 = pipeline.delivery_profile_fingerprint(profile)
-        fp2 = pipeline.delivery_profile_fingerprint(profile)
-        assert fp1 == fp2, "Fingerprint should be stable"
-        assert fp1, "Fingerprint should be non-empty for meaningful profile"
-
-    def test_fingerprint_empty_for_neutral():
-        fp = pipeline.delivery_profile_fingerprint(
-            {"preset_id": "neutral", "final_instruction": "Normal tone"}
-        )
-        assert fp == "", "Fingerprint should be empty for neutral"
-
-    # CloneDeliveryProfile property tests
-    def test_profile_is_meaningful():
-        meaningful = pipeline.CloneDeliveryProfile(
-            preset_id="happy", intensity="normal", custom_text=None, final_instruction="Happy tone"
-        )
-        assert meaningful.is_meaningful
-        not_meaningful = pipeline.CloneDeliveryProfile(
-            preset_id="neutral", intensity=None, custom_text=None, final_instruction="Normal tone"
-        )
-        assert not not_meaningful.is_meaningful
-
-    def test_profile_is_custom():
-        custom = pipeline.CloneDeliveryProfile(
-            preset_id=None, intensity=None, custom_text="Custom instruction", final_instruction="Custom"
-        )
-        assert custom.is_custom
-        preset = pipeline.CloneDeliveryProfile(
-            preset_id="happy", intensity="normal", custom_text=None, final_instruction="Happy"
-        )
-        assert not preset.is_custom
-
-    def test_profile_canonical_intensity():
-        for raw, expected in [("subtle", "subtle"), ("normal", "normal"), ("strong", "strong")]:
-            p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity=raw, custom_text=None, final_instruction="X")
-            assert p.canonical_intensity == expected
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="invalid", custom_text=None, final_instruction="X")
-        assert p.canonical_intensity is None
-
-    def test_profile_starting_strength():
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="subtle", custom_text=None, final_instruction="X")
-        assert p.starting_strength == "light"
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="normal", custom_text=None, final_instruction="X")
-        assert p.starting_strength == "medium"
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="strong", custom_text=None, final_instruction="X")
-        assert p.starting_strength == "strong"
-
-    def test_profile_fallback_ladder():
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="strong", custom_text=None, final_instruction="X")
-        assert p.fallback_ladder == ["strong", "medium", "light"]
-        p = pipeline.CloneDeliveryProfile(preset_id="happy", intensity="subtle", custom_text=None, final_instruction="X")
-        assert p.fallback_ladder == ["light"]
-
-    # Text styling tests
-    def test_energetic_text():
-        text = "Hello, world"
-        styled_strong = pipeline._energetic_text(text, "strong")
-        assert "!" in styled_strong
-        styled_light = pipeline._energetic_text(text, "light")
-        assert styled_light.endswith(".")
-
-    def test_fragile_text():
-        text = "Hello, world"
-        styled_strong = pipeline._fragile_text(text, "strong")
-        assert "..." in styled_strong
-        styled_light = pipeline._fragile_text(text, "light")
-        assert styled_light.endswith(".")
-
-    def test_dramatic_text():
-        text = "Hello, world"
-        styled_strong = pipeline._dramatic_text(text, "strong")
-        assert "--" in styled_strong
-        styled_medium = pipeline._dramatic_text(text, "medium")
-        assert "..." in styled_medium
-
-    def test_calm_text():
-        text = "Hello world"
-        styled_light = pipeline._calm_text(text, "light")
-        assert styled_light == text  # light calm returns text as-is
-
-    # Structural integrity tests
-    def test_sampling_profiles_keys():
-        assert set(pipeline.SAMPLING_PROFILES.keys()) == {"light", "medium", "strong"}
-
-    def test_strength_fallbacks_keys():
-        assert set(pipeline.STRENGTH_FALLBACKS.keys()) == {"light", "medium", "strong"}
-
-    def test_clone_emotion_instruct_entries():
-        expected_emotions = {"happy", "sad", "angry", "fearful", "whisper", "dramatic", "calm", "excited", "neutral"}
-        assert set(pipeline.CLONE_EMOTION_INSTRUCT.keys()) == expected_emotions
-        assert pipeline.CLONE_EMOTION_INSTRUCT["neutral"] is None
 
     def test_ui_state_client_wraps_transport_errors():
         from .ui_state_client import UIStateClient, UIStateClientError
@@ -476,35 +304,13 @@ def _run_pipeline_tests() -> dict[str, Any]:
                 os.environ["QWENVOICE_UITEST_CAPTURE_MODE"] = previous_value
 
     tests = [
-        ("parse_profile_preset", test_parse_profile_preset),
-        ("parse_profile_custom_text", test_parse_profile_custom_text),
-        ("parse_profile_neutral_returns_none", test_parse_profile_neutral_returns_none),
-        ("parse_profile_empty_returns_none", test_parse_profile_empty_returns_none),
-        ("parse_profile_already_parsed", test_parse_profile_already_parsed),
-        ("build_plan_all_emotions", test_build_plan_all_emotions),
-        ("build_plan_custom_profile", test_build_plan_custom_profile),
-        ("build_plan_strength_override", test_build_plan_strength_override),
-        ("plan_clone_instruct_preset", test_plan_clone_instruct_preset),
-        ("fingerprint_stable", test_fingerprint_stable),
-        ("fingerprint_empty_for_neutral", test_fingerprint_empty_for_neutral),
-        ("profile_is_meaningful", test_profile_is_meaningful),
-        ("profile_is_custom", test_profile_is_custom),
-        ("profile_canonical_intensity", test_profile_canonical_intensity),
-        ("profile_starting_strength", test_profile_starting_strength),
-        ("profile_fallback_ladder", test_profile_fallback_ladder),
-        ("energetic_text", test_energetic_text),
-        ("fragile_text", test_fragile_text),
-        ("dramatic_text", test_dramatic_text),
-        ("calm_text", test_calm_text),
-        ("sampling_profiles_keys", test_sampling_profiles_keys),
-        ("strength_fallbacks_keys", test_strength_fallbacks_keys),
-        ("clone_emotion_instruct_entries", test_clone_emotion_instruct_entries),
         ("ui_state_client_wraps_transport_errors", test_ui_state_client_wraps_transport_errors),
         ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
         ("click_detection_ignores_matching_final_boundary_transient", test_click_detection_ignores_matching_final_boundary_transient),
         ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
         ("build_ui_launch_environment_defaults_screenshot_capture_mode", test_build_ui_launch_environment_defaults_screenshot_capture_mode),
         ("build_ui_launch_environment_preserves_explicit_capture_mode", test_build_ui_launch_environment_preserves_explicit_capture_mode),
+        ("pipeline_tests_retired", lambda: {"skip_reason": "No pipeline-specific tests remain after clone delivery cleanup"}),
     ]
 
     for name, fn in tests:
@@ -673,30 +479,6 @@ def _run_server_tests() -> dict[str, Any]:
         finally:
             os.unlink(tmp_path)
 
-    # _env_float tests
-    def test_env_float_valid():
-        os.environ["_HARNESS_TEST_FLOAT"] = "0.75"
-        try:
-            assert server._env_float("_HARNESS_TEST_FLOAT", 0.5) == 0.75
-        finally:
-            del os.environ["_HARNESS_TEST_FLOAT"]
-
-    def test_env_float_invalid():
-        os.environ["_HARNESS_TEST_FLOAT"] = "not_a_number"
-        try:
-            assert server._env_float("_HARNESS_TEST_FLOAT", 0.5) == 0.5
-        finally:
-            del os.environ["_HARNESS_TEST_FLOAT"]
-
-    def test_env_float_missing():
-        os.environ.pop("_HARNESS_TEST_FLOAT_MISSING", None)
-        assert server._env_float("_HARNESS_TEST_FLOAT_MISSING", 0.78) == 0.78
-
-    # Early-abort constant validation
-    def test_early_abort_margin_positive():
-        assert server.GUIDED_CLONE_EARLY_ABORT_MARGIN > 0
-        assert server.GUIDED_CLONE_EARLY_ABORT_MARGIN < server.GUIDED_CLONE_HARD_SIMILARITY
-
     def test_stream_selected_audio_emits_chunks_before_final_write():
         import numpy as np
 
@@ -769,10 +551,6 @@ def _run_server_tests() -> dict[str, Any]:
         ("env_flag_true", test_env_flag_true),
         ("env_flag_false", test_env_flag_false),
         ("env_flag_missing_default", test_env_flag_missing_default),
-        ("env_float_valid", test_env_float_valid),
-        ("env_float_invalid", test_env_float_invalid),
-        ("env_float_missing", test_env_float_missing),
-        ("early_abort_margin_positive", test_early_abort_margin_positive),
         ("meaningful_delivery_instruction", test_meaningful_delivery_various),
         ("design_prewarm_identity_ignores_instruction", test_design_prewarm_identity_ignores_instruction),
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),

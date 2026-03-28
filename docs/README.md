@@ -26,4 +26,4 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 ## Notes
 
 - Generated/vendor documentation under `Sources/Resources/python/`, `cli/.venv/`, and dependency package directories is intentionally out of scope for the repo docs.
-- Older dated report and plan filenames now point to the current reference docs above so existing links do not break.
+- Historical notes may still appear in git history or external references, but the maintained repo docs live in the files listed above.

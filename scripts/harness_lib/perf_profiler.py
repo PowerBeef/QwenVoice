@@ -1,8 +1,8 @@
 """Exhaustive performance profiler for the QwenVoice TTS pipeline.
 
 Captures both client-side wall time AND server-side pipeline stage timings
-across model modes, text lengths, speakers, cache states, and clone delivery
-configurations.  Produces a ranked bottleneck analysis at the end.
+across model modes, text lengths, speakers, and cache states. Produces a
+ranked bottleneck analysis at the end.
 
 Intended entry point: ``run_all_tiers(client, runs, tiers, output_dir)``.
 """
@@ -70,15 +70,6 @@ TEXT_BY_LENGTH: dict[str, str] = {
     "long": TEXT_LONG,
     "extra_long": TEXT_EXTRA_LONG,
 }
-
-DELIVERY_PROFILES_MATRIX: list[dict[str, Any]] = [
-    {"label": "neutral", "profile": None},
-    {"label": "angry_strong", "profile": {"preset_id": "angry", "intensity": "strong", "final_instruction": "Furious and intensely angry"}},
-    {"label": "sad_gentle", "profile": {"preset_id": "sad", "intensity": "gentle", "final_instruction": "Quietly sad and melancholic"}},
-    {"label": "excited_strong", "profile": {"preset_id": "excited", "intensity": "strong", "final_instruction": "Very excited and energetic"}},
-    {"label": "calm_gentle", "profile": {"preset_id": "calm", "intensity": "gentle", "final_instruction": "Calm and serene delivery"}},
-    {"label": "dramatic_strong", "profile": {"preset_id": "dramatic", "intensity": "strong", "final_instruction": "Dramatically theatrical delivery"}},
-]
 
 KATHLEEN_BASE_URL = "https://raw.githubusercontent.com/rhasspy/dataset-voice-kathleen/master"
 KATHLEEN_STEMS = [
@@ -154,7 +145,6 @@ def _make_generate_params(
     ref_audio: str | None = None,
     ref_text: str | None = None,
     stream: bool = True,
-    delivery_profile: dict[str, Any] | None = None,
     benchmark_label: str | None = None,
 ) -> dict[str, Any]:
     """Build a generate RPC params dict."""
@@ -177,8 +167,6 @@ def _make_generate_params(
             params["ref_audio"] = ref_audio
         if ref_text:
             params["ref_text"] = ref_text
-        if delivery_profile:
-            params["delivery_profile"] = delivery_profile
     return params
 
 
@@ -400,19 +388,6 @@ def _run_tier1(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
         # Warm run (repeat — should hit cache)
         summary_warm = _multi_run(client, params_base, runs, label_warm)
         results.append(build_test_result(label_warm, passed=True, details=summary_warm))
-
-        # --- 1e: Clone delivery profiles ---
-        if mode == "clone" and kathleen_ref:
-            for dp in DELIVERY_PROFILES_MATRIX:
-                label = f"delivery_{dp['label']}"
-                params = _make_generate_params(
-                    "clone", TEXT_MEDIUM, "/tmp/placeholder.wav",
-                    ref_audio=kathleen_ref[0], ref_text=kathleen_ref[1],
-                    delivery_profile=dp["profile"],
-                    benchmark_label=label,
-                )
-                summary = _multi_run(client, params, runs, label)
-                results.append(build_test_result(label, passed=True, details=summary))
 
         client.call("unload_model", timeout=30)
 
@@ -778,38 +753,6 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
             ),
         },
     ))
-
-    # --- 4b: Delivery emotion × intensity matrix ---
-    eprint("    Delivery matrix...")
-    for dp in DELIVERY_PROFILES_MATRIX:
-        label = f"clone_delivery_{dp['label']}"
-        params = _make_generate_params(
-            "clone", TEXT_MEDIUM, "/tmp/placeholder.wav",
-            ref_audio=ref_wav, ref_text=ref_text,
-            delivery_profile=dp["profile"],
-            benchmark_label=label,
-        )
-        summary = _multi_run(client, params, runs, label)
-
-        # Extract delivery-specific flags from first successful run
-        delivery_flags: dict[str, Any] = {}
-        for rec in summary.get("raw_records", []):
-            if "server_flags" in rec:
-                delivery_flags = {
-                    k: v for k, v in rec["server_flags"].items()
-                    if k in (
-                        "delivery_instruction_applied",
-                        "delivery_instruction_strategy",
-                        "delivery_plan_strength",
-                        "prepared_clone_used",
-                        "clone_cache_hit",
-                        "delivery_retry_count",
-                        "delivery_compromised",
-                    )
-                }
-                break
-        summary["delivery_flags"] = delivery_flags
-        results.append(build_test_result(label, passed=True, details=summary))
 
     client.call("unload_model", timeout=30)
     duration_ms = int((time.perf_counter() - start) * 1000)

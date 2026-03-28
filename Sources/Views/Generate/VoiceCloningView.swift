@@ -305,8 +305,6 @@ private extension VoiceCloningView {
                     text: draft.text,
                     refAudio: refPath,
                     refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
-                    emotion: "Normal tone",
-                    deliveryProfile: nil,
                     outputPath: outputPath
                 )
 

@@ -114,8 +114,11 @@ Useful local checks:
 
 ```sh
 ./scripts/check_project_inputs.sh
-./scripts/run_tests.sh
-./scripts/run_backend_tests.sh
+python3 scripts/harness.py validate
+python3 scripts/harness.py test --layer swift
+python3 scripts/harness.py test --layer server
+python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer ui
 ```
 
 ### Development-mode Python behavior
@@ -182,7 +185,6 @@ Start here:
 
 - [`docs/README.md`](docs/README.md) — documentation index
 - [`docs/reference/current-state.md`](docs/reference/current-state.md) — current repo facts
-- [`docs/reference/testing.md`](docs/reference/testing.md) — test inventory and commands
 - [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — current strengths and caveats
 
 ## Credits

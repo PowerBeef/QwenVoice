@@ -43,7 +43,6 @@
 		7142299093710E7ECD0887F6 /* AppStartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEC7B0D62CB687A465F31B8 /* AppStartupCoordinatorTests.swift */; };
 		7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */; };
 		782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9B899A22B7619F15A40FC99C /* Assets.xcassets */; };
-		7966E1A03049D6A9F427AA40 /* clone_delivery_pipeline.py in Resources */ = {isa = PBXBuildFile; fileRef = EF5CD755DB3306C3935B67BE /* clone_delivery_pipeline.py */; };
 		7A4C342B51D60AB71AC61E0C /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637866C95AC607A5E0509956 /* SidebarView.swift */; };
 		80B162A6B2D1D7E86252D5B3 /* qwenvoice_contract.json in Resources */ = {isa = PBXBuildFile; fileRef = 617BE72142511CD5043C341E /* qwenvoice_contract.json */; };
 		81725373CBCC5E7D92BD1C43 /* RPCMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0B1D8FD5B2DB216E702532 /* RPCMessageTests.swift */; };
@@ -179,7 +178,6 @@
 		E876590A12FADBE38100CD17 /* LayoutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConstants.swift; sourceTree = "<group>"; };
 		E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceApp.swift; sourceTree = "<group>"; };
 		E8D6C6FCFF2654F27862BD50 /* ScreenshotCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCaptureTests.swift; sourceTree = "<group>"; };
-		EF5CD755DB3306C3935B67BE /* clone_delivery_pipeline.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = clone_delivery_pipeline.py; sourceTree = "<group>"; };
 		F1B9A406B3FB86D1CB132845 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSContractTests.swift; sourceTree = "<group>"; };
 		F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignView.swift; sourceTree = "<group>"; };
@@ -202,7 +200,6 @@
 		0D9B30C2AA1A6F6704D6B55A /* backend */ = {
 			isa = PBXGroup;
 			children = (
-				EF5CD755DB3306C3935B67BE /* clone_delivery_pipeline.py */,
 				F75A879B8DA7C5F5AEC99D00 /* mlx_audio_qwen_speed_patch.py */,
 				A6529F131AAB6D76EF97AA1B /* server.py */,
 			);
@@ -517,7 +514,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */,
-				7966E1A03049D6A9F427AA40 /* clone_delivery_pipeline.py in Resources */,
 				1E794E6C7666C278A151F811 /* mlx_audio_qwen_speed_patch.py in Resources */,
 				80B162A6B2D1D7E86252D5B3 /* qwenvoice_contract.json in Resources */,
 				8D6183A2086E6C2AD0F8E32A /* requirements.txt in Resources */,

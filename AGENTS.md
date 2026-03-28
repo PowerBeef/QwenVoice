@@ -38,6 +38,26 @@ Prefer code, manifests, and scripts over prose whenever they disagree.
 - App data under `~/Library/Application Support/QwenVoice/` is runtime state, not repo source.
 - Watch for accidental `__pycache__` and `.pyc` paths when regenerating or reviewing changes.
 
+## Project-Local Skills
+
+QwenVoice now has repo-tracked local skills under `.agents/skills/`. Prefer these when the task matches their scope instead of rediscovering the same repo-specific workflows from scratch:
+
+- `qwenvoice-packaged-validation` for packaged-app validation, dual-UI release artifact checks, bundled dependency proof, screenshot-capture prompt issues, and full automated validation requests.
+- `qwenvoice-release-publish` for version/build bumps, checked-in release notes, CI gate waiting, `release-dual-ui` dispatch, and GitHub release verification.
+- `qwenvoice-vendored-runtime` for `mlx-audio`, vendored wheel and runtime changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification.
+- `qwenvoice-doc-sync` for README, AGENTS, current-state, and release-notes sync against `Sources/`, `project.yml`, and `scripts/`.
+
+These local skills complement, rather than replace, the user-wide skills that are already useful in this repo:
+
+- `swift-concurrency-expert`
+- `swiftui-liquid-glass`
+- `swiftui-performance-audit`
+- `swiftui-view-refactor`
+- `simplify-code`
+- `github`
+- `gh-fix-ci`
+- `app-store-changelog`
+
 ## Architecture Boundaries
 
 - `Sources/QwenVoiceApp.swift` creates shared app services and owns the separate Settings scene.
@@ -100,6 +120,9 @@ python3 scripts/harness.py test --layer ui
 python3 scripts/harness.py test --layer design
 python3 scripts/harness.py test --layer perf
 
+# Packaged release validation
+python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
+
 # Diagnostics and release packaging
 python3 scripts/harness.py diagnose
 ./scripts/release.sh
@@ -111,6 +134,11 @@ Notes:
 - `scripts/harness.py` is the primary testing and diagnostics entrypoint.
 - `python3 scripts/harness.py test --layer all` runs the normal combined layers and excludes `ui`, `design`, and `perf`.
 - `python3 scripts/harness.py test --layer ui`, `design`, and `perf` now default to `--ui-backend-mode live --ui-data-root fixture`, which reuses the installed runtime/models while isolating writable app state in a disposable fixture root.
+- Packaged validation should prefer the harness packaged or release lanes plus `./scripts/verify_release_bundle.sh` over ad hoc manual app launches. Prefer `qwenvoice-packaged-validation` when that is the main task.
+- Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. Use `system` mode only for explicit, permissioned fidelity checks.
+- Tagged publishes should use the `release-dual-ui` workflow with checked-in release notes and the release inputs, including `release_notes_path`. Prefer `qwenvoice-release-publish` for that flow.
+- Vendored runtime work should patch through the repo-owned vendoring flow, not by hand-editing bundled runtime assets. Prefer `qwenvoice-vendored-runtime` when the task centers on `mlx-audio`, bundled Python, or packaged dependency behavior.
+- For doc refreshes after behavior or workflow changes, prefer `qwenvoice-doc-sync`.
 - Benchmarks exist under `scripts/harness.py bench ...` and typically require the app Python environment plus installed models.
 
 ## When Changing X, Also Update Y
@@ -131,10 +159,14 @@ Notes:
   Prefer `Sources/Services/GenerationPersistence.swift` over duplicating logic inside individual generation views.
 - History or database access:
   Keep `Sources/Services/DatabaseService.swift` and affected library views in sync, and respect MainActor isolation.
+- Packaged validation, release artifacts, or bundled dependency checks:
+  Prefer `qwenvoice-packaged-validation`, validate through the harness packaged or release lanes, use `./scripts/verify_release_bundle.sh`, and default screenshot checks to `QWENVOICE_UITEST_CAPTURE_MODE=content`.
+- GitHub release publication or hosted release notes:
+  Prefer `qwenvoice-release-publish`, require a checked-in notes file, and keep the `release-dual-ui` workflow inputs aligned, including `release_notes_path`.
 - Vendored runtime or `mlx-audio` changes:
-  Keep `scripts/build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio/`, `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`, `docs/reference/vendoring-runtime.md`, and the release verification flow aligned.
+  Prefer `qwenvoice-vendored-runtime`, keep `scripts/build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio/`, `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`, `docs/reference/vendoring-runtime.md`, and the release verification flow aligned.
 - Broad repo facts that users or contributors rely on:
-  Update `docs/reference/current-state.md`, `docs/README.md`, and any top-level guidance docs that claim the changed behavior.
+  Prefer `qwenvoice-doc-sync`, and update `docs/reference/current-state.md`, `docs/README.md`, and any top-level guidance docs that claim the changed behavior.
 
 ## CLI Boundary
 
@@ -154,8 +186,7 @@ Keep these boundaries in mind:
 
 There is known doc drift in the repo today:
 
-- `README.md` still references `./scripts/run_tests.sh` and `./scripts/run_backend_tests.sh`, but those scripts are not present.
-- `README.md` and `TEST_REPORT.md` still point to `docs/reference/testing.md`, but that file is not present.
+- Older local clones may still have stale references to `./scripts/run_tests.sh`, `./scripts/run_backend_tests.sh`, or `docs/reference/testing.md`; those are not valid repo entrypoints.
 
 Use the harness commands in this file and the existing reference docs instead of following those stale test references.
 

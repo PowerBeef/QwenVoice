@@ -19,7 +19,6 @@ APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "QwenVoice"
 APP_VENV_PYTHON = APP_SUPPORT_DIR / "python" / "bin" / "python3"
 APP_MODELS_DIR = APP_SUPPORT_DIR / "models"
 BACKEND_DIR = PROJECT_DIR / "Sources" / "Resources" / "backend"
-PIPELINE_PATH = BACKEND_DIR / "clone_delivery_pipeline.py"
 
 
 def resolve_backend_python(explicit: str | None = None) -> str:

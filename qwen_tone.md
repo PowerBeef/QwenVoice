@@ -16,7 +16,7 @@ Current app behavior:
 Useful instruction patterns in the shipped app:
 
 - emotional delivery: `calm and reassuring`, `frustrated but controlled`, `nervous and unsure`
-- pacing and cadence: `slow, deliberate pace`, `quick and energetic`, `measured with slight pauses`
+- pacing and cadence: `slow, deliberate pace`, `quick and energetic`, `measured and deliberate`
 - character and timbre: `warm documentary narrator`, `dry late-night radio host`, `soft-spoken teacher`
 
 ## What the Standalone CLI Exposes

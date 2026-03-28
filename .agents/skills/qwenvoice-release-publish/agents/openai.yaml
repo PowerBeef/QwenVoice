@@ -1,0 +1,4 @@
+interface:
+  display_name: "QwenVoice Release Publish"
+  short_description: "Publish dual-UI releases safely"
+  default_prompt: "Use $qwenvoice-release-publish to cut, publish, and verify a QwenVoice GitHub release."

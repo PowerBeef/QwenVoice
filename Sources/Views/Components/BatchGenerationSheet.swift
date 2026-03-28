@@ -250,7 +250,6 @@ struct BatchGenerationSheet: View {
                     lines: lines,
                     voice: voice,
                     emotion: emotion,
-                    deliveryProfile: deliveryProfile,
                     voiceDescription: voiceDescription,
                     refAudio: refAudio,
                     refText: refText
