@@ -95,6 +95,40 @@ class UIStateClient:
             operation="capture_screenshot",
         )
 
+    def seed_screen(
+        self,
+        screen: str,
+        *,
+        text: str | None = None,
+        speaker: str | None = None,
+        voice_description: str | None = None,
+        emotion: str | None = None,
+        reference_audio_path: str | None = None,
+        reference_transcript: str | None = None,
+    ) -> dict:
+        query = {
+            "screen": screen,
+        }
+        if text is not None:
+            query["text"] = text
+        if speaker is not None:
+            query["speaker"] = speaker
+        if voice_description is not None:
+            query["voiceDescription"] = voice_description
+        if emotion is not None:
+            query["emotion"] = emotion
+        if reference_audio_path is not None:
+            query["referenceAudioPath"] = reference_audio_path
+        if reference_transcript is not None:
+            query["referenceTranscript"] = reference_transcript
+
+        encoded_query = urllib.parse.urlencode(query, quote_via=urllib.parse.quote)
+        return self._request_json(
+            f"/seed-screen?{encoded_query}",
+            timeout=10,
+            operation="seed_screen",
+        )
+
     def wait_for_ready(
         self,
         timeout: float = 15,

@@ -76,6 +76,9 @@ struct CustomVoiceView: View {
         .onChange(of: draft.emotion) { _, _ in syncUITestState() }
         .onChange(of: draft.text) { _, _ in syncUITestState() }
         .onChange(of: isGenerating) { _, _ in syncUITestState() }
+        .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
+            handleTestSeedScreenState(notification)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
             handleTestStartGeneration(notification)
         }
@@ -243,6 +246,23 @@ private extension CustomVoiceView {
         }
 
         generate()
+    }
+
+    func handleTestSeedScreenState(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled,
+              let screen = notification.userInfo?["screen"] as? String,
+              screen == "customVoice" else { return }
+
+        if let speaker = notification.userInfo?["speaker"] as? String,
+           !speaker.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.selectedSpeaker = speaker
+        }
+        if let emotion = notification.userInfo?["emotion"] as? String {
+            draft.emotion = emotion
+        }
+        if let text = notification.userInfo?["text"] as? String {
+            draft.text = text
+        }
     }
 
     func generate() {

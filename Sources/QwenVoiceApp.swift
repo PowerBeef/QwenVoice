@@ -198,6 +198,19 @@ final class UITestWindowCoordinator {
         )
         let destinationURL = screenshotDirectory.appendingPathComponent("\(name).png")
 
+        if ReadmeScreenshotRenderer.shouldRender(name: name) {
+            let captured = ReadmeScreenshotRenderer.render(
+                name: name,
+                snapshot: TestStateProvider.shared.snapshot(),
+                to: destinationURL
+            )
+            return ScreenshotCaptureResult(
+                captured: captured,
+                mode: mode,
+                failureReason: captured ? nil : "readme_capture_failed"
+            )
+        }
+
         switch mode {
         case .content:
             let captured = captureWindowContent(window, to: destinationURL)
@@ -241,27 +254,110 @@ final class UITestWindowCoordinator {
 
     private func captureWindowContent(_ window: NSWindow, to destinationURL: URL) -> Bool {
         guard let contentView = window.contentView else { return false }
-        let renderView = contentView.superview ?? contentView
-        let bounds = renderView.bounds
-        guard !bounds.isEmpty,
-              let bitmap = renderView.bitmapImageRepForCachingDisplay(in: bounds) else {
+        let renderView = contentView
+        let bounds = renderView.bounds.integral
+        guard !bounds.isEmpty else {
             return false
         }
 
         renderView.layoutSubtreeIfNeeded()
         renderView.displayIfNeeded()
-        renderView.cacheDisplay(in: bounds, to: bitmap)
+        window.displayIfNeeded()
 
-        guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
-            return false
+        if let pngData = renderPDFContent(of: renderView, in: bounds, scale: window.backingScaleFactor)
+            ?? renderLayerBackedContent(of: renderView, in: bounds, scale: window.backingScaleFactor)
+            ?? renderCachedDisplay(of: renderView, in: bounds) {
+            do {
+                try pngData.write(to: destinationURL)
+                return true
+            } catch {
+                return false
+            }
         }
 
-        do {
-            try pngData.write(to: destinationURL)
-            return true
-        } catch {
-            return false
+        return false
+    }
+
+    private func renderPDFContent(
+        of view: NSView,
+        in bounds: NSRect,
+        scale: CGFloat
+    ) -> Data? {
+        let pdfData = view.dataWithPDF(inside: bounds)
+        guard let pdfImage = NSPDFImageRep(data: pdfData) else { return nil }
+
+        let pixelsWide = Int(bounds.width * scale)
+        let pixelsHigh = Int(bounds.height * scale)
+        guard pixelsWide > 0,
+              pixelsHigh > 0,
+              let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: pixelsWide,
+                pixelsHigh: pixelsHigh,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+              ),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+            return nil
         }
+
+        bitmap.size = bounds.size
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.cgContext.scaleBy(x: scale, y: scale)
+        pdfImage.draw(in: bounds)
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private func renderLayerBackedContent(
+        of view: NSView,
+        in bounds: NSRect,
+        scale: CGFloat
+    ) -> Data? {
+        guard let layer = view.layer else { return nil }
+
+        let pixelsWide = Int(bounds.width * scale)
+        let pixelsHigh = Int(bounds.height * scale)
+        guard pixelsWide > 0,
+              pixelsHigh > 0,
+              let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: pixelsWide,
+                pixelsHigh: pixelsHigh,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+              ),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+            return nil
+        }
+
+        context.cgContext.scaleBy(x: scale, y: scale)
+        layer.render(in: context.cgContext)
+        context.flushGraphics()
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private func renderCachedDisplay(of view: NSView, in bounds: NSRect) -> Data? {
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+
+        view.cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     private func canUseSystemScreenCapture() -> Bool {

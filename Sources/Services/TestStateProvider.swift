@@ -22,9 +22,12 @@ final class TestStateProvider: ObservableObject {
     @Published var backendReady: Bool = false
     @Published var interactiveReady: Bool = false
     @Published var selectedSpeaker: String = ""
+    @Published var voiceDescription: String = ""
     @Published var emotion: String = ""
     @Published var isGenerating: Bool = false
     @Published var text: String = ""
+    @Published var referenceAudioPath: String = ""
+    @Published var referenceTranscript: String = ""
     @Published var disabledSidebarItems: String = ""
     @Published var lastNavigationStartedAtMS: Int = 0
     @Published var lastNavigationCompletedAtMS: Int = 0
@@ -187,9 +190,12 @@ final class TestStateProvider: ObservableObject {
             "backendReady": backendReady,
             "interactiveReady": interactiveReady,
             "selectedSpeaker": selectedSpeaker,
+            "voiceDescription": voiceDescription,
             "emotion": emotion,
             "isGenerating": isGenerating,
             "text": text,
+            "referenceAudioPath": referenceAudioPath,
+            "referenceTranscript": referenceTranscript,
             "disabledSidebarItems": disabledSidebarItems,
             "lastNavigationStartedAtMS": lastNavigationStartedAtMS,
             "lastNavigationCompletedAtMS": lastNavigationCompletedAtMS,

@@ -70,6 +70,8 @@ final class TestStateServer: @unchecked Sendable {
             handleActivateWindow(path: p, connection: connection)
         case let p where p.hasPrefix("/capture-screenshot"):
             handleCaptureScreenshot(path: p, connection: connection)
+        case let p where p.hasPrefix("/seed-screen"):
+            handleSeedScreen(path: p, connection: connection)
         case let p where p.hasPrefix("/start-generation"):
             handleStartGeneration(path: p, connection: connection)
         case let p where p.hasPrefix("/start-preview"):
@@ -121,6 +123,53 @@ final class TestStateServer: @unchecked Sendable {
             state["screenshotName"] = name
             state["screenshotCaptureMode"] = result.mode.rawValue
             state["screenshotFailureReason"] = result.failureReason ?? ""
+            self.sendJSON(state, connection: connection)
+        }
+    }
+
+    private func handleSeedScreen(path: String, connection: NWConnection) {
+        guard let screen = extractQueryParam(from: path, key: "screen") else {
+            sendJSON(["error": "missing_screen_param"], status: 400, connection: connection)
+            return
+        }
+
+        let text = extractQueryParam(from: path, key: "text")
+        let speaker = extractQueryParam(from: path, key: "speaker")
+        let voiceDescription = extractQueryParam(from: path, key: "voiceDescription")
+        let emotion = extractQueryParam(from: path, key: "emotion")
+        let referenceAudioPath = extractQueryParam(from: path, key: "referenceAudioPath")
+        let referenceTranscript = extractQueryParam(from: path, key: "referenceTranscript")
+
+        Task { @MainActor in
+            var userInfo: [String: String] = [
+                "screen": screen,
+            ]
+            if let text {
+                userInfo["text"] = text
+            }
+            if let speaker {
+                userInfo["speaker"] = speaker
+            }
+            if let voiceDescription {
+                userInfo["voiceDescription"] = voiceDescription
+            }
+            if let emotion {
+                userInfo["emotion"] = emotion
+            }
+            if let referenceAudioPath {
+                userInfo["referenceAudioPath"] = referenceAudioPath
+            }
+            if let referenceTranscript {
+                userInfo["referenceTranscript"] = referenceTranscript
+            }
+
+            NotificationCenter.default.post(
+                name: .testSeedScreenState,
+                object: nil,
+                userInfo: userInfo
+            )
+            try? await Task.sleep(for: .milliseconds(200))
+            let state = TestStateProvider.shared.snapshot()
             self.sendJSON(state, connection: connection)
         }
     }
@@ -209,5 +258,6 @@ final class TestStateServer: @unchecked Sendable {
 extension Notification.Name {
     static let testNavigateToScreen = Notification.Name("testNavigateToScreen")
     static let testStartLivePreview = Notification.Name("testStartLivePreview")
+    static let testSeedScreenState = Notification.Name("testSeedScreenState")
     static let testStartGeneration = Notification.Name("testStartGeneration")
 }

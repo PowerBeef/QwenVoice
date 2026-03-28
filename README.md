@@ -1,10 +1,16 @@
-<div align="center">
-  <img src="docs/social_preview.png" alt="QwenVoice — offline Qwen3-TTS for macOS with custom voices, voice design, and voice cloning">
-</div>
-
 ## Screenshots
 
-<img width="1868" height="1676" alt="QwenVoice screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
+### Custom Voice
+
+![Custom Voice screenshot](docs/screenshots/readme_custom_voice.png)
+
+### Voice Design
+
+![Voice Design screenshot](docs/screenshots/readme_voice_design.png)
+
+### Voice Cloning
+
+![Voice Cloning screenshot](docs/screenshots/readme_voice_cloning.png)
 
 ## Overview
 
@@ -50,7 +56,6 @@ For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENV
 - Batch generation for multi-line jobs
 - Sidebar waveform playback UI
 - Configurable output directory and autoplay preference
-- Standalone CLI companion in [`cli/`](cli/)
 
 ## Requirements
 
@@ -148,7 +153,6 @@ Custom Voice and Voice Design are guided by natural-language instructions rather
 See [`qwen_tone.md`](qwen_tone.md) for the current app-oriented guidance on:
 
 - what the shipped app exposes
-- what the standalone CLI exposes
 - what broader Qwen3-TTS ecosystem notes are informational only
 
 ## Architecture
@@ -172,14 +176,6 @@ Default runtime output layout:
   voices/
   history.sqlite
 ```
-
-## CLI Companion
-
-A standalone Python CLI lives in [`cli/`](cli/) for headless or scripted workflows.
-
-Start here:
-
-- [`cli/README.md`](cli/README.md)
 
 ## More Docs
 

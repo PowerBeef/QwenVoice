@@ -150,6 +150,14 @@ struct VoiceCloningView: View {
         .task(id: idlePrewarmTaskID) {
             await prewarmCloneModelIfNeeded()
         }
+        .onAppear(perform: syncUITestState)
+        .onChange(of: draft.referenceAudioPath) { _, _ in syncUITestState() }
+        .onChange(of: draft.referenceTranscript) { _, _ in syncUITestState() }
+        .onChange(of: draft.text) { _, _ in syncUITestState() }
+        .onChange(of: isGenerating) { _, _ in syncUITestState() }
+        .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
+            handleTestSeedScreenState(notification)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
             handleTestStartGeneration(notification)
         }
@@ -244,6 +252,31 @@ private extension VoiceCloningView {
 // MARK: - Actions
 
 private extension VoiceCloningView {
+    func syncUITestState() {
+        guard UITestAutomationSupport.isEnabled else { return }
+        TestStateProvider.shared.referenceAudioPath = draft.referenceAudioPath ?? ""
+        TestStateProvider.shared.referenceTranscript = draft.referenceTranscript
+        TestStateProvider.shared.text = draft.text
+        TestStateProvider.shared.isGenerating = isGenerating
+    }
+
+    func handleTestSeedScreenState(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled,
+              let screen = notification.userInfo?["screen"] as? String,
+              screen == "voiceCloning" else { return }
+
+        if let referenceAudioPath = notification.userInfo?["referenceAudioPath"] as? String {
+            draft.selectedSavedVoiceID = nil
+            draft.referenceAudioPath = referenceAudioPath.isEmpty ? nil : referenceAudioPath
+        }
+        if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
+            draft.referenceTranscript = referenceTranscript
+        }
+        if let text = notification.userInfo?["text"] as? String {
+            draft.text = text
+        }
+    }
+
     func handleTestStartGeneration(_ notification: Notification) {
         guard UITestAutomationSupport.isEnabled,
               let screen = notification.userInfo?["screen"] as? String,
