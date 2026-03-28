@@ -198,19 +198,6 @@ final class UITestWindowCoordinator {
         )
         let destinationURL = screenshotDirectory.appendingPathComponent("\(name).png")
 
-        if ReadmeScreenshotRenderer.shouldRender(name: name) {
-            let captured = ReadmeScreenshotRenderer.render(
-                name: name,
-                snapshot: TestStateProvider.shared.snapshot(),
-                to: destinationURL
-            )
-            return ScreenshotCaptureResult(
-                captured: captured,
-                mode: mode,
-                failureReason: captured ? nil : "readme_capture_failed"
-            )
-        }
-
         switch mode {
         case .content:
             let captured = captureWindowContent(window, to: destinationURL)

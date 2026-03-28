@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
+import subprocess
 import sys
 import time
 import wave
@@ -78,6 +80,49 @@ def _wait_for_seed(client: UIStateClient, scenario: dict, timeout: float = 5.0) 
     return state
 
 
+def _activate_qwenvoice_window(client: UIStateClient) -> None:
+    client.activate_window(reason="readme_capture")
+    subprocess.run(
+        ["osascript", "-e", 'tell application "QwenVoice" to activate'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    time.sleep(0.25)
+
+
+def _front_window_rect() -> tuple[int, int, int, int]:
+    result = subprocess.run(
+        [
+            "osascript",
+            "-e",
+            'tell application "System Events" to tell process "QwenVoice" to get {position, size} of front window',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    numbers = [int(part) for part in re.findall(r"-?\d+", result.stdout)]
+    if len(numbers) != 4:
+        raise RuntimeError(f"Could not parse QwenVoice window bounds: {result.stdout!r}")
+    return tuple(numbers)  # type: ignore[return-value]
+
+
+def _capture_window_screenshot(output_path: Path) -> None:
+    x, y, width, height = _front_window_rect()
+    subprocess.run(
+        [
+            "screencapture",
+            "-x",
+            f"-R{x},{y},{width},{height}",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _capture_scenario(client: UIStateClient, scenario: dict, output_dir: Path) -> None:
     try:
         state = client.navigate(scenario["screen"])
@@ -99,16 +144,11 @@ def _capture_scenario(client: UIStateClient, scenario: dict, output_dir: Path) -
         raise RuntimeError(f"Seeding {scenario['screen']} failed: {exc.detail}") from exc
 
     _wait_for_seed(client, scenario)
-    time.sleep(0.2)
-
-    capture_state = client.capture_screenshot(scenario["name"])
-    if not capture_state.get("screenshotCaptured"):
-        raise RuntimeError(
-            f"Screenshot capture failed for {scenario['name']}: "
-            f"{capture_state.get('screenshotFailureReason')}"
-        )
+    _activate_qwenvoice_window(client)
 
     image_path = output_dir / f"{scenario['name']}.png"
+    _capture_window_screenshot(image_path)
+
     if not image_path.exists() or image_path.stat().st_size == 0:
         raise RuntimeError(f"Expected screenshot file was not written: {image_path}")
 
@@ -174,8 +214,7 @@ def main() -> int:
     ]
 
     for scenario in scenarios:
-        image_path = output_dir / f"{scenario['name']}.png"
-        image_path.unlink(missing_ok=True)
+        (output_dir / f"{scenario['name']}.png").unlink(missing_ok=True)
 
     try:
         success, target, details = resolve_ui_app_target(app_bundle=args.app_bundle)

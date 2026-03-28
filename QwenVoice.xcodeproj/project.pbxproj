@@ -30,7 +30,6 @@
 		4E143AC96C8ABA269C3929AE /* SavedVoiceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFE0839E5278349D1087CB9 /* SavedVoiceSheet.swift */; };
 		4F1EBFC3163C497229ACCAA7 /* TestStateServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */; };
 		4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */; };
-		4F63DA6235048E43A210F475 /* ReadmeScreenshotRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D7408CCFC737B53AD3FEB92 /* ReadmeScreenshotRenderer.swift */; };
 		502EAC7A4B0AA32029A66868 /* VoiceCloningViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA432E578A830977B1C6CA32 /* VoiceCloningViewTests.swift */; };
 		565CB307630274488593A8D1 /* ModelManagerViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E945FA6D00942DDA36660B9 /* ModelManagerViewModelTests.swift */; };
 		59EF7FDB9556E1860DC2FF67 /* ContinuousVoiceDescriptionField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70E509E03D5758CB0D6C0388 /* ContinuousVoiceDescriptionField.swift */; };
@@ -140,7 +139,6 @@
 		6A9C19A5B1A1BAA500D359B1 /* DebugHierarchyTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHierarchyTest.swift; sourceTree = "<group>"; };
 		6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceUITestBase.swift; sourceTree = "<group>"; };
 		6CFE0839E5278349D1087CB9 /* SavedVoiceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedVoiceSheet.swift; sourceTree = "<group>"; };
-		6D7408CCFC737B53AD3FEB92 /* ReadmeScreenshotRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadmeScreenshotRenderer.swift; sourceTree = "<group>"; };
 		70E509E03D5758CB0D6C0388 /* ContinuousVoiceDescriptionField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContinuousVoiceDescriptionField.swift; sourceTree = "<group>"; };
 		7220613AFFBB1E9C0C9AB52F /* GenerationDrafts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationDrafts.swift; sourceTree = "<group>"; };
 		7282AD0029C4CFDAEF69F9DB /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
@@ -339,7 +337,6 @@
 				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
 				23A356AF30C23A234B739A2F /* PythonBridgeLineParser.swift */,
 				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
-				6D7408CCFC737B53AD3FEB92 /* ReadmeScreenshotRenderer.swift */,
 				87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */,
 				1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */,
 				1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */,
@@ -560,7 +557,6 @@
 				5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */,
 				A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */,
 				4F5FDA3E5FD42FC8071ED364 /* RPCMessage.swift in Sources */,
-				4F63DA6235048E43A210F475 /* ReadmeScreenshotRenderer.swift in Sources */,
 				4E143AC96C8ABA269C3929AE /* SavedVoiceSheet.swift in Sources */,
 				9AD93240195D2474CD96EB6B /* SavedVoicesViewModel.swift in Sources */,
 				D43105145129C9FECE338221 /* SetupView.swift in Sources */,
