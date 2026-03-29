@@ -39,38 +39,11 @@ struct TextInputView: View {
             maxHeight: usesFlexibleEmbeddedHeight && isEmbedded ? .infinity : LayoutConstants.textEditorMaxHeight,
             alignment: .topLeading
         )
-        #if QW_UI_LIQUID
-        .background {
-            if #available(macOS 26, *) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(white: 0.16))
-                    .glassEffect(
-                        .regular.tint(AppTheme.smokedGlassTint),
-                        in: .rect(cornerRadius: 10)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(isEditorFocused ? buttonColor.opacity(0.4) : .clear, lineWidth: 1)
-                    )
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(isEditorFocused ? buttonColor.opacity(0.3) : AppTheme.cardStroke.opacity(0.15), lineWidth: 0.5)
-                }
-            }
-        }
-        #else
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(nsColor: .textBackgroundColor))
+        .glassTextField(
+            radius: 10,
+            strokeColor: isEditorFocused ? buttonColor.opacity(0.24) : AppTheme.fieldStroke,
+            strokeWidth: isEditorFocused ? 1.05 : 0.95
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isEditorFocused ? buttonColor.opacity(0.45) : AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
-        )
-        #endif
         .accessibilityIdentifier("textInput_textEditor")
         .frame(maxHeight: usesFlexibleEmbeddedHeight ? .infinity : nil, alignment: .topLeading)
     }

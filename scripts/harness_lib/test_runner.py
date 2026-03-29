@@ -815,6 +815,13 @@ def _ui_ready_timeout(backend_mode: str) -> float:
     return 60.0 if backend_mode == "live" else 15.0
 
 
+def _ui_test_appearance() -> str:
+    raw = os.environ.get("QWENVOICE_UI_TEST_APPEARANCE", "").strip().lower()
+    if raw in {"light", "dark"}:
+        return raw
+    return "system"
+
+
 def _wait_for_ui_launch_ready(
     client: Any,
     backend_mode: str,
@@ -1283,6 +1290,7 @@ def _run_design_tests(
     capture_only = os.environ.get("QWENVOICE_UI_DESIGN_CAPTURE_ONLY", "").strip().lower() in {
         "1", "true", "yes", "on",
     }
+    appearance = _ui_test_appearance()
     baselines_dir = PROJECT_DIR / "tests" / "screenshots" / "baselines"
     captures_dir = PROJECT_DIR / "build" / "test" / "screenshots"
     diffs_dir = PROJECT_DIR / "tests" / "screenshots" / "diffs"
@@ -1321,7 +1329,10 @@ def _run_design_tests(
     results.append(build_test_result(
         "design_launch_context",
         passed=True,
-        details=describe_launch_context(context),
+        details={
+            **describe_launch_context(context),
+            "appearance": appearance,
+        },
     ))
 
     app_proc: subprocess.Popen[Any] | None = None
@@ -1417,6 +1428,14 @@ def _run_design_tests(
             ))
 
         variant_baselines_dir = baselines_dir / target.variant_id if target.variant_id else None
+        if appearance != "system":
+            appearance_baselines_dir = baselines_dir / appearance
+        else:
+            appearance_baselines_dir = baselines_dir
+
+        variant_baselines_dir = (
+            appearance_baselines_dir / target.variant_id if target.variant_id else None
+        )
         has_variant_baselines = bool(
             variant_baselines_dir is not None
             and variant_baselines_dir.is_dir()
@@ -1435,6 +1454,7 @@ def _run_design_tests(
                 skip_reason="Baseline comparison disabled for this environment",
                 details={
                     "captures_dir": str(captures_dir),
+                    "appearance": appearance,
                     "variant_id": target.variant_id,
                     "variant_baselines_dir": str(variant_baselines_dir) if variant_baselines_dir else None,
                 },
@@ -1442,7 +1462,11 @@ def _run_design_tests(
             duration_ms = int((time.perf_counter() - start) * 1000)
             return build_suite_result("design_comparison", results, duration_ms)
 
-        active_baselines_dir = variant_baselines_dir if has_variant_baselines and variant_baselines_dir is not None else baselines_dir
+        active_baselines_dir = (
+            variant_baselines_dir
+            if has_variant_baselines and variant_baselines_dir is not None
+            else appearance_baselines_dir
+        )
         baseline_names = sorted(
             name for name in os.listdir(active_baselines_dir)
             if name.endswith(".png")

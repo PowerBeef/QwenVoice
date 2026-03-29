@@ -251,9 +251,9 @@ final class UITestWindowCoordinator {
         renderView.displayIfNeeded()
         window.displayIfNeeded()
 
-        if let pngData = renderPDFContent(of: renderView, in: bounds, scale: window.backingScaleFactor)
+        if let pngData = renderCachedDisplay(of: renderView, in: bounds)
             ?? renderLayerBackedContent(of: renderView, in: bounds, scale: window.backingScaleFactor)
-            ?? renderCachedDisplay(of: renderView, in: bounds) {
+            ?? renderPDFContent(of: renderView, in: bounds, scale: window.backingScaleFactor) {
             do {
                 try pngData.write(to: destinationURL)
                 return true
@@ -414,6 +414,10 @@ struct QwenVoiceApp: App {
         // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
         // (e.g. Python backend terminates between isRunning check and write)
         signal(SIGPIPE, SIG_IGN)
+
+        if let forcedAppearance = UITestAutomationSupport.forcedNSAppearance {
+            NSApplication.shared.appearance = forcedAppearance
+        }
 
         // In UI test mode, start the test state HTTP server and force activate.
         if AppLaunchConfiguration.current.isUITest {
@@ -680,6 +684,10 @@ private struct UITestWindowSizeConfigurator: NSViewRepresentable {
     private func applyWindowConfigurationIfNeeded(for view: NSView) {
         guard let window = view.window else {
             return
+        }
+
+        if let forcedAppearance = UITestAutomationSupport.forcedNSAppearance {
+            window.appearance = forcedAppearance
         }
 
         if UITestAutomationSupport.isEnabled {

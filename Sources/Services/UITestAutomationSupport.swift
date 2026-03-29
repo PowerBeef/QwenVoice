@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 enum UITestBackendMode {
     case live
@@ -15,6 +16,12 @@ enum UITestSetupScenario: String {
     case failOnce = "fail_once"
 }
 
+enum UITestAppearanceMode: String {
+    case system
+    case light
+    case dark
+}
+
 enum UITestAutomationSupport {
     private static let environment = ProcessInfo.processInfo.environment
 
@@ -26,6 +33,7 @@ enum UITestAutomationSupport {
     static let outputDirectoryEnvironmentKey = "QWENVOICE_UI_TEST_OUTPUT_DIRECTORY"
     static let screenshotDirectoryEnvironmentKey = "QWENVOICE_UITEST_SCREENSHOT_DIR"
     static let screenshotCaptureModeEnvironmentKey = "QWENVOICE_UITEST_CAPTURE_MODE"
+    static let appearanceEnvironmentKey = "QWENVOICE_UI_TEST_APPEARANCE"
     static let defaultsSuiteEnvironmentKey = "QWENVOICE_UI_TEST_DEFAULTS_SUITE"
     static let setupScenarioEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_SCENARIO"
     static let setupDelayEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_DELAY_MS"
@@ -81,6 +89,21 @@ enum UITestAutomationSupport {
 
     static var screenshotCaptureMode: UITestScreenshotCaptureMode {
         screenshotCaptureMode(from: environment)
+    }
+
+    static var appearanceMode: UITestAppearanceMode {
+        appearanceMode(from: environment)
+    }
+
+    static var forcedNSAppearance: NSAppearance? {
+        switch appearanceMode {
+        case .system:
+            return nil
+        case .light:
+            return NSAppearance(named: .aqua)
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        }
     }
 
     static var appStorage: UserDefaults {
@@ -169,6 +192,18 @@ enum UITestAutomationSupport {
             .lowercased(),
             let mode = UITestScreenshotCaptureMode(rawValue: rawValue) else {
             return .content
+        }
+        return mode
+    }
+
+    static func appearanceMode(
+        from environment: [String: String]
+    ) -> UITestAppearanceMode {
+        guard let rawValue = environment[appearanceEnvironmentKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            let mode = UITestAppearanceMode(rawValue: rawValue) else {
+            return .system
         }
         return mode
     }

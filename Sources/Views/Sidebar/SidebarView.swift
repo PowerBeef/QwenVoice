@@ -17,6 +17,8 @@ private struct SidebarSectionHeader: View {
 }
 
 private struct SidebarRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let item: SidebarItem
     @Binding var selection: SidebarItem?
     let isDisabled: Bool
@@ -32,14 +34,28 @@ private struct SidebarRow: View {
         if #available(macOS 26, *) {
             if isSelected {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
+                    .fill(AppTheme.sidebarSelectionFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                AppTheme.sidebarSelectionStroke.opacity(colorScheme == .dark ? 1.0 : 0.78),
+                                lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.9
+                            )
+                    )
                     .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
-                    .glass3DDepth(radius: 8, intensity: 0.5)
+                    .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.5 : 0.28)
             } else if isHovered {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.03))
+                    .fill(AppTheme.sidebarHoverFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(
+                                AppTheme.sidebarHoverStroke.opacity(colorScheme == .dark ? 1.0 : 0.72),
+                                lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.85
+                            )
+                    )
                     .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
-                    .glass3DDepth(radius: 8, intensity: 0.25)
+                    .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.25 : 0.16)
             } else {
                 Color.clear
             }
@@ -66,11 +82,11 @@ private struct SidebarRow: View {
         }
 
         if isSelected {
-            return .accentColor.opacity(0.08)
+            return AppTheme.sidebarSelectionFill
         }
 
         if isHovered {
-            return Color.primary.opacity(0.04)
+            return AppTheme.sidebarHoverFill
         }
 
         return .clear
@@ -82,11 +98,11 @@ private struct SidebarRow: View {
         }
 
         if isSelected {
-            return .accentColor.opacity(0.24)
+            return AppTheme.sidebarSelectionStroke
         }
 
         if isHovered {
-            return Color.primary.opacity(0.08)
+            return AppTheme.sidebarHoverStroke
         }
 
         return .clear
@@ -203,7 +219,7 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.railBackground)
         .safeAreaInset(edge: .bottom) {
             SidebarFooterRegion()
                 .environmentObject(audioPlayer)
@@ -235,6 +251,7 @@ struct SidebarView: View {
 }
 
 private struct SidebarFooterRegion: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
 
@@ -255,14 +272,18 @@ private struct SidebarFooterRegion: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Divider()
+            Rectangle()
+                .fill(AppTheme.railStroke.opacity(colorScheme == .dark ? 0.9 : 0.34))
+                .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 10) {
                 if audioPlayer.hasAudio {
                     SidebarPlayerView(inlinePlayerActivity: footerPresentation.inlinePlayerActivity)
 
                     if footerPresentation.showsStandaloneStatus {
-                        Divider()
+                        Rectangle()
+                            .fill(AppTheme.railStroke.opacity(colorScheme == .dark ? 0.65 : 0.22))
+                            .frame(height: 1)
                     }
                 }
 
@@ -275,7 +296,7 @@ private struct SidebarFooterRegion: View {
             .padding(.bottom, LayoutConstants.shellPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .profileBackground(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 1.0 : 0.985))
         .onAppear(perform: syncUITestFooterState)
         .onChange(of: pythonBridge.sidebarStatus) { _, _ in syncUITestFooterState() }
         .onChange(of: audioPlayer.isLiveStream) { _, _ in syncUITestFooterState() }

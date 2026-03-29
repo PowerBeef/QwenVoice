@@ -207,6 +207,8 @@ struct StudioSectionCard<Content: View>: View {
 }
 
 struct CompactConfigurationSection<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let title: String
     var detail: String? = nil
     var iconName: String? = nil
@@ -253,9 +255,20 @@ struct CompactConfigurationSection<Content: View>: View {
             .background {
                 if #available(macOS 26, *) {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.clear)
+                        .fill(AppTheme.inlineFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    AppTheme.inlineStroke.opacity(
+                                        colorScheme == .dark
+                                            ? AppTheme.surfaceStrokeOpacity(for: colorScheme)
+                                            : AppTheme.surfaceStrokeOpacity(for: colorScheme) * 0.88
+                                    ),
+                                    lineWidth: AppTheme.surfaceStrokeWidth(for: colorScheme)
+                                )
+                        )
                         .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
-                        .glass3DDepth(radius: 12)
+                        .glass3DDepth(radius: 12, intensity: colorScheme == .dark ? 1.0 : 0.72)
                 } else {
                     compactPanelLegacyBackground
                 }

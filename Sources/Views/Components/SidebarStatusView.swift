@@ -16,6 +16,7 @@ struct SidebarFooterPresentation: Equatable {
 }
 
 struct SidebarStatusView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var pythonBridge: PythonBridge
 
     private var stateKey: String {
@@ -188,8 +189,19 @@ struct SidebarStatusView: View {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.clear)
-                .glassEffect(.regular.tint(color), in: .rect(cornerRadius: 8))
+                .fill(colorScheme == .dark ? Color.clear : AppTheme.inlineFill.opacity(0.62))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            color.opacity(colorScheme == .dark ? strokeOpacity : strokeOpacity * 0.56),
+                            lineWidth: colorScheme == .dark ? 1 : 0.85
+                        )
+                )
+                .glassEffect(
+                    .regular.tint(colorScheme == .dark ? color : color.opacity(0.18)),
+                    in: .rect(cornerRadius: 8)
+                )
+                .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.35 : 0.16)
         } else {
             statusBackgroundLegacy(color: color, fillOpacity: fillOpacity, strokeOpacity: strokeOpacity)
         }
