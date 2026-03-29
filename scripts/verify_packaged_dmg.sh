@@ -1,0 +1,112 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+fail() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+if [ $# -ne 2 ]; then
+    fail "Usage: $0 /path/to/QwenVoice-macosXX.dmg /path/to/release-metadata.txt"
+fi
+
+DMG_PATH="$1"
+METADATA_PATH="$2"
+
+[ -f "$DMG_PATH" ] || fail "DMG not found: $DMG_PATH"
+[ -f "$METADATA_PATH" ] || fail "Metadata file not found: $METADATA_PATH"
+
+DMG_PATH="$(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
+METADATA_PATH="$(cd "$(dirname "$METADATA_PATH")" && pwd)/$(basename "$METADATA_PATH")"
+
+EXPECTED_DMG_NAME="$(grep -E '^dmg_name=' "$METADATA_PATH" | head -n1 | cut -d= -f2-)"
+if [ -z "$EXPECTED_DMG_NAME" ]; then
+    fail "Metadata is missing dmg_name: $METADATA_PATH"
+fi
+
+ACTUAL_DMG_NAME="$(basename "$DMG_PATH")"
+if [ "$EXPECTED_DMG_NAME" != "$ACTUAL_DMG_NAME" ]; then
+    fail "Metadata dmg_name '$EXPECTED_DMG_NAME' does not match DMG '$ACTUAL_DMG_NAME'"
+fi
+
+MOUNTED_DEVICE=""
+TEMP_ROOT=""
+
+cleanup() {
+    if [ -n "$MOUNTED_DEVICE" ]; then
+        hdiutil detach "$MOUNTED_DEVICE" >/dev/null 2>&1 || true
+    fi
+    if [ -n "$TEMP_ROOT" ] && [ -d "$TEMP_ROOT" ]; then
+        rm -rf "$TEMP_ROOT"
+    fi
+}
+trap cleanup EXIT
+
+echo "=== QwenVoice: Verify Packaged DMG ==="
+echo ""
+echo "[1/4] Attaching DMG..."
+
+ATTACH_PLIST="$(mktemp)"
+if ! hdiutil attach -nobrowse -readonly -plist "$DMG_PATH" >"$ATTACH_PLIST"; then
+    rm -f "$ATTACH_PLIST"
+    fail "Failed to attach DMG: $DMG_PATH"
+fi
+
+MOUNTED_DEVICE="$(python3 - "$ATTACH_PLIST" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+
+data = plistlib.loads(Path(sys.argv[1]).read_bytes())
+for entity in data.get("system-entities", []):
+    dev = entity.get("dev-entry")
+    if dev:
+        print(dev)
+        break
+PY
+)"
+MOUNT_POINT="$(python3 - "$ATTACH_PLIST" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+
+data = plistlib.loads(Path(sys.argv[1]).read_bytes())
+for entity in data.get("system-entities", []):
+    mount = entity.get("mount-point")
+    if mount:
+        print(mount)
+        break
+PY
+)"
+rm -f "$ATTACH_PLIST"
+
+[ -n "$MOUNTED_DEVICE" ] || fail "Could not determine attached device for $DMG_PATH"
+[ -n "$MOUNT_POINT" ] || fail "Could not determine mount point for $DMG_PATH"
+[ -d "$MOUNT_POINT" ] || fail "Mount point does not exist: $MOUNT_POINT"
+echo "[1/4] Attached at $MOUNT_POINT"
+echo ""
+
+echo "[2/4] Copying packaged app out of the DMG..."
+SOURCE_APP="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -type d | head -n1)"
+[ -n "$SOURCE_APP" ] || fail "No .app found inside mounted DMG: $MOUNT_POINT"
+
+TEMP_ROOT="$(mktemp -d /tmp/qwenvoice-packaged-dmg.XXXXXX)"
+COPIED_APP="$TEMP_ROOT/$(basename "$SOURCE_APP")"
+ditto "$SOURCE_APP" "$COPIED_APP"
+xattr -dr com.apple.quarantine "$COPIED_APP" >/dev/null 2>&1 || true
+[ -d "$COPIED_APP" ] || fail "Copied app missing after ditto: $COPIED_APP"
+echo "[2/4] Copied app to $COPIED_APP"
+echo ""
+
+echo "[3/4] Validating packaged bundle contents..."
+"$SCRIPT_DIR/verify_release_bundle.sh" "$COPIED_APP"
+echo "[3/4] Packaged bundle validation passed"
+echo ""
+
+echo "[4/4] DMG verification complete"
+echo ""
+echo "  DMG:      $DMG_PATH"
+echo "  Metadata: $METADATA_PATH"
+echo "  App:      $COPIED_APP"

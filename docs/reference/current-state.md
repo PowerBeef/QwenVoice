@@ -8,7 +8,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Deployment target: macOS 15+
 - Product name: `QwenVoice`
 - Version source: `project.yml`
-- Current version/build: `1.2` / `11`
+- Current version/build: `1.2.1` / `12`
 
 ## Shipped UI
 
@@ -109,10 +109,12 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 
 The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) now default to live backend mode with an isolated app-support fixture. Those runs reuse the installed runtime and models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the backend initialization handshake has completed.
 
-Screenshot-based harness runs now default to permissionless in-app window-content capture via `QWENVOICE_UITEST_CAPTURE_MODE=content`. The legacy system capture path remains available only as an explicit opt-in with `QWENVOICE_UITEST_CAPTURE_MODE=system`; true pre-approval for that macOS permission requires device-management/PPPC policy, not an app-side setting.
+`QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design harness runs. When appearance is forced away from `system`, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/` so light and dark visual regressions can be tracked independently. Run the forced `light` and `dark` design lanes sequentially, not in parallel, because they share the same UI app and test transport.
+
+Screenshot-based harness runs now default to permissionless in-app window-content capture via `QWENVOICE_UITEST_CAPTURE_MODE=content`. That is the normal automated comparison path, but it is not the highest-fidelity view of Liquid Glass. For explicit appearance-polish or visual-fidelity checks, use real window capture instead of treating `content` capture as the source of truth. The legacy system capture path remains available only as an explicit opt-in with `QWENVOICE_UITEST_CAPTURE_MODE=system`; true pre-approval for that macOS permission requires device-management/PPPC policy, not an app-side setting.
 
 ## Current Documentation Boundaries
 
 - `README.md` is the public GitHub landing page.
-- `CLAUDE.md` is the repo-operating doc and should stay aligned with this file.
+- `AGENTS.md` is the primary repo-operating guide; `CLAUDE.md` is a supplementary tool-specific doc and should stay aligned where it overlaps.
 - `cli/README.md` documents the standalone CLI, which has a broader speaker map than the shipped GUI.

@@ -95,6 +95,61 @@ jobs:
               ;;
           esac
 
+  packaged-builds:
+    name: Packaged Builds (${{ matrix.variant.id }})
+    runs-on: ${{ matrix.variant.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - id: legacy-glass
+            runner: macos-15
+            ui_profile: legacy
+            output_name: QwenVoice-macos15
+          - id: modern-liquid
+            runner: macos-26
+            ui_profile: liquid
+            output_name: QwenVoice-macos26
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: |
+          case "${{ matrix.variant.runner }}" in
+            macos-15) sudo xcode-select -s /Applications/Xcode_16.3.app ;;
+            macos-26) sudo xcode-select -s /Applications/Xcode_26.0.app ;;
+          esac
+          xcodebuild -version
+
+      - name: Ensure XcodeGen
+        run: which xcodegen || brew install xcodegen
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/*.sh
+
+      - name: Build packaged app
+        run: |
+          ./scripts/release.sh \
+            --ui-profile "${{ matrix.variant.ui_profile }}" \
+            --output-name "${{ matrix.variant.output_name }}"
+
+      - name: Verify packaged DMG
+        run: |
+          ./scripts/verify_packaged_dmg.sh \
+            "build/${{ matrix.variant.output_name }}.dmg" \
+            "build/release-metadata.txt"
+
+      - name: Upload packaged artifacts for debugging
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: packaged-build-${{ matrix.variant.id }}
+          if-no-files-found: warn
+          path: |
+            build/*.dmg
+            build/release-metadata.txt
+
   runtime-parity:
     name: Runtime Parity
     runs-on: macos-15

@@ -134,8 +134,10 @@ Notes:
 - `scripts/harness.py` is the primary testing and diagnostics entrypoint.
 - `python3 scripts/harness.py test --layer all` runs the normal combined layers and excludes `ui`, `design`, and `perf`.
 - `python3 scripts/harness.py test --layer ui`, `design`, and `perf` now default to `--ui-backend-mode live --ui-data-root fixture`, which reuses the installed runtime/models while isolating writable app state in a disposable fixture root.
+- `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/`.
 - Packaged validation should prefer the harness packaged or release lanes plus `./scripts/verify_release_bundle.sh` over ad hoc manual app launches. Prefer `qwenvoice-packaged-validation` when that is the main task.
-- Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. Use `system` mode only for explicit, permissioned fidelity checks.
+- Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. This is the correct automated comparison path, but it is not the highest-fidelity representation of Liquid Glass; for explicit visual-fidelity checks, use real window capture instead of treating content capture as the source of truth for appearance polish.
+- Run forced `light` and `dark` `design` lanes sequentially, not in parallel, because they share the UI app and transport and can interfere with each other.
 - Tagged publishes should use the `release-dual-ui` workflow with checked-in release notes and the release inputs, including `release_notes_path`. Prefer `qwenvoice-release-publish` for that flow.
 - Vendored runtime work should patch through the repo-owned vendoring flow, not by hand-editing bundled runtime assets. Prefer `qwenvoice-vendored-runtime` when the task centers on `mlx-audio`, bundled Python, or packaged dependency behavior.
 - For doc refreshes after behavior or workflow changes, prefer `qwenvoice-doc-sync`.
@@ -159,6 +161,8 @@ Notes:
   Prefer `Sources/Services/GenerationPersistence.swift` over duplicating logic inside individual generation views.
 - History or database access:
   Keep `Sources/Services/DatabaseService.swift` and affected library views in sync, and respect MainActor isolation.
+- Appearance-sensitive UI or design-baseline work:
+  Keep `QWENVOICE_UI_TEST_APPEARANCE=light` and `dark` coverage green, and refresh the matching committed baselines under `tests/screenshots/baselines/light/` and `tests/screenshots/baselines/dark/` when the intended visual output changes.
 - Packaged validation, release artifacts, or bundled dependency checks:
   Prefer `qwenvoice-packaged-validation`, validate through the harness packaged or release lanes, use `./scripts/verify_release_bundle.sh`, and default screenshot checks to `QWENVOICE_UITEST_CAPTURE_MODE=content`.
 - GitHub release publication or hosted release notes:

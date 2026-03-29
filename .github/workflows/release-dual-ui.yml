@@ -18,6 +18,11 @@ on:
         required: false
         default: ""
         type: string
+      release_notes_path:
+        description: "Optional checked-in release notes file to publish with the release tag."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -197,6 +202,12 @@ jobs:
             echo "app_minos_asserted=$APP_MINOS"
           } >> "$METADATA_PATH"
 
+      - name: Verify mounted packaged DMG
+        run: |
+          ./scripts/verify_packaged_dmg.sh \
+            "build/${{ matrix.variant.output_name }}.dmg" \
+            "build/release-metadata-${{ matrix.variant.id }}.txt"
+
       - name: Compute artifact name
         run: |
           name="qwenvoice-dual-ui-${GITHUB_RUN_NUMBER}-${{ matrix.variant.id }}"
@@ -228,6 +239,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 1
+
       - name: Download build artifacts
         uses: actions/download-artifact@v6
         with:
@@ -243,8 +260,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.release_tag }}"
+          NOTES_PATH="${{ inputs.release_notes_path }}"
+          TITLE="QwenVoice ${TAG#v}"
+
+          if [ -z "$NOTES_PATH" ]; then
+            echo "::error::release_notes_path is required when release_tag is set"
+            exit 1
+          fi
+          if [ ! -f "$NOTES_PATH" ]; then
+            echo "::error::Release notes file not found: $NOTES_PATH"
+            exit 1
+          fi
+
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes-file "$NOTES_PATH"
             exit 0
           fi
 
@@ -255,8 +287,8 @@ jobs:
 
           gh release create "$TAG" -R "$GITHUB_REPOSITORY" \
             --target "$COMMIT_SHA" \
-            --title "QwenVoice ${TAG#v}" \
-            --notes "Dual UI artifact release built from ${{ inputs.git_ref }}."
+            --title "$TITLE" \
+            --notes-file "$NOTES_PATH"
 
       - name: Upload assets to release
         env:

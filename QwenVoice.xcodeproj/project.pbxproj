@@ -834,7 +834,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -842,7 +842,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
@@ -860,7 +860,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -868,7 +868,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
 				PRODUCT_NAME = QwenVoice;
 				SDKROOT = macosx;
