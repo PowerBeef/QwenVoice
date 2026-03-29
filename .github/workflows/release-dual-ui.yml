@@ -119,6 +119,8 @@ jobs:
           APP_PATH="build/QwenVoice.app"
           APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
           DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
+          DMG_BASENAME="$(basename "$DMG_PATH")"
+          DMG_SHA256_PATH="${DMG_PATH}.sha256"
           METADATA_PATH="build/release-metadata-${{ matrix.variant.id }}.txt"
           EXPECTED_DMG_NAME="${{ matrix.variant.output_name }}.dmg"
           EXPECTED_UI_PROFILE="${{ matrix.variant.ui_profile }}"
@@ -127,7 +129,8 @@ jobs:
           test -f "$DMG_PATH"
           test -f "build/release-metadata.txt"
 
-          shasum -a 256 "$DMG_PATH" > "${DMG_PATH}.sha256"
+          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
+          printf '%s  %s\n' "$DMG_SHA256" "$DMG_BASENAME" > "$DMG_SHA256_PATH"
 
           APP_MINOS="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "minos" { print $2; exit }')"
           APP_SDK="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "sdk" { print $2; exit }')"
@@ -201,6 +204,22 @@ jobs:
             echo "app_sdk_major=$APP_SDK_MAJOR"
             echo "app_minos_asserted=$APP_MINOS"
           } >> "$METADATA_PATH"
+
+      - name: Verify checksum sidecar from clean download directory
+        run: |
+          DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
+          DMG_BASENAME="$(basename "$DMG_PATH")"
+          DMG_SHA256_PATH="${DMG_PATH}.sha256"
+          VERIFY_DIR="$(mktemp -d)"
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+
+          cp "$DMG_PATH" "$VERIFY_DIR/$DMG_BASENAME"
+          cp "$DMG_SHA256_PATH" "$VERIFY_DIR/${DMG_BASENAME}.sha256"
+
+          (
+            cd "$VERIFY_DIR"
+            shasum -a 256 -c "${DMG_BASENAME}.sha256"
+          )
 
       - name: Verify mounted packaged DMG
         run: |
