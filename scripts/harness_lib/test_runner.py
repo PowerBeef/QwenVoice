@@ -427,6 +427,122 @@ def _run_server_tests() -> dict[str, Any]:
         assert base_key != changed_voice_key
         assert base_key != changed_instruction_key
 
+    def test_clone_prewarm_prepared_generator_omits_instruct_kwarg():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+
+        try:
+            server._current_model = object()
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+            )
+            server._get_or_prepare_clone_context = (
+                lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+            )
+
+            def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                calls.append(dict(kwargs))
+                yield {"audio": "warmup"}
+
+            server._generate_prepared_icl_fn = fake_generate_prepared_icl
+
+            result = server._run_model_prewarm(
+                "clone",
+                ref_audio="/tmp/reference.wav",
+                ref_text="Reference transcript",
+            )
+
+            assert result["prepared_clone_used"] is True
+            assert calls
+            assert "instruct" not in calls[0]
+        finally:
+            server._current_model = original_current_model
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+
+    def test_handle_generate_prepared_clone_omits_instruct_kwarg():
+        calls: list[dict[str, Any]] = []
+        final_path = "/tmp/qwenvoice-harness-clone.wav"
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_derive_generation_paths = server._derive_generation_paths
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        try:
+            server._current_model = object()
+            server._current_model_id = None
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = lambda output_path, text, mode=None, voice=None, ref_audio=None: final_path
+            server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+            )
+            server._get_or_prepare_clone_context = (
+                lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+            )
+
+            def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                calls.append(dict(kwargs))
+                yield {"audio": "prepared-clone"}
+
+            server._generate_prepared_icl_fn = fake_generate_prepared_icl
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path},
+                    {},
+                    {"duration_seconds": 0.1, "frames": 1},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate(
+                {
+                    "text": "Prepared clone release smoke line.",
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                }
+            )
+
+            assert result["metrics"]["prepared_clone_used"] is True
+            assert calls
+            assert "instruct" not in calls[0]
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._derive_generation_paths = original_derive_generation_paths
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
     def test_collect_generation_result_with_timings_captures_first_yield():
         class FakeResult:
             def __init__(self, value: int) -> None:
@@ -554,6 +670,8 @@ def _run_server_tests() -> dict[str, Any]:
         ("meaningful_delivery_instruction", test_meaningful_delivery_various),
         ("design_prewarm_identity_ignores_instruction", test_design_prewarm_identity_ignores_instruction),
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
+        ("clone_prewarm_prepared_generator_omits_instruct_kwarg", test_clone_prewarm_prepared_generator_omits_instruct_kwarg),
+        ("handle_generate_prepared_clone_omits_instruct_kwarg", test_handle_generate_prepared_clone_omits_instruct_kwarg),
         ("collect_generation_result_with_timings", test_collect_generation_result_with_timings_captures_first_yield),
         ("stream_selected_audio_emits_chunks_before_final_write", test_stream_selected_audio_emits_chunks_before_final_write),
         ("infer_legacy_mode", test_infer_legacy_mode),
