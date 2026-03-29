@@ -98,6 +98,14 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
+        if let uiTestLivePython = uiTestLiveOverridePythonPath() {
+            state = .checking
+            launchSetupTask { [weak self] in
+                await self?.validateUITestRuntimeAndUpdateState(uiTestLivePython)
+            }
+            return
+        }
+
         // Check existing venv with valid marker (dev fast path)
         let venvPython = Self.venvPython
         if FileManager.default.fileExists(atPath: venvPython),
@@ -341,6 +349,37 @@ final class PythonEnvironmentManager: ObservableObject {
 
         await MainActor.run {
             self.state = .ready(pythonPath: UITestAutomationSupport.stubPythonPath())
+        }
+    }
+
+    private func uiTestLiveOverridePythonPath() -> String? {
+        guard UITestAutomationSupport.isEnabled,
+              UITestAutomationSupport.backendMode == .live,
+              let overridePath = ProcessInfo.processInfo.environment[AppPaths.appSupportOverrideEnvironmentKey]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !overridePath.isEmpty else {
+            return nil
+        }
+
+        let candidate = Self.venvPython
+        guard FileManager.default.isExecutableFile(atPath: candidate) else {
+            return nil
+        }
+        return candidate
+    }
+
+    private func validateUITestRuntimeAndUpdateState(_ pythonPath: String) async {
+        do {
+            try await validateImports(pythonPath: pythonPath)
+            await MainActor.run {
+                self.state = .ready(pythonPath: pythonPath)
+            }
+        } catch {
+            await MainActor.run {
+                self.state = .failed(
+                    message: "The UI test runtime override is present but failed validation.\n\n\(error.localizedDescription)\n\nQwenVoice will not reinstall dependencies automatically when launched with an overridden UI test app-support root."
+                )
+            }
         }
     }
 

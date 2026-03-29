@@ -1,10 +1,46 @@
+import Foundation
 import XCTest
+
+private struct UITestStateSnapshot: Decodable {
+    let activeScreen: String?
+    let isReady: Bool?
+    let interactiveReady: Bool?
+    let launchPhase: String?
+    let readinessBlocker: String?
+    let environmentReady: Bool?
+    let backendReady: Bool?
+    let windowMounted: Bool?
+    let hasVisibleMainWindow: Bool?
+    let windowTitle: String?
+    let sidebarStatusKind: String?
+    let sidebarStatusLabel: String?
+
+    var readinessSummary: String {
+        [
+            "launchPhase=\(launchPhase ?? "")",
+            "readinessBlocker=\(readinessBlocker ?? "")",
+            "environmentReady=\(environmentReady.map(String.init) ?? "nil")",
+            "backendReady=\(backendReady.map(String.init) ?? "nil")",
+            "windowMounted=\(windowMounted.map(String.init) ?? "nil")",
+            "hasVisibleMainWindow=\(hasVisibleMainWindow.map(String.init) ?? "nil")",
+            "activeScreen=\(activeScreen ?? "")",
+            "windowTitle=\(windowTitle ?? "")",
+            "sidebarStatusKind=\(sidebarStatusKind ?? "")",
+            "sidebarStatusLabel=\(sidebarStatusLabel ?? "")",
+        ].joined(separator: ", ")
+    }
+}
+
+private final class UITestStateBox: @unchecked Sendable {
+    var snapshot: UITestStateSnapshot?
+}
 
 class QwenVoiceUITestBase: XCTestCase {
     var app: XCUIApplication!
     private var fixtureRoot: String?
     private var fixtureShouldCleanup = false
     private var defaultsSuiteName: String?
+    private let stateServerURL = URL(string: "http://127.0.0.1:19876/state")!
 
     /// Override in subclass to auto-navigate after launch.
     var initialScreen: String? { nil }
@@ -97,7 +133,11 @@ class QwenVoiceUITestBase: XCTestCase {
         let extraEnvironment = additionalLaunchEnvironment(fixtureRoot: fixtureRoot)
 
         performOnMainActor(with: application) { app in
-            app.launchArguments = ["--uitest", "--uitest-disable-animations"]
+            app.launchArguments = [
+                "-ApplePersistenceIgnoreState", "YES",
+                "--uitest",
+                "--uitest-disable-animations",
+            ]
             if includesFastIdleLaunchArgument {
                 app.launchArguments += ["--uitest-fast-idle"]
             }
@@ -140,18 +180,27 @@ class QwenVoiceUITestBase: XCTestCase {
         }
 
         let deadline = Date().addingTimeInterval(effectiveTimeout)
+        var lastSnapshot: UITestStateSnapshot?
         repeat {
-            if readinessMarkerValue() == "true" {
-                return
+            if let snapshot = fetchTestState() {
+                lastSnapshot = snapshot
+                if isReady(snapshot) {
+                    return
+                }
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         } while Date() < deadline
 
         let setupVisible = elementExists(identifier: "setupView_visible")
+        let diagnostics = lastSnapshot?.readinessSummary ?? "state_server_unreachable"
         if setupVisible {
-            XCTFail("App remained in setup instead of becoming \(readinessDescription) within \(effectiveTimeout)s")
+            XCTFail(
+                "App remained in setup instead of becoming \(readinessDescription) within \(effectiveTimeout)s (\(diagnostics))"
+            )
         } else {
-            XCTFail("App did not become \(readinessDescription) within \(effectiveTimeout)s")
+            XCTFail(
+                "App did not become \(readinessDescription) within \(effectiveTimeout)s (\(diagnostics))"
+            )
         }
     }
 
@@ -184,22 +233,26 @@ class QwenVoiceUITestBase: XCTestCase {
 
     func waitForActiveScreen(_ screenID: String, timeout: TimeInterval = 5, file: StaticString = #filePath, line: UInt = #line) {
         let deadline = Date().addingTimeInterval(timeout)
+        var lastSnapshot: UITestStateSnapshot?
         repeat {
-            if activeScreenValue() == screenID {
-                return
+            if let snapshot = fetchTestState() {
+                lastSnapshot = snapshot
+                if snapshot.activeScreen == screenID {
+                    return
+                }
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         } while Date() < deadline
 
         XCTFail(
-            "Active screen \(activeScreenValue() ?? "nil") did not become \(screenID) within \(timeout)s",
+            "Active screen \(lastSnapshot?.activeScreen ?? "nil") did not become \(screenID) within \(timeout)s (\(lastSnapshot?.readinessSummary ?? "state_server_unreachable"))",
             file: file,
             line: line
         )
     }
 
     func activeScreenValue() -> String? {
-        elementStringValue(identifier: "mainWindow_activeScreen")
+        fetchTestState()?.activeScreen
     }
 
     // MARK: - Screenshots
@@ -279,16 +332,36 @@ class QwenVoiceUITestBase: XCTestCase {
         uiTestBackendMode == .live ? 60 : 15
     }
 
-    private var readinessMarkerIdentifier: String {
-        uiTestBackendMode == .live ? "mainWindow_interactiveReady" : "mainWindow_ready"
-    }
-
     private var readinessDescription: String {
         uiTestBackendMode == .live ? "interactive-ready" : "ready"
     }
 
-    private func readinessMarkerValue() -> String? {
-        elementStringValue(identifier: readinessMarkerIdentifier)
+    private func fetchTestState(timeout: TimeInterval = 0.5) -> UITestStateSnapshot? {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForResource = timeout
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = UITestStateBox()
+        let task = session.dataTask(with: stateServerURL) { data, _, _ in
+            defer { semaphore.signal() }
+            guard let data else { return }
+            box.snapshot = try? JSONDecoder().decode(UITestStateSnapshot.self, from: data)
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .now() + timeout + 0.1)
+        return box.snapshot
+    }
+
+    private func isReady(_ snapshot: UITestStateSnapshot) -> Bool {
+        switch uiTestBackendMode {
+        case .stub:
+            return snapshot.isReady == true
+        case .live:
+            return snapshot.interactiveReady == true
+        }
     }
 
     private func elementExists(identifier: String) -> Bool {

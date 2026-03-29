@@ -21,6 +21,14 @@ enum StubFixtureSupport {
             .appendingPathComponent("QwenVoice", isDirectory: true)
     }
 
+    private static var sharedFixtureBaseRoot: URL {
+        let baseRoot = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("QwenVoiceUITests", isDirectory: true)
+            .appendingPathComponent("Fixtures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: baseRoot, withIntermediateDirectories: true)
+        return baseRoot
+    }
+
     static func createContext(
         backendMode: UITestLaunchBackendMode,
         dataRoot: UITestLaunchDataRoot
@@ -38,16 +46,20 @@ enum StubFixtureSupport {
     /// Create a minimal fixture directory mimicking ~/Library/Application Support/QwenVoice/.
     /// Returns the root path for use as QWENVOICE_UI_TEST_FIXTURE_ROOT.
     static func createStubFixtureRoot() -> String {
-        let root = NSTemporaryDirectory() + "QwenVoiceUITestFixtures/\(UUID().uuidString)"
-        createBaseDirectories(root: root)
-        return root
+        let rootURL = sharedFixtureBaseRoot
+            .appendingPathComponent("stub", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        createBaseDirectories(root: rootURL.path)
+        return rootURL.path
     }
 
     static func createLiveFixtureRoot() -> String {
-        let root = NSTemporaryDirectory() + "QwenVoiceUILiveFixtures/\(UUID().uuidString)"
+        let rootURL = sharedFixtureBaseRoot
+            .appendingPathComponent("live", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let root = rootURL.path
         createBaseDirectories(root: root)
 
-        let rootURL = URL(fileURLWithPath: root, isDirectory: true)
         let fm = FileManager.default
         let modelsSource = realAppSupportRoot.appendingPathComponent("models", isDirectory: true)
         let pythonSource = realAppSupportRoot.appendingPathComponent("python", isDirectory: true)

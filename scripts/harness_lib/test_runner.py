@@ -997,7 +997,45 @@ def _append_live_preflight_results_for_target(
             "required_for_target": requires_models,
         },
     ))
+
+    if backend_mode == "live" and python_ok and requires_app_support_python:
+        runtime_ok, runtime_details = _validate_python_runtime_imports(prerequisites["python_path"])
+        results.append(build_test_result(
+            "live_backend_runtime_validation",
+            passed=runtime_ok,
+            details=runtime_details,
+        ))
+        python_ok = python_ok and runtime_ok
+
     return (models_ok or not requires_models) and (python_ok or not requires_app_support_python)
+
+
+def _validate_python_runtime_imports(python_path: str, timeout: int = 30) -> tuple[bool, dict[str, Any]]:
+    import_script = (
+        "import mlx; import mlx.core as mx; import mlx_audio; import transformers; "
+        "import numpy; import soundfile; import huggingface_hub; "
+        "x = mx.array([1.0], dtype=mx.float32); mx.eval(x)"
+    )
+    try:
+        proc = subprocess.run(
+            [python_path, "-c", import_script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, {
+            "python_path": python_path,
+            "timeout_s": timeout,
+            "error": "runtime_validation_timeout",
+        }
+
+    return proc.returncode == 0, {
+        "python_path": python_path,
+        "returncode": proc.returncode,
+        "stdout_tail": proc.stdout.splitlines()[-20:],
+        "stderr_tail": proc.stderr.splitlines()[-20:],
+    }
 
 
 def _release_thresholds_for(mode: str) -> dict[str, int]:
