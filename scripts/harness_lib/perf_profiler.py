@@ -754,6 +754,71 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
         },
     ))
 
+    eprint("    Clone priming effectiveness test...")
+    primed_first_times: list[float] = []
+    prime_wall_times: list[float] = []
+    prime_first_chunk_times: list[float] = []
+    repeated_after_prime_times: list[float] = []
+
+    for i in range(runs):
+        client.call("unload_model", timeout=30)
+        client.call("load_model", {"model_id": mid, "benchmark": True}, timeout=120)
+
+        prime_start = time.perf_counter()
+        prime_result = client.call(
+            "prime_clone_reference",
+            {
+                "model_id": mid,
+                "ref_audio": ref_wav,
+                "ref_text": ref_text,
+                "streaming_interval": APP_STREAMING_INTERVAL,
+                "benchmark": True,
+            },
+            timeout=120,
+        )
+        prime_wall_times.append((time.perf_counter() - prime_start) * 1000)
+        prime_first_chunk = (
+            prime_result.get("benchmark", {})
+            .get("timings_ms", {})
+            .get("first_stream_chunk")
+        )
+        if prime_first_chunk is not None:
+            prime_first_chunk_times.append(float(prime_first_chunk))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            params = _make_generate_params(
+                "clone", TEXT_MEDIUM, os.path.join(tmp, "primed.wav"),
+                ref_audio=ref_wav, ref_text=ref_text,
+                benchmark_label="primed_first_generate",
+            )
+            rec = _run_single_generation(client, params)
+            primed_first_times.append(rec["wall_ms"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            params = _make_generate_params(
+                "clone", TEXT_MEDIUM, os.path.join(tmp, "primed_repeat.wav"),
+                ref_audio=ref_wav, ref_text=ref_text,
+                benchmark_label="primed_repeat",
+            )
+            rec = _run_single_generation(client, params)
+            repeated_after_prime_times.append(rec["wall_ms"])
+
+    results.append(build_test_result(
+        "clone_reference_prime",
+        passed=True,
+        details={
+            "cold_first_generate_ms": summarize_numeric(cache_miss_times),
+            "prime_wall_ms": summarize_numeric(prime_wall_times),
+            "prime_first_stream_chunk_ms": summarize_numeric(prime_first_chunk_times) if prime_first_chunk_times else None,
+            "primed_first_generate_ms": summarize_numeric(primed_first_times),
+            "repeated_same_reference_ms": summarize_numeric(repeated_after_prime_times),
+            "primed_speedup_pct": round(
+                (1 - summarize_numeric(primed_first_times)["mean"] / max(summarize_numeric(cache_miss_times)["mean"], 0.01)) * 100,
+                1,
+            ),
+        },
+    ))
+
     client.call("unload_model", timeout=30)
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("tier4_clone_dive", results, duration_ms)

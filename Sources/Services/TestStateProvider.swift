@@ -48,6 +48,8 @@ final class TestStateProvider: ObservableObject {
     @Published var runtimeSource: String = RuntimeSource.none.rawValue
     @Published var activePythonPath: String = ""
     @Published var activeFFmpegPath: String = ""
+    @Published var clonePrimingPhase: String = ""
+    @Published var cloneFastReady: Bool = false
     @Published var previewPreparedCount: Int = 0
     @Published var previewPreparedAtMS: Int = 0
     @Published var previewChunkCount: Int = 0
@@ -216,6 +218,8 @@ final class TestStateProvider: ObservableObject {
             "runtimeSource": runtimeSource,
             "activePythonPath": activePythonPath,
             "activeFFmpegPath": activeFFmpegPath,
+            "clonePrimingPhase": clonePrimingPhase,
+            "cloneFastReady": cloneFastReady,
             "previewPreparedCount": previewPreparedCount,
             "previewPreparedAtMS": previewPreparedAtMS,
             "previewChunkCount": previewChunkCount,

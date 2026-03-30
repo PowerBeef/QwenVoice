@@ -543,6 +543,87 @@ def _run_server_tests() -> dict[str, Any]:
             server._finalize_generated_audio = original_finalize_generated_audio
             server.send_progress = original_send_progress
 
+    def test_handle_prime_clone_reference_prepared_clone_streams_first_chunk():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_path = server._current_model_path
+        original_resolve_model_request = server._resolve_model_request
+        original_load_model_request = server._load_model_request
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_send_progress = server.send_progress
+        original_primed_clone_reference_keys = set(server._primed_clone_reference_keys)
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+            reference_path = tmp.name
+            tmp.write(b"RIFF")
+            tmp.flush()
+
+            try:
+                server._current_model = object()
+                server._current_model_path = "/tmp/pro_clone"
+                server._resolve_model_request = lambda model_id=None, model_path=None: (
+                    model_path or "/tmp/pro_clone",
+                    model_id or "pro_clone",
+                )
+                server._load_model_request = lambda **kwargs: (
+                    {
+                        "benchmark": {
+                            "timings_ms": {
+                                "load_model_total": 0,
+                            }
+                        }
+                    },
+                    kwargs.get("model_id") or "pro_clone",
+                    kwargs.get("model_path") or "/tmp/pro_clone",
+                    False,
+                )
+                server._normalize_clone_reference = lambda path: path
+                server._resolve_clone_transcript = (
+                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                )
+                server._get_or_prepare_clone_context = (
+                    lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+                )
+
+                def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                    calls.append(dict(kwargs))
+                    yield {"audio": "primed"}
+
+                server._generate_prepared_icl_fn = fake_generate_prepared_icl
+                server.send_progress = lambda *args, **kwargs: None
+                server._primed_clone_reference_keys.clear()
+
+                result = server.handle_prime_clone_reference(
+                    {
+                        "model_id": "pro_clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                        "streaming_interval": 0.32,
+                    }
+                )
+
+                assert result["prime_applied"] is True
+                assert result["prepared_clone_used"] is True
+                assert calls
+                assert calls[0]["stream"] is True
+                assert calls[0]["streaming_interval"] == 0.32
+                assert "instruct" not in calls[0]
+            finally:
+                server._current_model = original_current_model
+                server._current_model_path = original_current_model_path
+                server._resolve_model_request = original_resolve_model_request
+                server._load_model_request = original_load_model_request
+                server._normalize_clone_reference = original_normalize_clone_reference
+                server._resolve_clone_transcript = original_resolve_clone_transcript
+                server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+                server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+                server.send_progress = original_send_progress
+                server._primed_clone_reference_keys = original_primed_clone_reference_keys
+
     def test_collect_generation_result_with_timings_captures_first_yield():
         class FakeResult:
             def __init__(self, value: int) -> None:
@@ -672,6 +753,7 @@ def _run_server_tests() -> dict[str, Any]:
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
         ("clone_prewarm_prepared_generator_omits_instruct_kwarg", test_clone_prewarm_prepared_generator_omits_instruct_kwarg),
         ("handle_generate_prepared_clone_omits_instruct_kwarg", test_handle_generate_prepared_clone_omits_instruct_kwarg),
+        ("handle_prime_clone_reference_prepared_clone_streams_first_chunk", test_handle_prime_clone_reference_prepared_clone_streams_first_chunk),
         ("collect_generation_result_with_timings", test_collect_generation_result_with_timings_captures_first_yield),
         ("stream_selected_audio_emits_chunks_before_final_write", test_stream_selected_audio_emits_chunks_before_final_write),
         ("infer_legacy_mode", test_infer_legacy_mode),
@@ -1995,6 +2077,45 @@ def _run_release_generation_smoke(
             if state.get("activeScreen") != scenario["screen_id"]:
                 continue
 
+            trigger_kwargs = dict(scenario["trigger_kwargs"])
+            if scenario["mode"] == "clone":
+                try:
+                    state = client.seed_screen(
+                        scenario["screen"],
+                        text=scenario["text"],
+                        reference_audio_path=trigger_kwargs.get("reference_audio_path"),
+                        reference_transcript=trigger_kwargs.get("reference_transcript"),
+                    )
+                except UIStateClientError as exc:
+                    results.append(_build_ui_transport_failure_result(
+                        "clone_seed_reference",
+                        exc,
+                        last_state=state,
+                    ))
+                    continue
+
+                primed, primed_state = client.wait_for_state(
+                    lambda snapshot: (
+                        snapshot.get("activeScreen") == scenario["screen_id"]
+                        and snapshot.get("cloneFastReady") is True
+                    ),
+                    timeout=20,
+                    interval=0.1,
+                )
+                if primed_state:
+                    state = primed_state
+                results.append(build_test_result(
+                    "clone_context_ready",
+                    passed=primed,
+                    details={
+                        "state": state,
+                        "threshold_ms": 20_000,
+                    },
+                ))
+                trigger_kwargs = {}
+                if not primed:
+                    continue
+
             baseline_chunk_count = int(state.get("previewChunkCount", 0))
             baseline_finalized_count = int(state.get("previewFinalizedCount", 0))
             trigger_start = time.perf_counter()
@@ -2002,7 +2123,7 @@ def _run_release_generation_smoke(
                 state = client.start_generation(
                     scenario["screen"],
                     scenario["text"],
-                    **scenario["trigger_kwargs"],
+                    **trigger_kwargs,
                 )
             except UIStateClientError as exc:
                 results.append(_build_ui_transport_failure_result(
@@ -2018,7 +2139,7 @@ def _run_release_generation_smoke(
                 details={
                     "activeScreen": state.get("activeScreen"),
                     "text": scenario["text"],
-                    **scenario["trigger_kwargs"],
+                    **trigger_kwargs,
                 },
             ))
 

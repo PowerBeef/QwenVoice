@@ -8,9 +8,11 @@ struct VoiceCloningView: View {
     @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
 
     @Binding private var draft: VoiceCloningDraft
+    @Binding private var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var transcriptLoadError: String?
+    @State private var hydratedSavedVoiceID: String?
     @State private var isDragOver = false
     @State private var showingBatch = false
 
@@ -35,8 +37,68 @@ struct VoiceCloningView: View {
         pythonBridge.isReady && draft.referenceAudioPath != nil && isModelAvailable
     }
 
-    private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(draft.referenceAudioPath ?? "none")-\(draft.referenceTranscript)-\(isModelAvailable)"
+    private var clonePrimingRequestKey: String? {
+        guard let model = cloneModel,
+              pythonBridge.isReady,
+              isModelAvailable,
+              let referenceAudioPath = draft.referenceAudioPath else {
+            return nil
+        }
+        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
+           hydratedSavedVoiceID != selectedSavedVoiceID,
+           transcriptLoadError == nil {
+            return nil
+        }
+        return PythonBridge.cloneReferenceIdentityKey(
+            modelID: model.id,
+            refAudio: referenceAudioPath,
+            refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
+        )
+    }
+
+    private var clonePrimingTaskID: String {
+        clonePrimingRequestKey ?? "clone-priming-idle"
+    }
+
+    private var cloneContextStatus: VoiceCloningContextStatus? {
+        guard draft.referenceAudioPath != nil else { return nil }
+
+        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
+           hydratedSavedVoiceID != selectedSavedVoiceID,
+           transcriptLoadError == nil {
+            return .waitingForHydration
+        }
+
+        guard let clonePrimingRequestKey else { return nil }
+
+        if pythonBridge.cloneReferencePrimingKey == clonePrimingRequestKey {
+            switch pythonBridge.cloneReferencePrimingPhase {
+            case .idle:
+                break
+            case .preparing:
+                return .preparing
+            case .primed:
+                return .primed
+            case .failed:
+                return .fallback(
+                    pythonBridge.cloneReferencePrimingError
+                        ?? "Voice context priming didn't finish. Generation is still available, but the first preview may be slower."
+                )
+            }
+        }
+
+        return .preparing
+    }
+
+    private var readinessDescriptor: VoiceCloningReadinessDescriptor {
+        VoiceCloningReadiness.describe(
+            pythonReady: pythonBridge.isReady,
+            isModelAvailable: isModelAvailable,
+            modelDisplayName: modelDisplayName,
+            referenceAudioPath: draft.referenceAudioPath,
+            text: draft.text,
+            contextStatus: cloneContextStatus
+        )
     }
 
     private var savedVoicesLoadTaskID: String {
@@ -74,40 +136,12 @@ struct VoiceCloningView: View {
         )
     }
 
-    private var readinessTitle: String {
-        if !pythonBridge.isReady {
-            return "Engine starting"
-        }
-        if !isModelAvailable {
-            return "Install the active model"
-        }
-        if draft.referenceAudioPath == nil {
-            return "Add a reference"
-        }
-        if draft.text.isEmpty {
-            return "Add a script"
-        }
-        return "Review the take"
-    }
-
-    private var readinessDetail: String {
-        if !pythonBridge.isReady {
-            return "QwenVoice is still preparing the generation engine."
-        }
-        if !isModelAvailable {
-            return "Install \(modelDisplayName) in Models to enable generation."
-        }
-        if draft.referenceAudioPath == nil {
-            return "Saved voices or imported clips both work here. Choose one before writing the final line."
-        }
-        if draft.text.isEmpty {
-            return "Your reference is ready. Add the line you want the cloned voice to perform."
-        }
-        return "Everything is in place for a live preview and a saved clone."
-    }
-
-    init(draft: Binding<VoiceCloningDraft>) {
+    init(
+        draft: Binding<VoiceCloningDraft>,
+        pendingSavedVoiceHandoff: Binding<PendingVoiceCloningHandoff?>
+    ) {
         _draft = draft
+        _pendingSavedVoiceHandoff = pendingSavedVoiceHandoff
     }
 
     var body: some View {
@@ -147,14 +181,21 @@ struct VoiceCloningView: View {
         .onChange(of: savedVoicesViewModel.voices) { _, _ in
             syncSavedVoiceSelectionState()
         }
-        .task(id: idlePrewarmTaskID) {
-            await prewarmCloneModelIfNeeded()
+        .task(id: clonePrimingTaskID) {
+            await syncCloneReferencePriming()
         }
-        .onAppear(perform: syncUITestState)
+        .onAppear(perform: handleAppear)
         .onChange(of: draft.referenceAudioPath) { _, _ in syncUITestState() }
         .onChange(of: draft.referenceTranscript) { _, _ in syncUITestState() }
         .onChange(of: draft.text) { _, _ in syncUITestState() }
         .onChange(of: isGenerating) { _, _ in syncUITestState() }
+        .onChange(of: hydratedSavedVoiceID) { _, _ in syncUITestState() }
+        .onChange(of: transcriptLoadError) { _, _ in syncUITestState() }
+        .onChange(of: pythonBridge.cloneReferencePrimingPhase) { _, _ in syncUITestState() }
+        .onChange(of: pythonBridge.cloneReferencePrimingKey) { _, _ in syncUITestState() }
+        .onChange(of: pendingSavedVoiceHandoff) { _, _ in
+            consumePendingSavedVoiceHandoffIfNeeded()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
             handleTestSeedScreenState(notification)
         }
@@ -217,7 +258,7 @@ private extension VoiceCloningView {
             title: "Script",
             iconName: "text.alignleft",
             accentColor: AppTheme.voiceCloning,
-            trailingText: canGenerate ? "Ready" : nil,
+            trailingText: readinessDescriptor.trailingText,
             fillsAvailableHeight: true,
             accessibilityIdentifier: "voiceCloning_script"
         ) {
@@ -236,9 +277,9 @@ private extension VoiceCloningView {
                 .disabled(!pythonBridge.isReady || !isModelAvailable || draft.referenceAudioPath == nil)
 
                 VoiceCloningComposerFooter(
-                    canGenerate: canGenerate,
-                    readinessTitle: readinessTitle,
-                    readinessDetail: readinessDetail,
+                    isReadyForFastGenerate: readinessDescriptor.noteIsReady,
+                    readinessTitle: readinessDescriptor.title,
+                    readinessDetail: readinessDescriptor.detail,
                     errorMessage: errorMessage
                 )
             }
@@ -252,12 +293,50 @@ private extension VoiceCloningView {
 // MARK: - Actions
 
 private extension VoiceCloningView {
+    func handleAppear() {
+        consumePendingSavedVoiceHandoffIfNeeded()
+        syncUITestState()
+    }
+
+    var cloneContextStatusTestValue: String {
+        switch cloneContextStatus {
+        case .none:
+            return "none"
+        case .waitingForHydration:
+            return "waitingForHydration"
+        case .preparing:
+            return "preparing"
+        case .primed:
+            return "primed"
+        case .fallback:
+            return "fallback"
+        }
+    }
+
+    func consumePendingSavedVoiceHandoffIfNeeded() {
+        guard let pendingSavedVoiceHandoff else { return }
+        applyPendingSavedVoiceHandoff(pendingSavedVoiceHandoff)
+        self.pendingSavedVoiceHandoff = nil
+    }
+
+    func applyPendingSavedVoiceHandoff(_ handoff: PendingVoiceCloningHandoff) {
+        draft.applySavedVoiceSelection(
+            id: handoff.savedVoiceID,
+            wavPath: handoff.wavPath,
+            transcript: handoff.transcript
+        )
+        transcriptLoadError = handoff.transcriptLoadError
+        hydratedSavedVoiceID = handoff.savedVoiceID
+    }
+
     func syncUITestState() {
         guard UITestAutomationSupport.isEnabled else { return }
         TestStateProvider.shared.referenceAudioPath = draft.referenceAudioPath ?? ""
         TestStateProvider.shared.referenceTranscript = draft.referenceTranscript
         TestStateProvider.shared.text = draft.text
         TestStateProvider.shared.isGenerating = isGenerating
+        TestStateProvider.shared.clonePrimingPhase = cloneContextStatusTestValue
+        TestStateProvider.shared.cloneFastReady = readinessDescriptor.noteIsReady
     }
 
     func handleTestSeedScreenState(_ notification: Notification) {
@@ -268,6 +347,7 @@ private extension VoiceCloningView {
         if let referenceAudioPath = notification.userInfo?["referenceAudioPath"] as? String {
             draft.selectedSavedVoiceID = nil
             draft.referenceAudioPath = referenceAudioPath.isEmpty ? nil : referenceAudioPath
+            hydratedSavedVoiceID = nil
         }
         if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
             draft.referenceTranscript = referenceTranscript
@@ -290,6 +370,7 @@ private extension VoiceCloningView {
            !referenceAudioPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             draft.selectedSavedVoiceID = nil
             draft.referenceAudioPath = referenceAudioPath
+            hydratedSavedVoiceID = nil
         }
         if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
             draft.referenceTranscript = referenceTranscript
@@ -300,11 +381,6 @@ private extension VoiceCloningView {
 
     func generate() {
         guard !draft.text.isEmpty else { return }
-
-        guard let refPath = draft.referenceAudioPath else {
-            errorMessage = "Select a reference audio file before generating."
-            return
-        }
 
         guard pythonBridge.isReady else { return }
 
@@ -324,6 +400,29 @@ private extension VoiceCloningView {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
                     return
+                }
+
+                ensureSelectedSavedVoiceHydratedIfNeeded()
+
+                guard let refPath = draft.referenceAudioPath else {
+                    errorMessage = "Select a reference audio file before generating."
+                    isGenerating = false
+                    return
+                }
+
+                if pythonBridge.cloneReferencePrimingPhase != .failed
+                    || pythonBridge.cloneReferencePrimingKey != clonePrimingRequestKey {
+                    do {
+                        try await pythonBridge.ensureCloneReferencePrimed(
+                            modelID: model.id,
+                            refAudio: refPath,
+                            refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
+                        )
+                    } catch {
+                        #if DEBUG
+                        print("[Performance][VoiceCloningView] clone priming degraded: \(error.localizedDescription)")
+                        #endif
+                    }
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: draft.text)
@@ -369,44 +468,87 @@ private extension VoiceCloningView {
         }
     }
 
-    func prewarmCloneModelIfNeeded() async {
-        guard let model = cloneModel else { return }
-        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        guard let refPath = draft.referenceAudioPath else { return }
+    func syncCloneReferencePriming() async {
+        guard !isGenerating else { return }
+        guard let model = cloneModel,
+              let refPath = draft.referenceAudioPath,
+              let clonePrimingRequestKey else {
+            await pythonBridge.cancelCloneReferencePrimingIfNeeded()
+            return
+        }
 
-        await pythonBridge.prewarmModelIfNeeded(
-            modelID: model.id,
-            mode: .clone,
-            refAudio: refPath,
-            refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
-        )
+        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
+           hydratedSavedVoiceID != selectedSavedVoiceID,
+           transcriptLoadError == nil {
+            await pythonBridge.cancelCloneReferencePrimingIfNeeded()
+            return
+        }
+
+        do {
+            try await pythonBridge.ensureCloneReferencePrimed(
+                modelID: model.id,
+                refAudio: refPath,
+                refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
+            )
+        } catch {
+            #if DEBUG
+            print("[Performance][VoiceCloningView] clone priming failed key=\(clonePrimingRequestKey) error=\(error.localizedDescription)")
+            #endif
+        }
     }
 
     func selectSavedVoice(_ voice: Voice) {
-        draft.selectedSavedVoiceID = voice.id
-        draft.referenceAudioPath = voice.wavPath
+        applySavedVoice(voice)
+    }
+
+    func applySavedVoice(_ voice: Voice) {
         do {
-            draft.referenceTranscript = try voice.loadTranscript() ?? ""
+            let transcript = try SavedVoiceCloneHydration.loadTranscript(for: voice)
+            draft.applySavedVoice(voice, transcript: transcript)
             transcriptLoadError = nil
         } catch {
-            draft.referenceTranscript = ""
+            draft.applySavedVoice(voice, transcript: "")
             transcriptLoadError = "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
         }
+        hydratedSavedVoiceID = voice.id
+    }
+
+    func ensureSelectedSavedVoiceHydratedIfNeeded() {
+        guard let selectedVoice else { return }
+        guard draft.selectedSavedVoiceID == selectedVoice.id else { return }
+        guard hydratedSavedVoiceID != selectedVoice.id else { return }
+        guard transcriptLoadError == nil else { return }
+        applySavedVoice(selectedVoice)
     }
 
     func clearReference() {
         draft.clearReference()
         transcriptLoadError = nil
+        hydratedSavedVoiceID = nil
     }
 
     func syncSavedVoiceSelectionState() {
-        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
-           let voice = savedVoices.first(where: { $0.id == selectedSavedVoiceID }) {
-            selectSavedVoice(voice)
+        if draft.selectedSavedVoiceID != nil,
+           selectedVoice == nil,
+           (savedVoicesViewModel.isLoading || savedVoicesViewModel.loadError != nil) {
             return
         }
 
-        if draft.selectedSavedVoiceID != nil {
+        switch SavedVoiceCloneHydration.action(
+            draft: draft,
+            voice: selectedVoice,
+            hydratedVoiceID: hydratedSavedVoiceID,
+            transcriptLoadError: transcriptLoadError
+        ) {
+        case .none:
+            break
+        case .acceptCurrentDraft:
+            hydratedSavedVoiceID = selectedVoice?.id
+        case .applyFromDisk:
+            if let selectedVoice {
+                applySavedVoice(selectedVoice)
+            }
+        case .clearStaleSelection:
             clearReference()
         }
     }
@@ -432,6 +574,7 @@ private extension VoiceCloningView {
                 draft.referenceAudioPath = url.path
                 draft.selectedSavedVoiceID = nil
                 transcriptLoadError = nil
+                hydratedSavedVoiceID = nil
             }
         }
         return true
@@ -443,6 +586,7 @@ private extension VoiceCloningView {
             draft.referenceAudioPath = url.path
             draft.selectedSavedVoiceID = nil
             transcriptLoadError = nil
+            hydratedSavedVoiceID = nil
             return
         }
 
@@ -453,6 +597,7 @@ private extension VoiceCloningView {
             draft.referenceAudioPath = url.path
             draft.selectedSavedVoiceID = nil
             transcriptLoadError = nil
+            hydratedSavedVoiceID = nil
         }
     }
 }
@@ -549,7 +694,7 @@ private struct VoiceCloningTranscriptSettings: View {
 // MARK: - Composer Footer
 
 private struct VoiceCloningComposerFooter: View {
-    let canGenerate: Bool
+    let isReadyForFastGenerate: Bool
     let readinessTitle: String
     let readinessDetail: String
     let errorMessage: String?
@@ -557,8 +702,8 @@ private struct VoiceCloningComposerFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
             WorkflowReadinessNote(
-                isReady: canGenerate,
-                title: canGenerate ? "Ready to generate" : readinessTitle,
+                isReady: isReadyForFastGenerate,
+                title: readinessTitle,
                 detail: readinessDetail,
                 accentColor: AppTheme.voiceCloning,
                 accessibilityIdentifier: "voiceCloning_readiness"

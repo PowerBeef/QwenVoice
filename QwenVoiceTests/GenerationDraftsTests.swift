@@ -2,6 +2,44 @@ import XCTest
 @testable import QwenVoice
 
 final class GenerationDraftsTests: XCTestCase {
+    func testVoiceCloningDraftApplySavedVoiceKeepsScriptAndLoadsTranscript() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let wavURL = tempDirectory.appendingPathComponent("DesignedVoice.wav")
+        let txtURL = tempDirectory.appendingPathComponent("DesignedVoice.txt")
+        FileManager.default.createFile(atPath: wavURL.path, contents: Data(), attributes: nil)
+        try "Reference transcript".write(to: txtURL, atomically: true, encoding: .utf8)
+
+        let voice = Voice(name: "DesignedVoice", wavPath: wavURL.path, hasTranscript: true)
+        let transcript = try SavedVoiceCloneHydration.loadTranscript(for: voice)
+        var draft = VoiceCloningDraft(text: "Keep this clone script")
+
+        draft.applySavedVoice(voice, transcript: transcript)
+
+        XCTAssertEqual(draft.selectedSavedVoiceID, voice.id)
+        XCTAssertEqual(draft.referenceAudioPath, voice.wavPath)
+        XCTAssertEqual(draft.referenceTranscript, "Reference transcript")
+        XCTAssertEqual(draft.text, "Keep this clone script")
+    }
+
+    func testVoiceCloningDraftApplySavedVoiceSelectionKeepsScript() {
+        var draft = VoiceCloningDraft(text: "Keep this clone script")
+
+        draft.applySavedVoiceSelection(
+            id: "DesignedVoice",
+            wavPath: "/tmp/DesignedVoice.wav",
+            transcript: "Reference transcript"
+        )
+
+        XCTAssertEqual(draft.selectedSavedVoiceID, "DesignedVoice")
+        XCTAssertEqual(draft.referenceAudioPath, "/tmp/DesignedVoice.wav")
+        XCTAssertEqual(draft.referenceTranscript, "Reference transcript")
+        XCTAssertEqual(draft.text, "Keep this clone script")
+    }
+
     func testCustomVoiceDraftDefaultsMatchGenerationInputs() {
         let draft = CustomVoiceDraft()
 
@@ -82,5 +120,83 @@ final class GenerationDraftsTests: XCTestCase {
         XCTAssertNil(draft.referenceAudioPath)
         XCTAssertEqual(draft.referenceTranscript, "")
         XCTAssertEqual(draft.text, "Keep this clone script")
+    }
+
+    func testSavedVoiceCloneHydrationAcceptsCurrentDraftWithoutOverwritingEditedTranscript() {
+        let voice = Voice(name: "DesignedVoice", wavPath: "/tmp/designed.wav", hasTranscript: true)
+        let draft = VoiceCloningDraft(
+            selectedSavedVoiceID: voice.id,
+            referenceAudioPath: voice.wavPath,
+            referenceTranscript: "Edited by the user",
+            text: "Keep this clone script"
+        )
+
+        let action = SavedVoiceCloneHydration.action(
+            draft: draft,
+            voice: voice,
+            hydratedVoiceID: nil,
+            transcriptLoadError: nil
+        )
+
+        XCTAssertEqual(action, .acceptCurrentDraft)
+    }
+
+    func testSavedVoiceCloneHydrationAcceptsAudioOnlySavedVoiceWithoutTranscript() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let wavURL = tempDirectory.appendingPathComponent("SavedVoice.wav")
+        FileManager.default.createFile(atPath: wavURL.path, contents: Data(), attributes: nil)
+
+        let voice = Voice(name: "SavedVoice", wavPath: wavURL.path, hasTranscript: false)
+        XCTAssertEqual(try SavedVoiceCloneHydration.loadTranscript(for: voice), "")
+
+        let draft = VoiceCloningDraft(
+            selectedSavedVoiceID: voice.id,
+            referenceAudioPath: voice.wavPath,
+            referenceTranscript: "",
+            text: "Keep this clone script"
+        )
+
+        let action = SavedVoiceCloneHydration.action(
+            draft: draft,
+            voice: voice,
+            hydratedVoiceID: nil,
+            transcriptLoadError: nil
+        )
+
+        XCTAssertEqual(action, .acceptCurrentDraft)
+    }
+
+    func testVoiceCloningReadinessShowsPreparingStateBeforeClonePrimingCompletes() {
+        let descriptor = VoiceCloningReadiness.describe(
+            pythonReady: true,
+            isModelAvailable: true,
+            modelDisplayName: "Qwen3-TTS Pro Clone",
+            referenceAudioPath: "/tmp/reference.wav",
+            text: "Clone this line",
+            contextStatus: .preparing
+        )
+
+        XCTAssertFalse(descriptor.noteIsReady)
+        XCTAssertEqual(descriptor.title, "Preparing voice context")
+        XCTAssertEqual(descriptor.trailingText, nil)
+    }
+
+    func testVoiceCloningReadinessBecomesReadyAfterClonePrimingCompletes() {
+        let descriptor = VoiceCloningReadiness.describe(
+            pythonReady: true,
+            isModelAvailable: true,
+            modelDisplayName: "Qwen3-TTS Pro Clone",
+            referenceAudioPath: "/tmp/reference.wav",
+            text: "Clone this line",
+            contextStatus: .primed
+        )
+
+        XCTAssertTrue(descriptor.noteIsReady)
+        XCTAssertEqual(descriptor.title, "Ready to generate")
+        XCTAssertEqual(descriptor.trailingText, "Ready")
     }
 }

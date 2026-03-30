@@ -413,9 +413,12 @@ private struct VoiceRowActions: View {
             Button("Open in Cloning", action: onUseInVoiceCloning)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(!canUseInVoiceCloning)
                 .fixedSize(horizontal: true, vertical: false)
-                .help(canUseInVoiceCloning ? "Open Voice Cloning with this saved voice selected." : "Install the Voice Cloning model in Models to open this saved voice there.")
+                .help(
+                    canUseInVoiceCloning
+                        ? "Open Voice Cloning with this saved voice selected."
+                        : "Open Voice Cloning with this saved voice selected. Install the Voice Cloning model in Models to generate from it."
+                )
                 .accessibilityIdentifier("voicesRow_use_\(voiceID)")
 
             Button("Preview", action: onPlay)

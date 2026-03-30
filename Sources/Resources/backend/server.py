@@ -171,6 +171,7 @@ _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
 _mlx_audio_version = None
 _prewarmed_model_keys = set()
+_primed_clone_reference_keys = set()
 
 
 def _ensure_mlx():
@@ -753,6 +754,7 @@ def _discard_loaded_model():
     _current_model_path = None
     _current_model_id = None
     _clear_clone_context_cache()
+    _primed_clone_reference_keys.clear()
     _perform_memory_recovery()
 
 
@@ -975,6 +977,104 @@ def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text):
     prepared = _prepare_icl_context_fn(_current_model, clean_ref_audio_path, ref_text)
     _cache_clone_context(cache_key, prepared)
     return prepared, False
+
+
+def _clone_prime_identity_key(clean_ref_audio_path, ref_text):
+    """Build a stable key for primed clone-reference streaming state."""
+    return (
+        _current_model_path,
+        *_clone_cache_key(clean_ref_audio_path, ref_text),
+    )
+
+
+def _reset_clone_streaming_state():
+    decoder = getattr(getattr(_current_model, "speech_tokenizer", None), "decoder", None)
+    reset_streaming_state = getattr(decoder, "reset_streaming_state", None)
+    if callable(reset_streaming_state):
+        reset_streaming_state()
+
+
+def _prime_streaming_generator(generator):
+    """Advance a streaming generator through its first yielded chunk, then clean up."""
+    generation_start = time.perf_counter()
+    first_chunk_ms = None
+
+    try:
+        for _ in generator:
+            first_chunk_ms = int((time.perf_counter() - generation_start) * 1000)
+            break
+    finally:
+        close = getattr(generator, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+        _reset_clone_streaming_state()
+
+    if first_chunk_ms is None:
+        raise RuntimeError("Clone priming produced no streaming chunk")
+
+    return {
+        "first_stream_chunk": first_chunk_ms,
+        "generation": int((time.perf_counter() - generation_start) * 1000),
+    }
+
+
+def _run_clone_reference_prime(clean_ref_audio_path, resolved_ref_text, streaming_interval):
+    """Prime the actual clone streaming path so the next visible generate is fast."""
+    if _current_model is None:
+        raise RuntimeError("No model loaded. Call load_model first.")
+
+    profile = _prewarm_profile("clone")
+    warmup_text = profile["text"]
+    warmup_max_tokens = profile["max_tokens"]
+    prepare_clone_context_ms = 0
+    prepared_clone_used = False
+    clone_cache_hit = None
+
+    prepare_start = time.perf_counter()
+    prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
+        clean_ref_audio_path,
+        resolved_ref_text,
+    )
+    prepare_clone_context_ms = int((time.perf_counter() - prepare_start) * 1000)
+
+    if prepared_context is not None and _generate_prepared_icl_fn is not None:
+        prepared_clone_used = True
+        generator = _generate_prepared_icl_fn(
+            _current_model,
+            warmup_text,
+            prepared_context,
+            temperature=0.6,
+            top_p=1.0,
+            repetition_penalty=1.5,
+            max_tokens=warmup_max_tokens,
+            stream=True,
+            streaming_interval=streaming_interval,
+        )
+    else:
+        generator = _build_clone_fallback_generator(
+            _current_model,
+            text=warmup_text,
+            temperature=0.6,
+            clean_ref_audio=clean_ref_audio_path,
+            resolved_ref_text=resolved_ref_text,
+            max_tokens=warmup_max_tokens,
+            stream=True,
+            streaming_interval=streaming_interval,
+        )
+
+    streaming_timings = _prime_streaming_generator(generator)
+    return {
+        "prepare_clone_context": prepare_clone_context_ms,
+        "generation": streaming_timings["generation"],
+        "first_stream_chunk": streaming_timings["first_stream_chunk"],
+        "prepared_clone_used": prepared_clone_used,
+        "clone_cache_hit": clone_cache_hit,
+        "prime_max_tokens": warmup_max_tokens,
+        "streaming_interval": streaming_interval,
+    }
 
 
 def _infer_legacy_mode(voice=None, ref_audio=None):
@@ -1445,6 +1545,91 @@ def handle_prewarm_model(params, request_id=None):
     return result
 
 
+def handle_prime_clone_reference(params, request_id=None):
+    """Prime the real clone streaming path for a specific reference voice."""
+    benchmark = bool(params.get("benchmark", False))
+    model_id = params.get("model_id")
+    model_path = params.get("model_path")
+    ref_audio = params.get("ref_audio")
+    ref_text = params.get("ref_text")
+    streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
+
+    if not ref_audio:
+        raise ValueError("prime_clone_reference requires ref_audio")
+
+    overall_start = time.perf_counter()
+    model_path, resolved_model_id = _resolve_model_request(model_id=model_id, model_path=model_path)
+    loaded_model_changed = _current_model_path != model_path
+
+    load_result, resolved_model_id, model_path, _ = _load_model_request(
+        model_id=model_id,
+        model_path=model_path,
+        benchmark=benchmark,
+        request_id=request_id,
+    )
+    load_timings = load_result.get("benchmark", {}).get("timings_ms", {})
+
+    normalize_start = time.perf_counter()
+    clean_ref_audio = _normalize_clone_reference(ref_audio)
+    normalize_reference_ms = int((time.perf_counter() - normalize_start) * 1000)
+    if not clean_ref_audio:
+        raise RuntimeError("Could not process reference audio file")
+
+    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+    prime_key = _clone_prime_identity_key(clean_ref_audio, resolved_ref_text)
+    already_primed = prime_key in _primed_clone_reference_keys
+
+    prime_timings = {
+        "normalize_reference": normalize_reference_ms,
+        "prepare_clone_context": 0,
+        "generation": 0,
+        "first_stream_chunk": 0,
+        "prime_max_tokens": 0,
+        "streaming_interval": streaming_interval,
+    }
+    prepared_clone_used = False
+    clone_cache_hit = None
+
+    if not already_primed:
+        send_progress(20, "Preparing voice context...", request_id=request_id)
+        prime_timings = _run_clone_reference_prime(
+            clean_ref_audio,
+            resolved_ref_text,
+            streaming_interval=streaming_interval,
+        )
+        prime_timings["normalize_reference"] = normalize_reference_ms
+        prepared_clone_used = prime_timings["prepared_clone_used"]
+        clone_cache_hit = prime_timings["clone_cache_hit"]
+        _primed_clone_reference_keys.add(prime_key)
+
+    result = {
+        "success": True,
+        "model_id": resolved_model_id,
+        "model_path": model_path,
+        "loaded_model_changed": loaded_model_changed,
+        "already_primed": already_primed,
+        "prime_applied": not already_primed,
+        "prepared_clone_used": prepared_clone_used,
+        "clone_cache_hit": clone_cache_hit,
+    }
+    if benchmark:
+        result["benchmark"] = {
+            "prepared_clone_used": prepared_clone_used,
+            "clone_cache_hit": clone_cache_hit,
+            "prime_max_tokens": prime_timings.get("prime_max_tokens", 0),
+            "streaming_interval": prime_timings.get("streaming_interval", streaming_interval),
+            "timings_ms": {
+                "load_model_total": load_timings.get("load_model_total", 0),
+                "normalize_reference": prime_timings["normalize_reference"],
+                "prepare_clone_context": prime_timings["prepare_clone_context"],
+                "first_stream_chunk": prime_timings["first_stream_chunk"],
+                "generation": prime_timings["generation"],
+                "total_backend": int((time.perf_counter() - overall_start) * 1000),
+            },
+        }
+    return result
+
+
 def handle_unload_model(params):
     """Unload current model and free memory."""
     _discard_loaded_model()
@@ -1893,6 +2078,7 @@ METHODS = {
     "init": handle_init,
     "load_model": handle_load_model,
     "prewarm_model": handle_prewarm_model,
+    "prime_clone_reference": handle_prime_clone_reference,
     "unload_model": handle_unload_model,
     "generate": handle_generate,
     "convert_audio": handle_convert_audio,
@@ -1926,7 +2112,7 @@ def process_request(line):
         return
 
     try:
-        if method in {"generate", "load_model", "prewarm_model"}:
+        if method in {"generate", "load_model", "prewarm_model", "prime_clone_reference"}:
             result = METHODS[method](params, request_id=req_id)
         else:
             result = METHODS[method](params)

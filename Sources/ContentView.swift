@@ -148,6 +148,7 @@ struct ContentView: View {
     @State private var customVoiceDraft = CustomVoiceDraft()
     @State private var voiceDesignDraft = VoiceDesignDraft()
     @State private var voiceCloningDraft = VoiceCloningDraft()
+    @State private var pendingVoiceCloningHandoff: PendingVoiceCloningHandoff?
     @State private var didCompleteInitialAvailabilityRefresh = false
 
     private var currentWindowTitle: String {
@@ -160,6 +161,11 @@ struct ContentView: View {
 
     private var disabledSidebarItems: Set<SidebarItem> {
         Set(SidebarItem.generationItems.filter { !$0.isAvailable(using: modelManager) })
+    }
+
+    private var canUseSavedVoicesInVoiceCloning: Bool {
+        guard let cloneModel = SidebarItem.voiceCloning.requiredModel else { return false }
+        return modelManager.isAvailable(cloneModel) || cloneModel.isAvailable(in: QwenVoiceApp.modelsDir)
     }
 
     private var currentDisabledSidebarIdentifiers: String {
@@ -262,7 +268,10 @@ struct ContentView: View {
         case .voiceDesign:
             VoiceDesignView(draft: $voiceDesignDraft)
         case .voiceCloning:
-            VoiceCloningView(draft: $voiceCloningDraft)
+            VoiceCloningView(
+                draft: $voiceCloningDraft,
+                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff
+            )
         case .history:
             HistoryView(
                 searchText: $historySearchText,
@@ -271,12 +280,30 @@ struct ContentView: View {
         case .voices:
             VoicesView(
                 enrollRequestID: voicesEnrollRequestID,
-                canUseInVoiceCloning: !disabledSidebarItems.contains(.voiceCloning),
+                canUseInVoiceCloning: canUseSavedVoicesInVoiceCloning,
                 onUseInVoiceCloning: { voice in
-                    voiceCloningDraft.selectedSavedVoiceID = voice.id
-                    voiceCloningDraft.referenceAudioPath = voice.wavPath
-                    voiceCloningDraft.referenceTranscript = ""
-                    selectSidebarItemIfEnabled(.voiceCloning)
+                    let handoff: PendingVoiceCloningHandoff
+                    do {
+                        let transcript = try SavedVoiceCloneHydration.loadTranscript(for: voice)
+                        handoff = PendingVoiceCloningHandoff(
+                            savedVoiceID: voice.id,
+                            wavPath: voice.wavPath,
+                            transcript: transcript,
+                            transcriptLoadError: nil
+                        )
+                    } catch {
+                        handoff = PendingVoiceCloningHandoff(
+                            savedVoiceID: voice.id,
+                            wavPath: voice.wavPath,
+                            transcript: "",
+                            transcriptLoadError: "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
+                        )
+                    }
+                    pendingVoiceCloningHandoff = handoff
+                    selectSidebarItemIfEnabled(
+                        .voiceCloning,
+                        bypassDisabledCheck: true
+                    )
                 }
             )
         case .models:
@@ -335,8 +362,8 @@ struct ContentView: View {
 
     // MARK: - Helper methods
 
-    private func selectSidebarItemIfEnabled(_ item: SidebarItem) {
-        guard !disabledSidebarItems.contains(item) else { return }
+    private func selectSidebarItemIfEnabled(_ item: SidebarItem, bypassDisabledCheck: Bool = false) {
+        guard bypassDisabledCheck || !disabledSidebarItems.contains(item) else { return }
         if UITestAutomationSupport.isEnabled {
             TestStateProvider.shared.markSidebarSelectionStarted(targetScreen: item.screenAccessibilityID)
         }

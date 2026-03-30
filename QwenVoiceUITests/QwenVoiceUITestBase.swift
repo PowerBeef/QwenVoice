@@ -291,6 +291,18 @@ class QwenVoiceUITestBase: XCTestCase {
         }
     }
 
+    func assertElementEnabled(_ identifier: String, timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line) {
+        performWithApplicationOnMainActor { application in
+            let element = application.descendants(matching: .any)[identifier]
+            XCTAssertTrue(element.waitForExistence(timeout: timeout), "Element '\(identifier)' not found within \(timeout)s", file: file, line: line)
+            let deadline = Date().addingTimeInterval(timeout)
+            while !element.isEnabled, Date() < deadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+            XCTAssertTrue(element.isEnabled, "Element '\(identifier)' was disabled", file: file, line: line)
+        }
+    }
+
     func typeInTextEditor(_ text: String, identifier: String = "textInput_textEditor", file: StaticString = #filePath, line: UInt = #line) {
         performWithApplicationOnMainActor { application in
             let textView = application.textViews.firstMatch

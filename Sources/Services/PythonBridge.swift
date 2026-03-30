@@ -19,6 +19,13 @@ enum SidebarStatus: Equatable {
     case crashed(String)
 }
 
+enum CloneReferencePrimingPhase: String, Equatable {
+    case idle
+    case preparing
+    case primed
+    case failed
+}
+
 /// Manages a long-lived Python subprocess running server.py,
 /// communicating via JSON-RPC 2.0 over stdin/stdout pipes.
 @MainActor
@@ -33,6 +40,9 @@ final class PythonBridge: ObservableObject {
     private(set) var progressPercent: Int = 0
     private(set) var progressMessage: String = ""
     @Published private(set) var sidebarStatus: SidebarStatus = .starting
+    @Published private(set) var cloneReferencePrimingPhase: CloneReferencePrimingPhase = .idle
+    @Published private(set) var cloneReferencePrimingKey: String?
+    @Published private(set) var cloneReferencePrimingError: String?
     @Published var lastError: String? {
         didSet { syncSidebarStatusFromSystemState() }
     }
@@ -72,6 +82,12 @@ final class PythonBridge: ObservableObject {
         let task: Task<[String: RPCValue], Error>
     }
 
+    private struct InFlightCloneReferencePrime {
+        let token: UUID
+        let key: String
+        let task: Task<[String: RPCValue], Error>
+    }
+
     private struct PendingRequest {
         let continuation: CheckedContinuation<RPCValue, Error>
         let reportsErrors: Bool
@@ -92,8 +108,11 @@ final class PythonBridge: ObservableObject {
     private var recentStderrLines: [String] = []
     private var loadedModelID: String?
     private var inFlightModelLoad: InFlightModelLoad?
+    private var inFlightCloneReferencePrime: InFlightCloneReferencePrime?
     private var prewarmedRequestKeys: Set<String> = []
     private var prewarmingRequestKeys: Set<String> = []
+    private var activePythonPath: String?
+    private var activeAppSupportDir: String?
     private var stubRequestSeed = 10_000
 
     private static let maxStoredStderrLines = 20
@@ -109,8 +128,10 @@ final class PythonBridge: ObservableObject {
         loadedModelID = nil
         prewarmedRequestKeys = []
         prewarmingRequestKeys = []
+        resetCloneReferencePrimingState()
 
         if isStubBackendMode {
+            activePythonPath = nil
             lastError = nil
             isReady = false
             isProcessing = false
@@ -132,6 +153,7 @@ final class PythonBridge: ObservableObject {
             lastError = "Cannot find Python interpreter"
             return
         }
+        activePythonPath = resolvedPython
 
         proc.executableURL = URL(fileURLWithPath: resolvedPython)
         proc.arguments = ["-u", serverPath]
@@ -165,6 +187,7 @@ final class PythonBridge: ObservableObject {
                 self.activeStreamingRequests.removeAll()
                 self.loadedModelID = nil
                 self.inFlightModelLoad = nil
+                self.resetCloneReferencePrimingState()
                 self.clearActiveProgressTracking()
                 if shouldReportCrash {
                     self.lastError = self.recentStderrLines.last ?? PythonBridgeError.processTerminated.localizedDescription
@@ -217,6 +240,7 @@ final class PythonBridge: ObservableObject {
         prewarmedRequestKeys = []
         prewarmingRequestKeys = []
         recentStderrLines = []
+        resetCloneReferencePrimingState()
         clearActiveProgressTracking()
         cancelAllPending(error: PythonBridgeError.processTerminated)
 
@@ -237,7 +261,7 @@ final class PythonBridge: ObservableObject {
     /// Default timeout for RPC calls (seconds).
     private static let defaultTimeout: UInt64 = 300  // 5 minutes for generation
     private static let pingTimeout: UInt64 = 10
-    private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio"]
+    private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio", "prime_clone_reference"]
     private static let appStreamingInterval = 0.32
 
     static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
@@ -293,6 +317,19 @@ final class PythonBridge: ObservableObject {
         return identityParts.joined(separator: "|")
     }
 
+    static func cloneReferenceIdentityKey(
+        modelID: String,
+        refAudio: String,
+        refText: String?
+    ) -> String {
+        prewarmIdentityKey(
+            modelID: modelID,
+            mode: .clone,
+            refAudio: refAudio,
+            refText: refText
+        )
+    }
+
     private static func designInstruction(voiceDescription: String, emotion: String) -> String {
         let trimmedDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmotion = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -303,6 +340,21 @@ final class PythonBridge: ObservableObject {
         Voice description: \(trimmedDescription)
         Delivery style: \(trimmedEmotion)
         """
+    }
+
+    private func setCloneReferencePrimingState(
+        _ phase: CloneReferencePrimingPhase,
+        key: String? = nil,
+        error: String? = nil
+    ) {
+        cloneReferencePrimingPhase = phase
+        cloneReferencePrimingKey = key
+        cloneReferencePrimingError = error
+    }
+
+    private func resetCloneReferencePrimingState() {
+        inFlightCloneReferencePrime = nil
+        setCloneReferencePrimingState(.idle)
     }
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
@@ -461,6 +513,7 @@ final class PythonBridge: ObservableObject {
             isReady = true
             activeStreamingRequests.removeAll()
             loadedModelID = nil
+            activeAppSupportDir = appSupportDir
             lastError = nil
             syncSidebarStatusFromSystemState()
             return
@@ -471,6 +524,7 @@ final class PythonBridge: ObservableObject {
         ])
         activeStreamingRequests.removeAll()
         loadedModelID = nil
+        activeAppSupportDir = appSupportDir
     }
 
     /// Ping the backend to check it's alive.
@@ -662,6 +716,102 @@ final class PythonBridge: ObservableObject {
         }
     }
 
+    func cancelCloneReferencePrimingIfNeeded() async {
+        guard inFlightCloneReferencePrime != nil else { return }
+        guard let pythonPath = activePythonPath,
+              let appSupportDir = activeAppSupportDir else {
+            resetCloneReferencePrimingState()
+            return
+        }
+
+        do {
+            try await cancelActiveGenerationAndRestart(
+                pythonPath: pythonPath,
+                appSupportDir: appSupportDir
+            )
+        } catch {
+            setCloneReferencePrimingState(
+                .failed,
+                key: cloneReferencePrimingKey,
+                error: error.localizedDescription
+            )
+        }
+    }
+
+    func ensureCloneReferencePrimed(
+        modelID: String,
+        refAudio: String,
+        refText: String?
+    ) async throws {
+        let trimmedRefAudio = refAudio.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRefAudio.isEmpty else { return }
+        guard isReady else { return }
+        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard activeGenerationSession == nil else { return }
+
+        let key = Self.cloneReferenceIdentityKey(
+            modelID: modelID,
+            refAudio: trimmedRefAudio,
+            refText: refText
+        )
+
+        if cloneReferencePrimingPhase == .primed, cloneReferencePrimingKey == key {
+            return
+        }
+
+        if let inFlightCloneReferencePrime {
+            if inFlightCloneReferencePrime.key == key {
+                _ = try await inFlightCloneReferencePrime.task.value
+                return
+            }
+
+            try await cancelCloneReferencePrimingIfNeeded()
+        }
+
+        if isStubBackendMode {
+            loadedModelID = modelID
+            setCloneReferencePrimingState(.primed, key: key)
+            return
+        }
+
+        let token = UUID()
+        let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        setCloneReferencePrimingState(.preparing, key: key)
+
+        let task = Task { @MainActor [self] () throws -> [String: RPCValue] in
+            var params: [String: RPCValue] = [
+                "model_id": .string(modelID),
+                "ref_audio": .string(trimmedRefAudio),
+                "streaming_interval": .double(Self.appStreamingInterval),
+            ]
+            if let trimmedRefText, !trimmedRefText.isEmpty {
+                params["ref_text"] = .string(trimmedRefText)
+            }
+            return try await callDict(
+                "prime_clone_reference",
+                params: params,
+                reportsErrors: false,
+                resetLastError: false
+            )
+        }
+        inFlightCloneReferencePrime = InFlightCloneReferencePrime(token: token, key: key, task: task)
+
+        do {
+            _ = try await task.value
+            if inFlightCloneReferencePrime?.token == token {
+                inFlightCloneReferencePrime = nil
+            }
+            loadedModelID = modelID
+            setCloneReferencePrimingState(.primed, key: key)
+        } catch {
+            if inFlightCloneReferencePrime?.token == token {
+                inFlightCloneReferencePrime = nil
+            }
+            setCloneReferencePrimingState(.failed, key: key, error: error.localizedDescription)
+            throw error
+        }
+    }
+
     func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
         if isStubBackendMode {
             cancelAllPending(error: PythonBridgeError.cancelled)
@@ -675,6 +825,7 @@ final class PythonBridge: ObservableObject {
             prewarmingRequestKeys = []
             recentStderrLines = []
             lastError = nil
+            resetCloneReferencePrimingState()
             clearActiveProgressTracking()
             try await initialize(appSupportDir: appSupportDir)
             clearGenerationActivity()
@@ -701,6 +852,7 @@ final class PythonBridge: ObservableObject {
         prewarmingRequestKeys = []
         recentStderrLines = []
         lastError = nil
+        resetCloneReferencePrimingState()
         clearActiveProgressTracking()
 
         if let proc, proc.isRunning {
