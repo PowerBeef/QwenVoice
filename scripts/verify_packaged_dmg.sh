@@ -33,10 +33,18 @@ fi
 
 MOUNTED_DEVICE=""
 TEMP_ROOT=""
+ATTACH_MOUNTPOINT=""
+LAST_ATTACH_STDERR=""
 
 cleanup() {
     if [ -n "$MOUNTED_DEVICE" ]; then
         hdiutil detach "$MOUNTED_DEVICE" >/dev/null 2>&1 || true
+    fi
+    if [ -n "$LAST_ATTACH_STDERR" ] && [ -f "$LAST_ATTACH_STDERR" ]; then
+        rm -f "$LAST_ATTACH_STDERR"
+    fi
+    if [ -n "$ATTACH_MOUNTPOINT" ] && [ -d "$ATTACH_MOUNTPOINT" ]; then
+        rm -rf "$ATTACH_MOUNTPOINT"
     fi
     if [ -n "$TEMP_ROOT" ] && [ -d "$TEMP_ROOT" ]; then
         rm -rf "$TEMP_ROOT"
@@ -49,9 +57,34 @@ echo ""
 echo "[1/4] Attaching DMG..."
 
 ATTACH_PLIST="$(mktemp)"
-if ! hdiutil attach -nobrowse -readonly -plist "$DMG_PATH" >"$ATTACH_PLIST"; then
+LAST_ATTACH_STDERR="$(mktemp)"
+
+ATTACH_DELAYS=(2 4 6 8 10)
+ATTACH_ATTEMPT=1
+ATTACH_SUCCESS=false
+
+for ATTACH_DELAY in "${ATTACH_DELAYS[@]}"; do
+    : >"$ATTACH_PLIST"
+    ATTACH_MOUNTPOINT="$(mktemp -d /tmp/qwenvoice-dmg-mount.XXXXXX)"
+    if hdiutil attach -mountpoint "$ATTACH_MOUNTPOINT" -nobrowse -readonly -plist "$DMG_PATH" >"$ATTACH_PLIST" 2>"$LAST_ATTACH_STDERR"; then
+        ATTACH_SUCCESS=true
+        break
+    fi
+
+    rm -rf "$ATTACH_MOUNTPOINT"
+    ATTACH_MOUNTPOINT=""
+
+    if [ "$ATTACH_ATTEMPT" -lt "${#ATTACH_DELAYS[@]}" ]; then
+        echo "Attach attempt $ATTACH_ATTEMPT failed; retrying in ${ATTACH_DELAY}s..." >&2
+        sleep "$ATTACH_DELAY"
+    fi
+    ATTACH_ATTEMPT=$((ATTACH_ATTEMPT + 1))
+done
+
+if [ "$ATTACH_SUCCESS" != true ]; then
+    ATTACH_ERROR="$(tr '\n' ' ' <"$LAST_ATTACH_STDERR" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
     rm -f "$ATTACH_PLIST"
-    fail "Failed to attach DMG: $DMG_PATH"
+    fail "Failed to attach DMG after ${#ATTACH_DELAYS[@]} attempts: $DMG_PATH${ATTACH_ERROR:+ ($ATTACH_ERROR)}"
 fi
 
 MOUNTED_DEVICE="$(python3 - "$ATTACH_PLIST" <<'PY'
