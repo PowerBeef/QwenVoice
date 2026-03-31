@@ -229,12 +229,30 @@ else
 
     echo "[3/8] Building Release with xcodebuild..."
     cd "$PROJECT_DIR"
+    XCODEBUILD_LOG="$BUILD_DIR/xcodebuild-release.log"
+    rm -f "$XCODEBUILD_LOG"
+
+    set +e
     xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         SWIFT_ACTIVE_COMPILATION_CONDITIONS="$UI_SWIFT_DEFINE" \
-        build | tail -5
+        build 2>&1 | tee "$XCODEBUILD_LOG"
+    XCODEBUILD_STATUS=${PIPESTATUS[0]}
+    set -e
+
+    if [ "$XCODEBUILD_STATUS" -ne 0 ]; then
+        echo ""
+        echo "xcodebuild failed with exit code $XCODEBUILD_STATUS"
+        echo "Diagnostic summary from $XCODEBUILD_LOG:"
+        if ! grep -E \
+            '(^|[^[:alnum:]_])(error:|warning:)|\\.swift:[0-9]+:[0-9]+:|CompileSwift|SwiftCompile|\\*\\* BUILD FAILED \\*\\*|The following build commands failed' \
+            "$XCODEBUILD_LOG" | tail -n 200; then
+            tail -n 200 "$XCODEBUILD_LOG" || true
+        fi
+        exit "$XCODEBUILD_STATUS"
+    fi
 
     echo ""
     echo "[3/8] Build Release — done ($(step_time $STEP_START))"
