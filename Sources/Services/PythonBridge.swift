@@ -1321,7 +1321,7 @@ final class PythonBridge: ObservableObject {
         batchIndex: Int?,
         batchTotal: Int?,
         activityPresentation: ActivityStatus.Presentation = .standaloneCard,
-        generate: () async throws -> Output
+        generate: @MainActor () async throws -> Output
     ) async throws -> Output {
         beginGenerationSession(
             mode: mode,
