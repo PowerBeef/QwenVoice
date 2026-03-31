@@ -34,7 +34,7 @@ Prefer code, manifests, and scripts over prose whenever they disagree.
 
 - `project.yml` drives `QwenVoice.xcodeproj`. Prefer editing `project.yml` and regenerating the project over hand-editing generated Xcode project files.
 - `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, and most contents of `Sources/Resources/vendor/` are generated or vendored runtime assets. Update them through the packaging or vendoring scripts, not by ad hoc manual edits.
-- `third_party_patches/mlx-audio/` and `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py` are coupled to the vendored `mlx-audio` wheel. Keep them aligned.
+- `third_party_patches/mlx-audio/` and `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py` are coupled through the helper-sync workflow. Keep them aligned.
 - App data under `~/Library/Application Support/QwenVoice/` is runtime state, not repo source.
 - Watch for accidental `__pycache__` and `.pyc` paths when regenerating or reviewing changes.
 
@@ -44,7 +44,7 @@ QwenVoice now has repo-tracked local skills under `.agents/skills/`. Prefer thes
 
 - `qwenvoice-packaged-validation` for packaged-app validation, dual-UI release artifact checks, bundled dependency proof, screenshot-capture prompt issues, and full automated validation requests.
 - `qwenvoice-release-publish` for version/build bumps, checked-in release notes, CI gate waiting, `release-dual-ui` dispatch, and GitHub release verification.
-- `qwenvoice-vendored-runtime` for `mlx-audio`, vendored wheel and runtime changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification.
+- `qwenvoice-vendored-runtime` for `mlx-audio`, backend helper overlay and runtime packaging changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification.
 - `qwenvoice-doc-sync` for README, AGENTS, current-state, and release-notes sync against `Sources/`, `project.yml`, and `scripts/`.
 
 These local skills complement, rather than replace, the user-wide skills that are already useful in this repo:
@@ -142,6 +142,8 @@ Notes:
 - Vendored runtime work should patch through the repo-owned vendoring flow, not by hand-editing bundled runtime assets. Prefer `qwenvoice-vendored-runtime` when the task centers on `mlx-audio`, bundled Python, or packaged dependency behavior.
 - For doc refreshes after behavior or workflow changes, prefer `qwenvoice-doc-sync`.
 - Benchmarks exist under `scripts/harness.py bench ...` and typically require the app Python environment plus installed models.
+- For clone-helper regression isolation, use `python3 scripts/harness.py bench --category clone_regression`. It runs the 1.2.2 helper and current helper in separate serialized backend processes on the same saved reference.
+- For performance or regression profiling, prefer tiny prompts and serialized `benchmark=true` runs. Do not add heavy profiling lanes to `bench --category all`.
 
 ## When Changing X, Also Update Y
 
@@ -199,6 +201,12 @@ Use the harness commands in this file and the existing reference docs instead of
 - Avoid running multiple `QwenVoice` app instances at once while debugging model loads or playback.
 - Prefer killing an old instance before launching a new build.
 - Prefer asking before launching the full app unless the task clearly requires it.
+- Never run more than one heavy model load, generation, or benchmark at a time.
+- Never run clone/custom comparisons side by side or in parallel processes.
+- For clone-mode investigations, cold and warm runs may share one backend process only when intentionally measuring cache reuse. Do not overlap that process with any other model process.
+- If comparing two implementations, run them in separate serial passes, not concurrently.
+- Unload the current model and let the backend fully exit before starting the next heavy comparison run.
+- Verify idle state with a lightweight process check before starting another heavy run, especially before clone benchmarks or helper/runtime comparisons.
 
 ## Before Finishing
 

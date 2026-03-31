@@ -72,6 +72,8 @@ final class TestStateServer: @unchecked Sendable {
             handleCaptureScreenshot(path: p, connection: connection)
         case let p where p.hasPrefix("/seed-screen"):
             handleSeedScreen(path: p, connection: connection)
+        case let p where p.hasPrefix("/use-saved-voice-in-cloning"):
+            handleUseSavedVoiceInCloning(path: p, connection: connection)
         case let p where p.hasPrefix("/start-generation"):
             handleStartGeneration(path: p, connection: connection)
         case let p where p.hasPrefix("/start-preview"):
@@ -174,6 +176,39 @@ final class TestStateServer: @unchecked Sendable {
         }
     }
 
+    private func handleUseSavedVoiceInCloning(path: String, connection: NWConnection) {
+        guard let savedVoiceID = extractQueryParam(from: path, key: "savedVoiceID"),
+              let wavPath = extractQueryParam(from: path, key: "wavPath") else {
+            sendJSON(["error": "missing_saved_voice_params"], status: 400, connection: connection)
+            return
+        }
+
+        let transcript = extractQueryParam(from: path, key: "transcript")
+        let transcriptLoadError = extractQueryParam(from: path, key: "transcriptLoadError")
+
+        Task { @MainActor in
+            var userInfo: [String: String] = [
+                "savedVoiceID": savedVoiceID,
+                "wavPath": wavPath,
+            ]
+            if let transcript {
+                userInfo["transcript"] = transcript
+            }
+            if let transcriptLoadError {
+                userInfo["transcriptLoadError"] = transcriptLoadError
+            }
+
+            NotificationCenter.default.post(
+                name: .testUseSavedVoiceInCloning,
+                object: nil,
+                userInfo: userInfo
+            )
+            try? await Task.sleep(for: .milliseconds(200))
+            let state = TestStateProvider.shared.snapshot()
+            self.sendJSON(state, connection: connection)
+        }
+    }
+
     private func handleStartGeneration(
         path: String,
         connection: NWConnection,
@@ -260,4 +295,5 @@ extension Notification.Name {
     static let testStartLivePreview = Notification.Name("testStartLivePreview")
     static let testSeedScreenState = Notification.Name("testSeedScreenState")
     static let testStartGeneration = Notification.Name("testStartGeneration")
+    static let testUseSavedVoiceInCloning = Notification.Name("testUseSavedVoiceInCloning")
 }

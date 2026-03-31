@@ -8,6 +8,7 @@ Layer (d): Contract cross-validation — cross-references across layers
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
 import os
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 from pathlib import Path
 from typing import Any
 
@@ -195,6 +197,244 @@ def _load_module_from_path(name: str, path: Path) -> Any:
         sys.modules.pop(name, None)
         raise
     return module
+
+
+@contextlib.contextmanager
+def _temporary_sys_modules(replacements: dict[str, Any]):
+    original: dict[str, Any] = {}
+    missing: set[str] = set()
+
+    for name, module in replacements.items():
+        if name in sys.modules:
+            original[name] = sys.modules[name]
+        else:
+            missing.add(name)
+        sys.modules[name] = module
+
+    try:
+        yield
+    finally:
+        for name in replacements:
+            if name in original:
+                sys.modules[name] = original[name]
+            elif name in missing:
+                sys.modules.pop(name, None)
+
+
+def _load_qwen_speed_patch_module():
+    helper_path = PROJECT_DIR / "third_party_patches/mlx-audio/qwenvoice_speed_patch.py"
+
+    class FakeTensor:
+        def __init__(self, payload: str, shape: tuple[int, ...]):
+            self.payload = payload
+            self.shape = tuple(shape)
+
+        @property
+        def ndim(self) -> int:
+            return len(self.shape)
+
+        def reshape(self, *shape: int):
+            return FakeTensor(f"reshape({self.payload},{shape})", tuple(shape))
+
+        def __getitem__(self, key):
+            if not isinstance(key, tuple):
+                key = (key,)
+
+            source_dims = list(self.shape)
+            dim_index = 0
+            result_shape: list[int] = []
+
+            for item in key:
+                if item is None:
+                    result_shape.append(1)
+                    continue
+
+                size = source_dims[dim_index]
+                dim_index += 1
+
+                if isinstance(item, int):
+                    continue
+
+                if isinstance(item, slice):
+                    start, stop, step = item.indices(size)
+                    length = len(range(start, stop, step))
+                    result_shape.append(length)
+                    continue
+
+                raise TypeError(f"Unsupported index type: {type(item)!r}")
+
+            result_shape.extend(source_dims[dim_index:])
+            return FakeTensor(f"{self.payload}[{key!r}]", tuple(result_shape))
+
+        def __add__(self, other):
+            other_tensor = other if isinstance(other, FakeTensor) else FakeTensor(repr(other), ())
+            shape = self.shape if len(self.shape) >= len(other_tensor.shape) else other_tensor.shape
+            return FakeTensor(f"add({self.payload},{other_tensor.payload})", shape)
+
+        __radd__ = __add__
+
+        def __eq__(self, other):
+            return (
+                isinstance(other, FakeTensor)
+                and self.payload == other.payload
+                and self.shape == other.shape
+            )
+
+        def __repr__(self) -> str:
+            return f"FakeTensor(payload={self.payload!r}, shape={self.shape!r})"
+
+    def _shape_for_data(value) -> tuple[int, ...]:
+        if isinstance(value, FakeTensor):
+            return value.shape
+        if isinstance(value, list):
+            if not value:
+                return (0,)
+            return (len(value),) + _shape_for_data(value[0])
+        return ()
+
+    def _mx_array(value):
+        if isinstance(value, FakeTensor):
+            return value
+        return FakeTensor(repr(value), _shape_for_data(value))
+
+    def _mx_concatenate(values, axis=0):
+        tensors = [_mx_array(value) for value in values]
+        base_shape = list(tensors[0].shape)
+        base_shape[axis] = sum(tensor.shape[axis] for tensor in tensors)
+        payload = "concat(" + ",".join(tensor.payload for tensor in tensors) + f";axis={axis})"
+        return FakeTensor(payload, tuple(base_shape))
+
+    def _mx_broadcast_to(value, shape):
+        tensor = _mx_array(value)
+        return FakeTensor(f"broadcast({tensor.payload}->{tuple(shape)!r})", tuple(shape))
+
+    def _make_embedding(name: str):
+        def embed(ids):
+            tensor = _mx_array(ids)
+            if len(tensor.shape) == 1:
+                batch, seq = 1, tensor.shape[0]
+            else:
+                batch, seq = tensor.shape[0], tensor.shape[1]
+            return FakeTensor(f"{name}({tensor.payload})", (batch, seq, 4))
+
+        return embed
+
+    class FakeTokenizer:
+        def __init__(self) -> None:
+            self.encoded_texts: list[str] = []
+
+        def encode(self, text: str) -> list[int]:
+            self.encoded_texts.append(text)
+            base = [((ord(ch) % 17) + 1) for ch in text]
+            while len(base) < 16:
+                base.append(len(base) + 1)
+            return base
+
+    class FakeSpeechTokenizer:
+        def __init__(self) -> None:
+            self.has_encoder = True
+            self.encode_calls = 0
+
+        def encode(self, audio):
+            self.encode_calls += 1
+            return FakeTensor(f"ref_codes({getattr(audio, 'payload', audio)!r})", (1, 2, 3))
+
+    class FakeTalker:
+        def __init__(self) -> None:
+            self._text_embeddings = _make_embedding("text_embeddings")
+            self._input_embeddings = _make_embedding("input_embeddings")
+            self.code_predictor = types.SimpleNamespace(
+                codec_embedding=[_make_embedding("codec_embedding_0")]
+            )
+
+        def get_text_embeddings(self):
+            return self._text_embeddings
+
+        def text_projection(self, tensor):
+            tensor = _mx_array(tensor)
+            return FakeTensor(f"text_projection({tensor.payload})", tensor.shape)
+
+        def get_input_embeddings(self):
+            return self._input_embeddings
+
+    class FakeModel(dict):
+        def __init__(self) -> None:
+            super().__init__()
+            self.sample_rate = 24_000
+            self.tokenizer = FakeTokenizer()
+            self.talker = FakeTalker()
+            self.speech_tokenizer = FakeSpeechTokenizer()
+            self.speaker_encoder = object()
+            self._sample_token = object()
+            self.config = types.SimpleNamespace(
+                tts_bos_token_id=101,
+                tts_eos_token_id=102,
+                tts_pad_token_id=0,
+                talker_config=types.SimpleNamespace(
+                    codec_pad_id=501,
+                    codec_bos_id=502,
+                    num_code_groups=2,
+                    codec_nothink_id=601,
+                    codec_think_bos_id=602,
+                    codec_think_eos_id=603,
+                    codec_think_id=604,
+                    codec_eos_token_id=605,
+                    vocab_size=10_000,
+                    codec_language_id={"en": 701, "ja": 702},
+                ),
+            )
+
+        def extract_speaker_embedding(self, audio):
+            return FakeTensor(f"speaker_embed({getattr(audio, 'payload', audio)!r})", (4,))
+
+    mx_core_module = types.ModuleType("mlx.core")
+    mx_core_module.array = _mx_array
+    mx_core_module.concatenate = _mx_concatenate
+    mx_core_module.broadcast_to = _mx_broadcast_to
+    mx_core_module.eval = lambda *args, **kwargs: None
+    mx_core_module.load = lambda *args, **kwargs: {}
+    mx_core_module.get_peak_memory = lambda: 0.0
+
+    mlx_module = types.ModuleType("mlx")
+    mlx_module.__path__ = []
+    mlx_module.core = mx_core_module
+
+    mlx_audio_module = types.ModuleType("mlx_audio")
+    mlx_audio_module.__path__ = []
+    mlx_audio_tts_module = types.ModuleType("mlx_audio.tts")
+    mlx_audio_tts_module.__path__ = []
+    mlx_audio_models_module = types.ModuleType("mlx_audio.tts.models")
+    mlx_audio_models_module.__path__ = []
+    mlx_audio_qwen_module = types.ModuleType("mlx_audio.tts.models.qwen3_tts")
+    mlx_audio_qwen_module.__path__ = []
+
+    base_module = types.ModuleType("mlx_audio.tts.models.base")
+    base_module.GenerationResult = type("GenerationResult", (), {})
+    base_module.BatchGenerationResult = type("BatchGenerationResult", (), {})
+
+    qwen_module = types.ModuleType("mlx_audio.tts.models.qwen3_tts.qwen3_tts")
+    qwen_module.format_duration = lambda duration_seconds: f"{duration_seconds:.2f}s"
+
+    utils_module = types.ModuleType("mlx_audio.utils")
+    utils_module.load_audio = lambda path, sample_rate=None: FakeTensor(f"audio({path})", (240,))
+
+    replacements = {
+        "mlx": mlx_module,
+        "mlx.core": mx_core_module,
+        "mlx_audio": mlx_audio_module,
+        "mlx_audio.tts": mlx_audio_tts_module,
+        "mlx_audio.tts.models": mlx_audio_models_module,
+        "mlx_audio.tts.models.base": base_module,
+        "mlx_audio.tts.models.qwen3_tts": mlx_audio_qwen_module,
+        "mlx_audio.tts.models.qwen3_tts.qwen3_tts": qwen_module,
+        "mlx_audio.utils": utils_module,
+    }
+
+    with _temporary_sys_modules(replacements):
+        module_name = f"_qwen_speed_patch_harness_{id(object())}"
+        module = _load_module_from_path(module_name, helper_path)
+
+    return module, FakeTensor, FakeModel
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +667,20 @@ def _run_server_tests() -> dict[str, Any]:
         assert base_key != changed_voice_key
         assert base_key != changed_instruction_key
 
+    def test_build_generation_kwargs_omits_auto_language():
+        default_kwargs = server._build_generation_kwargs("Hello", 0.6)
+        empty_kwargs = server._build_generation_kwargs("Hello", 0.6, language="")
+        auto_kwargs = server._build_generation_kwargs("Hello", 0.6, language="auto")
+
+        assert "lang_code" not in default_kwargs
+        assert "lang_code" not in empty_kwargs
+        assert "lang_code" not in auto_kwargs
+
+    def test_build_generation_kwargs_includes_explicit_language():
+        kwargs = server._build_generation_kwargs("Bonjour", 0.6, language="fr")
+
+        assert kwargs["lang_code"] == "fr"
+
     def test_clone_prewarm_prepared_generator_omits_instruct_kwarg():
         calls: list[dict[str, Any]] = []
 
@@ -461,6 +715,48 @@ def _run_server_tests() -> dict[str, Any]:
             assert result["prepared_clone_used"] is True
             assert calls
             assert "instruct" not in calls[0]
+            assert "language" not in calls[0]
+        finally:
+            server._current_model = original_current_model
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+
+    def test_clone_prewarm_prepared_generator_forwards_explicit_language():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+
+        try:
+            server._current_model = object()
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+            )
+            server._get_or_prepare_clone_context = (
+                lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+            )
+
+            def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                calls.append(dict(kwargs))
+                yield {"audio": "warmup"}
+
+            server._generate_prepared_icl_fn = fake_generate_prepared_icl
+
+            result = server._run_model_prewarm(
+                "clone",
+                ref_audio="/tmp/reference.wav",
+                ref_text="Reference transcript",
+                language="fr",
+            )
+
+            assert result["prepared_clone_used"] is True
+            assert calls[0]["language"] == "fr"
         finally:
             server._current_model = original_current_model
             server._normalize_clone_reference = original_normalize_clone_reference
@@ -529,6 +825,82 @@ def _run_server_tests() -> dict[str, Any]:
             assert result["metrics"]["prepared_clone_used"] is True
             assert calls
             assert "instruct" not in calls[0]
+            assert "language" not in calls[0]
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._derive_generation_paths = original_derive_generation_paths
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_prepared_clone_forwards_explicit_language():
+        calls: list[dict[str, Any]] = []
+        final_path = "/tmp/qwenvoice-harness-clone-language.wav"
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_derive_generation_paths = server._derive_generation_paths
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        try:
+            server._current_model = object()
+            server._current_model_id = None
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = lambda output_path, text, mode=None, voice=None, ref_audio=None: final_path
+            server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+            )
+            server._get_or_prepare_clone_context = (
+                lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+            )
+
+            def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                calls.append(dict(kwargs))
+                yield {"audio": "prepared-clone"}
+
+            server._generate_prepared_icl_fn = fake_generate_prepared_icl
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path},
+                    {},
+                    {"duration_seconds": 0.1, "frames": 1},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate(
+                {
+                    "text": "Prepared clone explicit language line.",
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "language": "fr",
+                }
+            )
+
+            assert result["metrics"]["prepared_clone_used"] is True
+            assert calls[0]["language"] == "fr"
         finally:
             server._current_model = original_current_model
             server._current_model_id = original_current_model_id
@@ -612,6 +984,7 @@ def _run_server_tests() -> dict[str, Any]:
                 assert calls[0]["stream"] is True
                 assert calls[0]["streaming_interval"] == 0.32
                 assert "instruct" not in calls[0]
+                assert "language" not in calls[0]
             finally:
                 server._current_model = original_current_model
                 server._current_model_path = original_current_model_path
@@ -623,6 +996,1270 @@ def _run_server_tests() -> dict[str, Any]:
                 server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
                 server.send_progress = original_send_progress
                 server._primed_clone_reference_keys = original_primed_clone_reference_keys
+
+    def test_handle_prime_clone_reference_forwards_explicit_language():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_path = server._current_model_path
+        original_resolve_model_request = server._resolve_model_request
+        original_load_model_request = server._load_model_request
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_send_progress = server.send_progress
+        original_primed_clone_reference_keys = set(server._primed_clone_reference_keys)
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+            reference_path = tmp.name
+            tmp.write(b"RIFF")
+            tmp.flush()
+
+            try:
+                server._current_model = object()
+                server._current_model_path = "/tmp/pro_clone"
+                server._resolve_model_request = lambda model_id=None, model_path=None: (
+                    model_path or "/tmp/pro_clone",
+                    model_id or "pro_clone",
+                )
+                server._load_model_request = lambda **kwargs: (
+                    {
+                        "benchmark": {
+                            "timings_ms": {
+                                "load_model_total": 0,
+                            }
+                        }
+                    },
+                    kwargs.get("model_id") or "pro_clone",
+                    kwargs.get("model_path") or "/tmp/pro_clone",
+                    False,
+                )
+                server._normalize_clone_reference = lambda path: path
+                server._resolve_clone_transcript = (
+                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                )
+                server._get_or_prepare_clone_context = (
+                    lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
+                )
+
+                def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                    calls.append(dict(kwargs))
+                    yield {"audio": "primed"}
+
+                server._generate_prepared_icl_fn = fake_generate_prepared_icl
+                server.send_progress = lambda *args, **kwargs: None
+                server._primed_clone_reference_keys.clear()
+
+                result = server.handle_prime_clone_reference(
+                    {
+                        "model_id": "pro_clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                        "streaming_interval": 0.32,
+                        "language": "fr",
+                    }
+                )
+
+                assert result["prime_applied"] is True
+                assert calls[0]["language"] == "fr"
+            finally:
+                server._current_model = original_current_model
+                server._current_model_path = original_current_model_path
+                server._resolve_model_request = original_resolve_model_request
+                server._load_model_request = original_load_model_request
+                server._normalize_clone_reference = original_normalize_clone_reference
+                server._resolve_clone_transcript = original_resolve_clone_transcript
+                server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+                server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+                server.send_progress = original_send_progress
+                server._primed_clone_reference_keys = original_primed_clone_reference_keys
+
+    def test_handle_prepare_clone_reference_cold_and_warm_cache_paths():
+        prepare_calls: list[tuple[Any, str, str]] = []
+        progress_events: list[tuple[int, str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_path = server._current_model_path
+        original_resolve_model_request = server._resolve_model_request
+        original_load_model_request = server._load_model_request
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_prepare_icl_context_fn = server._prepare_icl_context_fn
+        original_can_prepare_icl_fn = server._can_prepare_icl_fn
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_clone_context_cache = type(server._clone_context_cache)(server._clone_context_cache)
+        original_send_progress = server.send_progress
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+            reference_path = tmp.name
+            tmp.write(b"RIFF")
+            tmp.flush()
+
+            try:
+                server._current_model = object()
+                server._current_model_path = "/tmp/pro_clone"
+                server._resolve_model_request = lambda model_id=None, model_path=None: (
+                    model_path or "/tmp/pro_clone",
+                    model_id or "pro_clone",
+                )
+                server._load_model_request = lambda **kwargs: (
+                    {
+                        "benchmark": {
+                            "timings_ms": {
+                                "load_model_total": 0,
+                            }
+                        }
+                    },
+                    kwargs.get("model_id") or "pro_clone",
+                    kwargs.get("model_path") or "/tmp/pro_clone",
+                    False,
+                )
+                server._normalize_clone_reference = lambda path: path
+                server._resolve_clone_transcript = (
+                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                )
+                server._can_prepare_icl_fn = lambda model: True
+
+                def fake_prepare_context(model, ref_audio, ref_text, language="auto"):
+                    prepare_calls.append((model, ref_audio, ref_text))
+                    return {"prepared": ref_text}
+
+                server._prepare_icl_context_fn = fake_prepare_context
+                server._generate_prepared_icl_fn = lambda *args, **kwargs: iter(())
+                server._clone_context_cache.clear()
+                server.send_progress = lambda percent, message, request_id=None: (
+                    progress_events.append((percent, message, request_id))
+                )
+
+                cold = server.handle_prepare_clone_reference(
+                    {
+                        "model_id": "pro_clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                        "benchmark": True,
+                    },
+                    request_id="req-cold",
+                )
+                warm = server.handle_prepare_clone_reference(
+                    {
+                        "model_id": "pro_clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                        "benchmark": True,
+                    },
+                    request_id="req-warm",
+                )
+
+                assert cold["success"] is True
+                assert cold["reference_prepared"] is True
+                assert cold["prepared_clone_used"] is True
+                assert cold["clone_cache_hit"] is False
+                assert "generation" not in cold["benchmark"]["timings_ms"]
+                assert "first_stream_chunk" not in cold["benchmark"]["timings_ms"]
+
+                assert warm["success"] is True
+                assert warm["reference_prepared"] is True
+                assert warm["prepared_clone_used"] is True
+                assert warm["clone_cache_hit"] is True
+                assert len(prepare_calls) == 1
+                assert progress_events == [
+                    (20, "Preparing voice context...", "req-cold"),
+                    (20, "Preparing voice context...", "req-warm"),
+                ]
+            finally:
+                server._current_model = original_current_model
+                server._current_model_path = original_current_model_path
+                server._resolve_model_request = original_resolve_model_request
+                server._load_model_request = original_load_model_request
+                server._normalize_clone_reference = original_normalize_clone_reference
+                server._resolve_clone_transcript = original_resolve_clone_transcript
+                server._prepare_icl_context_fn = original_prepare_icl_context_fn
+                server._can_prepare_icl_fn = original_can_prepare_icl_fn
+                server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+                server._clone_context_cache = original_clone_context_cache
+                server.send_progress = original_send_progress
+
+    def test_clone_prewarm_reuses_prepared_reference_after_prepare_clone_reference():
+        prepare_calls: list[tuple[Any, str, str]] = []
+        generate_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_path = server._current_model_path
+        original_resolve_model_request = server._resolve_model_request
+        original_load_model_request = server._load_model_request
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_prepare_icl_context_fn = server._prepare_icl_context_fn
+        original_can_prepare_icl_fn = server._can_prepare_icl_fn
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_clone_context_cache = type(server._clone_context_cache)(server._clone_context_cache)
+        original_prewarmed_model_keys = set(server._prewarmed_model_keys)
+        original_send_progress = server.send_progress
+
+        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+            reference_path = tmp.name
+            tmp.write(b"RIFF")
+            tmp.flush()
+
+            try:
+                server._current_model = object()
+                server._current_model_path = "/tmp/pro_clone"
+                server._resolve_model_request = lambda model_id=None, model_path=None: (
+                    model_path or "/tmp/pro_clone",
+                    model_id or "pro_clone",
+                )
+                server._load_model_request = lambda **kwargs: (
+                    {
+                        "benchmark": {
+                            "timings_ms": {
+                                "load_model_total": 0,
+                            }
+                        }
+                    },
+                    kwargs.get("model_id") or "pro_clone",
+                    kwargs.get("model_path") or "/tmp/pro_clone",
+                    False,
+                )
+                server._normalize_clone_reference = lambda path: path
+                server._resolve_clone_transcript = (
+                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                )
+                server._can_prepare_icl_fn = lambda model: True
+
+                def fake_prepare_context(model, ref_audio, ref_text, language="auto"):
+                    prepare_calls.append((model, ref_audio, ref_text))
+                    return {"prepared": ref_text}
+
+                def fake_generate_prepared_icl(model, text, prepared_context, **kwargs):
+                    generate_calls.append(dict(kwargs))
+                    yield {"audio": "warm"}
+
+                server._prepare_icl_context_fn = fake_prepare_context
+                server._generate_prepared_icl_fn = fake_generate_prepared_icl
+                server._clone_context_cache.clear()
+                server._prewarmed_model_keys.clear()
+                server.send_progress = lambda *args, **kwargs: None
+
+                prepare_result = server.handle_prepare_clone_reference(
+                    {
+                        "model_id": "pro_clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                    }
+                )
+                prewarm_result = server.handle_prewarm_model(
+                    {
+                        "model_id": "pro_clone",
+                        "mode": "clone",
+                        "ref_audio": reference_path,
+                        "ref_text": "Reference transcript",
+                        "benchmark": True,
+                    }
+                )
+
+                assert prepare_result["reference_prepared"] is True
+                assert len(prepare_calls) == 1
+                assert prewarm_result["prewarm_applied"] is True
+                assert prewarm_result["benchmark"]["prepared_clone_used"] is True
+                assert prewarm_result["benchmark"]["clone_cache_hit"] is True
+                assert len(prepare_calls) == 1
+                assert len(generate_calls) == 1
+            finally:
+                server._current_model = original_current_model
+                server._current_model_path = original_current_model_path
+                server._resolve_model_request = original_resolve_model_request
+                server._load_model_request = original_load_model_request
+                server._normalize_clone_reference = original_normalize_clone_reference
+                server._resolve_clone_transcript = original_resolve_clone_transcript
+                server._prepare_icl_context_fn = original_prepare_icl_context_fn
+                server._can_prepare_icl_fn = original_can_prepare_icl_fn
+                server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+                server._clone_context_cache = original_clone_context_cache
+                server._prewarmed_model_keys = original_prewarmed_model_keys
+                server.send_progress = original_send_progress
+
+    def test_build_mlx_audio_helper_sync_script_no_version_rewrite():
+        script_text = (PROJECT_DIR / "scripts/build_mlx_audio_wheel.sh").read_text(encoding="utf-8")
+        assert "0.4.1.post1" not in script_text
+        assert "pip download" not in script_text
+        assert "wheel pack" not in script_text
+        assert "mlx_audio_qwen_speed_patch.py" in script_text
+        assert not list((PROJECT_DIR / "Sources/Resources/vendor").glob("mlx_audio*.whl"))
+
+    def test_prepare_icl_context_is_language_independent():
+        helper, FakeTensor, FakeModel = _load_qwen_speed_patch_module()
+        model = FakeModel()
+        ref_audio = FakeTensor("reference_audio", (240,))
+
+        prepared_en = helper.prepare_icl_context(
+            model,
+            ref_audio,
+            "Reference transcript",
+            language="en",
+        )
+        prepared_ja = helper.prepare_icl_context(
+            model,
+            ref_audio,
+            "Reference transcript",
+            language="ja",
+        )
+
+        assert prepared_en.clean_ref_text == "Reference transcript"
+        assert prepared_en.clean_ref_text == prepared_ja.clean_ref_text
+        assert prepared_en.ref_codes == prepared_ja.ref_codes
+        assert prepared_en.ref_text_embed == prepared_ja.ref_text_embed
+        assert prepared_en.codec_with_text_pad == prepared_ja.codec_with_text_pad
+        assert prepared_en.speaker_embed == prepared_ja.speaker_embed
+        assert not hasattr(prepared_en, "language")
+
+    def test_request_time_language_changes_do_not_rebuild_reference_state():
+        helper, FakeTensor, FakeModel = _load_qwen_speed_patch_module()
+        model = FakeModel()
+        prepared = helper.prepare_icl_context(
+            model,
+            FakeTensor("reference_audio", (240,)),
+            "Reference transcript",
+            language="auto",
+        )
+        ref_encode_calls = model.speech_tokenizer.encode_calls
+
+        en_inputs, _, en_ref_codes = helper.prepare_icl_generation_inputs_from_context(
+            model,
+            "Target line",
+            prepared,
+            language="en",
+        )
+        ja_inputs, _, ja_ref_codes = helper.prepare_icl_generation_inputs_from_context(
+            model,
+            "Target line",
+            prepared,
+            language="ja",
+        )
+
+        assert model.speech_tokenizer.encode_calls == ref_encode_calls
+        assert en_ref_codes == prepared.ref_codes
+        assert ja_ref_codes == prepared.ref_codes
+        assert en_inputs != ja_inputs
+
+    def test_model_static_icl_cache_supports_unhashable_models():
+        helper, _, FakeModel = _load_qwen_speed_patch_module()
+        model = FakeModel()
+
+        first_static = helper._get_model_static_icl(model)
+        second_static = helper._get_model_static_icl(model)
+
+        assert first_static is second_static
+        assert len(helper._MODEL_STATIC_CACHE) == 1
+
+    def test_model_static_icl_cache_isolated_per_model_instance():
+        helper, _, FakeModel = _load_qwen_speed_patch_module()
+        first_model = FakeModel()
+        second_model = FakeModel()
+
+        first_static = helper._get_model_static_icl(first_model)
+        second_static = helper._get_model_static_icl(second_model)
+
+        assert first_static is not second_static
+        assert len(helper._MODEL_STATIC_CACHE) == 2
+
+    def test_clone_packaged_regression_classifier_detects_packaged_app_regression():
+        from harness_lib.clone_packaged_regression_runner import classify_packaged_clone_regression
+
+        medians = {
+            "legacy": {
+                "clone_fast_ready_ms": 900.0,
+                "first_preview_prepared_ms": 1100.0,
+                "first_chunk_ms": 1700.0,
+            },
+            "current": {
+                "clone_fast_ready_ms": 1350.0,
+                "first_preview_prepared_ms": 1600.0,
+                "first_chunk_ms": 2500.0,
+            },
+        }
+
+        classification = classify_packaged_clone_regression(medians)
+
+        assert classification["source"] == "packaged_app_regression"
+        assert "clone_fast_ready_ms" in classification["slower_metrics"]
+        assert "first_preview_prepared_ms" in classification["slower_metrics"]
+        assert "first_chunk_ms" in classification["slower_metrics"]
+
+    def test_clone_packaged_regression_classifier_handles_similar_medians():
+        from harness_lib.clone_packaged_regression_runner import classify_packaged_clone_regression
+
+        medians = {
+            "legacy": {
+                "clone_fast_ready_ms": 1000.0,
+                "first_preview_prepared_ms": 1400.0,
+                "first_chunk_ms": 2000.0,
+            },
+            "current": {
+                "clone_fast_ready_ms": 1080.0,
+                "first_preview_prepared_ms": 1490.0,
+                "first_chunk_ms": 2100.0,
+            },
+        }
+
+        classification = classify_packaged_clone_regression(medians)
+
+        assert classification["source"] == "local_state_or_machine_environment"
+        assert classification["slower_metrics"] == []
+
+    def _bundled_qwen3_tts_source_path(name: str) -> Path:
+        site_packages_roots = sorted(
+            (PROJECT_DIR / "Sources/Resources/python/lib").glob("python*/site-packages")
+        )
+        assert site_packages_roots, "Bundled Python site-packages directory not found"
+        source_path = site_packages_roots[-1] / "mlx_audio/tts/models/qwen3_tts" / name
+        assert source_path.exists(), f"Expected bundled mlx-audio source at {source_path}"
+        return source_path
+
+    def test_overlay_source_marks_upstream_rebase_seams():
+        overlay_text = (
+            PROJECT_DIR / "third_party_patches/mlx-audio/qwenvoice_speed_patch.py"
+        ).read_text(encoding="utf-8")
+
+        assert "_prepare_icl_generation_inputs" in overlay_text
+        assert "_generate_icl" in overlay_text
+        assert "`batch_generate`" in overlay_text
+        assert "Streaming clone requests must fall back to repeated single-item paths" in overlay_text
+
+    def test_bundled_qwen3_tts_upstream_seams_are_present():
+        qwen3_tts_text = _bundled_qwen3_tts_source_path("qwen3_tts.py").read_text(
+            encoding="utf-8"
+        )
+        speech_tokenizer_text = _bundled_qwen3_tts_source_path(
+            "speech_tokenizer.py"
+        ).read_text(encoding="utf-8")
+
+        assert "def _prepare_icl_generation_inputs(" in qwen3_tts_text
+        assert "def _generate_icl(" in qwen3_tts_text
+        assert "def batch_generate(" in qwen3_tts_text
+        assert "def _sample_token(" in qwen3_tts_text
+        assert "def _sample_token_batch(" in qwen3_tts_text
+        assert "talker.make_cache()" in qwen3_tts_text
+        assert "talker.code_predictor.make_cache()" in qwen3_tts_text
+        assert "decoder.reset_streaming_state" in qwen3_tts_text
+        assert "decoder.streaming_step" in qwen3_tts_text
+        assert "def batch_decode(" in speech_tokenizer_text
+
+    def test_ensure_mlx_prefers_standalone_overlay():
+        standalone_can_prepare = lambda model: "standalone"
+        standalone_prepare = lambda *args, **kwargs: "standalone-prepare"
+        standalone_generate = lambda *args, **kwargs: "standalone-generate"
+        standalone_batch = lambda *args, **kwargs: "standalone-batch"
+        standalone_enable = lambda *args, **kwargs: True
+
+        upstream_can_prepare = lambda model: "upstream"
+
+        numpy_module = types.ModuleType("numpy")
+        mx_core_module = types.ModuleType("mlx.core")
+        mlx_module = types.ModuleType("mlx")
+        mlx_module.__path__ = []
+        mlx_module.core = mx_core_module
+
+        mlx_audio_module = types.ModuleType("mlx_audio")
+        mlx_audio_module.__path__ = []
+        mlx_audio_tts_module = types.ModuleType("mlx_audio.tts")
+        mlx_audio_tts_module.__path__ = []
+
+        tts_utils_module = types.ModuleType("mlx_audio.tts.utils")
+        tts_utils_module.load_model = lambda path: ("load_model", path)
+
+        tts_generate_module = types.ModuleType("mlx_audio.tts.generate")
+        tts_generate_module.generate_audio = lambda **kwargs: ("generate_audio", kwargs)
+
+        audio_io_module = types.ModuleType("mlx_audio.audio_io")
+        audio_io_module.write = lambda *args, **kwargs: None
+
+        standalone_module = types.ModuleType("mlx_audio_qwen_speed_patch")
+        standalone_module.can_prepare_icl = standalone_can_prepare
+        standalone_module.prepare_icl_context = standalone_prepare
+        standalone_module.generate_with_prepared_icl = standalone_generate
+        standalone_module.batch_generate_with_prepared_icl = standalone_batch
+        standalone_module.try_enable_speech_tokenizer_encoder = standalone_enable
+
+        upstream_module = types.ModuleType("mlx_audio.qwenvoice_speed_patch")
+        upstream_module.can_prepare_icl = upstream_can_prepare
+        upstream_module.prepare_icl_context = lambda *args, **kwargs: "upstream-prepare"
+        upstream_module.generate_with_prepared_icl = lambda *args, **kwargs: "upstream-generate"
+        upstream_module.batch_generate_with_prepared_icl = lambda *args, **kwargs: "upstream-batch"
+        upstream_module.try_enable_speech_tokenizer_encoder = lambda *args, **kwargs: False
+
+        replacements = {
+            "numpy": numpy_module,
+            "mlx": mlx_module,
+            "mlx.core": mx_core_module,
+            "mlx_audio": mlx_audio_module,
+            "mlx_audio.tts": mlx_audio_tts_module,
+            "mlx_audio.tts.utils": tts_utils_module,
+            "mlx_audio.tts.generate": tts_generate_module,
+            "mlx_audio.audio_io": audio_io_module,
+            "mlx_audio_qwen_speed_patch": standalone_module,
+            "mlx_audio.qwenvoice_speed_patch": upstream_module,
+        }
+
+        original_state = (
+            server._load_model_fn,
+            server._generate_audio_fn,
+            server._audio_write_fn,
+            server._mx,
+            server._np,
+            server._can_prepare_icl_fn,
+            server._prepare_icl_context_fn,
+            server._generate_prepared_icl_fn,
+            server._batch_generate_prepared_icl_fn,
+            server._enable_speech_tokenizer_encoder_fn,
+            server._mlx_audio_version,
+        )
+
+        try:
+            server._load_model_fn = None
+            server._generate_audio_fn = None
+            server._audio_write_fn = None
+            server._mx = None
+            server._np = None
+            server._can_prepare_icl_fn = None
+            server._prepare_icl_context_fn = None
+            server._generate_prepared_icl_fn = None
+            server._batch_generate_prepared_icl_fn = None
+            server._enable_speech_tokenizer_encoder_fn = None
+            server._mlx_audio_version = None
+
+            with _temporary_sys_modules(replacements):
+                server._ensure_mlx()
+
+            assert server._can_prepare_icl_fn is standalone_can_prepare
+            assert server._prepare_icl_context_fn is standalone_prepare
+            assert server._generate_prepared_icl_fn is standalone_generate
+            assert server._batch_generate_prepared_icl_fn is standalone_batch
+            assert server._enable_speech_tokenizer_encoder_fn is standalone_enable
+        finally:
+            (
+                server._load_model_fn,
+                server._generate_audio_fn,
+                server._audio_write_fn,
+                server._mx,
+                server._np,
+                server._can_prepare_icl_fn,
+                server._prepare_icl_context_fn,
+                server._generate_prepared_icl_fn,
+                server._batch_generate_prepared_icl_fn,
+                server._enable_speech_tokenizer_encoder_fn,
+                server._mlx_audio_version,
+            ) = original_state
+
+    def test_handle_generate_clone_batch_uses_shared_prepared_reference_once():
+        prepare_calls = 0
+        normalize_calls = 0
+        transcript_calls = 0
+        batch_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_batch_generate_prepared_icl_fn = server._batch_generate_prepared_icl_fn
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        class FakeBatchResult:
+            def __init__(self, sequence_idx: int) -> None:
+                self.sequence_idx = sequence_idx
+
+        class FakeBatchModel:
+            def __init__(self) -> None:
+                self.config = types.SimpleNamespace(tts_model_type="base")
+                self._sample_token_batch = object()
+                self.speech_tokenizer = types.SimpleNamespace(batch_decode=lambda *args, **kwargs: None)
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = FakeBatchModel()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = (
+                lambda output_path, text, mode=None, voice=None, ref_audio=None: output_path
+            )
+
+            def fake_normalize(path: str) -> str:
+                nonlocal normalize_calls
+                normalize_calls += 1
+                return "/tmp/normalized-reference.wav"
+
+            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+                nonlocal transcript_calls
+                transcript_calls += 1
+                return requested_transcript or "Resolved transcript"
+
+            def fake_prepare(clean_ref_audio_path: str, ref_text: str):
+                nonlocal prepare_calls
+                prepare_calls += 1
+                return "prepared-context", False
+
+            def fake_batch_generate(model, texts, prepared_context, **kwargs):
+                batch_calls.append(dict(kwargs))
+                assert prepared_context == "prepared-context"
+                for index, _ in enumerate(texts):
+                    yield FakeBatchResult(index)
+
+            server._normalize_clone_reference = fake_normalize
+            server._resolve_clone_transcript = fake_resolve
+            server._get_or_prepare_clone_context = fake_prepare
+            server._generate_prepared_icl_fn = lambda *args, **kwargs: iter(())
+            server._batch_generate_prepared_icl_fn = fake_batch_generate
+            server._build_clone_fallback_generator = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Clone batch fast path should not use single-item fallback")
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path, "duration_seconds": 0.2},
+                    {"token_count": 1},
+                    {"duration_seconds": 0.2},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate_clone_batch(
+                {
+                    "texts": ["One", "Two", "Three"],
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "output_paths": ["/tmp/one.wav", "/tmp/two.wav", "/tmp/three.wav"],
+                }
+            )
+
+            assert prepare_calls == 1
+            assert normalize_calls == 1
+            assert transcript_calls == 1
+            assert len(batch_calls) == 1
+            assert "language" not in batch_calls[0]
+            assert len(result) == 3
+            assert all(item["metrics"]["prepared_clone_used"] is True for item in result)
+            assert all(item["metrics"]["batch_generation_used"] is True for item in result)
+            assert all(item["metrics"]["clone_cache_hit"] is False for item in result)
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._batch_generate_prepared_icl_fn = original_batch_generate_prepared_icl_fn
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_batch_forwards_explicit_language_to_batch_fast_path():
+        batch_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_batch_generate_prepared_icl_fn = server._batch_generate_prepared_icl_fn
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        class FakeBatchResult:
+            def __init__(self, sequence_idx: int) -> None:
+                self.sequence_idx = sequence_idx
+
+        class FakeBatchModel:
+            def __init__(self) -> None:
+                self.config = types.SimpleNamespace(tts_model_type="base")
+                self._sample_token_batch = object()
+                self.speech_tokenizer = types.SimpleNamespace(batch_decode=lambda *args, **kwargs: None)
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = FakeBatchModel()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = (
+                lambda output_path, text, mode=None, voice=None, ref_audio=None: output_path
+            )
+            server._normalize_clone_reference = lambda path: "/tmp/normalized-reference.wav"
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+            )
+            server._get_or_prepare_clone_context = (
+                lambda clean_ref_audio_path, ref_text: ("prepared-context", False)
+            )
+            server._generate_prepared_icl_fn = lambda *args, **kwargs: iter(())
+
+            def fake_batch_generate(model, texts, prepared_context, **kwargs):
+                batch_calls.append(dict(kwargs))
+                for index, _ in enumerate(texts):
+                    yield FakeBatchResult(index)
+
+            server._batch_generate_prepared_icl_fn = fake_batch_generate
+            server._build_clone_fallback_generator = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Explicit-language batch fast path should not use fallback")
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path, "duration_seconds": 0.2},
+                    {"token_count": 1},
+                    {"duration_seconds": 0.2},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate_clone_batch(
+                {
+                    "texts": ["One", "Two"],
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "output_paths": ["/tmp/one.wav", "/tmp/two.wav"],
+                    "language": "fr",
+                }
+            )
+
+            assert len(batch_calls) == 1
+            assert batch_calls[0]["language"] == "fr"
+            assert len(result) == 2
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._batch_generate_prepared_icl_fn = original_batch_generate_prepared_icl_fn
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_batch_stream_request_falls_back_to_prepared_single_item_generation():
+        prepare_calls = 0
+        normalize_calls = 0
+        transcript_calls = 0
+        batch_calls = 0
+        prepared_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_batch_generate_prepared_icl_fn = server._batch_generate_prepared_icl_fn
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        class FakePreparedBatchModel:
+            def __init__(self) -> None:
+                self.config = types.SimpleNamespace(tts_model_type="base")
+                self._sample_token_batch = object()
+                self.speech_tokenizer = types.SimpleNamespace(
+                    batch_decode=lambda *args, **kwargs: None
+                )
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = FakePreparedBatchModel()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = (
+                lambda output_path, text, mode=None, voice=None, ref_audio=None: output_path
+            )
+
+            def fake_normalize(path: str) -> str:
+                nonlocal normalize_calls
+                normalize_calls += 1
+                return "/tmp/normalized-reference.wav"
+
+            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+                nonlocal transcript_calls
+                transcript_calls += 1
+                return requested_transcript or "Resolved transcript"
+
+            def fake_prepare(clean_ref_audio_path: str, ref_text: str):
+                nonlocal prepare_calls
+                prepare_calls += 1
+                return "prepared-context", False
+
+            def fake_generate_prepared(model, text, prepared_context, **kwargs):
+                prepared_calls.append(
+                    {
+                        "text": text,
+                        "prepared_context": prepared_context,
+                        **kwargs,
+                    }
+                )
+                yield types.SimpleNamespace(audio="audio", sample_rate=24_000)
+
+            def fake_batch_generate(*args, **kwargs):
+                nonlocal batch_calls
+                batch_calls += 1
+                raise AssertionError("Streaming clone batch requests should not use the batch fast path")
+
+            server._normalize_clone_reference = fake_normalize
+            server._resolve_clone_transcript = fake_resolve
+            server._get_or_prepare_clone_context = fake_prepare
+            server._generate_prepared_icl_fn = fake_generate_prepared
+            server._batch_generate_prepared_icl_fn = fake_batch_generate
+            server._build_clone_fallback_generator = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Prepared single-item fallback should stay available")
+            )
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path, "duration_seconds": 0.2},
+                    {"token_count": 1},
+                    {"duration_seconds": 0.2},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate_clone_batch(
+                {
+                    "texts": ["One", "Two"],
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "output_paths": ["/tmp/one.wav", "/tmp/two.wav"],
+                    "stream": True,
+                }
+            )
+
+            assert prepare_calls == 1
+            assert normalize_calls == 1
+            assert transcript_calls == 1
+            assert batch_calls == 0
+            assert len(prepared_calls) == 2
+            assert all(call["prepared_context"] == "prepared-context" for call in prepared_calls)
+            assert all(call["stream"] is False for call in prepared_calls)
+            assert all("language" not in call for call in prepared_calls)
+            assert all(item["metrics"]["prepared_clone_used"] is True for item in result)
+            assert all(item["metrics"]["batch_generation_used"] is False for item in result)
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._batch_generate_prepared_icl_fn = original_batch_generate_prepared_icl_fn
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_batch_falls_back_when_batch_capabilities_are_missing():
+        prepare_calls = 0
+        normalize_calls = 0
+        transcript_calls = 0
+        prepared_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_generate_prepared_icl_fn = server._generate_prepared_icl_fn
+        original_batch_generate_prepared_icl_fn = server._batch_generate_prepared_icl_fn
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        class MissingBatchCapabilityModel:
+            def __init__(self) -> None:
+                self.config = types.SimpleNamespace(tts_model_type="base")
+                self.speech_tokenizer = types.SimpleNamespace(
+                    batch_decode=lambda *args, **kwargs: None
+                )
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = MissingBatchCapabilityModel()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = (
+                lambda output_path, text, mode=None, voice=None, ref_audio=None: output_path
+            )
+
+            def fake_normalize(path: str) -> str:
+                nonlocal normalize_calls
+                normalize_calls += 1
+                return "/tmp/normalized-reference.wav"
+
+            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+                nonlocal transcript_calls
+                transcript_calls += 1
+                return requested_transcript or "Resolved transcript"
+
+            def fake_prepare(clean_ref_audio_path: str, ref_text: str):
+                nonlocal prepare_calls
+                prepare_calls += 1
+                return "prepared-context", False
+
+            def fake_generate_prepared(model, text, prepared_context, **kwargs):
+                prepared_calls.append(
+                    {
+                        "text": text,
+                        "prepared_context": prepared_context,
+                        **kwargs,
+                    }
+                )
+                yield types.SimpleNamespace(audio="audio", sample_rate=24_000)
+
+            server._normalize_clone_reference = fake_normalize
+            server._resolve_clone_transcript = fake_resolve
+            server._get_or_prepare_clone_context = fake_prepare
+            server._generate_prepared_icl_fn = fake_generate_prepared
+            server._batch_generate_prepared_icl_fn = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Missing batch capabilities should bypass the fast path")
+            )
+            server._build_clone_fallback_generator = lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("Prepared single-item fallback should handle missing batch capabilities")
+            )
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path, "duration_seconds": 0.2},
+                    {"token_count": 1},
+                    {"duration_seconds": 0.2},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate_clone_batch(
+                {
+                    "texts": ["One", "Two"],
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "output_paths": ["/tmp/one.wav", "/tmp/two.wav"],
+                }
+            )
+
+            assert prepare_calls == 1
+            assert normalize_calls == 1
+            assert transcript_calls == 1
+            assert len(prepared_calls) == 2
+            assert all(call["prepared_context"] == "prepared-context" for call in prepared_calls)
+            assert all(call["stream"] is False for call in prepared_calls)
+            assert all("language" not in call for call in prepared_calls)
+            assert all(item["metrics"]["prepared_clone_used"] is True for item in result)
+            assert all(item["metrics"]["batch_generation_used"] is False for item in result)
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._generate_prepared_icl_fn = original_generate_prepared_icl_fn
+            server._batch_generate_prepared_icl_fn = original_batch_generate_prepared_icl_fn
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_batch_falls_back_without_prepared_or_batch_helpers():
+        normalize_calls = 0
+        transcript_calls = 0
+        prepare_calls = 0
+        fallback_calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_batch_generate_prepared_icl_fn = server._batch_generate_prepared_icl_fn
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = object()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = (
+                lambda output_path, text, mode=None, voice=None, ref_audio=None: output_path
+            )
+
+            def fake_normalize(path: str) -> str:
+                nonlocal normalize_calls
+                normalize_calls += 1
+                return "/tmp/normalized-reference.wav"
+
+            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+                nonlocal transcript_calls
+                transcript_calls += 1
+                return requested_transcript or "Resolved transcript"
+
+            def fake_prepare(clean_ref_audio_path: str, ref_text: str):
+                nonlocal prepare_calls
+                prepare_calls += 1
+                return None, None
+
+            def fake_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, **kwargs):
+                fallback_calls.append(
+                    {
+                        "text": text,
+                        "clean_ref_audio": clean_ref_audio,
+                        "resolved_ref_text": resolved_ref_text,
+                        **kwargs,
+                    }
+                )
+                yield types.SimpleNamespace(audio="audio", sample_rate=24_000)
+
+            server._normalize_clone_reference = fake_normalize
+            server._resolve_clone_transcript = fake_resolve
+            server._get_or_prepare_clone_context = fake_prepare
+            server._batch_generate_prepared_icl_fn = None
+            server._build_clone_fallback_generator = fake_fallback_generator
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path, "duration_seconds": 0.2},
+                    {"token_count": 1},
+                    {"duration_seconds": 0.2},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate_clone_batch(
+                {
+                    "texts": ["One", "Two"],
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "output_paths": ["/tmp/one.wav", "/tmp/two.wav"],
+                }
+            )
+
+            assert prepare_calls == 1
+            assert normalize_calls == 1
+            assert transcript_calls == 1
+            assert len(fallback_calls) == 2
+            assert all("language" not in call for call in fallback_calls)
+            assert all(item["metrics"]["prepared_clone_used"] is False for item in result)
+            assert all(item["metrics"]["batch_generation_used"] is False for item in result)
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._batch_generate_prepared_icl_fn = original_batch_generate_prepared_icl_fn
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_single_falls_back_without_prepared_helper():
+        fallback_calls: list[dict[str, Any]] = []
+        final_path = "/tmp/qwenvoice-harness-clone-fallback.wav"
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_derive_generation_paths = server._derive_generation_paths
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = object()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = lambda output_path, text, mode=None, voice=None, ref_audio=None: final_path
+            server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+            )
+            server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
+
+            def fake_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, **kwargs):
+                fallback_calls.append(
+                    {
+                        "text": text,
+                        "clean_ref_audio": clean_ref_audio,
+                        "resolved_ref_text": resolved_ref_text,
+                        **kwargs,
+                    }
+                )
+                yield types.SimpleNamespace(audio="audio", sample_rate=24_000)
+
+            server._build_clone_fallback_generator = fake_fallback_generator
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path},
+                    {},
+                    {"duration_seconds": 0.1, "frames": 1},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate(
+                {
+                    "text": "Clone fallback line.",
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                }
+            )
+
+            assert len(fallback_calls) == 1
+            assert "language" not in fallback_calls[0]
+            assert result["metrics"]["prepared_clone_used"] is False
+            assert result["metrics"]["clone_cache_hit"] is None
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._derive_generation_paths = original_derive_generation_paths
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
+
+    def test_handle_generate_clone_single_fallback_forwards_explicit_language():
+        fallback_calls: list[dict[str, Any]] = []
+        final_path = "/tmp/qwenvoice-harness-clone-fallback-language.wav"
+
+        original_current_model = server._current_model
+        original_current_model_id = server._current_model_id
+        original_ensure_mlx = server._ensure_mlx
+        original_resolve_final_output_path = server._resolve_final_output_path
+        original_derive_generation_paths = server._derive_generation_paths
+        original_normalize_clone_reference = server._normalize_clone_reference
+        original_resolve_clone_transcript = server._resolve_clone_transcript
+        original_get_or_prepare_clone_context = server._get_or_prepare_clone_context
+        original_build_clone_fallback_generator = server._build_clone_fallback_generator
+        original_collect_generation_result_with_timings = server._collect_generation_result_with_timings
+        original_finalize_generated_audio = server._finalize_generated_audio
+        original_send_progress = server.send_progress
+
+        try:
+            clone_model_id = server.MODELS_BY_MODE["clone"]["id"]
+            server._current_model = object()
+            server._current_model_id = clone_model_id
+            server._ensure_mlx = lambda: None
+            server._resolve_final_output_path = lambda output_path, text, mode=None, voice=None, ref_audio=None: final_path
+            server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
+            server._normalize_clone_reference = lambda path: path
+            server._resolve_clone_transcript = (
+                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+            )
+            server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
+
+            def fake_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, **kwargs):
+                fallback_calls.append(
+                    {
+                        "text": text,
+                        "clean_ref_audio": clean_ref_audio,
+                        "resolved_ref_text": resolved_ref_text,
+                        **kwargs,
+                    }
+                )
+                yield types.SimpleNamespace(audio="audio", sample_rate=24_000)
+
+            server._build_clone_fallback_generator = fake_fallback_generator
+            server._collect_generation_result_with_timings = (
+                lambda generator: (next(iter(generator)), server._timing_breakdown_template())
+            )
+            server._finalize_generated_audio = (
+                lambda result, final_path, streaming_used: (
+                    {"audio_path": final_path},
+                    {},
+                    {"duration_seconds": 0.1, "frames": 1},
+                    0,
+                    server._timing_breakdown_template(),
+                )
+            )
+            server.send_progress = lambda *args, **kwargs: None
+
+            result = server.handle_generate(
+                {
+                    "text": "Clone fallback explicit language line.",
+                    "ref_audio": "/tmp/reference.wav",
+                    "ref_text": "Reference transcript",
+                    "language": "fr",
+                }
+            )
+
+            assert len(fallback_calls) == 1
+            assert fallback_calls[0]["language"] == "fr"
+            assert result["metrics"]["prepared_clone_used"] is False
+        finally:
+            server._current_model = original_current_model
+            server._current_model_id = original_current_model_id
+            server._ensure_mlx = original_ensure_mlx
+            server._resolve_final_output_path = original_resolve_final_output_path
+            server._derive_generation_paths = original_derive_generation_paths
+            server._normalize_clone_reference = original_normalize_clone_reference
+            server._resolve_clone_transcript = original_resolve_clone_transcript
+            server._get_or_prepare_clone_context = original_get_or_prepare_clone_context
+            server._build_clone_fallback_generator = original_build_clone_fallback_generator
+            server._collect_generation_result_with_timings = original_collect_generation_result_with_timings
+            server._finalize_generated_audio = original_finalize_generated_audio
+            server.send_progress = original_send_progress
 
     def test_collect_generation_result_with_timings_captures_first_yield():
         class FakeResult:
@@ -677,7 +2314,10 @@ def _run_server_tests() -> dict[str, Any]:
             os.unlink(tmp_path)
 
     def test_stream_selected_audio_emits_chunks_before_final_write():
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            return {"skip_reason": "numpy not installed in the active python3 environment"}
 
         events: list[str] = []
         original_np = server._np
@@ -751,9 +2391,33 @@ def _run_server_tests() -> dict[str, Any]:
         ("meaningful_delivery_instruction", test_meaningful_delivery_various),
         ("design_prewarm_identity_ignores_instruction", test_design_prewarm_identity_ignores_instruction),
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
+        ("build_generation_kwargs_omits_auto_language", test_build_generation_kwargs_omits_auto_language),
+        ("build_generation_kwargs_includes_explicit_language", test_build_generation_kwargs_includes_explicit_language),
         ("clone_prewarm_prepared_generator_omits_instruct_kwarg", test_clone_prewarm_prepared_generator_omits_instruct_kwarg),
+        ("clone_prewarm_prepared_generator_forwards_explicit_language", test_clone_prewarm_prepared_generator_forwards_explicit_language),
         ("handle_generate_prepared_clone_omits_instruct_kwarg", test_handle_generate_prepared_clone_omits_instruct_kwarg),
+        ("handle_generate_prepared_clone_forwards_explicit_language", test_handle_generate_prepared_clone_forwards_explicit_language),
         ("handle_prime_clone_reference_prepared_clone_streams_first_chunk", test_handle_prime_clone_reference_prepared_clone_streams_first_chunk),
+        ("handle_prime_clone_reference_forwards_explicit_language", test_handle_prime_clone_reference_forwards_explicit_language),
+        ("handle_prepare_clone_reference_cold_and_warm_cache_paths", test_handle_prepare_clone_reference_cold_and_warm_cache_paths),
+        ("clone_prewarm_reuses_prepared_reference_after_prepare_clone_reference", test_clone_prewarm_reuses_prepared_reference_after_prepare_clone_reference),
+        ("build_mlx_audio_helper_sync_script_no_version_rewrite", test_build_mlx_audio_helper_sync_script_no_version_rewrite),
+        ("prepare_icl_context_is_language_independent", test_prepare_icl_context_is_language_independent),
+        ("request_time_language_changes_do_not_rebuild_reference_state", test_request_time_language_changes_do_not_rebuild_reference_state),
+        ("model_static_icl_cache_supports_unhashable_models", test_model_static_icl_cache_supports_unhashable_models),
+        ("model_static_icl_cache_isolated_per_model_instance", test_model_static_icl_cache_isolated_per_model_instance),
+        ("clone_packaged_regression_classifier_detects_packaged_app_regression", test_clone_packaged_regression_classifier_detects_packaged_app_regression),
+        ("clone_packaged_regression_classifier_handles_similar_medians", test_clone_packaged_regression_classifier_handles_similar_medians),
+        ("overlay_source_marks_upstream_rebase_seams", test_overlay_source_marks_upstream_rebase_seams),
+        ("bundled_qwen3_tts_upstream_seams_are_present", test_bundled_qwen3_tts_upstream_seams_are_present),
+        ("ensure_mlx_prefers_standalone_overlay", test_ensure_mlx_prefers_standalone_overlay),
+        ("handle_generate_clone_batch_uses_shared_prepared_reference_once", test_handle_generate_clone_batch_uses_shared_prepared_reference_once),
+        ("handle_generate_clone_batch_forwards_explicit_language_to_batch_fast_path", test_handle_generate_clone_batch_forwards_explicit_language_to_batch_fast_path),
+        ("handle_generate_clone_batch_stream_request_falls_back_to_prepared_single_item_generation", test_handle_generate_clone_batch_stream_request_falls_back_to_prepared_single_item_generation),
+        ("handle_generate_clone_batch_falls_back_when_batch_capabilities_are_missing", test_handle_generate_clone_batch_falls_back_when_batch_capabilities_are_missing),
+        ("handle_generate_clone_batch_falls_back_without_prepared_or_batch_helpers", test_handle_generate_clone_batch_falls_back_without_prepared_or_batch_helpers),
+        ("handle_generate_clone_single_falls_back_without_prepared_helper", test_handle_generate_clone_single_falls_back_without_prepared_helper),
+        ("handle_generate_clone_single_fallback_forwards_explicit_language", test_handle_generate_clone_single_fallback_forwards_explicit_language),
         ("collect_generation_result_with_timings", test_collect_generation_result_with_timings_captures_first_yield),
         ("stream_selected_audio_emits_chunks_before_final_write", test_stream_selected_audio_emits_chunks_before_final_write),
         ("infer_legacy_mode", test_infer_legacy_mode),

@@ -24,6 +24,10 @@ def run_benchmarks(
     python_path: str | None = None,
     output_dir: str | None = None,
     tier: str = "all",
+    legacy_app_bundle: str | None = None,
+    legacy_dmg: str | None = None,
+    current_app_bundle: str | None = None,
+    current_dmg: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run selected benchmark categories."""
     suites: list[dict[str, Any]] = []
@@ -43,6 +47,31 @@ def run_benchmarks(
     if category in ("all", "release"):
         eprint("==> Running release bundle validation...")
         suites.append(_run_release_bench())
+
+    if category == "clone_regression":
+        eprint("==> Running serialized clone helper regression isolation...")
+        from .clone_regression_runner import run_clone_regression_bench
+
+        suites.append(
+            run_clone_regression_bench(
+                python_path=python_path,
+                output_dir=output_dir,
+            )
+        )
+
+    if category == "clone_packaged_regression":
+        eprint("==> Running packaged clone regression isolation...")
+        from .clone_packaged_regression_runner import run_clone_packaged_regression_bench
+
+        suites.append(
+            run_clone_packaged_regression_bench(
+                output_dir=output_dir,
+                legacy_app_bundle=legacy_app_bundle,
+                legacy_dmg=legacy_dmg,
+                current_app_bundle=current_app_bundle,
+                current_dmg=current_dmg,
+            )
+        )
 
     if category == "perf":
         eprint("==> Running exhaustive performance profiler...")

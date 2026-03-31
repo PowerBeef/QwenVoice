@@ -102,6 +102,7 @@ final class PythonBridge: ObservableObject {
     private var readBuffer = ""
     private var activeProgressRequestID: Int?
     private var activeProgressMethod: String?
+    private var activeCloneBatchProgressHandler: ((Double?, String) -> Void)?
     private var activeGenerationSession: GenerationSession?
     private var activeStreamingRequests: [Int: ActiveStreamingRequest] = [:]
     private var sidebarStatusResetTask: Task<Void, Never>?
@@ -234,6 +235,7 @@ final class PythonBridge: ObservableObject {
         lastError = nil
         readBuffer = ""
         activeGenerationSession = nil
+        activeCloneBatchProgressHandler = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
         inFlightModelLoad = nil
@@ -261,7 +263,15 @@ final class PythonBridge: ObservableObject {
     /// Default timeout for RPC calls (seconds).
     private static let defaultTimeout: UInt64 = 300  // 5 minutes for generation
     private static let pingTimeout: UInt64 = 10
-    private static let longRunningMethods: Set<String> = ["generate", "load_model", "unload_model", "convert_audio", "prime_clone_reference"]
+    private static let longRunningMethods: Set<String> = [
+        "generate",
+        "generate_clone_batch",
+        "load_model",
+        "unload_model",
+        "convert_audio",
+        "prepare_clone_reference",
+        "prime_clone_reference",
+    ]
     private static let appStreamingInterval = 0.32
 
     static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
@@ -393,7 +403,9 @@ final class PythonBridge: ObservableObject {
         }
 
         let isLongRunning = Self.longRunningMethods.contains(method)
-        let tracksSidebarProgress = method == "load_model" || method == "generate"
+        let tracksSidebarProgress = method == "load_model"
+            || method == "generate"
+            || method == "generate_clone_batch"
         if isLongRunning {
             isProcessing = true
             progressPercent = 0
@@ -738,6 +750,16 @@ final class PythonBridge: ObservableObject {
         }
     }
 
+    func beginCloneModelLoadIfPossible(modelID: String) {
+        let trimmedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedModelID.isEmpty else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.ensureModelLoadedIfNeeded(id: trimmedModelID)
+        }
+    }
+
     func ensureCloneReferencePrimed(
         modelID: String,
         refAudio: String,
@@ -765,7 +787,7 @@ final class PythonBridge: ObservableObject {
                 return
             }
 
-            try await cancelCloneReferencePrimingIfNeeded()
+            await cancelCloneReferencePrimingIfNeeded()
         }
 
         if isStubBackendMode {
@@ -788,7 +810,7 @@ final class PythonBridge: ObservableObject {
                 params["ref_text"] = .string(trimmedRefText)
             }
             return try await callDict(
-                "prime_clone_reference",
+                "prepare_clone_reference",
                 params: params,
                 reportsErrors: false,
                 resetLastError: false
@@ -845,6 +867,7 @@ final class PythonBridge: ObservableObject {
         isProcessing = false
         readBuffer = ""
         activeGenerationSession = nil
+        activeCloneBatchProgressHandler = nil
         activeStreamingRequests.removeAll()
         loadedModelID = nil
         inFlightModelLoad = nil
@@ -985,6 +1008,42 @@ final class PythonBridge: ObservableObject {
         return GenerationResult(from: result)
     }
 
+    private func generateCloneBatch(
+        modelID: String,
+        texts: [String],
+        refAudio: String,
+        refText: String?,
+        outputPaths: [String]
+    ) async throws -> [GenerationResult] {
+        if isStubBackendMode {
+            var results: [GenerationResult] = []
+            for (text, outputPath) in zip(texts, outputPaths) {
+                let result = try await generateStub(
+                    mode: .clone,
+                    text: text,
+                    outputPath: outputPath,
+                    stream: false,
+                    streamingContext: nil
+                )
+                results.append(result)
+            }
+            return results
+        }
+
+        var params: [String: RPCValue] = [
+            "model_id": .string(modelID),
+            "texts": .array(texts.map { .string($0) }),
+            "ref_audio": .string(refAudio),
+            "output_paths": .array(outputPaths.map { .string($0) }),
+        ]
+        if let refText, !refText.isEmpty {
+            params["ref_text"] = .string(refText)
+        }
+
+        let items = try await callArray("generate_clone_batch", params: params)
+        return try generationResults(from: items)
+    }
+
     func generateCustomFlow(
         modelID: String,
         text: String,
@@ -1121,6 +1180,33 @@ final class PythonBridge: ObservableObject {
         }
     }
 
+    func generateCloneBatchFlow(
+        modelID: String,
+        texts: [String],
+        refAudio: String,
+        refText: String?,
+        outputPaths: [String],
+        progressHandler: ((Double?, String) -> Void)?
+    ) async throws -> [GenerationResult] {
+        activeCloneBatchProgressHandler = progressHandler
+        defer { activeCloneBatchProgressHandler = nil }
+
+        return try await performGenerationFlow(
+            mode: .clone,
+            modelID: modelID,
+            batchIndex: nil,
+            batchTotal: nil
+        ) {
+            try await self.generateCloneBatch(
+                modelID: modelID,
+                texts: texts,
+                refAudio: refAudio,
+                refText: refText,
+                outputPaths: outputPaths
+            )
+        }
+    }
+
     func generateCloneStreamingFlow(
         modelID: String,
         text: String,
@@ -1155,6 +1241,7 @@ final class PythonBridge: ObservableObject {
         sidebarStatusResetTask = nil
         activeGenerationSession = nil
         clearActiveProgressTracking()
+        activeCloneBatchProgressHandler = nil
         syncSidebarStatusFromSystemState()
     }
 
@@ -1228,14 +1315,14 @@ final class PythonBridge: ObservableObject {
 
     // MARK: - Sidebar Status
 
-    private func performGenerationFlow(
+    private func performGenerationFlow<Output>(
         mode: GenerationMode,
         modelID: String,
         batchIndex: Int?,
         batchTotal: Int?,
         activityPresentation: ActivityStatus.Presentation = .standaloneCard,
-        generate: () async throws -> GenerationResult
-    ) async throws -> GenerationResult {
+        generate: () async throws -> Output
+    ) async throws -> Output {
         beginGenerationSession(
             mode: mode,
             batchIndex: batchIndex,
@@ -1333,6 +1420,7 @@ final class PythonBridge: ObservableObject {
         sidebarStatusResetTask = nil
         activeGenerationSession = nil
         clearActiveProgressTracking()
+        activeCloneBatchProgressHandler = nil
         if lastError == nil {
             lastError = error.localizedDescription
         } else {
@@ -1379,7 +1467,7 @@ final class PythonBridge: ObservableObject {
         switch method {
         case "load_model":
             return .loadingModel
-        case "generate":
+        case "generate", "generate_clone_batch":
             let lowercasedMessage = message.lowercased()
             if lowercasedMessage.contains("saving") || lowercasedMessage.contains("done") {
                 return .saving
@@ -1403,7 +1491,7 @@ final class PythonBridge: ObservableObject {
         switch method {
         case "load_model":
             return normalized * 0.15
-        case "generate":
+        case "generate", "generate_clone_batch":
             return 0.15 + (normalized * 0.85)
         default:
             return normalized
@@ -1562,6 +1650,12 @@ final class PythonBridge: ObservableObject {
                 percent: progressPercent,
                 message: progressMessage
             )
+            if activeProgressMethod == "generate_clone_batch" {
+                activeCloneBatchProgressHandler?(
+                    Double(progressPercent) / 100.0,
+                    progressMessage
+                )
+            }
         case "generation_chunk":
             guard let params = response.params else { return }
             handleGenerationChunkNotification(params)
@@ -1726,7 +1820,7 @@ final class PythonBridge: ObservableObject {
             "success": .bool(true),
             "cached": .bool(cached),
             "model_id": .string(model.id),
-            "mlx_audio_version": .string("0.4.1.post1"),
+            "mlx_audio_version": .string("0.4.2"),
             "supports_streaming": .bool(true),
             "supports_prepared_clone": .bool(model.mode == .clone),
             "supports_clone_streaming": .bool(model.mode == .clone),
@@ -1818,7 +1912,7 @@ final class PythonBridge: ObservableObject {
                 "output_subfolder": .string(model.outputSubfolder),
                 "downloaded": .bool(installed),
                 "size_bytes": .int(size),
-                "mlx_audio_version": .string("0.4.1.post1"),
+                "mlx_audio_version": .string("0.4.2"),
                 "supports_streaming": .bool(true),
                 "supports_prepared_clone": .bool(model.mode == .clone),
                 "supports_clone_streaming": .bool(model.mode == .clone),
@@ -1916,6 +2010,18 @@ final class PythonBridge: ObservableObject {
     private func nextStubRequestID() -> Int {
         stubRequestSeed += 1
         return stubRequestSeed
+    }
+
+    private func generationResults(from items: [RPCValue]) throws -> [GenerationResult] {
+        try items.enumerated().map { index, item in
+            guard let object = item.objectValue else {
+                throw PythonBridgeError.rpcError(
+                    code: -32002,
+                    message: "Invalid clone batch response item at index \(index)."
+                )
+            }
+            return GenerationResult(from: object)
+        }
     }
 
     private static func directorySize(url: URL) -> Int {

@@ -7,6 +7,11 @@ extension Notification.Name {
     static let generationChunkReceived = Notification.Name("generationChunkReceived")
 }
 
+struct SavedVoiceCloneHandoffPlan: Equatable {
+    let handoff: PendingVoiceCloningHandoff
+    let cloneModelID: String?
+}
+
 enum SidebarItem: String, CaseIterable, Identifiable {
     case customVoice = "Custom Voice"
     case voiceDesign = "Voice Design"
@@ -136,6 +141,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 @MainActor
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @EnvironmentObject private var pythonBridge: PythonBridge
 
     private let launchSidebarOverride: SidebarItem?
 
@@ -199,6 +205,37 @@ struct ContentView: View {
         _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
     }
 
+    static func savedVoiceCloneHandoffPlan(
+        for voice: Voice,
+        cloneModelID: String?,
+        transcriptLoader: (Voice) throws -> String = { voice in
+            try SavedVoiceCloneHydration.loadTranscript(for: voice)
+        }
+    ) -> SavedVoiceCloneHandoffPlan {
+        let handoff: PendingVoiceCloningHandoff
+        do {
+            let transcript = try transcriptLoader(voice)
+            handoff = PendingVoiceCloningHandoff(
+                savedVoiceID: voice.id,
+                wavPath: voice.wavPath,
+                transcript: transcript,
+                transcriptLoadError: nil
+            )
+        } catch {
+            handoff = PendingVoiceCloningHandoff(
+                savedVoiceID: voice.id,
+                wavPath: voice.wavPath,
+                transcript: "",
+                transcriptLoadError: "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
+            )
+        }
+
+        return SavedVoiceCloneHandoffPlan(
+            handoff: handoff,
+            cloneModelID: cloneModelID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(
@@ -230,6 +267,9 @@ struct ContentView: View {
             if let item = SidebarItem(testScreenID: screen) {
                 selectSidebarItemIfEnabled(item)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .testUseSavedVoiceInCloning)) { notification in
+            handleTestUseSavedVoiceInCloning(notification)
         }
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
@@ -282,28 +322,11 @@ struct ContentView: View {
                 enrollRequestID: voicesEnrollRequestID,
                 canUseInVoiceCloning: canUseSavedVoicesInVoiceCloning,
                 onUseInVoiceCloning: { voice in
-                    let handoff: PendingVoiceCloningHandoff
-                    do {
-                        let transcript = try SavedVoiceCloneHydration.loadTranscript(for: voice)
-                        handoff = PendingVoiceCloningHandoff(
-                            savedVoiceID: voice.id,
-                            wavPath: voice.wavPath,
-                            transcript: transcript,
-                            transcriptLoadError: nil
-                        )
-                    } catch {
-                        handoff = PendingVoiceCloningHandoff(
-                            savedVoiceID: voice.id,
-                            wavPath: voice.wavPath,
-                            transcript: "",
-                            transcriptLoadError: "Couldn't load the saved transcript for \"\(voice.name)\". You can still clone from the audio file alone."
-                        )
-                    }
-                    pendingVoiceCloningHandoff = handoff
-                    selectSidebarItemIfEnabled(
-                        .voiceCloning,
-                        bypassDisabledCheck: true
+                    let plan = Self.savedVoiceCloneHandoffPlan(
+                        for: voice,
+                        cloneModelID: TTSModel.model(for: .clone)?.id
                     )
+                    startSavedVoiceCloningHandoff(plan)
                 }
             )
         case .models:
@@ -321,6 +344,41 @@ struct ContentView: View {
                 disabledSidebarItems: currentDisabledSidebarIdentifiers
             )
         }
+    }
+
+    private func startSavedVoiceCloningHandoff(_ plan: SavedVoiceCloneHandoffPlan) {
+        pendingVoiceCloningHandoff = plan.handoff
+        if let cloneModelID = plan.cloneModelID,
+           !cloneModelID.isEmpty {
+            pythonBridge.beginCloneModelLoadIfPossible(modelID: cloneModelID)
+        }
+        selectSidebarItemIfEnabled(
+            .voiceCloning,
+            bypassDisabledCheck: true
+        )
+    }
+
+    private func handleTestUseSavedVoiceInCloning(_ notification: Notification) {
+        guard UITestAutomationSupport.isEnabled else { return }
+        guard let savedVoiceID = notification.userInfo?["savedVoiceID"] as? String,
+              let wavPath = notification.userInfo?["wavPath"] as? String else {
+            return
+        }
+
+        let transcript = notification.userInfo?["transcript"] as? String ?? ""
+        let transcriptLoadError = notification.userInfo?["transcriptLoadError"] as? String
+        let handoff = PendingVoiceCloningHandoff(
+            savedVoiceID: savedVoiceID,
+            wavPath: wavPath,
+            transcript: transcript,
+            transcriptLoadError: transcriptLoadError
+        )
+        startSavedVoiceCloningHandoff(
+            SavedVoiceCloneHandoffPlan(
+                handoff: handoff,
+                cloneModelID: TTSModel.model(for: .clone)?.id
+            )
+        )
     }
 
     private func handleInitialLoad() async {

@@ -11,7 +11,6 @@ from typing import Any
 
 from .paths import (
     APP_REQUIREMENTS_PATH,
-    BUILD_MLX_AUDIO_WHEEL_SCRIPT,
     CLI_REQUIREMENTS_PATH,
     PYTHON_BRIDGE_PATH,
 )
@@ -55,14 +54,6 @@ def app_core_requirements() -> dict[str, str]:
 
 def cli_core_requirements() -> dict[str, str]:
     return parse_core_requirements(CLI_REQUIREMENTS_PATH)
-
-
-def read_mlx_audio_target_version(path: Path = BUILD_MLX_AUDIO_WHEEL_SCRIPT) -> str:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r'^TARGET_VERSION="([^"]+)"', text, flags=re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"Could not find TARGET_VERSION in {path}")
-    return match.group(1)
 
 
 def read_pythonbridge_mlx_audio_versions(path: Path = PYTHON_BRIDGE_PATH) -> set[str]:

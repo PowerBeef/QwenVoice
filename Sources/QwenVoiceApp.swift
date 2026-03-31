@@ -513,6 +513,7 @@ struct QwenVoiceApp: App {
                 if UITestAutomationSupport.isEnabled {
                     UITestWindowCoordinator.shared.syncVisibleMainWindowState()
                     TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode)
+                    TestStateProvider.shared.setBackendLastError(pythonBridge.lastError)
                 }
                 envManager.ensureEnvironment()
                 syncUITestEnvironmentReadiness(for: envManager.state)
@@ -531,6 +532,10 @@ struct QwenVoiceApp: App {
             .onReceive(pythonBridge.$sidebarStatus) { status in
                 guard UITestAutomationSupport.isEnabled else { return }
                 TestStateProvider.shared.setSidebarStatus(status)
+            }
+            .onReceive(pythonBridge.$lastError) { lastError in
+                guard UITestAutomationSupport.isEnabled else { return }
+                TestStateProvider.shared.setBackendLastError(lastError)
             }
         }
         .defaultSize(width: 720, height: 560)

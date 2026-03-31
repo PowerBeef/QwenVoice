@@ -24,8 +24,8 @@ pip install -r requirements.txt
 brew install ffmpeg
 ```
 
-The CLI requirements now resolve `mlx-audio` from the repo’s vendored wheel in
-`../Sources/Resources/vendor/`, so install from the `cli/` directory as shown.
+The CLI requirements now resolve stock `mlx-audio` from PyPI, so install from
+the `cli/` directory as shown.
 
 ## Models
 

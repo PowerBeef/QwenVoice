@@ -32,19 +32,18 @@ The release pipeline also:
 - verifies the final bundle
 - creates the DMG
 
-## Vendored Wheel Strategy
+## Qwen3-TTS Overlay Strategy
 
-The app currently vendors a repacked `mlx-audio==0.4.1.post1` wheel that includes a QwenVoice runtime helper module used by the backend.
+The app now installs stock `mlx-audio==0.4.2` and keeps the QwenVoice-specific Qwen3-TTS clone-speedup logic as a standalone backend helper overlay.
 
 Relevant locations:
 
-- `Sources/Resources/vendor/`
 - `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 - `third_party_patches/mlx-audio/`
 
-`scripts/build_mlx_audio_wheel.sh` is the source of truth for rebuilding that wheel and also syncs the backend fallback helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py` before repacking.
+`scripts/build_mlx_audio_wheel.sh` is now just the source of truth for syncing the backend helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`.
 
-If the GUI app’s `mlx-audio` version changes, the vendored wheel and vendoring notes must be updated together.
+If the GUI app’s `mlx-audio` version changes, the standalone overlay and vendoring notes must be reviewed together.
 
 ## Current Verification Surface
 

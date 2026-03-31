@@ -167,6 +167,7 @@ _np = None
 _can_prepare_icl_fn = None
 _prepare_icl_context_fn = None
 _generate_prepared_icl_fn = None
+_batch_generate_prepared_icl_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
 _mlx_audio_version = None
@@ -178,6 +179,7 @@ def _ensure_mlx():
     """Lazy-import mlx_audio so we only load it when needed."""
     global _load_model_fn, _generate_audio_fn, _audio_write_fn
     global _mx, _np, _can_prepare_icl_fn, _prepare_icl_context_fn, _generate_prepared_icl_fn
+    global _batch_generate_prepared_icl_fn
     global _enable_speech_tokenizer_encoder_fn, _mlx_audio_version
     if _load_model_fn is None:
         import numpy as np
@@ -188,6 +190,7 @@ def _ensure_mlx():
         try:
             from mlx_audio_qwen_speed_patch import (
                 can_prepare_icl,
+                batch_generate_with_prepared_icl,
                 generate_with_prepared_icl,
                 prepare_icl_context,
                 try_enable_speech_tokenizer_encoder,
@@ -196,12 +199,14 @@ def _ensure_mlx():
             try:
                 from mlx_audio.qwenvoice_speed_patch import (
                     can_prepare_icl,
+                    batch_generate_with_prepared_icl,
                     generate_with_prepared_icl,
                     prepare_icl_context,
                     try_enable_speech_tokenizer_encoder,
                 )
             except ImportError:
                 can_prepare_icl = None
+                batch_generate_with_prepared_icl = None
                 generate_with_prepared_icl = None
                 prepare_icl_context = None
                 try_enable_speech_tokenizer_encoder = None
@@ -214,6 +219,7 @@ def _ensure_mlx():
         _can_prepare_icl_fn = can_prepare_icl
         _prepare_icl_context_fn = prepare_icl_context
         _generate_prepared_icl_fn = generate_with_prepared_icl
+        _batch_generate_prepared_icl_fn = batch_generate_with_prepared_icl
         _enable_speech_tokenizer_encoder_fn = try_enable_speech_tokenizer_encoder
         try:
             _mlx_audio_version = importlib_metadata.version("mlx-audio")
@@ -433,6 +439,28 @@ def _collect_generation_result_with_timings(generator):
     }
 
 
+def _collect_batch_generation_results_with_timings(generator, expected_count):
+    collect_start = time.perf_counter()
+    first_yield_ms = None
+    results = []
+
+    for result in generator:
+        if first_yield_ms is None:
+            first_yield_ms = int((time.perf_counter() - collect_start) * 1000)
+        results.append(result)
+
+    if len(results) != expected_count:
+        raise RuntimeError(
+            f"Batch generation produced {len(results)} results for {expected_count} requested items"
+        )
+
+    results.sort(key=lambda item: int(getattr(item, "sequence_idx", 0) or 0))
+    return results, {
+        "first_generator_yield": first_yield_ms or 0,
+        "collect_generation": int((time.perf_counter() - collect_start) * 1000),
+    }
+
+
 def _prewarm_profile(mode):
     profile = PREWARM_PROFILES.get(mode)
     if profile is None:
@@ -457,11 +485,27 @@ def _apply_timing_breakdown(target, breakdown):
         target[key] = int(value)
 
 
+def _normalize_request_language(language):
+    if language is None:
+        return None
+    normalized = str(language).strip()
+    if not normalized or normalized.lower() == "auto":
+        return None
+    return normalized
+
+
+def _with_optional_kwarg(kwargs, key, value):
+    if value is not None:
+        kwargs[key] = value
+    return kwargs
+
+
 def _build_generation_kwargs(
     text,
     temperature,
     max_tokens=None,
     *,
+    language="auto",
     voice=None,
     instruct=None,
     ref_audio=None,
@@ -469,6 +513,7 @@ def _build_generation_kwargs(
     stream=False,
     streaming_interval=None,
 ):
+    language = _normalize_request_language(language)
     kwargs = {
         "text": text,
         "temperature": temperature,
@@ -476,6 +521,8 @@ def _build_generation_kwargs(
     }
     if max_tokens is not None:
         kwargs["max_tokens"] = int(max_tokens)
+    if language is not None:
+        kwargs["lang_code"] = language
     if voice:
         kwargs["voice"] = voice
     if instruct:
@@ -491,12 +538,13 @@ def _build_generation_kwargs(
     return kwargs
 
 
-def _build_standard_generator(model, text, temperature, max_tokens=None, *, voice=None, instruct=None, stream=False, streaming_interval=None):
+def _build_standard_generator(model, text, temperature, max_tokens=None, *, language="auto", voice=None, instruct=None, stream=False, streaming_interval=None):
     return model.generate(
         **_build_generation_kwargs(
             text=text,
             temperature=temperature,
             max_tokens=max_tokens,
+            language=language,
             voice=voice,
             instruct=instruct,
             stream=stream,
@@ -505,12 +553,13 @@ def _build_standard_generator(model, text, temperature, max_tokens=None, *, voic
     )
 
 
-def _build_clone_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, max_tokens=None, *, stream=False, streaming_interval=None):
+def _build_clone_fallback_generator(model, text, temperature, clean_ref_audio, resolved_ref_text, max_tokens=None, *, language="auto", stream=False, streaming_interval=None):
     return model.generate(
         **_build_generation_kwargs(
             text=text,
             temperature=temperature,
             max_tokens=max_tokens,
+            language=language,
             ref_audio=clean_ref_audio,
             ref_text=resolved_ref_text,
             stream=stream,
@@ -979,6 +1028,33 @@ def _get_or_prepare_clone_context(clean_ref_audio_path, ref_text):
     return prepared, False
 
 
+def _can_use_shared_reference_clone_batch_fast_path(
+    model,
+    *,
+    can_use_prepared,
+    requested_stream,
+):
+    """Return True when `generate_clone_batch` can use the shared-reference fast path.
+
+    This internal clone-batch RPC intentionally keeps the optimized shared-reference
+    path non-streaming-only. When streaming is requested, or when the small set of
+    upstream mlx-audio 0.4.2 batch seams we rely on are unavailable, the server
+    falls back to repeated single-item generation while still reusing the prepared
+    reference context when possible.
+    """
+    if requested_stream or not can_use_prepared or _batch_generate_prepared_icl_fn is None:
+        return False
+
+    if getattr(getattr(model, "config", None), "tts_model_type", None) != "base":
+        return False
+
+    if not hasattr(model, "_sample_token_batch"):
+        return False
+
+    speech_tokenizer = getattr(model, "speech_tokenizer", None)
+    return hasattr(speech_tokenizer, "batch_decode")
+
+
 def _clone_prime_identity_key(clean_ref_audio_path, ref_text):
     """Build a stable key for primed clone-reference streaming state."""
     return (
@@ -1021,7 +1097,7 @@ def _prime_streaming_generator(generator):
     }
 
 
-def _run_clone_reference_prime(clean_ref_audio_path, resolved_ref_text, streaming_interval):
+def _run_clone_reference_prime(clean_ref_audio_path, resolved_ref_text, streaming_interval, language=None):
     """Prime the actual clone streaming path so the next visible generate is fast."""
     if _current_model is None:
         raise RuntimeError("No model loaded. Call load_model first.")
@@ -1046,12 +1122,18 @@ def _run_clone_reference_prime(clean_ref_audio_path, resolved_ref_text, streamin
             _current_model,
             warmup_text,
             prepared_context,
-            temperature=0.6,
-            top_p=1.0,
-            repetition_penalty=1.5,
-            max_tokens=warmup_max_tokens,
-            stream=True,
-            streaming_interval=streaming_interval,
+            **_with_optional_kwarg(
+                {
+                    "temperature": 0.6,
+                    "top_p": 1.0,
+                    "repetition_penalty": 1.5,
+                    "max_tokens": warmup_max_tokens,
+                    "stream": True,
+                    "streaming_interval": streaming_interval,
+                },
+                "language",
+                language,
+            ),
         )
     else:
         generator = _build_clone_fallback_generator(
@@ -1063,6 +1145,7 @@ def _run_clone_reference_prime(clean_ref_audio_path, resolved_ref_text, streamin
             max_tokens=warmup_max_tokens,
             stream=True,
             streaming_interval=streaming_interval,
+            **({"language": language} if language is not None else {}),
         )
 
     streaming_timings = _prime_streaming_generator(generator)
@@ -1371,7 +1454,7 @@ def handle_load_model(params, request_id=None):
     return result
 
 
-def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text=None):
+def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text=None, language=None):
     """Run a short in-memory generation to pay one-time model warm-up costs while idle."""
     if _current_model is None:
         raise RuntimeError("No model loaded. Call load_model first.")
@@ -1393,6 +1476,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
                 text=warmup_text,
                 temperature=0.6,
                 max_tokens=warmup_max_tokens,
+                language=language,
                 voice=voice or DEFAULT_SPEAKER,
                 instruct=instruct or "Normal tone",
             )
@@ -1425,10 +1509,16 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
                 _current_model,
                 warmup_text,
                 prepared_context,
-                temperature=0.6,
-                top_p=1.0,
-                repetition_penalty=1.5,
-                max_tokens=warmup_max_tokens,
+                **_with_optional_kwarg(
+                    {
+                        "temperature": 0.6,
+                        "top_p": 1.0,
+                        "repetition_penalty": 1.5,
+                        "max_tokens": warmup_max_tokens,
+                    },
+                    "language",
+                    language,
+                ),
             )
             warm_results = list(generator)
         else:
@@ -1439,6 +1529,8 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
                 "temperature": 0.6,
                 "max_tokens": warmup_max_tokens,
             }
+            if language is not None:
+                warm_kwargs["lang_code"] = language
             if resolved_ref_text:
                 warm_kwargs["ref_text"] = resolved_ref_text
             warm_results = list(_current_model.generate(**warm_kwargs))
@@ -1469,6 +1561,7 @@ def handle_prewarm_model(params, request_id=None):
     instruct = params.get("instruct")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
+    language = _normalize_request_language(params.get("language"))
 
     overall_start = time.perf_counter()
     model_path, resolved_model_id = _resolve_model_request(model_id=model_id, model_path=model_path)
@@ -1515,6 +1608,7 @@ def handle_prewarm_model(params, request_id=None):
             instruct=instruct,
             ref_audio=ref_audio,
             ref_text=ref_text,
+            language=language,
         )
         prepared_clone_used = prewarm_timings["prepared_clone_used"]
         clone_cache_hit = prewarm_timings["clone_cache_hit"]
@@ -1545,6 +1639,68 @@ def handle_prewarm_model(params, request_id=None):
     return result
 
 
+def handle_prepare_clone_reference(params, request_id=None):
+    """Prepare clone reference state without blocking on a warm-up generation."""
+    benchmark = bool(params.get("benchmark", False))
+    model_id = params.get("model_id")
+    model_path = params.get("model_path")
+    ref_audio = params.get("ref_audio")
+    ref_text = params.get("ref_text")
+
+    if not ref_audio:
+        raise ValueError("prepare_clone_reference requires ref_audio")
+
+    overall_start = time.perf_counter()
+    model_path, resolved_model_id = _resolve_model_request(model_id=model_id, model_path=model_path)
+    loaded_model_changed = _current_model_path != model_path
+
+    load_result, resolved_model_id, model_path, _ = _load_model_request(
+        model_id=model_id,
+        model_path=model_path,
+        benchmark=benchmark,
+        request_id=request_id,
+    )
+    load_timings = load_result.get("benchmark", {}).get("timings_ms", {})
+
+    normalize_start = time.perf_counter()
+    clean_ref_audio = _normalize_clone_reference(ref_audio)
+    normalize_reference_ms = int((time.perf_counter() - normalize_start) * 1000)
+    if not clean_ref_audio:
+        raise RuntimeError("Could not process reference audio file")
+
+    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+    send_progress(20, "Preparing voice context...", request_id=request_id)
+    prepare_start = time.perf_counter()
+    prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
+        clean_ref_audio,
+        resolved_ref_text,
+    )
+    prepare_clone_context_ms = int((time.perf_counter() - prepare_start) * 1000)
+    prepared_clone_used = prepared_context is not None and _generate_prepared_icl_fn is not None
+
+    result = {
+        "success": True,
+        "model_id": resolved_model_id,
+        "model_path": model_path,
+        "loaded_model_changed": loaded_model_changed,
+        "prepared_clone_used": prepared_clone_used,
+        "clone_cache_hit": clone_cache_hit,
+        "reference_prepared": prepared_context is not None,
+    }
+    if benchmark:
+        result["benchmark"] = {
+            "prepared_clone_used": prepared_clone_used,
+            "clone_cache_hit": clone_cache_hit,
+            "timings_ms": {
+                "load_model_total": load_timings.get("load_model_total", 0),
+                "normalize_reference": normalize_reference_ms,
+                "prepare_clone_context": prepare_clone_context_ms,
+                "total_backend": int((time.perf_counter() - overall_start) * 1000),
+            },
+        }
+    return result
+
+
 def handle_prime_clone_reference(params, request_id=None):
     """Prime the real clone streaming path for a specific reference voice."""
     benchmark = bool(params.get("benchmark", False))
@@ -1552,6 +1708,7 @@ def handle_prime_clone_reference(params, request_id=None):
     model_path = params.get("model_path")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
+    language = _normalize_request_language(params.get("language"))
     streaming_interval = float(params.get("streaming_interval", DEFAULT_STREAMING_INTERVAL))
 
     if not ref_audio:
@@ -1596,6 +1753,7 @@ def handle_prime_clone_reference(params, request_id=None):
             clean_ref_audio,
             resolved_ref_text,
             streaming_interval=streaming_interval,
+            language=language,
         )
         prime_timings["normalize_reference"] = normalize_reference_ms
         prepared_clone_used = prime_timings["prepared_clone_used"]
@@ -1657,6 +1815,7 @@ def handle_generate(params, request_id=None):
     instruct = params.get("instruct")
     ref_audio = params.get("ref_audio")
     ref_text = params.get("ref_text")
+    language = _normalize_request_language(params.get("language"))
     temperature = params.get("temperature", 0.6)
     max_tokens = params.get("max_tokens")
     temperature_value = float(temperature)
@@ -1779,10 +1938,16 @@ def handle_generate(params, request_id=None):
                     _current_model,
                     text,
                     prepared_context,
-                    temperature=temperature_value,
-                    max_tokens=effective_max_tokens,
-                    stream=bool(stream and request_id is not None),
-                    streaming_interval=streaming_interval,
+                    **_with_optional_kwarg(
+                        {
+                            "temperature": temperature_value,
+                            "max_tokens": effective_max_tokens,
+                            "stream": bool(stream and request_id is not None),
+                            "streaming_interval": streaming_interval,
+                        },
+                        "language",
+                        language,
+                    ),
                 )
                 if stream and request_id is not None:
                     send_progress(55, "Streaming audio...", request_id=request_id)
@@ -1820,6 +1985,7 @@ def handle_generate(params, request_id=None):
                     max_tokens=max_tokens,
                     stream=bool(stream and request_id is not None),
                     streaming_interval=streaming_interval,
+                    **({"language": language} if language is not None else {}),
                 )
                 if stream and request_id is not None:
                     send_progress(55, "Streaming audio...", request_id=request_id)
@@ -1850,6 +2016,7 @@ def handle_generate(params, request_id=None):
                 text=text,
                 temperature=temperature_value,
                 max_tokens=max_tokens,
+                language=language,
                 voice=voice,
                 instruct=instruct,
                 stream=True,
@@ -1873,6 +2040,7 @@ def handle_generate(params, request_id=None):
                 text=text,
                 temperature=temperature_value,
                 max_tokens=max_tokens,
+                language=language,
                 voice=voice,
                 instruct=instruct,
             )
@@ -1926,6 +2094,181 @@ def handle_generate(params, request_id=None):
             }
         return result
 
+    finally:
+        if _should_clear_cache_after_request(request_succeeded):
+            _clear_mlx_cache()
+
+
+def handle_generate_clone_batch(params, request_id=None):
+    """Generate multiple clone clips that share one reference voice."""
+    if _current_model is None:
+        raise RuntimeError("No model loaded. Call load_model first.")
+
+    _ensure_mlx()
+
+    model_id = params.get("model_id")
+    if model_id and _current_model_id != model_id:
+        _load_model_request(model_id=model_id, benchmark=False, request_id=None)
+
+    current_model_contract = _current_model_contract()
+    if current_model_contract and current_model_contract["mode"] != "clone":
+        raise ValueError(
+            f"generate_clone_batch requires a clone model, but '{current_model_contract['id']}' is {current_model_contract['mode']}"
+        )
+
+    raw_texts = params.get("texts") or []
+    if not isinstance(raw_texts, list) or not raw_texts:
+        raise ValueError("Missing required param: texts")
+
+    texts = [str(item).strip() for item in raw_texts]
+    if any(not text for text in texts):
+        raise ValueError("Clone batch generation requires every text item to be non-empty")
+
+    raw_output_paths = params.get("output_paths") or []
+    if not isinstance(raw_output_paths, list) or len(raw_output_paths) != len(texts):
+        raise ValueError("output_paths must be a list matching texts")
+
+    ref_audio = params.get("ref_audio")
+    ref_text = params.get("ref_text")
+    if not ref_audio:
+        raise ValueError("generate_clone_batch requires ref_audio")
+
+    language = _normalize_request_language(params.get("language"))
+    temperature_value = float(params.get("temperature", 0.6))
+    max_tokens = params.get("max_tokens")
+    effective_max_tokens = int(max_tokens) if max_tokens is not None else 4096
+    requested_stream = bool(params.get("stream", False))
+
+    final_paths = [
+        _resolve_final_output_path(path, text, mode="clone", ref_audio=ref_audio)
+        for text, path in zip(texts, raw_output_paths)
+    ]
+
+    def cleanup_partial_outputs():
+        for path in final_paths:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+    def generate_once():
+        _maybe_send_progress(10, "Normalizing reference...", request_id=request_id)
+        clean_ref_audio = _normalize_clone_reference(ref_audio)
+        if not clean_ref_audio:
+            raise RuntimeError("Could not process reference audio file")
+
+        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+        _maybe_send_progress(30, "Preparing voice context...", request_id=request_id)
+        prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
+            clean_ref_audio,
+            resolved_ref_text,
+        )
+        can_use_prepared = (
+            prepared_context is not None and _generate_prepared_icl_fn is not None
+        )
+        can_use_batch_fast_path = len(texts) > 1 and _can_use_shared_reference_clone_batch_fast_path(
+            _current_model,
+            can_use_prepared=can_use_prepared,
+            requested_stream=requested_stream,
+        )
+
+        if can_use_batch_fast_path:
+            _maybe_send_progress(60, "Generating audio batch...", request_id=request_id)
+            collected_results, _ = _collect_batch_generation_results_with_timings(
+                _batch_generate_prepared_icl_fn(
+                    _current_model,
+                    texts,
+                    prepared_context,
+                    **_with_optional_kwarg(
+                        {
+                            "temperature": temperature_value,
+                            "max_tokens": effective_max_tokens,
+                            "stream": False,
+                        },
+                        "language",
+                        language,
+                    ),
+                ),
+                len(texts),
+            )
+        else:
+            collected_results = []
+            total = len(texts)
+            for index, text in enumerate(texts):
+                percent = 45 + int((index / max(total, 1)) * 30)
+                _maybe_send_progress(
+                    percent,
+                    f"Generating item {index + 1}/{total}...",
+                    request_id=request_id,
+                )
+                if can_use_prepared:
+                    generator = _generate_prepared_icl_fn(
+                        _current_model,
+                        text,
+                        prepared_context,
+                        **_with_optional_kwarg(
+                            {
+                                "temperature": temperature_value,
+                                "max_tokens": effective_max_tokens,
+                                "stream": False,
+                            },
+                            "language",
+                            language,
+                        ),
+                    )
+                else:
+                    generator = _build_clone_fallback_generator(
+                        _current_model,
+                        text=text,
+                        temperature=temperature_value,
+                        clean_ref_audio=clean_ref_audio,
+                        resolved_ref_text=resolved_ref_text,
+                        max_tokens=effective_max_tokens,
+                        stream=False,
+                        **({"language": language} if language is not None else {}),
+                    )
+                item_result, _ = _collect_generation_result_with_timings(generator)
+                collected_results.append(item_result)
+
+        responses = []
+        total = len(collected_results)
+        for index, (result, final_path) in enumerate(zip(collected_results, final_paths)):
+            percent = 80 + int((index / max(total, 1)) * 15)
+            _maybe_send_progress(
+                percent,
+                f"Saving item {index + 1}/{total}...",
+                request_id=request_id,
+            )
+            response_item, metrics, _, _, _ = _finalize_generated_audio(
+                result,
+                final_path=final_path,
+                streaming_used=False,
+            )
+            metrics = dict(metrics or {})
+            metrics["prepared_clone_used"] = can_use_prepared
+            metrics["clone_cache_hit"] = clone_cache_hit
+            metrics["batch_generation_used"] = can_use_batch_fast_path
+            response_item["metrics"] = metrics
+            responses.append(response_item)
+
+        return responses
+
+    request_succeeded = False
+
+    try:
+        try:
+            results = generate_once()
+        except Exception as error:
+            if not _is_retryable_allocation_error(error):
+                raise
+            cleanup_partial_outputs()
+            _perform_memory_recovery()
+            results = generate_once()
+
+        request_succeeded = True
+        _maybe_send_progress(100, "Done", request_id=request_id)
+        return results
     finally:
         if _should_clear_cache_after_request(request_succeeded):
             _clear_mlx_cache()
@@ -2078,9 +2421,11 @@ METHODS = {
     "init": handle_init,
     "load_model": handle_load_model,
     "prewarm_model": handle_prewarm_model,
+    "prepare_clone_reference": handle_prepare_clone_reference,
     "prime_clone_reference": handle_prime_clone_reference,
     "unload_model": handle_unload_model,
     "generate": handle_generate,
+    "generate_clone_batch": handle_generate_clone_batch,
     "convert_audio": handle_convert_audio,
     "list_voices": handle_list_voices,
     "enroll_voice": handle_enroll_voice,
@@ -2112,7 +2457,7 @@ def process_request(line):
         return
 
     try:
-        if method in {"generate", "load_model", "prewarm_model", "prime_clone_reference"}:
+        if method in {"generate", "generate_clone_batch", "load_model", "prewarm_model", "prepare_clone_reference", "prime_clone_reference"}:
             result = METHODS[method](params, request_id=req_id)
         else:
             result = METHODS[method](params)

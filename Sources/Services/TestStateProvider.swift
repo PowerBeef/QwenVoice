@@ -48,6 +48,7 @@ final class TestStateProvider: ObservableObject {
     @Published var runtimeSource: String = RuntimeSource.none.rawValue
     @Published var activePythonPath: String = ""
     @Published var activeFFmpegPath: String = ""
+    @Published var backendLastError: String = ""
     @Published var clonePrimingPhase: String = ""
     @Published var cloneFastReady: Bool = false
     @Published var previewPreparedCount: Int = 0
@@ -130,6 +131,10 @@ final class TestStateProvider: ObservableObject {
         runtimeSource = source.rawValue
         activePythonPath = pythonPath ?? ""
         activeFFmpegPath = ffmpegPath ?? ""
+    }
+
+    func setBackendLastError(_ message: String?) {
+        backendLastError = message ?? ""
     }
 
     func recordPreviewPrepared() {
@@ -218,6 +223,7 @@ final class TestStateProvider: ObservableObject {
             "runtimeSource": runtimeSource,
             "activePythonPath": activePythonPath,
             "activeFFmpegPath": activeFFmpegPath,
+            "backendLastError": backendLastError,
             "clonePrimingPhase": clonePrimingPhase,
             "cloneFastReady": cloneFastReady,
             "previewPreparedCount": previewPreparedCount,

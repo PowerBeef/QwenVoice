@@ -125,11 +125,16 @@ struct BatchGenerationSheet: View {
 
         if coordinator.isProcessing {
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: Double(coordinator.currentIndex), total: Double(coordinator.totalItems))
+                ProgressView(value: coordinator.progressSnapshot.displayFraction, total: 1.0)
                     .tint(AppTheme.statusProgressTint)
-                Text(progressLabel)
+                Text(progressStatusMessage)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if !coordinator.progressSnapshot.itemStatusText.isEmpty {
+                    Text(coordinator.progressSnapshot.itemStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
 
@@ -216,12 +221,12 @@ struct BatchGenerationSheet: View {
 
     // MARK: - Helpers
 
-    private var progressLabel: String {
-        let total = max(coordinator.totalItems, 1)
-        let current = min(coordinator.currentIndex + 1, total)
-        return coordinator.isCancelling
-            ? "Cancelling after interrupting \(current)/\(total)..."
-            : "Generating \(current)/\(total)..."
+    private var progressStatusMessage: String {
+        if coordinator.isCancelling {
+            return "Cancelling..."
+        }
+        let message = coordinator.progressSnapshot.statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "Preparing batch..." : message
     }
 
     private func completionMessage(for outcome: BatchGenerationOutcome) -> String {
@@ -231,7 +236,7 @@ struct BatchGenerationSheet: View {
                 ? "1 clip generated successfully."
                 : "\(count) clips generated successfully."
         case .cancelled(let count):
-            let total = coordinator.totalItems
+            let total = coordinator.progressSnapshot.totalCount
             if count == 0 {
                 return "Generation was cancelled before any clips were created."
             }

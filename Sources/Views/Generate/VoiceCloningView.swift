@@ -15,6 +15,9 @@ struct VoiceCloningView: View {
     @State private var hydratedSavedVoiceID: String?
     @State private var isDragOver = false
     @State private var showingBatch = false
+    @State private var cloneDeferredPrewarmTask: Task<Void, Never>?
+
+    static let deferredClonePrewarmDelayNanoseconds: UInt64 = 1_500_000_000
 
     private var cloneModel: TTSModel? {
         TTSModel.model(for: .clone)
@@ -58,6 +61,10 @@ struct VoiceCloningView: View {
 
     private var clonePrimingTaskID: String {
         clonePrimingRequestKey ?? "clone-priming-idle"
+    }
+
+    private var modelPreparationTaskID: String {
+        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(isModelAvailable)-\(isGenerating)"
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
@@ -144,6 +151,17 @@ struct VoiceCloningView: View {
         _pendingSavedVoiceHandoff = pendingSavedVoiceHandoff
     }
 
+    static func shouldStartDeferredClonePrewarm(
+        primingPhase: CloneReferencePrimingPhase,
+        primingKey: String?,
+        expectedKey: String?,
+        isGenerating: Bool
+    ) -> Bool {
+        primingPhase == .primed
+            && primingKey == expectedKey
+            && !isGenerating
+    }
+
     var body: some View {
         PageScaffold(
             accessibilityIdentifier: "screen_voiceCloning",
@@ -177,6 +195,9 @@ struct VoiceCloningView: View {
             }
 
             syncSavedVoiceSelectionState()
+        }
+        .task(id: modelPreparationTaskID) {
+            await prepareSelectedModelIfNeeded()
         }
         .onChange(of: savedVoicesViewModel.voices) { _, _ in
             syncSavedVoiceSelectionState()
@@ -389,6 +410,8 @@ private extension VoiceCloningView {
             return
         }
 
+        cloneDeferredPrewarmTask?.cancel()
+        cloneDeferredPrewarmTask = nil
         isGenerating = true
         errorMessage = nil
 
@@ -469,6 +492,8 @@ private extension VoiceCloningView {
     }
 
     func syncCloneReferencePriming() async {
+        cloneDeferredPrewarmTask?.cancel()
+        cloneDeferredPrewarmTask = nil
         guard !isGenerating else { return }
         guard let model = cloneModel,
               let refPath = draft.referenceAudioPath,
@@ -484,17 +509,50 @@ private extension VoiceCloningView {
             return
         }
 
+        let trimmedRefText = draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
         do {
             try await pythonBridge.ensureCloneReferencePrimed(
                 modelID: model.id,
                 refAudio: refPath,
-                refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
+                refText: trimmedRefText
             )
+            guard Self.shouldStartDeferredClonePrewarm(
+                primingPhase: pythonBridge.cloneReferencePrimingPhase,
+                primingKey: pythonBridge.cloneReferencePrimingKey,
+                expectedKey: clonePrimingRequestKey,
+                isGenerating: isGenerating
+            ) else {
+                return
+            }
+            cloneDeferredPrewarmTask = Task { @MainActor [modelID = model.id, refPath, trimmedRefText, clonePrimingRequestKey] in
+                try? await Task.sleep(nanoseconds: Self.deferredClonePrewarmDelayNanoseconds)
+                guard !Task.isCancelled else { return }
+                guard Self.shouldStartDeferredClonePrewarm(
+                    primingPhase: pythonBridge.cloneReferencePrimingPhase,
+                    primingKey: pythonBridge.cloneReferencePrimingKey,
+                    expectedKey: clonePrimingRequestKey,
+                    isGenerating: isGenerating
+                ) else {
+                    return
+                }
+                await pythonBridge.prewarmModelIfNeeded(
+                    modelID: modelID,
+                    mode: .clone,
+                    refAudio: refPath,
+                    refText: trimmedRefText
+                )
+            }
         } catch {
             #if DEBUG
             print("[Performance][VoiceCloningView] clone priming failed key=\(clonePrimingRequestKey) error=\(error.localizedDescription)")
             #endif
         }
+    }
+
+    func prepareSelectedModelIfNeeded() async {
+        guard let model = cloneModel else { return }
+        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
+        await pythonBridge.ensureModelLoadedIfNeeded(id: model.id)
     }
 
     func selectSavedVoice(_ voice: Voice) {
@@ -522,6 +580,8 @@ private extension VoiceCloningView {
     }
 
     func clearReference() {
+        cloneDeferredPrewarmTask?.cancel()
+        cloneDeferredPrewarmTask = nil
         draft.clearReference()
         transcriptLoadError = nil
         hydratedSavedVoiceID = nil

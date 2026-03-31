@@ -21,7 +21,7 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts that are intentionally reused by the other docs
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, recent cleanup outcomes, and live caveats
-- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — bundled Python, vendored wheels, and runtime packaging notes
+- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — bundled Python, backend helper overlay, and runtime packaging notes
 
 ## Notes
 

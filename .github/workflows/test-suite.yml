@@ -160,14 +160,13 @@ jobs:
       - name: Ensure runtime parity inputs exist
         run: |
           test -f Sources/Resources/requirements.txt
-          test -f Sources/Resources/vendor/mlx_audio-0.4.1.post1-py3-none-any.whl
 
       - name: Create clean parity environment
         run: |
           python3 -m venv .runtime-parity
           . .runtime-parity/bin/activate
           python -m pip install --quiet --upgrade pip
-          python -m pip install --quiet --find-links Sources/Resources/vendor -r Sources/Resources/requirements.txt
+          python -m pip install --quiet -r Sources/Resources/requirements.txt
 
       - name: Validate runtime alignment
         run: |

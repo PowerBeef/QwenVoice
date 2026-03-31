@@ -56,6 +56,10 @@ def _run_bench(args: argparse.Namespace) -> None:
         python_path=args.python or None,
         output_dir=args.output_dir,
         tier=getattr(args, "tier", "all"),
+        legacy_app_bundle=getattr(args, "legacy_app_bundle", None),
+        legacy_dmg=getattr(args, "legacy_dmg", None),
+        current_app_bundle=getattr(args, "current_app_bundle", None),
+        current_dmg=getattr(args, "current_dmg", None),
     )
     duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("bench", suites, duration_ms)
@@ -123,12 +127,25 @@ def main() -> None:
     p_bench = sub.add_parser("bench", help="Run benchmarks")
     p_bench.add_argument(
         "--category",
-        choices=["latency", "load", "quality", "release", "perf", "all"],
+        choices=[
+            "latency",
+            "load",
+            "quality",
+            "release",
+            "clone_regression",
+            "clone_packaged_regression",
+            "perf",
+            "all",
+        ],
         default="all",
     )
     p_bench.add_argument("--runs", type=int, default=3, help="Runs per benchmark")
     p_bench.add_argument("--python", default="", help="Explicit Python interpreter path")
     p_bench.add_argument("--output-dir", default=None, help="Output directory for artifacts")
+    p_bench.add_argument("--legacy-app-bundle", default=None, help="Path to the legacy packaged QwenVoice.app bundle")
+    p_bench.add_argument("--legacy-dmg", default=None, help="Path to the legacy packaged QwenVoice DMG")
+    p_bench.add_argument("--current-app-bundle", default=None, help="Path to the current packaged QwenVoice.app bundle")
+    p_bench.add_argument("--current-dmg", default=None, help="Path to the current packaged QwenVoice DMG")
     p_bench.add_argument(
         "--tier",
         default="all",

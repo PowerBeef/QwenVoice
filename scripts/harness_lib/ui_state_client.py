@@ -1,5 +1,7 @@
 """HTTP client for the test-mode UI state server (localhost:19876)."""
 
+from __future__ import annotations
+
 import http.client
 import json
 import time
@@ -127,6 +129,30 @@ class UIStateClient:
             f"/seed-screen?{encoded_query}",
             timeout=10,
             operation="seed_screen",
+        )
+
+    def use_saved_voice_in_cloning(
+        self,
+        *,
+        saved_voice_id: str,
+        wav_path: str,
+        transcript: str | None = None,
+        transcript_load_error: str | None = None,
+    ) -> dict:
+        query = {
+            "savedVoiceID": saved_voice_id,
+            "wavPath": wav_path,
+        }
+        if transcript is not None:
+            query["transcript"] = transcript
+        if transcript_load_error is not None:
+            query["transcriptLoadError"] = transcript_load_error
+
+        encoded_query = urllib.parse.urlencode(query, quote_via=urllib.parse.quote)
+        return self._request_json(
+            f"/use-saved-voice-in-cloning?{encoded_query}",
+            timeout=10,
+            operation="use_saved_voice_in_cloning",
         )
 
     def wait_for_ready(

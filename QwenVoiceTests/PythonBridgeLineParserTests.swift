@@ -157,4 +157,111 @@ final class PythonBridgeLineParserTests: XCTestCase {
         XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .design))
         XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .clone))
     }
+
+    @MainActor
+    func testDeferredClonePrewarmRequiresMatchingPrimedReference() {
+        XCTAssertTrue(
+            VoiceCloningView.shouldStartDeferredClonePrewarm(
+                primingPhase: .primed,
+                primingKey: "clone-key",
+                expectedKey: "clone-key",
+                isGenerating: false
+            )
+        )
+        XCTAssertFalse(
+            VoiceCloningView.shouldStartDeferredClonePrewarm(
+                primingPhase: .preparing,
+                primingKey: "clone-key",
+                expectedKey: "clone-key",
+                isGenerating: false
+            )
+        )
+        XCTAssertFalse(
+            VoiceCloningView.shouldStartDeferredClonePrewarm(
+                primingPhase: .primed,
+                primingKey: "other-key",
+                expectedKey: "clone-key",
+                isGenerating: false
+            )
+        )
+        XCTAssertFalse(
+            VoiceCloningView.shouldStartDeferredClonePrewarm(
+                primingPhase: .primed,
+                primingKey: "clone-key",
+                expectedKey: "clone-key",
+                isGenerating: true
+            )
+        )
+    }
+
+    @MainActor
+    func testSavedVoiceCloneHandoffPlanIncludesEarlyModelLoadTarget() {
+        let voice = Voice(
+            name: "French Voice",
+            wavPath: "/tmp/french.wav",
+            hasTranscript: true
+        )
+
+        let plan = ContentView.savedVoiceCloneHandoffPlan(
+            for: voice,
+            cloneModelID: "pro_clone",
+            transcriptLoader: { _ in "Bonjour tout le monde." }
+        )
+
+        XCTAssertEqual(plan.handoff.savedVoiceID, voice.id)
+        XCTAssertEqual(plan.handoff.wavPath, voice.wavPath)
+        XCTAssertEqual(plan.handoff.transcript, "Bonjour tout le monde.")
+        XCTAssertNil(plan.handoff.transcriptLoadError)
+        XCTAssertEqual(plan.cloneModelID, "pro_clone")
+    }
+
+    @MainActor
+    func testSavedVoiceCloneHandoffPlanUsesModelOnlyForEarlyLoad() {
+        let voice = Voice(
+            name: "French Voice",
+            wavPath: "/tmp/french.wav",
+            hasTranscript: true
+        )
+
+        let firstPlan = ContentView.savedVoiceCloneHandoffPlan(
+            for: voice,
+            cloneModelID: "pro_clone",
+            transcriptLoader: { _ in "Bonjour tout le monde." }
+        )
+        let secondPlan = ContentView.savedVoiceCloneHandoffPlan(
+            for: voice,
+            cloneModelID: "pro_clone",
+            transcriptLoader: { _ in "Salut encore." }
+        )
+
+        XCTAssertEqual(firstPlan.cloneModelID, "pro_clone")
+        XCTAssertEqual(secondPlan.cloneModelID, "pro_clone")
+        XCTAssertNotEqual(firstPlan.handoff.transcript, secondPlan.handoff.transcript)
+    }
+
+    @MainActor
+    func testSavedVoiceCloneHandoffPlanFallsBackToTranscriptWarningWithoutDroppingModelLoad() {
+        let voice = Voice(
+            name: "French Voice",
+            wavPath: "/tmp/french.wav",
+            hasTranscript: true
+        )
+
+        let plan = ContentView.savedVoiceCloneHandoffPlan(
+            for: voice,
+            cloneModelID: "pro_clone",
+            transcriptLoader: { _ in
+                throw CocoaError(.fileReadNoSuchFile)
+            }
+        )
+
+        XCTAssertEqual(plan.handoff.savedVoiceID, voice.id)
+        XCTAssertEqual(plan.handoff.wavPath, voice.wavPath)
+        XCTAssertEqual(plan.handoff.transcript, "")
+        XCTAssertEqual(
+            plan.handoff.transcriptLoadError,
+            "Couldn't load the saved transcript for \"French Voice\". You can still clone from the audio file alone."
+        )
+        XCTAssertEqual(plan.cloneModelID, "pro_clone")
+    }
 }

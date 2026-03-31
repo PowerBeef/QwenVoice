@@ -30,6 +30,10 @@ SERVER_SCRIPT="$RESOURCES_DIR/server.py"
 if [ ! -f "$SERVER_SCRIPT" ] && [ -f "$RESOURCES_DIR/backend/server.py" ]; then
     SERVER_SCRIPT="$RESOURCES_DIR/backend/server.py"
 fi
+HELPER_DIR="$RESOURCES_DIR"
+if [ ! -f "$HELPER_DIR/mlx_audio_qwen_speed_patch.py" ] && [ -f "$RESOURCES_DIR/backend/mlx_audio_qwen_speed_patch.py" ]; then
+    HELPER_DIR="$RESOURCES_DIR/backend"
+fi
 MANIFEST_PATH="$PYTHON_ROOT/.qwenvoice-runtime-manifest.json"
 
 export PYTHONDONTWRITEBYTECODE=1
@@ -63,7 +67,7 @@ echo "[3/8] Core imports OK"
 echo ""
 
 echo "[4/8] Verifying bundled mlx-audio helper..."
-"$PYTHON_BIN" -c "import mlx_audio.qwenvoice_speed_patch as p; import sys; sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)"
+"$PYTHON_BIN" -c "import sys; sys.path.insert(0, '$HELPER_DIR'); import mlx_audio_qwen_speed_patch as p; import sys as _sys; _sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)"
 echo "[4/8] Helper is present"
 echo ""
 
@@ -110,8 +114,8 @@ if data["requirements_sha256"] != expected_hash:
     raise SystemExit(
         f"Manifest requirements hash mismatch: {data['requirements_sha256']} != {expected_hash}"
     )
-if not data["used_vendor_wheels"]:
-    raise SystemExit("Manifest reports vendor wheels were not used")
+if data["used_vendor_wheels"]:
+    raise SystemExit("Manifest still reports vendor wheels were used")
 if data["supported_minimum_macos"] != supported_macos:
     raise SystemExit(
         f"Manifest minimum macOS mismatch: {data['supported_minimum_macos']} != {supported_macos}"

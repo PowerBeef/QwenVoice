@@ -27,7 +27,6 @@ from .runtime_alignment import (
     inspect_python_environment,
     load_runtime_manifest,
     manifest_core_versions,
-    read_mlx_audio_target_version,
     read_pythonbridge_mlx_audio_versions,
     resolved_python_for_environment,
 )
@@ -108,13 +107,6 @@ def run_validate(python_path: str | None = None) -> list[dict[str, Any]]:
                 f"CLI shared core pins drifted from app requirements: {json.dumps(cli_mismatches, sort_keys=True)}"
             )
 
-        target_version = read_mlx_audio_target_version()
-        if target_version != expected["mlx-audio"]:
-            raise AssertionError(
-                "scripts/build_mlx_audio_wheel.sh TARGET_VERSION drifted from app requirements: "
-                f"{target_version} != {expected['mlx-audio']}"
-            )
-
         swift_versions = read_pythonbridge_mlx_audio_versions()
         if swift_versions != {expected["mlx-audio"]}:
             raise AssertionError(
@@ -125,7 +117,6 @@ def run_validate(python_path: str | None = None) -> list[dict[str, Any]]:
         return {
             "expected": expected,
             "cli_versions": cli_versions,
-            "mlx_audio_target_version": target_version,
             "pythonbridge_mlx_audio_versions": sorted(swift_versions),
         }
 

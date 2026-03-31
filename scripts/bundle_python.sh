@@ -9,7 +9,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_DIR/Sources/Resources"
 PYTHON_BUNDLE="$RESOURCES_DIR/python"
 REQUIREMENTS="$RESOURCES_DIR/requirements.txt"
-VENDOR_DIR="$RESOURCES_DIR/vendor"
+BACKEND_DIR="$RESOURCES_DIR/backend"
 MANIFEST_PATH="$PYTHON_BUNDLE/.qwenvoice-runtime-manifest.json"
 
 PYTHON_VERSION="3.13"
@@ -89,7 +89,7 @@ REQUIREMENTS_HASH=$(shasum -a 256 "$REQUIREMENTS" | awk '{print $1}')
 # Step 3: Install required packages
 echo "[3/5] Installing pip packages..."
 "$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --upgrade pip
-"$PYTHON_BUNDLE/bin/python3" -m pip install --quiet --find-links "$VENDOR_DIR" -r "$REQUIREMENTS"
+"$PYTHON_BUNDLE/bin/python3" -m pip install --quiet -r "$REQUIREMENTS"
 
 # Force macOS 15-compatible MLX wheels even when bundling on newer host OS versions.
 MLX_WHEEL_CACHE_DIR="$DOWNLOAD_DIR/mlx-wheels-macos15"
@@ -121,9 +121,9 @@ if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx; import mlx.core as mx; import 
     echo "Error: Core import/compute validation failed — bundled MLX runtime is not usable"
     exit 1
 fi
-if ! "$PYTHON_BUNDLE/bin/python3" -c "import mlx_audio.qwenvoice_speed_patch as p; import sys; sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)" 2>&1; then
+if ! "$PYTHON_BUNDLE/bin/python3" -c "import sys; sys.path.insert(0, '$BACKEND_DIR'); import mlx_audio_qwen_speed_patch as p; import sys as _sys; _sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)" 2>&1; then
     rm -f "$TARBALL"
-    echo "Error: mlx_audio.qwenvoice_speed_patch is missing or incomplete"
+    echo "Error: standalone mlx_audio_qwen_speed_patch helper is missing or incomplete"
     exit 1
 fi
 INSTALLED_MLX_AUDIO_VERSION=$("$PYTHON_BUNDLE/bin/python3" -c "from importlib.metadata import version; print(version('mlx-audio'))")
@@ -269,7 +269,7 @@ cat > "$MANIFEST_PATH" <<EOF
   "mlx_metal_wheel_tag": "$MLX_METAL_WHEEL_TAG",
   "mlx_core_minos": "$MLX_CORE_MINOS",
   "supported_minimum_macos": "$APP_MIN_MACOS_VERSION",
-  "used_vendor_wheels": true,
+  "used_vendor_wheels": false,
   "built_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
