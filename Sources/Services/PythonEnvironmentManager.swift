@@ -259,11 +259,13 @@ final class PythonEnvironmentManager: ObservableObject {
         setupTask = task
         setupTaskID = taskID
 
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             _ = await task.result
-            guard let self, self.setupTaskID == taskID else { return }
-            self.setupTask = nil
-            self.setupTaskID = nil
+            await MainActor.run {
+                guard let self, self.setupTaskID == taskID else { return }
+                self.setupTask = nil
+                self.setupTaskID = nil
+            }
         }
     }
 
@@ -524,8 +526,10 @@ final class PythonEnvironmentManager: ObservableObject {
                             installed += 1
                         }
                         let current = min(installed, totalPackages)
-                        Task { @MainActor [weak self] in
-                            self?.state = .settingUp(.installingDependencies(installed: current, total: totalPackages))
+                        Task { [weak self] in
+                            await MainActor.run {
+                                self?.state = .settingUp(.installingDependencies(installed: current, total: totalPackages))
+                            }
                         }
                     }
                 }

@@ -284,8 +284,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 sessionDirectory: userInfo["streamSessionDirectory"] as? String,
                 cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
             )
-            Task { @MainActor [weak self] in
-                self?.handleGenerationChunk(chunk)
+            Task { [weak self] in
+                await self?.handleGenerationChunk(chunk)
             }
         }
     }
@@ -412,8 +412,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         livePlayerNode?.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { @Sendable [weak self] _ in
             // AVFAudio invokes completion handlers on its own queue, so keep
             // the callback nonisolated and hop back to MainActor explicitly.
-            Task { @MainActor [weak self] in
-                self?.handleLiveBufferPlaybackCompletion()
+            Task { [weak self] in
+                await self?.handleLiveBufferPlaybackCompletion()
             }
         }
     }
@@ -745,13 +745,16 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         let snapshotTime = player.currentTime
         let playerID = ObjectIdentifier(player)
-        Task { @MainActor [weak self] in
-            guard let self, self.player.map(ObjectIdentifier.init) == playerID else { return }
-            self.isPlaying = false
-            self.currentTime = flag ? self.duration : snapshotTime
-            self.stopTimer()
-            if !flag {
-                self.playbackError = "Playback stopped unexpectedly."
+        Task { [weak self] in
+            guard let self else { return }
+            await MainActor.run {
+                guard self.player.map(ObjectIdentifier.init) == playerID else { return }
+                self.isPlaying = false
+                self.currentTime = flag ? self.duration : snapshotTime
+                self.stopTimer()
+                if !flag {
+                    self.playbackError = "Playback stopped unexpectedly."
+                }
             }
         }
     }

@@ -135,23 +135,25 @@ final class ModelManagerViewModel: ObservableObject {
         downloaders[model.id] = downloader
 
         downloader.onProgress = { [weak self] bytesDownloaded, bytesTotal in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                guard self.isCurrentEpoch(epoch, for: model.id) else { return }
-                guard case .downloading = self.statuses[model.id] else { return }
+            Task { [weak self] in
+                await MainActor.run {
+                    guard let self = self else { return }
+                    guard self.isCurrentEpoch(epoch, for: model.id) else { return }
+                    guard case .downloading = self.statuses[model.id] else { return }
 
-                // Throttle UI updates to ~10Hz to avoid excessive re-renders.
-                let now = ContinuousClock.now
-                if let lastPublish = self.lastProgressPublishTimes[model.id],
-                   now - lastPublish < .milliseconds(100) {
-                    return
+                    // Throttle UI updates to ~10Hz to avoid excessive re-renders.
+                    let now = ContinuousClock.now
+                    if let lastPublish = self.lastProgressPublishTimes[model.id],
+                       now - lastPublish < .milliseconds(100) {
+                        return
+                    }
+                    self.lastProgressPublishTimes[model.id] = now
+
+                    self.statuses[model.id] = .downloading(
+                        downloadedBytes: bytesDownloaded,
+                        totalBytes: bytesTotal > 0 ? bytesTotal : nil
+                    )
                 }
-                self.lastProgressPublishTimes[model.id] = now
-
-                self.statuses[model.id] = .downloading(
-                    downloadedBytes: bytesDownloaded,
-                    totalBytes: bytesTotal > 0 ? bytesTotal : nil
-                )
             }
         }
 

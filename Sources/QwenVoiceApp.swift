@@ -118,8 +118,8 @@ final class UITestWindowCoordinator {
 
         for name in names {
             let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.syncVisibleMainWindowState()
+                Task { [weak self] in
+                    await self?.syncVisibleMainWindowState()
                 }
             }
             observationTokens.append(token)

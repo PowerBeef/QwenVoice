@@ -582,7 +582,7 @@ final class PythonBridge: ObservableObject {
         }
 
         let token = UUID()
-        let task = Task { @MainActor [self] () throws -> [String: RPCValue] in
+        let task = Task { @MainActor in
             if isStubBackendMode {
                 guard let model = TTSModel.model(id: id) else {
                     throw PythonBridgeError.rpcError(code: -32001, message: "Unknown model '\(id)'")
@@ -754,7 +754,7 @@ final class PythonBridge: ObservableObject {
         let trimmedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedModelID.isEmpty else { return }
 
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             guard let self else { return }
             await self.ensureModelLoadedIfNeeded(id: trimmedModelID)
         }
@@ -800,7 +800,7 @@ final class PythonBridge: ObservableObject {
         let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines)
         setCloneReferencePrimingState(.preparing, key: key)
 
-        let task = Task { @MainActor [self] () throws -> [String: RPCValue] in
+        let task = Task { @MainActor in
             var params: [String: RPCValue] = [
                 "model_id": .string(modelID),
                 "ref_audio": .string(trimmedRefAudio),
@@ -1549,8 +1549,8 @@ final class PythonBridge: ObservableObject {
             }
             guard let text = String(data: data, encoding: .utf8) else { return }
 
-            Task { @MainActor [weak self] in
-                self?.processOutputChunk(text)
+            Task { [weak self] in
+                await self?.processOutputChunk(text)
             }
         }
     }
@@ -1564,8 +1564,8 @@ final class PythonBridge: ObservableObject {
                 return
             }
             if let text = String(data: data, encoding: .utf8) {
-                Task { @MainActor [weak self] in
-                    self?.storeStderr(text)
+                Task { [weak self] in
+                    await self?.storeStderr(text)
                 }
                 #if DEBUG
                 print("[Python stderr] \(text)", terminator: "")

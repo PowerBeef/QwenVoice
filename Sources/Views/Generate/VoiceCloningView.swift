@@ -524,7 +524,8 @@ private extension VoiceCloningView {
             ) else {
                 return
             }
-            cloneDeferredPrewarmTask = Task { @MainActor [modelID = model.id, refPath, trimmedRefText, clonePrimingRequestKey] in
+            let deferredModelID = model.id
+            cloneDeferredPrewarmTask = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: Self.deferredClonePrewarmDelayNanoseconds)
                 guard !Task.isCancelled else { return }
                 guard Self.shouldStartDeferredClonePrewarm(
@@ -536,7 +537,7 @@ private extension VoiceCloningView {
                     return
                 }
                 await pythonBridge.prewarmModelIfNeeded(
-                    modelID: modelID,
+                    modelID: deferredModelID,
                     mode: .clone,
                     refAudio: refPath,
                     refText: trimmedRefText
