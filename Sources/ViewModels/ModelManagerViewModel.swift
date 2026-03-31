@@ -136,24 +136,13 @@ final class ModelManagerViewModel: ObservableObject {
 
         downloader.onProgress = { [weak self] bytesDownloaded, bytesTotal in
             Task { [weak self] in
-                await MainActor.run {
-                    guard let self = self else { return }
-                    guard self.isCurrentEpoch(epoch, for: model.id) else { return }
-                    guard case .downloading = self.statuses[model.id] else { return }
-
-                    // Throttle UI updates to ~10Hz to avoid excessive re-renders.
-                    let now = ContinuousClock.now
-                    if let lastPublish = self.lastProgressPublishTimes[model.id],
-                       now - lastPublish < .milliseconds(100) {
-                        return
-                    }
-                    self.lastProgressPublishTimes[model.id] = now
-
-                    self.statuses[model.id] = .downloading(
-                        downloadedBytes: bytesDownloaded,
-                        totalBytes: bytesTotal > 0 ? bytesTotal : nil
-                    )
-                }
+                guard let self = self else { return }
+                await self.publishDownloadProgressIfCurrent(
+                    epoch: epoch,
+                    modelID: model.id,
+                    downloadedBytes: bytesDownloaded,
+                    totalBytes: bytesTotal
+                )
             }
         }
 
@@ -315,5 +304,28 @@ final class ModelManagerViewModel: ObservableObject {
             self.stubDownloadTasks.removeValue(forKey: model.id)
         }
         stubDownloadTasks[model.id] = task
+    }
+
+    private func publishDownloadProgressIfCurrent(
+        epoch: Int,
+        modelID: String,
+        downloadedBytes: Int64,
+        totalBytes: Int64
+    ) {
+        guard isCurrentEpoch(epoch, for: modelID) else { return }
+        guard case .downloading = statuses[modelID] else { return }
+
+        // Throttle UI updates to ~10Hz to avoid excessive re-renders.
+        let now = ContinuousClock.now
+        if let lastPublish = lastProgressPublishTimes[modelID],
+           now - lastPublish < .milliseconds(100) {
+            return
+        }
+        lastProgressPublishTimes[modelID] = now
+
+        statuses[modelID] = .downloading(
+            downloadedBytes: downloadedBytes,
+            totalBytes: totalBytes > 0 ? totalBytes : nil
+        )
     }
 }

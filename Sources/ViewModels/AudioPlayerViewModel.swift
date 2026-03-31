@@ -747,15 +747,25 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         let playerID = ObjectIdentifier(player)
         Task { [weak self] in
             guard let self else { return }
-            await MainActor.run {
-                guard self.player.map(ObjectIdentifier.init) == playerID else { return }
-                self.isPlaying = false
-                self.currentTime = flag ? self.duration : snapshotTime
-                self.stopTimer()
-                if !flag {
-                    self.playbackError = "Playback stopped unexpectedly."
-                }
-            }
+            await self.finishPlaybackIfCurrent(
+                playerID: playerID,
+                succeeded: flag,
+                snapshotTime: snapshotTime
+            )
+        }
+    }
+
+    private func finishPlaybackIfCurrent(
+        playerID: ObjectIdentifier,
+        succeeded: Bool,
+        snapshotTime: TimeInterval
+    ) {
+        guard player.map(ObjectIdentifier.init) == playerID else { return }
+        isPlaying = false
+        currentTime = succeeded ? duration : snapshotTime
+        stopTimer()
+        if !succeeded {
+            playbackError = "Playback stopped unexpectedly."
         }
     }
 }

@@ -261,11 +261,8 @@ final class PythonEnvironmentManager: ObservableObject {
 
         Task { [weak self] in
             _ = await task.result
-            await MainActor.run {
-                guard let self, self.setupTaskID == taskID else { return }
-                self.setupTask = nil
-                self.setupTaskID = nil
-            }
+            guard let self else { return }
+            await self.completeSetupTaskIfCurrent(taskID)
         }
     }
 
@@ -527,9 +524,8 @@ final class PythonEnvironmentManager: ObservableObject {
                         }
                         let current = min(installed, totalPackages)
                         Task { [weak self] in
-                            await MainActor.run {
-                                self?.state = .settingUp(.installingDependencies(installed: current, total: totalPackages))
-                            }
+                            guard let self else { return }
+                            await self.publishDependencyInstallProgress(installed: current, total: totalPackages)
                         }
                     }
                 }
@@ -556,6 +552,16 @@ final class PythonEnvironmentManager: ObservableObject {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    private func completeSetupTaskIfCurrent(_ taskID: UUID) {
+        guard setupTaskID == taskID else { return }
+        setupTask = nil
+        setupTaskID = nil
+    }
+
+    private func publishDependencyInstallProgress(installed: Int, total: Int) {
+        state = .settingUp(.installingDependencies(installed: installed, total: total))
     }
 
     private func runPipInstallWithRetry(pipPath: String, requirementsPath: String, totalPackages: Int, vendorDir: String?) async throws {

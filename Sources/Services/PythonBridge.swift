@@ -1529,12 +1529,14 @@ final class PythonBridge: ObservableObject {
         sidebarStatusResetTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 600_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self = self else { return }
-                self.sidebarStatusResetTask = nil
-                self.syncSidebarStatusFromSystemState()
-            }
+            guard let self = self else { return }
+            await self.finishSidebarStatusResetIfCurrent()
         }
+    }
+
+    private func finishSidebarStatusResetIfCurrent() {
+        sidebarStatusResetTask = nil
+        syncSidebarStatusFromSystemState()
     }
 
     // MARK: - Output Reading
