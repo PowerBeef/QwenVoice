@@ -77,11 +77,12 @@ Current GitHub release builds are produced by the dual-release workflow and typi
 Then:
 
 1. Drag `QwenVoice.app` to `/Applications`
-2. Remove the quarantine attribute because the app is unsigned:
+2. Open the app. Official GitHub workflow releases are intended to be signed and notarized.
+3. If you are testing an older unsigned build, you may still need to remove quarantine manually:
    ```sh
    xattr -cr "/Applications/QwenVoice.app"
    ```
-3. Open the app, go to **Models**, download a model, and generate speech
+4. Go to **Models**, download a model, and generate speech
 
 ## Models
 

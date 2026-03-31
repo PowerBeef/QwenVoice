@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Create a distributable .dmg for QwenVoice
-# Expects the .app to be already built and signed
+# Create a distributable .dmg for QwenVoice.
+# Expects the .app to be already built and signed.
+# Official notarization is handled by the GitHub Release Dual UI workflow
+# after this script completes.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -63,6 +65,5 @@ echo ""
 echo "DMG created: $DMG_OUTPUT"
 echo "Size: $DMG_SIZE_ACTUAL"
 echo ""
-echo "To notarize for distribution:"
-echo "  xcrun notarytool submit '$DMG_OUTPUT' --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID --password YOUR_APP_PASSWORD --wait"
-echo "  xcrun stapler staple '$DMG_OUTPUT'"
+echo "Official signed/notarized release DMGs should be produced by the GitHub"
+echo "'Release Dual UI' workflow. This local script only creates the DMG."

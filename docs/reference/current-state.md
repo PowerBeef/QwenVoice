@@ -105,7 +105,9 @@ The dual-release workflow builds:
 - `QwenVoice-macos26.dmg` for the modern liquid UI profile
 - `QwenVoice-macos15.dmg` for the legacy glass UI profile
 
-Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided.
+Those two shipped release artifacts are workflow-built outputs. The GitHub workflow is also the intended source of truth for Developer ID signing and DMG notarization/stapling on both runners. QwenVoice prefers App Store Connect API key auth for notarization, with `issuer` included for Team keys and omitted for Individual keys. Local builds on the maintainer machine are for macOS 26 dev/testing only, not authoritative release proof for either variant.
+
+Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided, but local packaging should be treated as script/debug validation rather than the source of truth for shipped release artifacts.
 
 The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) now default to live backend mode with an isolated app-support fixture. Those runs reuse the installed runtime and models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the backend initialization handshake has completed.
 

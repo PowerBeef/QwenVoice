@@ -8,6 +8,9 @@ set -euo pipefail
 #   ./scripts/release.sh --skip-build Skip xcodebuild (repackage existing build)
 #   ./scripts/release.sh --ui-profile liquid|legacy
 #   ./scripts/release.sh --output-name <dmg_basename>
+#   ./scripts/release.sh --signing-mode ad-hoc|developer-id
+#   ./scripts/release.sh --signing-identity "Developer ID Application: ..."
+#   ./scripts/release.sh --codesign-keychain /path/to/keychain-db
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -19,6 +22,9 @@ SKIP_DEPS=false
 SKIP_BUILD=false
 UI_PROFILE="legacy"
 OUTPUT_NAME="QwenVoice"
+SIGNING_MODE="${QWENVOICE_SIGNING_MODE:-ad-hoc}"
+SIGNING_IDENTITY="${QWENVOICE_SIGNING_IDENTITY:-}"
+CODESIGN_KEYCHAIN="${QWENVOICE_CODESIGN_KEYCHAIN:-}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -46,9 +52,33 @@ while [ $# -gt 0 ]; do
             OUTPUT_NAME="$2"
             shift 2
             ;;
+        --signing-mode)
+            if [ $# -lt 2 ]; then
+                echo "Error: --signing-mode requires a value (ad-hoc|developer-id)"
+                exit 1
+            fi
+            SIGNING_MODE="$2"
+            shift 2
+            ;;
+        --signing-identity)
+            if [ $# -lt 2 ]; then
+                echo "Error: --signing-identity requires a value"
+                exit 1
+            fi
+            SIGNING_IDENTITY="$2"
+            shift 2
+            ;;
+        --codesign-keychain)
+            if [ $# -lt 2 ]; then
+                echo "Error: --codesign-keychain requires a value"
+                exit 1
+            fi
+            CODESIGN_KEYCHAIN="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--skip-deps] [--skip-build] [--ui-profile liquid|legacy] [--output-name <basename>]"
+            echo "Usage: $0 [--skip-deps] [--skip-build] [--ui-profile liquid|legacy] [--output-name <basename>] [--signing-mode ad-hoc|developer-id] [--signing-identity <identity>] [--codesign-keychain <path>]"
             exit 1
             ;;
     esac
@@ -72,6 +102,28 @@ if [[ "$OUTPUT_NAME" == *"/"* ]]; then
     exit 1
 fi
 
+case "$SIGNING_MODE" in
+    ad-hoc)
+        ACTIVE_SIGNING_IDENTITY="-"
+        ;;
+    developer-id)
+        if [ -z "$SIGNING_IDENTITY" ]; then
+            echo "Error: --signing-identity is required when --signing-mode developer-id"
+            exit 1
+        fi
+        ACTIVE_SIGNING_IDENTITY="$SIGNING_IDENTITY"
+        ;;
+    *)
+        echo "Error: unsupported --signing-mode '$SIGNING_MODE' (expected ad-hoc|developer-id)"
+        exit 1
+        ;;
+esac
+
+if [ -n "$CODESIGN_KEYCHAIN" ] && [ ! -f "$CODESIGN_KEYCHAIN" ]; then
+    echo "Error: --codesign-keychain path does not exist: $CODESIGN_KEYCHAIN"
+    exit 1
+fi
+
 step_time() {
     local start=$1
     local end=$(date +%s)
@@ -83,12 +135,51 @@ release_fail() {
     exit 1
 }
 
+is_macho_file() {
+    local target="$1"
+    file -b "$target" 2>/dev/null | grep -q "Mach-O"
+}
+
+run_codesign() {
+    local target="$1"
+    shift
+
+    local args=(codesign --force --sign "$ACTIVE_SIGNING_IDENTITY")
+    if [ -n "$CODESIGN_KEYCHAIN" ]; then
+        args+=(--keychain "$CODESIGN_KEYCHAIN")
+    fi
+    if [ "$SIGNING_MODE" = "developer-id" ]; then
+        args+=(--timestamp)
+    fi
+    args+=("$@" "$target")
+    "${args[@]}"
+}
+
+sign_macho_executable() {
+    local target="$1"
+    [ -f "$target" ] || return 0
+    [ -x "$target" ] || return 0
+    is_macho_file "$target" || return 0
+    run_codesign "$target"
+}
+
+sign_macho_library() {
+    local target="$1"
+    [ -f "$target" ] || return 0
+    is_macho_file "$target" || return 0
+    run_codesign "$target"
+}
+
 echo "=== QwenVoice: Release Build ==="
 echo ""
 if $SKIP_DEPS; then echo "  (skipping dependency bundling)"; fi
 if $SKIP_BUILD; then echo "  (skipping xcodebuild)"; fi
 echo "  ui profile: $UI_PROFILE ($UI_SWIFT_DEFINE)"
 echo "  dmg output: $OUTPUT_NAME.dmg"
+echo "  signing: $SIGNING_MODE"
+if [ "$SIGNING_MODE" = "developer-id" ]; then
+    echo "  signing identity: $SIGNING_IDENTITY"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -229,27 +320,23 @@ echo ""
 # Step 5: Re-sign final app bundle
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
-echo "[5/8] Re-signing final app bundle..."
+echo "[5/8] Signing bundled executables and final app bundle..."
 
 if [ -f "$APP_RESOURCES/ffmpeg" ]; then
-    codesign --force --sign - "$APP_RESOURCES/ffmpeg"
+    sign_macho_executable "$APP_RESOURCES/ffmpeg"
 fi
 
-for py_bin in "$APP_RESOURCES"/python/bin/python3.*; do
-    if [ -f "$py_bin" ] && [ -x "$py_bin" ]; then
-        codesign --force --sign - "$py_bin"
-    fi
-done
+while IFS= read -r -d '' py_bin; do
+    sign_macho_executable "$py_bin"
+done < <(find "$APP_RESOURCES/python/bin" -type f -print0 2>/dev/null)
 
 while IFS= read -r -d '' native_file; do
-    codesign --force --sign - "$native_file"
+    sign_macho_library "$native_file"
 done < <(find "$APP_RESOURCES/python" -type f \( -name "*.so" -o -name "*.dylib" \) -print0 2>/dev/null)
 
-codesign --force --sign - \
-    --deep \
+run_codesign "$BUILD_DIR/$APP_BUNDLE_NAME.app" \
     --options runtime \
-    --preserve-metadata=entitlements,requirements,flags \
-    "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+    --entitlements "$PROJECT_DIR/Sources/QwenVoice.entitlements"
 
 echo ""
 
@@ -258,7 +345,7 @@ codesign -v --deep --strict "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 echo "Code signature verified."
 
 echo ""
-echo "[5/8] Re-sign final app bundle — done ($(step_time $STEP_START))"
+echo "[5/8] Sign final app bundle — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------

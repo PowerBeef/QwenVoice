@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REQUIREMENTS_PATH="$PROJECT_DIR/Sources/Resources/requirements.txt"
 APP_MIN_MACOS_VERSION="15.0"
+EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
 
 fail() {
     echo "Error: $*" >&2
@@ -56,27 +57,40 @@ fi
 echo "[1/8] Required files OK"
 echo ""
 
-echo "[2/8] Verifying bundled Python executable..."
+echo "[2/9] Verifying app code signature..."
+if [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
+    codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1 || fail "Signed release code signature verification failed"
+    if ! codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -q "Runtime Version"; then
+        fail "Signed release is missing hardened runtime metadata"
+    fi
+    spctl -a -vvv --type exec "$APP_PATH" >/dev/null 2>&1 || fail "Signed release was rejected by spctl"
+    echo "[2/9] Signed release checks OK"
+else
+    echo "[2/9] Signature checks skipped (set QWENVOICE_EXPECT_SIGNED_RELEASE=1 for release verification)"
+fi
+echo ""
+
+echo "[3/9] Verifying bundled Python executable..."
 "$PYTHON_BIN" --version >/dev/null
-echo "[2/8] Bundled Python runs"
+echo "[3/9] Bundled Python runs"
 echo ""
 
-echo "[3/8] Verifying bundled Python imports..."
+echo "[4/9] Verifying bundled Python imports..."
 "$PYTHON_BIN" -c "import mlx; import mlx.core as mx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub; x = mx.array([1.0], dtype=mx.float32); mx.eval(x)"
-echo "[3/8] Core imports OK"
+echo "[4/9] Core imports OK"
 echo ""
 
-echo "[4/8] Verifying bundled mlx-audio helper..."
+echo "[5/9] Verifying bundled mlx-audio helper..."
 "$PYTHON_BIN" -c "import sys; sys.path.insert(0, '$HELPER_DIR'); import mlx_audio_qwen_speed_patch as p; import sys as _sys; _sys.exit(0 if hasattr(p, 'try_enable_speech_tokenizer_encoder') else 1)"
-echo "[4/8] Helper is present"
+echo "[5/9] Helper is present"
 echo ""
 
-echo "[5/8] Verifying bundled ffmpeg..."
+echo "[6/9] Verifying bundled ffmpeg..."
 "$FFMPEG_BIN" -version >/dev/null
-echo "[5/8] Bundled ffmpeg runs"
+echo "[6/9] Bundled ffmpeg runs"
 echo ""
 
-echo "[6/8] Verifying runtime manifest and native-library linkage..."
+echo "[7/9] Verifying runtime manifest and native-library linkage..."
 EXPECTED_REQUIREMENTS_HASH="$(shasum -a 256 "$REQUIREMENTS_PATH" | awk '{print $1}')"
 "$PYTHON_BIN" - "$MANIFEST_PATH" "$REQUIREMENTS_PATH" "$EXPECTED_REQUIREMENTS_HASH" "$APP_MIN_MACOS_VERSION" <<'PY'
 import json
@@ -271,10 +285,10 @@ done < <(find "$PYTHON_ROOT" \( -name "*.so" -o -name "*.dylib" \) -print0)
 if [ "$LEAKED_LIBS" -ne 0 ]; then
     fail "Embedded native libraries link against host-specific paths"
 fi
-echo "[6/8] Manifest and linkage checks OK"
+echo "[7/9] Manifest and linkage checks OK"
 echo ""
 
-echo "[7/8] Running backend smoke test..."
+echo "[8/9] Running backend smoke test..."
 TMP_APP_SUPPORT="$(mktemp -d)"
 TMP_UI_HOME=""
 TMP_UI_FIXTURE=""
@@ -431,10 +445,10 @@ finally:
         proc.wait(timeout=5)
 PY
 
-echo "[7/8] Backend smoke test OK"
+echo "[8/9] Backend smoke test OK"
 echo ""
 
-echo "[8/8] Running isolated packaged-app startup smoke..."
+echo "[9/9] Running isolated packaged-app startup smoke..."
 TMP_UI_HOME="$(mktemp -d)"
 TMP_UI_FIXTURE="$(mktemp -d)"
 TMP_UI_STDOUT="$(mktemp)"
@@ -534,6 +548,6 @@ then
     fail "Isolated packaged-app startup smoke failed"
 fi
 
-echo "[8/8] Packaged app startup smoke OK"
+echo "[9/9] Packaged app startup smoke OK"
 echo ""
 echo "Release bundle verification passed."

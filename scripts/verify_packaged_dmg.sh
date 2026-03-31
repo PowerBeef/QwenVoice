@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXPECT_NOTARIZED_DMG="${QWENVOICE_EXPECT_NOTARIZED_DMG:-0}"
 
 fail() {
     echo "Error: $*" >&2
@@ -54,7 +55,17 @@ trap cleanup EXIT
 
 echo "=== QwenVoice: Verify Packaged DMG ==="
 echo ""
-echo "[1/4] Attaching DMG..."
+echo "[1/5] Verifying DMG trust state..."
+if [ "$EXPECT_NOTARIZED_DMG" = "1" ]; then
+    xcrun stapler validate "$DMG_PATH" >/dev/null 2>&1 || fail "Stapled notarization ticket is missing or invalid for $DMG_PATH"
+    spctl -a -vvv --type open "$DMG_PATH" >/dev/null 2>&1 || fail "Signed DMG was rejected by spctl"
+    echo "[1/5] Stapled DMG trust checks OK"
+else
+    echo "[1/5] DMG notarization checks skipped (set QWENVOICE_EXPECT_NOTARIZED_DMG=1 for release verification)"
+fi
+echo ""
+
+echo "[2/5] Attaching DMG..."
 
 ATTACH_PLIST="$(mktemp)"
 LAST_ATTACH_STDERR="$(mktemp)"
@@ -118,10 +129,10 @@ rm -f "$ATTACH_PLIST"
 [ -n "$MOUNTED_DEVICE" ] || fail "Could not determine attached device for $DMG_PATH"
 [ -n "$MOUNT_POINT" ] || fail "Could not determine mount point for $DMG_PATH"
 [ -d "$MOUNT_POINT" ] || fail "Mount point does not exist: $MOUNT_POINT"
-echo "[1/4] Attached at $MOUNT_POINT"
+echo "[2/5] Attached at $MOUNT_POINT"
 echo ""
 
-echo "[2/4] Copying packaged app out of the DMG..."
+echo "[3/5] Copying packaged app out of the DMG..."
 SOURCE_APP="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -type d | head -n1)"
 [ -n "$SOURCE_APP" ] || fail "No .app found inside mounted DMG: $MOUNT_POINT"
 
@@ -130,15 +141,15 @@ COPIED_APP="$TEMP_ROOT/$(basename "$SOURCE_APP")"
 ditto "$SOURCE_APP" "$COPIED_APP"
 xattr -dr com.apple.quarantine "$COPIED_APP" >/dev/null 2>&1 || true
 [ -d "$COPIED_APP" ] || fail "Copied app missing after ditto: $COPIED_APP"
-echo "[2/4] Copied app to $COPIED_APP"
+echo "[3/5] Copied app to $COPIED_APP"
 echo ""
 
-echo "[3/4] Validating packaged bundle contents..."
+echo "[4/5] Validating packaged bundle contents..."
 "$SCRIPT_DIR/verify_release_bundle.sh" "$COPIED_APP"
-echo "[3/4] Packaged bundle validation passed"
+echo "[4/5] Packaged bundle validation passed"
 echo ""
 
-echo "[4/4] DMG verification complete"
+echo "[5/5] DMG verification complete"
 echo ""
 echo "  DMG:      $DMG_PATH"
 echo "  Metadata: $METADATA_PATH"

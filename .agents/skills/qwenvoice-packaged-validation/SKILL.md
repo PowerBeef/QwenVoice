@@ -9,6 +9,13 @@ description: Validate QwenVoice dev builds, packaged apps, and downloaded releas
 
 Use this skill for QwenVoice validation requests that go beyond a plain local build. Favor the repo harness, packaged-app flows, and bundled-runtime checks over one-off manual app launches.
 
+Treat local and release surfaces differently:
+
+- local builds on this machine are for macOS 26 dev/testing only
+- official macOS 26 and macOS 15 release packages must come from the GitHub `Release Dual UI` workflow
+- official release signing and notarization must also come from that workflow, not from local packaging runs
+- notarization should prefer App Store Connect API key auth; `issuer` is present for Team keys and omitted for Individual keys
+
 ## Workflow
 
 ### 1. Confirm the target surface
@@ -16,11 +23,12 @@ Use this skill for QwenVoice validation requests that go beyond a plain local bu
 Classify the request before running anything:
 
 - **Source sanity**: repo inputs, Swift tests, pure Python tests.
-- **Dev app validation**: local app built from the checkout.
+- **Dev app validation**: local app built from the checkout for the macOS 26 dev surface.
 - **Packaged app validation**: `.app` bundle copied from a build artifact.
 - **Release artifact validation**: downloaded dual-UI DMGs or a release-artifact root.
 
 Prefer the most specific surface that matches the request. Do not treat a source build as proof that the packaged app is healthy.
+Do not treat a local packaged build as proof of a shipped release artifact for either macOS variant.
 
 ### 2. Start with repo truth
 
@@ -51,6 +59,13 @@ When the request is about the actual release packages, prefer the packaged flow:
 ```bash
 python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
 ```
+
+For this repo, both `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` should come from the GitHub `Release Dual UI` workflow. Validate the downloaded or uploaded workflow artifacts rather than rebuilding release packages locally.
+
+When the request is about signed or notarized releases, include trust checks in addition to bundle checks:
+
+- `spctl -a -vvv --type open <dmg>`
+- `xcrun stapler validate <dmg>`
 
 Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as install-and-test flows:
 
@@ -119,6 +134,8 @@ python3 scripts/harness.py test --layer design --ui-backend-mode stub
 ## Failure Shields
 
 - Do not hand-roll alternate test flows when the harness already has a lane.
+- Do not build or validate macOS 15 release packages locally on this machine.
+- Do not use local `./scripts/release.sh` output as the authoritative proof for shipped macOS 26 or macOS 15 release artifacts.
 - Do not assume the mounted DMG app is the real test target.
 - Do not treat missing live models as a code regression.
 - Do not default screenshot tests to `QWENVOICE_UITEST_CAPTURE_MODE=system`.

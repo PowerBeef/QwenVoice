@@ -136,6 +136,11 @@ Notes:
 - `python3 scripts/harness.py test --layer ui`, `design`, and `perf` now default to `--ui-backend-mode live --ui-data-root fixture`, which reuses the installed runtime/models while isolating writable app state in a disposable fixture root.
 - `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/`.
 - Packaged validation should prefer the harness packaged or release lanes plus `./scripts/verify_release_bundle.sh` over ad hoc manual app launches. Prefer `qwenvoice-packaged-validation` when that is the main task.
+- Local builds on this machine are for dev/testing only and should target the macOS 26 / `QW_UI_LIQUID` surface. Prefer `xcodebuild` or dev-app validation for that path.
+- Do not use local packaging on this machine as proof for release artifacts, and never treat a local macOS 15 package build as valid release validation.
+- Official `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` release artifacts must be produced by the GitHub `Release Dual UI` workflow, then validated from the resulting workflow artifacts or downloaded DMGs.
+- Release signing and notarization belong in the GitHub workflow as well. Import the Developer ID Application certificate and App Store Connect API key credentials in Actions, sign each runner's `.app`, notarize and staple each runner's DMG, and do not treat local packaging as release-signing proof.
+- For App Store Connect API key auth, keep `APPLE_NOTARY_ISSUER_ID` optional: include it for Team keys and omit it for Individual keys.
 - Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. This is the correct automated comparison path, but it is not the highest-fidelity representation of Liquid Glass; for explicit visual-fidelity checks, use real window capture instead of treating content capture as the source of truth for appearance polish.
 - Run forced `light` and `dark` `design` lanes sequentially, not in parallel, because they share the UI app and transport and can interfere with each other.
 - Tagged publishes should use the `release-dual-ui` workflow with checked-in release notes and the release inputs, including `release_notes_path`. Prefer `qwenvoice-release-publish` for that flow.
@@ -201,6 +206,7 @@ Use the harness commands in this file and the existing reference docs instead of
 - Avoid running multiple `QwenVoice` app instances at once while debugging model loads or playback.
 - Prefer killing an old instance before launching a new build.
 - Prefer asking before launching the full app unless the task clearly requires it.
+- Never run local macOS 15 release packaging on this machine. Use GitHub workflow artifacts for that surface.
 - Never run more than one heavy model load, generation, or benchmark at a time.
 - Never run clone/custom comparisons side by side or in parallel processes.
 - For clone-mode investigations, cold and warm runs may share one backend process only when intentionally measuring cache reuse. Do not overlap that process with any other model process.

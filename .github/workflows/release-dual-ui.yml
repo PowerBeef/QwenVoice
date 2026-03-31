@@ -84,13 +84,98 @@ jobs:
       - name: Ensure scripts are executable
         run: chmod +x scripts/*.sh
 
+      - name: Assert release signing secrets
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DEV_ID_APP_P12_BASE64: ${{ secrets.APPLE_DEV_ID_APP_P12_BASE64 }}
+          APPLE_DEV_ID_APP_P12_PASSWORD: ${{ secrets.APPLE_DEV_ID_APP_P12_PASSWORD }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_PRIVATE_KEY_P8: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_P8 }}
+        run: |
+          MISSING=0
+          for secret_name in \
+            APPLE_TEAM_ID \
+            APPLE_DEV_ID_APP_P12_BASE64 \
+            APPLE_DEV_ID_APP_P12_PASSWORD \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_PRIVATE_KEY_P8; do
+            if [ -z "${!secret_name}" ]; then
+              echo "::error::$secret_name is required for signed/notarized releases"
+              MISSING=1
+            fi
+          done
+
+          if [ "$MISSING" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare Developer ID signing materials
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DEV_ID_APP_P12_BASE64: ${{ secrets.APPLE_DEV_ID_APP_P12_BASE64 }}
+          APPLE_DEV_ID_APP_P12_PASSWORD: ${{ secrets.APPLE_DEV_ID_APP_P12_PASSWORD }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_PRIVATE_KEY_P8: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_P8 }}
+        run: |
+          SIGNING_KEYCHAIN_PATH="$RUNNER_TEMP/qwenvoice-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/qwenvoice-dev-id-app.p12"
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          KEYCHAIN_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          echo "::add-mask::$APPLE_DEV_ID_APP_P12_PASSWORD"
+
+          APPLE_DEV_ID_APP_P12_BASE64="$APPLE_DEV_ID_APP_P12_BASE64" \
+          CERT_PATH="$CERT_PATH" \
+          python3 -c 'import base64, os, pathlib; pathlib.Path(os.environ["CERT_PATH"]).write_bytes(base64.b64decode(os.environ["APPLE_DEV_ID_APP_P12_BASE64"]))'
+
+          printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_P8" > "$NOTARY_KEY_PATH"
+          chmod 600 "$CERT_PATH" "$NOTARY_KEY_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$SIGNING_KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -k "$SIGNING_KEYCHAIN_PATH" \
+            -P "$APPLE_DEV_ID_APP_P12_PASSWORD" \
+            -A \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$SIGNING_KEYCHAIN_PATH"
+          security list-keychains -d user -s "$SIGNING_KEYCHAIN_PATH"
+          security default-keychain -d user -s "$SIGNING_KEYCHAIN_PATH"
+
+          CODESIGN_IDENTITY="$(security find-identity -v -p codesigning "$SIGNING_KEYCHAIN_PATH" | awk -F'\"' '/Developer ID Application:/ { print $2; exit }')"
+          if [ -z "$CODESIGN_IDENTITY" ]; then
+            echo "::error::Could not find a Developer ID Application identity in the imported certificate"
+            exit 1
+          fi
+
+          {
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            echo "APPLE_CODESIGN_IDENTITY=$CODESIGN_IDENTITY"
+            echo "QWENVOICE_SIGNING_KEYCHAIN=$SIGNING_KEYCHAIN_PATH"
+            echo "APPLE_DEV_ID_APP_P12_PATH=$CERT_PATH"
+            echo "APPLE_NOTARY_KEY_ID=$APPLE_NOTARY_KEY_ID"
+            echo "APPLE_NOTARY_ISSUER_ID=$APPLE_NOTARY_ISSUER_ID"
+            echo "APPLE_NOTARY_API_KEY_PATH=$NOTARY_KEY_PATH"
+          } >> "$GITHUB_ENV"
+
       - name: Build release pipeline
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ env.APPLE_CODESIGN_IDENTITY }}
+          QWENVOICE_SIGNING_KEYCHAIN: ${{ env.QWENVOICE_SIGNING_KEYCHAIN }}
         run: |
           ./scripts/release.sh \
             --ui-profile "${{ matrix.variant.ui_profile }}" \
-            --output-name "${{ matrix.variant.output_name }}"
+            --output-name "${{ matrix.variant.output_name }}" \
+            --signing-mode developer-id \
+            --signing-identity "$APPLE_CODESIGN_IDENTITY" \
+            --codesign-keychain "$QWENVOICE_SIGNING_KEYCHAIN"
 
-      - name: Verify bundled dependencies and isolated startup in final app
+      - name: Verify signed app bundle and isolated startup in final app
         run: |
           APP_PATH="build/QwenVoice.app"
           RESOURCES_PATH="$APP_PATH/Contents/Resources"
@@ -112,7 +197,32 @@ jobs:
             exit 1
           fi
 
+          codesign --verify --deep --strict "$APP_PATH"
           ./scripts/verify_release_bundle.sh "$APP_PATH"
+
+      - name: Notarize and staple DMG
+        env:
+          APPLE_NOTARY_API_KEY_PATH: ${{ env.APPLE_NOTARY_API_KEY_PATH }}
+          APPLE_NOTARY_KEY_ID: ${{ env.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ env.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
+          NOTARY_ARGS=(
+            --key "$APPLE_NOTARY_API_KEY_PATH"
+            --key-id "$APPLE_NOTARY_KEY_ID"
+            --wait
+            --timeout 20m
+          )
+
+          test -f "$DMG_PATH"
+          if [ -n "$APPLE_NOTARY_ISSUER_ID" ]; then
+            NOTARY_ARGS+=(--issuer "$APPLE_NOTARY_ISSUER_ID")
+          fi
+
+          xcrun notarytool submit "$DMG_PATH" "${NOTARY_ARGS[@]}"
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl -a -vvv --type open "$DMG_PATH"
 
       - name: Assert outputs and generate checksums
         run: |
@@ -223,6 +333,8 @@ jobs:
 
       - name: Verify mounted packaged DMG
         run: |
+          QWENVOICE_EXPECT_SIGNED_RELEASE=1 \
+          QWENVOICE_EXPECT_NOTARIZED_DMG=1 \
           ./scripts/verify_packaged_dmg.sh \
             "build/${{ matrix.variant.output_name }}.dmg" \
             "build/release-metadata-${{ matrix.variant.id }}.txt"
@@ -249,6 +361,14 @@ jobs:
             build/${{ matrix.variant.output_name }}.dmg
             build/${{ matrix.variant.output_name }}.dmg.sha256
             build/release-metadata-${{ matrix.variant.id }}.txt
+
+      - name: Clean up signing credentials
+        if: always()
+        run: |
+          if [ -n "${QWENVOICE_SIGNING_KEYCHAIN:-}" ] && [ -f "$QWENVOICE_SIGNING_KEYCHAIN" ]; then
+            security delete-keychain "$QWENVOICE_SIGNING_KEYCHAIN" >/dev/null 2>&1 || true
+          fi
+          rm -f "${APPLE_DEV_ID_APP_P12_PATH:-}" "${APPLE_NOTARY_API_KEY_PATH:-}"
 
   publish-release:
     name: Publish dual UI assets to release

@@ -74,7 +74,7 @@ Do not build one artifact locally and the other on GitHub. Do not publish a tagg
 - checksum files
 - release metadata files for both UI profiles
 
-The workflow already supports checked-in release notes and bundled-runtime verification before upload.
+The workflow should also be the signing/notarization source of truth: import the Developer ID Application certificate from GitHub secrets, sign each runner's app, notarize and staple each DMG, and only then upload the artifacts. Prefer App Store Connect API key auth for notarization; include `issuer` for Team keys and omit it for Individual keys.
 
 ### 6. Verify the hosted release, not just the workflow
 
