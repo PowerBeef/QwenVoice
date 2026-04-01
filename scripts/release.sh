@@ -353,6 +353,7 @@ while IFS= read -r -d '' py_bin; do
     sign_macho_executable \
         "$py_bin" \
         --options runtime \
+        --force-library-entitlements \
         --entitlements "$EMBEDDED_RUNTIME_ENTITLEMENTS"
 done < <(find "$APP_RESOURCES/python/bin" -type f -print0 2>/dev/null)
 
