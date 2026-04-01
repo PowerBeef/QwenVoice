@@ -15,6 +15,7 @@ Treat local and release surfaces differently:
 - official macOS 26 and macOS 15 release packages must come from the GitHub `Release Dual UI` workflow
 - official release signing and notarization must also come from that workflow, not from local packaging runs
 - notarization should prefer App Store Connect API key auth; `issuer` is present for Team keys and omitted for Individual keys
+- the final notarized workflow artifact bundle is the preferred source for downloaded release validation, not the intermediate build artifacts
 
 ## Workflow
 
@@ -60,18 +61,18 @@ When the request is about the actual release packages, prefer the packaged flow:
 python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
 ```
 
-For this repo, both `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` should come from the GitHub `Release Dual UI` workflow. Validate the downloaded or uploaded workflow artifacts rather than rebuilding release packages locally.
+For this repo, both `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` should come from the GitHub `Release Dual UI` workflow. Validate the final downloaded or uploaded notarized workflow artifact bundle rather than rebuilding release packages locally or relying on the intermediate `qwenvoice-dual-ui-build-*` artifacts.
 
 When the request is about signed or notarized releases, include trust checks in addition to bundle checks:
 
-- `spctl -a -vvv --type open <dmg>`
+- `spctl -a -vvv --type open --context context:primary-signature <dmg>`
 - `xcrun stapler validate <dmg>`
 
 Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as install-and-test flows:
 
 - mount the DMG
 - copy `QwenVoice.app` into a disposable temp install root
-- clear quarantine on the temp copy if needed
+- clear quarantine on the temp copy only if the spot-check flow requires it
 - test the copied app, not the mounted app
 
 ### 4. Keep UI screenshot capture permissionless by default
@@ -100,6 +101,7 @@ Treat the following as the packaged-runtime acceptance checks:
 - packaged backend smoke passes
 
 If the request is about “using bundled dependencies,” do not stop at launch success.
+When the request is about downloaded signed/notarized DMGs, treat trust checks plus copied-app bundle verification as the acceptance gate.
 
 ### 6. Handle live-model blockers explicitly
 
@@ -136,6 +138,7 @@ python3 scripts/harness.py test --layer design --ui-backend-mode stub
 - Do not hand-roll alternate test flows when the harness already has a lane.
 - Do not build or validate macOS 15 release packages locally on this machine.
 - Do not use local `./scripts/release.sh` output as the authoritative proof for shipped macOS 26 or macOS 15 release artifacts.
+- Do not treat the intermediate `qwenvoice-dual-ui-build-*` artifacts as the final shipped release packages.
 - Do not assume the mounted DMG app is the real test target.
 - Do not treat missing live models as a code regression.
 - Do not default screenshot tests to `QWENVOICE_UITEST_CAPTURE_MODE=system`.

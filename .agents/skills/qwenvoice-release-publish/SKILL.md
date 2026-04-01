@@ -7,7 +7,7 @@ description: Publish QwenVoice GitHub releases with repo-specific versioning, CI
 
 ## Overview
 
-Use this skill for QwenVoice release work that touches versioning, checked-in release notes, remote CI gates, dual-runner GitHub Actions publishing, hosted release notes, or downloaded release artifacts. Follow the repo’s dual-UI release choreography instead of treating GitHub release publishing as a generic `gh release create` task. Local packaging scripts can still be useful for debugging, but they are not the publish path for a tagged release.
+Use this skill for QwenVoice release work that touches versioning, checked-in release notes, remote CI gates, dual-runner GitHub Actions publishing, hosted release notes, or downloaded release artifacts. Follow the repo’s dual-UI release choreography instead of treating GitHub release publishing as a generic `gh release create` task. Local packaging scripts can still be useful for macOS 26 debug work, but they are not the publish path or the source of truth for shipped release artifacts.
 
 ## Workflow
 
@@ -58,6 +58,12 @@ If either is red or still running, wait. Do not publish from a newer or differen
 
 The publish source of truth is `.github/workflows/release-dual-ui.yml`. This workflow is not just the publish step; it is the required build step for both shipped artifacts.
 
+The workflow currently has three stages:
+
+- `build-release`: builds and Developer ID-signs `QwenVoice-macos15.dmg` on `macos-15` and `QwenVoice-macos26.dmg` on `macos-26`
+- `notarize-release`: runs on `macos-26`, downloads the intermediate DMGs, notarizes and staples both, then uploads the final notarized artifact bundle
+- `publish-release`: runs only when `release_tag` is non-empty and uploads the final notarized assets to the GitHub release
+
 Provide all release-specific inputs:
 
 - `git_ref=<exact release sha>`
@@ -76,7 +82,19 @@ Do not build one artifact locally and the other on GitHub. Do not publish a tagg
 
 The workflow should also be the signing/notarization source of truth: import the Developer ID Application certificate from GitHub secrets, sign each runner's app, notarize and staple each DMG, and only then upload the artifacts. Prefer App Store Connect API key auth for notarization; include `issuer` for Team keys and omit it for Individual keys.
 
-### 6. Verify the hosted release, not just the workflow
+### 6. Use non-release smoke runs for build-only artifact requests
+
+When the user wants the official artifacts produced without publishing a GitHub release:
+
+- dispatch `release-dual-ui.yml` with `git_ref=<sha-or-branch>` and `artifact_label=<label>`
+- omit both `release_tag` and `release_notes_path`
+- wait for `build-release` and `notarize-release` to finish green
+- download the final notarized artifact bundle with `gh run download`
+- verify the downloaded DMGs before treating them as deliverables
+
+Do not download the intermediate `qwenvoice-dual-ui-build-*` artifacts when the user wants the final signed/notarized packages. The final `qwenvoice-dual-ui-*-final*` artifact bundle is the source of truth.
+
+### 7. Verify the hosted release, not just the workflow
 
 After the workflow completes, verify:
 
@@ -85,7 +103,7 @@ After the workflow completes, verify:
 - both DMGs and companion files are attached
 - hosted release notes are the checked-in notes, not a placeholder
 
-When the request includes downloads, also fetch the artifacts locally and verify checksums.
+When the request includes downloads, also fetch the final artifact bundle locally and verify checksums plus DMG trust state.
 
 ## Useful Commands
 
@@ -93,6 +111,8 @@ When the request includes downloads, also fetch the artifacts locally and verify
 gh run list --workflow release-dual-ui.yml --limit 10
 gh run view <run-id>
 gh workflow run release-dual-ui.yml -f git_ref=<sha> -f artifact_label=<version-shortsha> -f release_tag=vX.Y -f release_notes_path=docs/releases/vX.Y.md
+gh workflow run release-dual-ui.yml -f git_ref=<sha> -f artifact_label=<label>
+gh run download <run-id> -n qwenvoice-dual-ui-<run-number>-final[-label] -D <dir>
 gh release view vX.Y --repo PowerBeef/QwenVoice
 gh release edit vX.Y --repo PowerBeef/QwenVoice --notes-file docs/releases/vX.Y.md
 ```
@@ -104,5 +124,6 @@ gh release edit vX.Y --repo PowerBeef/QwenVoice --notes-file docs/releases/vX.Y.
 - Do not treat local green checks as a substitute for the required remote CI gates.
 - Do not treat local `./scripts/release.sh` output as the final release artifact source for a tagged publish.
 - Do not bypass the GitHub matrix by publishing only the locally available macOS 26 build.
+- Do not verify or hand off intermediate `qwenvoice-dual-ui-build-*` artifacts when the request is for final signed/notarized packages.
 - Do not patch hosted release notes by recreating the release unless the user explicitly wants that.
 - Do not verify only one DMG; this repo ships dual-UI macOS artifacts.

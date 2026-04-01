@@ -7,7 +7,7 @@ description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches
 
 ## Overview
 
-Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime from that source of truth.
+Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
 
 ## Workflow
 
@@ -65,6 +65,7 @@ python3 scripts/harness.py test --layer pipeline
 ```
 
 Add more targeted harness layers when the change touches UI-visible behavior.
+If the request is about shipped release behavior, validate against downloaded final notarized workflow artifacts after the local macOS 26 debug checks pass.
 
 ### 5. Keep release-facing docs aligned
 
@@ -94,5 +95,6 @@ When asked whether a packaged app uses bundled Python or ffmpeg, rely on runtime
 - Do not patch generated runtime assets directly when a repo-owned vendoring path exists.
 - Do not forget to rebuild the wheel after changing `third_party_patches/mlx-audio/`.
 - Do not stop at source tests when packaged runtime behavior is part of the request.
+- Do not treat local macOS 26 packaging as authoritative release proof for either shipped variant.
 - Do not let `__pycache__` or `.pyc` files leak into tracked changes.
 - Do not copy CLI speaker maps or cwd-based assumptions into the GUI runtime.

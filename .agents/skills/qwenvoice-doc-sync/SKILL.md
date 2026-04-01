@@ -43,6 +43,7 @@ Use these pairings as defaults:
 - **Current repo facts**: `docs/reference/current-state.md`
 - **Runtime or vendoring behavior**: `docs/reference/vendoring-runtime.md`
 - **Versioned release messaging**: `docs/releases/vX.Y.md`
+- **Repo-local agent guidance**: `.agents/skills/*.md`
 
 If a doc is intentionally user-facing, keep the wording concise and benefit-led. If it is maintainer-facing, keep the wording factual and operational.
 
@@ -54,6 +55,7 @@ For every doc edit, check that:
 - linked files exist
 - workflow names and artifact filenames match the current repo
 - version/build claims match `project.yml`
+- repo-local skill instructions still agree with the same workflow and packaging facts
 
 Use repo inspection commands instead of assuming previous docs were right.
 
