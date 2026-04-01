@@ -457,6 +457,9 @@ fields = [
     "mlx_lm_version",
     "mlx_audio_version",
     "transformers_version",
+    "mlx_wheel_tag",
+    "mlx_metal_wheel_tag",
+    "mlx_core_minos",
 ]
 for field in fields:
     value = manifest.get(field)

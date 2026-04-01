@@ -6,6 +6,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 REQUIREMENTS_PATH="$PROJECT_DIR/Sources/Resources/requirements.txt"
 APP_MIN_MACOS_VERSION="15.0"
 EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
+EXPECTED_MLX_WHEEL_TAG="cp313-cp313-macosx_15_0_arm64"
+EXPECTED_MLX_METAL_WHEEL_TAG="py3-none-macosx_15_0_arm64"
+EXPECTED_MLX_CORE_MINOS="$APP_MIN_MACOS_VERSION"
 
 fail() {
     echo "Error: $*" >&2
@@ -77,6 +80,7 @@ if [ ! -f "$HELPER_DIR/mlx_audio_qwen_speed_patch.py" ] && [ -f "$RESOURCES_DIR/
     HELPER_DIR="$RESOURCES_DIR/backend"
 fi
 MANIFEST_PATH="$PYTHON_ROOT/.qwenvoice-runtime-manifest.json"
+MLX_METALLIB_PATH="$(find "$PYTHON_ROOT/lib" -path '*/site-packages/mlx/lib/mlx.metallib' -type f | head -n1)"
 
 export PYTHONDONTWRITEBYTECODE=1
 
@@ -89,6 +93,7 @@ echo "[1/8] Checking required files..."
 [ -x "$FFMPEG_BIN" ] || fail "Bundled ffmpeg missing: $FFMPEG_BIN"
 [ -f "$SERVER_SCRIPT" ] || fail "Bundled backend missing: $SERVER_SCRIPT"
 [ -f "$MANIFEST_PATH" ] || fail "Bundled runtime manifest missing: $MANIFEST_PATH"
+[ -f "$MLX_METALLIB_PATH" ] || fail "Bundled mlx.metallib missing under $PYTHON_ROOT/lib"
 if find "$RESOURCES_DIR" -name "*.whl" -print -quit | grep -q .; then
     fail "Vendored wheel files should not be packaged into the app bundle"
 fi
@@ -182,6 +187,17 @@ if data["supported_minimum_macos"] != supported_macos:
     raise SystemExit(
         f"Manifest minimum macOS mismatch: {data['supported_minimum_macos']} != {supported_macos}"
     )
+expected_exact_values = {
+    "mlx_wheel_tag": "cp313-cp313-macosx_15_0_arm64",
+    "mlx_metal_wheel_tag": "py3-none-macosx_15_0_arm64",
+    "mlx_core_minos": supported_macos,
+}
+for key, expected_value in expected_exact_values.items():
+    actual_value = data.get(key)
+    if actual_value != expected_value:
+        raise SystemExit(
+            f"Manifest {key} mismatch: {actual_value} != {expected_value}"
+        )
 
 expected_core_versions = {}
 for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
@@ -236,7 +252,7 @@ if parse_version(data["mlx_core_minos"]) > max_version:
     )
 PY
 
-"$PYTHON_BIN" - "$PYTHON_ROOT" "$APP_MIN_MACOS_VERSION" <<'PY'
+"$PYTHON_BIN" - "$PYTHON_ROOT" "$APP_MIN_MACOS_VERSION" "$EXPECTED_MLX_WHEEL_TAG" "$EXPECTED_MLX_METAL_WHEEL_TAG" "$EXPECTED_MLX_CORE_MINOS" <<'PY'
 import json
 import re
 import subprocess
@@ -245,6 +261,9 @@ from pathlib import Path
 
 python_root = Path(sys.argv[1])
 supported_macos = sys.argv[2]
+expected_mlx_wheel_tag = sys.argv[3]
+expected_mlx_metal_wheel_tag = sys.argv[4]
+expected_mlx_core_minos = sys.argv[5]
 
 def parse_version(value: str) -> tuple[int, int]:
     parts = value.split(".")
@@ -262,6 +281,9 @@ site_packages_candidates = sorted(python_root.glob("lib/python*/site-packages"))
 if not site_packages_candidates:
     raise SystemExit(f"Could not locate site-packages under {python_root}")
 site_packages = site_packages_candidates[0]
+mlx_metallib_path = site_packages / "mlx" / "lib" / "mlx.metallib"
+if not mlx_metallib_path.is_file():
+    raise SystemExit(f"Could not locate bundled mlx.metallib at {mlx_metallib_path}")
 
 from importlib.metadata import version
 
@@ -275,10 +297,17 @@ def read_wheel_tag(prefix: str) -> str:
             return line.split(":", 1)[1].strip()
     raise SystemExit(f"Missing Tag entry in {wheel_path}")
 
-max_version = parse_version(supported_macos)
-for label, tag in (("mlx", read_wheel_tag("mlx-")), ("mlx-metal", read_wheel_tag("mlx_metal-"))):
-    if parse_tag_version(tag) > max_version:
-        raise SystemExit(f"{label} wheel tag is incompatible with macOS {supported_macos}: {tag}")
+resolved_wheel_tags = {
+    "mlx": read_wheel_tag("mlx-"),
+    "mlx-metal": read_wheel_tag("mlx_metal-"),
+}
+expected_wheel_tags = {
+    "mlx": expected_mlx_wheel_tag,
+    "mlx-metal": expected_mlx_metal_wheel_tag,
+}
+for label, tag in resolved_wheel_tags.items():
+    if tag != expected_wheel_tags[label]:
+        raise SystemExit(f"{label} wheel tag mismatch: {tag} != {expected_wheel_tags[label]}")
 
 core_candidates = sorted((site_packages / "mlx").glob("core.cpython-*-darwin.so"))
 if not core_candidates:
@@ -288,9 +317,9 @@ otool_output = subprocess.check_output(["otool", "-l", str(core_path)], text=Tru
 minos_match = re.search(r"\bminos\s+(\d+\.\d+)", otool_output)
 if not minos_match:
     raise SystemExit(f"Could not extract minos from {core_path}")
-if parse_version(minos_match.group(1)) > max_version:
+if minos_match.group(1) != expected_mlx_core_minos:
     raise SystemExit(
-        f"mlx core extension minos is incompatible with macOS {supported_macos}: {minos_match.group(1)}"
+        f"mlx core extension minos mismatch: {minos_match.group(1)} != {expected_mlx_core_minos}"
     )
 
 resolved_versions = {
@@ -309,12 +338,29 @@ manifest_versions = {
     "mlx-audio": manifest["mlx_audio_version"],
     "transformers": manifest["transformers_version"],
 }
+manifest_wheel_values = {
+    "mlx_wheel_tag": manifest["mlx_wheel_tag"],
+    "mlx_metal_wheel_tag": manifest["mlx_metal_wheel_tag"],
+    "mlx_core_minos": manifest["mlx_core_minos"],
+}
 for package, actual_version in resolved_versions.items():
     if manifest_versions[package] != actual_version:
         raise SystemExit(
             f"Bundled runtime resolved {package}={actual_version}, "
             f"but manifest recorded {manifest_versions[package]}"
         )
+if manifest_wheel_values["mlx_wheel_tag"] != expected_mlx_wheel_tag:
+    raise SystemExit(
+        f"Manifest mlx_wheel_tag mismatch: {manifest_wheel_values['mlx_wheel_tag']} != {expected_mlx_wheel_tag}"
+    )
+if manifest_wheel_values["mlx_metal_wheel_tag"] != expected_mlx_metal_wheel_tag:
+    raise SystemExit(
+        f"Manifest mlx_metal_wheel_tag mismatch: {manifest_wheel_values['mlx_metal_wheel_tag']} != {expected_mlx_metal_wheel_tag}"
+    )
+if manifest_wheel_values["mlx_core_minos"] != expected_mlx_core_minos:
+    raise SystemExit(
+        f"Manifest mlx_core_minos mismatch: {manifest_wheel_values['mlx_core_minos']} != {expected_mlx_core_minos}"
+    )
 PY
 
 LEAKED_LIBS=0
