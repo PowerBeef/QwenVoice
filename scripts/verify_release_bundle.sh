@@ -24,7 +24,7 @@ codesign_has_runtime_metadata() {
 
 verify_embedded_runtime_entitlements() {
     local target="$1"
-    codesign -d --entitlements :- "$target" 2>/dev/null | python3 - "$target" <<'PY'
+    codesign --display --entitlements - --xml "$target" 2>/dev/null | python3 - "$target" <<'PY'
 import plistlib
 import sys
 
