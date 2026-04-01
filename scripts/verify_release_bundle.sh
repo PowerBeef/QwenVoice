@@ -24,12 +24,15 @@ codesign_has_runtime_metadata() {
 
 verify_embedded_runtime_entitlements() {
     local target="$1"
-    codesign --display --entitlements - --xml "$target" 2>/dev/null | python3 - "$target" <<'PY'
+    local entitlements_payload
+    entitlements_payload="$(codesign --display --entitlements - --xml "$target" 2>/dev/null)"
+    ENTITLEMENTS_PAYLOAD="$entitlements_payload" python3 -c '
+import os
 import plistlib
 import sys
 
 target = sys.argv[1]
-payload = sys.stdin.buffer.read()
+payload = os.environ["ENTITLEMENTS_PAYLOAD"].encode("utf-8")
 if not payload.strip():
     raise SystemExit(f"Embedded runtime entitlements missing for {target}")
 
@@ -47,7 +50,7 @@ if entitlements != expected:
     raise SystemExit(
         f"Unexpected embedded runtime entitlements for {target}: {entitlements!r}"
     )
-PY
+' "$target"
 }
 
 if [ $# -ne 1 ]; then
