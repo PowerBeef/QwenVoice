@@ -58,7 +58,7 @@ echo ""
 echo "[1/5] Verifying DMG trust state..."
 if [ "$EXPECT_NOTARIZED_DMG" = "1" ]; then
     xcrun stapler validate "$DMG_PATH" >/dev/null 2>&1 || fail "Stapled notarization ticket is missing or invalid for $DMG_PATH"
-    spctl -a -vvv --type open "$DMG_PATH" >/dev/null 2>&1 || fail "Signed DMG was rejected by spctl"
+    spctl -a -vvv --type open --context context:primary-signature "$DMG_PATH" >/dev/null 2>&1 || fail "Signed DMG was rejected by spctl"
     echo "[1/5] Stapled DMG trust checks OK"
 else
     echo "[1/5] DMG notarization checks skipped (set QWENVOICE_EXPECT_NOTARIZED_DMG=1 for release verification)"

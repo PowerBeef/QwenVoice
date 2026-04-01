@@ -437,7 +437,7 @@ jobs:
 
             xcrun stapler staple "$dmg_path"
             xcrun stapler validate "$dmg_path"
-            spctl -a -vvv --type open "$dmg_path"
+            spctl -a -vvv --type open --context context:primary-signature "$dmg_path"
 
             local dmg_sha256_path="${dmg_path}.sha256"
             local dmg_sha256
