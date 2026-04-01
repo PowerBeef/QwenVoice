@@ -198,39 +198,14 @@ jobs:
           fi
 
           codesign --verify --deep --strict "$APP_PATH"
-          ./scripts/verify_release_bundle.sh "$APP_PATH"
+          QWENVOICE_EXPECT_SIGNED_RELEASE=1 ./scripts/verify_release_bundle.sh "$APP_PATH"
 
-      - name: Notarize and staple DMG
-        env:
-          APPLE_NOTARY_API_KEY_PATH: ${{ env.APPLE_NOTARY_API_KEY_PATH }}
-          APPLE_NOTARY_KEY_ID: ${{ env.APPLE_NOTARY_KEY_ID }}
-          APPLE_NOTARY_ISSUER_ID: ${{ env.APPLE_NOTARY_ISSUER_ID }}
-        run: |
-          DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
-          NOTARY_ARGS=(
-            --key "$APPLE_NOTARY_API_KEY_PATH"
-            --key-id "$APPLE_NOTARY_KEY_ID"
-            --wait
-            --timeout 20m
-          )
-
-          test -f "$DMG_PATH"
-          if [ -n "$APPLE_NOTARY_ISSUER_ID" ]; then
-            NOTARY_ARGS+=(--issuer "$APPLE_NOTARY_ISSUER_ID")
-          fi
-
-          xcrun notarytool submit "$DMG_PATH" "${NOTARY_ARGS[@]}"
-          xcrun stapler staple "$DMG_PATH"
-          xcrun stapler validate "$DMG_PATH"
-          spctl -a -vvv --type open "$DMG_PATH"
-
-      - name: Assert outputs and generate checksums
+      - name: Assert outputs and capture metadata
         run: |
           APP_PATH="build/QwenVoice.app"
           APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
           DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
           DMG_BASENAME="$(basename "$DMG_PATH")"
-          DMG_SHA256_PATH="${DMG_PATH}.sha256"
           METADATA_PATH="build/release-metadata-${{ matrix.variant.id }}.txt"
           EXPECTED_DMG_NAME="${{ matrix.variant.output_name }}.dmg"
           EXPECTED_UI_PROFILE="${{ matrix.variant.ui_profile }}"
@@ -238,9 +213,6 @@ jobs:
           test -d "$APP_PATH"
           test -f "$DMG_PATH"
           test -f "build/release-metadata.txt"
-
-          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
-          printf '%s  %s\n' "$DMG_SHA256" "$DMG_BASENAME" > "$DMG_SHA256_PATH"
 
           APP_MINOS="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "minos" { print $2; exit }')"
           APP_SDK="$(otool -l "$APP_BINARY" | awk '$1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_block = 1; next } in_block && $1 == "sdk" { print $2; exit }')"
@@ -315,33 +287,16 @@ jobs:
             echo "app_minos_asserted=$APP_MINOS"
           } >> "$METADATA_PATH"
 
-      - name: Verify checksum sidecar from clean download directory
-        run: |
-          DMG_PATH="build/${{ matrix.variant.output_name }}.dmg"
-          DMG_BASENAME="$(basename "$DMG_PATH")"
-          DMG_SHA256_PATH="${DMG_PATH}.sha256"
-          VERIFY_DIR="$(mktemp -d)"
-          trap 'rm -rf "$VERIFY_DIR"' EXIT
-
-          cp "$DMG_PATH" "$VERIFY_DIR/$DMG_BASENAME"
-          cp "$DMG_SHA256_PATH" "$VERIFY_DIR/${DMG_BASENAME}.sha256"
-
-          (
-            cd "$VERIFY_DIR"
-            shasum -a 256 -c "${DMG_BASENAME}.sha256"
-          )
-
-      - name: Verify mounted packaged DMG
+      - name: Verify mounted packaged DMG before notarization
         run: |
           QWENVOICE_EXPECT_SIGNED_RELEASE=1 \
-          QWENVOICE_EXPECT_NOTARIZED_DMG=1 \
           ./scripts/verify_packaged_dmg.sh \
             "build/${{ matrix.variant.output_name }}.dmg" \
             "build/release-metadata-${{ matrix.variant.id }}.txt"
 
-      - name: Compute artifact name
+      - name: Compute build artifact name
         run: |
-          name="qwenvoice-dual-ui-${GITHUB_RUN_NUMBER}-${{ matrix.variant.id }}"
+          name="qwenvoice-dual-ui-build-${GITHUB_RUN_NUMBER}-${{ matrix.variant.id }}"
           label="${{ inputs.artifact_label }}"
           if [ -n "$label" ]; then
             safe_label="$(printf '%s' "$label" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')"
@@ -349,17 +304,16 @@ jobs:
               name="${name}-${safe_label}"
             fi
           fi
-          echo "ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
-          echo "artifact name: $name"
+          echo "BUILD_ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+          echo "build artifact name: $name"
 
-      - name: Upload release artifacts
+      - name: Upload intermediate build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.ARTIFACT_NAME }}
+          name: ${{ env.BUILD_ARTIFACT_NAME }}
           if-no-files-found: error
           path: |
             build/${{ matrix.variant.output_name }}.dmg
-            build/${{ matrix.variant.output_name }}.dmg.sha256
             build/release-metadata-${{ matrix.variant.id }}.txt
 
       - name: Clean up signing credentials
@@ -370,10 +324,177 @@ jobs:
           fi
           rm -f "${APPLE_DEV_ID_APP_P12_PATH:-}" "${APPLE_NOTARY_API_KEY_PATH:-}"
 
+  notarize-release:
+    name: Notarize and validate dual UI assets
+    runs-on: macos-26
+    needs: build-release
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 1
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/*.sh
+
+      - name: Assert notarization secrets
+        env:
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_PRIVATE_KEY_P8: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_P8 }}
+        run: |
+          MISSING=0
+          for secret_name in \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_PRIVATE_KEY_P8; do
+            if [ -z "${!secret_name}" ]; then
+              echo "::error::$secret_name is required for notarization"
+              MISSING=1
+            fi
+          done
+
+          if [ "$MISSING" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare notary API key
+        env:
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_PRIVATE_KEY_P8: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_P8 }}
+        run: |
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_P8" > "$NOTARY_KEY_PATH"
+          chmod 600 "$NOTARY_KEY_PATH"
+
+          {
+            echo "APPLE_NOTARY_KEY_ID=$APPLE_NOTARY_KEY_ID"
+            echo "APPLE_NOTARY_ISSUER_ID=$APPLE_NOTARY_ISSUER_ID"
+            echo "APPLE_NOTARY_API_KEY_PATH=$NOTARY_KEY_PATH"
+          } >> "$GITHUB_ENV"
+
+      - name: Download intermediate build artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+          pattern: qwenvoice-dual-ui-build-${{ github.run_number }}-*
+          merge-multiple: true
+
+      - name: Show downloaded files
+        run: find dist -maxdepth 2 -type f | sort
+
+      - name: Notarize, staple, and verify DMGs
+        env:
+          APPLE_NOTARY_API_KEY_PATH: ${{ env.APPLE_NOTARY_API_KEY_PATH }}
+          APPLE_NOTARY_KEY_ID: ${{ env.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ env.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          mkdir -p dist/notary-logs
+
+          NOTARY_BASE_ARGS=(
+            --key "$APPLE_NOTARY_API_KEY_PATH"
+            --key-id "$APPLE_NOTARY_KEY_ID"
+          )
+          if [ -n "$APPLE_NOTARY_ISSUER_ID" ]; then
+            NOTARY_BASE_ARGS+=(--issuer "$APPLE_NOTARY_ISSUER_ID")
+          fi
+
+          notarize_one() {
+            local variant_id="$1"
+            local dmg_basename="$2"
+            local dmg_path="dist/$dmg_basename"
+            local metadata_path="dist/release-metadata-${variant_id}.txt"
+            local submit_json_path="dist/notary-logs/notary-submit-${variant_id}.json"
+            local log_json_path="dist/notary-logs/notary-log-${variant_id}.json"
+            local verify_dir
+
+            test -f "$dmg_path"
+            test -f "$metadata_path"
+
+            local -a submit_args=("${NOTARY_BASE_ARGS[@]}" --wait --timeout 20m --output-format json)
+
+            local submit_json
+            submit_json="$(xcrun notarytool submit "$dmg_path" "${submit_args[@]}")"
+            printf '%s\n' "$submit_json" | tee "$submit_json_path"
+
+            local submission_id
+            submission_id="$(printf '%s\n' "$submit_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+            local status
+            status="$(printf '%s\n' "$submit_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
+
+            if [ "$status" != "Accepted" ]; then
+              xcrun notarytool log "$submission_id" "${NOTARY_BASE_ARGS[@]}" --output-format json | tee "$log_json_path"
+              echo "::error::Notarization failed for $dmg_basename with status '$status'"
+              exit 1
+            fi
+
+            xcrun stapler staple "$dmg_path"
+            xcrun stapler validate "$dmg_path"
+            spctl -a -vvv --type open "$dmg_path"
+
+            local dmg_sha256_path="${dmg_path}.sha256"
+            local dmg_sha256
+            dmg_sha256="$(shasum -a 256 "$dmg_path" | awk '{print $1}')"
+            printf '%s  %s\n' "$dmg_sha256" "$dmg_basename" > "$dmg_sha256_path"
+
+            verify_dir="$(mktemp -d)"
+            cp "$dmg_path" "$verify_dir/$dmg_basename"
+            cp "$dmg_sha256_path" "$verify_dir/${dmg_basename}.sha256"
+            (
+              cd "$verify_dir"
+              shasum -a 256 -c "${dmg_basename}.sha256"
+            )
+            rm -rf "$verify_dir"
+
+            QWENVOICE_EXPECT_SIGNED_RELEASE=1 \
+            QWENVOICE_EXPECT_NOTARIZED_DMG=1 \
+            ./scripts/verify_packaged_dmg.sh "$dmg_path" "$metadata_path"
+          }
+
+          notarize_one modern-liquid QwenVoice-macos26.dmg
+          notarize_one legacy-glass QwenVoice-macos15.dmg
+
+      - name: Compute final artifact name
+        run: |
+          name="qwenvoice-dual-ui-${GITHUB_RUN_NUMBER}-final"
+          label="${{ inputs.artifact_label }}"
+          if [ -n "$label" ]; then
+            safe_label="$(printf '%s' "$label" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')"
+            if [ -n "$safe_label" ]; then
+              name="${name}-${safe_label}"
+            fi
+          fi
+          echo "FINAL_ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+          echo "final artifact name: $name"
+
+      - name: Upload final notarized artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.FINAL_ARTIFACT_NAME }}
+          if-no-files-found: error
+          path: |
+            dist/QwenVoice-macos26.dmg
+            dist/QwenVoice-macos26.dmg.sha256
+            dist/release-metadata-modern-liquid.txt
+            dist/QwenVoice-macos15.dmg
+            dist/QwenVoice-macos15.dmg.sha256
+            dist/release-metadata-legacy-glass.txt
+
+      - name: Clean up notary API key
+        if: always()
+        run: rm -f "${APPLE_NOTARY_API_KEY_PATH:-}"
+
   publish-release:
     name: Publish dual UI assets to release
     runs-on: ubuntu-latest
-    needs: build-release
+    needs: notarize-release
     if: ${{ inputs.release_tag != '' }}
     permissions:
       contents: write
@@ -388,7 +509,7 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           path: dist
-          pattern: qwenvoice-dual-ui-${{ github.run_number }}-*
+          pattern: qwenvoice-dual-ui-${{ github.run_number }}-final*
           merge-multiple: true
 
       - name: Show artifact files

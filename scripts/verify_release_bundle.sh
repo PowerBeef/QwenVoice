@@ -12,6 +12,44 @@ fail() {
     exit 1
 }
 
+is_macho_file() {
+    local target="$1"
+    file -b "$target" 2>/dev/null | grep -q "Mach-O"
+}
+
+codesign_has_runtime_metadata() {
+    local target="$1"
+    codesign -dv --verbose=4 "$target" 2>&1 | grep -q "Runtime Version"
+}
+
+verify_embedded_runtime_entitlements() {
+    local target="$1"
+    codesign -d --entitlements :- "$target" 2>/dev/null | python3 - "$target" <<'PY'
+import plistlib
+import sys
+
+target = sys.argv[1]
+payload = sys.stdin.buffer.read()
+if not payload.strip():
+    raise SystemExit(f"Embedded runtime entitlements missing for {target}")
+
+try:
+    entitlements = plistlib.loads(payload)
+except Exception as exc:  # pragma: no cover - defensive shell validation
+    raise SystemExit(f"Could not parse entitlements for {target}: {exc}") from exc
+
+expected = {
+    "com.apple.security.cs.allow-unsigned-executable-memory": True,
+    "com.apple.security.cs.disable-library-validation": True,
+}
+
+if entitlements != expected:
+    raise SystemExit(
+        f"Unexpected embedded runtime entitlements for {target}: {entitlements!r}"
+    )
+PY
+}
+
 if [ $# -ne 1 ]; then
     fail "Usage: $0 /path/to/QwenVoice.app"
 fi
@@ -60,9 +98,17 @@ echo ""
 echo "[2/9] Verifying app code signature..."
 if [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
     codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1 || fail "Signed release code signature verification failed"
-    if ! codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -q "Runtime Version"; then
+    if ! codesign_has_runtime_metadata "$APP_PATH"; then
         fail "Signed release is missing hardened runtime metadata"
     fi
+    if [ -x "$FFMPEG_BIN" ] && is_macho_file "$FFMPEG_BIN"; then
+        codesign_has_runtime_metadata "$FFMPEG_BIN" || fail "Bundled ffmpeg is missing hardened runtime metadata"
+    fi
+    while IFS= read -r -d '' py_bin; do
+        is_macho_file "$py_bin" || continue
+        codesign_has_runtime_metadata "$py_bin" || fail "Bundled Python executable is missing hardened runtime metadata: $py_bin"
+        verify_embedded_runtime_entitlements "$py_bin"
+    done < <(find "$PYTHON_ROOT/bin" -type f -print0 2>/dev/null)
     spctl -a -vvv --type exec "$APP_PATH" >/dev/null 2>&1 || fail "Signed release was rejected by spctl"
     echo "[2/9] Signed release checks OK"
 else

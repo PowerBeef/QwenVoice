@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 APP_BUNDLE_NAME="QwenVoice"
+EMBEDDED_RUNTIME_ENTITLEMENTS="$PROJECT_DIR/Sources/QwenVoiceEmbeddedRuntime.entitlements"
 TOTAL_START=$(date +%s)
 
 SKIP_DEPS=false
@@ -157,17 +158,19 @@ run_codesign() {
 
 sign_macho_executable() {
     local target="$1"
+    shift || true
     [ -f "$target" ] || return 0
     [ -x "$target" ] || return 0
     is_macho_file "$target" || return 0
-    run_codesign "$target"
+    run_codesign "$target" "$@"
 }
 
 sign_macho_library() {
     local target="$1"
+    shift || true
     [ -f "$target" ] || return 0
     is_macho_file "$target" || return 0
-    run_codesign "$target"
+    run_codesign "$target" "$@"
 }
 
 echo "=== QwenVoice: Release Build ==="
@@ -340,12 +343,17 @@ echo ""
 STEP_START=$(date +%s)
 echo "[5/8] Signing bundled executables and final app bundle..."
 
+[ -f "$EMBEDDED_RUNTIME_ENTITLEMENTS" ] || release_fail "Missing embedded runtime entitlements: $EMBEDDED_RUNTIME_ENTITLEMENTS"
+
 if [ -f "$APP_RESOURCES/ffmpeg" ]; then
-    sign_macho_executable "$APP_RESOURCES/ffmpeg"
+    sign_macho_executable "$APP_RESOURCES/ffmpeg" --options runtime
 fi
 
 while IFS= read -r -d '' py_bin; do
-    sign_macho_executable "$py_bin"
+    sign_macho_executable \
+        "$py_bin" \
+        --options runtime \
+        --entitlements "$EMBEDDED_RUNTIME_ENTITLEMENTS"
 done < <(find "$APP_RESOURCES/python/bin" -type f -print0 2>/dev/null)
 
 while IFS= read -r -d '' native_file; do
