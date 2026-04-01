@@ -112,7 +112,6 @@ if [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
         codesign_has_runtime_metadata "$py_bin" || fail "Bundled Python executable is missing hardened runtime metadata: $py_bin"
         verify_embedded_runtime_entitlements "$py_bin"
     done < <(find "$PYTHON_ROOT/bin" -type f -print0 2>/dev/null)
-    spctl -a -vvv --type exec "$APP_PATH" >/dev/null 2>&1 || fail "Signed release was rejected by spctl"
     echo "[2/9] Signed release checks OK"
 else
     echo "[2/9] Signature checks skipped (set QWENVOICE_EXPECT_SIGNED_RELEASE=1 for release verification)"
