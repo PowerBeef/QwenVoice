@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
 EXPECT_NOTARIZED_DMG="${QWENVOICE_EXPECT_NOTARIZED_DMG:-0}"
 
 fail() {
@@ -56,10 +57,15 @@ trap cleanup EXIT
 echo "=== QwenVoice: Verify Packaged DMG ==="
 echo ""
 echo "[1/5] Verifying DMG trust state..."
+if [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
+    codesign --verify --verbose=4 "$DMG_PATH" >/dev/null 2>&1 || fail "Signed DMG code signature verification failed"
+fi
 if [ "$EXPECT_NOTARIZED_DMG" = "1" ]; then
     xcrun stapler validate "$DMG_PATH" >/dev/null 2>&1 || fail "Stapled notarization ticket is missing or invalid for $DMG_PATH"
     spctl -a -vvv --type open --context context:primary-signature "$DMG_PATH" >/dev/null 2>&1 || fail "Signed DMG was rejected by spctl"
     echo "[1/5] Stapled DMG trust checks OK"
+elif [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
+    echo "[1/5] Signed DMG code signature checks OK"
 else
     echo "[1/5] DMG notarization checks skipped (set QWENVOICE_EXPECT_NOTARIZED_DMG=1 for release verification)"
 fi

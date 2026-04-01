@@ -391,6 +391,15 @@ echo ""
 STEP_START=$(date +%s)
 echo "[7/8] Creating DMG..."
 DMG_NAME="$OUTPUT_NAME" "$SCRIPT_DIR/create_dmg.sh" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
+
+DMG_PATH="$BUILD_DIR/${OUTPUT_NAME}.dmg"
+[ -f "$DMG_PATH" ] || release_fail "Created DMG is missing: $DMG_PATH"
+
+echo "Signing DMG container..."
+run_codesign "$DMG_PATH"
+
+echo "Verifying DMG signature..."
+codesign --verify --verbose=4 "$DMG_PATH"
 echo ""
 echo "[7/8] Create DMG — done ($(step_time $STEP_START))"
 echo ""
@@ -399,7 +408,6 @@ echo ""
 # Step 8: Report
 # ---------------------------------------------------------------------------
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
-DMG_PATH="$BUILD_DIR/${OUTPUT_NAME}.dmg"
 DMG_SIZE=$(du -sh "$DMG_PATH" | cut -f1)
 APP_SIZE=$(du -sh "$BUILD_DIR/$APP_BUNDLE_NAME.app" | cut -f1)
 
