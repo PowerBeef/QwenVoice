@@ -53,6 +53,7 @@ Required checks on the exact target SHA:
 - `Test Suite`
 
 If either is red or still running, wait. Do not publish from a newer or different SHA without saying so explicitly.
+If the intended release SHA fails either required check, fix the blocker on `main`, update the intended release SHA, and restart the remote-gate wait before dispatching `release-dual-ui`.
 
 ### 5. Dispatch the dual-UI release workflow
 
@@ -100,10 +101,17 @@ After the workflow completes, verify:
 
 - release title matches the intended version
 - target commit SHA matches the release commit
+- both release metadata files report the same `commit_sha`
+- the published release target SHA matches the `commit_sha` recorded in both metadata files
 - both DMGs and companion files are attached
 - hosted release notes are the checked-in notes, not a placeholder
 
-When the request includes downloads, also fetch the final artifact bundle locally and verify checksums plus DMG trust state.
+For tagged releases, treat hosted-asset verification as the default closeout, not an optional extra:
+
+- `gh release download vX.Y`
+- `xcrun stapler validate <dmg>` on both DMGs
+- `spctl -a -vvv --type open --context context:primary-signature <dmg>` on both DMGs
+- `QWENVOICE_EXPECT_SIGNED_RELEASE=1 QWENVOICE_EXPECT_NOTARIZED_DMG=1 ./scripts/verify_packaged_dmg.sh <dmg> <metadata>` on both variants
 
 ## Useful Commands
 

@@ -46,6 +46,7 @@ Use these pairings as defaults:
 - **Repo-local agent guidance**: `.agents/skills/*.md`
 
 If a doc is intentionally user-facing, keep the wording concise and benefit-led. If it is maintainer-facing, keep the wording factual and operational.
+If signing or notarization behavior changed, explicitly re-check the public install path in `README.md` so official releases are described as signed/notarized/stapled and unsigned-build workarounds stay out of the normal install steps.
 
 ### 3. Verify commands, links, and artifact names
 

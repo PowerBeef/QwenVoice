@@ -63,6 +63,14 @@ python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-back
 
 For this repo, both `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` should come from the GitHub `Release Dual UI` workflow. Validate the final downloaded or uploaded notarized workflow artifact bundle rather than rebuilding release packages locally or relying on the intermediate `qwenvoice-dual-ui-build-*` artifacts.
 
+For deeper hosted-release analysis, prefer a local audit workspace under:
+
+```bash
+build/downloads/<release-or-label>/audit/
+```
+
+Keep copied-out apps, raw inspection output, and any written audit report there so release investigations stay local and do not pollute tracked docs.
+
 When the request is about signed or notarized releases, include trust checks in addition to bundle checks:
 
 - `spctl -a -vvv --type open --context context:primary-signature <dmg>`
@@ -74,6 +82,7 @@ Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as 
 - copy `QwenVoice.app` into a disposable temp install root
 - clear quarantine on the temp copy only if the spot-check flow requires it
 - test the copied app, not the mounted app
+- if you run bundled Python directly inside the copied app for inspection, set `PYTHONDONTWRITEBYTECODE=1` or avoid ad hoc interpreter runs that would create `__pycache__` noise in the audit copy
 
 ### 4. Keep UI screenshot capture permissionless by default
 

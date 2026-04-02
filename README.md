@@ -77,12 +77,14 @@ Current GitHub release builds are produced by the dual-release workflow and typi
 Then:
 
 1. Drag `QwenVoice.app` to `/Applications`
-2. Open the app. Official GitHub workflow releases are intended to be signed and notarized.
-3. If you are testing an older unsigned build, you may still need to remove quarantine manually:
+2. Open the app normally. Official GitHub workflow releases are signed, notarized, and stapled.
+3. macOS may still show the standard first-open “downloaded from the Internet” confirmation prompt.
+4. Go to **Models**, download a model, and generate speech
+
+If you are testing an older unsigned build or an unofficial local/debug artifact, you may still need to remove quarantine manually:
    ```sh
    xattr -cr "/Applications/QwenVoice.app"
    ```
-4. Go to **Models**, download a model, and generate speech
 
 ## Models
 

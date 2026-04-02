@@ -9,6 +9,12 @@ description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches
 
 Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
 
+Current runtime policy:
+
+- both shipped release variants intentionally package the same macOS 15-compatible MLX/Metal runtime
+- the dual-release split is for app/UI build profile and SDK differences, not for two separate bundled MLX runtimes
+- moving the macOS 26 artifact to a macOS 26-specific MLX/Metal runtime would be a product/runtime decision, not a packaging optimization
+
 ## Workflow
 
 ### 1. Respect the safe edit boundaries

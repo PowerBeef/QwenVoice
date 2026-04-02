@@ -27,6 +27,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-dual-ui-${{ github.workflow }}-${{ inputs.release_tag || inputs.git_ref }}
+  cancel-in-progress: false
+
 jobs:
   build-release:
     name: Build ${{ matrix.variant.id }} (${{ matrix.variant.runner }})
@@ -482,6 +486,8 @@ jobs:
             QWENVOICE_EXPECT_SIGNED_RELEASE=1 \
             QWENVOICE_EXPECT_NOTARIZED_DMG=1 \
             ./scripts/verify_packaged_dmg.sh "$dmg_path" "$metadata_path"
+
+            printf '%s\t%s\n' "$variant_id" "$dmg_basename" >> dist/notary-logs/status.tsv
           }
 
           notarize_one modern-liquid QwenVoice-macos26.dmg
@@ -498,7 +504,40 @@ jobs:
             fi
           fi
           echo "FINAL_ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+          echo "NOTARY_LOGS_ARTIFACT_NAME=${name}-notary-logs" >> "$GITHUB_ENV"
           echo "final artifact name: $name"
+
+      - name: Write notarization summary
+        run: |
+          TARGET_SHA="$(grep -h '^commit_sha=' dist/release-metadata-*.txt | cut -d= -f2- | sort -u)"
+          if [ -z "$TARGET_SHA" ]; then
+            echo "::error::Could not determine target SHA from release metadata"
+            exit 1
+          fi
+
+          {
+            echo "## Final Release Receipt"
+            echo ""
+            echo "- Target SHA: \`$TARGET_SHA\`"
+            echo "- Final artifact bundle: \`${FINAL_ARTIFACT_NAME}\`"
+            echo ""
+            echo "| Variant | DMG | UI profile | SDK | Notarization | Stapled |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            while IFS=$'\t' read -r variant_id dmg_basename; do
+              case "$variant_id" in
+                modern-liquid) metadata_path="dist/release-metadata-modern-liquid.txt" ;;
+                legacy-glass) metadata_path="dist/release-metadata-legacy-glass.txt" ;;
+                *)
+                  echo "::error::Unknown variant id in notarization status: $variant_id"
+                  exit 1
+                  ;;
+              esac
+
+              ui_profile="$(grep -E '^ui_profile=' "$metadata_path" | head -n1 | cut -d= -f2-)"
+              app_sdk="$(grep -E '^app_sdk=' "$metadata_path" | head -n1 | cut -d= -f2-)"
+              echo "| $variant_id | \`$dmg_basename\` | $ui_profile | $app_sdk | Accepted | Yes |"
+            done < dist/notary-logs/status.tsv
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload final notarized artifacts
         uses: actions/upload-artifact@v6
@@ -512,6 +551,16 @@ jobs:
             dist/QwenVoice-macos15.dmg
             dist/QwenVoice-macos15.dmg.sha256
             dist/release-metadata-legacy-glass.txt
+
+      - name: Upload notary logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.NOTARY_LOGS_ARTIFACT_NAME }}
+          if-no-files-found: warn
+          path: |
+            dist/notary-logs/*.json
+            dist/notary-logs/status.tsv
 
       - name: Clean up notary API key
         if: always()
@@ -541,6 +590,33 @@ jobs:
       - name: Show artifact files
         run: find dist -maxdepth 2 -type f | sort
 
+      - name: Validate final release metadata
+        run: |
+          MODERN_METADATA="dist/release-metadata-modern-liquid.txt"
+          LEGACY_METADATA="dist/release-metadata-legacy-glass.txt"
+
+          test -f "$MODERN_METADATA"
+          test -f "$LEGACY_METADATA"
+
+          MODERN_SHA="$(grep -E '^commit_sha=' "$MODERN_METADATA" | head -n1 | cut -d= -f2-)"
+          LEGACY_SHA="$(grep -E '^commit_sha=' "$LEGACY_METADATA" | head -n1 | cut -d= -f2-)"
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+
+          if [ -z "$MODERN_SHA" ] || [ -z "$LEGACY_SHA" ]; then
+            echo "::error::Missing commit_sha in one or both release metadata files"
+            exit 1
+          fi
+          if [ "$MODERN_SHA" != "$LEGACY_SHA" ]; then
+            echo "::error::Release metadata commit_sha mismatch: modern=$MODERN_SHA legacy=$LEGACY_SHA"
+            exit 1
+          fi
+          if [ "$MODERN_SHA" != "$CHECKED_OUT_SHA" ]; then
+            echo "::error::Release metadata commit_sha $MODERN_SHA does not match checked out SHA $CHECKED_OUT_SHA"
+            exit 1
+          fi
+
+          echo "RELEASE_TARGET_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+
       - name: Ensure release exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -558,10 +634,7 @@ jobs:
             exit 1
           fi
 
-          COMMIT_SHA="$(grep -h '^commit_sha=' dist/release-metadata-*.txt | head -n1 | cut -d= -f2-)"
-          if [ -z "$COMMIT_SHA" ]; then
-            COMMIT_SHA="$GITHUB_SHA"
-          fi
+          COMMIT_SHA="${RELEASE_TARGET_SHA:-$GITHUB_SHA}"
 
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
