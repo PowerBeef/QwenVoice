@@ -1392,18 +1392,9 @@ final class PythonBridge: ObservableObject {
     // MARK: - Path Resolution
 
     private static func findServerScript() -> String? {
-        // 1. App bundle
-        if let bundlePath = Bundle.main.path(forResource: "server", ofType: "py") {
-            return bundlePath
-        }
+        // 1. App bundle: the shipped production backend lives under Resources/backend/.
         if let bundlePath = Bundle.main.path(forResource: "server", ofType: "py", inDirectory: "backend") {
             return bundlePath
-        }
-        if let resourceURL = Bundle.main.resourceURL {
-            let path = resourceURL.appendingPathComponent("server.py").path
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
         }
         if let resourceURL = Bundle.main.resourceURL {
             let path = resourceURL.appendingPathComponent("backend/server.py").path

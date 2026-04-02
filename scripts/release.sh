@@ -330,9 +330,7 @@ find "$APP_RESOURCES" -name "*.whl" -delete 2>/dev/null || true
 [ -d "$APP_RESOURCES/python" ] || release_fail "Packaged app is missing Contents/Resources/python"
 [ -f "$APP_RESOURCES/python/.qwenvoice-runtime-manifest.json" ] || release_fail "Packaged app is missing the bundled runtime manifest"
 [ -x "$APP_RESOURCES/ffmpeg" ] || release_fail "Packaged app is missing an executable bundled ffmpeg binary"
-if [ ! -f "$APP_RESOURCES/server.py" ] && [ ! -f "$APP_RESOURCES/backend/server.py" ]; then
-    release_fail "Packaged app is missing the bundled backend entrypoint"
-fi
+"$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 
 echo "[4/8] Copy .app + deps — done ($(step_time $STEP_START))"
 echo ""

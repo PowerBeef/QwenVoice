@@ -72,18 +72,13 @@ fi
 APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 
 RESOURCES_DIR="$APP_PATH/Contents/Resources"
+BACKEND_DIR="$RESOURCES_DIR/backend"
 APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
 PYTHON_ROOT="$RESOURCES_DIR/python"
 PYTHON_BIN="$PYTHON_ROOT/bin/python3"
 FFMPEG_BIN="$RESOURCES_DIR/ffmpeg"
-SERVER_SCRIPT="$RESOURCES_DIR/server.py"
-if [ ! -f "$SERVER_SCRIPT" ] && [ -f "$RESOURCES_DIR/backend/server.py" ]; then
-    SERVER_SCRIPT="$RESOURCES_DIR/backend/server.py"
-fi
-HELPER_DIR="$RESOURCES_DIR"
-if [ ! -f "$HELPER_DIR/mlx_audio_qwen_speed_patch.py" ] && [ -f "$RESOURCES_DIR/backend/mlx_audio_qwen_speed_patch.py" ]; then
-    HELPER_DIR="$RESOURCES_DIR/backend"
-fi
+SERVER_SCRIPT="$BACKEND_DIR/server.py"
+HELPER_DIR="$BACKEND_DIR"
 MANIFEST_PATH="$PYTHON_ROOT/.qwenvoice-runtime-manifest.json"
 MLX_METALLIB_PATH="$(find "$PYTHON_ROOT/lib" -path '*/site-packages/mlx/lib/mlx.metallib' -type f | head -n1)"
 
@@ -93,6 +88,7 @@ echo "=== QwenVoice: Verify Release Bundle ==="
 echo ""
 
 echo "[1/8] Checking required files..."
+"$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$APP_PATH" >/dev/null
 [ -x "$APP_BINARY" ] || fail "App binary missing: $APP_BINARY"
 [ -x "$PYTHON_BIN" ] || fail "Bundled Python missing: $PYTHON_BIN"
 [ -x "$FFMPEG_BIN" ] || fail "Bundled ffmpeg missing: $FFMPEG_BIN"

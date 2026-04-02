@@ -23,9 +23,20 @@ targets:
           - "Resources/ffmpeg/**"
           - "Resources/vendor"
           - "Resources/vendor/**"
+          - "Resources/backend"
+          - "Resources/backend/**"
           - "Resources/**/*.whl"
           - "Resources/**/__pycache__/**"
           - "Resources/**/*.pyc"
+      - path: Sources/Resources/backend
+        buildPhase:
+          copyFiles:
+            destination: resources
+            subpath: backend
+        excludes:
+          - "server_compat.py"
+          - "__pycache__/**"
+          - "*.pyc"
     resources:
       - path: Sources/Resources
         buildPhase: resources
@@ -34,6 +45,8 @@ targets:
           - "ffmpeg"
           - "vendor"
           - "vendor/**"
+          - "backend"
+          - "backend/**"
           - "**/*.whl"
           - "**/__pycache__/**"
           - "**/*.pyc"
@@ -58,6 +71,25 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
       - package: GRDB
+    postBuildScripts:
+      - name: Sanitize Bundled Backend Resources
+        shell: /bin/bash
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          RESOURCES_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          BACKEND_DIR="${RESOURCES_DIR}/backend"
+
+          rm -f \
+            "${RESOURCES_DIR}/server.py" \
+            "${RESOURCES_DIR}/mlx_audio_qwen_speed_patch.py" \
+            "${RESOURCES_DIR}/server_compat.py"
+
+          if [ -d "${BACKEND_DIR}" ]; then
+            rm -f "${BACKEND_DIR}/server_compat.py"
+            find "${BACKEND_DIR}" -type d -name "__pycache__" -prune -exec rm -rf {} +
+            find "${BACKEND_DIR}" -name "*.pyc" -delete
+          fi
 
   QwenVoiceTests:
     type: bundle.unit-test
