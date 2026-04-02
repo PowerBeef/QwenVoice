@@ -22,7 +22,12 @@ is_macho_file() {
 
 codesign_has_runtime_metadata() {
     local target="$1"
-    codesign -dv --verbose=4 "$target" 2>&1 | grep -q "Runtime Version"
+    local codesign_output
+    if ! codesign_output="$(codesign -dv --verbose=4 "$target" 2>&1)"; then
+        printf '%s\n' "$codesign_output" >&2
+        return 1
+    fi
+    grep -q "Runtime Version" <<<"$codesign_output"
 }
 
 verify_embedded_runtime_entitlements() {
