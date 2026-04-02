@@ -4,6 +4,7 @@ struct BatchGenerationSheet: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var envManager: PythonEnvironmentManager
+    @EnvironmentObject var appCommandRouter: AppCommandRouter
     @Environment(\.dismiss) private var dismiss
 
     let mode: GenerationMode
@@ -207,10 +208,7 @@ struct BatchGenerationSheet: View {
             Button("View in History") {
                 dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    NotificationCenter.default.post(
-                        name: .navigateToSidebarItem,
-                        object: SidebarItem.history
-                    )
+                    appCommandRouter.navigate(to: .history)
                 }
             }
             .buttonStyle(.borderedProminent)

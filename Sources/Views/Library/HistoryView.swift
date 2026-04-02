@@ -70,6 +70,7 @@ struct HistoryView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
+    @EnvironmentObject private var generationLibraryEvents: GenerationLibraryEvents
     @Binding var searchText: String
     @Binding var sortOrder: HistorySortOrder
 
@@ -91,7 +92,7 @@ struct HistoryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_history")
             .onAppear(perform: handleAppear)
-            .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in handleGenerationSaved() }
+            .onReceive(generationLibraryEvents.generationSaved) { _ in handleGenerationSaved() }
             .onChange(of: itemsRevision) { _, _ in recomputeFilteredItems() }
             .onChange(of: sortOrder) { _, _ in recomputeFilteredItems() }
             .onChange(of: searchText) { _, _ in

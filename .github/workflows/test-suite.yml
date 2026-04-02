@@ -41,15 +41,7 @@ jobs:
 
       - name: Set UI profile for runner
         run: |
-          case "${{ matrix.runner }}" in
-            macos-15)
-              echo "Patching project.yml to use QW_UI_LEGACY_GLASS for macOS 15 SDK..."
-              sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
-              ;;
-            macos-26)
-              echo "Using default QW_UI_LIQUID for macOS 26 SDK"
-              ;;
-          esac
+          ./scripts/set_ci_ui_profile.sh "${{ matrix.runner }}"
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
@@ -204,11 +196,7 @@ jobs:
 
       - name: Set UI profile for runner
         run: |
-          case "${{ matrix.runner }}" in
-            macos-15)
-              sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
-              ;;
-          esac
+          ./scripts/set_ci_ui_profile.sh "${{ matrix.runner }}"
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
@@ -264,11 +252,7 @@ jobs:
 
       - name: Set UI profile for runner
         run: |
-          case "${{ matrix.runner }}" in
-            macos-15)
-              sed -i '' 's/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID/SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS/' project.yml
-              ;;
-          esac
+          ./scripts/set_ci_ui_profile.sh "${{ matrix.runner }}"
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh

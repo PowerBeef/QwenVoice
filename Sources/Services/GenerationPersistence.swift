@@ -21,7 +21,8 @@ enum GenerationPersistence {
         result: GenerationResult,
         text: String,
         audioPlayer: AudioPlayerViewModel,
-        caller: String
+        caller: String,
+        generationEvents: GenerationLibraryEvents = .shared
     ) throws {
         AppPerformanceSignposts.emit("Final File Ready")
 
@@ -55,7 +56,7 @@ enum GenerationPersistence {
             #endif
 
             let notificationStart = DispatchTime.now().uptimeNanoseconds
-            NotificationCenter.default.post(name: .generationSaved, object: nil)
+            generationEvents.announceGenerationSaved()
             #if DEBUG
             print("[Performance][\(caller)] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
             #endif

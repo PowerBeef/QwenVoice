@@ -7,6 +7,51 @@ private final class MainCapableTestWindow: NSWindow {
 }
 
 final class AppStartupCoordinatorTests: XCTestCase {
+    func testLaunchActionPrefersBundledRuntimeOverOtherPaths() {
+        let action = EnvironmentSetupStateMachine().launchAction(
+            machineIdentifier: "arm64",
+            bundledPythonPath: "/Applications/QwenVoice.app/Contents/Resources/python/bin/python3",
+            bundledRuntimeExists: true,
+            isStubBackendMode: true,
+            uiTestLiveOverridePythonPath: "/tmp/ui-test/python3",
+            venvPythonPath: "/tmp/dev-venv/python3",
+            isMarkerValid: true
+        )
+
+        XCTAssertEqual(
+            action,
+            .validateBundled("/Applications/QwenVoice.app/Contents/Resources/python/bin/python3")
+        )
+    }
+
+    func testLaunchActionFallsBackToStubBeforeUITestLiveOrDevVenv() {
+        let action = EnvironmentSetupStateMachine().launchAction(
+            machineIdentifier: "arm64",
+            bundledPythonPath: nil,
+            bundledRuntimeExists: false,
+            isStubBackendMode: true,
+            uiTestLiveOverridePythonPath: "/tmp/ui-test/python3",
+            venvPythonPath: "/tmp/dev-venv/python3",
+            isMarkerValid: true
+        )
+
+        XCTAssertEqual(action, .runStub)
+    }
+
+    func testLaunchActionUsesSlowPathWhenNoReadyRuntimeExists() {
+        let action = EnvironmentSetupStateMachine().launchAction(
+            machineIdentifier: "arm64",
+            bundledPythonPath: nil,
+            bundledRuntimeExists: false,
+            isStubBackendMode: false,
+            uiTestLiveOverridePythonPath: nil,
+            venvPythonPath: "/tmp/missing-venv/python3",
+            isMarkerValid: false
+        )
+
+        XCTAssertEqual(action, .runSlowPath)
+    }
+
     func testShouldStartSetupTaskBlocksDuplicateCheckingState() {
         XCTAssertFalse(
             PythonEnvironmentManager.shouldStartSetupTask(

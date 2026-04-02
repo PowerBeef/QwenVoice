@@ -322,14 +322,17 @@ final class BatchGenerationCoordinator: ObservableObject {
 final class BatchGenerationRunner {
     private let bridge: any BatchGenerationBridging
     private let store: any GenerationPersisting
+    private let generationEvents: GenerationLibraryEvents
     private let cancellationState = BatchGenerationCancellationState()
 
     init(
         bridge: any BatchGenerationBridging,
-        store: any GenerationPersisting
+        store: any GenerationPersisting,
+        generationEvents: GenerationLibraryEvents = .shared
     ) {
         self.bridge = bridge
         self.store = store
+        self.generationEvents = generationEvents
     }
 
     func run(
@@ -404,7 +407,7 @@ final class BatchGenerationRunner {
                     let (line, result) = pair
                     var generation = request.makeHistoryRecord(for: line, result: result)
                     try store.saveGeneration(&generation)
-                    NotificationCenter.default.post(name: .generationSaved, object: nil)
+                    generationEvents.announceGenerationSaved()
                     completedCount += 1
                 }
 
@@ -462,7 +465,7 @@ final class BatchGenerationRunner {
 
                 var generation = request.makeHistoryRecord(for: line, result: result)
                 try store.saveGeneration(&generation)
-                NotificationCenter.default.post(name: .generationSaved, object: nil)
+                generationEvents.announceGenerationSaved()
                 completedCount += 1
             } catch {
                 if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {

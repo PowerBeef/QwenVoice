@@ -84,6 +84,14 @@ final class DatabaseService {
             try db.rename(table: "generations_v3", to: "generations")
         }
 
+        migrator.registerMigration("v4_index_generations_createdAt") { db in
+            try db.create(
+                index: "idx_generations_createdAt",
+                on: "generations",
+                columns: ["createdAt"]
+            )
+        }
+
         return migrator
     }
 

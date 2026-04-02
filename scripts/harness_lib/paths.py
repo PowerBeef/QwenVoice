@@ -7,11 +7,13 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 SERVER_PATH = PROJECT_DIR / "Sources" / "Resources" / "backend" / "server.py"
+SERVER_COMPAT_PATH = PROJECT_DIR / "Sources" / "Resources" / "backend" / "server_compat.py"
 CONTRACT_PATH = PROJECT_DIR / "Sources" / "Resources" / "qwenvoice_contract.json"
 APP_REQUIREMENTS_PATH = PROJECT_DIR / "Sources" / "Resources" / "requirements.txt"
 CLI_REQUIREMENTS_PATH = PROJECT_DIR / "cli" / "requirements.txt"
 BUILD_MLX_AUDIO_WHEEL_SCRIPT = PROJECT_DIR / "scripts" / "build_mlx_audio_wheel.sh"
 PYTHON_BRIDGE_PATH = PROJECT_DIR / "Sources" / "Services" / "PythonBridge.swift"
+STUB_BACKEND_TRANSPORT_PATH = PROJECT_DIR / "Sources" / "Services" / "StubBackendTransport.swift"
 BUNDLED_PYTHON_ROOT = PROJECT_DIR / "Sources" / "Resources" / "python"
 BUNDLED_PYTHON_BIN = BUNDLED_PYTHON_ROOT / "bin" / "python3"
 BUNDLED_RUNTIME_MANIFEST = BUNDLED_PYTHON_ROOT / ".qwenvoice-runtime-manifest.json"

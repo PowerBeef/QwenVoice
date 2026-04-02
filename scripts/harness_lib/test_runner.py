@@ -29,6 +29,7 @@ from .paths import (
     BACKEND_DIR,
     CONTRACT_PATH,
     PROJECT_DIR,
+    SERVER_COMPAT_PATH,
     SERVER_PATH,
     resolve_backend_python,
 )
@@ -565,12 +566,12 @@ def _run_pipeline_tests() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _load_server_module() -> Any:
-    """Load server.py in isolation, patching out heavy imports."""
+    """Load the backend pure-function harness surface in isolation."""
     # We need to load just the pure functions without triggering MLX imports.
-    # server.py executes _resolve_cache_policy() and _load_contract() at module
-    # level, which is fine.  The heavy parts (_ensure_mlx) are gated behind
-    # function calls.  We can safely import the module as long as the contract
-    # JSON is reachable.
+    # The production backend now lives in server.py with helper modules, while
+    # server_compat.py preserves the older pure-function surface the harness uses
+    # for characterization tests.
+    target_path = SERVER_COMPAT_PATH if SERVER_COMPAT_PATH.exists() else SERVER_PATH
     original_path = list(sys.path)
     if str(BACKEND_DIR) not in sys.path:
         sys.path.insert(0, str(BACKEND_DIR))
@@ -578,10 +579,10 @@ def _load_server_module() -> Any:
         # Use a unique name to get a fresh module each time
         spec = importlib.util.spec_from_file_location(
             f"_server_harness_{id(object())}",
-            str(SERVER_PATH),
+            str(target_path),
         )
         if spec is None or spec.loader is None:
-            raise ImportError(f"Cannot load server from {SERVER_PATH}")
+            raise ImportError(f"Cannot load server harness from {target_path}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module

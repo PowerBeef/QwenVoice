@@ -45,6 +45,23 @@ Relevant locations:
 
 If the GUI app’s `mlx-audio` version changes, the standalone overlay and vendoring notes must be reviewed together.
 
+## Maintenance Cadence
+
+The pinned Python/runtime stack is intentionally conservative. Review it on a simple maintainer cadence instead of introducing automated dependency churn:
+
+- after any intentional `mlx-audio`, Python, bundled `ffmpeg`, or release-runtime update
+- before major tagged releases if the vendored/runtime stack changed since the previous tag
+- at least quarterly for the overlay, runtime manifest expectations, and packaged verification flow
+
+Every review should keep these artifacts aligned:
+
+- `Sources/Resources/requirements.txt`
+- `scripts/build_mlx_audio_wheel.sh`
+- `third_party_patches/mlx-audio/`
+- `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
+- `scripts/verify_release_bundle.sh`
+- the signed/notarized GitHub release verification flow
+
 ## Current Verification Surface
 
 - `scripts/check_project_inputs.sh`

@@ -60,11 +60,12 @@ These local skills complement, rather than replace, the user-wide skills that ar
 
 ## Architecture Boundaries
 
-- `Sources/QwenVoiceApp.swift` creates shared app services and owns the separate Settings scene.
+- `Sources/QwenVoiceApp.swift` creates shared app services, injects typed app-flow routers, and owns the separate Settings scene. `AppStartupCoordinator.swift` and `BackendLaunchCoordinator.swift` now carry the launch/setup and backend-start sequencing that used to live inline in the app entrypoint.
 - `Sources/ContentView.swift` owns `NavigationSplitView`, main-window toolbar/search/titlebar chrome, and the activated-screen lifecycle that preserves drafts across sidebar navigation.
-- `Sources/Services/PythonEnvironmentManager.swift` owns dev-venv setup, bundled-runtime validation, readiness state, and backend restart policy. Do not casually change Python version search order, marker behavior, or bundled-runtime checks.
-- `Sources/Services/PythonBridge.swift` owns the long-lived Python subprocess, JSON-RPC request/response flow, timeouts, streaming chunk notifications, and backend error handling.
-- `Sources/Resources/backend/server.py` owns backend RPC handlers, model lifecycle, clone preparation, audio conversion, streaming output, and runtime capability detection.
+- `Sources/Services/AppCommandRouter.swift` and `Sources/Services/GenerationLibraryEvents.swift` are the typed MainActor event boundaries for product-flow navigation and history refresh. Keep UI-test `NotificationCenter` traffic in `TestStateServer`, but prefer these typed services for normal app flow.
+- `Sources/Services/PythonEnvironmentManager.swift` is now the façade for readiness state and restart policy. Runtime selection and setup details are split across `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`. Do not casually change Python version search order, marker behavior, or bundled-runtime checks.
+- `Sources/Services/PythonBridge.swift` remains the app-facing backend façade, but process launch, JSON-RPC transport, streaming state, model-load dedupe, clone priming, and stub behavior now live in `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, and `StubBackendTransport.swift`.
+- `Sources/Resources/backend/server.py` is now the thin Python entrypoint and wiring layer. Backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. `server_compat.py` exists only for the harness pure-function compatibility surface; do not treat it as production backend source of truth.
 - `Sources/ViewModels/AudioPlayerViewModel.swift` isolates timer-frequency playback state in nested `PlaybackProgress`. Do not move high-frequency playback fields back onto the parent observable object.
 - `Sources/Services/DatabaseService.swift` is `@MainActor`. Access it from MainActor-isolated code.
 - `cli/main.py` is a separate terminal app with cwd-based paths and a broader speaker map than the shipped GUI. Do not copy CLI assumptions into the app contract or app docs.
@@ -135,6 +136,7 @@ Notes:
 - `python3 scripts/harness.py test --layer all` runs the normal combined layers and excludes `ui`, `design`, and `perf`.
 - `python3 scripts/harness.py test --layer ui`, `design`, and `perf` now default to `--ui-backend-mode live --ui-data-root fixture`, which reuses the installed runtime/models while isolating writable app state in a disposable fixture root.
 - `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/`.
+- `.github/workflows/test-suite.yml` now uses `scripts/set_ci_ui_profile.sh` as the source of truth for CI UI-profile selection instead of inline `sed` patching. Keep that helper aligned with `project.yml` and the matrix runner intent.
 - Packaged validation should prefer the harness packaged or release lanes plus `./scripts/verify_release_bundle.sh` over ad hoc manual app launches. Prefer `qwenvoice-packaged-validation` when that is the main task.
 - Local builds on this machine are for dev/testing only and should target the macOS 26 / `QW_UI_LIQUID` surface. Prefer `xcodebuild` or dev-app validation for that path.
 - Do not use local packaging on this machine as proof for release artifacts, and never treat a local macOS 15 package build as valid release validation.

@@ -34,6 +34,13 @@ The backend MLX cache policy currently defaults to `adaptive` via `QWENVOICE_CAC
 
 Interactive latency instrumentation now uses Instruments-native signposts around model load, first streamed chunk, final file readiness, and autoplay start. Idle model warm-up is handled through a dedicated `prewarm_model` backend RPC instead of being folded into `load_model`.
 
+The app shell and runtime coordination are now split into explicit helper components instead of living inline in the largest entrypoints:
+
+- `QwenVoiceApp.swift` composes `AppStartupCoordinator.swift`, `BackendLaunchCoordinator.swift`, `AppCommandRouter.swift`, and `GenerationLibraryEvents.swift`
+- `PythonEnvironmentManager.swift` is the published-state façade over `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`
+- `PythonBridge.swift` composes `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, and `StubBackendTransport.swift`
+- `Sources/Resources/backend/server.py` is now the Python wiring layer over `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`
+
 ## Models, Speakers, and Contract Ownership
 
 Static TTS contract data lives in `Sources/Resources/qwenvoice_contract.json`.
@@ -110,6 +117,8 @@ Those two shipped release artifacts are workflow-built outputs. The GitHub workf
 Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided, but local packaging should be treated as script/debug validation rather than the source of truth for shipped release artifacts.
 
 The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) now default to live backend mode with an isolated app-support fixture. Those runs reuse the installed runtime and models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the backend initialization handshake has completed.
+
+The CI test workflow no longer patches `project.yml` inline. `.github/workflows/test-suite.yml` now delegates UI-profile selection to `scripts/set_ci_ui_profile.sh`, which is the repo-owned source of truth for choosing `QW_UI_LIQUID` vs `QW_UI_LEGACY_GLASS` in matrix runs.
 
 `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design harness runs. When appearance is forced away from `system`, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/` so light and dark visual regressions can be tracked independently. Run the forced `light` and `dark` design lanes sequentially, not in parallel, because they share the same UI app and test transport.
 

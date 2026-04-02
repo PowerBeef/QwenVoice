@@ -64,86 +64,55 @@ final class PythonBridge: ObservableObject {
         case generating
         case saving
     }
-
-    private struct StreamingRequestContext {
-        let mode: GenerationMode
-        let title: String
-    }
-
-    private struct ActiveStreamingRequest {
-        let context: StreamingRequestContext
-        var streamSessionDirectory: String?
-        var cumulativeDurationSeconds: Double
-    }
-
-    private struct InFlightModelLoad {
-        let token: UUID
-        let id: String
-        let task: Task<[String: RPCValue], Error>
-    }
-
-    private struct InFlightCloneReferencePrime {
-        let token: UUID
-        let key: String
-        let task: Task<[String: RPCValue], Error>
-    }
-
-    private struct PendingRequest {
-        let continuation: CheckedContinuation<RPCValue, Error>
-        let reportsErrors: Bool
-    }
-
-    private var process: Process?
-    private var stdinPipe: Pipe?
-    private var stdoutPipe: Pipe?
-    private var stderrPipe: Pipe?
-    private var requestID = 0
-    private var pendingRequests: [Int: PendingRequest] = [:]
-    private var readBuffer = ""
     private var activeProgressRequestID: Int?
     private var activeProgressMethod: String?
     private var activeCloneBatchProgressHandler: ((Double?, String) -> Void)?
     private var activeGenerationSession: GenerationSession?
-    private var activeStreamingRequests: [Int: ActiveStreamingRequest] = [:]
     private var sidebarStatusResetTask: Task<Void, Never>?
-    private var recentStderrLines: [String] = []
-    private var loadedModelID: String?
-    private var inFlightModelLoad: InFlightModelLoad?
-    private var inFlightCloneReferencePrime: InFlightCloneReferencePrime?
-    private var prewarmedRequestKeys: Set<String> = []
-    private var prewarmingRequestKeys: Set<String> = []
-    private var activePythonPath: String?
     private var activeAppSupportDir: String?
-    private var stubRequestSeed = 10_000
 
     private static let maxStoredStderrLines = 20
     private var isStubBackendMode: Bool { UITestAutomationSupport.isStubBackendMode }
+    private let processManager = PythonProcessManager(maxStoredStderrLines: 20)
+    private let streamCoordinator = GenerationStreamCoordinator()
+    private let modelLoadCoordinator = ModelLoadCoordinator()
+    private let clonePreparationCoordinator = ClonePreparationCoordinator()
+    private let stubTransport = StubBackendTransport()
+    private lazy var transport = PythonJSONRPCTransport(
+        runningCheck: { [weak self] in
+            self?.processManager.isRunning == true
+        },
+        writeData: { [weak self] data in
+            guard let self else {
+                throw PythonBridgeError.processNotRunning
+            }
+            try self.processManager.write(data)
+        },
+        notificationHandler: { [weak self] response in
+            self?.handleNotification(response)
+        },
+        errorReporter: { [weak self] message in
+            self?.lastError = message
+        }
+    )
 
     // MARK: - Lifecycle
 
     /// Start the Python backend process.
     /// - Parameter pythonPath: Explicit path to the Python interpreter. If nil, uses `findPython()`.
     func start(pythonPath: String? = nil) {
-        guard process == nil else { return }
-        recentStderrLines = []
-        loadedModelID = nil
-        prewarmedRequestKeys = []
-        prewarmingRequestKeys = []
+        guard !processManager.isRunning else { return }
+        processManager.clearRecentStderr()
+        modelLoadCoordinator.reset()
         resetCloneReferencePrimingState()
 
         if isStubBackendMode {
-            activePythonPath = nil
             lastError = nil
             isReady = false
             isProcessing = false
             sidebarStatus = .starting
             return
         }
-
-        let proc = Process()
-        let stdin = Pipe()
-        let stdout = Pipe()
-        let stderr = Pipe()
 
         guard let serverPath = Self.findServerScript() else {
             lastError = "Cannot find server.py"
@@ -154,57 +123,37 @@ final class PythonBridge: ObservableObject {
             lastError = "Cannot find Python interpreter"
             return
         }
-        activePythonPath = resolvedPython
-
-        proc.executableURL = URL(fileURLWithPath: resolvedPython)
-        proc.arguments = ["-u", serverPath]
-        proc.standardInput = stdin
-        proc.standardOutput = stdout
-        proc.standardError = stderr
-        proc.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
-
-        var env = ProcessInfo.processInfo.environment
-        env["PYTHONUNBUFFERED"] = "1"
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        env["TOKENIZERS_PARALLELISM"] = "false"
-        if let ffmpegPath = Self.findFFmpeg() {
-            env["QWENVOICE_FFMPEG_PATH"] = ffmpegPath
-            let ffmpegDir = URL(fileURLWithPath: ffmpegPath).deletingLastPathComponent().path
-            if let currentPath = env["PATH"], !currentPath.isEmpty {
-                env["PATH"] = "\(ffmpegDir):\(currentPath)"
-            } else {
-                env["PATH"] = ffmpegDir
-            }
-        }
-        proc.environment = env
-
-        proc.terminationHandler = { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                let shouldReportCrash = self.process != nil
-                self.isReady = false
-                self.isProcessing = false
-                self.activeGenerationSession = nil
-                self.activeStreamingRequests.removeAll()
-                self.loadedModelID = nil
-                self.inFlightModelLoad = nil
-                self.resetCloneReferencePrimingState()
-                self.clearActiveProgressTracking()
-                if shouldReportCrash {
-                    self.lastError = self.recentStderrLines.last ?? PythonBridgeError.processTerminated.localizedDescription
-                }
-                self.cancelAllPending(error: PythonBridgeError.processTerminated)
-            }
-        }
 
         do {
-            try proc.run()
+            try processManager.start(
+                pythonPath: resolvedPython,
+                serverPath: serverPath,
+                ffmpegPath: Self.findFFmpeg(),
+                onStdoutChunk: { [weak self] text in
+                    self?.transport.processOutputChunk(text)
+                },
+                onStderrText: { text in
+                    #if DEBUG
+                    print("[Python stderr] \(text)", terminator: "")
+                    #endif
+                },
+                onTerminate: { [weak self] shouldReportCrash, lastStderrLine in
+                    guard let self else { return }
+                    self.isReady = false
+                    self.isProcessing = false
+                    self.activeGenerationSession = nil
+                    self.streamCoordinator.removeAll()
+                    self.modelLoadCoordinator.reset()
+                    self.resetCloneReferencePrimingState()
+                    self.clearActiveProgressTracking()
+                    if shouldReportCrash {
+                        self.lastError = lastStderrLine ?? PythonBridgeError.processTerminated.localizedDescription
+                    }
+                    self.transport.cancelAllPending(error: PythonBridgeError.processTerminated)
+                    self.transport.reset()
+                }
+            )
         } catch {
-            process = nil
-            stdinPipe = nil
-            stdoutPipe = nil
-            stderrPipe = nil
-            loadedModelID = nil
             isReady = false
             isProcessing = false
             lastError = "Failed to start Python: \(error.localizedDescription)"
@@ -212,49 +161,25 @@ final class PythonBridge: ObservableObject {
         }
 
         lastError = nil
-        self.process = proc
-        self.stdinPipe = stdin
-        self.stdoutPipe = stdout
-        self.stderrPipe = stderr
-
-        startReadingOutput(stdout)
-        startReadingStderr(stderr)
     }
 
     /// Stop the Python backend process.
     func stop() {
-        let proc = process
-        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
-        stderrPipe?.fileHandleForReading.readabilityHandler = nil
-        process = nil
-        stdinPipe = nil
-        stdoutPipe = nil
-        stderrPipe = nil
+        processManager.stop()
         isReady = false
         isProcessing = false
         lastError = nil
-        readBuffer = ""
         activeGenerationSession = nil
         activeCloneBatchProgressHandler = nil
-        activeStreamingRequests.removeAll()
-        loadedModelID = nil
-        inFlightModelLoad = nil
-        prewarmedRequestKeys = []
-        prewarmingRequestKeys = []
-        recentStderrLines = []
+        streamCoordinator.removeAll()
+        modelLoadCoordinator.reset()
         resetCloneReferencePrimingState()
         clearActiveProgressTracking()
-        cancelAllPending(error: PythonBridgeError.processTerminated)
+        transport.cancelAllPending(error: PythonBridgeError.processTerminated)
+        transport.reset()
 
         if isStubBackendMode {
             return
-        }
-
-        if let proc, proc.isRunning {
-            proc.terminate()
-            Task.detached {
-                proc.waitUntilExit()
-            }
         }
     }
 
@@ -357,14 +282,19 @@ final class PythonBridge: ObservableObject {
         key: String? = nil,
         error: String? = nil
     ) {
-        cloneReferencePrimingPhase = phase
-        cloneReferencePrimingKey = key
-        cloneReferencePrimingError = error
+        clonePreparationCoordinator.setState(phase, key: key, error: error)
+        syncCloneReferencePrimingPublishedState()
     }
 
     private func resetCloneReferencePrimingState() {
-        inFlightCloneReferencePrime = nil
-        setCloneReferencePrimingState(.idle)
+        clonePreparationCoordinator.reset()
+        syncCloneReferencePrimingPublishedState()
+    }
+
+    private func syncCloneReferencePrimingPublishedState() {
+        cloneReferencePrimingPhase = clonePreparationCoordinator.phase
+        cloneReferencePrimingKey = clonePreparationCoordinator.currentKey
+        cloneReferencePrimingError = clonePreparationCoordinator.errorMessage
     }
 
     /// Send a JSON-RPC request and await the result (returns the raw RPCValue).
@@ -375,31 +305,14 @@ final class PythonBridge: ObservableObject {
         reportsErrors: Bool = true,
         resetLastError: Bool = true
     ) async throws -> RPCValue {
-        guard process?.isRunning == true else {
+        guard processManager.isRunning else {
             throw PythonBridgeError.processNotRunning
         }
-
-        requestID += 1
-        let id = requestID
+        let preparedRequest = try transport.makeRequest(method: method, params: params)
+        let id = preparedRequest.id
 
         if let streamingContext {
-            activeStreamingRequests[id] = ActiveStreamingRequest(
-                context: streamingContext,
-                streamSessionDirectory: nil,
-                cumulativeDurationSeconds: 0
-            )
-        }
-
-        let request = RPCRequest(id: id, method: method, params: params)
-        let data = try JSONEncoder().encode(request)
-
-        guard var line = String(data: data, encoding: .utf8) else {
-            throw PythonBridgeError.encodingError
-        }
-        line += "\n"
-
-        guard let lineData = line.data(using: .utf8) else {
-            throw PythonBridgeError.encodingError
+            streamCoordinator.register(requestID: id, context: streamingContext)
         }
 
         let isLongRunning = Self.longRunningMethods.contains(method)
@@ -425,40 +338,14 @@ final class PythonBridge: ObservableObject {
 
         let timeout = method == "ping" ? Self.pingTimeout : Self.defaultTimeout
 
-        // Register continuation and write to pipe (both MainActor-safe since we're already on it)
         let result: RPCValue
         do {
-            result = try await withThrowingTaskGroup(of: RPCValue.self) { group in
-                group.addTask { [self] in
-                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<RPCValue, any Error>) in
-                        Task { @MainActor in
-                            self.pendingRequests[id] = PendingRequest(
-                                continuation: continuation,
-                                reportsErrors: reportsErrors
-                            )
-                            guard let pipe = self.stdinPipe else {
-                                self.pendingRequests.removeValue(forKey: id)
-                                continuation.resume(throwing: PythonBridgeError.processNotRunning)
-                                return
-                            }
-                            pipe.fileHandleForWriting.write(lineData)
-                        }
-                    }
-                }
-
-                group.addTask {
-                    try await Task.sleep(nanoseconds: timeout * 1_000_000_000)
-                    throw PythonBridgeError.timeout(seconds: Int(timeout))
-                }
-
-                guard let first = try await group.next() else {
-                    throw PythonBridgeError.timeout(seconds: Int(timeout))
-                }
-                group.cancelAll()
-                return first
-            }
+            result = try await transport.execute(
+                preparedRequest,
+                reportsErrors: reportsErrors,
+                timeout: timeout
+            )
         } catch {
-            pendingRequests.removeValue(forKey: id)
             isProcessing = false
             progressPercent = 0
             progressMessage = ""
@@ -470,12 +357,11 @@ final class PythonBridge: ObservableObject {
                 activeGenerationSession = session
             }
             if streamingContext != nil {
-                activeStreamingRequests.removeValue(forKey: id)
+                streamCoordinator.remove(requestID: id)
             }
             throw error
         }
 
-        pendingRequests.removeValue(forKey: id)
         isProcessing = false
         progressPercent = 0
         progressMessage = ""
@@ -487,7 +373,7 @@ final class PythonBridge: ObservableObject {
             activeGenerationSession = session
         }
         if streamingContext != nil {
-            activeStreamingRequests.removeValue(forKey: id)
+            streamCoordinator.remove(requestID: id)
         }
         return result
     }
@@ -521,10 +407,10 @@ final class PythonBridge: ObservableObject {
     /// Initialize the backend with app paths.
     func initialize(appSupportDir: String) async throws {
         if isStubBackendMode {
-            try? await Task.sleep(nanoseconds: 60_000_000)
+            try await stubTransport.initialize()
             isReady = true
-            activeStreamingRequests.removeAll()
-            loadedModelID = nil
+            streamCoordinator.removeAll()
+            modelLoadCoordinator.reset()
             activeAppSupportDir = appSupportDir
             lastError = nil
             syncSidebarStatusFromSystemState()
@@ -534,8 +420,8 @@ final class PythonBridge: ObservableObject {
         _ = try await callDict("init", params: [
             "app_support_dir": .string(appSupportDir)
         ])
-        activeStreamingRequests.removeAll()
-        loadedModelID = nil
+        streamCoordinator.removeAll()
+        modelLoadCoordinator.reset()
         activeAppSupportDir = appSupportDir
     }
 
@@ -558,45 +444,12 @@ final class PythonBridge: ObservableObject {
         reportsErrors: Bool,
         resetLastError: Bool
     ) async throws -> [String: RPCValue] {
-        if Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) {
-            return [
-                "success": .bool(true),
-                "cached": .bool(true),
-                "model_id": .string(id),
-            ]
-        }
-
-        if let inFlightModelLoad {
-            if inFlightModelLoad.id == id {
-                return try await inFlightModelLoad.task.value
+        try await modelLoadCoordinator.loadModel(id: id) {
+            if self.isStubBackendMode {
+                return try await self.stubTransport.loadModel(id: id)
             }
 
-            _ = try? await inFlightModelLoad.task.value
-            if Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) {
-                return [
-                    "success": .bool(true),
-                    "cached": .bool(true),
-                    "model_id": .string(id),
-                ]
-            }
-        }
-
-        let token = UUID()
-        let task = Task { @MainActor in
-            if isStubBackendMode {
-                guard let model = TTSModel.model(id: id) else {
-                    throw PythonBridgeError.rpcError(code: -32001, message: "Unknown model '\(id)'")
-                }
-                guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
-                    throw PythonBridgeError.rpcError(code: -32010, message: "Model '\(model.name)' is unavailable or incomplete.")
-                }
-
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                loadedModelID = id
-                return stubModelLoadResult(for: model, cached: false)
-            }
-
-            let result = try await callDict(
+            return try await self.callDict(
                 "load_model",
                 params: [
                     "model_id": .string(id)
@@ -604,32 +457,16 @@ final class PythonBridge: ObservableObject {
                 reportsErrors: reportsErrors,
                 resetLastError: resetLastError
             )
-            loadedModelID = id
-            return result
-        }
-        inFlightModelLoad = InFlightModelLoad(token: token, id: id, task: task)
-
-        do {
-            let result = try await task.value
-            if inFlightModelLoad?.token == token {
-                inFlightModelLoad = nil
-            }
-            return result
-        } catch {
-            if inFlightModelLoad?.token == token {
-                inFlightModelLoad = nil
-            }
-            throw error
         }
     }
 
     func ensureModelLoadedIfNeeded(id: String) async {
         guard isReady else { return }
-        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard processManager.isRunning || isStubBackendMode else { return }
         guard activeGenerationSession == nil else { return }
-        guard !Self.canSkipLoadModel(requestedID: id, loadedModelID: loadedModelID) else { return }
+        guard !modelLoadCoordinator.canSkipLoadModel(requestedID: id) else { return }
 
-        if isProcessing, inFlightModelLoad?.id != id {
+        if isProcessing, modelLoadCoordinator.currentLoadedModelID != id {
             return
         }
 
@@ -645,11 +482,11 @@ final class PythonBridge: ObservableObject {
     /// Unload the current model.
     func unloadModel() async throws {
         if isStubBackendMode {
-            loadedModelID = nil
+            modelLoadCoordinator.markUnloaded()
             return
         }
         _ = try await callDict("unload_model")
-        loadedModelID = nil
+        modelLoadCoordinator.markUnloaded()
     }
 
     func prewarmModelIfNeeded(
@@ -661,7 +498,7 @@ final class PythonBridge: ObservableObject {
         refText: String? = nil
     ) async {
         guard isReady else { return }
-        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard processManager.isRunning || isStubBackendMode else { return }
         guard !isProcessing, activeGenerationSession == nil else { return }
         guard Self.supportsIdlePrewarm(mode: mode) else { return }
         if mode == .clone && (refAudio?.isEmpty ?? true) {
@@ -677,60 +514,52 @@ final class PythonBridge: ObservableObject {
             refText: refText
         )
 
-        guard !prewarmedRequestKeys.contains(prewarmKey) else { return }
-        guard !prewarmingRequestKeys.contains(prewarmKey) else { return }
-
-        prewarmingRequestKeys.insert(prewarmKey)
-        defer { prewarmingRequestKeys.remove(prewarmKey) }
-
-        if isStubBackendMode {
-            loadedModelID = modelID
-            prewarmedRequestKeys.insert(prewarmKey)
-            return
-        }
-
-        var params: [String: RPCValue] = [
-            "model_id": .string(modelID),
-            "mode": .string(mode.rawValue),
-        ]
-        switch mode {
-        case .custom:
-            if let voice, !voice.isEmpty {
-                params["voice"] = .string(voice)
+        let didPrewarm = await modelLoadCoordinator.prewarmIfNeeded(key: prewarmKey) {
+            if self.isStubBackendMode {
+                self.modelLoadCoordinator.markLoadedModel(id: modelID)
+                return
             }
-            if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
-                params["instruct"] = .string(instruct)
-            }
-        case .design:
-            break
-        case .clone:
-            if let refAudio, !refAudio.isEmpty {
-                params["ref_audio"] = .string(refAudio)
-            }
-            if let refText, !refText.isEmpty {
-                params["ref_text"] = .string(refText)
-            }
-        }
 
-        do {
-            _ = try await callDict(
+            var params: [String: RPCValue] = [
+                "model_id": .string(modelID),
+                "mode": .string(mode.rawValue),
+            ]
+            switch mode {
+            case .custom:
+                if let voice, !voice.isEmpty {
+                    params["voice"] = .string(voice)
+                }
+                if let instruct, !instruct.isEmpty, Self.hasMeaningfulDeliveryInstruction(instruct) {
+                    params["instruct"] = .string(instruct)
+                }
+            case .design:
+                break
+            case .clone:
+                if let refAudio, !refAudio.isEmpty {
+                    params["ref_audio"] = .string(refAudio)
+                }
+                if let refText, !refText.isEmpty {
+                    params["ref_text"] = .string(refText)
+                }
+            }
+
+            _ = try await self.callDict(
                 "prewarm_model",
                 params: params,
                 reportsErrors: false,
                 resetLastError: false
             )
-            loadedModelID = modelID
-            prewarmedRequestKeys.insert(prewarmKey)
-        } catch {
-            #if DEBUG
-            print("[Performance][PythonBridge] prewarm_model_failed id=\(modelID) error=\(error.localizedDescription)")
-            #endif
+            self.modelLoadCoordinator.markLoadedModel(id: modelID)
+        }
+
+        if didPrewarm {
+            modelLoadCoordinator.markLoadedModel(id: modelID)
         }
     }
 
     func cancelCloneReferencePrimingIfNeeded() async {
-        guard inFlightCloneReferencePrime != nil else { return }
-        guard let pythonPath = activePythonPath,
+        guard cloneReferencePrimingPhase == .preparing else { return }
+        guard let pythonPath = processManager.activePythonPath,
               let appSupportDir = activeAppSupportDir else {
             resetCloneReferencePrimingState()
             return
@@ -768,7 +597,7 @@ final class PythonBridge: ObservableObject {
         let trimmedRefAudio = refAudio.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRefAudio.isEmpty else { return }
         guard isReady else { return }
-        guard process?.isRunning == true || isStubBackendMode else { return }
+        guard processManager.isRunning || isStubBackendMode else { return }
         guard activeGenerationSession == nil else { return }
 
         let key = Self.cloneReferenceIdentityKey(
@@ -777,75 +606,56 @@ final class PythonBridge: ObservableObject {
             refText: refText
         )
 
-        if cloneReferencePrimingPhase == .primed, cloneReferencePrimingKey == key {
+        if clonePreparationCoordinator.hasInFlightTask(for: key) {
+            try await clonePreparationCoordinator.ensurePrimed(key: key) { [:] }
+            syncCloneReferencePrimingPublishedState()
             return
         }
 
-        if let inFlightCloneReferencePrime {
-            if inFlightCloneReferencePrime.key == key {
-                _ = try await inFlightCloneReferencePrime.task.value
-                return
-            }
-
+        if clonePreparationCoordinator.hasDifferentInFlightKey(key) {
             await cancelCloneReferencePrimingIfNeeded()
         }
 
         if isStubBackendMode {
-            loadedModelID = modelID
+            modelLoadCoordinator.markLoadedModel(id: modelID)
             setCloneReferencePrimingState(.primed, key: key)
             return
         }
 
-        let token = UUID()
         let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines)
-        setCloneReferencePrimingState(.preparing, key: key)
-
-        let task = Task { @MainActor in
-            var params: [String: RPCValue] = [
-                "model_id": .string(modelID),
-                "ref_audio": .string(trimmedRefAudio),
-                "streaming_interval": .double(Self.appStreamingInterval),
-            ]
-            if let trimmedRefText, !trimmedRefText.isEmpty {
-                params["ref_text"] = .string(trimmedRefText)
-            }
-            return try await callDict(
-                "prepare_clone_reference",
-                params: params,
-                reportsErrors: false,
-                resetLastError: false
-            )
-        }
-        inFlightCloneReferencePrime = InFlightCloneReferencePrime(token: token, key: key, task: task)
-
         do {
-            _ = try await task.value
-            if inFlightCloneReferencePrime?.token == token {
-                inFlightCloneReferencePrime = nil
+            try await clonePreparationCoordinator.ensurePrimed(key: key) {
+                var params: [String: RPCValue] = [
+                    "model_id": .string(modelID),
+                    "ref_audio": .string(trimmedRefAudio),
+                    "streaming_interval": .double(Self.appStreamingInterval),
+                ]
+                if let trimmedRefText, !trimmedRefText.isEmpty {
+                    params["ref_text"] = .string(trimmedRefText)
+                }
+                return try await self.callDict(
+                    "prepare_clone_reference",
+                    params: params,
+                    reportsErrors: false,
+                    resetLastError: false
+                )
             }
-            loadedModelID = modelID
-            setCloneReferencePrimingState(.primed, key: key)
+            modelLoadCoordinator.markLoadedModel(id: modelID)
         } catch {
-            if inFlightCloneReferencePrime?.token == token {
-                inFlightCloneReferencePrime = nil
-            }
-            setCloneReferencePrimingState(.failed, key: key, error: error.localizedDescription)
+            syncCloneReferencePrimingPublishedState()
             throw error
         }
+        syncCloneReferencePrimingPublishedState()
     }
 
     func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {
         if isStubBackendMode {
-            cancelAllPending(error: PythonBridgeError.cancelled)
+            transport.cancelAllPending(error: PythonBridgeError.cancelled)
             isReady = false
             isProcessing = false
-            readBuffer = ""
             activeGenerationSession = nil
-            activeStreamingRequests.removeAll()
-            loadedModelID = nil
-            prewarmedRequestKeys = []
-            prewarmingRequestKeys = []
-            recentStderrLines = []
+            streamCoordinator.removeAll()
+            modelLoadCoordinator.reset()
             lastError = nil
             resetCloneReferencePrimingState()
             clearActiveProgressTracking()
@@ -854,39 +664,52 @@ final class PythonBridge: ObservableObject {
             return
         }
 
-        cancelAllPending(error: PythonBridgeError.cancelled)
-
-        let proc = process
-        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
-        stderrPipe?.fileHandleForReading.readabilityHandler = nil
-        process = nil
-        stdinPipe = nil
-        stdoutPipe = nil
-        stderrPipe = nil
+        transport.cancelAllPending(error: PythonBridgeError.cancelled)
         isReady = false
         isProcessing = false
-        readBuffer = ""
         activeGenerationSession = nil
         activeCloneBatchProgressHandler = nil
-        activeStreamingRequests.removeAll()
-        loadedModelID = nil
-        inFlightModelLoad = nil
-        prewarmedRequestKeys = []
-        prewarmingRequestKeys = []
-        recentStderrLines = []
+        streamCoordinator.removeAll()
+        modelLoadCoordinator.reset()
         lastError = nil
         resetCloneReferencePrimingState()
         clearActiveProgressTracking()
+        transport.reset()
 
-        if let proc, proc.isRunning {
-            proc.terminate()
-            await Task.detached {
-                proc.waitUntilExit()
-            }.value
+        guard let serverPath = Self.findServerScript() else {
+            throw PythonBridgeError.restartFailed("Cannot find server.py")
         }
 
-        start(pythonPath: pythonPath)
-        guard process?.isRunning == true else {
+        do {
+            try await processManager.restart(
+                pythonPath: pythonPath,
+                serverPath: serverPath,
+                ffmpegPath: Self.findFFmpeg(),
+                onStdoutChunk: { [weak self] text in
+                    self?.transport.processOutputChunk(text)
+                },
+                onStderrText: { text in
+                    #if DEBUG
+                    print("[Python stderr] \(text)", terminator: "")
+                    #endif
+                },
+                onTerminate: { [weak self] shouldReportCrash, lastStderrLine in
+                    guard let self else { return }
+                    self.isReady = false
+                    self.isProcessing = false
+                    self.activeGenerationSession = nil
+                    self.streamCoordinator.removeAll()
+                    self.modelLoadCoordinator.reset()
+                    self.resetCloneReferencePrimingState()
+                    self.clearActiveProgressTracking()
+                    if shouldReportCrash {
+                        self.lastError = lastStderrLine ?? PythonBridgeError.processTerminated.localizedDescription
+                    }
+                    self.transport.cancelAllPending(error: PythonBridgeError.processTerminated)
+                    self.transport.reset()
+                }
+            )
+        } catch {
             throw PythonBridgeError.restartFailed(lastError ?? "Failed to restart Python backend")
         }
 
@@ -910,7 +733,7 @@ final class PythonBridge: ObservableObject {
         streamingContext: StreamingRequestContext? = nil
     ) async throws -> GenerationResult {
         if isStubBackendMode {
-            return try await generateStub(
+            return try await stubTransport.generate(
                 mode: .custom,
                 text: text,
                 outputPath: outputPath,
@@ -946,7 +769,7 @@ final class PythonBridge: ObservableObject {
         streamingContext: StreamingRequestContext? = nil
     ) async throws -> GenerationResult {
         if isStubBackendMode {
-            return try await generateStub(
+            return try await stubTransport.generate(
                 mode: .design,
                 text: text,
                 outputPath: outputPath,
@@ -981,7 +804,7 @@ final class PythonBridge: ObservableObject {
         streamingContext: StreamingRequestContext? = nil
     ) async throws -> GenerationResult {
         if isStubBackendMode {
-            return try await generateStub(
+            return try await stubTransport.generate(
                 mode: .clone,
                 text: text,
                 outputPath: outputPath,
@@ -1016,18 +839,10 @@ final class PythonBridge: ObservableObject {
         outputPaths: [String]
     ) async throws -> [GenerationResult] {
         if isStubBackendMode {
-            var results: [GenerationResult] = []
-            for (text, outputPath) in zip(texts, outputPaths) {
-                let result = try await generateStub(
-                    mode: .clone,
-                    text: text,
-                    outputPath: outputPath,
-                    stream: false,
-                    streamingContext: nil
-                )
-                results.append(result)
-            }
-            return results
+            return try await stubTransport.generateCloneBatch(
+                texts: texts,
+                outputPaths: outputPaths
+            )
         }
 
         var params: [String: RPCValue] = [
@@ -1249,7 +1064,7 @@ final class PythonBridge: ObservableObject {
     func listVoices() async throws -> [Voice] {
         try UITestFaultInjection.throwIfEnabled(.listVoices)
         if isStubBackendMode {
-            return try stubListVoices()
+            return try stubTransport.listVoices()
         }
         let items = try await callArray("list_voices")
         return items.compactMap { item -> Voice? in
@@ -1261,7 +1076,7 @@ final class PythonBridge: ObservableObject {
     /// Enroll a new voice.
     func enrollVoice(name: String, audioPath: String, transcript: String?) async throws -> Voice {
         if isStubBackendMode {
-            return try stubEnrollVoice(name: name, audioPath: audioPath, transcript: transcript)
+            return try stubTransport.enrollVoice(name: name, audioPath: audioPath, transcript: transcript)
         }
         var params: [String: RPCValue] = [
             "name": .string(name),
@@ -1283,7 +1098,7 @@ final class PythonBridge: ObservableObject {
     /// Delete an enrolled voice.
     func deleteVoice(name: String) async throws {
         if isStubBackendMode {
-            try stubDeleteVoice(name: name)
+            try stubTransport.deleteVoice(name: name)
             return
         }
         _ = try await callDict("delete_voice", params: ["name": .string(name)])
@@ -1292,7 +1107,7 @@ final class PythonBridge: ObservableObject {
     /// Get model info (download status, sizes).
     func getModelInfo() async throws -> [[String: RPCValue]] {
         if isStubBackendMode {
-            return stubModelInfo()
+            return stubTransport.modelInfo()
         }
         let items = try await callArray("get_model_info")
         return items.compactMap { $0.objectValue }
@@ -1300,7 +1115,7 @@ final class PythonBridge: ObservableObject {
 
     func getSpeakers() async throws -> [String: [String]] {
         if isStubBackendMode {
-            return TTSModel.speakerGroups
+            return stubTransport.speakers()
         }
         let response = try await callDict("get_speakers")
         var speakers: [String: [String]] = [:]
@@ -1539,98 +1354,6 @@ final class PythonBridge: ObservableObject {
         syncSidebarStatusFromSystemState()
     }
 
-    // MARK: - Output Reading
-
-    private func startReadingOutput(_ pipe: Pipe) {
-        let handle = pipe.fileHandleForReading
-        handle.readabilityHandler = { [weak self] fileHandle in
-            let data = fileHandle.availableData
-            guard !data.isEmpty else {
-                fileHandle.readabilityHandler = nil
-                return
-            }
-            guard let text = String(data: data, encoding: .utf8) else { return }
-
-            Task { [weak self] in
-                await self?.processOutputChunk(text)
-            }
-        }
-    }
-
-    private func startReadingStderr(_ pipe: Pipe) {
-        let handle = pipe.fileHandleForReading
-        handle.readabilityHandler = { [weak self] fileHandle in
-            let data = fileHandle.availableData
-            guard !data.isEmpty else {
-                fileHandle.readabilityHandler = nil
-                return
-            }
-            if let text = String(data: data, encoding: .utf8) {
-                Task { [weak self] in
-                    await self?.storeStderr(text)
-                }
-                #if DEBUG
-                print("[Python stderr] \(text)", terminator: "")
-                #endif
-            }
-        }
-    }
-
-    private func storeStderr(_ text: String) {
-        for line in text.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            recentStderrLines.append(trimmed)
-        }
-        if recentStderrLines.count > Self.maxStoredStderrLines {
-            recentStderrLines.removeFirst(recentStderrLines.count - Self.maxStoredStderrLines)
-        }
-    }
-
-    private func processOutputChunk(_ text: String) {
-        readBuffer += text
-
-        while let newlineIndex = readBuffer.firstIndex(of: "\n") {
-            let line = String(readBuffer[readBuffer.startIndex..<newlineIndex])
-            readBuffer = String(readBuffer[readBuffer.index(after: newlineIndex)...])
-
-            if !line.isEmpty {
-                processLine(line)
-            }
-        }
-    }
-
-    private func processLine(_ line: String) {
-        guard let response = PythonBridgeLineParser.parse(line) else {
-            #if DEBUG
-            print("[PythonBridge] Unparseable line: \(line)")
-            #endif
-            return
-        }
-
-        if response.isNotification {
-            guard PythonBridgeLineParser.isHandledNotification(response) else { return }
-            handleNotification(response)
-            return
-        }
-
-        guard let id = response.id,
-              let pendingRequest = pendingRequests.removeValue(forKey: id) else { return }
-
-        if let error = response.error {
-            if pendingRequest.reportsErrors {
-                lastError = error.message
-            }
-            pendingRequest.continuation.resume(
-                throwing: PythonBridgeError.rpcError(code: error.code, message: error.message)
-            )
-        } else if let result = response.result {
-            pendingRequest.continuation.resume(returning: result)
-        } else {
-            pendingRequest.continuation.resume(returning: .null)
-        }
-    }
-
     private func handleNotification(_ response: RPCResponse) {
         switch response.method {
         case "ready":
@@ -1660,49 +1383,10 @@ final class PythonBridge: ObservableObject {
             }
         case "generation_chunk":
             guard let params = response.params else { return }
-            handleGenerationChunkNotification(params)
+            streamCoordinator.handleGenerationChunkNotification(params)
         default:
             break
         }
-    }
-
-    private func handleGenerationChunkNotification(_ params: [String: RPCValue]) {
-        guard let requestID = params["request_id"]?.intValue,
-              var activeStream = activeStreamingRequests[requestID],
-              let chunkPath = params["chunk_path"]?.stringValue else {
-            return
-        }
-
-        let streamSessionDirectory = params["stream_session_dir"]?.stringValue
-        if activeStream.streamSessionDirectory == nil {
-            activeStream.streamSessionDirectory = streamSessionDirectory
-        }
-        let chunkDuration = params["chunk_duration_seconds"]?.doubleValue ?? 0
-        let cumulativeDuration = params["cumulative_duration_seconds"]?.doubleValue ?? activeStream.cumulativeDurationSeconds + chunkDuration
-        activeStream.cumulativeDurationSeconds = cumulativeDuration
-        activeStreamingRequests[requestID] = activeStream
-
-        NotificationCenter.default.post(
-            name: .generationChunkReceived,
-            object: nil,
-            userInfo: [
-                "requestID": requestID,
-                "mode": activeStream.context.mode.rawValue,
-                "title": activeStream.context.title,
-                "chunkPath": chunkPath,
-                "isFinal": params["is_final"]?.boolValue ?? false,
-                "chunkDurationSeconds": chunkDuration,
-                "cumulativeDurationSeconds": cumulativeDuration,
-                "streamSessionDirectory": activeStream.streamSessionDirectory ?? "",
-            ]
-        )
-    }
-
-    private func cancelAllPending(error: Error) {
-        for (_, pendingRequest) in pendingRequests {
-            pendingRequest.continuation.resume(throwing: error)
-        }
-        pendingRequests.removeAll()
     }
 
     // MARK: - Path Resolution
@@ -1808,210 +1492,9 @@ final class PythonBridge: ObservableObject {
         return nil
     }
 
-    static func canSkipLoadModel(requestedID: String, loadedModelID: String?) -> Bool {
-        loadedModelID == requestedID
-    }
-
     private static func streamingTitle(for text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(40)).isEmpty ? "Live generation" : String(trimmed.prefix(40))
-    }
-
-    private func stubModelLoadResult(for model: TTSModel, cached: Bool) -> [String: RPCValue] {
-        [
-            "success": .bool(true),
-            "cached": .bool(cached),
-            "model_id": .string(model.id),
-            "mlx_audio_version": .string("0.4.2"),
-            "supports_streaming": .bool(true),
-            "supports_prepared_clone": .bool(model.mode == .clone),
-            "supports_clone_streaming": .bool(model.mode == .clone),
-            "supports_batch": .bool(true),
-        ]
-    }
-
-    private func stubListVoices() throws -> [Voice] {
-        let voicesDir = AppPaths.voicesDir
-        guard let enumerator = FileManager.default.enumerator(at: voicesDir, includingPropertiesForKeys: nil) else {
-            return []
-        }
-
-        var voices: [Voice] = []
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension.lowercased() == "wav" else { continue }
-            let transcriptURL = fileURL.deletingPathExtension().appendingPathExtension("txt")
-            voices.append(
-                Voice(
-                    name: fileURL.deletingPathExtension().lastPathComponent,
-                    wavPath: fileURL.path,
-                    hasTranscript: FileManager.default.fileExists(atPath: transcriptURL.path)
-                )
-            )
-        }
-
-        return voices.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private func stubEnrollVoice(name: String, audioPath: String, transcript: String?) throws -> Voice {
-        let sourcePath = audioPath.isEmpty ? (UITestAutomationSupport.enrollAudioURL?.path ?? "") : audioPath
-        guard !sourcePath.isEmpty, FileManager.default.fileExists(atPath: sourcePath) else {
-            throw PythonBridgeError.rpcError(code: -32020, message: "Reference audio file not found.")
-        }
-
-        try FileManager.default.createDirectory(at: AppPaths.voicesDir, withIntermediateDirectories: true)
-        let safeName = SavedVoiceNameSanitizer.normalizedName(name)
-        guard !safeName.isEmpty else {
-            throw PythonBridgeError.rpcError(code: -32022, message: "Invalid saved voice name.")
-        }
-
-        let destination = AppPaths.voicesDir.appendingPathComponent("\(safeName).wav")
-        let transcriptDestination = AppPaths.voicesDir.appendingPathComponent("\(safeName).txt")
-
-        if FileManager.default.fileExists(atPath: destination.path)
-            || FileManager.default.fileExists(atPath: transcriptDestination.path)
-        {
-            throw PythonBridgeError.rpcError(
-                code: -32023,
-                message: "A saved voice named \"\(safeName)\" already exists. Choose a different name."
-            )
-        }
-
-        try FileManager.default.copyItem(at: URL(fileURLWithPath: sourcePath), to: destination)
-
-        if let transcript, !transcript.isEmpty {
-            try transcript.write(to: transcriptDestination, atomically: true, encoding: .utf8)
-        }
-
-        return Voice(
-            name: safeName,
-            wavPath: destination.path,
-            hasTranscript: !(transcript?.isEmpty ?? true)
-        )
-    }
-
-    private func stubDeleteVoice(name: String) throws {
-        let wavURL = AppPaths.voicesDir.appendingPathComponent("\(name).wav")
-        let transcriptURL = AppPaths.voicesDir.appendingPathComponent("\(name).txt")
-
-        guard FileManager.default.fileExists(atPath: wavURL.path) else {
-            throw PythonBridgeError.rpcError(code: -32021, message: "Voice '\(name)' does not exist.")
-        }
-
-        try FileManager.default.removeItem(at: wavURL)
-        try? FileManager.default.removeItem(at: transcriptURL)
-    }
-
-    private func stubModelInfo() -> [[String: RPCValue]] {
-        TTSModel.all.map { model in
-            let installed = model.isAvailable(in: QwenVoiceApp.modelsDir)
-            let size = installed ? Self.directorySize(url: model.installDirectory(in: QwenVoiceApp.modelsDir)) : 0
-            return [
-                "id": .string(model.id),
-                "name": .string(model.name),
-                "tier": .string(model.tier),
-                "mode": .string(model.mode.rawValue),
-                "folder": .string(model.folder),
-                "output_subfolder": .string(model.outputSubfolder),
-                "downloaded": .bool(installed),
-                "size_bytes": .int(size),
-                "mlx_audio_version": .string("0.4.2"),
-                "supports_streaming": .bool(true),
-                "supports_prepared_clone": .bool(model.mode == .clone),
-                "supports_clone_streaming": .bool(model.mode == .clone),
-                "supports_batch": .bool(true),
-            ]
-        }
-    }
-
-    private func generateStub(
-        mode: GenerationMode,
-        text: String,
-        outputPath: String,
-        stream: Bool,
-        streamingContext: StreamingRequestContext?
-    ) async throws -> GenerationResult {
-        let requestID = nextStubRequestID()
-        let finalURL = URL(fileURLWithPath: outputPath)
-        let finalDirectory = finalURL.deletingLastPathComponent()
-        let streamSessionDirectory = AppPaths.appSupportDir
-            .appendingPathComponent("cache/stream_sessions", isDirectory: true)
-            .appendingPathComponent("stub-\(requestID)", isDirectory: true)
-
-        try FileManager.default.createDirectory(at: finalDirectory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: streamSessionDirectory, withIntermediateDirectories: true)
-
-        let sampleRate = 24_000
-        let chunkDurations = [0.28, 0.32, 0.36]
-        var combinedSamples: [Int16] = []
-        let startedAt = Date()
-        var firstChunkMs: Int?
-
-        updateSidebarFromProgress(method: "generate", percent: 10, message: "Preparing request...")
-
-        for (index, durationSeconds) in chunkDurations.enumerated() {
-            try? await Task.sleep(nanoseconds: 250_000_000)
-
-            let samples = Self.stubSineWave(
-                sampleRate: sampleRate,
-                durationSeconds: durationSeconds,
-                frequency: 220 + (index * 45)
-            )
-            combinedSamples.append(contentsOf: samples)
-
-            let chunkURL = streamSessionDirectory.appendingPathComponent("chunk_\(index).wav")
-            try Self.writeStubWAV(
-                to: chunkURL,
-                samples: samples,
-                sampleRate: sampleRate
-            )
-
-            if firstChunkMs == nil {
-                firstChunkMs = max(1, Int(Date().timeIntervalSince(startedAt) * 1000))
-            }
-
-            let progress = min(90, 25 + (index * 25))
-            updateSidebarFromProgress(method: "generate", percent: progress, message: "Streaming audio...")
-
-            if stream, let streamingContext {
-                NotificationCenter.default.post(
-                    name: .generationChunkReceived,
-                    object: nil,
-                    userInfo: [
-                        "requestID": requestID,
-                        "mode": streamingContext.mode.rawValue,
-                        "title": streamingContext.title,
-                        "chunkPath": chunkURL.path,
-                        "isFinal": index == chunkDurations.count - 1,
-                        "chunkDurationSeconds": durationSeconds,
-                        "cumulativeDurationSeconds": chunkDurations.prefix(index + 1).reduce(0.0, +),
-                        "streamSessionDirectory": streamSessionDirectory.path,
-                    ]
-                )
-            }
-        }
-
-        updateSidebarFromProgress(method: "generate", percent: 100, message: "Saving audio...")
-        try Self.writeStubWAV(to: finalURL, samples: combinedSamples, sampleRate: sampleRate)
-
-        return GenerationResult(
-            audioPath: finalURL.path,
-            durationSeconds: chunkDurations.reduce(0, +),
-            streamSessionDirectory: stream ? streamSessionDirectory.path : nil,
-            metrics: .init(
-                tokenCount: 96,
-                processingTimeSeconds: Date().timeIntervalSince(startedAt),
-                peakMemoryUsage: 0.12,
-                streamingUsed: stream,
-                preparedCloneUsed: mode == .clone,
-                cloneCacheHit: mode == .clone,
-                firstChunkMs: stream ? firstChunkMs : nil
-            )
-        )
-    }
-
-    private func nextStubRequestID() -> Int {
-        stubRequestSeed += 1
-        return stubRequestSeed
     }
 
     private func generationResults(from items: [RPCValue]) throws -> [GenerationResult] {
@@ -2024,62 +1507,6 @@ final class PythonBridge: ObservableObject {
             }
             return GenerationResult(from: object)
         }
-    }
-
-    private static func directorySize(url: URL) -> Int {
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
-        var total = 0
-        for case let fileURL as URL in enumerator {
-            if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                total += size
-            }
-        }
-        return total
-    }
-
-    private static func stubSineWave(sampleRate: Int, durationSeconds: Double, frequency: Int) -> [Int16] {
-        let frameCount = max(1, Int(Double(sampleRate) * durationSeconds))
-        let amplitude = 0.28
-        let angularFrequency = 2.0 * Double.pi * Double(frequency)
-
-        return (0..<frameCount).map { frame in
-            let time = Double(frame) / Double(sampleRate)
-            let value = sin(angularFrequency * time) * amplitude
-            return Int16(max(-32767, min(32767, Int(value * Double(Int16.max)))))
-        }
-    }
-
-    private static func writeStubWAV(to url: URL, samples: [Int16], sampleRate: Int) throws {
-        var data = Data()
-        let bytesPerSample = 2
-        let dataSize = UInt32(samples.count * bytesPerSample)
-        let chunkSize = UInt32(36) + dataSize
-
-        data.append("RIFF".data(using: .ascii)!)
-        data.append(littleEndianBytes(chunkSize))
-        data.append("WAVE".data(using: .ascii)!)
-        data.append("fmt ".data(using: .ascii)!)
-        data.append(littleEndianBytes(UInt32(16)))
-        data.append(littleEndianBytes(UInt16(1)))
-        data.append(littleEndianBytes(UInt16(1)))
-        data.append(littleEndianBytes(UInt32(sampleRate)))
-        data.append(littleEndianBytes(UInt32(sampleRate * bytesPerSample)))
-        data.append(littleEndianBytes(UInt16(bytesPerSample)))
-        data.append(littleEndianBytes(UInt16(16)))
-        data.append("data".data(using: .ascii)!)
-        data.append(littleEndianBytes(dataSize))
-
-        for sample in samples {
-            data.append(littleEndianBytes(UInt16(bitPattern: sample)))
-        }
-
-        try data.write(to: url, options: .atomic)
-    }
-
-    private static func littleEndianBytes<T: FixedWidthInteger>(_ value: T) -> Data {
-        var littleEndian = value.littleEndian
-        return Data(bytes: &littleEndian, count: MemoryLayout<T>.size)
     }
 }
 

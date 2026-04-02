@@ -2,8 +2,6 @@ import SwiftUI
 import AppKit
 
 extension Notification.Name {
-    static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
-    static let generationSaved = Notification.Name("generationSaved")
     static let generationChunkReceived = Notification.Name("generationChunkReceived")
 }
 
@@ -142,6 +140,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
     private let launchSidebarOverride: SidebarItem?
 
@@ -274,8 +273,8 @@ struct ContentView: View {
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
-        .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
-            handleNavigateToSidebarItem(notification)
+        .onReceive(appCommandRouter.sidebarSelection) { item in
+            selectSidebarItemIfEnabled(item)
         }
     }
 
@@ -407,15 +406,6 @@ struct ContentView: View {
         guard didCompleteInitialAvailabilityRefresh else { return }
         guard !isPreservingLaunchOverrideSelection else { return }
         reconcileSelectionWithAvailability()
-    }
-
-    private func handleNavigateToSidebarItem(_ notification: Notification) {
-        if let item = notification.object as? SidebarItem {
-            selectSidebarItemIfEnabled(item)
-        } else if let screenID = notification.object as? String,
-                  let item = SidebarItem(testScreenID: screenID) {
-            selectSidebarItemIfEnabled(item)
-        }
     }
 
     // MARK: - Helper methods

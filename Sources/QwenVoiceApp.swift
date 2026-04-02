@@ -408,7 +408,11 @@ struct QwenVoiceApp: App {
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
     @StateObject private var savedVoicesViewModel = SavedVoicesViewModel()
+    @StateObject private var appCommandRouter = AppCommandRouter.shared
+    @StateObject private var generationLibraryEvents = GenerationLibraryEvents.shared
     private let testStateServer = TestStateServer()
+    private let appStartupCoordinator = AppStartupCoordinator()
+    private let backendLaunchCoordinator = BackendLaunchCoordinator()
 
     init() {
         // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
@@ -432,47 +436,6 @@ struct QwenVoiceApp: App {
         }
     }
 
-    private func syncUITestEnvironmentReadiness(for state: PythonEnvironmentManager.State) {
-        guard UITestAutomationSupport.isEnabled else { return }
-
-        let isEnvironmentReady: Bool
-        let activePythonPath: String?
-        if case .ready = state {
-            isEnvironmentReady = true
-        } else {
-            isEnvironmentReady = false
-        }
-        if case .ready(let pythonPath) = state {
-            activePythonPath = pythonPath
-        } else {
-            activePythonPath = nil
-        }
-
-        let runtimeSource = TestStateProvider.runtimeSource(
-            for: activePythonPath,
-            bundledRuntimeRoot: bundledRuntimeRoot(),
-            devVenvRoot: AppPaths.pythonVenvDir.path,
-            stubPythonPath: UITestAutomationSupport.stubPythonPath()
-        )
-        let activeFFmpegPath = PythonBridge.findFFmpeg()
-
-        TestStateProvider.shared.setRuntimeStatus(
-            source: runtimeSource,
-            pythonPath: activePythonPath,
-            ffmpegPath: activeFFmpegPath
-        )
-        TestStateProvider.shared.setEnvironmentReady(isEnvironmentReady)
-        if isEnvironmentReady {
-            UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
-        }
-    }
-
-    private func bundledRuntimeRoot() -> String? {
-        Bundle.main.resourceURL?
-            .appendingPathComponent("python", isDirectory: true)
-            .path
-    }
-
     var body: some Scene {
         WindowGroup {
             Group {
@@ -485,14 +448,20 @@ struct QwenVoiceApp: App {
                         .environmentObject(envManager)
                         .environmentObject(modelManager)
                         .environmentObject(savedVoicesViewModel)
+                        .environmentObject(appCommandRouter)
+                        .environmentObject(generationLibraryEvents)
                         .frame(minWidth: 720, minHeight: 560)
                         .onAppear {
-                            syncUITestEnvironmentReadiness(for: .ready(pythonPath: pythonPath))
-                            if envManager.needsBackendRestart {
-                                pythonBridge.stop()
-                                envManager.needsBackendRestart = false
-                            }
-                            startBackend(pythonPath: pythonPath)
+                            appStartupCoordinator.syncUITestEnvironmentReadiness(
+                                state: .ready(pythonPath: pythonPath),
+                                pythonBridge: pythonBridge
+                            )
+                            backendLaunchCoordinator.startBackendIfNeeded(
+                                pythonBridge: pythonBridge,
+                                envManager: envManager,
+                                pythonPath: pythonPath,
+                                appSupportDir: Self.appSupportDir.path
+                            )
                         }
                 case .idle:
                     SetupView(envManager: envManager)
@@ -509,18 +478,24 @@ struct QwenVoiceApp: App {
                 )
             )
             .onAppear {
-                setupAppSupport()
+                appStartupCoordinator.setupAppSupport()
                 if UITestAutomationSupport.isEnabled {
                     UITestWindowCoordinator.shared.syncVisibleMainWindowState()
                     TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode)
                     TestStateProvider.shared.setBackendLastError(pythonBridge.lastError)
                 }
                 envManager.ensureEnvironment()
-                syncUITestEnvironmentReadiness(for: envManager.state)
+                appStartupCoordinator.syncUITestEnvironmentReadiness(
+                    state: envManager.state,
+                    pythonBridge: pythonBridge
+                )
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
             .onChange(of: envManager.state) { _, newState in
-                syncUITestEnvironmentReadiness(for: newState)
+                appStartupCoordinator.syncUITestEnvironmentReadiness(
+                    state: newState,
+                    pythonBridge: pythonBridge
+                )
             }
             .onReceive(pythonBridge.$isReady) { isReady in
                 guard UITestAutomationSupport.isEnabled else { return }
@@ -564,32 +539,32 @@ struct QwenVoiceApp: App {
 
             CommandMenu("Navigate") {
                 Button("Custom Voice") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.customVoice)
+                    appCommandRouter.navigate(to: .customVoice)
                 }
                 .keyboardShortcut("1", modifiers: .command)
 
                 Button("Voice Design") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voiceDesign)
+                    appCommandRouter.navigate(to: .voiceDesign)
                 }
                 .keyboardShortcut("2", modifiers: .command)
 
                 Button("Voice Cloning") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voiceCloning)
+                    appCommandRouter.navigate(to: .voiceCloning)
                 }
                 .keyboardShortcut("3", modifiers: .command)
 
                 Button("History") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.history)
+                    appCommandRouter.navigate(to: .history)
                 }
                 .keyboardShortcut("4", modifiers: .command)
 
                 Button("Saved Voices") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.voices)
+                    appCommandRouter.navigate(to: .voices)
                 }
                 .keyboardShortcut("5", modifiers: .command)
 
                 Button("Models") {
-                    NotificationCenter.default.post(name: .navigateToSidebarItem, object: SidebarItem.models)
+                    appCommandRouter.navigate(to: .models)
                 }
                 .keyboardShortcut("6", modifiers: .command)
             }
@@ -610,49 +585,6 @@ struct QwenVoiceApp: App {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(audioPlayer.currentFilePath == nil)
             }
-        }
-    }
-
-    private func startBackend(pythonPath: String) {
-        if UITestAutomationSupport.isStubBackendMode {
-            guard !pythonBridge.isReady else { return }
-            Task {
-                do {
-                    try await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)
-                } catch {
-                    pythonBridge.lastError = "Backend initialization failed: \(error.localizedDescription)"
-                }
-            }
-            return
-        }
-        guard !pythonBridge.isReady else { return }
-        pythonBridge.start(pythonPath: pythonPath)
-        Task {
-            do {
-                try await pythonBridge.initialize(appSupportDir: Self.appSupportDir.path)
-            } catch {
-                pythonBridge.lastError = "Backend initialization failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    private func setupAppSupport() {
-        let fm = FileManager.default
-        let outputSubdirectories = Set(TTSModel.all.map(\.outputSubfolder))
-
-        let dirs = [
-            Self.appSupportDir.path,
-            Self.appSupportDir.appendingPathComponent("models").path,
-            Self.appSupportDir.appendingPathComponent("outputs").path,
-            Self.appSupportDir.appendingPathComponent("voices").path,
-            Self.appSupportDir.appendingPathComponent("cache").path,
-            Self.appSupportDir.appendingPathComponent("cache/stream_sessions").path,
-        ] + outputSubdirectories.sorted().map {
-            Self.appSupportDir.appendingPathComponent("outputs/\($0)").path
-        }
-
-        for dir in dirs {
-            try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
     }
 

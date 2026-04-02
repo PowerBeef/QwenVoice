@@ -26,27 +26,17 @@ final class PythonEnvironmentManager: ObservableObject {
     @Published var needsBackendRestart = false
     private var setupTask: Task<Void, Never>?
     private var setupTaskID: UUID?
-    private static let minimumSupportedMacOSMajor = 15
-    private static let minimumSupportedMacOSMinor = 0
-    private static let minimumSupportedMacOSVersionString = "15.0"
+    private let discovery = PythonRuntimeDiscovery()
+    private lazy var validator = PythonRuntimeValidator(discovery: discovery)
+    private lazy var installer = RequirementsInstaller(discovery: discovery)
+    private lazy var provisioner = PythonRuntimeProvisioner(
+        discovery: discovery,
+        validator: validator,
+        installer: installer
+    )
+    private let stateMachine = EnvironmentSetupStateMachine()
 
     // MARK: - Paths
-
-    private static var appSupportDir: URL {
-        AppPaths.appSupportDir
-    }
-
-    private static var venvDir: URL {
-        AppPaths.pythonVenvDir
-    }
-
-    private static var venvPython: String {
-        venvDir.appendingPathComponent("bin/python3").path
-    }
-
-    private static var markerFile: URL {
-        venvDir.appendingPathComponent(".setup-complete")
-    }
 
     // MARK: - Init
 
@@ -59,65 +49,39 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        // --- Synchronous fast path (no Task, no dispatch) ---
-
-        // Architecture check (instant)
-        var sysInfo = utsname()
-        uname(&sysInfo)
-        let machine = withUnsafePointer(to: &sysInfo.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
-                String(cString: $0)
-            }
-        }
-        guard machine.starts(with: "arm64") else {
-            state = .failed(message: "QwenVoice requires an Apple Silicon Mac (M1 or later).\nThis Mac has a \(machine) processor, which is not supported by the MLX framework.")
-            return
-        }
-
-        // Check for bundled Python (production build).
-        // In packaged builds this is the only acceptable runtime.
-        if let bundledPython = bundledPythonPath() {
+        switch stateMachine.launchAction(
+            machineIdentifier: discovery.machineIdentifier(),
+            bundledPythonPath: discovery.bundledPythonPath(),
+            bundledRuntimeExists: discovery.bundledRuntimeExists(),
+            isStubBackendMode: UITestAutomationSupport.isStubBackendMode,
+            uiTestLiveOverridePythonPath: discovery.uiTestLiveOverridePythonPath(),
+            venvPythonPath: discovery.venvPythonPath,
+            isMarkerValid: discovery.isMarkerValid()
+        ) {
+        case .fail(let message):
+            state = .failed(message: message)
+        case .validateBundled(let bundledPython):
             state = .checking
             launchSetupTask { [weak self] in
                 await self?.validateBundledRuntimeAndUpdateState(bundledPython)
             }
-            return
-        }
-        if bundledRuntimeExists() {
-            state = .failed(
-                message: "The bundled Python runtime is present but could not be located.\n\nThis is a packaging issue. Reinstall the app or use a new release build."
-            )
-            return
-        }
-
-        if UITestAutomationSupport.isStubBackendMode {
+        case .runStub:
             state = .checking
             launchSetupTask { [weak self] in
                 await self?.runStubSetup()
             }
-            return
-        }
-
-        if let uiTestLivePython = uiTestLiveOverridePythonPath() {
+        case .validateUITestRuntime(let uiTestLivePython):
             state = .checking
             launchSetupTask { [weak self] in
                 await self?.validateUITestRuntimeAndUpdateState(uiTestLivePython)
             }
-            return
-        }
-
-        // Check existing venv with valid marker (dev fast path)
-        let venvPython = Self.venvPython
-        if FileManager.default.fileExists(atPath: venvPython),
-           isMarkerValid() {
-            state = .ready(pythonPath: venvPython)
-            return
-        }
-
-        // --- Slow path: needs async work ---
-        state = .checking
-        launchSetupTask { [weak self] in
-            await self?.runSetupSlowPath()
+        case .ready(let pythonPath):
+            state = .ready(pythonPath: pythonPath)
+        case .runSlowPath:
+            state = .checking
+            launchSetupTask { [weak self] in
+                await self?.runSetupSlowPath()
+            }
         }
     }
 
@@ -135,7 +99,7 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        if let bundledPython = bundledPythonPath() {
+        if let bundledPython = discovery.bundledPythonPath() {
             needsBackendRestart = true
             if case .ready(let pythonPath) = state, pythonPath == bundledPython {
                 return
@@ -149,10 +113,8 @@ final class PythonEnvironmentManager: ObservableObject {
             return
         }
 
-        let fm = FileManager.default
-        let venvDir = Self.venvDir
-        if fm.fileExists(atPath: venvDir.path) {
-            try? fm.removeItem(at: venvDir)
+        if discovery.fileManager.fileExists(atPath: discovery.venvDir.path) {
+            try? discovery.fileManager.removeItem(at: discovery.venvDir)
         }
         needsBackendRestart = true
         state = .idle
@@ -162,93 +124,25 @@ final class PythonEnvironmentManager: ObservableObject {
     }
 
     nonisolated static func shouldStartSetupTask(for state: State, hasInFlightTask: Bool) -> Bool {
-        if case .ready = state {
-            return false
-        }
-
-        guard hasInFlightTask else { return true }
-
-        switch state {
-        case .checking, .settingUp:
-            return false
-        case .idle, .ready, .failed:
-            return true
-        }
+        EnvironmentSetupStateMachine.shouldStartSetupTask(
+            for: state,
+            hasInFlightTask: hasInFlightTask
+        )
     }
 
     // MARK: - Setup Logic
 
     private func runSetupSlowPath() async {
-        let fm = FileManager.default
-        let vendorDir = resolveVendorDir()
-
-        // Venv exists but marker is stale — try incremental update first
-        let venvPython = Self.venvPython
-        if fm.fileExists(atPath: venvPython),
-           let reqPath = resolveRequirementsPath() {
-            await MainActor.run { state = .settingUp(.updatingDependencies) }
-
-            let pipPath = Self.venvDir.appendingPathComponent("bin/pip").path
-            let totalPackages = countPackages(in: reqPath)
-            do {
-                try await runPipInstallWithRetry(
-                    pipPath: pipPath,
-                    requirementsPath: reqPath,
-                    totalPackages: totalPackages,
-                    vendorDir: vendorDir
-                )
-                try await validateImports(pythonPath: venvPython)
-                writeMarker(requirementsPath: reqPath)
-                await MainActor.run { state = .ready(pythonPath: venvPython) }
-                return
-            } catch {
-                // Incremental update failed — fall through to full recreate
-            }
+        let outcome = await provisioner.runSlowPath { [weak self] newState in
+            self?.state = newState
         }
 
-        // 3. Need to set up — find system Python
-        await MainActor.run { state = .settingUp(.findingPython) }
-
-        guard let systemPython = findSystemPython() else {
-            let brewExists = FileManager.default.fileExists(atPath: "/opt/homebrew/bin/brew") ||
-                             FileManager.default.fileExists(atPath: "/usr/local/bin/brew")
-            let message = brewExists
-                ? "Python 3.11+ not found. Install it via:\n  brew install python@3.13"
-                : "Python 3.11+ not found.\n\nFirst install Homebrew:\n  /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/homebrew/install/HEAD/install.sh)\"\n\nThen install Python:\n  brew install python@3.13"
+        switch outcome {
+        case .ready(let pythonPath):
+            await MainActor.run { state = .ready(pythonPath: pythonPath) }
+        case .failed(let message):
             await MainActor.run { state = .failed(message: message) }
-            return
         }
-
-        // 4. Create venv
-        await MainActor.run { state = .settingUp(.creatingVenv) }
-
-        // Remove any partial venv
-        let venvDir = Self.venvDir
-        if fm.fileExists(atPath: venvDir.path) {
-            try? fm.removeItem(at: venvDir)
-        }
-
-        // Ensure parent directory exists
-        try? fm.createDirectory(at: Self.appSupportDir, withIntermediateDirectories: true)
-
-        do {
-            try await runProcess(systemPython, arguments: ["-m", "venv", venvDir.path])
-        } catch {
-            await MainActor.run {
-                state = .failed(message: "Failed to create virtual environment:\n\(error.localizedDescription)")
-            }
-            return
-        }
-
-        // 5. Install dependencies
-        guard let requirementsPath = resolveRequirementsPath() else {
-            await MainActor.run {
-                state = .failed(message: "Cannot find requirements.txt in app bundle.")
-            }
-            return
-        }
-
-        await installDependencies(venvPython: venvPython, requirementsPath: requirementsPath, vendorDir: vendorDir)
     }
 
     private func launchSetupTask(_ operation: @escaping @Sendable () async -> Void) {
@@ -262,48 +156,7 @@ final class PythonEnvironmentManager: ObservableObject {
         Task { [weak self] in
             _ = await task.result
             guard let self else { return }
-            await self.completeSetupTaskIfCurrent(taskID)
-        }
-    }
-
-    private func installDependencies(venvPython: String, requirementsPath: String, vendorDir: String?) async {
-        let totalPackages = countPackages(in: requirementsPath)
-        await MainActor.run {
-            state = .settingUp(.installingDependencies(installed: 0, total: totalPackages))
-        }
-
-        let pipPath = Self.venvDir.appendingPathComponent("bin/pip").path
-
-        do {
-            try await runPipInstallWithRetry(
-                pipPath: pipPath,
-                requirementsPath: requirementsPath,
-                totalPackages: totalPackages,
-                vendorDir: vendorDir
-            )
-        } catch {
-            await MainActor.run {
-                state = .failed(message: "Failed to install dependencies:\n\(error.localizedDescription)")
-            }
-            return
-        }
-
-        // Validate core imports before marking setup complete
-        let pythonForValidation = venvPython.isEmpty ? Self.venvPython : venvPython
-        do {
-            try await validateImports(pythonPath: pythonForValidation)
-        } catch {
-            await MainActor.run {
-                state = .failed(message: "Dependencies installed but import validation failed:\n\(error.localizedDescription)\n\nSetup will retry on next launch.")
-            }
-            return
-        }
-
-        // Write marker file with hash
-        writeMarker(requirementsPath: requirementsPath)
-
-        await MainActor.run {
-            state = .ready(pythonPath: Self.venvPython)
+            self.completeSetupTaskIfCurrent(taskID)
         }
     }
 
@@ -338,7 +191,7 @@ final class PythonEnvironmentManager: ObservableObject {
         if UITestAutomationSupport.setupScenario == .failOnce,
            UITestAutomationSupport.consumeFailOnceFlag(
                 namespace: "setup-fail",
-                appSupportDir: Self.appSupportDir
+                appSupportDir: discovery.appSupportDir
            ) {
             await MainActor.run {
                 self.state = .failed(message: "Simulated setup failure for UI automation.")
@@ -351,25 +204,9 @@ final class PythonEnvironmentManager: ObservableObject {
         }
     }
 
-    private func uiTestLiveOverridePythonPath() -> String? {
-        guard UITestAutomationSupport.isEnabled,
-              UITestAutomationSupport.backendMode == .live,
-              let overridePath = ProcessInfo.processInfo.environment[AppPaths.appSupportOverrideEnvironmentKey]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !overridePath.isEmpty else {
-            return nil
-        }
-
-        let candidate = Self.venvPython
-        guard FileManager.default.isExecutableFile(atPath: candidate) else {
-            return nil
-        }
-        return candidate
-    }
-
     private func validateUITestRuntimeAndUpdateState(_ pythonPath: String) async {
         do {
-            try await validateImports(pythonPath: pythonPath)
+            try await validator.validateImports(pythonPath: pythonPath)
             await MainActor.run {
                 self.state = .ready(pythonPath: pythonPath)
             }
@@ -382,408 +219,14 @@ final class PythonEnvironmentManager: ObservableObject {
         }
     }
 
-    // MARK: - System Python Discovery
-
-    private func findSystemPython() -> String? {
-        let fm = FileManager.default
-
-        // Check versioned Homebrew paths first (most likely on macOS)
-        let versionedPaths = [
-            "/opt/homebrew/bin/python3.13",
-            "/opt/homebrew/bin/python3.12",
-            "/opt/homebrew/bin/python3.11",
-            "/opt/homebrew/bin/python3.14",
-            "/usr/local/bin/python3.13",
-            "/usr/local/bin/python3.12",
-            "/usr/local/bin/python3.11",
-            "/usr/local/bin/python3.14",
-        ]
-        for path in versionedPaths {
-            if fm.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Check generic python3 with version validation.
-        // /usr/bin/python3 is intentionally excluded — on modern macOS it's a stub
-        // that may pop a GUI dialog when invoked outside a terminal.
-        let genericPaths = [
-            "/opt/homebrew/bin/python3",
-            "/usr/local/bin/python3",
-        ]
-        for path in genericPaths {
-            if fm.fileExists(atPath: path), validatePythonVersion(path) {
-                return path
-            }
-        }
-
-        return nil
-    }
-
-    private func validatePythonVersion(_ pythonPath: String) -> Bool {
-        let proc = Process()
-        let pipe = Pipe()
-        proc.executableURL = URL(fileURLWithPath: pythonPath)
-        proc.arguments = ["--version"]
-        proc.standardOutput = pipe
-        proc.standardError = pipe
-
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-        } catch {
-            return false
-        }
-
-        guard proc.terminationStatus == 0 else { return false }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else { return false }
-
-        // Parse "Python 3.X.Y"
-        let components = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "Python ", with: "")
-            .split(separator: ".")
-        guard components.count >= 2,
-              components[0] == "3",
-              let minor = Int(components[1]) else { return false }
-
-        return minor >= 11 && minor <= 14
-    }
-
-    // MARK: - Process Helpers
-
-    private func runProcess(_ executable: String, arguments: [String]) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let proc = Process()
-            let stderr = Pipe()
-            proc.executableURL = URL(fileURLWithPath: executable)
-            proc.arguments = arguments
-            proc.standardOutput = FileHandle.nullDevice
-            proc.standardError = stderr
-            var env = ProcessInfo.processInfo.environment
-            env["PYTHONDONTWRITEBYTECODE"] = "1"
-            proc.environment = env
-
-            nonisolated(unsafe) var resumed = false
-
-            proc.terminationHandler = { process in
-                guard !resumed else { return }
-                resumed = true
-                if process.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                    let errMsg = String(data: errData, encoding: .utf8) ?? "Unknown error"
-                    continuation.resume(throwing: SetupError.commandFailed(errMsg.trimmingCharacters(in: .whitespacesAndNewlines)))
-                }
-            }
-
-            do {
-                try proc.run()
-            } catch {
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private func runPipInstall(pipPath: String, requirementsPath: String, totalPackages: Int, vendorDir: String?) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let proc = Process()
-            let stdout = Pipe()
-            let stderr = Pipe()
-
-            proc.executableURL = URL(fileURLWithPath: pipPath)
-            var pipArgs = ["install", "--progress-bar", "off"]
-            if let vendorDir {
-                pipArgs += ["--find-links", vendorDir]
-            }
-            pipArgs += ["-r", requirementsPath]
-            proc.arguments = pipArgs
-            proc.standardOutput = stdout
-            proc.standardError = stderr
-            var env = ProcessInfo.processInfo.environment
-            env["PYTHONDONTWRITEBYTECODE"] = "1"
-            proc.environment = env
-
-            nonisolated(unsafe) var installed = 0
-            nonisolated(unsafe) var resumed = false
-
-            stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                let data = handle.availableData
-                guard !data.isEmpty,
-                      let text = String(data: data, encoding: .utf8) else { return }
-
-                for line in text.components(separatedBy: .newlines) {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    if trimmed.hasPrefix("Collecting") || trimmed.hasPrefix("Downloading") || trimmed.hasPrefix("Installing") || trimmed.hasPrefix("Successfully installed") {
-                        if trimmed.hasPrefix("Collecting") {
-                            installed += 1
-                        }
-                        let current = min(installed, totalPackages)
-                        Task { [weak self] in
-                            guard let self else { return }
-                            await self.publishDependencyInstallProgress(installed: current, total: totalPackages)
-                        }
-                    }
-                }
-            }
-
-            proc.terminationHandler = { process in
-                stdout.fileHandleForReading.readabilityHandler = nil
-                guard !resumed else { return }
-                resumed = true
-                if process.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                    let errMsg = String(data: errData, encoding: .utf8) ?? "pip install failed"
-                    continuation.resume(throwing: SetupError.commandFailed(errMsg.trimmingCharacters(in: .whitespacesAndNewlines)))
-                }
-            }
-
-            do {
-                try proc.run()
-            } catch {
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
     private func completeSetupTaskIfCurrent(_ taskID: UUID) {
         guard setupTaskID == taskID else { return }
         setupTask = nil
         setupTaskID = nil
     }
 
-    private func publishDependencyInstallProgress(installed: Int, total: Int) {
-        state = .settingUp(.installingDependencies(installed: installed, total: total))
-    }
-
-    private func runPipInstallWithRetry(pipPath: String, requirementsPath: String, totalPackages: Int, vendorDir: String?) async throws {
-        let maxAttempts = 3
-        for attempt in 1...maxAttempts {
-            do {
-                try await runPipInstall(
-                    pipPath: pipPath,
-                    requirementsPath: requirementsPath,
-                    totalPackages: totalPackages,
-                    vendorDir: vendorDir
-                )
-                return
-            } catch {
-                if attempt == maxAttempts {
-                    throw SetupError.commandFailed("Failed to install dependencies after \(maxAttempts) attempts:\n\(error.localizedDescription)")
-                }
-                try await Task.sleep(for: .seconds(2))
-            }
-        }
-    }
-
-    // MARK: - Import Validation
-
-    private func validateImports(pythonPath: String) async throws {
-        let importScript = "import mlx; import mlx.core as mx; import mlx_audio; import transformers; import numpy; import soundfile; import huggingface_hub; x = mx.array([1.0], dtype=mx.float32); mx.eval(x)"
-        try await runProcess(pythonPath, arguments: ["-c", importScript])
-    }
-
-    private struct BundledRuntimeCompatibility {
-        let mlxWheelTag: String
-        let mlxMetalWheelTag: String
-        let mlxCoreMinOS: String?
-    }
-
-    private func validateBundledRuntimeCompatibility(pythonPath: String) throws {
-        let runtimeRoot = URL(fileURLWithPath: pythonPath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let compatibility = try loadBundledRuntimeCompatibility(runtimeRoot: runtimeRoot)
-
-        try validateWheelTag(compatibility.mlxWheelTag, label: "mlx")
-        try validateWheelTag(compatibility.mlxMetalWheelTag, label: "mlx-metal")
-        if let minOS = compatibility.mlxCoreMinOS {
-            try validateTargetVersionString(minOS, label: "mlx core extension minos")
-        }
-    }
-
-    private func loadBundledRuntimeCompatibility(runtimeRoot: URL) throws -> BundledRuntimeCompatibility {
-        var manifestMlxWheelTag: String?
-        var manifestMlxMetalWheelTag: String?
-        var manifestMlxCoreMinOS: String?
-
-        let manifestURL = runtimeRoot.appendingPathComponent(".qwenvoice-runtime-manifest.json")
-        if let manifestData = try? Data(contentsOf: manifestURL),
-           let json = try? JSONSerialization.jsonObject(with: manifestData) as? [String: Any] {
-            manifestMlxWheelTag = json["mlx_wheel_tag"] as? String
-            manifestMlxMetalWheelTag = json["mlx_metal_wheel_tag"] as? String
-            manifestMlxCoreMinOS = json["mlx_core_minos"] as? String
-            if let supportedMinimum = json["supported_minimum_macos"] as? String,
-               supportedMinimum != Self.minimumSupportedMacOSVersionString {
-                throw SetupError.commandFailed(
-                    "Bundled runtime metadata mismatch: minimum macOS is \(supportedMinimum), expected \(Self.minimumSupportedMacOSVersionString)."
-                )
-            }
-        }
-
-        guard let sitePackages = bundledSitePackagesURL(runtimeRoot: runtimeRoot) else {
-            throw SetupError.commandFailed("Bundled runtime is missing site-packages metadata.")
-        }
-
-        let mlxWheelTag = manifestMlxWheelTag ?? readWheelTag(in: sitePackages, prefix: "mlx-")
-        let mlxMetalWheelTag = manifestMlxMetalWheelTag ?? readWheelTag(in: sitePackages, prefix: "mlx_metal-")
-
-        guard let mlxWheelTag else {
-            throw SetupError.commandFailed("Bundled runtime is missing mlx wheel compatibility metadata.")
-        }
-        guard let mlxMetalWheelTag else {
-            throw SetupError.commandFailed("Bundled runtime is missing mlx-metal wheel compatibility metadata.")
-        }
-
-        return BundledRuntimeCompatibility(
-            mlxWheelTag: mlxWheelTag,
-            mlxMetalWheelTag: mlxMetalWheelTag,
-            mlxCoreMinOS: manifestMlxCoreMinOS
-        )
-    }
-
-    private func bundledSitePackagesURL(runtimeRoot: URL) -> URL? {
-        let libURL = runtimeRoot.appendingPathComponent("lib", isDirectory: true)
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: libURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-
-        let pythonLib = entries
-            .filter { $0.hasDirectoryPath }
-            .first(where: { $0.lastPathComponent.hasPrefix("python") })
-        guard let pythonLib else { return nil }
-
-        let sitePackages = pythonLib.appendingPathComponent("site-packages", isDirectory: true)
-        return FileManager.default.fileExists(atPath: sitePackages.path) ? sitePackages : nil
-    }
-
-    private func readWheelTag(in sitePackages: URL, prefix: String) -> String? {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: sitePackages,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-
-        guard let distInfo = entries.first(where: {
-            $0.lastPathComponent.hasPrefix(prefix) && $0.lastPathComponent.hasSuffix(".dist-info")
-        }) else {
-            return nil
-        }
-
-        let wheelPath = distInfo.appendingPathComponent("WHEEL")
-        guard let content = try? String(contentsOf: wheelPath, encoding: .utf8) else {
-            return nil
-        }
-
-        for line in content.split(separator: "\n") {
-            if line.hasPrefix("Tag: ") {
-                return String(line.dropFirst("Tag: ".count))
-            }
-        }
-        return nil
-    }
-
-    private func validateWheelTag(_ tag: String, label: String) throws {
-        guard let targetVersion = parseMacOSTargetFromWheelTag(tag) else {
-            throw SetupError.commandFailed("Could not parse \(label) wheel tag: \(tag)")
-        }
-        try validateTargetVersion(
-            targetVersion,
-            label: "\(label) wheel tag",
-            rawValue: tag
-        )
-    }
-
-    private func validateTargetVersionString(_ value: String, label: String) throws {
-        guard let targetVersion = parseVersionString(value) else {
-            throw SetupError.commandFailed("Could not parse \(label): \(value)")
-        }
-        try validateTargetVersion(targetVersion, label: label, rawValue: value)
-    }
-
-    private func parseMacOSTargetFromWheelTag(_ tag: String) -> (major: Int, minor: Int)? {
-        guard let markerRange = tag.range(of: "macosx_"),
-              let armRange = tag.range(of: "_arm64", options: .backwards),
-              markerRange.upperBound <= armRange.lowerBound else {
-            return nil
-        }
-
-        let versionPortion = tag[markerRange.upperBound..<armRange.lowerBound]
-        let parts = versionPortion.split(separator: "_")
-        guard parts.count >= 2,
-              let major = Int(parts[0]),
-              let minor = Int(parts[1]) else {
-            return nil
-        }
-        return (major, minor)
-    }
-
-    private func parseVersionString(_ value: String) -> (major: Int, minor: Int)? {
-        let parts = value.split(separator: ".")
-        guard let majorPart = parts.first,
-              let major = Int(majorPart) else {
-            return nil
-        }
-        let minor = parts.count > 1 ? Int(parts[1]) ?? 0 : 0
-        return (major, minor)
-    }
-
-    private func validateTargetVersion(
-        _ targetVersion: (major: Int, minor: Int),
-        label: String,
-        rawValue: String
-    ) throws {
-        let supportedFloor = (major: Self.minimumSupportedMacOSMajor, minor: Self.minimumSupportedMacOSMinor)
-        if targetVersion.major > supportedFloor.major ||
-            (targetVersion.major == supportedFloor.major && targetVersion.minor > supportedFloor.minor) {
-            throw SetupError.commandFailed(
-                "Bundled runtime is incompatible: \(label) requires macOS \(rawValue), which exceeds the app minimum \(Self.minimumSupportedMacOSVersionString)."
-            )
-        }
-    }
-
-    private func bundledPythonPath() -> String? {
-        if let bundlePath = Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") {
-            return bundlePath
-        }
-        if let bundlePath = Bundle.main.path(forResource: "python3.13", ofType: nil, inDirectory: "python/bin") {
-            return bundlePath
-        }
-        if let resourceURL = Bundle.main.resourceURL {
-            let candidates = [
-                resourceURL.appendingPathComponent("python/bin/python3").path,
-                resourceURL.appendingPathComponent("python/bin/python3.13").path
-            ]
-            for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
-                return candidate
-            }
-        }
-        return nil
-    }
-
-    private func bundledRuntimeExists() -> Bool {
-        guard let resourceURL = Bundle.main.resourceURL else { return false }
-        let runtimeRoot = resourceURL.appendingPathComponent("python").path
-        return FileManager.default.fileExists(atPath: runtimeRoot)
-    }
-
     private func validateBundledRuntime(_ pythonPath: String) async throws {
-        try validateBundledRuntimeCompatibility(pythonPath: pythonPath)
-        try await validateImports(pythonPath: pythonPath)
+        try await validator.validateBundledRuntime(pythonPath: pythonPath)
     }
 
     private func validateBundledRuntimeAndUpdateState(_ pythonPath: String) async {
@@ -799,77 +242,6 @@ final class PythonEnvironmentManager: ObservableObject {
                 )
             }
         }
-    }
-
-    // MARK: - Marker / Hashing
-
-    private func isMarkerValid() -> Bool {
-        let fm = FileManager.default
-        guard let markerData = fm.contents(atPath: Self.markerFile.path),
-              let markerHash = String(data: markerData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            return false
-        }
-
-        // Hash the bundled requirements.txt
-        guard let reqPath = bundledRequirementsPath(),
-              let reqData = fm.contents(atPath: reqPath) else {
-            return false
-        }
-
-        let currentHash = SHA256.hash(data: reqData).map { String(format: "%02x", $0) }.joined()
-        return markerHash == currentHash
-    }
-
-    private func writeMarker(requirementsPath: String) {
-        let fm = FileManager.default
-        guard let reqData = fm.contents(atPath: requirementsPath) else { return }
-        let hash = SHA256.hash(data: reqData).map { String(format: "%02x", $0) }.joined()
-        try? hash.write(to: Self.markerFile, atomically: true, encoding: .utf8)
-    }
-
-    private func resolveRequirementsPath() -> String? {
-        if let path = Bundle.main.path(forResource: "requirements", ofType: "txt") {
-            return path
-        }
-        let devPath = URL(fileURLWithPath: #file)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources/requirements.txt").path
-        if FileManager.default.fileExists(atPath: devPath) {
-            return devPath
-        }
-        return nil
-    }
-
-    private func resolveVendorDir() -> String? {
-        // Production bundle — Bundle has no path(forResource:) API for directories,
-        // so resourceURL is used directly (unlike resolveRequirementsPath which uses path(forResource:)).
-        if let resourceURL = Bundle.main.resourceURL {
-            let bundledVendor = resourceURL.appendingPathComponent("vendor").path
-            if FileManager.default.fileExists(atPath: bundledVendor) {
-                return bundledVendor
-            }
-        }
-        // Development: relative to this source file
-        let devPath = URL(fileURLWithPath: #file)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources/vendor").path
-        if FileManager.default.fileExists(atPath: devPath) {
-            return devPath
-        }
-        return nil
-    }
-
-    private func bundledRequirementsPath() -> String? {
-        resolveRequirementsPath()
-    }
-
-    private func countPackages(in path: String) -> Int {
-        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return 61 }
-        return content.components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && !$0.hasPrefix("#") }
-            .count
     }
 
     // MARK: - Error

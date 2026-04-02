@@ -13,6 +13,7 @@ from .paths import (
     APP_REQUIREMENTS_PATH,
     CLI_REQUIREMENTS_PATH,
     PYTHON_BRIDGE_PATH,
+    STUB_BACKEND_TRANSPORT_PATH,
 )
 
 CORE_PACKAGES = ("mlx", "mlx-metal", "mlx-lm", "mlx-audio", "transformers")
@@ -56,14 +57,21 @@ def cli_core_requirements() -> dict[str, str]:
     return parse_core_requirements(CLI_REQUIREMENTS_PATH)
 
 
-def read_pythonbridge_mlx_audio_versions(path: Path = PYTHON_BRIDGE_PATH) -> set[str]:
-    text = path.read_text(encoding="utf-8")
-    versions = set(
-        re.findall(r'mlx_audio_version": \.string\("([^"]+)"\)', text)
-    )
+def read_pythonbridge_mlx_audio_versions(
+    paths: tuple[Path, ...] = (PYTHON_BRIDGE_PATH, STUB_BACKEND_TRANSPORT_PATH),
+) -> set[str]:
+    versions: set[str] = set()
+    searched: list[str] = []
+    for path in paths:
+        searched.append(str(path))
+        text = path.read_text(encoding="utf-8")
+        versions.update(
+            re.findall(r'mlx_audio_version": \.string\("([^"]+)"\)', text)
+        )
     if not versions:
         raise RuntimeError(
-            f"Could not find stub mlx_audio_version echoes in {path}"
+            "Could not find stub mlx_audio_version echoes in "
+            + ", ".join(searched)
         )
     return versions
 
