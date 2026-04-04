@@ -49,35 +49,16 @@ final class PythonBridge: ObservableObject {
 
     // MARK: - Private
 
-    private struct GenerationSession {
-        var mode: GenerationMode
-        var batchIndex: Int?
-        var batchTotal: Int?
-        var currentPhase: GenerationPhase
-        var currentRequestID: Int?
-        var activityPresentation: ActivityStatus.Presentation
-    }
-
-    private enum GenerationPhase {
-        case loadingModel
-        case preparing
-        case generating
-        case saving
-    }
-    private var activeProgressRequestID: Int?
-    private var activeProgressMethod: String?
-    private var activeCloneBatchProgressHandler: ((Double?, String) -> Void)?
-    private var activeGenerationSession: GenerationSession?
-    private var sidebarStatusResetTask: Task<Void, Never>?
     private var activeAppSupportDir: String?
 
     private static let maxStoredStderrLines = 20
-    private var isStubBackendMode: Bool { UITestAutomationSupport.isStubBackendMode }
+    var isStubBackendMode: Bool { UITestAutomationSupport.isStubBackendMode }
     private let processManager = PythonProcessManager(maxStoredStderrLines: 20)
     private let streamCoordinator = GenerationStreamCoordinator()
     private let modelLoadCoordinator = ModelLoadCoordinator()
     private let clonePreparationCoordinator = ClonePreparationCoordinator()
-    private let stubTransport = StubBackendTransport()
+    let activityCoordinator = PythonBridgeActivityCoordinator()
+    let stubTransport = StubBackendTransport()
     private lazy var transport = PythonJSONRPCTransport(
         runningCheck: { [weak self] in
             self?.processManager.isRunning == true
@@ -107,10 +88,11 @@ final class PythonBridge: ObservableObject {
         resetCloneReferencePrimingState()
 
         if isStubBackendMode {
+            activityCoordinator.clearGenerationActivity()
             lastError = nil
             isReady = false
             isProcessing = false
-            sidebarStatus = .starting
+            syncSidebarStatusFromSystemState()
             return
         }
 
@@ -141,11 +123,11 @@ final class PythonBridge: ObservableObject {
                     guard let self else { return }
                     self.isReady = false
                     self.isProcessing = false
-                    self.activeGenerationSession = nil
                     self.streamCoordinator.removeAll()
                     self.modelLoadCoordinator.reset()
                     self.resetCloneReferencePrimingState()
-                    self.clearActiveProgressTracking()
+                    self.activityCoordinator.clearGenerationActivity()
+                    self.syncActivityPublishedState()
                     if shouldReportCrash {
                         self.lastError = lastStderrLine ?? PythonBridgeError.processTerminated.localizedDescription
                     }
@@ -169,12 +151,11 @@ final class PythonBridge: ObservableObject {
         isReady = false
         isProcessing = false
         lastError = nil
-        activeGenerationSession = nil
-        activeCloneBatchProgressHandler = nil
         streamCoordinator.removeAll()
         modelLoadCoordinator.reset()
         resetCloneReferencePrimingState()
-        clearActiveProgressTracking()
+        activityCoordinator.clearGenerationActivity()
+        syncActivityPublishedState()
         transport.cancelAllPending(error: PythonBridgeError.processTerminated)
         transport.reset()
 
@@ -197,7 +178,7 @@ final class PythonBridge: ObservableObject {
         "prepare_clone_reference",
         "prime_clone_reference",
     ]
-    private static let appStreamingInterval = 0.32
+    static let appStreamingInterval = 0.32
 
     static func hasMeaningfulDeliveryInstruction(_ emotion: String) -> Bool {
         let trimmed = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,7 +246,7 @@ final class PythonBridge: ObservableObject {
         )
     }
 
-    private static func designInstruction(voiceDescription: String, emotion: String) -> String {
+    static func designInstruction(voiceDescription: String, emotion: String) -> String {
         let trimmedDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedEmotion = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.hasMeaningfulDeliveryInstruction(trimmedEmotion) else {
@@ -316,21 +297,10 @@ final class PythonBridge: ObservableObject {
         }
 
         let isLongRunning = Self.longRunningMethods.contains(method)
-        let tracksSidebarProgress = method == "load_model"
-            || method == "generate"
-            || method == "generate_clone_batch"
         if isLongRunning {
             isProcessing = true
-            progressPercent = 0
-            progressMessage = ""
-        }
-        if tracksSidebarProgress {
-            activeProgressRequestID = id
-            activeProgressMethod = method
-            if var session = activeGenerationSession {
-                session.currentRequestID = id
-                activeGenerationSession = session
-            }
+            activityCoordinator.beginRequestTracking(id: id, method: method)
+            syncActivityPublishedState()
         }
         if resetLastError {
             lastError = nil
@@ -344,18 +314,11 @@ final class PythonBridge: ObservableObject {
                 preparedRequest,
                 reportsErrors: reportsErrors,
                 timeout: timeout
-            )
+        )
         } catch {
             isProcessing = false
-            progressPercent = 0
-            progressMessage = ""
-            if activeProgressRequestID == id {
-                clearActiveProgressTracking()
-            }
-            if var session = activeGenerationSession, session.currentRequestID == id {
-                session.currentRequestID = nil
-                activeGenerationSession = session
-            }
+            activityCoordinator.finishRequestTracking(id: id)
+            syncActivityPublishedState()
             if streamingContext != nil {
                 streamCoordinator.remove(requestID: id)
             }
@@ -363,15 +326,8 @@ final class PythonBridge: ObservableObject {
         }
 
         isProcessing = false
-        progressPercent = 0
-        progressMessage = ""
-        if activeProgressRequestID == id {
-            clearActiveProgressTracking()
-        }
-        if var session = activeGenerationSession, session.currentRequestID == id {
-            session.currentRequestID = nil
-            activeGenerationSession = session
-        }
+        activityCoordinator.finishRequestTracking(id: id)
+        syncActivityPublishedState()
         if streamingContext != nil {
             streamCoordinator.remove(requestID: id)
         }
@@ -379,7 +335,7 @@ final class PythonBridge: ObservableObject {
     }
 
     /// Send a JSON-RPC request expecting a dict result.
-    private func callDict(
+    func callDict(
         _ method: String,
         params: [String: RPCValue] = [:],
         streamingContext: StreamingRequestContext? = nil,
@@ -439,7 +395,7 @@ final class PythonBridge: ObservableObject {
         try await loadModel(id: id, reportsErrors: true, resetLastError: true)
     }
 
-    private func loadModel(
+    func loadModel(
         id: String,
         reportsErrors: Bool,
         resetLastError: Bool
@@ -463,7 +419,7 @@ final class PythonBridge: ObservableObject {
     func ensureModelLoadedIfNeeded(id: String) async {
         guard isReady else { return }
         guard processManager.isRunning || isStubBackendMode else { return }
-        guard activeGenerationSession == nil else { return }
+        guard !activityCoordinator.hasActiveGenerationSession else { return }
         guard !modelLoadCoordinator.canSkipLoadModel(requestedID: id) else { return }
 
         if isProcessing, modelLoadCoordinator.currentLoadedModelID != id {
@@ -499,7 +455,7 @@ final class PythonBridge: ObservableObject {
     ) async {
         guard isReady else { return }
         guard processManager.isRunning || isStubBackendMode else { return }
-        guard !isProcessing, activeGenerationSession == nil else { return }
+        guard !isProcessing, !activityCoordinator.hasActiveGenerationSession else { return }
         guard Self.supportsIdlePrewarm(mode: mode) else { return }
         if mode == .clone && (refAudio?.isEmpty ?? true) {
             return
@@ -598,7 +554,7 @@ final class PythonBridge: ObservableObject {
         guard !trimmedRefAudio.isEmpty else { return }
         guard isReady else { return }
         guard processManager.isRunning || isStubBackendMode else { return }
-        guard activeGenerationSession == nil else { return }
+        guard !activityCoordinator.hasActiveGenerationSession else { return }
 
         let key = Self.cloneReferenceIdentityKey(
             modelID: modelID,
@@ -653,12 +609,12 @@ final class PythonBridge: ObservableObject {
             transport.cancelAllPending(error: PythonBridgeError.cancelled)
             isReady = false
             isProcessing = false
-            activeGenerationSession = nil
             streamCoordinator.removeAll()
             modelLoadCoordinator.reset()
             lastError = nil
             resetCloneReferencePrimingState()
-            clearActiveProgressTracking()
+            activityCoordinator.clearGenerationActivity()
+            syncActivityPublishedState()
             try await initialize(appSupportDir: appSupportDir)
             clearGenerationActivity()
             return
@@ -667,13 +623,12 @@ final class PythonBridge: ObservableObject {
         transport.cancelAllPending(error: PythonBridgeError.cancelled)
         isReady = false
         isProcessing = false
-        activeGenerationSession = nil
-        activeCloneBatchProgressHandler = nil
         streamCoordinator.removeAll()
         modelLoadCoordinator.reset()
         lastError = nil
         resetCloneReferencePrimingState()
-        clearActiveProgressTracking()
+        activityCoordinator.clearGenerationActivity()
+        syncActivityPublishedState()
         transport.reset()
 
         guard let serverPath = Self.findServerScript() else {
@@ -697,11 +652,11 @@ final class PythonBridge: ObservableObject {
                     guard let self else { return }
                     self.isReady = false
                     self.isProcessing = false
-                    self.activeGenerationSession = nil
                     self.streamCoordinator.removeAll()
                     self.modelLoadCoordinator.reset()
                     self.resetCloneReferencePrimingState()
-                    self.clearActiveProgressTracking()
+                    self.activityCoordinator.clearGenerationActivity()
+                    self.syncActivityPublishedState()
                     if shouldReportCrash {
                         self.lastError = lastStderrLine ?? PythonBridgeError.processTerminated.localizedDescription
                     }
@@ -720,344 +675,6 @@ final class PythonBridge: ObservableObject {
             stop()
             throw PythonBridgeError.restartFailed(error.localizedDescription)
         }
-    }
-
-    /// Generate audio with custom voice mode.
-    private func generateCustom(
-        modelID: String,
-        text: String,
-        voice: String,
-        emotion: String,
-        outputPath: String,
-        stream: Bool = false,
-        streamingContext: StreamingRequestContext? = nil
-    ) async throws -> GenerationResult {
-        if isStubBackendMode {
-            return try await stubTransport.generate(
-                mode: .custom,
-                text: text,
-                outputPath: outputPath,
-                stream: stream,
-                streamingContext: streamingContext
-            )
-        }
-
-        var params: [String: RPCValue] = [
-            "model_id": .string(modelID),
-            "mode": .string(GenerationMode.custom.rawValue),
-            "text": .string(text),
-            "voice": .string(voice),
-            "instruct": .string(emotion),
-            "output_path": .string(outputPath),
-        ]
-        if stream {
-            params["stream"] = .bool(true)
-            params["streaming_interval"] = .double(Self.appStreamingInterval)
-        }
-        let result = try await callDict("generate", params: params, streamingContext: streamingContext)
-        return GenerationResult(from: result)
-    }
-
-    /// Generate audio with voice design mode.
-    private func generateDesign(
-        modelID: String,
-        text: String,
-        voiceDescription: String,
-        emotion: String,
-        outputPath: String,
-        stream: Bool = false,
-        streamingContext: StreamingRequestContext? = nil
-    ) async throws -> GenerationResult {
-        if isStubBackendMode {
-            return try await stubTransport.generate(
-                mode: .design,
-                text: text,
-                outputPath: outputPath,
-                stream: stream,
-                streamingContext: streamingContext
-            )
-        }
-
-        var params: [String: RPCValue] = [
-            "model_id": .string(modelID),
-            "mode": .string(GenerationMode.design.rawValue),
-            "text": .string(text),
-            "instruct": .string(Self.designInstruction(voiceDescription: voiceDescription, emotion: emotion)),
-            "output_path": .string(outputPath),
-        ]
-        if stream {
-            params["stream"] = .bool(true)
-            params["streaming_interval"] = .double(Self.appStreamingInterval)
-        }
-        let result = try await callDict("generate", params: params, streamingContext: streamingContext)
-        return GenerationResult(from: result)
-    }
-
-    /// Generate audio with voice cloning mode.
-    private func generateClone(
-        modelID: String,
-        text: String,
-        refAudio: String,
-        refText: String?,
-        outputPath: String,
-        stream: Bool = false,
-        streamingContext: StreamingRequestContext? = nil
-    ) async throws -> GenerationResult {
-        if isStubBackendMode {
-            return try await stubTransport.generate(
-                mode: .clone,
-                text: text,
-                outputPath: outputPath,
-                stream: stream,
-                streamingContext: streamingContext
-            )
-        }
-
-        var params: [String: RPCValue] = [
-            "model_id": .string(modelID),
-            "mode": .string(GenerationMode.clone.rawValue),
-            "text": .string(text),
-            "ref_audio": .string(refAudio),
-            "output_path": .string(outputPath),
-        ]
-        if let refText, !refText.isEmpty {
-            params["ref_text"] = .string(refText)
-        }
-        if stream {
-            params["stream"] = .bool(true)
-            params["streaming_interval"] = .double(Self.appStreamingInterval)
-        }
-        let result = try await callDict("generate", params: params, streamingContext: streamingContext)
-        return GenerationResult(from: result)
-    }
-
-    private func generateCloneBatch(
-        modelID: String,
-        texts: [String],
-        refAudio: String,
-        refText: String?,
-        outputPaths: [String]
-    ) async throws -> [GenerationResult] {
-        if isStubBackendMode {
-            return try await stubTransport.generateCloneBatch(
-                texts: texts,
-                outputPaths: outputPaths
-            )
-        }
-
-        var params: [String: RPCValue] = [
-            "model_id": .string(modelID),
-            "texts": .array(texts.map { .string($0) }),
-            "ref_audio": .string(refAudio),
-            "output_paths": .array(outputPaths.map { .string($0) }),
-        ]
-        if let refText, !refText.isEmpty {
-            params["ref_text"] = .string(refText)
-        }
-
-        let items = try await callArray("generate_clone_batch", params: params)
-        return try generationResults(from: items)
-    }
-
-    func generateCustomFlow(
-        modelID: String,
-        text: String,
-        voice: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int? = nil,
-        batchTotal: Int? = nil
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .custom,
-            modelID: modelID,
-            batchIndex: batchIndex,
-            batchTotal: batchTotal
-        ) {
-            try await self.generateCustom(
-                modelID: modelID,
-                text: text,
-                voice: voice,
-                emotion: emotion,
-                outputPath: outputPath,
-                stream: false
-            )
-        }
-    }
-
-    func generateCustomStreamingFlow(
-        modelID: String,
-        text: String,
-        voice: String,
-        emotion: String,
-        outputPath: String
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .custom,
-            modelID: modelID,
-            batchIndex: nil,
-            batchTotal: nil,
-            activityPresentation: .inlinePlayer
-        ) {
-            try await self.generateCustom(
-                modelID: modelID,
-                text: text,
-                voice: voice,
-                emotion: emotion,
-                outputPath: outputPath,
-                stream: true,
-                streamingContext: StreamingRequestContext(
-                    mode: .custom,
-                    title: Self.streamingTitle(for: text)
-                )
-            )
-        }
-    }
-
-    func generateDesignFlow(
-        modelID: String,
-        text: String,
-        voiceDescription: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int? = nil,
-        batchTotal: Int? = nil
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .design,
-            modelID: modelID,
-            batchIndex: batchIndex,
-            batchTotal: batchTotal
-        ) {
-            try await self.generateDesign(
-                modelID: modelID,
-                text: text,
-                voiceDescription: voiceDescription,
-                emotion: emotion,
-                outputPath: outputPath,
-                stream: false
-            )
-        }
-    }
-
-    func generateDesignStreamingFlow(
-        modelID: String,
-        text: String,
-        voiceDescription: String,
-        emotion: String,
-        outputPath: String
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .design,
-            modelID: modelID,
-            batchIndex: nil,
-            batchTotal: nil,
-            activityPresentation: .inlinePlayer
-        ) {
-            try await self.generateDesign(
-                modelID: modelID,
-                text: text,
-                voiceDescription: voiceDescription,
-                emotion: emotion,
-                outputPath: outputPath,
-                stream: true,
-                streamingContext: StreamingRequestContext(
-                    mode: .design,
-                    title: Self.streamingTitle(for: text)
-                )
-            )
-        }
-    }
-
-    func generateCloneFlow(
-        modelID: String,
-        text: String,
-        refAudio: String,
-        refText: String?,
-        outputPath: String,
-        batchIndex: Int? = nil,
-        batchTotal: Int? = nil
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .clone,
-            modelID: modelID,
-            batchIndex: batchIndex,
-            batchTotal: batchTotal
-        ) {
-            try await self.generateClone(
-                modelID: modelID,
-                text: text,
-                refAudio: refAudio,
-                refText: refText,
-                outputPath: outputPath,
-                stream: false
-            )
-        }
-    }
-
-    func generateCloneBatchFlow(
-        modelID: String,
-        texts: [String],
-        refAudio: String,
-        refText: String?,
-        outputPaths: [String],
-        progressHandler: ((Double?, String) -> Void)?
-    ) async throws -> [GenerationResult] {
-        activeCloneBatchProgressHandler = progressHandler
-        defer { activeCloneBatchProgressHandler = nil }
-
-        return try await performGenerationFlow(
-            mode: .clone,
-            modelID: modelID,
-            batchIndex: nil,
-            batchTotal: nil
-        ) {
-            try await self.generateCloneBatch(
-                modelID: modelID,
-                texts: texts,
-                refAudio: refAudio,
-                refText: refText,
-                outputPaths: outputPaths
-            )
-        }
-    }
-
-    func generateCloneStreamingFlow(
-        modelID: String,
-        text: String,
-        refAudio: String,
-        refText: String?,
-        outputPath: String
-    ) async throws -> GenerationResult {
-        try await performGenerationFlow(
-            mode: .clone,
-            modelID: modelID,
-            batchIndex: nil,
-            batchTotal: nil,
-            activityPresentation: .inlinePlayer
-        ) {
-            try await self.generateClone(
-                modelID: modelID,
-                text: text,
-                refAudio: refAudio,
-                refText: refText,
-                outputPath: outputPath,
-                stream: true,
-                streamingContext: StreamingRequestContext(
-                    mode: .clone,
-                    title: Self.streamingTitle(for: text)
-                )
-            )
-        }
-    }
-
-    func clearGenerationActivity() {
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = nil
-        activeGenerationSession = nil
-        clearActiveProgressTracking()
-        activeCloneBatchProgressHandler = nil
-        syncSidebarStatusFromSystemState()
     }
 
     /// List enrolled voices.
@@ -1128,230 +745,15 @@ final class PythonBridge: ObservableObject {
         return speakers
     }
 
-    // MARK: - Sidebar Status
-
-    private func performGenerationFlow<Output>(
-        mode: GenerationMode,
-        modelID: String,
-        batchIndex: Int?,
-        batchTotal: Int?,
-        activityPresentation: ActivityStatus.Presentation = .standaloneCard,
-        generate: @MainActor () async throws -> Output
-    ) async throws -> Output {
-        beginGenerationSession(
-            mode: mode,
-            batchIndex: batchIndex,
-            batchTotal: batchTotal,
-            activityPresentation: activityPresentation
-        )
-
-        do {
-            let loadStart = DispatchTime.now().uptimeNanoseconds
-            let loadResult: [String: RPCValue]
-            do {
-                let loadSignpost = AppPerformanceSignposts.begin("Model Load")
-                defer { AppPerformanceSignposts.end(loadSignpost) }
-                loadResult = try await loadModel(id: modelID)
-            }
-            let loadElapsedMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart) / 1_000_000)
-            #if DEBUG
-            print("[Performance][PythonBridge] mode=\(mode.rawValue) load_model_client_wall_ms=\(loadElapsedMs) cached=\(loadResult["cached"]?.boolValue == true)")
-            #endif
-            if loadResult["cached"]?.boolValue == true {
-                updateCurrentSession(
-                    phase: .preparing,
-                    message: "Preparing request...",
-                    requestFraction: 0.15
-                )
-            }
-
-            let generateStart = DispatchTime.now().uptimeNanoseconds
-            let result = try await generate()
-            let generateElapsedMs = Int((DispatchTime.now().uptimeNanoseconds - generateStart) / 1_000_000)
-            #if DEBUG
-            print("[Performance][PythonBridge] mode=\(mode.rawValue) generate_client_wall_ms=\(generateElapsedMs)")
-            #endif
-            completeGenerationSession()
-            return result
-        } catch {
-            failGenerationSession(with: error)
-            throw error
-        }
+    func syncSidebarStatusFromSystemState() {
+        activityCoordinator.syncSidebarStatusFromSystemState(isReady: isReady, lastError: lastError)
+        syncActivityPublishedState()
     }
 
-    private func beginGenerationSession(
-        mode: GenerationMode,
-        batchIndex: Int?,
-        batchTotal: Int?,
-        activityPresentation: ActivityStatus.Presentation
-    ) {
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = nil
-        activeGenerationSession = GenerationSession(
-            mode: mode,
-            batchIndex: batchIndex,
-            batchTotal: batchTotal,
-            currentPhase: .loadingModel,
-            currentRequestID: nil,
-            activityPresentation: activityPresentation
-        )
-        lastError = nil
-        updateCurrentSession(
-            phase: .loadingModel,
-            message: "Preparing model...",
-            requestFraction: 0.0
-        )
-    }
-
-    private func completeGenerationSession() {
-        guard var session = activeGenerationSession else {
-            syncSidebarStatusFromSystemState()
-            return
-        }
-
-        clearActiveProgressTracking()
-
-        if let batchIndex = session.batchIndex,
-           let batchTotal = session.batchTotal,
-           batchIndex < batchTotal {
-            session.batchIndex = batchIndex + 1
-            session.currentPhase = .loadingModel
-            session.currentRequestID = nil
-            activeGenerationSession = session
-            updateCurrentSession(
-                phase: .loadingModel,
-                message: "Preparing model...",
-                requestFraction: 0.0
-            )
-            return
-        }
-
-        activeGenerationSession = nil
-        scheduleSidebarStatusReset()
-    }
-
-    private func failGenerationSession(with error: Error) {
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = nil
-        activeGenerationSession = nil
-        clearActiveProgressTracking()
-        activeCloneBatchProgressHandler = nil
-        if lastError == nil {
-            lastError = error.localizedDescription
-        } else {
-            syncSidebarStatusFromSystemState()
-        }
-    }
-
-    private func syncSidebarStatusFromSystemState() {
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = nil
-        if let error = lastError {
-            sidebarStatus = isReady ? .error(error) : .crashed(error)
-            return
-        }
-        guard activeGenerationSession == nil else { return }
-        sidebarStatus = isReady ? .idle : .starting
-    }
-
-    private func updateSidebarFromProgress(method: String, percent: Int, message: String) {
-        guard let session = activeGenerationSession else { return }
-        let phase = phaseForProgress(method: method, message: message, mode: session.mode)
-        let requestFraction = mappedRequestFraction(method: method, percent: percent)
-        updateCurrentSession(phase: phase, message: message, requestFraction: requestFraction)
-    }
-
-    private func updateCurrentSession(phase: GenerationPhase, message: String, requestFraction: Double?) {
-        guard var session = activeGenerationSession else { return }
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = nil
-        session.currentPhase = phase
-        activeGenerationSession = session
-        let overallFraction = overallFraction(for: session, requestFraction: requestFraction)
-        let label = sidebarLabel(for: session, message: message)
-        sidebarStatus = .running(
-            ActivityStatus(
-                label: label,
-                fraction: overallFraction,
-                presentation: session.activityPresentation
-            )
-        )
-    }
-
-    private func phaseForProgress(method: String, message: String, mode: GenerationMode) -> GenerationPhase {
-        switch method {
-        case "load_model":
-            return .loadingModel
-        case "generate", "generate_clone_batch":
-            let lowercasedMessage = message.lowercased()
-            if lowercasedMessage.contains("saving") || lowercasedMessage.contains("done") {
-                return .saving
-            }
-            if lowercasedMessage.contains("generating") || lowercasedMessage.contains("streaming") {
-                return .generating
-            }
-            if mode == .clone && (lowercasedMessage.contains("normalizing") || lowercasedMessage.contains("voice context")) {
-                return .preparing
-            }
-            return .preparing
-        default:
-            return .preparing
-        }
-    }
-
-    private func mappedRequestFraction(method: String, percent: Int) -> Double? {
-        let clampedPercent = min(max(percent, 0), 100)
-        let normalized = Double(clampedPercent) / 100.0
-
-        switch method {
-        case "load_model":
-            return normalized * 0.15
-        case "generate", "generate_clone_batch":
-            return 0.15 + (normalized * 0.85)
-        default:
-            return normalized
-        }
-    }
-
-    private func overallFraction(for session: GenerationSession, requestFraction: Double?) -> Double? {
-        guard let requestFraction else { return nil }
-        guard let batchIndex = session.batchIndex,
-              let batchTotal = session.batchTotal,
-              batchTotal > 0 else {
-            return min(max(requestFraction, 0.0), 1.0)
-        }
-
-        let completedItems = max(batchIndex - 1, 0)
-        let overall = (Double(completedItems) + requestFraction) / Double(batchTotal)
-        return min(max(overall, 0.0), 1.0)
-    }
-
-    private func sidebarLabel(for session: GenerationSession, message: String) -> String {
-        guard let batchIndex = session.batchIndex,
-              let batchTotal = session.batchTotal else {
-            return message
-        }
-        return "Generating \(batchIndex)/\(batchTotal): \(message)"
-    }
-
-    private func clearActiveProgressTracking() {
-        activeProgressRequestID = nil
-        activeProgressMethod = nil
-    }
-
-    private func scheduleSidebarStatusReset() {
-        sidebarStatusResetTask?.cancel()
-        sidebarStatusResetTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            guard !Task.isCancelled else { return }
-            guard let self = self else { return }
-            await self.finishSidebarStatusResetIfCurrent()
-        }
-    }
-
-    private func finishSidebarStatusResetIfCurrent() {
-        sidebarStatusResetTask = nil
-        syncSidebarStatusFromSystemState()
+    func syncActivityPublishedState() {
+        progressPercent = activityCoordinator.progressPercent
+        progressMessage = activityCoordinator.progressMessage
+        sidebarStatus = activityCoordinator.sidebarStatus
     }
 
     private func handleNotification(_ response: RPCResponse) {
@@ -1360,27 +762,12 @@ final class PythonBridge: ObservableObject {
             isReady = true
         case "progress":
             guard let params = response.params else { return }
-            let notificationRequestID = params["request_id"]?.intValue
-            if let expectedRequestID = activeProgressRequestID,
-               let notificationRequestID,
-               notificationRequestID != expectedRequestID {
-                return
-            }
-            progressPercent = params["percent"]?.intValue ?? 0
-            progressMessage = params["message"]?.stringValue ?? ""
-            guard activeGenerationSession != nil,
-                  let activeProgressMethod else { return }
-            updateSidebarFromProgress(
-                method: activeProgressMethod,
-                percent: progressPercent,
-                message: progressMessage
+            activityCoordinator.recordProgressNotification(
+                requestID: params["request_id"]?.intValue,
+                percent: params["percent"]?.intValue ?? 0,
+                message: params["message"]?.stringValue ?? ""
             )
-            if activeProgressMethod == "generate_clone_batch" {
-                activeCloneBatchProgressHandler?(
-                    Double(progressPercent) / 100.0,
-                    progressMessage
-                )
-            }
+            syncActivityPublishedState()
         case "generation_chunk":
             guard let params = response.params else { return }
             streamCoordinator.handleGenerationChunkNotification(params)
@@ -1483,12 +870,12 @@ final class PythonBridge: ObservableObject {
         return nil
     }
 
-    private static func streamingTitle(for text: String) -> String {
+    static func streamingTitle(for text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(40)).isEmpty ? "Live generation" : String(trimmed.prefix(40))
     }
 
-    private func generationResults(from items: [RPCValue]) throws -> [GenerationResult] {
+    func generationResults(from items: [RPCValue]) throws -> [GenerationResult] {
         try items.enumerated().map { index, item in
             guard let object = item.objectValue else {
                 throw PythonBridgeError.rpcError(

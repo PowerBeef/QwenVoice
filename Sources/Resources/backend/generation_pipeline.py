@@ -154,7 +154,7 @@ class GenerationPipeline:
         if language is not None and language != "auto":
             kwargs["lang_code"] = language
         if voice:
-            kwargs["speaker"] = voice
+            kwargs["voice"] = voice
         if instruct:
             kwargs["instruct"] = instruct
         if stream:

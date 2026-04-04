@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/search_helpers.sh"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_YML="$PROJECT_DIR/project.yml"
 PBXPROJ="$PROJECT_DIR/QwenVoice.xcodeproj/project.pbxproj"
@@ -39,20 +40,20 @@ check_project_metadata() {
     [ -f "$PROJECT_YML" ] || fail "missing project.yml at $PROJECT_YML"
     [ -f "$PBXPROJ" ] || fail "missing generated project at $PBXPROJ"
 
-    rg -Fq 'path: Sources/Resources/backend' "$PROJECT_YML" || fail "project.yml does not define Sources/Resources/backend as a target resource"
-    rg -Fq 'destination: resources' "$PROJECT_YML" || fail "project.yml must copy the backend into the resources destination"
-    rg -Fq 'subpath: backend' "$PROJECT_YML" || fail "project.yml must copy the backend into Resources/backend"
-    rg -Fq '"backend/**"' "$PROJECT_YML" || fail "project.yml must exclude backend/** from the flattened Sources/Resources resource entry"
-    rg -Fq '"server_compat.py"' "$PROJECT_YML" || fail "project.yml must exclude server_compat.py from bundled backend resources"
+    search_fixed_in_file 'path: Sources/Resources/backend' "$PROJECT_YML" || fail "project.yml does not define Sources/Resources/backend as a target resource"
+    search_fixed_in_file 'destination: resources' "$PROJECT_YML" || fail "project.yml must copy the backend into the resources destination"
+    search_fixed_in_file 'subpath: backend' "$PROJECT_YML" || fail "project.yml must copy the backend into Resources/backend"
+    search_fixed_in_file '"backend/**"' "$PROJECT_YML" || fail "project.yml must exclude backend/** from the flattened Sources/Resources resource entry"
+    search_fixed_in_file '"server_compat.py"' "$PROJECT_YML" || fail "project.yml must exclude server_compat.py from bundled backend resources"
 
-    rg -q 'dstPath = backend;' "$PBXPROJ" || fail "generated project is missing the backend copy-files subpath"
-    if rg -q 'server_compat.py in Resources' "$PBXPROJ" || rg -q 'server_compat.py in CopyFiles' "$PBXPROJ"; then
+    search_regex_in_file 'dstPath = backend;' "$PBXPROJ" || fail "generated project is missing the backend copy-files subpath"
+    if search_regex_in_file 'server_compat.py in Resources' "$PBXPROJ" || search_regex_in_file 'server_compat.py in CopyFiles' "$PBXPROJ"; then
         fail "generated project must not copy server_compat.py into app resources"
     fi
-    if rg -q 'server.py in Resources' "$PBXPROJ"; then
+    if search_regex_in_file 'server.py in Resources' "$PBXPROJ"; then
         fail "generated project must not flatten server.py into the top-level resource phase"
     fi
-    if rg -q 'mlx_audio_qwen_speed_patch.py in Resources' "$PBXPROJ"; then
+    if search_regex_in_file 'mlx_audio_qwen_speed_patch.py in Resources' "$PBXPROJ"; then
         fail "generated project must not flatten backend helper modules into top-level resources"
     fi
 }

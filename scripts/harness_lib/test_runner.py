@@ -544,6 +544,32 @@ def _run_pipeline_tests() -> dict[str, Any]:
             else:
                 os.environ["QWENVOICE_UITEST_CAPTURE_MODE"] = previous_value
 
+    def test_split_generation_pipeline_forwards_voice_kwarg():
+        module = _load_module_from_path(
+            f"_generation_pipeline_{id(object())}",
+            BACKEND_DIR / "generation_pipeline.py",
+        )
+        pipeline = module.GenerationPipeline(
+            state=None,
+            transport=None,
+            output_paths=None,
+            audio_io=None,
+            clone_context=None,
+            default_speaker="vivian",
+            cache_policy="always",
+            default_streaming_interval=0.32,
+            prewarm_profiles={},
+        )
+
+        kwargs = pipeline.build_generation_kwargs(
+            "Hello",
+            0.6,
+            voice="vivian",
+        )
+
+        assert kwargs["voice"] == "vivian"
+        assert "speaker" not in kwargs
+
     tests = [
         ("ui_state_client_wraps_transport_errors", test_ui_state_client_wraps_transport_errors),
         ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
@@ -551,6 +577,7 @@ def _run_pipeline_tests() -> dict[str, Any]:
         ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
         ("build_ui_launch_environment_defaults_screenshot_capture_mode", test_build_ui_launch_environment_defaults_screenshot_capture_mode),
         ("build_ui_launch_environment_preserves_explicit_capture_mode", test_build_ui_launch_environment_preserves_explicit_capture_mode),
+        ("split_generation_pipeline_forwards_voice_kwarg", test_split_generation_pipeline_forwards_voice_kwarg),
         ("pipeline_tests_retired", lambda: {"skip_reason": "No pipeline-specific tests remain after clone delivery cleanup"}),
     ]
 

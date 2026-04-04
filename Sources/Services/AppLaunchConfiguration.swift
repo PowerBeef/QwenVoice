@@ -1,0 +1,85 @@
+import SwiftUI
+import AppKit
+import CoreGraphics
+
+struct AppLaunchConfiguration {
+    let isUITest: Bool
+    let disableAnimations: Bool
+    let fastIdle: Bool
+    let initialScreenID: String?
+    let debugCaptureEnabled: Bool
+    let uiTestWindowSize: CGSize?
+
+    static let current = AppLaunchConfiguration(
+        arguments: ProcessInfo.processInfo.arguments,
+        environment: ProcessInfo.processInfo.environment
+    )
+    @MainActor private static var openedInitialSettingsWindow = false
+
+    init(arguments: [String], environment: [String: String]) {
+        let inferredUITest = arguments.contains("--uitest")
+            || arguments.contains("--uitest-disable-animations")
+            || arguments.contains("--uitest-fast-idle")
+            || arguments.contains("--uitest-debug-capture")
+            || arguments.contains(where: { $0.hasPrefix("--uitest-screen=") })
+
+        isUITest = inferredUITest
+        disableAnimations = inferredUITest && (
+            arguments.contains("--uitest") || arguments.contains("--uitest-disable-animations")
+        )
+        fastIdle = inferredUITest && (
+            arguments.contains("--uitest") || arguments.contains("--uitest-fast-idle")
+        )
+        debugCaptureEnabled = inferredUITest && arguments.contains("--uitest-debug-capture")
+        initialScreenID = arguments.first(where: { $0.hasPrefix("--uitest-screen=") })?
+            .replacingOccurrences(of: "--uitest-screen=", with: "")
+        uiTestWindowSize = Self.parseWindowSize(environment["QWENVOICE_UI_TEST_WINDOW_SIZE"])
+    }
+
+    var initialSidebarItem: SidebarItem? {
+        guard let initialScreenID else { return nil }
+        return SidebarItem(testScreenID: initialScreenID)
+    }
+
+    var shouldOpenSettingsOnLaunch: Bool {
+        initialScreenID == "preferences"
+    }
+
+    var animationsEnabled: Bool {
+        !disableAnimations
+    }
+
+    func animation(_ animation: Animation?) -> Animation? {
+        animationsEnabled ? animation : nil
+    }
+
+    static func performAnimated<Result>(_ animation: Animation?, _ updates: () -> Result) -> Result {
+        withAnimation(current.animation(animation), updates)
+    }
+
+    @MainActor static func openSettingsWindowIfNeeded() {
+        guard current.shouldOpenSettingsOnLaunch, !openedInitialSettingsWindow else { return }
+        openedInitialSettingsWindow = true
+        DispatchQueue.main.async {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
+    }
+
+    private static func parseWindowSize(_ rawValue: String?) -> CGSize? {
+        guard let rawValue else { return nil }
+
+        let parts = rawValue
+            .lowercased()
+            .split(separator: "x", maxSplits: 1)
+            .map(String.init)
+        guard parts.count == 2,
+              let width = Double(parts[0]),
+              let height = Double(parts[1]),
+              width > 0,
+              height > 0 else {
+            return nil
+        }
+
+        return CGSize(width: width, height: height)
+    }
+}

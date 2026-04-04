@@ -28,6 +28,7 @@
 		369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */; };
 		3971E286607F4851A7D7CD68 /* backend_state.py in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91212A8A30870608C0CFDB6F /* backend_state.py */; };
 		3E7879D3644E06670F306F6F /* TestStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */; };
+		3EA77628D5341715077DCB0C /* PythonBridge+GenerationFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC5CD3AE05B12B8D8E56059 /* PythonBridge+GenerationFlows.swift */; };
 		40361A78F41D4941A5CB602D /* AppCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3736EA57DD8B4B60EF1883 /* AppCommandRouter.swift */; };
 		44FF0435B940C5B1E34352D2 /* SetupFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB1F0A25C5A26E0CFB7932F /* SetupFlowTests.swift */; };
 		45C81726ED5F9B6E91DAD8FA /* PythonProcessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE74652CAA36AEABDE667D5F /* PythonProcessManager.swift */; };
@@ -50,6 +51,7 @@
 		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
 		6C9465B379155219A67DB005 /* server.py in CopyFiles */ = {isa = PBXBuildFile; fileRef = EEC2A9FFA67B72EE6CF11CB1 /* server.py */; };
 		6DF4BB61EE4A5EA6AE74F1F6 /* rpc_handlers.py in CopyFiles */ = {isa = PBXBuildFile; fileRef = 3C763048BF61486C7FD37463 /* rpc_handlers.py */; };
+		712EF5135E17F9CE4052CCE8 /* UITestWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C87A8E0307B1098429346 /* UITestWindowCoordinator.swift */; };
 		7142299093710E7ECD0887F6 /* AppStartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEC7B0D62CB687A465F31B8 /* AppStartupCoordinatorTests.swift */; };
 		731AB8BDB802F6A3A068CAD9 /* EnvironmentSetupStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A914F7999E1DD73239D11F /* EnvironmentSetupStateMachine.swift */; };
 		7535DC9EA0B9F6C298FC227E /* PreferencesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3780F1ED790D660E20B02B9F /* PreferencesViewTests.swift */; };
@@ -71,6 +73,7 @@
 		9C7F54D72E62B1918F56298B /* TTSContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56DB3F2A6729473A3816C4C /* TTSContract.swift */; };
 		9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */; };
 		9F33BE2BD7E13711926ED9B8 /* UITestAutomationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */; };
+		9FB6425F0086C460341DEDAA /* PythonBridgeActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA6F9060980475209655B54 /* PythonBridgeActivityCoordinator.swift */; };
 		A4391A1D525E6177F26A23F1 /* QwenVoiceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */; };
 		AB87F901E753DA2B3DC66096 /* PerformanceAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98AD34E571030FFA2B990B5 /* PerformanceAuditTests.swift */; };
 		AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */; };
@@ -83,6 +86,7 @@
 		BC326F943A029701044DA184 /* PythonJSONRPCTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A61850BB469B3E81DCED94C3 /* PythonJSONRPCTransport.swift */; };
 		BC702680E0058355A5DDDC81 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */; };
 		BE958EFC766206F91BAA2FAD /* ScreenshotCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D6C6FCFF2654F27862BD50 /* ScreenshotCaptureTests.swift */; };
+		BF627B1485DDCDEC1797CE11 /* AppLaunchConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665696D2F6ABD9A6E7DB4A49 /* AppLaunchConfiguration.swift */; };
 		BFB9538DB6144B9BD8E227DE /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 652CF3434A19FF8823B9CCA2 /* WaveformView.swift */; };
 		C48D4D80BF6A0E8A29A6BC0D /* CustomVoiceViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC02BA052DB3AD7BE221B9CE /* CustomVoiceViewTests.swift */; };
 		C7614DCEA3F190692321161D /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4BA2E12FB2E8DADF0D68B35C /* GRDB */; };
@@ -193,6 +197,7 @@
 		637866C95AC607A5E0509956 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		6436F73812606485A0589C35 /* AppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPaths.swift; sourceTree = "<group>"; };
 		652CF3434A19FF8823B9CCA2 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		665696D2F6ABD9A6E7DB4A49 /* AppLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLaunchConfiguration.swift; sourceTree = "<group>"; };
 		68F81C5FEEA3E2900A987556 /* BackendLaunchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendLaunchCoordinator.swift; sourceTree = "<group>"; };
 		6A9C19A5B1A1BAA500D359B1 /* DebugHierarchyTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugHierarchyTest.swift; sourceTree = "<group>"; };
 		6C7FBAB5EB31BCCC4490027E /* QwenVoiceUITestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceUITestBase.swift; sourceTree = "<group>"; };
@@ -206,6 +211,7 @@
 		786E4C195547351A7BAD7CF6 /* GenerationDraftsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationDraftsTests.swift; sourceTree = "<group>"; };
 		78F44393E69966D3C36248DB /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
 		7A3736EA57DD8B4B60EF1883 /* AppCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommandRouter.swift; sourceTree = "<group>"; };
+		7BA6F9060980475209655B54 /* PythonBridgeActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridgeActivityCoordinator.swift; sourceTree = "<group>"; };
 		802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
 		87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestStateProvider.swift; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
@@ -226,6 +232,8 @@
 		B62852B52626359D53D76C11 /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
 		B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceView.swift; sourceTree = "<group>"; };
 		B8DE0E108884A82B4A671FE5 /* Voice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice.swift; sourceTree = "<group>"; };
+		B96C87A8E0307B1098429346 /* UITestWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestWindowCoordinator.swift; sourceTree = "<group>"; };
+		BBC5CD3AE05B12B8D8E56059 /* PythonBridge+GenerationFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PythonBridge+GenerationFlows.swift"; sourceTree = "<group>"; };
 		C12149883EC3D49A78CA9EE5 /* RPCMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCMessage.swift; sourceTree = "<group>"; };
 		C1BA97E899E616829A78233A /* Generation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Generation.swift; sourceTree = "<group>"; };
 		C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarPlayerView.swift; sourceTree = "<group>"; };
@@ -409,6 +417,7 @@
 			isa = PBXGroup;
 			children = (
 				7A3736EA57DD8B4B60EF1883 /* AppCommandRouter.swift */,
+				665696D2F6ABD9A6E7DB4A49 /* AppLaunchConfiguration.swift */,
 				6436F73812606485A0589C35 /* AppPaths.swift */,
 				50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */,
 				40385AC6FD361E190A8E3CE3 /* AppStartupCoordinator.swift */,
@@ -424,6 +433,8 @@
 				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				728E773DE6EDF620EE6454AB /* ModelLoadCoordinator.swift */,
 				927B9E942C6EACB0CD15D12D /* PythonBridge.swift */,
+				BBC5CD3AE05B12B8D8E56059 /* PythonBridge+GenerationFlows.swift */,
+				7BA6F9060980475209655B54 /* PythonBridgeActivityCoordinator.swift */,
 				23A356AF30C23A234B739A2F /* PythonBridgeLineParser.swift */,
 				3B9309BE7505D62F0A7727E6 /* PythonEnvironmentManager.swift */,
 				A61850BB469B3E81DCED94C3 /* PythonJSONRPCTransport.swift */,
@@ -437,6 +448,7 @@
 				1646F79064AA8B7F5AD6F946 /* TestStateServer.swift */,
 				1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */,
 				04F2E80B69B803A391427DE4 /* UITestFaultInjection.swift */,
+				B96C87A8E0307B1098429346 /* UITestWindowCoordinator.swift */,
 				D2A539A647083CC4810F72FE /* WaveformService.swift */,
 			);
 			path = Services;
@@ -655,6 +667,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				40361A78F41D4941A5CB602D /* AppCommandRouter.swift in Sources */,
+				BF627B1485DDCDEC1797CE11 /* AppLaunchConfiguration.swift in Sources */,
 				B1D83CB652CC883A7A1DDC65 /* AppPaths.swift in Sources */,
 				8612AA28117CF2FDD46D401A /* AppPerformanceSignposts.swift in Sources */,
 				CDA31B55F78B96D43385E1E6 /* AppStartupCoordinator.swift in Sources */,
@@ -686,7 +699,9 @@
 				0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */,
 				1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */,
 				FE9FD53DCF750D74B09A37B3 /* PreferencesView.swift in Sources */,
+				3EA77628D5341715077DCB0C /* PythonBridge+GenerationFlows.swift in Sources */,
 				CD868F54EB56E87BE5F00283 /* PythonBridge.swift in Sources */,
+				9FB6425F0086C460341DEDAA /* PythonBridgeActivityCoordinator.swift in Sources */,
 				D90E5F2FAA2429B93D591514 /* PythonBridgeLineParser.swift in Sources */,
 				5A314AECCE19F864317B35A8 /* PythonEnvironmentManager.swift in Sources */,
 				BC326F943A029701044DA184 /* PythonJSONRPCTransport.swift in Sources */,
@@ -711,6 +726,7 @@
 				1BA11424A101CD274AFE9727 /* TextInputView.swift in Sources */,
 				9F33BE2BD7E13711926ED9B8 /* UITestAutomationSupport.swift in Sources */,
 				E5E94AD88F173238332FECF7 /* UITestFaultInjection.swift in Sources */,
+				712EF5135E17F9CE4052CCE8 /* UITestWindowCoordinator.swift in Sources */,
 				FDC2379CA4DB15F84DB80A3C /* Voice.swift in Sources */,
 				9506A9366B29D225A10210E7 /* VoiceCloningView.swift in Sources */,
 				AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */,
