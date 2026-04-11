@@ -1,6 +1,43 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum VoiceCloningReferenceAudioSupport {
+    static let allowedFileExtensions: Set<String> = [
+        "wav", "mp3", "aiff", "aif", "m4a", "flac", "ogg", "webm",
+    ]
+
+    static let supportedFormatDescription = "WAV, MP3, AIFF, M4A, FLAC, OGG, or WebM"
+
+    static let webMType = UTType(filenameExtension: "webm")
+        ?? UTType(mimeType: "audio/webm")
+        ?? UTType(mimeType: "video/webm")
+
+    static let openPanelContentTypes: [UTType] = {
+        var seen = Set<String>()
+        var types: [UTType] = []
+
+        func append(_ type: UTType) {
+            if seen.insert(type.identifier).inserted {
+                types.append(type)
+            }
+        }
+
+        append(.audio)
+
+        for ext in allowedFileExtensions.sorted() where ext != "webm" {
+            if let type = UTType(filenameExtension: ext) {
+                append(type)
+            }
+        }
+
+        if let webMType {
+            append(webMType)
+        }
+
+        return types
+    }()
+}
+
 struct VoiceCloningView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
@@ -614,20 +651,16 @@ private extension VoiceCloningView {
         }
     }
 
-    static let allowedAudioExtensions: Set<String> = [
-        "wav", "mp3", "aiff", "aif", "m4a", "flac", "ogg"
-    ]
-
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        let allowedExtensions = Self.allowedAudioExtensions
+        let allowedExtensions = VoiceCloningReferenceAudioSupport.allowedFileExtensions
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
             guard let data = data as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
             let ext = url.pathExtension.lowercased()
             guard allowedExtensions.contains(ext) else {
                 Task { @MainActor in
-                    errorMessage = "Unsupported file type '.\(ext)'. Drop an audio file (WAV, MP3, AIFF, M4A, FLAC, or OGG)."
+                    errorMessage = "Unsupported file type '.\(ext)'. Drop an audio file (\(VoiceCloningReferenceAudioSupport.supportedFormatDescription))."
                 }
                 return
             }
@@ -652,7 +685,7 @@ private extension VoiceCloningView {
         }
 
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
+        panel.allowedContentTypes = VoiceCloningReferenceAudioSupport.openPanelContentTypes
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             draft.referenceAudioPath = url.path

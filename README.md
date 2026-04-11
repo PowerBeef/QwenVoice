@@ -35,7 +35,7 @@ Voice Design is a standalone destination. Describe the voice you want, then shap
 
 ### Voice Cloning
 
-Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, and OGG input and can also use an optional transcript for better cloning accuracy.
+Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, OGG, and WebM input and can also use an optional transcript for better cloning accuracy.
 
 ## What the App Does Not Expose
 
@@ -74,6 +74,8 @@ Current GitHub release builds are produced by the dual-release workflow and typi
 - `QwenVoice-macos26.dmg` — modern liquid UI build
 - `QwenVoice-macos15.dmg` — legacy glass UI build
 
+Those workflow-built DMGs are the release source of truth. Local `./scripts/release.sh` output is useful for debug validation, but it is not authoritative shipped-release proof.
+
 Then:
 
 1. Drag `QwenVoice.app` to `/Applications`
@@ -102,7 +104,7 @@ Source-build prerequisites:
 
 - macOS 15+
 - Apple Silicon
-- Xcode 15+
+- Xcode 26+ for the default `QW_UI_LIQUID` checkout
 - XcodeGen
 
 ```sh
@@ -117,6 +119,8 @@ Build the `QwenVoice` scheme from Xcode, or use:
 ```sh
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 ```
+
+The checked-in `project.yml` defaults to `QW_UI_LIQUID`, so a local build of the default checkout needs a macOS 26 SDK. CI still validates the macOS 15 legacy profile by patching `project.yml` through `scripts/set_ci_ui_profile.sh` before regenerating the project.
 
 Useful local checks:
 
@@ -148,6 +152,8 @@ For a local release build and DMG:
 ```
 
 That script bundles Python and ffmpeg, builds the Release app, verifies the bundle, and by default produces `build/QwenVoice.dmg`.
+
+Use GitHub workflow artifacts for authoritative shipped release validation.
 
 ## Tone and Emotion Control
 

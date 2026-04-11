@@ -2349,6 +2349,40 @@ def _run_server_tests() -> dict[str, Any]:
         finally:
             os.unlink(tmp_path)
 
+    def test_convert_audio_if_needed_falls_back_to_ffmpeg_for_webm():
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            input_path = tmp.name
+
+        original_audio_write_fn = server._audio_write_fn
+        original_convert_audio_with_mlx = server._convert_audio_with_mlx
+        original_convert_audio_to_wav = server._convert_audio_to_wav
+        fallback_calls: list[tuple[str, str]] = []
+
+        try:
+            server._audio_write_fn = object()
+
+            def fake_convert_audio_with_mlx(input_path, output_path):
+                raise ValueError("webm is not supported by the mlx conversion path")
+
+            def fake_convert_audio_to_wav(input_path, output_path):
+                fallback_calls.append((input_path, output_path))
+                return output_path
+
+            server._convert_audio_with_mlx = fake_convert_audio_with_mlx
+            server._convert_audio_to_wav = fake_convert_audio_to_wav
+
+            wav_path = server.convert_audio_if_needed(input_path)
+
+            assert len(fallback_calls) == 1
+            assert fallback_calls[0][0] == input_path
+            assert fallback_calls[0][1].endswith(".wav")
+            assert wav_path == fallback_calls[0][1]
+        finally:
+            server._audio_write_fn = original_audio_write_fn
+            server._convert_audio_with_mlx = original_convert_audio_with_mlx
+            server._convert_audio_to_wav = original_convert_audio_to_wav
+            os.unlink(input_path)
+
     def test_stream_selected_audio_emits_chunks_before_final_write():
         try:
             import numpy as np
@@ -2460,6 +2494,7 @@ def _run_server_tests() -> dict[str, Any]:
         ("make_output_path", test_make_output_path),
         ("get_audio_metadata_missing", test_get_audio_metadata_missing),
         ("get_audio_metadata_valid", test_get_audio_metadata_valid),
+        ("convert_audio_if_needed_falls_back_to_ffmpeg_for_webm", test_convert_audio_if_needed_falls_back_to_ffmpeg_for_webm),
     ]
 
     for name, fn in tests:
