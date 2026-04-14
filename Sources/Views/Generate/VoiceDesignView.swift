@@ -35,6 +35,7 @@ struct VoiceDesignView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
+    @EnvironmentObject var appCommandRouter: AppCommandRouter
 
     @Binding private var draft: VoiceDesignDraft
     @State private var isGenerating = false
@@ -267,6 +268,23 @@ private extension VoiceDesignView {
 
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            if let model = activeModel,
+               let primaryActionTitle = modelManager.primaryActionTitle(for: model) {
+                ModelRecoveryCard(
+                    title: primaryActionTitle,
+                    detail: modelManager.recoveryDetail(for: model),
+                    primaryActionTitle: primaryActionTitle,
+                    accentColor: AppTheme.voiceDesign,
+                    accessibilityIdentifier: "voiceDesign_modelRecovery",
+                    onPrimaryAction: {
+                        Task { await modelManager.download(model, using: pythonBridge) }
+                    },
+                    onSecondaryAction: {
+                        appCommandRouter.navigate(to: .models)
+                    }
+                )
+            }
+
             generationReadiness
             saveVoiceAction
 
@@ -358,7 +376,7 @@ private extension VoiceDesignView {
         guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
-            errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+            errorMessage = modelManager.recoveryDetail(for: model)
             return
         }
 

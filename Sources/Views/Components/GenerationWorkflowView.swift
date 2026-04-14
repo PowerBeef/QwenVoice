@@ -145,6 +145,48 @@ struct WorkflowReadinessNote: View {
     }
 }
 
+struct ModelRecoveryCard: View {
+    let title: String
+    let detail: String
+    let primaryActionTitle: String
+    var accentColor: Color = AppTheme.accent
+    var accessibilityIdentifier: String? = nil
+    let onPrimaryAction: () -> Void
+    let onSecondaryAction: () -> Void
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "square.stack.3d.down.forward")
+                        .font(.subheadline)
+                        .foregroundStyle(accentColor)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button(primaryActionTitle, action: onPrimaryAction)
+                        .buttonStyle(.borderedProminent)
+                        .tint(accentColor)
+
+                    Button("Show Models", action: onSecondaryAction)
+                        .buttonStyle(.bordered)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .profileGroupBoxStyle()
+        .optionalAccessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
 enum StudioCardStyle {
     case standard
     case inline

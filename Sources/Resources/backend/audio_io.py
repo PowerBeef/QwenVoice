@@ -101,6 +101,46 @@ class AudioIOManager:
         self.state.audio_write_fn(output_path, audio_np, self.sample_rate, format="wav")
         return output_path
 
+    def trim_clone_reference_silence(self, input_path, output_path):
+        parent_dir = os.path.dirname(output_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        filter_graph = (
+            "silenceremove="
+            "start_periods=1:start_silence=0.25:start_threshold=-45dB,"
+            "areverse,"
+            "silenceremove="
+            "start_periods=1:start_silence=0.25:start_threshold=-45dB,"
+            "areverse"
+        )
+        cmd = [
+            self.resolve_ffmpeg_binary(),
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            input_path,
+            "-af",
+            filter_graph,
+            "-ar",
+            str(self.sample_rate),
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            output_path,
+        ]
+
+        try:
+            subprocess.run(
+                cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise RuntimeError("Could not trim clone reference audio. Is ffmpeg installed?")
+
+        return output_path
+
     def to_int16_audio_array(self, audio):
         array = audio if isinstance(audio, self.state.np.ndarray) else self.state.np.array(audio)
 

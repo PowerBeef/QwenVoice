@@ -134,6 +134,7 @@ def main() -> None:
             "release",
             "clone_regression",
             "clone_packaged_regression",
+            "tts_roundtrip",
             "perf",
             "all",
         ],

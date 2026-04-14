@@ -91,6 +91,10 @@ PREWARM_PROFILES = {
 }
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+EXPERIMENTAL_CLONE_REF_TRIM = _env_flag(
+    "QWENVOICE_EXPERIMENTAL_CLONE_REF_TRIM", default=False
+)
+MIN_TRIMMED_CLONE_REFERENCE_SECONDS = 0.75
 # Default paths — overridable via init params
 APP_SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/QwenVoice")
 MODELS_DIR = os.path.join(APP_SUPPORT_DIR, "models")
@@ -170,6 +174,7 @@ _generate_prepared_icl_fn = None
 _batch_generate_prepared_icl_fn = None
 _enable_speech_tokenizer_encoder_fn = None
 _clone_context_cache = OrderedDict()
+_last_clone_reference_metrics = {}
 _mlx_audio_version = None
 _prewarmed_model_keys = set()
 _primed_clone_reference_keys = set()
@@ -303,6 +308,38 @@ def get_smart_path(folder_name):
             return os.path.join(snapshots_dir, subfolders[0])
 
     return full_path
+
+
+def _model_installation_info(model_def):
+    root_path = os.path.join(MODELS_DIR, model_def["folder"])
+    root_exists = os.path.exists(root_path)
+    resolved_path = get_smart_path(model_def["folder"])
+
+    missing_required_paths = []
+    if root_exists:
+        base_path = resolved_path or root_path
+        for relative_path in model_def["requiredRelativePaths"]:
+            candidate = os.path.join(base_path, relative_path)
+            if not os.path.exists(candidate):
+                missing_required_paths.append(relative_path)
+
+    complete = root_exists and resolved_path is not None and not missing_required_paths
+    repairable = root_exists and not complete
+    size_bytes = 0
+
+    if root_exists:
+        for current_root, _, files in os.walk(root_path):
+            for filename in files:
+                size_bytes += os.path.getsize(os.path.join(current_root, filename))
+
+    return {
+        "resolved_path": resolved_path,
+        "downloaded": root_exists,
+        "complete": complete,
+        "repairable": repairable,
+        "missing_required_paths": missing_required_paths,
+        "size_bytes": size_bytes,
+    }
 
 
 def _resolve_model_id_for_path(model_path):
@@ -865,15 +902,168 @@ def _convert_audio_with_mlx(input_path, output_path):
     return output_path
 
 
+def _trim_clone_reference_silence(input_path, output_path):
+    """Conservatively trim leading and trailing silence from clone references."""
+    parent_dir = os.path.dirname(output_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+
+    filter_graph = (
+        "silenceremove="
+        "start_periods=1:start_silence=0.25:start_threshold=-45dB,"
+        "areverse,"
+        "silenceremove="
+        "start_periods=1:start_silence=0.25:start_threshold=-45dB,"
+        "areverse"
+    )
+    cmd = [
+        _resolve_ffmpeg_binary(),
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        input_path,
+        "-af",
+        filter_graph,
+        "-ar",
+        str(SAMPLE_RATE),
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        output_path,
+    ]
+
+    try:
+        subprocess.run(
+            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        raise RuntimeError("Could not trim clone reference audio. Is ffmpeg installed?")
+
+    return output_path
+
+
 def _clone_reference_cache_path(input_path):
     """Build a stable normalized WAV cache path for an external reference clip."""
+    stem, fingerprint = _clone_reference_cache_components(input_path)
+    return os.path.join(CLONE_REF_CACHE_DIR, f"{stem}_{fingerprint}.wav")
+
+
+def _clone_reference_trimmed_cache_path(input_path):
+    stem, fingerprint = _clone_reference_cache_components(input_path)
+    return os.path.join(CLONE_REF_CACHE_DIR, f"{stem}_{fingerprint}_trimmed.wav")
+
+
+def _clone_reference_cache_components(input_path):
     stat_result = os.stat(input_path)
     fingerprint = hashlib.sha256(
         f"{os.path.realpath(input_path)}:{stat_result.st_size}:{stat_result.st_mtime_ns}".encode("utf-8")
     ).hexdigest()[:16]
     stem = re.sub(r"[^\w\s-]", "", os.path.splitext(os.path.basename(input_path))[0]).strip().replace(" ", "_")
     stem = stem or "reference"
-    return os.path.join(CLONE_REF_CACHE_DIR, f"{stem}_{fingerprint}.wav")
+    return stem, fingerprint
+
+
+def _record_clone_reference_metrics(
+    *,
+    original_path,
+    normalized_path,
+    returned_path,
+    trim_attempted,
+    trim_applied,
+    trim_status,
+    duration_before_seconds,
+    duration_after_seconds,
+    trim_error=None,
+):
+    global _last_clone_reference_metrics
+    _last_clone_reference_metrics = {
+        "original_path": original_path,
+        "normalized_path": normalized_path,
+        "returned_path": returned_path,
+        "trim_attempted": trim_attempted,
+        "trim_applied": trim_applied,
+        "trim_status": trim_status,
+        "duration_before_seconds": round(duration_before_seconds, 4),
+        "duration_after_seconds": round(duration_after_seconds, 4),
+    }
+    if trim_error:
+        _last_clone_reference_metrics["trim_error"] = trim_error
+    return dict(_last_clone_reference_metrics)
+
+
+def _trim_normalized_clone_reference(original_path, normalized_path):
+    trimmed_path = _clone_reference_trimmed_cache_path(original_path)
+    source_duration = get_audio_metadata(normalized_path).get("duration_seconds") or 0.0
+
+    if os.path.exists(trimmed_path):
+        try:
+            os.utime(trimmed_path, None)
+        except OSError:
+            pass
+        trimmed_duration = get_audio_metadata(trimmed_path).get("duration_seconds") or source_duration
+        _record_clone_reference_metrics(
+            original_path=original_path,
+            normalized_path=normalized_path,
+            returned_path=trimmed_path,
+            trim_attempted=True,
+            trim_applied=True,
+            trim_status="cached_trimmed_reference",
+            duration_before_seconds=source_duration,
+            duration_after_seconds=trimmed_duration,
+        )
+        return trimmed_path
+
+    try:
+        trimmed_candidate = _trim_clone_reference_silence(normalized_path, trimmed_path)
+    except Exception as exc:
+        _record_clone_reference_metrics(
+            original_path=original_path,
+            normalized_path=normalized_path,
+            returned_path=normalized_path,
+            trim_attempted=True,
+            trim_applied=False,
+            trim_status="trim_failed",
+            duration_before_seconds=source_duration,
+            duration_after_seconds=source_duration,
+            trim_error=str(exc),
+        )
+        return normalized_path
+
+    trimmed_duration = get_audio_metadata(trimmed_candidate).get("duration_seconds") or 0.0
+    trim_made_difference = source_duration <= 0 or trimmed_duration < max(0.0, source_duration - 0.05)
+    trim_is_plausible = trimmed_duration >= MIN_TRIMMED_CLONE_REFERENCE_SECONDS
+
+    if trim_is_plausible and trim_made_difference:
+        _record_clone_reference_metrics(
+            original_path=original_path,
+            normalized_path=normalized_path,
+            returned_path=trimmed_candidate,
+            trim_attempted=True,
+            trim_applied=True,
+            trim_status="trim_applied",
+            duration_before_seconds=source_duration,
+            duration_after_seconds=trimmed_duration,
+        )
+        return trimmed_candidate
+
+    try:
+        os.remove(trimmed_candidate)
+    except OSError:
+        pass
+
+    _record_clone_reference_metrics(
+        original_path=original_path,
+        normalized_path=normalized_path,
+        returned_path=normalized_path,
+        trim_attempted=True,
+        trim_applied=False,
+        trim_status="trim_rejected_too_short" if not trim_is_plausible else "trim_not_needed",
+        duration_before_seconds=source_duration,
+        duration_after_seconds=trimmed_duration or source_duration,
+    )
+    return normalized_path
 
 
 def _prune_normalized_clone_reference_cache():
@@ -916,34 +1106,61 @@ def _prune_normalized_clone_reference_cache():
 def _normalize_audio_with_stable_cache(input_path):
     """Convert once and reuse a stable cached WAV for repeated reference audio."""
     if not os.path.exists(input_path):
+        _record_clone_reference_metrics(
+            original_path=input_path,
+            normalized_path=None,
+            returned_path=None,
+            trim_attempted=False,
+            trim_applied=False,
+            trim_status="missing_input",
+            duration_before_seconds=0.0,
+            duration_after_seconds=0.0,
+        )
         return None
 
     ext = os.path.splitext(input_path)[1].lower()
+    normalized_path = None
     if ext == ".wav":
         try:
             with wave.open(input_path, "rb") as f:
                 if f.getnchannels() == 1 and f.getframerate() == SAMPLE_RATE:
-                    return input_path
+                    normalized_path = input_path
         except wave.Error:
             pass
 
-    cached_wav = _clone_reference_cache_path(input_path)
-    if os.path.exists(cached_wav):
-        try:
-            os.utime(cached_wav, None)
-        except OSError:
-            pass
-        return cached_wav
+    if normalized_path is None:
+        cached_wav = _clone_reference_cache_path(input_path)
+        if os.path.exists(cached_wav):
+            try:
+                os.utime(cached_wav, None)
+            except OSError:
+                pass
+            normalized_path = cached_wav
+        elif _audio_write_fn is not None:
+            try:
+                normalized_path = _convert_audio_with_mlx(input_path, cached_wav)
+            except Exception:
+                normalized_path = _convert_audio_to_wav(input_path, cached_wav)
+        else:
+            normalized_path = _convert_audio_to_wav(input_path, cached_wav)
 
-    if _audio_write_fn is not None:
-        try:
-            converted = _convert_audio_with_mlx(input_path, cached_wav)
-        except Exception:
-            converted = _convert_audio_to_wav(input_path, cached_wav)
-    else:
-        converted = _convert_audio_to_wav(input_path, cached_wav)
+    returned_path = normalized_path
+    if EXPERIMENTAL_CLONE_REF_TRIM and normalized_path is not None:
+        returned_path = _trim_normalized_clone_reference(input_path, normalized_path)
+    elif normalized_path is not None:
+        duration = get_audio_metadata(normalized_path).get("duration_seconds") or 0.0
+        _record_clone_reference_metrics(
+            original_path=input_path,
+            normalized_path=normalized_path,
+            returned_path=normalized_path,
+            trim_attempted=False,
+            trim_applied=False,
+            trim_status="trim_disabled",
+            duration_before_seconds=duration,
+            duration_after_seconds=duration,
+        )
     _prune_normalized_clone_reference_cache()
-    return converted
+    return returned_path
 
 
 def _normalize_clone_reference(ref_audio_path):
@@ -956,25 +1173,32 @@ def _normalize_clone_reference(ref_audio_path):
     return _normalize_audio_with_stable_cache(ref_audio_path)
 
 
-def _resolve_clone_transcript(clean_ref_audio_path, requested_transcript):
+def _resolve_clone_transcript(clean_ref_audio_path, original_ref_audio_path, requested_transcript):
     """Prefer an explicit transcript, then fall back to a sidecar transcript."""
     transcript = (requested_transcript or "").strip()
     if transcript:
         return transcript
 
-    if not clean_ref_audio_path:
-        return None
+    candidate_paths = []
+    if original_ref_audio_path:
+        candidate_paths.append(original_ref_audio_path)
+    if clean_ref_audio_path and clean_ref_audio_path not in candidate_paths:
+        candidate_paths.append(clean_ref_audio_path)
 
-    sidecar = os.path.splitext(clean_ref_audio_path)[0] + ".txt"
-    if not os.path.exists(sidecar):
-        return None
+    for candidate_path in candidate_paths:
+        sidecar = os.path.splitext(candidate_path)[0] + ".txt"
+        if not os.path.exists(sidecar):
+            continue
 
-    try:
-        with open(sidecar, "r", encoding="utf-8") as f:
-            text = f.read().strip()
-            return text or None
-    except OSError:
-        return None
+        try:
+            with open(sidecar, "r", encoding="utf-8") as f:
+                text = f.read().strip()
+                if text:
+                    return text
+        except OSError:
+            continue
+
+    return None
 
 
 def _clone_cache_key(clean_ref_audio_path, ref_text):
@@ -1496,7 +1720,7 @@ def _run_model_prewarm(mode, voice=None, instruct=None, ref_audio=None, ref_text
         if not clean_ref_audio:
             raise RuntimeError("Could not process reference audio file")
 
-        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_audio, ref_text)
         prepare_start = time.perf_counter()
         prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
             clean_ref_audio,
@@ -1627,6 +1851,7 @@ def handle_prewarm_model(params, request_id=None):
             "mode": warm_mode,
             "prepared_clone_used": prepared_clone_used,
             "clone_cache_hit": clone_cache_hit,
+            "reference_preprocessing": dict(_last_clone_reference_metrics),
             "prewarm_max_tokens": prewarm_timings.get("prewarm_max_tokens", 0),
             "timings_ms": {
                 "load_model_total": load_timings.get("load_model_total", 0),
@@ -1668,7 +1893,7 @@ def handle_prepare_clone_reference(params, request_id=None):
     if not clean_ref_audio:
         raise RuntimeError("Could not process reference audio file")
 
-    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_audio, ref_text)
     send_progress(20, "Preparing voice context...", request_id=request_id)
     prepare_start = time.perf_counter()
     prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
@@ -1691,6 +1916,7 @@ def handle_prepare_clone_reference(params, request_id=None):
         result["benchmark"] = {
             "prepared_clone_used": prepared_clone_used,
             "clone_cache_hit": clone_cache_hit,
+            "reference_preprocessing": dict(_last_clone_reference_metrics),
             "timings_ms": {
                 "load_model_total": load_timings.get("load_model_total", 0),
                 "normalize_reference": normalize_reference_ms,
@@ -1732,7 +1958,7 @@ def handle_prime_clone_reference(params, request_id=None):
     if not clean_ref_audio:
         raise RuntimeError("Could not process reference audio file")
 
-    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+    resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_audio, ref_text)
     prime_key = _clone_prime_identity_key(clean_ref_audio, resolved_ref_text)
     already_primed = prime_key in _primed_clone_reference_keys
 
@@ -1774,6 +2000,7 @@ def handle_prime_clone_reference(params, request_id=None):
         result["benchmark"] = {
             "prepared_clone_used": prepared_clone_used,
             "clone_cache_hit": clone_cache_hit,
+            "reference_preprocessing": dict(_last_clone_reference_metrics),
             "prime_max_tokens": prime_timings.get("prime_max_tokens", 0),
             "streaming_interval": prime_timings.get("streaming_interval", streaming_interval),
             "timings_ms": {
@@ -1919,7 +2146,7 @@ def handle_generate(params, request_id=None):
                 raise RuntimeError("Could not process reference audio file")
             benchmark_flags["used_temp_reference"] = clean_ref_audio != ref_audio
 
-            resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+            resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_audio, ref_text)
             prepare_start = time.perf_counter()
             prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
                 clean_ref_audio,
@@ -2088,6 +2315,7 @@ def handle_generate(params, request_id=None):
         if benchmark:
             result["benchmark"] = {
                 **benchmark_flags,
+                "reference_preprocessing": dict(_last_clone_reference_metrics),
                 "output_duration_seconds": round(output_metadata["duration_seconds"], 4),
                 "output_frames": output_metadata["frames"],
                 "timings_ms": benchmark_timings,
@@ -2158,7 +2386,7 @@ def handle_generate_clone_batch(params, request_id=None):
         if not clean_ref_audio:
             raise RuntimeError("Could not process reference audio file")
 
-        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_text)
+        resolved_ref_text = _resolve_clone_transcript(clean_ref_audio, ref_audio, ref_text)
         _maybe_send_progress(30, "Preparing voice context...", request_id=request_id)
         prepared_context, clone_cache_hit = _get_or_prepare_clone_context(
             clean_ref_audio,
@@ -2383,12 +2611,7 @@ def handle_get_model_info(params):
     """Get information about available models and their download status."""
     models_info = []
     for model_id, model_def in MODELS.items():
-        path = get_smart_path(model_def["folder"])
-        size_bytes = 0
-        if path:
-            for root, dirs, files in os.walk(path):
-                for f in files:
-                    size_bytes += os.path.getsize(os.path.join(root, f))
+        installation_info = _model_installation_info(model_def)
 
         models_info.append({
             "id": model_id,
@@ -2399,8 +2622,7 @@ def handle_get_model_info(params):
             "output_subfolder": model_def["outputSubfolder"],
             "hugging_face_repo": model_def["huggingFaceRepo"],
             "required_relative_paths": model_def["requiredRelativePaths"],
-            "downloaded": path is not None,
-            "size_bytes": size_bytes,
+            **installation_info,
             **_resolved_model_capabilities(model_def),
         })
 

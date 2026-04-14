@@ -481,7 +481,7 @@ class GenerationPipeline:
                 raise RuntimeError("Could not process reference audio file")
 
             resolved_ref_text = self.clone_context.resolve_clone_transcript(
-                clean_ref_audio, ref_text
+                clean_ref_audio, ref_audio, ref_text
             )
             prepare_start = time.perf_counter()
             prepared_context, clone_cache_hit = (

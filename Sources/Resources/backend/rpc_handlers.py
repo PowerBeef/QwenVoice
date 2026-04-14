@@ -1,13 +1,19 @@
 import json
 import os
-import re
 import shutil
 import time
 import traceback
 from importlib import metadata as importlib_metadata
 
+from rpc_clone_reference_handlers import CloneReferenceRPCMixin
+from rpc_model_info_handlers import ModelInfoRPCMixin
+from rpc_voice_handlers import VoiceRPCMixin
 
-class BackendRPCHandlers:
+class BackendRPCHandlers(
+    CloneReferenceRPCMixin,
+    VoiceRPCMixin,
+    ModelInfoRPCMixin,
+):
     def __init__(
         self,
         *,
@@ -325,6 +331,9 @@ class BackendRPCHandlers:
                 "mode": warm_mode,
                 "prepared_clone_used": prepared_clone_used,
                 "clone_cache_hit": clone_cache_hit,
+                "reference_preprocessing": dict(
+                    self.state.last_clone_reference_metrics or {}
+                ),
                 "prewarm_max_tokens": prewarm_timings.get("prewarm_max_tokens", 0),
                 "timings_ms": {
                     "load_model_total": load_timings.get("load_model_total", 0),
@@ -333,176 +342,6 @@ class BackendRPCHandlers:
                         "prepare_clone_context"
                     ],
                     "generation": prewarm_timings["generation"],
-                    "total_backend": int((time.perf_counter() - overall_start) * 1000),
-                },
-            }
-        return result
-
-    def handle_prepare_clone_reference(self, params, request_id=None):
-        benchmark = bool(params.get("benchmark", False))
-        model_id = params.get("model_id")
-        model_path = params.get("model_path")
-        ref_audio = params.get("ref_audio")
-        ref_text = params.get("ref_text")
-
-        if not ref_audio:
-            raise ValueError("prepare_clone_reference requires ref_audio")
-
-        overall_start = time.perf_counter()
-        model_path, resolved_model_id = self.output_paths.resolve_model_request(
-            model_id=model_id, model_path=model_path
-        )
-        loaded_model_changed = self.state.current_model_path != model_path
-
-        load_result, resolved_model_id, model_path, _ = self.load_model_request(
-            model_id=model_id,
-            model_path=model_path,
-            benchmark=benchmark,
-            request_id=request_id,
-        )
-        load_timings = load_result.get("benchmark", {}).get("timings_ms", {})
-
-        normalize_start = time.perf_counter()
-        clean_ref_audio = self.clone_context.normalize_clone_reference(ref_audio)
-        normalize_reference_ms = int((time.perf_counter() - normalize_start) * 1000)
-        if not clean_ref_audio:
-            raise RuntimeError("Could not process reference audio file")
-
-        resolved_ref_text = self.clone_context.resolve_clone_transcript(
-            clean_ref_audio, ref_text
-        )
-        self.transport.send_progress(20, "Preparing voice context...", request_id=request_id)
-        prepare_start = time.perf_counter()
-        prepared_context, clone_cache_hit = self.clone_context.get_or_prepare_clone_context(
-            clean_ref_audio,
-            resolved_ref_text,
-        )
-        prepare_clone_context_ms = int((time.perf_counter() - prepare_start) * 1000)
-        prepared_clone_used = (
-            prepared_context is not None
-            and self.state.generate_prepared_icl_fn is not None
-        )
-
-        result = {
-            "success": True,
-            "model_id": resolved_model_id,
-            "model_path": model_path,
-            "loaded_model_changed": loaded_model_changed,
-            "prepared_clone_used": prepared_clone_used,
-            "clone_cache_hit": clone_cache_hit,
-            "reference_prepared": prepared_context is not None,
-        }
-        if benchmark:
-            result["benchmark"] = {
-                "prepared_clone_used": prepared_clone_used,
-                "clone_cache_hit": clone_cache_hit,
-                "timings_ms": {
-                    "load_model_total": load_timings.get("load_model_total", 0),
-                    "normalize_reference": normalize_reference_ms,
-                    "prepare_clone_context": prepare_clone_context_ms,
-                    "total_backend": int((time.perf_counter() - overall_start) * 1000),
-                },
-            }
-        return result
-
-    def handle_prime_clone_reference(self, params, request_id=None):
-        benchmark = bool(params.get("benchmark", False))
-        model_id = params.get("model_id")
-        model_path = params.get("model_path")
-        ref_audio = params.get("ref_audio")
-        ref_text = params.get("ref_text")
-        language = self.generation_pipeline.normalize_request_language(
-            params.get("language")
-        )
-        streaming_interval = float(
-            params.get(
-                "streaming_interval", self.generation_pipeline.default_streaming_interval
-            )
-        )
-
-        if not ref_audio:
-            raise ValueError("prime_clone_reference requires ref_audio")
-
-        overall_start = time.perf_counter()
-        model_path, resolved_model_id = self.output_paths.resolve_model_request(
-            model_id=model_id, model_path=model_path
-        )
-        loaded_model_changed = self.state.current_model_path != model_path
-
-        load_result, resolved_model_id, model_path, _ = self.load_model_request(
-            model_id=model_id,
-            model_path=model_path,
-            benchmark=benchmark,
-            request_id=request_id,
-        )
-        load_timings = load_result.get("benchmark", {}).get("timings_ms", {})
-
-        normalize_start = time.perf_counter()
-        clean_ref_audio = self.clone_context.normalize_clone_reference(ref_audio)
-        normalize_reference_ms = int((time.perf_counter() - normalize_start) * 1000)
-        if not clean_ref_audio:
-            raise RuntimeError("Could not process reference audio file")
-
-        resolved_ref_text = self.clone_context.resolve_clone_transcript(
-            clean_ref_audio, ref_text
-        )
-        prime_key = self.clone_context.clone_prime_identity_key(
-            clean_ref_audio, resolved_ref_text
-        )
-        already_primed = prime_key in self.state.primed_clone_reference_keys
-
-        prime_timings = {
-            "normalize_reference": normalize_reference_ms,
-            "prepare_clone_context": 0,
-            "generation": 0,
-            "first_stream_chunk": 0,
-            "prime_max_tokens": 0,
-            "streaming_interval": streaming_interval,
-        }
-        prepared_clone_used = False
-        clone_cache_hit = None
-
-        if not already_primed:
-            self.transport.send_progress(
-                20, "Preparing voice context...", request_id=request_id
-            )
-            prime_timings = self.generation_pipeline.run_clone_reference_prime(
-                clean_ref_audio,
-                resolved_ref_text,
-                streaming_interval=streaming_interval,
-                language=language,
-            )
-            prime_timings["normalize_reference"] = normalize_reference_ms
-            prepared_clone_used = prime_timings["prepared_clone_used"]
-            clone_cache_hit = prime_timings["clone_cache_hit"]
-            self.state.primed_clone_reference_keys.add(prime_key)
-
-        result = {
-            "success": True,
-            "model_id": resolved_model_id,
-            "model_path": model_path,
-            "loaded_model_changed": loaded_model_changed,
-            "already_primed": already_primed,
-            "prime_applied": not already_primed,
-            "prepared_clone_used": prepared_clone_used,
-            "clone_cache_hit": clone_cache_hit,
-        }
-        if benchmark:
-            result["benchmark"] = {
-                "prepared_clone_used": prepared_clone_used,
-                "clone_cache_hit": clone_cache_hit,
-                "prime_max_tokens": prime_timings.get("prime_max_tokens", 0),
-                "streaming_interval": prime_timings.get(
-                    "streaming_interval", streaming_interval
-                ),
-                "timings_ms": {
-                    "load_model_total": load_timings.get("load_model_total", 0),
-                    "normalize_reference": prime_timings["normalize_reference"],
-                    "prepare_clone_context": prime_timings[
-                        "prepare_clone_context"
-                    ],
-                    "first_stream_chunk": prime_timings["first_stream_chunk"],
-                    "generation": prime_timings["generation"],
                     "total_backend": int((time.perf_counter() - overall_start) * 1000),
                 },
             }
@@ -655,7 +494,7 @@ class BackendRPCHandlers:
                 benchmark_flags["used_temp_reference"] = clean_ref_audio != ref_audio
 
                 resolved_ref_text = self.clone_context.resolve_clone_transcript(
-                    clean_ref_audio, ref_text
+                    clean_ref_audio, ref_audio, ref_text
                 )
                 prepare_start = time.perf_counter()
                 prepared_context, clone_cache_hit = (
@@ -936,6 +775,9 @@ class BackendRPCHandlers:
             if benchmark:
                 result["benchmark"] = {
                     **benchmark_flags,
+                    "reference_preprocessing": dict(
+                        self.state.last_clone_reference_metrics or {}
+                    ),
                     "output_duration_seconds": round(
                         output_metadata["duration_seconds"], 4
                     ),
@@ -1017,7 +859,7 @@ class BackendRPCHandlers:
                 raise RuntimeError("Could not process reference audio file")
 
             resolved_ref_text = self.clone_context.resolve_clone_transcript(
-                clean_ref_audio, ref_text
+                clean_ref_audio, ref_audio, ref_text
             )
             self.maybe_send_progress(
                 30, "Preparing voice context...", request_id=request_id
@@ -1171,111 +1013,6 @@ class BackendRPCHandlers:
             wav_path = output_path
 
         return {"wav_path": wav_path}
-
-    def handle_list_voices(self, params):
-        if not os.path.exists(self.state.voices_dir):
-            return []
-
-        voices = []
-        for filename in sorted(os.listdir(self.state.voices_dir)):
-            if filename.endswith(".wav"):
-                name = filename[:-4]
-                txt_path = os.path.join(self.state.voices_dir, f"{name}.txt")
-                voices.append(
-                    {
-                        "name": name,
-                        "has_transcript": os.path.exists(txt_path),
-                        "wav_path": os.path.join(self.state.voices_dir, filename),
-                    }
-                )
-
-        return voices
-
-    def handle_enroll_voice(self, params):
-        name = params.get("name")
-        audio_path = params.get("audio_path")
-
-        if not name or not audio_path:
-            raise ValueError("Missing required params: name, audio_path")
-
-        safe_name = re.sub(r"[^\w\s-]", "", name).strip().replace(" ", "_")
-        if not safe_name:
-            raise ValueError("Invalid voice name")
-
-        os.makedirs(self.state.voices_dir, exist_ok=True)
-
-        clean_wav = self.clone_context.normalize_clone_reference(audio_path)
-        if not clean_wav:
-            raise RuntimeError("Could not process audio file")
-
-        target_wav = os.path.join(self.state.voices_dir, f"{safe_name}.wav")
-        target_txt = os.path.join(self.state.voices_dir, f"{safe_name}.txt")
-
-        if os.path.exists(target_wav) or os.path.exists(target_txt):
-            raise ValueError(
-                f'A saved voice named "{safe_name}" already exists. Choose a different name.'
-            )
-
-        shutil.copy(clean_wav, target_wav)
-
-        transcript = params.get("transcript", "")
-        if transcript:
-            with open(target_txt, "w", encoding="utf-8") as handle:
-                handle.write(transcript)
-
-        return {"success": True, "name": safe_name, "wav_path": target_wav}
-
-    def handle_delete_voice(self, params):
-        name = params.get("name")
-        if not name:
-            raise ValueError("Missing required param: name")
-
-        safe_name = re.sub(r"[^\w\s-]", "", name).strip().replace(" ", "_")
-        if not safe_name:
-            raise ValueError("Invalid voice name")
-
-        wav_path = os.path.join(self.state.voices_dir, f"{safe_name}.wav")
-        txt_path = os.path.join(self.state.voices_dir, f"{safe_name}.txt")
-
-        deleted = False
-        if os.path.exists(wav_path):
-            os.remove(wav_path)
-            deleted = True
-        if os.path.exists(txt_path):
-            os.remove(txt_path)
-
-        return {"success": deleted}
-
-    def handle_get_model_info(self, params):
-        models_info = []
-        for model_id, model_def in self.models.items():
-            path = self.output_paths.get_smart_path(model_def["folder"])
-            size_bytes = 0
-            if path:
-                for root, _, files in os.walk(path):
-                    for filename in files:
-                        size_bytes += os.path.getsize(os.path.join(root, filename))
-
-            models_info.append(
-                {
-                    "id": model_id,
-                    "name": model_def["name"],
-                    "folder": model_def["folder"],
-                    "mode": model_def["mode"],
-                    "tier": model_def["tier"],
-                    "output_subfolder": model_def["outputSubfolder"],
-                    "hugging_face_repo": model_def["huggingFaceRepo"],
-                    "required_relative_paths": model_def["requiredRelativePaths"],
-                    "downloaded": path is not None,
-                    "size_bytes": size_bytes,
-                    **self.resolved_model_capabilities(model_def),
-                }
-            )
-
-        return models_info
-
-    def handle_get_speakers(self, params):
-        return self.speaker_map
 
     def methods(self):
         return {

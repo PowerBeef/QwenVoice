@@ -153,6 +153,7 @@ python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-back
 # Diagnostics and targeted benchmarks
 python3 scripts/harness.py diagnose
 python3 scripts/harness.py bench --category clone_regression
+python3 scripts/harness.py bench --category tts_roundtrip
 ```
 
 Notes:
@@ -167,6 +168,7 @@ Notes:
 - Run forced `light` and `dark` `design` lanes sequentially, not in parallel, because they share the UI app and test transport.
 - `python3 scripts/harness.py test --layer release ...` is for workflow-built artifacts. Prefer a downloaded or extracted final artifact bundle from `Release Dual UI`, not local ad hoc DMGs and not the intermediate build-only artifact set.
 - `python3 scripts/harness.py bench ...` typically requires the app runtime plus installed models. Prefer tiny prompts and serialized `benchmark=true` runs for profiling and regression isolation.
+- `python3 scripts/harness.py bench --category tts_roundtrip` also requires a locally available ASR evaluator. Set `QWENVOICE_TTS_ROUNDTRIP_ASR_MODEL` to an installed local path or cached Hugging Face repo if you want to override the default candidate list; otherwise the benchmark skips cleanly.
 
 ## CI And Release Workflows
 

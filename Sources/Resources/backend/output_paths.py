@@ -23,6 +23,37 @@ class OutputPathResolver:
 
         return full_path
 
+    def model_installation_info(self, model_def):
+        root_path = os.path.join(self.state.models_dir, model_def["folder"])
+        root_exists = os.path.exists(root_path)
+        resolved_path = self.get_smart_path(model_def["folder"])
+
+        missing_required_paths = []
+        if root_exists:
+            base_path = resolved_path or root_path
+            for relative_path in model_def["requiredRelativePaths"]:
+                candidate = os.path.join(base_path, relative_path)
+                if not os.path.exists(candidate):
+                    missing_required_paths.append(relative_path)
+
+        complete = root_exists and resolved_path is not None and not missing_required_paths
+        repairable = root_exists and not complete
+        size_bytes = 0
+
+        if root_exists:
+            for current_root, _, files in os.walk(root_path):
+                for filename in files:
+                    size_bytes += os.path.getsize(os.path.join(current_root, filename))
+
+        return {
+            "resolved_path": resolved_path,
+            "downloaded": root_exists,
+            "complete": complete,
+            "repairable": repairable,
+            "missing_required_paths": missing_required_paths,
+            "size_bytes": size_bytes,
+        }
+
     def resolve_model_id_for_path(self, model_path):
         if not model_path:
             return None

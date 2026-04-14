@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ModelsView: View {
     @EnvironmentObject private var viewModel: ModelManagerViewModel
+    @EnvironmentObject private var pythonBridge: PythonBridge
 
     @Binding var highlightedModelID: String?
 
@@ -71,7 +72,7 @@ struct ModelsView: View {
             }
             .accessibilityIdentifier("screen_models")
             .task {
-                await viewModel.refresh()
+                await viewModel.refresh(using: pythonBridge)
                 focusHighlightedModel(using: proxy)
             }
             .onChange(of: highlightedModelID) { _, _ in
@@ -108,8 +109,6 @@ private extension ModelsView {
         switch viewModel.statuses[model.id] {
         case .downloaded:
             return true
-        case .checking:
-            return viewModel.isLikelyInstalled(model)
         default:
             return false
         }
@@ -136,6 +135,8 @@ private extension ModelsView {
 }
 
 struct ModelRow: View {
+    @EnvironmentObject private var pythonBridge: PythonBridge
+
     let model: TTSModel
     let viewModel: ModelManagerViewModel
     var isHighlighted: Bool = false
@@ -195,10 +196,17 @@ struct ModelRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("models_checking_\(model.id)")
-        case .notDownloaded:
-            Text("Download to enable \(model.mode.displayName).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        case .notDownloaded(let message):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Download to enable \(model.mode.displayName).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let message, !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
         case .downloading(let downloadedBytes, let totalBytes):
             VStack(alignment: .leading, spacing: 4) {
                 if let totalBytes, totalBytes > 0 {
@@ -217,6 +225,30 @@ struct ModelRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        case .repairAvailable(let sizeBytes, let missingRequiredPaths, let message):
+            VStack(alignment: .leading, spacing: 4) {
+                if !missingRequiredPaths.isEmpty {
+                    Text("Missing \(missingRequiredPaths.count) required file\(missingRequiredPaths.count == 1 ? "" : "s").")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Local files are incomplete.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if sizeBytes > 0 {
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let message, !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
         case .downloaded(let sizeBytes):
             HStack(spacing: 8) {
                 Label("Ready", systemImage: "checkmark.circle.fill")
@@ -227,10 +259,6 @@ struct ModelRow: View {
                     .foregroundStyle(.secondary)
             }
             .font(.caption.weight(.medium))
-        case .error:
-            Text("Download failed. Retry to keep using \(model.mode.displayName).")
-                .font(.caption)
-                .foregroundStyle(.red)
         }
     }
 
@@ -241,7 +269,7 @@ struct ModelRow: View {
             EmptyView()
         case .notDownloaded:
             Button("Download") {
-                Task { await viewModel.download(model) }
+                Task { await viewModel.download(model, using: pythonBridge) }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -253,6 +281,14 @@ struct ModelRow: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+        case .repairAvailable:
+            Button("Repair") {
+                Task { await viewModel.download(model, using: pythonBridge) }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(AppTheme.accent)
+            .accessibilityIdentifier("models_retry_\(model.id)")
         case .downloaded:
             Button(role: .destructive) {
                 onDelete?()
@@ -262,14 +298,6 @@ struct ModelRow: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityIdentifier("models_delete_\(model.id)")
-        case .error:
-            Button("Retry") {
-                Task { await viewModel.download(model) }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .tint(AppTheme.accent)
-            .accessibilityIdentifier("models_retry_\(model.id)")
         }
     }
 

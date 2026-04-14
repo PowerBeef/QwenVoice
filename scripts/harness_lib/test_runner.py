@@ -722,7 +722,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._current_model = object()
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -764,7 +764,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._current_model = object()
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -817,7 +817,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -893,7 +893,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -983,7 +983,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._get_or_prepare_clone_context = (
                     lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -1065,7 +1065,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._get_or_prepare_clone_context = (
                     lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -1145,7 +1145,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._can_prepare_icl_fn = lambda model: True
 
@@ -1251,7 +1251,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._can_prepare_icl_fn = lambda model: True
 
@@ -1630,7 +1630,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -1733,7 +1737,7 @@ def _run_server_tests() -> dict[str, Any]:
             )
             server._normalize_clone_reference = lambda path: "/tmp/normalized-reference.wav"
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-context", False)
@@ -1830,7 +1834,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -1953,7 +1961,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -2063,7 +2075,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -2159,7 +2175,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
 
@@ -2241,7 +2257,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
 
@@ -2383,6 +2399,74 @@ def _run_server_tests() -> dict[str, Any]:
             server._convert_audio_to_wav = original_convert_audio_to_wav
             os.unlink(input_path)
 
+    def test_resolve_clone_transcript_prefers_original_reference_sidecar():
+        with tempfile.TemporaryDirectory(prefix="qwenvoice_clone_transcript_") as tmp_dir:
+            original_path = os.path.join(tmp_dir, "reference.wav")
+            normalized_path = os.path.join(tmp_dir, "normalized.wav")
+            original_sidecar = os.path.splitext(original_path)[0] + ".txt"
+            normalized_sidecar = os.path.splitext(normalized_path)[0] + ".txt"
+
+            Path(original_path).write_bytes(b"RIFF")
+            Path(normalized_path).write_bytes(b"RIFF")
+            Path(original_sidecar).write_text("Original sidecar transcript", encoding="utf-8")
+            Path(normalized_sidecar).write_text("Normalized sidecar transcript", encoding="utf-8")
+
+            resolved = server._resolve_clone_transcript(
+                normalized_path,
+                original_path,
+                None,
+            )
+
+            assert resolved == "Original sidecar transcript"
+
+    def test_normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short():
+        import struct
+        import wave
+
+        original_trim_enabled = server.EXPERIMENTAL_CLONE_REF_TRIM
+        original_trim_helper = server._trim_clone_reference_silence
+        original_metrics = dict(getattr(server, "_last_clone_reference_metrics", {}))
+
+        with tempfile.TemporaryDirectory(prefix="qwenvoice_clone_trim_") as tmp_dir:
+            input_path = os.path.join(tmp_dir, "reference.wav")
+
+            with wave.open(input_path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(24000)
+                wf.writeframes(struct.pack("<" + "h" * 24000, *([0] * 24000)))
+
+            def fake_trim(input_path, output_path):
+                with wave.open(output_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(24000)
+                    wf.writeframes(struct.pack("<" + "h" * 1200, *([0] * 1200)))
+                return output_path
+
+            try:
+                server.EXPERIMENTAL_CLONE_REF_TRIM = True
+                server._trim_clone_reference_silence = fake_trim
+
+                normalized = server._normalize_clone_reference(input_path)
+
+                assert normalized == input_path
+                assert server._last_clone_reference_metrics["trim_applied"] is False
+                assert server._last_clone_reference_metrics["trim_status"] == "trim_rejected_too_short"
+            finally:
+                server.EXPERIMENTAL_CLONE_REF_TRIM = original_trim_enabled
+                server._trim_clone_reference_silence = original_trim_helper
+                server._last_clone_reference_metrics = original_metrics
+
+    def test_tts_roundtrip_word_error_rate_normalizes_punctuation():
+        from harness_lib.tts_roundtrip_runner import normalize_wer_text, word_error_rate
+
+        assert normalize_wer_text("Hello, QwenVoice!") == ["hello", "qwenvoice"]
+        assert word_error_rate(
+            "The package is ready.",
+            "the package is ready",
+        ) == 0.0
+
     def test_stream_selected_audio_emits_chunks_before_final_write():
         try:
             import numpy as np
@@ -2495,6 +2579,9 @@ def _run_server_tests() -> dict[str, Any]:
         ("get_audio_metadata_missing", test_get_audio_metadata_missing),
         ("get_audio_metadata_valid", test_get_audio_metadata_valid),
         ("convert_audio_if_needed_falls_back_to_ffmpeg_for_webm", test_convert_audio_if_needed_falls_back_to_ffmpeg_for_webm),
+        ("resolve_clone_transcript_prefers_original_reference_sidecar", test_resolve_clone_transcript_prefers_original_reference_sidecar),
+        ("normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short", test_normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short),
+        ("tts_roundtrip_word_error_rate_normalizes_punctuation", test_tts_roundtrip_word_error_rate_normalizes_punctuation),
     ]
 
     for name, fn in tests:
@@ -2592,14 +2679,57 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
             result = client.call("get_model_info", timeout=10)
             contract_ids = set(model_ids())
             if isinstance(result, list):
-                backend_ids = {m.get("id") or m.get("model_id") for m in result if isinstance(m, dict)}
+                backend_models = [m for m in result if isinstance(m, dict)]
             elif isinstance(result, dict) and "models" in result:
-                backend_ids = {m.get("id") or m.get("model_id") for m in result["models"] if isinstance(m, dict)}
+                backend_models = [m for m in result["models"] if isinstance(m, dict)]
             else:
-                backend_ids = set()
+                backend_models = []
+            backend_ids = {m.get("id") or m.get("model_id") for m in backend_models}
             assert backend_ids == contract_ids, (
                 f"Model ID mismatch: backend={backend_ids}, contract={contract_ids}"
             )
+            required_fields = {
+                "resolved_path",
+                "downloaded",
+                "complete",
+                "repairable",
+                "missing_required_paths",
+                "size_bytes",
+            }
+            for model_info in backend_models:
+                missing_fields = required_fields - set(model_info.keys())
+                assert not missing_fields, (
+                    f"Model info missing fields for {model_info.get('id')}: {sorted(missing_fields)}"
+                )
+                assert isinstance(model_info["downloaded"], bool), (
+                    f"downloaded must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["complete"], bool), (
+                    f"complete must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["repairable"], bool), (
+                    f"repairable must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["missing_required_paths"], list), (
+                    f"missing_required_paths must be list for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["size_bytes"], int), (
+                    f"size_bytes must be int for {model_info.get('id')}"
+                )
+                if model_info["complete"]:
+                    assert model_info["downloaded"], (
+                        f"complete model must also be downloaded for {model_info.get('id')}"
+                    )
+                    assert not model_info["repairable"], (
+                        f"complete model must not be repairable for {model_info.get('id')}"
+                    )
+                    assert not model_info["missing_required_paths"], (
+                        f"complete model must not report missing files for {model_info.get('id')}"
+                    )
+                if model_info["repairable"]:
+                    assert model_info["downloaded"], (
+                        f"repairable model must report downloaded for {model_info.get('id')}"
+                    )
 
         results.append(_timed_test("get_model_info_matches_contract", test_get_model_info))
 

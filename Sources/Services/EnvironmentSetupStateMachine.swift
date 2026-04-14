@@ -43,6 +43,10 @@ struct EnvironmentSetupStateMachine {
             )
         }
 
+        if isStubBackendMode {
+            return .runStub
+        }
+
         if let bundledPythonPath {
             return .validateBundled(bundledPythonPath)
         }
@@ -51,10 +55,6 @@ struct EnvironmentSetupStateMachine {
             return .fail(
                 message: "The bundled Python runtime is present but could not be located.\n\nThis is a packaging issue. Reinstall the app or use a new release build."
             )
-        }
-
-        if isStubBackendMode {
-            return .runStub
         }
 
         if let uiTestLiveOverridePythonPath {

@@ -1,12 +1,14 @@
 import Foundation
 
 /// Downloads a HuggingFace model repository using native URLSession.
-final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
+final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
 
     enum DownloadError: LocalizedError {
         case cancelled
         case httpError(statusCode: Int, path: String)
         case fileDownloadFailed(path: String, underlying: Error)
+        case invalidRemotePath(String)
+        case invalidLocalDestination(String)
         case apiError(String)
 
         var errorDescription: String? {
@@ -17,6 +19,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
                 return "HTTP \(code) downloading \(path)"
             case .fileDownloadFailed(let path, let underlying):
                 return "Failed to download \(path): \(underlying.localizedDescription)"
+            case .invalidRemotePath(let path):
+                return "Rejected unsafe remote path: \(path)"
+            case .invalidLocalDestination(let path):
+                return "Rejected unsafe local destination: \(path)"
             case .apiError(let message):
                 return message
             }
@@ -28,28 +34,171 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         let size: Int64
     }
 
-    /// Callback: (bytesDownloaded, bytesTotal)
-    nonisolated(unsafe) var onProgress: ((Int64, Int64) -> Void)?
+    final class ProgressHandlerBox: @unchecked Sendable {
+        let handler: (Int64) -> Void
 
-    nonisolated(unsafe) private var _isCancelled = false
-    nonisolated(unsafe) private var session: URLSession!
+        init(_ handler: @escaping (Int64) -> Void) {
+            self.handler = handler
+        }
+    }
 
-    /// Tracks the active download task for cancellation.
-    nonisolated(unsafe) private var _activeTask: URLSessionDownloadTask?
+    final class RepositoryProgressHandlerBox: @unchecked Sendable {
+        let handler: (Int64, Int64) -> Void
 
-    /// Protects concurrent access to continuations, destinations, and progress state
-    /// (written on caller thread, read on URLSession delegate queue).
-    private let lock = NSLock()
+        init(_ handler: @escaping (Int64, Int64) -> Void) {
+            self.handler = handler
+        }
+    }
 
-    /// Bridge from delegate callbacks to async/await.
-    /// Keyed by task.taskIdentifier.
-    nonisolated(unsafe) private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
-    nonisolated(unsafe) private var destinations: [Int: URL] = [:]
+    final class TaskCancellationBox: @unchecked Sendable {
+        private let cancellation: () -> Void
 
-    override init() {
+        init(task: URLSessionDownloadTask) {
+            self.cancellation = { task.cancel() }
+        }
+
+        func cancel() {
+            cancellation()
+        }
+    }
+
+    actor DownloadStateRegistry {
+        private var isCancelled = false
+        private var activeTaskID: Int?
+        private var activeCancellation: TaskCancellationBox?
+        private var continuations: [Int: CheckedContinuation<URL, Error>] = [:]
+        private var destinations: [Int: URL] = [:]
+        private var progressHandlers: [Int: ProgressHandlerBox] = [:]
+        private let repositoryProgressHandler: RepositoryProgressHandlerBox?
+
+        init(repositoryProgressHandler: RepositoryProgressHandlerBox?) {
+            self.repositoryProgressHandler = repositoryProgressHandler
+        }
+
+        func resetForNewRepositoryDownload() {
+            isCancelled = false
+            activeTaskID = nil
+            activeCancellation = nil
+        }
+
+        func register(
+            task: URLSessionDownloadTask,
+            destination: URL,
+            continuation: CheckedContinuation<URL, Error>,
+            progressHandler: ProgressHandlerBox
+        ) {
+            let taskID = task.taskIdentifier
+            activeTaskID = taskID
+            activeCancellation = TaskCancellationBox(task: task)
+            continuations[taskID] = continuation
+            destinations[taskID] = destination
+            progressHandlers[taskID] = progressHandler
+        }
+
+        func requestCancellation() {
+            isCancelled = true
+            activeCancellation?.cancel()
+        }
+
+        func cancellationRequested() -> Bool {
+            isCancelled
+        }
+
+        func reportProgress(taskID: Int, totalBytesWritten: Int64) {
+            progressHandlers[taskID]?.handler(totalBytesWritten)
+        }
+
+        func reportRepositoryProgress(downloadedBytes: Int64, totalBytes: Int64) {
+            repositoryProgressHandler?.handler(downloadedBytes, totalBytes)
+        }
+
+        func resumeSuccess(taskID: Int, temporaryURL: URL) {
+            let continuation = continuations.removeValue(forKey: taskID)
+            destinations.removeValue(forKey: taskID)
+            progressHandlers.removeValue(forKey: taskID)
+            clearActiveTaskIfNeeded(taskID: taskID)
+            continuation?.resume(returning: temporaryURL)
+        }
+
+        func resumeFailure(taskID: Int, error: Error) {
+            let continuation = continuations.removeValue(forKey: taskID)
+            destinations.removeValue(forKey: taskID)
+            progressHandlers.removeValue(forKey: taskID)
+            clearActiveTaskIfNeeded(taskID: taskID)
+            continuation?.resume(throwing: error)
+        }
+
+        func destinationPath(taskID: Int) -> String {
+            destinations[taskID]?.lastPathComponent ?? "unknown"
+        }
+
+        private func clearActiveTaskIfNeeded(taskID: Int) {
+            guard activeTaskID == taskID else { return }
+            activeTaskID = nil
+            activeCancellation = nil
+        }
+    }
+
+    private var session: URLSession!
+    private let state: DownloadStateRegistry
+
+    static func validatedRelativeRepoPath(_ path: String) throws -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw DownloadError.invalidRemotePath(path)
+        }
+
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        guard !normalized.hasPrefix("/") else {
+            throw DownloadError.invalidRemotePath(path)
+        }
+
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: false)
+        guard !components.isEmpty else {
+            throw DownloadError.invalidRemotePath(path)
+        }
+
+        var validatedComponents: [String] = []
+        for rawComponent in components {
+            let component = String(rawComponent)
+            guard !component.isEmpty, component != ".", component != ".." else {
+                throw DownloadError.invalidRemotePath(path)
+            }
+            guard !component.hasPrefix(".") else {
+                throw DownloadError.invalidRemotePath(path)
+            }
+            validatedComponents.append(component)
+        }
+
+        return validatedComponents.joined(separator: "/")
+    }
+
+    static func validatedDestinationURL(for relativePath: String, in root: URL) throws -> URL {
+        let validatedRelativePath = try validatedRelativeRepoPath(relativePath)
+        let normalizedRoot = root.standardizedFileURL.resolvingSymlinksInPath()
+        let destination = normalizedRoot
+            .appendingPathComponent(validatedRelativePath, isDirectory: false)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let rootPrefix = normalizedRoot.path.hasSuffix("/") ? normalizedRoot.path : normalizedRoot.path + "/"
+
+        guard destination.path.hasPrefix(rootPrefix) else {
+            throw DownloadError.invalidLocalDestination(relativePath)
+        }
+
+        return destination
+    }
+
+    convenience override init() {
+        self.init(progressHandler: nil)
+    }
+
+    init(progressHandler: ((Int64, Int64) -> Void)?) {
+        let progressBox = progressHandler.map(RepositoryProgressHandlerBox.init)
+        state = DownloadStateRegistry(repositoryProgressHandler: progressBox)
         super.init()
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForResource = 3600 // 1 hour max per file
+        config.timeoutIntervalForResource = 3600
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }
 
@@ -57,42 +206,50 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
     /// Download all files from a HuggingFace repo into `targetDir`.
     func downloadRepo(repo: String, to targetDir: URL) async throws {
+        await state.resetForNewRepositoryDownload()
+
         let files = try await listFiles(repo: repo)
         let totalBytes = files.reduce(Int64(0)) { $0 + $1.size }
-        onProgress?(0, totalBytes)
+        await state.reportRepositoryProgress(downloadedBytes: 0, totalBytes: totalBytes)
 
         var completedBytes: Int64 = 0
 
         for file in files {
-            guard !withLock({ _isCancelled }) else { throw DownloadError.cancelled }
+            guard !(await state.cancellationRequested()) else {
+                throw DownloadError.cancelled
+            }
 
-            let destURL = targetDir.appendingPathComponent(file.path)
+            let relativePath = try Self.validatedRelativeRepoPath(file.path)
+            let destURL = try Self.validatedDestinationURL(for: relativePath, in: targetDir)
             let parentDir = destURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-            let downloadURL = URL(string: "https://huggingface.co/\(repo)/resolve/main/\(file.path)")!
-            let finalCompletedBytes = completedBytes
+            let downloadURL = URL(string: "https://huggingface.co/\(repo)/resolve/main/\(relativePath)")!
+            let baseCompletedBytes = completedBytes
 
             try await downloadFile(
                 from: downloadURL,
                 to: destURL,
-                progressHandler: { [weak self] bytesWritten in
-                    self?.onProgress?(finalCompletedBytes + bytesWritten, totalBytes)
+                progressHandler: ProgressHandlerBox { [state] bytesWritten in
+                    Task {
+                        await state.reportRepositoryProgress(
+                            downloadedBytes: baseCompletedBytes + bytesWritten,
+                            totalBytes: totalBytes
+                        )
+                    }
                 }
             )
 
             completedBytes += file.size
-            onProgress?(completedBytes, totalBytes)
+            await state.reportRepositoryProgress(downloadedBytes: completedBytes, totalBytes: totalBytes)
         }
     }
 
     /// Cancel all in-flight downloads.
     func cancel() {
-        let task: URLSessionDownloadTask? = withLock {
-            _isCancelled = true
-            return _activeTask
+        Task {
+            await state.requestCancellation()
         }
-        task?.cancel()
     }
 
     // MARK: - Private: List Files
@@ -118,7 +275,6 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
                   let path = item["path"] as? String,
                   path != ".gitattributes" else { return nil }
 
-            // Size may be in "size" or inside "lfs.size"
             let size: Int64
             if let lfs = item["lfs"] as? [String: Any], let lfsSize = lfs["size"] as? Int64 {
                 size = lfsSize
@@ -136,66 +292,39 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - Private: Download Single File
 
-    /// Bytes written by the currently active download task (updated by delegate).
-    nonisolated(unsafe) private var currentTaskBytesWritten: Int64 = 0
-    nonisolated(unsafe) private var currentProgressHandler: ((Int64) -> Void)?
-
-    private func withLock<Result>(_ body: () -> Result) -> Result {
-        lock.lock()
-        defer { lock.unlock() }
-        return body()
-    }
-
     private func downloadFile(
         from url: URL,
         to destination: URL,
-        progressHandler: @escaping (Int64) -> Void
+        progressHandler: ProgressHandlerBox
     ) async throws {
-        withLock {
-            currentTaskBytesWritten = 0
-            currentProgressHandler = progressHandler
-        }
-
-        let tempURL: URL
+        let temporaryURL: URL
         do {
-            tempURL = try await withCheckedThrowingContinuation { continuation in
+            temporaryURL = try await withCheckedThrowingContinuation { continuation in
                 let task = session.downloadTask(with: url)
-                let taskID = task.taskIdentifier
-                withLock {
-                    continuations[taskID] = continuation
-                    destinations[taskID] = destination
+                Task {
+                    await state.register(
+                        task: task,
+                        destination: destination,
+                        continuation: continuation,
+                        progressHandler: progressHandler
+                    )
+                    task.resume()
                 }
-                withLock { _activeTask = task }
-                task.resume()
             }
         } catch {
-            withLock {
-                _activeTask = nil
-                currentProgressHandler = nil
-            }
             throw error
         }
 
-        if withLock({ _isCancelled }) {
-            try? FileManager.default.removeItem(at: tempURL)
-            withLock {
-                _activeTask = nil
-                currentProgressHandler = nil
-            }
+        if await state.cancellationRequested() {
+            try? FileManager.default.removeItem(at: temporaryURL)
             throw DownloadError.cancelled
         }
 
-        // Move downloaded temp file to final destination
         let fm = FileManager.default
         if fm.fileExists(atPath: destination.path) {
             try fm.removeItem(at: destination)
         }
-        try fm.moveItem(at: tempURL, to: destination)
-
-        withLock {
-            _activeTask = nil
-            currentProgressHandler = nil
-        }
+        try fm.moveItem(at: temporaryURL, to: destination)
     }
 
     // MARK: - URLSessionDownloadDelegate
@@ -207,11 +336,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        let handler = withLock { () -> ((Int64) -> Void)? in
-            currentTaskBytesWritten = totalBytesWritten
-            return currentProgressHandler
+        let taskID = downloadTask.taskIdentifier
+        Task {
+            await state.reportProgress(taskID: taskID, totalBytesWritten: totalBytesWritten)
         }
-        handler?(totalBytesWritten)
     }
 
     func urlSession(
@@ -221,31 +349,29 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     ) {
         let taskID = downloadTask.taskIdentifier
 
-        // Check HTTP status
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            let (path, continuation) = withLock { () -> (String, CheckedContinuation<URL, Error>?) in
-                let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-                let continuation = continuations.removeValue(forKey: taskID)
-                destinations.removeValue(forKey: taskID)
-                return (path, continuation)
+            Task {
+                let path = await state.destinationPath(taskID: taskID)
+                await state.resumeFailure(
+                    taskID: taskID,
+                    error: DownloadError.httpError(statusCode: http.statusCode, path: path)
+                )
             }
-            continuation?.resume(throwing: DownloadError.httpError(statusCode: http.statusCode, path: path))
             return
         }
 
-        // Move to a safe temp location (the delegate location is deleted after this method returns)
         let safeTmp = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
-        let continuation = withLock { () -> CheckedContinuation<URL, Error>? in
-            let continuation = continuations.removeValue(forKey: taskID)
-            destinations.removeValue(forKey: taskID)
-            return continuation
-        }
+
         do {
             try FileManager.default.moveItem(at: location, to: safeTmp)
-            continuation?.resume(returning: safeTmp)
+            Task {
+                await state.resumeSuccess(taskID: taskID, temporaryURL: safeTmp)
+            }
         } catch {
-            continuation?.resume(throwing: error)
+            Task {
+                await state.resumeFailure(taskID: taskID, error: error)
+            }
         }
     }
 
@@ -255,19 +381,18 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         didCompleteWithError error: Error?
     ) {
         let taskID = task.taskIdentifier
-        guard let error = error else { return } // Success handled in didFinishDownloadingTo
+        guard let error else { return }
 
-        let (continuation, path) = withLock { () -> (CheckedContinuation<URL, Error>?, String) in
-            let continuation = continuations.removeValue(forKey: taskID)
-            let path = destinations[taskID]?.lastPathComponent ?? "unknown"
-            destinations.removeValue(forKey: taskID)
-            return (continuation, path)
-        }
-
-        if (error as NSError).code == NSURLErrorCancelled {
-            continuation?.resume(throwing: DownloadError.cancelled)
-        } else {
-            continuation?.resume(throwing: DownloadError.fileDownloadFailed(path: path, underlying: error))
+        Task {
+            let path = await state.destinationPath(taskID: taskID)
+            if (error as NSError).code == NSURLErrorCancelled {
+                await state.resumeFailure(taskID: taskID, error: DownloadError.cancelled)
+            } else {
+                await state.resumeFailure(
+                    taskID: taskID,
+                    error: DownloadError.fileDownloadFailed(path: path, underlying: error)
+                )
+            }
         }
     }
 }

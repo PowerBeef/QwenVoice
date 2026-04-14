@@ -118,21 +118,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     }
 
     @MainActor static func defaultInitialSelection(
-        launchOverride: SidebarItem? = AppLaunchConfiguration.current.initialSidebarItem,
-        modelsDirectory: URL = QwenVoiceApp.modelsDir
+        launchOverride: SidebarItem? = AppLaunchConfiguration.current.initialSidebarItem
     ) -> SidebarItem {
         if let launchOverride {
             return launchOverride
         }
-
-        if let firstAvailableGenerationItem = generationItems.first(where: { item in
-            guard let requiredModel = item.requiredModel else { return false }
-            return requiredModel.isAvailable(in: modelsDirectory)
-        }) {
-            return firstAvailableGenerationItem
-        }
-
-        return .models
+        return .customVoice
     }
 }
 
@@ -170,7 +161,7 @@ struct ContentView: View {
 
     private var canUseSavedVoicesInVoiceCloning: Bool {
         guard let cloneModel = SidebarItem.voiceCloning.requiredModel else { return false }
-        return modelManager.isAvailable(cloneModel) || cloneModel.isAvailable(in: QwenVoiceApp.modelsDir)
+        return modelManager.isAvailable(cloneModel)
     }
 
     private var currentDisabledSidebarIdentifiers: String {
@@ -273,6 +264,10 @@ struct ContentView: View {
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
+        .onChange(of: pythonBridge.isReady) { _, isReady in
+            guard isReady else { return }
+            Task { await modelManager.refresh(using: pythonBridge) }
+        }
         .onReceive(appCommandRouter.sidebarSelection) { item in
             selectSidebarItemIfEnabled(item)
         }
@@ -381,7 +376,7 @@ struct ContentView: View {
     }
 
     private func handleInitialLoad() async {
-        await modelManager.refresh()
+        await modelManager.refresh(using: pythonBridge)
         didCompleteInitialAvailabilityRefresh = true
         if !isPreservingLaunchOverrideSelection {
             reconcileSelectionWithAvailability()

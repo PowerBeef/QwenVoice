@@ -73,6 +73,17 @@ def run_benchmarks(
             )
         )
 
+    if category == "tts_roundtrip":
+        eprint("==> Running TTS round-trip intelligibility benchmark...")
+        from .tts_roundtrip_runner import run_tts_roundtrip_bench
+
+        suites.append(
+            run_tts_roundtrip_bench(
+                python_path=python_path,
+                output_dir=output_dir,
+            )
+        )
+
     if category == "perf":
         eprint("==> Running exhaustive performance profiler...")
         suites.extend(_run_perf_benchmarks(

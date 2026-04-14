@@ -4,6 +4,7 @@ struct CustomVoiceView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
+    @EnvironmentObject var appCommandRouter: AppCommandRouter
 
     @Binding private var draft: CustomVoiceDraft
     @State private var isGenerating = false
@@ -208,6 +209,23 @@ private extension CustomVoiceView {
 
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            if let model = activeModel,
+               let primaryActionTitle = modelManager.primaryActionTitle(for: model) {
+                ModelRecoveryCard(
+                    title: primaryActionTitle,
+                    detail: modelManager.recoveryDetail(for: model),
+                    primaryActionTitle: primaryActionTitle,
+                    accentColor: AppTheme.customVoice,
+                    accessibilityIdentifier: "customVoice_modelRecovery",
+                    onPrimaryAction: {
+                        Task { await modelManager.download(model, using: pythonBridge) }
+                    },
+                    onSecondaryAction: {
+                        appCommandRouter.navigate(to: .models)
+                    }
+                )
+            }
+
             generationReadiness
 
             if let errorMessage {
@@ -269,7 +287,7 @@ private extension CustomVoiceView {
         guard !draft.text.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
-            errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+            errorMessage = modelManager.recoveryDetail(for: model)
             return
         }
 

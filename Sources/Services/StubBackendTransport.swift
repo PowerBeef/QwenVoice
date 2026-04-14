@@ -90,25 +90,41 @@ final class StubBackendTransport {
         try? FileManager.default.removeItem(at: transcriptURL)
     }
 
-    func modelInfo() -> [[String: RPCValue]] {
+    func modelInfo() -> [ModelInfo] {
         TTSModel.all.map { model in
-            let installed = model.isAvailable(in: QwenVoiceApp.modelsDir)
-            let size = installed ? Self.directorySize(url: model.installDirectory(in: QwenVoiceApp.modelsDir)) : 0
-            return [
-                "id": .string(model.id),
-                "name": .string(model.name),
-                "tier": .string(model.tier),
-                "mode": .string(model.mode.rawValue),
-                "folder": .string(model.folder),
-                "output_subfolder": .string(model.outputSubfolder),
-                "downloaded": .bool(installed),
-                "size_bytes": .int(size),
-                "mlx_audio_version": .string("0.4.2"),
-                "supports_streaming": .bool(true),
-                "supports_prepared_clone": .bool(model.mode == .clone),
-                "supports_clone_streaming": .bool(model.mode == .clone),
-                "supports_batch": .bool(true),
-            ]
+            let modelDirectory = model.installDirectory(in: QwenVoiceApp.modelsDir)
+            let rootExists = FileManager.default.fileExists(atPath: modelDirectory.path)
+            let missingRequiredPaths = rootExists
+                ? model.requiredRelativePaths.filter {
+                    !FileManager.default.fileExists(
+                        atPath: modelDirectory.appendingPathComponent($0).path
+                    )
+                }
+                : []
+            let complete = rootExists && missingRequiredPaths.isEmpty
+            let size = rootExists ? Self.directorySize(url: modelDirectory) : 0
+
+            return ModelInfo(
+                id: model.id,
+                name: model.name,
+                folder: model.folder,
+                mode: model.mode,
+                tier: model.tier,
+                outputSubfolder: model.outputSubfolder,
+                huggingFaceRepo: model.huggingFaceRepo,
+                requiredRelativePaths: model.requiredRelativePaths,
+                resolvedPath: rootExists ? modelDirectory.path : nil,
+                downloaded: rootExists,
+                complete: complete,
+                repairable: rootExists && !complete,
+                missingRequiredPaths: missingRequiredPaths,
+                sizeBytes: size,
+                mlxAudioVersion: "0.4.2",
+                supportsStreaming: true,
+                supportsPreparedClone: model.mode == .clone,
+                supportsCloneStreaming: model.mode == .clone,
+                supportsBatch: true
+            )
         }
     }
 
