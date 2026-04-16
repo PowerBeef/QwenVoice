@@ -4,13 +4,57 @@ import Foundation
 @MainActor
 final class ModelManagerViewModel: ObservableObject {
 
+    struct DownloadProgress: Equatable, Sendable {
+        let downloadedBytes: Int64
+        let totalBytes: Int64?
+        let completedFiles: Int
+        let totalFiles: Int?
+        let bytesPerSecond: Int64?
+        let isStalled: Bool
+
+        static let initial = DownloadProgress(
+            downloadedBytes: 0,
+            totalBytes: nil,
+            completedFiles: 0,
+            totalFiles: nil,
+            bytesPerSecond: nil,
+            isStalled: false
+        )
+    }
+
     enum ModelStatus: Equatable {
         case checking
         case notDownloaded(message: String?)
-        case downloading(downloadedBytes: Int64, totalBytes: Int64?)
+        case downloading(progress: DownloadProgress)
         case repairAvailable(sizeBytes: Int, missingRequiredPaths: [String], message: String?)
         case downloaded(sizeBytes: Int)
     }
+
+    private struct InstallMetadata: Codable, Equatable {
+        let schemaVersion: Int
+        let modelID: String
+        let huggingFaceRepo: String
+        let completedAtUTC: String
+        let resolvedPath: String
+        let sizeBytes: Int
+        let requiredRelativePaths: [String]
+        let downloadedRelativePaths: [String]
+        let missingRequiredPaths: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case schemaVersion = "schema_version"
+            case modelID = "model_id"
+            case huggingFaceRepo = "hugging_face_repo"
+            case completedAtUTC = "completed_at_utc"
+            case resolvedPath = "resolved_path"
+            case sizeBytes = "size_bytes"
+            case requiredRelativePaths = "required_relative_paths"
+            case downloadedRelativePaths = "downloaded_relative_paths"
+            case missingRequiredPaths = "missing_required_paths"
+        }
+    }
+
+    private nonisolated static let installMetadataFilename = ".qwenvoice-install-metadata.json"
 
     @Published private(set) var statuses: [String: ModelStatus] = [:]
     @Published private(set) var modelInfoByID: [String: ModelInfo] = [:]
@@ -101,7 +145,15 @@ final class ModelManagerViewModel: ObservableObject {
             self.bridge = bridge
         }
 
-        if case .downloading = statuses[model.id] { return }
+        if let existingTask = downloadTasks[model.id] {
+            await existingTask.value
+            return
+        }
+
+        if let existingTask = stubDownloadTasks[model.id] {
+            await existingTask.value
+            return
+        }
 
         if UITestAutomationSupport.isStubBackendMode {
             await downloadStub(model)
@@ -110,7 +162,7 @@ final class ModelManagerViewModel: ObservableObject {
 
         let epoch = beginEpoch(for: model.id)
         lastFailureMessages.removeValue(forKey: model.id)
-        statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: nil)
+        statuses[model.id] = .downloading(progress: .initial)
 
         let targetDir = model.installDirectory(in: modelsDirectory)
         let modelsDirectory = self.modelsDirectory
@@ -123,15 +175,15 @@ final class ModelManagerViewModel: ObservableObject {
         // Repair and re-download always start from a clean directory.
         try? fileManager.removeItem(at: targetDir)
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+        removeInstallMetadata(for: model)
 
-        let downloader = HuggingFaceDownloader(progressHandler: { [weak self] bytesDownloaded, bytesTotal in
+        let downloader = HuggingFaceDownloader(progressHandler: { [weak self] progress in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.publishDownloadProgressIfCurrent(
                     epoch: epoch,
                     modelID: model.id,
-                    downloadedBytes: bytesDownloaded,
-                    totalBytes: bytesTotal
+                    progress: progress
                 )
             }
         })
@@ -144,6 +196,8 @@ final class ModelManagerViewModel: ObservableObject {
                 let postDownloadSnapshot = localModelInfo(for: model)
                 if !postDownloadSnapshot.complete {
                     lastFailureMessages[model.id] = "Download finished, but required model files are still missing."
+                } else {
+                    persistInstallMetadata(for: model, snapshot: postDownloadSnapshot)
                 }
                 await handleMutationCompletion(for: model.id)
             } catch is CancellationError {
@@ -211,6 +265,7 @@ final class ModelManagerViewModel: ObservableObject {
         let modelDir = model.installDirectory(in: modelsDirectory)
         try? fileManager.removeItem(at: modelDir)
         lastFailureMessages.removeValue(forKey: model.id)
+        removeInstallMetadata(for: model)
 
         Task {
             await handleMutationCompletion(for: model.id)
@@ -247,6 +302,7 @@ final class ModelManagerViewModel: ObservableObject {
                 let failureMessage = lastFailureMessages[id]
                 if snapshot.complete {
                     lastFailureMessages.removeValue(forKey: id)
+                    persistInstallMetadata(for: model, snapshot: snapshot)
                 }
                 statuses[id] = status(for: snapshot, failureMessage: failureMessage)
                 continue
@@ -273,8 +329,12 @@ final class ModelManagerViewModel: ObservableObject {
         downloadTasks.removeValue(forKey: modelID)
         stubDownloadTasks.removeValue(forKey: modelID)
         lastProgressPublishTimes.removeValue(forKey: modelID)
-        statuses[modelID] = .checking
-        await refresh()
+        if let model = TTSModel.model(id: modelID) {
+            applyLocalSnapshot(for: model)
+        } else {
+            statuses[modelID] = .checking
+        }
+        scheduleRefreshIfPossible()
     }
 
     private func localModelInfo(for model: TTSModel) -> ModelInfo {
@@ -311,6 +371,79 @@ final class ModelManagerViewModel: ObservableObject {
         )
     }
 
+    private func applyLocalSnapshot(for model: TTSModel) {
+        let snapshot = localModelInfo(for: model)
+        modelInfoByID[model.id] = snapshot
+        if snapshot.complete {
+            lastFailureMessages.removeValue(forKey: model.id)
+            persistInstallMetadata(for: model, snapshot: snapshot)
+        } else if !snapshot.downloaded {
+            removeInstallMetadata(for: model)
+        }
+        statuses[model.id] = status(
+            for: snapshot,
+            failureMessage: lastFailureMessages[model.id]
+        )
+    }
+
+    private func scheduleRefreshIfPossible() {
+        guard let bridge else { return }
+        guard bridge.isStubBackendMode || bridge.isReady else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refresh(using: bridge)
+        }
+    }
+
+    private func installMetadataURL(for model: TTSModel) -> URL {
+        model.installDirectory(in: modelsDirectory)
+            .appendingPathComponent(Self.installMetadataFilename, isDirectory: false)
+    }
+
+    private func persistInstallMetadata(for model: TTSModel, snapshot: ModelInfo) {
+        guard snapshot.complete, let resolvedPath = snapshot.resolvedPath else { return }
+
+        let metadata = InstallMetadata(
+            schemaVersion: 1,
+            modelID: model.id,
+            huggingFaceRepo: model.huggingFaceRepo,
+            completedAtUTC: ISO8601DateFormatter().string(from: Date()),
+            resolvedPath: resolvedPath,
+            sizeBytes: snapshot.sizeBytes,
+            requiredRelativePaths: model.requiredRelativePaths,
+            downloadedRelativePaths: downloadedRelativePaths(in: model.installDirectory(in: modelsDirectory)),
+            missingRequiredPaths: snapshot.missingRequiredPaths
+        )
+
+        guard let data = try? JSONEncoder().encode(metadata) else { return }
+        try? data.write(to: installMetadataURL(for: model), options: .atomic)
+    }
+
+    private func removeInstallMetadata(for model: TTSModel) {
+        try? fileManager.removeItem(at: installMetadataURL(for: model))
+    }
+
+    private func downloadedRelativePaths(in directory: URL) -> [String] {
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var paths: [String] = []
+        for case let fileURL as URL in enumerator {
+            guard let isRegularFile = try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile,
+                  isRegularFile == true else {
+                continue
+            }
+            let relativePath = fileURL.path.replacingOccurrences(of: directory.path + "/", with: "")
+            paths.append(relativePath)
+        }
+        return paths.sorted()
+    }
+
     private func beginEpoch(for modelID: String) -> Int {
         let nextEpoch = (stateEpochs[modelID] ?? 0) + 1
         stateEpochs[modelID] = nextEpoch
@@ -326,6 +459,9 @@ final class ModelManagerViewModel: ObservableObject {
         guard let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total = 0
         for case let fileURL as URL in enumerator {
+            if fileURL.lastPathComponent == installMetadataFilename {
+                continue
+            }
             if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
                 total += size
             }
@@ -341,7 +477,16 @@ final class ModelManagerViewModel: ObservableObject {
         stubDownloadTasks.removeValue(forKey: model.id)
         try? fileManager.removeItem(at: targetDir)
         lastFailureMessages.removeValue(forKey: model.id)
-        statuses[model.id] = .downloading(downloadedBytes: 0, totalBytes: 3)
+        statuses[model.id] = .downloading(
+            progress: DownloadProgress(
+                downloadedBytes: 0,
+                totalBytes: 3,
+                completedFiles: 0,
+                totalFiles: 3,
+                bytesPerSecond: nil,
+                isStalled: false
+            )
+        )
 
         let shouldFailOnce = UITestAutomationSupport.modelDownloadFailOnceIDs.contains(model.id)
         let task = Task { [weak self] in
@@ -350,7 +495,16 @@ final class ModelManagerViewModel: ObservableObject {
             for step in 1...3 {
                 try? await Task.sleep(nanoseconds: 180_000_000)
                 guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
-                self.statuses[model.id] = .downloading(downloadedBytes: Int64(step), totalBytes: 3)
+                self.statuses[model.id] = .downloading(
+                    progress: DownloadProgress(
+                        downloadedBytes: Int64(step),
+                        totalBytes: 3,
+                        completedFiles: step,
+                        totalFiles: 3,
+                        bytesPerSecond: nil,
+                        isStalled: false
+                    )
+                )
             }
 
             if shouldFailOnce,
@@ -381,6 +535,8 @@ final class ModelManagerViewModel: ObservableObject {
             }
 
             guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
+            let snapshot = self.localModelInfo(for: model)
+            self.persistInstallMetadata(for: model, snapshot: snapshot)
             await self.handleMutationCompletion(for: model.id)
         }
         stubDownloadTasks[model.id] = task
@@ -389,8 +545,7 @@ final class ModelManagerViewModel: ObservableObject {
     private func publishDownloadProgressIfCurrent(
         epoch: Int,
         modelID: String,
-        downloadedBytes: Int64,
-        totalBytes: Int64
+        progress: HuggingFaceDownloader.RepositoryProgress
     ) {
         guard isCurrentEpoch(epoch, for: modelID) else { return }
         guard case .downloading = statuses[modelID] else { return }
@@ -403,8 +558,14 @@ final class ModelManagerViewModel: ObservableObject {
         lastProgressPublishTimes[modelID] = now
 
         statuses[modelID] = .downloading(
-            downloadedBytes: downloadedBytes,
-            totalBytes: totalBytes > 0 ? totalBytes : nil
+            progress: DownloadProgress(
+                downloadedBytes: progress.downloadedBytes,
+                totalBytes: progress.totalBytes > 0 ? progress.totalBytes : nil,
+                completedFiles: progress.completedFiles,
+                totalFiles: progress.totalFiles > 0 ? progress.totalFiles : nil,
+                bytesPerSecond: progress.bytesPerSecond,
+                isStalled: progress.isStalled
+            )
         )
     }
 }

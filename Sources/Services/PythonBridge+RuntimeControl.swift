@@ -228,7 +228,7 @@ extension PythonBridge {
                     params["ref_text"] = .string(trimmedRefText)
                 }
                 return try await self.callDict(
-                    "prepare_clone_reference",
+                    "prime_clone_reference",
                     params: params,
                     reportsErrors: false,
                     resetLastError: false

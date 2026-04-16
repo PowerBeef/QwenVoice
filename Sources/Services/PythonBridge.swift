@@ -186,9 +186,7 @@ final class PythonBridge: ObservableObject {
     }
 
     static func supportsIdlePrewarm(mode: GenerationMode) -> Bool {
-        // Custom prewarm has not produced stable wins in shipped-path testing.
-        // Keep idle prewarm focused on the modes that materially benefit from it.
-        mode != .custom
+        true
     }
 
     static func prewarmIdentityKey(

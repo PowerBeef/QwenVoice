@@ -22,11 +22,17 @@ final class ModelLoadCoordinator {
     }
 
     func markLoadedModel(id: String) {
+        if loadedModelID != id {
+            prewarmedRequestKeys.removeAll()
+            prewarmingRequestKeys.removeAll()
+        }
         loadedModelID = id
     }
 
     func markUnloaded() {
         loadedModelID = nil
+        prewarmedRequestKeys.removeAll()
+        prewarmingRequestKeys.removeAll()
     }
 
     func reset() {
@@ -66,7 +72,7 @@ final class ModelLoadCoordinator {
         let token = UUID()
         let task = Task { @MainActor in
             let result = try await performLoad()
-            self.loadedModelID = id
+            self.markLoadedModel(id: id)
             return result
         }
         inFlightModelLoad = InFlightModelLoad(token: token, id: id, task: task)

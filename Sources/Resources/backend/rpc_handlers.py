@@ -164,6 +164,7 @@ class BackendRPCHandlers(
         self.state.current_model_path = None
         self.state.current_model_id = None
         self.clone_context.clear_clone_context_cache()
+        self.state.prewarmed_model_keys.clear()
         self.state.primed_clone_reference_keys.clear()
         self.perform_memory_recovery()
 
@@ -342,6 +343,7 @@ class BackendRPCHandlers(
                         "prepare_clone_context"
                     ],
                     "generation": prewarm_timings["generation"],
+                    "first_stream_chunk": prewarm_timings.get("first_stream_chunk", 0),
                     "total_backend": int((time.perf_counter() - overall_start) * 1000),
                 },
             }

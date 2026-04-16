@@ -27,6 +27,8 @@ OLD_HELPER_REF = "7f0da86"
 OLD_WHEEL_REF = "7f0da86:Sources/Resources/vendor/mlx_audio-0.4.1.post1-py3-none-any.whl"
 REFERENCE_AUDIO_PATH = APP_SUPPORT_DIR / "voices" / "Un_homme_Francais.wav"
 REFERENCE_TEXT_PATH = APP_SUPPORT_DIR / "voices" / "Un_homme_Francais.txt"
+COMMITTED_REFERENCE_AUDIO_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.wav"
+COMMITTED_REFERENCE_TEXT_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.txt"
 CLONE_MODEL_ID = "pro_clone"
 BENCH_TEXT = "Bonjour toi."
 BENCH_LANGUAGE = "fr"
@@ -36,6 +38,17 @@ SIMILAR_RATIO_THRESHOLD = 1.15
 SIMILAR_DELTA_THRESHOLD_SECONDS = 0.15
 RUNTIME_LEGACY = "legacy_mlx_audio_041_post1"
 RUNTIME_CURRENT = "current_mlx_audio_042"
+
+
+def resolve_clone_regression_reference() -> tuple[Path, Path] | None:
+    candidates = (
+        (REFERENCE_AUDIO_PATH, REFERENCE_TEXT_PATH),
+        (COMMITTED_REFERENCE_AUDIO_PATH, COMMITTED_REFERENCE_TEXT_PATH),
+    )
+    for audio_path, text_path in candidates:
+        if audio_path.exists() and text_path.exists():
+            return audio_path, text_path
+    return None
 
 
 def run_clone_regression_bench(
@@ -58,14 +71,16 @@ def run_clone_regression_bench(
         )
         return build_suite_result("clone_regression", results, 0)
 
-    if not REFERENCE_AUDIO_PATH.exists() or not REFERENCE_TEXT_PATH.exists():
+    reference_fixture = resolve_clone_regression_reference()
+    if reference_fixture is None:
         results.append(
             build_test_result(
                 "clone_regression_reference_available",
                 passed=True,
                 skip_reason=(
-                    "Missing saved clone reference at "
-                    f"{REFERENCE_AUDIO_PATH} / {REFERENCE_TEXT_PATH}"
+                    "Missing clone regression reference at either "
+                    f"{REFERENCE_AUDIO_PATH} / {REFERENCE_TEXT_PATH} or "
+                    f"{COMMITTED_REFERENCE_AUDIO_PATH} / {COMMITTED_REFERENCE_TEXT_PATH}"
                 ),
             )
         )
@@ -74,6 +89,7 @@ def run_clone_regression_bench(
             results,
             int((time.perf_counter() - start) * 1000),
         )
+    reference_audio_path, reference_text_path = reference_fixture
 
     try:
         clone_model_path = _resolve_clone_model_path(CLONE_MODEL_ID)
@@ -114,10 +130,10 @@ def run_clone_regression_bench(
     bench_dir = Path(output_dir) if output_dir else PROJECT_DIR / "build" / "benchmarks" / timestamp
     ensure_directory(bench_dir)
 
-    ref_text = REFERENCE_TEXT_PATH.read_text(encoding="utf-8").strip()
+    ref_text = reference_text_path.read_text(encoding="utf-8").strip()
     benchmark_details = {
-        "reference_audio": str(REFERENCE_AUDIO_PATH),
-        "reference_text_path": str(REFERENCE_TEXT_PATH),
+        "reference_audio": str(reference_audio_path),
+        "reference_text_path": str(reference_text_path),
         "text": BENCH_TEXT,
         "language": BENCH_LANGUAGE,
         "temperature": BENCH_TEMPERATURE,
@@ -162,7 +178,7 @@ def run_clone_regression_bench(
             helper_mode="old",
             legacy_runtime_root=legacy_runtime_root,
             model_path=str(clone_model_path),
-            ref_audio=str(REFERENCE_AUDIO_PATH),
+            ref_audio=str(reference_audio_path),
             ref_text=ref_text,
         )
         if legacy_old_result is None:
@@ -181,7 +197,7 @@ def run_clone_regression_bench(
             helper_mode="old",
             legacy_runtime_root=None,
             model_path=str(clone_model_path),
-            ref_audio=str(REFERENCE_AUDIO_PATH),
+            ref_audio=str(reference_audio_path),
             ref_text=ref_text,
         )
         if current_old_result is None:
@@ -200,7 +216,7 @@ def run_clone_regression_bench(
             helper_mode="current",
             legacy_runtime_root=None,
             model_path=str(clone_model_path),
-            ref_audio=str(REFERENCE_AUDIO_PATH),
+            ref_audio=str(reference_audio_path),
             ref_text=ref_text,
         )
         if current_current_result is None:

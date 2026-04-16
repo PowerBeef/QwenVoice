@@ -4,18 +4,24 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
+import re
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .backend_client import BackendClient
 from .contract import load_contract, model_is_installed
 from .output import build_suite_result, build_test_result, eprint
-from .paths import PROJECT_DIR, ensure_directory, resolve_backend_python
+from .paths import (
+    APP_VENV_PYTHON,
+    BUNDLED_PYTHON_BIN,
+    PROJECT_DIR,
+    ensure_directory,
+    resolve_backend_python,
+)
 
 ROUNDTRIP_CORPUS: list[tuple[str, str]] = [
     ("delivery_notice", "Please leave the package with the concierge if nobody answers."),
@@ -67,6 +73,63 @@ def _benchmark_dir(output_dir: str | None) -> Path:
         else PROJECT_DIR / "build" / "benchmarks" / timestamp / "tts_roundtrip"
     )
     return ensure_directory(bench_dir)
+
+
+def _runtime_variant_label(python_path: str) -> str:
+    resolved = Path(python_path).resolve(strict=False)
+    if resolved in {
+        APP_VENV_PYTHON.resolve(strict=False),
+        APP_VENV_PYTHON.with_name("python3.13").resolve(strict=False),
+    }:
+        return "app_support_venv"
+    if resolved in {
+        BUNDLED_PYTHON_BIN.resolve(strict=False),
+        BUNDLED_PYTHON_BIN.with_name("python3.13").resolve(strict=False),
+    }:
+        return "bundled_runtime"
+    try:
+        resolved.relative_to(PROJECT_DIR)
+        return "repo_local_python"
+    except ValueError:
+        return "custom_python"
+
+
+def _helper_variant_label() -> str:
+    configured = os.environ.get("QWENVOICE_MLX_AUDIO_HELPER_VARIANT", "").strip()
+    return configured or "current_overlay"
+
+
+def _process_rss_bytes(pid: int | None) -> int | None:
+    if pid is None or pid <= 0:
+        return None
+    proc = subprocess.run(
+        ["ps", "-o", "rss=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if proc.returncode != 0:
+        return None
+    raw_value = proc.stdout.strip()
+    if not raw_value:
+        return None
+    try:
+        return int(raw_value) * 1024
+    except ValueError:
+        return None
+
+
+def _delta_bytes(before: int | None, after: int | None) -> int | None:
+    if before is None or after is None:
+        return None
+    return after - before
+
+
+def _file_size_bytes(path: str) -> int | None:
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return None
 
 
 def _asr_model_candidates() -> list[str]:
@@ -172,6 +235,11 @@ def run_tts_roundtrip_bench(
         )
         return build_suite_result("tts_roundtrip", results, 0)
 
+    comparison_labels = {
+        "runtime_variant": _runtime_variant_label(resolved_python),
+        "helper_variant": _helper_variant_label(),
+        "python_path": resolved_python,
+    }
     contract = load_contract()
     installed_models = [model for model in contract["models"] if model_is_installed(model["id"])]
     if not installed_models:
@@ -192,6 +260,7 @@ def run_tts_roundtrip_bench(
     try:
         client.start()
         client.call("init", timeout=30)
+        backend_pid = client.proc.pid if client.proc is not None else None
 
         for model_def in installed_models:
             mode = model_def["mode"]
@@ -209,9 +278,12 @@ def run_tts_roundtrip_bench(
                 continue
 
             eprint(f"  Round-trip benchmark: loading {model_def['id']}...")
+            load_rss_before = _process_rss_bytes(backend_pid)
             load_start = time.perf_counter()
             client.call("load_model", {"model_id": model_def["id"], "benchmark": True}, timeout=180)
             cold_load_ms = round((time.perf_counter() - load_start) * 1000, 2)
+            load_rss_after = _process_rss_bytes(backend_pid)
+            load_memory_delta_bytes = _delta_bytes(load_rss_before, load_rss_after)
 
             file_records: list[dict[str, Any]] = []
             audio_files: list[str] = []
@@ -219,15 +291,18 @@ def run_tts_roundtrip_bench(
                 output_path = bench_dir / f"{model_def['id']}_{sample_name}.wav"
                 params = _roundtrip_params(mode, sample_text, str(output_path))
                 eprint(f"    Generating {model_def['id']} / {sample_name}...")
+                rss_before = _process_rss_bytes(backend_pid)
                 result, notifications = client.call_collecting_notifications_timed(
                     "generate",
                     params,
                     timeout=600,
                 )
+                rss_after = _process_rss_bytes(backend_pid)
                 benchmark = result.get("benchmark", {})
                 output_duration_seconds = float(benchmark.get("output_duration_seconds") or 0.0)
                 wall_ms = float(result.get("_wall_ms") or 0.0)
                 first_chunk_ms = _first_chunk_ms(notifications)
+                output_disk_bytes = _file_size_bytes(str(output_path))
                 rtf = None
                 if output_duration_seconds > 0:
                     rtf = round((wall_ms / 1000.0) / output_duration_seconds, 4)
@@ -238,9 +313,14 @@ def run_tts_roundtrip_bench(
                         "reference_text": sample_text,
                         "output_path": str(output_path),
                         "wall_ms": round(wall_ms, 2),
+                        "end_to_end_wall_ms": round(wall_ms, 2),
                         "first_chunk_ms": first_chunk_ms,
                         "output_duration_seconds": round(output_duration_seconds, 4),
                         "rtf": rtf,
+                        "output_disk_bytes": output_disk_bytes,
+                        "backend_rss_before_bytes": rss_before,
+                        "backend_rss_after_bytes": rss_after,
+                        "backend_rss_delta_bytes": _delta_bytes(rss_before, rss_after),
                         "backend_timings_ms": benchmark.get("timings_ms", {}),
                         "reference_preprocessing": benchmark.get(
                             "reference_preprocessing", {}
@@ -264,6 +344,7 @@ def run_tts_roundtrip_bench(
                             "model_id": model_def["id"],
                             "mode": mode,
                             "cold_load_ms": cold_load_ms,
+                            "variant_labels": comparison_labels,
                         },
                     )
                 )
@@ -274,6 +355,8 @@ def run_tts_roundtrip_bench(
             wall_times: list[float] = []
             first_chunk_times: list[float] = []
             rtfs: list[float] = []
+            disk_deltas: list[int] = []
+            rss_deltas: list[int] = []
 
             for record in file_records:
                 transcription = (transcripts or {}).get(record["output_path"], "")
@@ -286,11 +369,19 @@ def run_tts_roundtrip_bench(
                     first_chunk_times.append(float(record["first_chunk_ms"]))
                 if isinstance(record["rtf"], (int, float)):
                     rtfs.append(float(record["rtf"]))
+                if isinstance(record["output_disk_bytes"], int):
+                    disk_deltas.append(int(record["output_disk_bytes"]))
+                if isinstance(record["backend_rss_delta_bytes"], int):
+                    rss_deltas.append(int(record["backend_rss_delta_bytes"]))
 
             artifact = {
+                "schema_version": 2,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                "variant_labels": comparison_labels,
                 "model_id": model_def["id"],
                 "mode": mode,
                 "cold_load_ms": cold_load_ms,
+                "cold_load_memory_delta_bytes": load_memory_delta_bytes,
                 "evaluator_model": evaluator_model,
                 "records": file_records,
             }
@@ -302,8 +393,10 @@ def run_tts_roundtrip_bench(
                 "model_id": model_def["id"],
                 "mode": mode,
                 "evaluator_model": evaluator_model,
+                "variant_labels": comparison_labels,
                 "corpus_size": len(file_records),
                 "cold_load_ms": cold_load_ms,
+                "cold_load_memory_delta_bytes": load_memory_delta_bytes,
                 "wer": {
                     "mean": round(sum(wers) / len(wers), 4),
                     "max": round(max(wers), 4),
@@ -326,6 +419,22 @@ def run_tts_roundtrip_bench(
                         "max": round(max(rtfs), 4),
                     }
                     if rtfs
+                    else None
+                ),
+                "disk_bytes": (
+                    {
+                        "total": sum(disk_deltas),
+                        "max": max(disk_deltas),
+                    }
+                    if disk_deltas
+                    else None
+                ),
+                "backend_rss_delta_bytes": (
+                    {
+                        "max": max(rss_deltas),
+                        "min": min(rss_deltas),
+                    }
+                    if rss_deltas
                     else None
                 ),
                 "artifact_path": str(artifact_path),
@@ -351,7 +460,19 @@ def run_tts_roundtrip_bench(
         client.stop()
 
     summary_path = bench_dir / "tts_roundtrip_summary.json"
-    summary_path.write_text(json.dumps({"models": artifact_records}, indent=2), encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "benchmark": "tts_roundtrip",
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                "comparison_labels": comparison_labels,
+                "models": artifact_records,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("tts_roundtrip", results, duration_ms)

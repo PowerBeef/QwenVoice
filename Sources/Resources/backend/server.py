@@ -75,6 +75,11 @@ PREWARM_PROFILES = {
         "max_tokens": 128,
         "run_generation": True,
     },
+    "clone_prime": {
+        "text": "Voice warmup.",
+        "max_tokens": 48,
+        "run_generation": True,
+    },
 }
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60

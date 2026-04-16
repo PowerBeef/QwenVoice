@@ -39,8 +39,14 @@ struct CustomVoiceView: View {
             && isModelAvailable
     }
 
-    private var modelPreparationTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)-\(isGenerating)"
+    private var idlePrewarmTaskID: String {
+        let identity = PythonBridge.prewarmIdentityKey(
+            modelID: activeModel?.id ?? "none",
+            mode: activeMode,
+            voice: draft.selectedSpeaker,
+            instruct: draft.emotion
+        )
+        return "\(pythonBridge.isReady)|\(isModelAvailable)|\(identity)"
     }
 
     init(draft: Binding<CustomVoiceDraft>) {
@@ -69,8 +75,8 @@ struct CustomVoiceView: View {
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
         }
-        .task(id: modelPreparationTaskID) {
-            await prepareSelectedModelIfNeeded()
+        .task(id: idlePrewarmTaskID) {
+            await prewarmSelectedModelIfNeeded()
         }
         .onAppear(perform: syncUITestState)
         .onChange(of: draft.selectedSpeaker) { _, _ in syncUITestState() }
@@ -348,10 +354,15 @@ private extension CustomVoiceView {
         }
     }
 
-    func prepareSelectedModelIfNeeded() async {
+    func prewarmSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        await pythonBridge.ensureModelLoadedIfNeeded(id: model.id)
+        await pythonBridge.prewarmModelIfNeeded(
+            modelID: model.id,
+            mode: activeMode,
+            voice: draft.selectedSpeaker,
+            instruct: draft.emotion
+        )
     }
 }
 

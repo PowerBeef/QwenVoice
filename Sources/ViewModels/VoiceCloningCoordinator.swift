@@ -12,25 +12,6 @@ final class VoiceCloningCoordinator: ObservableObject {
     @Published var isDragOver = false
     @Published var showingBatch = false
 
-    static let deferredClonePrewarmDelayNanoseconds: UInt64 = 1_500_000_000
-
-    private var cloneDeferredPrewarmTask: Task<Void, Never>?
-
-    deinit {
-        cloneDeferredPrewarmTask?.cancel()
-    }
-
-    static func shouldStartDeferredClonePrewarm(
-        primingPhase: CloneReferencePrimingPhase,
-        primingKey: String?,
-        expectedKey: String?,
-        isGenerating: Bool
-    ) -> Bool {
-        primingPhase == .primed
-            && primingKey == expectedKey
-            && !isGenerating
-    }
-
     func handleAppear(
         draft: Binding<VoiceCloningDraft>,
         pendingSavedVoiceHandoff: Binding<PendingVoiceCloningHandoff?>
@@ -142,8 +123,6 @@ final class VoiceCloningCoordinator: ObservableObject {
             return
         }
 
-        cloneDeferredPrewarmTask?.cancel()
-        cloneDeferredPrewarmTask = nil
         isGenerating = true
         errorMessage = nil
 
@@ -172,7 +151,7 @@ final class VoiceCloningCoordinator: ObservableObject {
                     return
                 }
 
-                if pythonBridge.cloneReferencePrimingPhase != .failed
+                if pythonBridge.cloneReferencePrimingPhase != .primed
                     || pythonBridge.cloneReferencePrimingKey != clonePrimingRequestKey {
                     do {
                         try await pythonBridge.ensureCloneReferencePrimed(
@@ -251,8 +230,6 @@ final class VoiceCloningCoordinator: ObservableObject {
         clonePrimingRequestKey: String?,
         pythonBridge: PythonBridge
     ) async {
-        cloneDeferredPrewarmTask?.cancel()
-        cloneDeferredPrewarmTask = nil
         guard !isGenerating else { return }
         guard let model = cloneModel,
               isModelAvailable,
@@ -276,33 +253,6 @@ final class VoiceCloningCoordinator: ObservableObject {
                 refAudio: refPath,
                 refText: trimmedRefText
             )
-            guard Self.shouldStartDeferredClonePrewarm(
-                primingPhase: pythonBridge.cloneReferencePrimingPhase,
-                primingKey: pythonBridge.cloneReferencePrimingKey,
-                expectedKey: clonePrimingRequestKey,
-                isGenerating: isGenerating
-            ) else {
-                return
-            }
-            let deferredModelID = model.id
-            cloneDeferredPrewarmTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: Self.deferredClonePrewarmDelayNanoseconds)
-                guard !Task.isCancelled else { return }
-                guard Self.shouldStartDeferredClonePrewarm(
-                    primingPhase: pythonBridge.cloneReferencePrimingPhase,
-                    primingKey: pythonBridge.cloneReferencePrimingKey,
-                    expectedKey: clonePrimingRequestKey,
-                    isGenerating: isGenerating
-                ) else {
-                    return
-                }
-                await pythonBridge.prewarmModelIfNeeded(
-                    modelID: deferredModelID,
-                    mode: .clone,
-                    refAudio: refPath,
-                    refText: trimmedRefText
-                )
-            }
         } catch {
             #if DEBUG
             print("[Performance][VoiceCloningCoordinator] clone priming failed key=\(clonePrimingRequestKey) error=\(error.localizedDescription)")
@@ -339,8 +289,6 @@ final class VoiceCloningCoordinator: ObservableObject {
     }
 
     func clearReference(draft: Binding<VoiceCloningDraft>) {
-        cloneDeferredPrewarmTask?.cancel()
-        cloneDeferredPrewarmTask = nil
         draft.wrappedValue.clearReference()
         transcriptLoadError = nil
         hydratedSavedVoiceID = nil

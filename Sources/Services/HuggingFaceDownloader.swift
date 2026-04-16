@@ -3,6 +3,15 @@ import Foundation
 /// Downloads a HuggingFace model repository using native URLSession.
 final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
 
+    struct RepositoryProgress: Equatable, Sendable {
+        let downloadedBytes: Int64
+        let totalBytes: Int64
+        let completedFiles: Int
+        let totalFiles: Int
+        let bytesPerSecond: Int64?
+        let isStalled: Bool
+    }
+
     enum DownloadError: LocalizedError {
         case cancelled
         case httpError(statusCode: Int, path: String)
@@ -43,9 +52,9 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     }
 
     final class RepositoryProgressHandlerBox: @unchecked Sendable {
-        let handler: (Int64, Int64) -> Void
+        let handler: (RepositoryProgress) -> Void
 
-        init(_ handler: @escaping (Int64, Int64) -> Void) {
+        init(_ handler: @escaping (RepositoryProgress) -> Void) {
             self.handler = handler
         }
     }
@@ -70,6 +79,15 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         private var destinations: [Int: URL] = [:]
         private var progressHandlers: [Int: ProgressHandlerBox] = [:]
         private let repositoryProgressHandler: RepositoryProgressHandlerBox?
+        private var repositoryTotalBytes: Int64 = 0
+        private var repositoryDownloadedBytes: Int64 = 0
+        private var repositoryTotalFiles = 0
+        private var repositoryCompletedFiles = 0
+        private var lastProgressAdvanceTime: TimeInterval?
+        private var lastSpeedSampleTime: TimeInterval?
+        private var lastSpeedSampleBytes: Int64 = 0
+        private var lastMeasuredBytesPerSecond: Int64?
+        private var heartbeatTask: Task<Void, Never>?
 
         init(repositoryProgressHandler: RepositoryProgressHandlerBox?) {
             self.repositoryProgressHandler = repositoryProgressHandler
@@ -79,6 +97,30 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
             isCancelled = false
             activeTaskID = nil
             activeCancellation = nil
+            repositoryTotalBytes = 0
+            repositoryDownloadedBytes = 0
+            repositoryTotalFiles = 0
+            repositoryCompletedFiles = 0
+            lastProgressAdvanceTime = nil
+            lastSpeedSampleTime = nil
+            lastSpeedSampleBytes = 0
+            lastMeasuredBytesPerSecond = nil
+            heartbeatTask?.cancel()
+            heartbeatTask = nil
+        }
+
+        func beginRepositoryDownload(totalBytes: Int64, totalFiles: Int) {
+            repositoryTotalBytes = max(0, totalBytes)
+            repositoryDownloadedBytes = 0
+            repositoryTotalFiles = max(0, totalFiles)
+            repositoryCompletedFiles = 0
+            let now = ProcessInfo.processInfo.systemUptime
+            lastProgressAdvanceTime = now
+            lastSpeedSampleTime = now
+            lastSpeedSampleBytes = 0
+            lastMeasuredBytesPerSecond = nil
+            emitRepositoryProgress(isStalled: false)
+            startHeartbeatIfNeeded()
         }
 
         func register(
@@ -108,8 +150,35 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
             progressHandlers[taskID]?.handler(totalBytesWritten)
         }
 
-        func reportRepositoryProgress(downloadedBytes: Int64, totalBytes: Int64) {
-            repositoryProgressHandler?.handler(downloadedBytes, totalBytes)
+        func reportRepositoryProgress(downloadedBytes: Int64, completedFiles: Int) {
+            let now = ProcessInfo.processInfo.systemUptime
+            let clampedBytes = min(max(0, downloadedBytes), repositoryTotalBytes)
+            let clampedCompletedFiles = min(max(0, completedFiles), repositoryTotalFiles)
+
+            if clampedBytes > repositoryDownloadedBytes {
+                if let previousSpeedSampleTime = lastSpeedSampleTime {
+                    let elapsed = max(now - previousSpeedSampleTime, 0.001)
+                    let deltaBytes = clampedBytes - lastSpeedSampleBytes
+                    if deltaBytes > 0 {
+                        lastMeasuredBytesPerSecond = Int64(Double(deltaBytes) / elapsed)
+                        lastSpeedSampleTime = now
+                        lastSpeedSampleBytes = clampedBytes
+                    }
+                } else {
+                    lastSpeedSampleTime = now
+                    lastSpeedSampleBytes = clampedBytes
+                }
+                lastProgressAdvanceTime = now
+            }
+
+            repositoryDownloadedBytes = clampedBytes
+            repositoryCompletedFiles = clampedCompletedFiles
+            emitRepositoryProgress(isStalled: false)
+        }
+
+        func finishRepositoryDownload() {
+            heartbeatTask?.cancel()
+            heartbeatTask = nil
         }
 
         func resumeSuccess(taskID: Int, temporaryURL: URL) {
@@ -136,6 +205,42 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
             guard activeTaskID == taskID else { return }
             activeTaskID = nil
             activeCancellation = nil
+        }
+
+        private func startHeartbeatIfNeeded() {
+            guard heartbeatTask == nil else { return }
+            let registry = self
+            heartbeatTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(750))
+                    await registry.emitHeartbeatIfNeeded()
+                }
+            }
+        }
+
+        private func emitHeartbeatIfNeeded() {
+            guard repositoryProgressHandler != nil else { return }
+            guard let activeTaskID else { return }
+            guard activeTaskID >= 0 else { return }
+
+            let now = ProcessInfo.processInfo.systemUptime
+            guard let lastProgressAdvanceTime, now - lastProgressAdvanceTime >= 1.5 else {
+                return
+            }
+            emitRepositoryProgress(isStalled: true)
+        }
+
+        private func emitRepositoryProgress(isStalled: Bool) {
+            repositoryProgressHandler?.handler(
+                RepositoryProgress(
+                    downloadedBytes: repositoryDownloadedBytes,
+                    totalBytes: repositoryTotalBytes,
+                    completedFiles: repositoryCompletedFiles,
+                    totalFiles: repositoryTotalFiles,
+                    bytesPerSecond: lastMeasuredBytesPerSecond,
+                    isStalled: isStalled
+                )
+            )
         }
     }
 
@@ -193,7 +298,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         self.init(progressHandler: nil)
     }
 
-    init(progressHandler: ((Int64, Int64) -> Void)?) {
+    init(progressHandler: ((RepositoryProgress) -> Void)?) {
         let progressBox = progressHandler.map(RepositoryProgressHandlerBox.init)
         state = DownloadStateRegistry(repositoryProgressHandler: progressBox)
         super.init()
@@ -210,38 +315,51 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
 
         let files = try await listFiles(repo: repo)
         let totalBytes = files.reduce(Int64(0)) { $0 + $1.size }
-        await state.reportRepositoryProgress(downloadedBytes: 0, totalBytes: totalBytes)
+        await state.beginRepositoryDownload(totalBytes: totalBytes, totalFiles: files.count)
 
         var completedBytes: Int64 = 0
+        var completedFiles = 0
 
-        for file in files {
-            guard !(await state.cancellationRequested()) else {
-                throw DownloadError.cancelled
-            }
-
-            let relativePath = try Self.validatedRelativeRepoPath(file.path)
-            let destURL = try Self.validatedDestinationURL(for: relativePath, in: targetDir)
-            let parentDir = destURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
-
-            let downloadURL = URL(string: "https://huggingface.co/\(repo)/resolve/main/\(relativePath)")!
-            let baseCompletedBytes = completedBytes
-
-            try await downloadFile(
-                from: downloadURL,
-                to: destURL,
-                progressHandler: ProgressHandlerBox { [state] bytesWritten in
-                    Task {
-                        await state.reportRepositoryProgress(
-                            downloadedBytes: baseCompletedBytes + bytesWritten,
-                            totalBytes: totalBytes
-                        )
-                    }
+        do {
+            for file in files {
+                guard !(await state.cancellationRequested()) else {
+                    await state.finishRepositoryDownload()
+                    throw DownloadError.cancelled
                 }
-            )
 
-            completedBytes += file.size
-            await state.reportRepositoryProgress(downloadedBytes: completedBytes, totalBytes: totalBytes)
+                let relativePath = try Self.validatedRelativeRepoPath(file.path)
+                let destURL = try Self.validatedDestinationURL(for: relativePath, in: targetDir)
+                let parentDir = destURL.deletingLastPathComponent()
+                try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
+
+                let downloadURL = URL(string: "https://huggingface.co/\(repo)/resolve/main/\(relativePath)")!
+                let baseCompletedBytes = completedBytes
+                let baseCompletedFiles = completedFiles
+
+                try await downloadFile(
+                    from: downloadURL,
+                    to: destURL,
+                    progressHandler: ProgressHandlerBox { [state] bytesWritten in
+                        Task {
+                            await state.reportRepositoryProgress(
+                                downloadedBytes: baseCompletedBytes + bytesWritten,
+                                completedFiles: baseCompletedFiles
+                            )
+                        }
+                    }
+                )
+
+                completedBytes += file.size
+                completedFiles += 1
+                await state.reportRepositoryProgress(
+                    downloadedBytes: completedBytes,
+                    completedFiles: completedFiles
+                )
+            }
+            await state.finishRepositoryDownload()
+        } catch {
+            await state.finishRepositoryDownload()
+            throw error
         }
     }
 

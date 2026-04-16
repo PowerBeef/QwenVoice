@@ -197,12 +197,9 @@ struct VoiceCloningView: View {
         expectedKey: String?,
         isGenerating: Bool
     ) -> Bool {
-        VoiceCloningCoordinator.shouldStartDeferredClonePrewarm(
-            primingPhase: primingPhase,
-            primingKey: primingKey,
-            expectedKey: expectedKey,
-            isGenerating: isGenerating
-        )
+        primingPhase == .primed
+            && primingKey == expectedKey
+            && !isGenerating
     }
 
     var body: some View {

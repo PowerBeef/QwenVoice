@@ -207,13 +207,13 @@ struct ModelRow: View {
                         .foregroundStyle(.red)
                 }
             }
-        case .downloading(let downloadedBytes, let totalBytes):
+        case .downloading(let progress):
             VStack(alignment: .leading, spacing: 4) {
-                if let totalBytes, totalBytes > 0 {
-                    ProgressView(value: Double(downloadedBytes), total: Double(totalBytes))
+                if let totalBytes = progress.totalBytes, totalBytes > 0 {
+                    ProgressView(value: Double(progress.downloadedBytes), total: Double(totalBytes))
                         .tint(AppTheme.statusProgressTint)
                     Text(
-                        "\(ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
+                        "\(ByteCountFormatter.string(fromByteCount: progress.downloadedBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))"
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -221,6 +221,22 @@ struct ModelRow: View {
                     ProgressView()
                         .tint(AppTheme.statusProgressTint)
                     Text("Preparing download...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let totalFiles = progress.totalFiles, totalFiles > 0 {
+                    Text("File \(min(progress.completedFiles + 1, totalFiles)) of \(totalFiles)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if progress.isStalled {
+                    Text("Waiting for network activity...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let bytesPerSecond = progress.bytesPerSecond, bytesPerSecond > 0 {
+                    Text("\(ByteCountFormatter.string(fromByteCount: bytesPerSecond, countStyle: .file))/s")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

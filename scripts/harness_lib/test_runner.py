@@ -516,6 +516,27 @@ def _run_pipeline_tests() -> dict[str, Any]:
         assert result["passed"] is False
         assert result["clicks"]
 
+    def test_click_detection_ignores_matching_boundary_with_small_final_alignment_drift():
+        import numpy as np
+
+        from .audio_analysis import check_click_detection
+
+        chunk_a = np.linspace(0.0, 0.12, 64, dtype=np.float32)
+        chunk_b = np.concatenate((
+            np.array([0.95], dtype=np.float32),
+            np.linspace(0.94, 0.2, 63, dtype=np.float32),
+        ))
+        final_audio = np.concatenate((
+            chunk_a,
+            chunk_b,
+            np.array([0.19, 0.18], dtype=np.float32),
+        ))
+        result = check_click_detection(
+            [(chunk_a, 24000), (chunk_b, 24000)],
+            final_audio=final_audio,
+        )
+        assert result["passed"] is True
+
     def test_build_ui_launch_environment_defaults_screenshot_capture_mode():
         context = prepare_ui_launch_context(backend_mode="stub", data_root="fixture")
         try:
@@ -575,6 +596,7 @@ def _run_pipeline_tests() -> dict[str, Any]:
         ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
         ("click_detection_ignores_matching_final_boundary_transient", test_click_detection_ignores_matching_final_boundary_transient),
         ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
+        ("click_detection_ignores_matching_boundary_with_small_final_alignment_drift", test_click_detection_ignores_matching_boundary_with_small_final_alignment_drift),
         ("build_ui_launch_environment_defaults_screenshot_capture_mode", test_build_ui_launch_environment_defaults_screenshot_capture_mode),
         ("build_ui_launch_environment_preserves_explicit_capture_mode", test_build_ui_launch_environment_preserves_explicit_capture_mode),
         ("split_generation_pipeline_forwards_voice_kwarg", test_split_generation_pipeline_forwards_voice_kwarg),
@@ -709,6 +731,125 @@ def _run_server_tests() -> dict[str, Any]:
 
         assert kwargs["lang_code"] == "fr"
 
+    def test_latency_first_chunk_uses_received_notification_timestamp():
+        from harness_lib.bench_runner import _latency_first_chunk_ms
+
+        notifications = [
+            {"method": "progress", "_received_at_ms": 7.5},
+            {"method": "generation_chunk", "_received_at_ms": 123.4},
+            {"method": "generation_chunk", "_received_at_ms": 456.7},
+        ]
+
+        assert _latency_first_chunk_ms(notifications) == 123.4
+
+    def test_latency_generate_params_use_streaming_and_design_instruct():
+        from harness_lib.bench_runner import _latency_generate_params
+
+        params = _latency_generate_params(
+            mode="design",
+            output_path="/tmp/latency.wav",
+            clone_reference_path=None,
+            clone_reference_text=None,
+        )
+
+        assert params["stream"] is True
+        assert "streaming_interval" in params
+        assert "instruct" in params
+        assert "voice_description" not in params
+
+    def test_clone_regression_reference_falls_back_to_committed_fixture():
+        from harness_lib import clone_regression_runner
+
+        original_reference_audio = clone_regression_runner.REFERENCE_AUDIO_PATH
+        original_reference_text = clone_regression_runner.REFERENCE_TEXT_PATH
+        original_committed_audio = clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH
+        original_committed_text = clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH
+
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            committed_audio = temp_root / "release_clone_reference.wav"
+            committed_text = temp_root / "release_clone_reference.txt"
+            committed_audio.write_bytes(b"wav")
+            committed_text.write_text("fixture transcript", encoding="utf-8")
+
+            try:
+                clone_regression_runner.REFERENCE_AUDIO_PATH = temp_root / "missing_saved.wav"
+                clone_regression_runner.REFERENCE_TEXT_PATH = temp_root / "missing_saved.txt"
+                clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH = committed_audio
+                clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH = committed_text
+
+                resolved = clone_regression_runner.resolve_clone_regression_reference()
+                assert resolved == (committed_audio, committed_text)
+            finally:
+                clone_regression_runner.REFERENCE_AUDIO_PATH = original_reference_audio
+                clone_regression_runner.REFERENCE_TEXT_PATH = original_reference_text
+                clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH = original_committed_audio
+                clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH = original_committed_text
+
+    def test_unload_model_clears_prewarm_and_clone_prime_state():
+        original_prewarmed_keys = set(server._prewarmed_model_keys)
+        original_primed_keys = set(server._primed_clone_reference_keys)
+
+        try:
+            server._prewarmed_model_keys.add("pro_custom|custom|vivian|Conversational")
+            server._primed_clone_reference_keys.add("pro_clone|clone|fixture.wav|hello")
+
+            result = server.handle_unload_model({})
+
+            assert result["success"] is True
+            assert server._prewarmed_model_keys == set()
+            assert server._primed_clone_reference_keys == set()
+        finally:
+            server._prewarmed_model_keys = original_prewarmed_keys
+            server._primed_clone_reference_keys = original_primed_keys
+
+    def test_custom_prewarm_primes_streaming_generator():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_build_standard_generator = server._build_standard_generator
+
+        try:
+            server._current_model = object()
+
+            def fake_build_standard_generator(
+                model,
+                text,
+                temperature,
+                max_tokens=None,
+                *,
+                language="auto",
+                voice=None,
+                instruct=None,
+                stream=False,
+                streaming_interval=None,
+            ):
+                calls.append({
+                    "text": text,
+                    "max_tokens": max_tokens,
+                    "voice": voice,
+                    "instruct": instruct,
+                    "stream": stream,
+                    "streaming_interval": streaming_interval,
+                })
+                yield {"audio": "warmup"}
+
+            server._build_standard_generator = fake_build_standard_generator
+
+            result = server._run_model_prewarm(
+                "custom",
+                voice="vivian",
+                instruct="Conversational",
+            )
+
+            assert calls
+            assert calls[0]["stream"] is True
+            assert calls[0]["streaming_interval"] == server.DEFAULT_STREAMING_INTERVAL
+            assert "first_stream_chunk" in result
+        finally:
+            server._current_model = original_current_model
+            server._build_standard_generator = original_build_standard_generator
+
     def test_clone_prewarm_prepared_generator_omits_instruct_kwarg():
         calls: list[dict[str, Any]] = []
 
@@ -744,6 +885,14 @@ def _run_server_tests() -> dict[str, Any]:
             assert calls
             assert "instruct" not in calls[0]
             assert "language" not in calls[0]
+            assert calls[0]["stream"] is True
+            assert calls[0]["streaming_interval"] == server.DEFAULT_STREAMING_INTERVAL
+            assert "first_stream_chunk" in result
+            assert result["generation"] >= result["first_stream_chunk"]
+            assert (
+                result["prewarm_max_tokens"]
+                == server.PREWARM_PROFILES["clone_prime"]["max_tokens"]
+            )
         finally:
             server._current_model = original_current_model
             server._normalize_clone_reference = original_normalize_clone_reference
@@ -784,7 +933,12 @@ def _run_server_tests() -> dict[str, Any]:
             )
 
             assert result["prepared_clone_used"] is True
+            assert calls[0]["stream"] is True
             assert calls[0]["language"] == "fr"
+            assert (
+                result["prewarm_max_tokens"]
+                == server.PREWARM_PROFILES["clone_prime"]["max_tokens"]
+            )
         finally:
             server._current_model = original_current_model
             server._normalize_clone_reference = original_normalize_clone_reference
@@ -2467,6 +2621,28 @@ def _run_server_tests() -> dict[str, Any]:
             "the package is ready",
         ) == 0.0
 
+    def test_tts_roundtrip_runtime_variant_labels_known_paths():
+        from harness_lib.paths import APP_VENV_PYTHON, BUNDLED_PYTHON_BIN
+        from harness_lib.tts_roundtrip_runner import _runtime_variant_label
+
+        assert _runtime_variant_label(str(APP_VENV_PYTHON)) == "app_support_venv"
+        assert _runtime_variant_label(str(BUNDLED_PYTHON_BIN)) == "bundled_runtime"
+        assert _runtime_variant_label("/tmp/custom/python3") == "custom_python"
+
+    def test_tts_roundtrip_helper_variant_defaults_to_current_overlay():
+        from harness_lib.tts_roundtrip_runner import _helper_variant_label
+
+        original = os.environ.pop("QWENVOICE_MLX_AUDIO_HELPER_VARIANT", None)
+        try:
+            assert _helper_variant_label() == "current_overlay"
+            os.environ["QWENVOICE_MLX_AUDIO_HELPER_VARIANT"] = "audit_candidate_a"
+            assert _helper_variant_label() == "audit_candidate_a"
+        finally:
+            if original is None:
+                os.environ.pop("QWENVOICE_MLX_AUDIO_HELPER_VARIANT", None)
+            else:
+                os.environ["QWENVOICE_MLX_AUDIO_HELPER_VARIANT"] = original
+
     def test_stream_selected_audio_emits_chunks_before_final_write():
         try:
             import numpy as np
@@ -2547,6 +2723,11 @@ def _run_server_tests() -> dict[str, Any]:
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
         ("build_generation_kwargs_omits_auto_language", test_build_generation_kwargs_omits_auto_language),
         ("build_generation_kwargs_includes_explicit_language", test_build_generation_kwargs_includes_explicit_language),
+        ("latency_first_chunk_uses_received_notification_timestamp", test_latency_first_chunk_uses_received_notification_timestamp),
+        ("latency_generate_params_use_streaming_and_design_instruct", test_latency_generate_params_use_streaming_and_design_instruct),
+        ("clone_regression_reference_falls_back_to_committed_fixture", test_clone_regression_reference_falls_back_to_committed_fixture),
+        ("unload_model_clears_prewarm_and_clone_prime_state", test_unload_model_clears_prewarm_and_clone_prime_state),
+        ("custom_prewarm_primes_streaming_generator", test_custom_prewarm_primes_streaming_generator),
         ("clone_prewarm_prepared_generator_omits_instruct_kwarg", test_clone_prewarm_prepared_generator_omits_instruct_kwarg),
         ("clone_prewarm_prepared_generator_forwards_explicit_language", test_clone_prewarm_prepared_generator_forwards_explicit_language),
         ("handle_generate_prepared_clone_omits_instruct_kwarg", test_handle_generate_prepared_clone_omits_instruct_kwarg),
@@ -2582,6 +2763,8 @@ def _run_server_tests() -> dict[str, Any]:
         ("resolve_clone_transcript_prefers_original_reference_sidecar", test_resolve_clone_transcript_prefers_original_reference_sidecar),
         ("normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short", test_normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short),
         ("tts_roundtrip_word_error_rate_normalizes_punctuation", test_tts_roundtrip_word_error_rate_normalizes_punctuation),
+        ("tts_roundtrip_runtime_variant_labels_known_paths", test_tts_roundtrip_runtime_variant_labels_known_paths),
+        ("tts_roundtrip_helper_variant_defaults_to_current_overlay", test_tts_roundtrip_helper_variant_defaults_to_current_overlay),
     ]
 
     for name, fn in tests:

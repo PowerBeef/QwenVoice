@@ -152,8 +152,26 @@ final class PythonBridgeLineParserTests: XCTestCase {
     }
 
     @MainActor
-    func testIdlePrewarmPolicySkipsCustomMode() {
-        XCTAssertFalse(PythonBridge.supportsIdlePrewarm(mode: .custom))
+    func testCustomPrewarmIdentityIgnoresNormalToneChanges() {
+        let defaultKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_custom",
+            mode: .custom,
+            voice: "Vivian",
+            instruct: "Normal tone"
+        )
+        let blankKey = PythonBridge.prewarmIdentityKey(
+            modelID: "pro_custom",
+            mode: .custom,
+            voice: "Vivian",
+            instruct: ""
+        )
+
+        XCTAssertEqual(defaultKey, blankKey)
+    }
+
+    @MainActor
+    func testIdlePrewarmPolicyIncludesCustomMode() {
+        XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .custom))
         XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .design))
         XCTAssertTrue(PythonBridge.supportsIdlePrewarm(mode: .clone))
     }
