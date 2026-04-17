@@ -1,7 +1,9 @@
 import Foundation
 
 @MainActor
-final class AppStartupCoordinator {
+final class AppStartupCoordinator: ObservableObject {
+    @Published private(set) var launchDiagnostics: AppLaunchDiagnosticsSnapshot?
+
     func setupAppSupport() {
         let fm = FileManager.default
         let outputSubdirectories = Set(TTSModel.all.map(\.outputSubfolder))
@@ -20,6 +22,14 @@ final class AppStartupCoordinator {
         for dir in dirs {
             try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
+    }
+
+    func refreshLaunchDiagnostics() {
+        launchDiagnostics = AppLaunchPreflight.run()
+    }
+
+    func clearLaunchDiagnostics() {
+        launchDiagnostics = nil
     }
 
     func syncUITestEnvironmentReadiness(

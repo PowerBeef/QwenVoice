@@ -10,8 +10,8 @@ struct QwenVoiceApp: App {
     @StateObject private var savedVoicesViewModel = SavedVoicesViewModel()
     @StateObject private var appCommandRouter = AppCommandRouter.shared
     @StateObject private var generationLibraryEvents = GenerationLibraryEvents.shared
+    @StateObject private var appStartupCoordinator = AppStartupCoordinator()
     private let testStateServer = TestStateServer()
-    private let appStartupCoordinator = AppStartupCoordinator()
     private let backendLaunchCoordinator = BackendLaunchCoordinator()
 
     init() {
@@ -39,36 +39,44 @@ struct QwenVoiceApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                switch envManager.state {
-                case .ready(let pythonPath):
-                    ContentView()
-                        .environmentObject(pythonBridge)
-                        .environmentObject(audioPlayer)
-                        .environmentObject(audioPlayer.playbackProgress)
-                        .environmentObject(envManager)
-                        .environmentObject(modelManager)
-                        .environmentObject(savedVoicesViewModel)
-                        .environmentObject(appCommandRouter)
-                        .environmentObject(generationLibraryEvents)
-                        .frame(minWidth: 720, minHeight: 560)
-                        .onAppear {
-                            appStartupCoordinator.syncUITestEnvironmentReadiness(
-                                state: .ready(pythonPath: pythonPath),
-                                pythonBridge: pythonBridge
-                            )
-                            backendLaunchCoordinator.startBackendIfNeeded(
-                                pythonBridge: pythonBridge,
-                                envManager: envManager,
-                                pythonPath: pythonPath,
-                                appSupportDir: Self.appSupportDir.path
-                            )
-                        }
-                case .idle:
-                    SetupView(envManager: envManager)
-                        .frame(minWidth: 500, minHeight: 400)
-                default:
-                    SetupView(envManager: envManager)
-                        .frame(minWidth: 500, minHeight: 400)
+                if let launchDiagnostics = appStartupCoordinator.launchDiagnostics {
+                    StartupDiagnosticsView(
+                        snapshot: launchDiagnostics,
+                        onRetry: retryLaunchPreflight
+                    )
+                    .frame(minWidth: 520, minHeight: 420)
+                } else {
+                    switch envManager.state {
+                    case .ready(let pythonPath):
+                        ContentView()
+                            .environmentObject(pythonBridge)
+                            .environmentObject(audioPlayer)
+                            .environmentObject(audioPlayer.playbackProgress)
+                            .environmentObject(envManager)
+                            .environmentObject(modelManager)
+                            .environmentObject(savedVoicesViewModel)
+                            .environmentObject(appCommandRouter)
+                            .environmentObject(generationLibraryEvents)
+                            .frame(minWidth: 720, minHeight: 560)
+                            .onAppear {
+                                appStartupCoordinator.syncUITestEnvironmentReadiness(
+                                    state: .ready(pythonPath: pythonPath),
+                                    pythonBridge: pythonBridge
+                                )
+                                backendLaunchCoordinator.startBackendIfNeeded(
+                                    pythonBridge: pythonBridge,
+                                    envManager: envManager,
+                                    pythonPath: pythonPath,
+                                    appSupportDir: Self.appSupportDir.path
+                                )
+                            }
+                    case .idle:
+                        SetupView(envManager: envManager)
+                            .frame(minWidth: 500, minHeight: 400)
+                    default:
+                        SetupView(envManager: envManager)
+                            .frame(minWidth: 500, minHeight: 400)
+                    }
                 }
             }
             .defaultAppStorage(UITestAutomationSupport.appStorage)
@@ -79,19 +87,23 @@ struct QwenVoiceApp: App {
             )
             .onAppear {
                 appStartupCoordinator.setupAppSupport()
+                appStartupCoordinator.refreshLaunchDiagnostics()
                 if UITestAutomationSupport.isEnabled {
                     UITestWindowCoordinator.shared.syncVisibleMainWindowState()
                     TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode)
                     TestStateProvider.shared.setBackendLastError(pythonBridge.lastError)
                 }
-                envManager.ensureEnvironment()
-                appStartupCoordinator.syncUITestEnvironmentReadiness(
-                    state: envManager.state,
-                    pythonBridge: pythonBridge
-                )
+                if appStartupCoordinator.launchDiagnostics == nil {
+                    envManager.ensureEnvironment()
+                    appStartupCoordinator.syncUITestEnvironmentReadiness(
+                        state: envManager.state,
+                        pythonBridge: pythonBridge
+                    )
+                }
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
-            .onChange(of: envManager.state) { _, newState in
+            .onReceive(envManager.$state) { newState in
+                guard appStartupCoordinator.launchDiagnostics == nil else { return }
                 appStartupCoordinator.syncUITestEnvironmentReadiness(
                     state: newState,
                     pythonBridge: pythonBridge
@@ -195,4 +207,14 @@ struct QwenVoiceApp: App {
     static var modelsDir: URL { AppPaths.modelsDir }
     static var outputsDir: URL { AppPaths.outputsDir }
     static var voicesDir: URL { AppPaths.voicesDir }
+
+    private func retryLaunchPreflight() {
+        appStartupCoordinator.refreshLaunchDiagnostics()
+        guard appStartupCoordinator.launchDiagnostics == nil else { return }
+        envManager.ensureEnvironment()
+        appStartupCoordinator.syncUITestEnvironmentReadiness(
+            state: envManager.state,
+            pythonBridge: pythonBridge
+        )
+    }
 }

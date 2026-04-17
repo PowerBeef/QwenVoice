@@ -4,6 +4,7 @@ struct CustomVoiceView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
+    @EnvironmentObject var appCommandRouter: AppCommandRouter
 
     @Binding private var draft: CustomVoiceDraft
     @State private var isGenerating = false
@@ -38,8 +39,14 @@ struct CustomVoiceView: View {
             && isModelAvailable
     }
 
-    private var modelPreparationTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-\(isModelAvailable)-\(isGenerating)"
+    private var idlePrewarmTaskID: String {
+        let identity = PythonBridge.prewarmIdentityKey(
+            modelID: activeModel?.id ?? "none",
+            mode: activeMode,
+            voice: draft.selectedSpeaker,
+            instruct: draft.emotion
+        )
+        return "\(pythonBridge.isReady)|\(isModelAvailable)|\(identity)"
     }
 
     init(draft: Binding<CustomVoiceDraft>) {
@@ -68,8 +75,8 @@ struct CustomVoiceView: View {
             .environmentObject(pythonBridge)
             .environmentObject(audioPlayer)
         }
-        .task(id: modelPreparationTaskID) {
-            await prepareSelectedModelIfNeeded()
+        .task(id: idlePrewarmTaskID) {
+            await prewarmSelectedModelIfNeeded()
         }
         .onAppear(perform: syncUITestState)
         .onChange(of: draft.selectedSpeaker) { _, _ in syncUITestState() }
@@ -208,6 +215,23 @@ private extension CustomVoiceView {
 
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
+            if let model = activeModel,
+               let primaryActionTitle = modelManager.primaryActionTitle(for: model) {
+                ModelRecoveryCard(
+                    title: primaryActionTitle,
+                    detail: modelManager.recoveryDetail(for: model),
+                    primaryActionTitle: primaryActionTitle,
+                    accentColor: AppTheme.customVoice,
+                    accessibilityIdentifier: "customVoice_modelRecovery",
+                    onPrimaryAction: {
+                        Task { await modelManager.download(model, using: pythonBridge) }
+                    },
+                    onSecondaryAction: {
+                        appCommandRouter.navigate(to: .models)
+                    }
+                )
+            }
+
             generationReadiness
 
             if let errorMessage {
@@ -269,7 +293,7 @@ private extension CustomVoiceView {
         guard !draft.text.isEmpty, pythonBridge.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
-            errorMessage = "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+            errorMessage = modelManager.recoveryDetail(for: model)
             return
         }
 
@@ -330,10 +354,15 @@ private extension CustomVoiceView {
         }
     }
 
-    func prepareSelectedModelIfNeeded() async {
+    func prewarmSelectedModelIfNeeded() async {
         guard let model = activeModel else { return }
         guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        await pythonBridge.ensureModelLoadedIfNeeded(id: model.id)
+        await pythonBridge.prewarmModelIfNeeded(
+            modelID: model.id,
+            mode: activeMode,
+            voice: draft.selectedSpeaker,
+            instruct: draft.emotion
+        )
     }
 }
 

@@ -347,6 +347,52 @@ def _extract_boundary_window(
     return signal[start:end]
 
 
+def _best_matching_final_boundary_window(
+    concatenated: np.ndarray,
+    final_audio: np.ndarray,
+    boundary_sample: int,
+) -> tuple[int, np.ndarray, float] | None:
+    streamed_window = _extract_boundary_window(
+        concatenated,
+        boundary_sample,
+        CLICK_CONTEXT_WINDOW_SAMPLES,
+    )
+    if streamed_window.size == 0 or final_audio.size == 0:
+        return None
+
+    min_boundary = max(1, boundary_sample - CHUNK_ALIGNMENT_WINDOW_SAMPLES)
+    max_boundary = min(
+        final_audio.shape[0] - 1,
+        boundary_sample + CHUNK_ALIGNMENT_WINDOW_SAMPLES,
+    )
+    if max_boundary < min_boundary:
+        return None
+
+    best_match: tuple[int, np.ndarray, float] | None = None
+    for candidate_boundary in range(min_boundary, max_boundary + 1):
+        final_window = _extract_boundary_window(
+            final_audio,
+            candidate_boundary,
+            CLICK_CONTEXT_WINDOW_SAMPLES,
+        )
+        if final_window.shape != streamed_window.shape or final_window.size == 0:
+            continue
+
+        window_diff = float(np.max(np.abs(streamed_window - final_window)))
+        if (
+            best_match is None
+            or window_diff < best_match[2]
+            or (
+                window_diff == best_match[2]
+                and abs(candidate_boundary - boundary_sample)
+                < abs(best_match[0] - boundary_sample)
+            )
+        ):
+            best_match = (candidate_boundary, final_window, window_diff)
+
+    return best_match
+
+
 def check_click_detection(
     chunks: list[tuple[np.ndarray, int]],
     final_audio: np.ndarray | None = None,
@@ -383,31 +429,35 @@ def check_click_detection(
         final_boundary_diff = 0.0
         local_threshold = threshold
 
-        if final_audio is not None and final_audio.shape[0] == concatenated.shape[0]:
-            streamed_window = _extract_boundary_window(
+        if final_audio is not None:
+            final_match = _best_matching_final_boundary_window(
                 concatenated,
-                b,
-                CLICK_CONTEXT_WINDOW_SAMPLES,
-            )
-            final_window = _extract_boundary_window(
                 final_audio,
                 b,
-                CLICK_CONTEXT_WINDOW_SAMPLES,
             )
-            if streamed_window.shape == final_window.shape and streamed_window.size > 0:
-                boundary_window_matches_final = bool(
-                    np.max(np.abs(streamed_window - final_window)) <= (1.0 / 32768.0)
-                )
+            if final_match is not None:
+                final_boundary_index, final_window, window_diff = final_match
+                boundary_window_matches_final = bool(window_diff <= (1.0 / 32768.0))
 
-            if 0 < b < final_audio.shape[0]:
-                final_boundary_diff = float(abs(final_audio[b] - final_audio[b - 1]))
+                if 0 < final_boundary_index < final_audio.shape[0]:
+                    final_boundary_diff = float(
+                        abs(
+                            final_audio[final_boundary_index]
+                            - final_audio[final_boundary_index - 1]
+                        )
+                    )
 
-            local_final_diffs = np.abs(np.diff(final_window)) if final_window.size > 1 else np.array([], dtype=np.float32)
-            if local_final_diffs.size > 0:
-                local_threshold = max(
-                    local_threshold,
-                    CLICK_THRESHOLD_MULTIPLIER * float(np.median(local_final_diffs)),
+                local_final_diffs = (
+                    np.abs(np.diff(final_window))
+                    if final_window.size > 1
+                    else np.array([], dtype=np.float32)
                 )
+                if local_final_diffs.size > 0:
+                    local_threshold = max(
+                        local_threshold,
+                        CLICK_THRESHOLD_MULTIPLIER
+                        * float(np.median(local_final_diffs)),
+                    )
 
         if boundary_window_matches_final:
             continue

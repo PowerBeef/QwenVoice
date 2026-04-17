@@ -4,6 +4,7 @@ struct BatchGenerationSheet: View {
     @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var envManager: PythonEnvironmentManager
+    @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var appCommandRouter: AppCommandRouter
     @Environment(\.dismiss) private var dismiss
 
@@ -139,6 +140,13 @@ struct BatchGenerationSheet: View {
             }
         }
 
+        if !coordinator.itemStates.isEmpty {
+            batchItemStatusList(
+                coordinator.itemStates,
+                title: coordinator.isProcessing ? "Current batch" : "Prepared items"
+            )
+        }
+
         if let errorMessage = coordinator.errorMessage {
             Text(errorMessage)
                 .foregroundStyle(.red)
@@ -175,16 +183,11 @@ struct BatchGenerationSheet: View {
         Spacer()
 
         VStack(spacing: 16) {
-            let isCompleted = {
-                if case .completed = outcome { return true }
-                return false
-            }()
-
-            Image(systemName: isCompleted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+            Image(systemName: completionIconName(for: outcome))
                 .font(.system(size: 48))
-                .foregroundStyle(isCompleted ? AppTheme.accent : .orange)
+                .foregroundStyle(completionIconColor(for: outcome))
 
-            Text(isCompleted ? "Batch Complete" : "Batch Cancelled")
+            Text(completionTitle(for: outcome))
                 .font(.title2.weight(.bold))
 
             Text(completionMessage(for: outcome))
@@ -193,6 +196,8 @@ struct BatchGenerationSheet: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+
+        batchItemStatusList(outcome.items, title: "Batch results")
 
         Spacer()
 
@@ -203,9 +208,34 @@ struct BatchGenerationSheet: View {
             .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
 
+            if shouldShowRetryRemaining(for: outcome) {
+                Button("Retry Remaining") {
+                    retryBatch(with: outcome.retryRemainingLines)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if shouldShowRetryFailed(for: outcome) {
+                Button("Retry Failed") {
+                    retryBatch(with: outcome.retryFailedLines)
+                }
+                .buttonStyle(.bordered)
+            }
+
             Spacer()
 
-            Button("View in History") {
+            if !outcome.savedAudioPaths.isEmpty {
+                Button("Reveal Outputs") {
+                    revealOutputs(for: outcome.savedAudioPaths)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Button(outcome.savedAudioPaths.isEmpty ? "Close" : "View History") {
+                if outcome.savedAudioPaths.isEmpty {
+                    dismiss()
+                    return
+                }
                 dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     appCommandRouter.navigate(to: .history)
@@ -214,6 +244,7 @@ struct BatchGenerationSheet: View {
             .buttonStyle(.borderedProminent)
             .tint(themeColor)
             .keyboardShortcut(.defaultAction)
+            .disabled(outcome.savedAudioPaths.isEmpty && !shouldShowRetryRemaining(for: outcome) && !shouldShowRetryFailed(for: outcome))
         }
     }
 
@@ -229,17 +260,103 @@ struct BatchGenerationSheet: View {
 
     private func completionMessage(for outcome: BatchGenerationOutcome) -> String {
         switch outcome {
-        case .completed(let count):
+        case .completed(let items):
+            let count = items.filter(\.isSaved).count
             return count == 1
                 ? "1 clip generated successfully."
                 : "\(count) clips generated successfully."
-        case .cancelled(let count):
-            let total = coordinator.progressSnapshot.totalCount
+        case .cancelled(let items, let restartFailedMessage):
+            let count = items.filter(\.isSaved).count
+            let total = items.count
             if count == 0 {
+                if let restartFailedMessage, !restartFailedMessage.isEmpty {
+                    return "Generation was cancelled before any clips were created. \(restartFailedMessage)"
+                }
                 return "Generation was cancelled before any clips were created."
             }
-            return "\(count) of \(total) clips generated before cancellation."
+            let base = "\(count) of \(total) clips generated before cancellation."
+            if let restartFailedMessage, !restartFailedMessage.isEmpty {
+                return "\(base) \(restartFailedMessage)"
+            }
+            return base
+        case .failed(let items, let message):
+            let completedCount = items.filter(\.isSaved).count
+            if completedCount == 0 {
+                return "Batch generation stopped before any clips were saved. \(message)"
+            }
+            return "\(completedCount) of \(items.count) clips were saved before the batch stopped. \(message)"
         }
+    }
+
+    private func completionTitle(for outcome: BatchGenerationOutcome) -> String {
+        switch outcome {
+        case .completed:
+            return "Batch Complete"
+        case .cancelled:
+            return "Batch Cancelled"
+        case .failed:
+            return "Batch Stopped"
+        }
+    }
+
+    private func completionIconName(for outcome: BatchGenerationOutcome) -> String {
+        switch outcome {
+        case .completed:
+            return "checkmark.circle.fill"
+        case .cancelled:
+            return "exclamationmark.circle.fill"
+        case .failed:
+            return "xmark.octagon.fill"
+        }
+    }
+
+    private func completionIconColor(for outcome: BatchGenerationOutcome) -> Color {
+        switch outcome {
+        case .completed:
+            return AppTheme.accent
+        case .cancelled:
+            return .orange
+        case .failed:
+            return .red
+        }
+    }
+
+    @ViewBuilder
+    private func batchItemStatusList(_ items: [BatchGenerationItemState], title: String) -> some View {
+        if !items.isEmpty {
+            GroupBox(title) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(items) { item in
+                            BatchGenerationItemRow(item: item)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .frame(minHeight: 120, maxHeight: 220)
+            }
+            .accessibilityIdentifier("batch_itemStatusList")
+        }
+    }
+
+    private func retryBatch(with lines: [String]) {
+        guard !lines.isEmpty else { return }
+        batchText = lines.joined(separator: "\n")
+        startBatch()
+    }
+
+    private func shouldShowRetryRemaining(for outcome: BatchGenerationOutcome) -> Bool {
+        !outcome.retryRemainingLines.isEmpty
+    }
+
+    private func shouldShowRetryFailed(for outcome: BatchGenerationOutcome) -> Bool {
+        !outcome.retryFailedLines.isEmpty
+    }
+
+    private func revealOutputs(for audioPaths: [String]) {
+        let urls = audioPaths.map { URL(fileURLWithPath: $0) }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     private func startBatch() {
@@ -258,7 +375,89 @@ struct BatchGenerationSheet: View {
                     refText: refText
                 )
             },
+            isModelAvailable: { model in
+                modelManager.isAvailable(model)
+            },
+            recoveryDetail: { model in
+                modelManager.recoveryDetail(for: model)
+            },
             bridge: pythonBridge
+        )
+    }
+}
+
+private struct BatchGenerationItemRow: View {
+    let item: BatchGenerationItemState
+
+    private var statusColor: Color {
+        switch item.status {
+        case .pending:
+            return .secondary
+        case .running:
+            return AppTheme.statusProgressTint
+        case .saved:
+            return .green
+        case .failed:
+            return .red
+        case .cancelled:
+            return .orange
+        }
+    }
+
+    private var statusIcon: String {
+        switch item.status {
+        case .pending:
+            return "circle.dashed"
+        case .running:
+            return "waveform.circle.fill"
+        case .saved:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "xmark.circle.fill"
+        case .cancelled:
+            return "pause.circle.fill"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Label(item.statusLabel, systemImage: statusIcon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(statusColor)
+
+                Text("Line \(item.index + 1)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            Text(item.line)
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let statusMessage = item.statusMessage {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let audioPath = item.audioPath {
+                Text(URL(fileURLWithPath: audioPath).lastPathComponent)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppTheme.cardFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(statusColor.opacity(0.18), lineWidth: 1)
         )
     }
 }

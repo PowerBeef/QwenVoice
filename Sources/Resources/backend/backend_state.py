@@ -32,6 +32,7 @@ class BackendState:
     batch_generate_prepared_icl_fn = None
     enable_speech_tokenizer_encoder_fn = None
     clone_context_cache: OrderedDict = field(default_factory=OrderedDict)
+    last_clone_reference_metrics: dict = field(default_factory=dict)
     mlx_audio_version: str | None = None
     prewarmed_model_keys: set = field(default_factory=set)
     primed_clone_reference_keys: set = field(default_factory=set)

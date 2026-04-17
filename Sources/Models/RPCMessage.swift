@@ -117,3 +117,10 @@ enum RPCValue: Codable, Equatable, Sendable {
         }
     }
 }
+
+extension RPCValue {
+    func decoded<T: Decodable>(as type: T.Type, decoder: JSONDecoder = JSONDecoder()) throws -> T {
+        let data = try JSONEncoder().encode(self)
+        return try decoder.decode(T.self, from: data)
+    }
+}

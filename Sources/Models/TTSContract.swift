@@ -4,52 +4,103 @@ private struct TTSContractManifest: Decodable {
     let defaultSpeaker: String
     let speakers: [String: [String]]
     let models: [TTSModel]
+
+    static let empty = TTSContractManifest(
+        defaultSpeaker: "",
+        speakers: [:],
+        models: []
+    )
+}
+
+struct ContractLoadError: LocalizedError, Equatable, Sendable {
+    let summary: String
+    let details: String
+    let manifestPath: String?
+
+    var errorDescription: String? {
+        details
+    }
+}
+
+private struct TTSContractLoadState {
+    let manifest: TTSContractManifest
+    let manifestURL: URL?
+    let loadError: ContractLoadError?
 }
 
 private final class TTSContractBundleLocator: NSObject { }
 
 enum TTSContract {
-    static var manifestURL: URL {
-        locateManifestURL()
+    static var manifestURL: URL? {
+        loadState.manifestURL
+    }
+
+    static var loadError: ContractLoadError? {
+        loadState.loadError
     }
 
     static var models: [TTSModel] {
-        manifest.models
+        loadState.manifest.models
     }
 
     static var defaultSpeaker: String {
-        manifest.defaultSpeaker
+        loadState.manifest.defaultSpeaker
     }
 
     static var groupedSpeakers: [String: [String]] {
-        manifest.speakers
+        loadState.manifest.speakers
     }
 
     static var allSpeakers: [String] {
-        manifest.speakers.keys.sorted().flatMap { manifest.speakers[$0] ?? [] }
+        loadState.manifest.speakers.keys.sorted().flatMap { loadState.manifest.speakers[$0] ?? [] }
     }
 
     static func model(for mode: GenerationMode) -> TTSModel? {
-        manifest.models.first { $0.mode == mode }
+        loadState.manifest.models.first { $0.mode == mode }
     }
 
     static func model(id: String) -> TTSModel? {
-        manifest.models.first { $0.id == id }
+        loadState.manifest.models.first { $0.id == id }
     }
 
-    private static let manifest: TTSContractManifest = loadManifest()
+    private static let loadState: TTSContractLoadState = loadManifestState()
 
-    private static func loadManifest() -> TTSContractManifest {
-        let url = locateManifestURL()
-
+    private static func loadManifestState() -> TTSContractLoadState {
+        var locatedManifestURL: URL?
         do {
+            let url = try locateManifestURL()
+            locatedManifestURL = url
             let data = try Data(contentsOf: url)
             let decoded = try JSONDecoder().decode(TTSContractManifest.self, from: data)
             try validate(decoded)
-            return decoded
+            return TTSContractLoadState(
+                manifest: decoded,
+                manifestURL: url,
+                loadError: nil
+            )
+        } catch let error as ContractLoadError {
+            return handleLoadFailure(error)
         } catch {
-            fatalError("Failed to load qwenvoice_contract.json: \(error.localizedDescription)")
+            let failure = ContractLoadError(
+                summary: "Failed to load qwenvoice_contract.json",
+                details: error.localizedDescription,
+                manifestPath: locatedManifestURL?.path
+            )
+            return handleLoadFailure(failure)
         }
+    }
+
+    private static func handleLoadFailure(_ error: ContractLoadError) -> TTSContractLoadState {
+        #if DEBUG
+        fatalError("\(error.summary): \(error.details)")
+        #else
+        let manifestURL = error.manifestPath.map { URL(fileURLWithPath: $0) }
+        return TTSContractLoadState(
+            manifest: .empty,
+            manifestURL: manifestURL,
+            loadError: error
+        )
+        #endif
     }
 
     private static func validate(_ manifest: TTSContractManifest) throws {
@@ -89,7 +140,7 @@ enum TTSContract {
         }
     }
 
-    private static func locateManifestURL() -> URL {
+    private static func locateManifestURL() throws -> URL {
         let bundles = [Bundle.main, Bundle(for: TTSContractBundleLocator.self)] + Bundle.allBundles + Bundle.allFrameworks
 
         for bundle in bundles {
@@ -98,7 +149,14 @@ enum TTSContract {
             }
         }
 
-        fatalError("Could not locate bundled qwenvoice_contract.json")
+        let searchedBundles = bundles
+            .map(\.bundlePath)
+            .joined(separator: "\n")
+        throw ContractLoadError(
+            summary: "Could not locate bundled qwenvoice_contract.json",
+            details: "Searched bundles:\n\(searchedBundles)",
+            manifestPath: nil
+        )
     }
 
     private static func duplicateValues(in values: [String]) -> [String] {

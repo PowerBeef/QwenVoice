@@ -79,6 +79,8 @@ KATHLEEN_STEMS = [
     "data/arctic_a0004_1592748478",
 ]
 APP_STREAMING_INTERVAL = 0.32
+COMMITTED_CLONE_REFERENCE_AUDIO_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.wav"
+COMMITTED_CLONE_REFERENCE_TEXT_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.txt"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -255,6 +257,40 @@ def _multi_run(
     return summary
 
 
+def _summarize_records(records: list[dict[str, Any]], *, label: str) -> dict[str, Any]:
+    summary: dict[str, Any] = {"label": label, "runs": len(records), "raw_records": records}
+
+    wall_times = [
+        float(rec["wall_ms"])
+        for rec in records
+        if isinstance(rec.get("wall_ms"), (int, float))
+    ]
+    if wall_times:
+        summary["wall_ms"] = summarize_numeric(wall_times)
+
+    first_chunks = [
+        float(rec["first_chunk_ms"])
+        for rec in records
+        if isinstance(rec.get("first_chunk_ms"), (int, float))
+    ]
+    if first_chunks:
+        summary["first_chunk_ms"] = summarize_numeric(first_chunks)
+
+    timing_keys: set[str] = set()
+    for rec in records:
+        timing_keys.update(rec.get("server_timings_ms", {}).keys())
+    for key in sorted(timing_keys):
+        values = [
+            float(rec["server_timings_ms"][key])
+            for rec in records
+            if isinstance(rec.get("server_timings_ms", {}).get(key), (int, float))
+        ]
+        if values:
+            summary[f"server_{key}_ms"] = summarize_numeric(values)
+
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # Kathleen reference audio for clone benchmarks
 # ---------------------------------------------------------------------------
@@ -306,6 +342,20 @@ def _prepare_kathleen_reference(work_dir: Path) -> tuple[str, str]:
     return str(seed), combined_text
 
 
+def _preferred_clone_reference(work_dir: Path | None) -> tuple[str, str] | None:
+    if (
+        COMMITTED_CLONE_REFERENCE_AUDIO_PATH.exists()
+        and COMMITTED_CLONE_REFERENCE_TEXT_PATH.exists()
+    ):
+        return (
+            str(COMMITTED_CLONE_REFERENCE_AUDIO_PATH),
+            COMMITTED_CLONE_REFERENCE_TEXT_PATH.read_text(encoding="utf-8").strip(),
+        )
+    if work_dir is None:
+        return None
+    return _prepare_kathleen_reference(work_dir)
+
+
 # ---------------------------------------------------------------------------
 # Tier 1: Generation Performance
 # ---------------------------------------------------------------------------
@@ -340,8 +390,15 @@ def _run_tier1(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
             # For clone mode, set up ref audio
             if mode == "clone":
                 if kathleen_ref is None:
-                    eprint("    Preparing Kathleen reference audio...")
-                    kathleen_ref = _prepare_kathleen_reference(work_dir)
+                    eprint("    Preparing clone reference audio...")
+                    kathleen_ref = _preferred_clone_reference(work_dir)
+                if kathleen_ref is None:
+                    results.append(build_test_result(
+                        f"{mid}_{length_name}",
+                        passed=True,
+                        skip_reason="No clone reference fixture is available for perf profiling",
+                    ))
+                    continue
                 params["ref_audio"] = kathleen_ref[0]
                 params["ref_text"] = kathleen_ref[1]
 
@@ -468,9 +525,9 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
         # Prepare clone ref if needed
         clone_kwargs: dict[str, str] = {}
         if mode == "clone":
-            if kathleen_ref is None and work_dir is not None:
-                eprint("    Preparing Kathleen reference audio...")
-                kathleen_ref = _prepare_kathleen_reference(work_dir)
+            if kathleen_ref is None:
+                eprint("    Preparing clone reference audio...")
+                kathleen_ref = _preferred_clone_reference(work_dir)
             if kathleen_ref:
                 clone_kwargs = {"ref_audio": kathleen_ref[0], "ref_text": kathleen_ref[1]}
             else:
@@ -533,9 +590,12 @@ def _run_tier2(client: Any, contract: dict, runs: int, work_dir: Path | None = N
             f"prewarm_{mid}",
             passed=True,
             details={
+                "mode": mode,
                 "no_prewarm_ms": summarize_numeric(no_prewarm_times),
                 "with_prewarm_ms": summarize_numeric(prewarm_times),
                 "speedup_pct": speedup_pct,
+                "no_prewarm": _summarize_records(no_prewarm_records, label="no_prewarm"),
+                "with_prewarm": _summarize_records(prewarm_records, label="with_prewarm"),
                 "raw_records": no_prewarm_records + prewarm_records,
             },
         ))
@@ -564,9 +624,9 @@ def _run_tier3(client: Any, contract: dict, runs: int, work_dir: Path | None = N
         nonlocal kathleen_ref
         if mode != "clone":
             return {}
-        if kathleen_ref is None and work_dir is not None:
-            eprint("    Preparing Kathleen reference audio...")
-            kathleen_ref = _prepare_kathleen_reference(work_dir)
+        if kathleen_ref is None:
+            eprint("    Preparing clone reference audio...")
+            kathleen_ref = _preferred_clone_reference(work_dir)
         if kathleen_ref:
             return {"ref_audio": kathleen_ref[0], "ref_text": kathleen_ref[1]}
         return {}
@@ -695,7 +755,17 @@ def _run_tier4(client: Any, contract: dict, runs: int, work_dir: Path) -> dict[s
     mid = clone_model["id"]
 
     eprint("    Preparing Kathleen reference audio...")
-    ref_wav, ref_text = _prepare_kathleen_reference(work_dir)
+    preferred_reference = _preferred_clone_reference(work_dir)
+    if preferred_reference is None:
+        results.append(build_test_result(
+            "clone_reference_available",
+            passed=True,
+            skip_reason="No clone reference fixture is available for the exhaustive profiler",
+        ))
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return build_suite_result("tier4_clone", results, duration_ms)
+
+    ref_wav, ref_text = preferred_reference
 
     eprint(f"    Loading {mid}...")
     client.call("load_model", {"model_id": mid, "benchmark": True}, timeout=120)

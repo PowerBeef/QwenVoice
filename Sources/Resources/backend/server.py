@@ -47,6 +47,13 @@ def _resolve_cache_policy():
     return "adaptive"
 
 
+def _env_flag(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw not in {"0", "false", "False"}
+
+
 SAMPLE_RATE = 24000
 FILENAME_MAX_LEN = 20
 CACHE_POLICY = _resolve_cache_policy()
@@ -68,9 +75,17 @@ PREWARM_PROFILES = {
         "max_tokens": 128,
         "run_generation": True,
     },
+    "clone_prime": {
+        "text": "Voice warmup.",
+        "max_tokens": 48,
+        "run_generation": True,
+    },
 }
 NORMALIZED_CLONE_REF_CACHE_LIMIT = 32
 NORMALIZED_CLONE_REF_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+EXPERIMENTAL_CLONE_REF_TRIM = _env_flag(
+    "QWENVOICE_EXPERIMENTAL_CLONE_REF_TRIM", default=False
+)
 
 
 def _resolve_resources_dir():
@@ -136,6 +151,7 @@ CLONE_CONTEXT = CloneContextManager(
     clone_context_cache_capacity=CLONE_CONTEXT_CACHE_CAPACITY,
     normalized_clone_ref_cache_limit=NORMALIZED_CLONE_REF_CACHE_LIMIT,
     normalized_clone_ref_max_age_seconds=NORMALIZED_CLONE_REF_MAX_AGE_SECONDS,
+    experimental_trim_enabled=EXPERIMENTAL_CLONE_REF_TRIM,
 )
 GENERATION_PIPELINE = GenerationPipeline(
     STATE,

@@ -516,6 +516,27 @@ def _run_pipeline_tests() -> dict[str, Any]:
         assert result["passed"] is False
         assert result["clicks"]
 
+    def test_click_detection_ignores_matching_boundary_with_small_final_alignment_drift():
+        import numpy as np
+
+        from .audio_analysis import check_click_detection
+
+        chunk_a = np.linspace(0.0, 0.12, 64, dtype=np.float32)
+        chunk_b = np.concatenate((
+            np.array([0.95], dtype=np.float32),
+            np.linspace(0.94, 0.2, 63, dtype=np.float32),
+        ))
+        final_audio = np.concatenate((
+            chunk_a,
+            chunk_b,
+            np.array([0.19, 0.18], dtype=np.float32),
+        ))
+        result = check_click_detection(
+            [(chunk_a, 24000), (chunk_b, 24000)],
+            final_audio=final_audio,
+        )
+        assert result["passed"] is True
+
     def test_build_ui_launch_environment_defaults_screenshot_capture_mode():
         context = prepare_ui_launch_context(backend_mode="stub", data_root="fixture")
         try:
@@ -575,6 +596,7 @@ def _run_pipeline_tests() -> dict[str, Any]:
         ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
         ("click_detection_ignores_matching_final_boundary_transient", test_click_detection_ignores_matching_final_boundary_transient),
         ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
+        ("click_detection_ignores_matching_boundary_with_small_final_alignment_drift", test_click_detection_ignores_matching_boundary_with_small_final_alignment_drift),
         ("build_ui_launch_environment_defaults_screenshot_capture_mode", test_build_ui_launch_environment_defaults_screenshot_capture_mode),
         ("build_ui_launch_environment_preserves_explicit_capture_mode", test_build_ui_launch_environment_preserves_explicit_capture_mode),
         ("split_generation_pipeline_forwards_voice_kwarg", test_split_generation_pipeline_forwards_voice_kwarg),
@@ -709,6 +731,125 @@ def _run_server_tests() -> dict[str, Any]:
 
         assert kwargs["lang_code"] == "fr"
 
+    def test_latency_first_chunk_uses_received_notification_timestamp():
+        from harness_lib.bench_runner import _latency_first_chunk_ms
+
+        notifications = [
+            {"method": "progress", "_received_at_ms": 7.5},
+            {"method": "generation_chunk", "_received_at_ms": 123.4},
+            {"method": "generation_chunk", "_received_at_ms": 456.7},
+        ]
+
+        assert _latency_first_chunk_ms(notifications) == 123.4
+
+    def test_latency_generate_params_use_streaming_and_design_instruct():
+        from harness_lib.bench_runner import _latency_generate_params
+
+        params = _latency_generate_params(
+            mode="design",
+            output_path="/tmp/latency.wav",
+            clone_reference_path=None,
+            clone_reference_text=None,
+        )
+
+        assert params["stream"] is True
+        assert "streaming_interval" in params
+        assert "instruct" in params
+        assert "voice_description" not in params
+
+    def test_clone_regression_reference_falls_back_to_committed_fixture():
+        from harness_lib import clone_regression_runner
+
+        original_reference_audio = clone_regression_runner.REFERENCE_AUDIO_PATH
+        original_reference_text = clone_regression_runner.REFERENCE_TEXT_PATH
+        original_committed_audio = clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH
+        original_committed_text = clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH
+
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            committed_audio = temp_root / "release_clone_reference.wav"
+            committed_text = temp_root / "release_clone_reference.txt"
+            committed_audio.write_bytes(b"wav")
+            committed_text.write_text("fixture transcript", encoding="utf-8")
+
+            try:
+                clone_regression_runner.REFERENCE_AUDIO_PATH = temp_root / "missing_saved.wav"
+                clone_regression_runner.REFERENCE_TEXT_PATH = temp_root / "missing_saved.txt"
+                clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH = committed_audio
+                clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH = committed_text
+
+                resolved = clone_regression_runner.resolve_clone_regression_reference()
+                assert resolved == (committed_audio, committed_text)
+            finally:
+                clone_regression_runner.REFERENCE_AUDIO_PATH = original_reference_audio
+                clone_regression_runner.REFERENCE_TEXT_PATH = original_reference_text
+                clone_regression_runner.COMMITTED_REFERENCE_AUDIO_PATH = original_committed_audio
+                clone_regression_runner.COMMITTED_REFERENCE_TEXT_PATH = original_committed_text
+
+    def test_unload_model_clears_prewarm_and_clone_prime_state():
+        original_prewarmed_keys = set(server._prewarmed_model_keys)
+        original_primed_keys = set(server._primed_clone_reference_keys)
+
+        try:
+            server._prewarmed_model_keys.add("pro_custom|custom|vivian|Conversational")
+            server._primed_clone_reference_keys.add("pro_clone|clone|fixture.wav|hello")
+
+            result = server.handle_unload_model({})
+
+            assert result["success"] is True
+            assert server._prewarmed_model_keys == set()
+            assert server._primed_clone_reference_keys == set()
+        finally:
+            server._prewarmed_model_keys = original_prewarmed_keys
+            server._primed_clone_reference_keys = original_primed_keys
+
+    def test_custom_prewarm_primes_streaming_generator():
+        calls: list[dict[str, Any]] = []
+
+        original_current_model = server._current_model
+        original_build_standard_generator = server._build_standard_generator
+
+        try:
+            server._current_model = object()
+
+            def fake_build_standard_generator(
+                model,
+                text,
+                temperature,
+                max_tokens=None,
+                *,
+                language="auto",
+                voice=None,
+                instruct=None,
+                stream=False,
+                streaming_interval=None,
+            ):
+                calls.append({
+                    "text": text,
+                    "max_tokens": max_tokens,
+                    "voice": voice,
+                    "instruct": instruct,
+                    "stream": stream,
+                    "streaming_interval": streaming_interval,
+                })
+                yield {"audio": "warmup"}
+
+            server._build_standard_generator = fake_build_standard_generator
+
+            result = server._run_model_prewarm(
+                "custom",
+                voice="vivian",
+                instruct="Conversational",
+            )
+
+            assert calls
+            assert calls[0]["stream"] is True
+            assert calls[0]["streaming_interval"] == server.DEFAULT_STREAMING_INTERVAL
+            assert "first_stream_chunk" in result
+        finally:
+            server._current_model = original_current_model
+            server._build_standard_generator = original_build_standard_generator
+
     def test_clone_prewarm_prepared_generator_omits_instruct_kwarg():
         calls: list[dict[str, Any]] = []
 
@@ -722,7 +863,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._current_model = object()
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -744,6 +885,14 @@ def _run_server_tests() -> dict[str, Any]:
             assert calls
             assert "instruct" not in calls[0]
             assert "language" not in calls[0]
+            assert calls[0]["stream"] is True
+            assert calls[0]["streaming_interval"] == server.DEFAULT_STREAMING_INTERVAL
+            assert "first_stream_chunk" in result
+            assert result["generation"] >= result["first_stream_chunk"]
+            assert (
+                result["prewarm_max_tokens"]
+                == server.PREWARM_PROFILES["clone_prime"]["max_tokens"]
+            )
         finally:
             server._current_model = original_current_model
             server._normalize_clone_reference = original_normalize_clone_reference
@@ -764,7 +913,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._current_model = object()
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -784,7 +933,12 @@ def _run_server_tests() -> dict[str, Any]:
             )
 
             assert result["prepared_clone_used"] is True
+            assert calls[0]["stream"] is True
             assert calls[0]["language"] == "fr"
+            assert (
+                result["prewarm_max_tokens"]
+                == server.PREWARM_PROFILES["clone_prime"]["max_tokens"]
+            )
         finally:
             server._current_model = original_current_model
             server._normalize_clone_reference = original_normalize_clone_reference
@@ -817,7 +971,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -893,7 +1047,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -983,7 +1137,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._get_or_prepare_clone_context = (
                     lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -1065,7 +1219,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._get_or_prepare_clone_context = (
                     lambda clean_ref_audio_path, ref_text: ("prepared-clone-context", True)
@@ -1145,7 +1299,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._can_prepare_icl_fn = lambda model: True
 
@@ -1251,7 +1405,7 @@ def _run_server_tests() -> dict[str, Any]:
                 )
                 server._normalize_clone_reference = lambda path: path
                 server._resolve_clone_transcript = (
-                    lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
+                    lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Prepared transcript"
                 )
                 server._can_prepare_icl_fn = lambda model: True
 
@@ -1630,7 +1784,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -1733,7 +1891,7 @@ def _run_server_tests() -> dict[str, Any]:
             )
             server._normalize_clone_reference = lambda path: "/tmp/normalized-reference.wav"
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = (
                 lambda clean_ref_audio_path, ref_text: ("prepared-context", False)
@@ -1830,7 +1988,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -1953,7 +2115,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -2063,7 +2229,11 @@ def _run_server_tests() -> dict[str, Any]:
                 normalize_calls += 1
                 return "/tmp/normalized-reference.wav"
 
-            def fake_resolve(clean_ref_audio_path: str, requested_transcript: str | None) -> str:
+            def fake_resolve(
+                clean_ref_audio_path: str,
+                original_ref_audio_path: str | None,
+                requested_transcript: str | None,
+            ) -> str:
                 nonlocal transcript_calls
                 transcript_calls += 1
                 return requested_transcript or "Resolved transcript"
@@ -2159,7 +2329,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
 
@@ -2241,7 +2411,7 @@ def _run_server_tests() -> dict[str, Any]:
             server._derive_generation_paths = lambda path: (os.path.dirname(path), Path(path).stem, path)
             server._normalize_clone_reference = lambda path: path
             server._resolve_clone_transcript = (
-                lambda clean_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
+                lambda clean_ref_audio_path, original_ref_audio_path, requested_transcript: requested_transcript or "Resolved transcript"
             )
             server._get_or_prepare_clone_context = lambda clean_ref_audio_path, ref_text: (None, None)
 
@@ -2349,6 +2519,130 @@ def _run_server_tests() -> dict[str, Any]:
         finally:
             os.unlink(tmp_path)
 
+    def test_convert_audio_if_needed_falls_back_to_ffmpeg_for_webm():
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp:
+            input_path = tmp.name
+
+        original_audio_write_fn = server._audio_write_fn
+        original_convert_audio_with_mlx = server._convert_audio_with_mlx
+        original_convert_audio_to_wav = server._convert_audio_to_wav
+        fallback_calls: list[tuple[str, str]] = []
+
+        try:
+            server._audio_write_fn = object()
+
+            def fake_convert_audio_with_mlx(input_path, output_path):
+                raise ValueError("webm is not supported by the mlx conversion path")
+
+            def fake_convert_audio_to_wav(input_path, output_path):
+                fallback_calls.append((input_path, output_path))
+                return output_path
+
+            server._convert_audio_with_mlx = fake_convert_audio_with_mlx
+            server._convert_audio_to_wav = fake_convert_audio_to_wav
+
+            wav_path = server.convert_audio_if_needed(input_path)
+
+            assert len(fallback_calls) == 1
+            assert fallback_calls[0][0] == input_path
+            assert fallback_calls[0][1].endswith(".wav")
+            assert wav_path == fallback_calls[0][1]
+        finally:
+            server._audio_write_fn = original_audio_write_fn
+            server._convert_audio_with_mlx = original_convert_audio_with_mlx
+            server._convert_audio_to_wav = original_convert_audio_to_wav
+            os.unlink(input_path)
+
+    def test_resolve_clone_transcript_prefers_original_reference_sidecar():
+        with tempfile.TemporaryDirectory(prefix="qwenvoice_clone_transcript_") as tmp_dir:
+            original_path = os.path.join(tmp_dir, "reference.wav")
+            normalized_path = os.path.join(tmp_dir, "normalized.wav")
+            original_sidecar = os.path.splitext(original_path)[0] + ".txt"
+            normalized_sidecar = os.path.splitext(normalized_path)[0] + ".txt"
+
+            Path(original_path).write_bytes(b"RIFF")
+            Path(normalized_path).write_bytes(b"RIFF")
+            Path(original_sidecar).write_text("Original sidecar transcript", encoding="utf-8")
+            Path(normalized_sidecar).write_text("Normalized sidecar transcript", encoding="utf-8")
+
+            resolved = server._resolve_clone_transcript(
+                normalized_path,
+                original_path,
+                None,
+            )
+
+            assert resolved == "Original sidecar transcript"
+
+    def test_normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short():
+        import struct
+        import wave
+
+        original_trim_enabled = server.EXPERIMENTAL_CLONE_REF_TRIM
+        original_trim_helper = server._trim_clone_reference_silence
+        original_metrics = dict(getattr(server, "_last_clone_reference_metrics", {}))
+
+        with tempfile.TemporaryDirectory(prefix="qwenvoice_clone_trim_") as tmp_dir:
+            input_path = os.path.join(tmp_dir, "reference.wav")
+
+            with wave.open(input_path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(24000)
+                wf.writeframes(struct.pack("<" + "h" * 24000, *([0] * 24000)))
+
+            def fake_trim(input_path, output_path):
+                with wave.open(output_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(24000)
+                    wf.writeframes(struct.pack("<" + "h" * 1200, *([0] * 1200)))
+                return output_path
+
+            try:
+                server.EXPERIMENTAL_CLONE_REF_TRIM = True
+                server._trim_clone_reference_silence = fake_trim
+
+                normalized = server._normalize_clone_reference(input_path)
+
+                assert normalized == input_path
+                assert server._last_clone_reference_metrics["trim_applied"] is False
+                assert server._last_clone_reference_metrics["trim_status"] == "trim_rejected_too_short"
+            finally:
+                server.EXPERIMENTAL_CLONE_REF_TRIM = original_trim_enabled
+                server._trim_clone_reference_silence = original_trim_helper
+                server._last_clone_reference_metrics = original_metrics
+
+    def test_tts_roundtrip_word_error_rate_normalizes_punctuation():
+        from harness_lib.tts_roundtrip_runner import normalize_wer_text, word_error_rate
+
+        assert normalize_wer_text("Hello, QwenVoice!") == ["hello", "qwenvoice"]
+        assert word_error_rate(
+            "The package is ready.",
+            "the package is ready",
+        ) == 0.0
+
+    def test_tts_roundtrip_runtime_variant_labels_known_paths():
+        from harness_lib.paths import APP_VENV_PYTHON, BUNDLED_PYTHON_BIN
+        from harness_lib.tts_roundtrip_runner import _runtime_variant_label
+
+        assert _runtime_variant_label(str(APP_VENV_PYTHON)) == "app_support_venv"
+        assert _runtime_variant_label(str(BUNDLED_PYTHON_BIN)) == "bundled_runtime"
+        assert _runtime_variant_label("/tmp/custom/python3") == "custom_python"
+
+    def test_tts_roundtrip_helper_variant_defaults_to_current_overlay():
+        from harness_lib.tts_roundtrip_runner import _helper_variant_label
+
+        original = os.environ.pop("QWENVOICE_MLX_AUDIO_HELPER_VARIANT", None)
+        try:
+            assert _helper_variant_label() == "current_overlay"
+            os.environ["QWENVOICE_MLX_AUDIO_HELPER_VARIANT"] = "audit_candidate_a"
+            assert _helper_variant_label() == "audit_candidate_a"
+        finally:
+            if original is None:
+                os.environ.pop("QWENVOICE_MLX_AUDIO_HELPER_VARIANT", None)
+            else:
+                os.environ["QWENVOICE_MLX_AUDIO_HELPER_VARIANT"] = original
+
     def test_stream_selected_audio_emits_chunks_before_final_write():
         try:
             import numpy as np
@@ -2429,6 +2723,11 @@ def _run_server_tests() -> dict[str, Any]:
         ("custom_prewarm_identity_tracks_shape", test_custom_prewarm_identity_tracks_voice_and_instruction),
         ("build_generation_kwargs_omits_auto_language", test_build_generation_kwargs_omits_auto_language),
         ("build_generation_kwargs_includes_explicit_language", test_build_generation_kwargs_includes_explicit_language),
+        ("latency_first_chunk_uses_received_notification_timestamp", test_latency_first_chunk_uses_received_notification_timestamp),
+        ("latency_generate_params_use_streaming_and_design_instruct", test_latency_generate_params_use_streaming_and_design_instruct),
+        ("clone_regression_reference_falls_back_to_committed_fixture", test_clone_regression_reference_falls_back_to_committed_fixture),
+        ("unload_model_clears_prewarm_and_clone_prime_state", test_unload_model_clears_prewarm_and_clone_prime_state),
+        ("custom_prewarm_primes_streaming_generator", test_custom_prewarm_primes_streaming_generator),
         ("clone_prewarm_prepared_generator_omits_instruct_kwarg", test_clone_prewarm_prepared_generator_omits_instruct_kwarg),
         ("clone_prewarm_prepared_generator_forwards_explicit_language", test_clone_prewarm_prepared_generator_forwards_explicit_language),
         ("handle_generate_prepared_clone_omits_instruct_kwarg", test_handle_generate_prepared_clone_omits_instruct_kwarg),
@@ -2460,6 +2759,12 @@ def _run_server_tests() -> dict[str, Any]:
         ("make_output_path", test_make_output_path),
         ("get_audio_metadata_missing", test_get_audio_metadata_missing),
         ("get_audio_metadata_valid", test_get_audio_metadata_valid),
+        ("convert_audio_if_needed_falls_back_to_ffmpeg_for_webm", test_convert_audio_if_needed_falls_back_to_ffmpeg_for_webm),
+        ("resolve_clone_transcript_prefers_original_reference_sidecar", test_resolve_clone_transcript_prefers_original_reference_sidecar),
+        ("normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short", test_normalize_clone_reference_trim_falls_back_when_trimmed_audio_is_too_short),
+        ("tts_roundtrip_word_error_rate_normalizes_punctuation", test_tts_roundtrip_word_error_rate_normalizes_punctuation),
+        ("tts_roundtrip_runtime_variant_labels_known_paths", test_tts_roundtrip_runtime_variant_labels_known_paths),
+        ("tts_roundtrip_helper_variant_defaults_to_current_overlay", test_tts_roundtrip_helper_variant_defaults_to_current_overlay),
     ]
 
     for name, fn in tests:
@@ -2557,14 +2862,57 @@ def _run_rpc_tests(python_path: str | None) -> dict[str, Any]:
             result = client.call("get_model_info", timeout=10)
             contract_ids = set(model_ids())
             if isinstance(result, list):
-                backend_ids = {m.get("id") or m.get("model_id") for m in result if isinstance(m, dict)}
+                backend_models = [m for m in result if isinstance(m, dict)]
             elif isinstance(result, dict) and "models" in result:
-                backend_ids = {m.get("id") or m.get("model_id") for m in result["models"] if isinstance(m, dict)}
+                backend_models = [m for m in result["models"] if isinstance(m, dict)]
             else:
-                backend_ids = set()
+                backend_models = []
+            backend_ids = {m.get("id") or m.get("model_id") for m in backend_models}
             assert backend_ids == contract_ids, (
                 f"Model ID mismatch: backend={backend_ids}, contract={contract_ids}"
             )
+            required_fields = {
+                "resolved_path",
+                "downloaded",
+                "complete",
+                "repairable",
+                "missing_required_paths",
+                "size_bytes",
+            }
+            for model_info in backend_models:
+                missing_fields = required_fields - set(model_info.keys())
+                assert not missing_fields, (
+                    f"Model info missing fields for {model_info.get('id')}: {sorted(missing_fields)}"
+                )
+                assert isinstance(model_info["downloaded"], bool), (
+                    f"downloaded must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["complete"], bool), (
+                    f"complete must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["repairable"], bool), (
+                    f"repairable must be bool for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["missing_required_paths"], list), (
+                    f"missing_required_paths must be list for {model_info.get('id')}"
+                )
+                assert isinstance(model_info["size_bytes"], int), (
+                    f"size_bytes must be int for {model_info.get('id')}"
+                )
+                if model_info["complete"]:
+                    assert model_info["downloaded"], (
+                        f"complete model must also be downloaded for {model_info.get('id')}"
+                    )
+                    assert not model_info["repairable"], (
+                        f"complete model must not be repairable for {model_info.get('id')}"
+                    )
+                    assert not model_info["missing_required_paths"], (
+                        f"complete model must not report missing files for {model_info.get('id')}"
+                    )
+                if model_info["repairable"]:
+                    assert model_info["downloaded"], (
+                        f"repairable model must report downloaded for {model_info.get('id')}"
+                    )
 
         results.append(_timed_test("get_model_info_matches_contract", test_get_model_info))
 

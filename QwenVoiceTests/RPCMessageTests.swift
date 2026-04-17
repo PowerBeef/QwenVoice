@@ -60,6 +60,41 @@ final class RPCMessageTests: XCTestCase {
         XCTAssertEqual(decoded.objectValue?["key"]?.stringValue, "val")
     }
 
+    func testModelInfoDecodesFromRPCValue() throws {
+        let value = RPCValue.object([
+            "id": .string("pro_clone"),
+            "name": .string("Qwen Voice Clone"),
+            "folder": .string("QwenVoiceClone"),
+            "mode": .string("clone"),
+            "tier": .string("pro"),
+            "output_subfolder": .string("Clones"),
+            "hugging_face_repo": .string("qwen/pro-clone"),
+            "required_relative_paths": .array([.string("weights/model.safetensors"), .string("config.json")]),
+            "resolved_path": .string("/tmp/QwenVoiceClone"),
+            "downloaded": .bool(true),
+            "complete": .bool(false),
+            "repairable": .bool(true),
+            "missing_required_paths": .array([.string("config.json")]),
+            "size_bytes": .int(1024),
+            "mlx_audio_version": .string("0.4.2"),
+            "supports_streaming": .bool(true),
+            "supports_prepared_clone": .bool(true),
+            "supports_clone_streaming": .bool(true),
+            "supports_batch": .bool(true),
+        ])
+
+        let decoded = try value.decoded(as: ModelInfo.self)
+
+        XCTAssertEqual(decoded.id, "pro_clone")
+        XCTAssertEqual(decoded.mode, .clone)
+        XCTAssertEqual(decoded.resolvedPath, "/tmp/QwenVoiceClone")
+        XCTAssertTrue(decoded.downloaded)
+        XCTAssertFalse(decoded.complete)
+        XCTAssertTrue(decoded.repairable)
+        XCTAssertEqual(decoded.missingRequiredPaths, ["config.json"])
+        XCTAssertEqual(decoded.sizeBytes, 1024)
+    }
+
     // MARK: - RPCResponse decoding variants
 
     func testDecodeResultResponse() throws {

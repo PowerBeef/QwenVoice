@@ -7,7 +7,7 @@ private final class MainCapableTestWindow: NSWindow {
 }
 
 final class AppStartupCoordinatorTests: XCTestCase {
-    func testLaunchActionPrefersBundledRuntimeOverOtherPaths() {
+    func testLaunchActionPrefersStubRuntimeWhenStubModeIsExplicit() {
         let action = EnvironmentSetupStateMachine().launchAction(
             machineIdentifier: "arm64",
             bundledPythonPath: "/Applications/QwenVoice.app/Contents/Resources/python/bin/python3",
@@ -18,10 +18,7 @@ final class AppStartupCoordinatorTests: XCTestCase {
             isMarkerValid: true
         )
 
-        XCTAssertEqual(
-            action,
-            .validateBundled("/Applications/QwenVoice.app/Contents/Resources/python/bin/python3")
-        )
+        XCTAssertEqual(action, .runStub)
     }
 
     func testLaunchActionFallsBackToStubBeforeUITestLiveOrDevVenv() {
@@ -137,6 +134,22 @@ final class AppStartupCoordinatorTests: XCTestCase {
                 UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "invalid"
             ]),
             .content
+        )
+    }
+
+    func testLaunchDiagnosticsAreDisabledForUITestOrDerivedDataSourceBuilds() {
+        XCTAssertFalse(
+            AppLaunchPreflight.shouldShowDiagnostics(
+                isUITest: true,
+                bundlePath: "/Applications/QwenVoice.app"
+            )
+        )
+
+        XCTAssertFalse(
+            AppLaunchPreflight.shouldShowDiagnostics(
+                isUITest: false,
+                bundlePath: "/Users/test/Library/Developer/Xcode/DerivedData/QwenVoice/Build/Products/Debug/QwenVoice.app"
+            )
         )
     }
 

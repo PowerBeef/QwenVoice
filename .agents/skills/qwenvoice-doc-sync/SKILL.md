@@ -76,7 +76,7 @@ Checked-in release notes should be concise and user-facing. Avoid changelog-styl
 ## Useful Checks
 
 ```bash
-rg -n "run_tests.sh|run_backend_tests.sh|docs/reference/testing.md" README.md docs AGENTS.md
+rg -n "run(_backend)?_tests\\.sh|docs/reference/te(sting)\\.md" README.md docs AGENTS.md
 rg -n "MARKETING_VERSION|CURRENT_PROJECT_VERSION" project.yml
 find docs -maxdepth 3 -type f | sort
 python3 scripts/harness.py validate

@@ -134,15 +134,20 @@ final class BatchGenerationRunnerTests: XCTestCase {
         )
 
         var progressSnapshots: [BatchProgressSnapshot] = []
-        let outcome = try await runner.run(
+        let outcome = await runner.run(
             request: request,
             makeOutputPath: { _, text in "/tmp/\(text.replacingOccurrences(of: " ", with: "_")).wav" },
             onProgress: { snapshot in
                 progressSnapshots.append(snapshot)
-            }
+            },
+            onItemsUpdated: { _ in }
         )
 
-        XCTAssertEqual(outcome, .completed(completedCount: 2))
+        guard case .completed(let items) = outcome else {
+            return XCTFail("Expected completed outcome, got \(outcome)")
+        }
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.filter(\.isSaved).count, 2)
         XCTAssertEqual(bridge.cloneBatchCalls.count, 1)
         XCTAssertTrue(bridge.cloneCalls.isEmpty)
         XCTAssertEqual(
@@ -177,13 +182,18 @@ final class BatchGenerationRunnerTests: XCTestCase {
             refText: "Reference transcript"
         )
 
-        let outcome = try await runner.run(
+        let outcome = await runner.run(
             request: request,
             makeOutputPath: { _, _ in "/tmp/solo.wav" },
-            onProgress: { _ in }
+            onProgress: { _ in },
+            onItemsUpdated: { _ in }
         )
 
-        XCTAssertEqual(outcome, .completed(completedCount: 1))
+        guard case .completed(let items) = outcome else {
+            return XCTFail("Expected completed outcome, got \(outcome)")
+        }
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.status, .saved(audioPath: "/tmp/solo.wav"))
         XCTAssertTrue(bridge.cloneBatchCalls.isEmpty)
         XCTAssertEqual(bridge.cloneCalls.count, 1)
         XCTAssertEqual(store.savedGenerations.count, 1)
@@ -211,12 +221,13 @@ final class BatchGenerationRunnerTests: XCTestCase {
         )
 
         var snapshots: [BatchProgressSnapshot] = []
-        _ = try await runner.run(
+        _ = await runner.run(
             request: request,
             makeOutputPath: { _, text in "/tmp/\(text.replacingOccurrences(of: " ", with: "_")).wav" },
             onProgress: { snapshot in
                 snapshots.append(snapshot)
-            }
+            },
+            onItemsUpdated: { _ in }
         )
 
         XCTAssertTrue(
@@ -265,26 +276,50 @@ final class BatchGenerationRunnerTests: XCTestCase {
                     refText: "Reference transcript"
                 )
             },
+            isModelAvailable: { _ in true },
+            recoveryDetail: { _ in "Install model" },
             bridge: bridge,
             store: store
         )
 
         try await waitUntil(timeoutSeconds: 1.0) {
             coordinator.progressSnapshot.statusMessage == "Generating audio batch..."
-                || coordinator.outcome == .completed(completedCount: 2)
+                || coordinator.outcome?.completedCount == 2
         }
 
         XCTAssertEqual(coordinator.progressSnapshot.totalCount, 2)
         XCTAssertTrue(
             coordinator.progressSnapshot.statusMessage == "Generating audio batch..."
-                || coordinator.outcome == .completed(completedCount: 2)
+                || coordinator.outcome?.completedCount == 2
         )
 
         try await waitUntil(timeoutSeconds: 1.0) {
-            coordinator.outcome == .completed(completedCount: 2)
+            coordinator.outcome?.completedCount == 2
         }
 
+        guard case .completed(let items) = coordinator.outcome else {
+            return XCTFail("Expected completed batch outcome, got \(String(describing: coordinator.outcome))")
+        }
+        XCTAssertEqual(items.filter(\.isSaved).count, 2)
+        XCTAssertEqual(coordinator.itemStates.filter(\.isSaved).count, 2)
         XCTAssertEqual(store.savedGenerations.count, 2)
+    }
+
+    func testBatchGenerationOutcomeRetryHelpersSeparateRemainingAndFailedLines() {
+        let outcome = BatchGenerationOutcome.cancelled(
+            items: [
+                BatchGenerationItemState(index: 0, line: "Saved line", status: .saved(audioPath: "/tmp/saved.wav")),
+                BatchGenerationItemState(index: 1, line: "Pending line", status: .pending),
+                BatchGenerationItemState(index: 2, line: "Failed line", status: .failed(message: "boom")),
+                BatchGenerationItemState(index: 3, line: "Cancelled line", status: .cancelled),
+            ],
+            restartFailedMessage: nil
+        )
+
+        XCTAssertEqual(outcome.completedCount, 1)
+        XCTAssertEqual(outcome.retryRemainingLines, ["Pending line", "Cancelled line"])
+        XCTAssertEqual(outcome.retryFailedLines, ["Failed line"])
+        XCTAssertEqual(outcome.savedAudioPaths, ["/tmp/saved.wav"])
     }
 
     @MainActor

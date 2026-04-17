@@ -453,20 +453,27 @@ class GenerationPipeline:
         prepared_clone_used = False
         clone_cache_hit = None
         generation_ms = 0
+        first_stream_chunk_ms = 0
 
         if mode == "custom":
-            warm_results = list(
-                self.build_standard_generator(
-                    self.state.current_model,
-                    text=warmup_text,
-                    temperature=0.6,
-                    max_tokens=warmup_max_tokens,
-                    language=language,
-                    voice=voice or self.default_speaker,
-                    instruct=instruct or "Normal tone",
-                )
+            generator = self.build_standard_generator(
+                self.state.current_model,
+                text=warmup_text,
+                temperature=0.6,
+                max_tokens=warmup_max_tokens,
+                language=language,
+                voice=voice or self.default_speaker,
+                instruct=instruct or "Normal tone",
+                stream=True,
+                streaming_interval=self.default_streaming_interval,
             )
-            generation_ms = int((time.perf_counter() - generation_start) * 1000)
+            warm_results = None
+            streaming_timings = self.prime_streaming_generator(
+                generator,
+                empty_error_message="Custom prewarm produced no streaming chunk",
+            )
+            generation_ms = streaming_timings["generation"]
+            first_stream_chunk_ms = streaming_timings["first_stream_chunk"]
         elif mode == "design":
             warm_results = None
             generation_ms = int((time.perf_counter() - generation_start) * 1000)
@@ -481,52 +488,24 @@ class GenerationPipeline:
                 raise RuntimeError("Could not process reference audio file")
 
             resolved_ref_text = self.clone_context.resolve_clone_transcript(
-                clean_ref_audio, ref_text
+                clean_ref_audio, ref_audio, ref_text
             )
-            prepare_start = time.perf_counter()
-            prepared_context, clone_cache_hit = (
-                self.clone_context.get_or_prepare_clone_context(
-                    clean_ref_audio, resolved_ref_text
-                )
+            # Reuse the lighter clone-prime path so idle prewarm seeds the same
+            # prepared reference and first streaming chunk state that the app
+            # relies on, without paying for a longer full warmup utterance.
+            prime_timings = self.run_clone_reference_prime(
+                clean_ref_audio,
+                resolved_ref_text,
+                streaming_interval=self.default_streaming_interval,
+                language=language,
             )
-            prepare_clone_context_ms = int(
-                (time.perf_counter() - prepare_start) * 1000
-            )
-            if (
-                prepared_context is not None
-                and self.state.generate_prepared_icl_fn is not None
-            ):
-                prepared_clone_used = True
-                generator = self.state.generate_prepared_icl_fn(
-                    self.state.current_model,
-                    warmup_text,
-                    prepared_context,
-                    **self.with_optional_kwarg(
-                        {
-                            "temperature": 0.6,
-                            "top_p": 1.0,
-                            "repetition_penalty": 1.5,
-                            "max_tokens": warmup_max_tokens,
-                        },
-                        "language",
-                        language,
-                    ),
-                )
-                warm_results = list(generator)
-            else:
-                warm_kwargs = {
-                    "text": warmup_text,
-                    "ref_audio": clean_ref_audio,
-                    "verbose": False,
-                    "temperature": 0.6,
-                    "max_tokens": warmup_max_tokens,
-                }
-                if language is not None:
-                    warm_kwargs["lang_code"] = language
-                if resolved_ref_text:
-                    warm_kwargs["ref_text"] = resolved_ref_text
-                warm_results = list(self.state.current_model.generate(**warm_kwargs))
-            generation_ms = int((time.perf_counter() - generation_start) * 1000)
+            prepare_clone_context_ms = prime_timings["prepare_clone_context"]
+            generation_ms = prime_timings["generation"]
+            first_stream_chunk_ms = prime_timings["first_stream_chunk"]
+            prepared_clone_used = prime_timings["prepared_clone_used"]
+            clone_cache_hit = prime_timings["clone_cache_hit"]
+            warmup_max_tokens = prime_timings.get("prime_max_tokens", warmup_max_tokens)
+            warm_results = None
         else:
             raise ValueError(f"Unknown prewarm mode: {mode}")
 
@@ -537,12 +516,18 @@ class GenerationPipeline:
             "normalize_reference": normalize_reference_ms,
             "prepare_clone_context": prepare_clone_context_ms,
             "generation": generation_ms,
+            "first_stream_chunk": first_stream_chunk_ms,
             "prepared_clone_used": prepared_clone_used,
             "clone_cache_hit": clone_cache_hit,
             "prewarm_max_tokens": warmup_max_tokens,
         }
 
-    def prime_streaming_generator(self, generator):
+    def prime_streaming_generator(
+        self,
+        generator,
+        *,
+        empty_error_message="Streaming prime produced no chunk",
+    ):
         generation_start = time.perf_counter()
         first_chunk_ms = None
 
@@ -560,7 +545,7 @@ class GenerationPipeline:
             self.clone_context.reset_clone_streaming_state()
 
         if first_chunk_ms is None:
-            raise RuntimeError("Clone priming produced no streaming chunk")
+            raise RuntimeError(empty_error_message)
 
         return {
             "first_stream_chunk": first_chunk_ms,
@@ -573,7 +558,7 @@ class GenerationPipeline:
         if self.state.current_model is None:
             raise RuntimeError("No model loaded. Call load_model first.")
 
-        profile = self.prewarm_profile("clone")
+        profile = self.prewarm_profiles.get("clone_prime") or self.prewarm_profile("clone")
         warmup_text = profile["text"]
         warmup_max_tokens = profile["max_tokens"]
         prepare_clone_context_ms = 0
@@ -623,7 +608,10 @@ class GenerationPipeline:
                 **({"language": language} if language is not None else {}),
             )
 
-        streaming_timings = self.prime_streaming_generator(generator)
+        streaming_timings = self.prime_streaming_generator(
+            generator,
+            empty_error_message="Clone priming produced no streaming chunk",
+        )
         return {
             "prepare_clone_context": prepare_clone_context_ms,
             "generation": streaming_timings["generation"],

@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 
 struct BatchProgressSnapshot: Equatable {
     let completedCount: Int
@@ -38,6 +37,68 @@ struct BatchProgressSnapshot: Equatable {
             return "\(completedText) · Item \(min(activeItemIndex + 1, totalCount)) active"
         }
         return completedText
+    }
+}
+
+struct BatchGenerationItemState: Identifiable, Equatable {
+    enum Status: Equatable {
+        case pending
+        case running
+        case saved(audioPath: String)
+        case failed(message: String)
+        case cancelled
+    }
+
+    let id = UUID()
+    let index: Int
+    let line: String
+    var status: Status
+
+    var audioPath: String? {
+        if case .saved(let audioPath) = status {
+            return audioPath
+        }
+        return nil
+    }
+
+    var isSaved: Bool {
+        if case .saved = status {
+            return true
+        }
+        return false
+    }
+
+    var isRetryable: Bool {
+        switch status {
+        case .pending, .running, .failed, .cancelled:
+            return true
+        case .saved:
+            return false
+        }
+    }
+
+    var statusLabel: String {
+        switch status {
+        case .pending:
+            return "Pending"
+        case .running:
+            return "Running"
+        case .saved:
+            return "Saved"
+        case .failed:
+            return "Failed"
+        case .cancelled:
+            return "Cancelled"
+        }
+    }
+
+    var statusMessage: String? {
+        switch status {
+        case .failed(let message):
+            return message
+        default:
+            return nil
+        }
     }
 }
 
@@ -124,9 +185,9 @@ struct BatchGenerationRequest {
         self.refText = refText
     }
 
-    func validationError(modelsDirectory: URL) -> String? {
-        guard model.isAvailable(in: modelsDirectory) else {
-            return "Model '\(model.name)' is unavailable or incomplete. Go to Settings > Models to download or re-download it."
+    func validationError(isModelAvailable: Bool, recoveryDetail: String) -> String? {
+        guard isModelAvailable else {
+            return recoveryDetail
         }
 
         if mode == .design && (voiceDescription ?? "").isEmpty {
@@ -172,8 +233,57 @@ struct BatchGenerationRequest {
 }
 
 enum BatchGenerationOutcome: Equatable {
-    case completed(completedCount: Int)
-    case cancelled(completedCount: Int)
+    case completed(items: [BatchGenerationItemState])
+    case cancelled(items: [BatchGenerationItemState], restartFailedMessage: String?)
+    case failed(items: [BatchGenerationItemState], message: String)
+
+    var items: [BatchGenerationItemState] {
+        switch self {
+        case .completed(let items):
+            return items
+        case .cancelled(let items, _):
+            return items
+        case .failed(let items, _):
+            return items
+        }
+    }
+
+    var completedCount: Int {
+        items.filter(\.isSaved).count
+    }
+
+    var totalCount: Int {
+        items.count
+    }
+
+    var retryRemainingLines: [String] {
+        items.compactMap { item in
+            switch item.status {
+            case .pending, .running, .cancelled:
+                return item.line
+            case .failed, .saved:
+                return nil
+            }
+        }
+    }
+
+    var retryFailedLines: [String] {
+        items.compactMap { item in
+            if case .failed = item.status {
+                return item.line
+            }
+            return nil
+        }
+    }
+
+    var savedAudioPaths: [String] {
+        items.compactMap(\.audioPath)
+    }
+
+    func withRestartFailure(_ message: String?) -> BatchGenerationOutcome {
+        guard case .cancelled(let items, _) = self else { return self }
+        return .cancelled(items: items, restartFailedMessage: message)
+    }
 }
 
 @MainActor
@@ -181,17 +291,20 @@ final class BatchGenerationCoordinator: ObservableObject {
     @Published private(set) var isProcessing = false
     @Published private(set) var isCancelling = false
     @Published private(set) var progressSnapshot = BatchProgressSnapshot()
+    @Published private(set) var itemStates: [BatchGenerationItemState] = []
     @Published var errorMessage: String?
     @Published private(set) var outcome: BatchGenerationOutcome?
 
     private var runner: BatchGenerationRunner?
     private var runTask: Task<Void, Never>?
     private var cancelTask: Task<Void, Never>?
-    private var cancelRestartFailed = false
+    private var cancelRestartFailedMessage: String?
 
     func startBatch(
         batchText: String,
         requestBuilder: ([String]) -> BatchGenerationRequest?,
+        isModelAvailable: (TTSModel) -> Bool,
+        recoveryDetail: (TTSModel) -> String,
         bridge: any BatchGenerationBridging,
         store: any GenerationPersisting = DatabaseService.shared
     ) {
@@ -205,7 +318,10 @@ final class BatchGenerationCoordinator: ObservableObject {
             return
         }
 
-        if let validationError = request.validationError(modelsDirectory: QwenVoiceApp.modelsDir) {
+        if let validationError = request.validationError(
+            isModelAvailable: isModelAvailable(request.model),
+            recoveryDetail: recoveryDetail(request.model)
+        ) {
             errorMessage = validationError
             return
         }
@@ -218,11 +334,14 @@ final class BatchGenerationCoordinator: ObservableObject {
         self.runner = runner
         runTask?.cancel()
         cancelTask = nil
-        cancelRestartFailed = false
+        cancelRestartFailedMessage = nil
         isProcessing = true
         isCancelling = false
         errorMessage = nil
         outcome = nil
+        itemStates = lines.enumerated().map { index, line in
+            BatchGenerationItemState(index: index, line: line, status: .pending)
+        }
         progressSnapshot = BatchProgressSnapshot(
             completedCount: 0,
             totalCount: lines.count,
@@ -233,38 +352,34 @@ final class BatchGenerationCoordinator: ObservableObject {
         runTask = Task { [weak self] in
             guard let self else { return }
 
-            do {
-                let outcome = try await runner.run(
-                    request: request,
-                    makeOutputPath: { makeOutputPath(subfolder: $0, text: $1) },
-                    onProgress: { [weak self] snapshot in
-                        self?.progressSnapshot = snapshot
-                    }
-                )
-
-                if case .cancelled = outcome, let cancelTask = self.cancelTask {
-                    await cancelTask.value
+            var outcome = await runner.run(
+                request: request,
+                makeOutputPath: { makeOutputPath(subfolder: $0, text: $1) },
+                onProgress: { [weak self] snapshot in
+                    self?.progressSnapshot = snapshot
+                },
+                onItemsUpdated: { [weak self] items in
+                    self?.itemStates = items
                 }
+            )
 
-                if self.cancelRestartFailed {
-                    self.isProcessing = false
-                    self.isCancelling = false
-                    self.runner = nil
-                    self.runTask = nil
-                    return
+            if case .cancelled = outcome, let cancelTask = self.cancelTask {
+                await cancelTask.value
+                if let cancelRestartFailedMessage {
+                    outcome = outcome.withRestartFailure(cancelRestartFailedMessage)
                 }
+            }
 
-                self.isProcessing = false
-                self.isCancelling = false
-                self.runner = nil
-                self.runTask = nil
-                self.outcome = outcome
-            } catch {
-                self.errorMessage = error.localizedDescription
-                self.isProcessing = false
-                self.isCancelling = false
-                self.runner = nil
-                self.runTask = nil
+            self.isProcessing = false
+            self.isCancelling = false
+            self.runner = nil
+            self.runTask = nil
+            self.outcome = outcome
+
+            if case .failed(_, let message) = outcome {
+                self.errorMessage = message
+            } else if case .cancelled(_, let restartFailedMessage) = outcome {
+                self.errorMessage = restartFailedMessage
             }
         }
     }
@@ -291,7 +406,7 @@ final class BatchGenerationCoordinator: ObservableObject {
 
         isCancelling = true
         errorMessage = nil
-        cancelRestartFailed = false
+        cancelRestartFailedMessage = nil
         progressSnapshot = BatchProgressSnapshot(
             completedCount: progressSnapshot.completedCount,
             totalCount: progressSnapshot.totalCount,
@@ -307,12 +422,7 @@ final class BatchGenerationCoordinator: ObservableObject {
                     appSupportDir: AppPaths.appSupportDir.path
                 )
             } catch {
-                self.cancelRestartFailed = true
-                self.errorMessage = "Batch generation was interrupted, but the backend could not be restarted: \(error.localizedDescription)"
-                self.isProcessing = false
-                self.isCancelling = false
-                self.runner = nil
-                self.runTask = nil
+                self.cancelRestartFailedMessage = "Batch generation was interrupted, but the backend could not be restarted: \(error.localizedDescription)"
             }
         }
     }
@@ -338,25 +448,51 @@ final class BatchGenerationRunner {
     func run(
         request: BatchGenerationRequest,
         makeOutputPath: (String, String) -> String,
-        onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void
-    ) async throws -> BatchGenerationOutcome {
+        onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void,
+        onItemsUpdated: @escaping @MainActor ([BatchGenerationItemState]) -> Void
+    ) async -> BatchGenerationOutcome {
+        var items = request.lines.enumerated().map { index, line in
+            BatchGenerationItemState(index: index, line: line, status: .pending)
+        }
         var completedCount = 0
         let total = request.lines.count
 
-        if request.mode == .clone && total > 1 {
-            if await cancellationState.isRequested {
-                bridge.clearGenerationActivity()
-                return .cancelled(completedCount: completedCount)
-            }
+        func publishItems() {
+            onItemsUpdated(items)
+        }
 
+        func markItemsCancelled(startingAt index: Int) {
+            guard index < items.count else { return }
+            for itemIndex in index..<items.count where !items[itemIndex].isSaved {
+                items[itemIndex].status = .cancelled
+            }
+        }
+
+        func publishProgress(activeItemIndex: Int?, message: String, backendFraction: Double? = nil) {
             onProgress(
-                makeProgressSnapshot(
+                BatchProgressSnapshot(
                     completedCount: completedCount,
                     totalCount: total,
-                    activeItemIndex: 0,
-                    statusMessage: "Preparing batch..."
+                    activeItemIndex: activeItemIndex,
+                    backendFraction: backendFraction,
+                    statusMessage: message
                 )
             )
+        }
+
+        publishItems()
+
+        if request.mode == .clone && total > 1 {
+            if await cancellationState.isRequested {
+                markItemsCancelled(startingAt: 0)
+                publishItems()
+                bridge.clearGenerationActivity()
+                return .cancelled(items: items, restartFailedMessage: nil)
+            }
+
+            items[0].status = .running
+            publishItems()
+            publishProgress(activeItemIndex: 0, message: "Preparing batch...")
 
             let outputPaths = request.lines.map {
                 makeOutputPath(request.model.outputSubfolder, $0)
@@ -370,79 +506,89 @@ final class BatchGenerationRunner {
                     refText: request.refText,
                     outputPaths: outputPaths,
                     progressHandler: { fraction, message in
-                        onProgress(
-                            self.makeProgressSnapshot(
-                                completedCount: completedCount,
-                                totalCount: total,
-                                activeItemIndex: completedCount < total ? completedCount : nil,
-                                backendFraction: fraction,
-                                statusMessage: message
-                            )
+                        publishProgress(
+                            activeItemIndex: completedCount < total ? completedCount : nil,
+                            message: message,
+                            backendFraction: fraction
                         )
                     }
                 )
 
                 guard results.count == request.lines.count else {
-                    throw BatchGenerationRunnerError.unexpectedResultCount(
-                        expected: request.lines.count,
-                        actual: results.count
+                    if let firstRunningIndex = items.firstIndex(where: { $0.status == .running || $0.status == .pending }) {
+                        items[firstRunningIndex].status = .failed(
+                            message: "Clone batch generation returned \(results.count) results for \(request.lines.count) requests."
+                        )
+                    }
+                    publishItems()
+                    return .failed(
+                        items: items,
+                        message: "Clone batch generation returned \(results.count) results for \(request.lines.count) requests."
                     )
                 }
 
                 for (index, pair) in zip(request.lines, results).enumerated() {
                     if await cancellationState.isRequested {
+                        markItemsCancelled(startingAt: index)
+                        publishItems()
                         bridge.clearGenerationActivity()
-                        return .cancelled(completedCount: completedCount)
+                        return .cancelled(items: items, restartFailedMessage: nil)
                     }
 
-                    onProgress(
-                        makeProgressSnapshot(
-                            completedCount: completedCount,
-                            totalCount: total,
-                            activeItemIndex: index,
-                            statusMessage: "Saving item \(index + 1)/\(total)..."
-                        )
-                    )
+                    items[index].status = .running
+                    publishItems()
+                    publishProgress(activeItemIndex: index, message: "Saving item \(index + 1)/\(total)...")
 
                     let (line, result) = pair
                     var generation = request.makeHistoryRecord(for: line, result: result)
-                    try store.saveGeneration(&generation)
-                    generationEvents.announceGenerationSaved()
-                    completedCount += 1
+
+                    do {
+                        try store.saveGeneration(&generation)
+                        generationEvents.announceGenerationSaved()
+                        completedCount += 1
+                        items[index].status = .saved(audioPath: result.audioPath)
+                        if index + 1 < items.count {
+                            items[index + 1].status = .pending
+                        }
+                        publishItems()
+                    } catch {
+                        items[index].status = .failed(message: error.localizedDescription)
+                        publishItems()
+                        return .failed(items: items, message: error.localizedDescription)
+                    }
                 }
 
-                onProgress(
-                    makeProgressSnapshot(
-                        completedCount: completedCount,
-                        totalCount: total,
-                        activeItemIndex: nil,
-                        statusMessage: "Done"
-                    )
-                )
-                return .completed(completedCount: completedCount)
+                publishProgress(activeItemIndex: nil, message: "Done")
+                return .completed(items: items)
             } catch {
                 if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {
+                    if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
+                        markItemsCancelled(startingAt: firstUnfinished)
+                    }
+                    publishItems()
                     bridge.clearGenerationActivity()
-                    return .cancelled(completedCount: completedCount)
+                    return .cancelled(items: items, restartFailedMessage: nil)
                 }
-                throw error
+
+                if let activeIndex = items.firstIndex(where: { $0.status == .running || $0.status == .pending }) {
+                    items[activeIndex].status = .failed(message: error.localizedDescription)
+                }
+                publishItems()
+                return .failed(items: items, message: error.localizedDescription)
             }
         }
 
         for (index, line) in request.lines.enumerated() {
             if await cancellationState.isRequested {
+                markItemsCancelled(startingAt: index)
+                publishItems()
                 bridge.clearGenerationActivity()
-                return .cancelled(completedCount: completedCount)
+                return .cancelled(items: items, restartFailedMessage: nil)
             }
 
-            onProgress(
-                makeProgressSnapshot(
-                    completedCount: completedCount,
-                    totalCount: total,
-                    activeItemIndex: index,
-                    statusMessage: "Generating item \(index + 1)/\(total)..."
-                )
-            )
+            items[index].status = .running
+            publishItems()
+            publishProgress(activeItemIndex: index, message: "Generating item \(index + 1)/\(total)...")
 
             let outputPath = makeOutputPath(request.model.outputSubfolder, line)
             do {
@@ -454,42 +600,39 @@ final class BatchGenerationRunner {
                     batchTotal: total
                 )
 
-                onProgress(
-                    makeProgressSnapshot(
-                        completedCount: completedCount,
-                        totalCount: total,
-                        activeItemIndex: index,
-                        statusMessage: "Saving item \(index + 1)/\(total)..."
-                    )
-                )
+                publishProgress(activeItemIndex: index, message: "Saving item \(index + 1)/\(total)...")
 
                 var generation = request.makeHistoryRecord(for: line, result: result)
                 try store.saveGeneration(&generation)
                 generationEvents.announceGenerationSaved()
                 completedCount += 1
+                items[index].status = .saved(audioPath: result.audioPath)
+                publishItems()
             } catch {
                 if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {
+                    markItemsCancelled(startingAt: index)
+                    publishItems()
                     bridge.clearGenerationActivity()
-                    return .cancelled(completedCount: completedCount)
+                    return .cancelled(items: items, restartFailedMessage: nil)
                 }
-                throw error
+
+                items[index].status = .failed(message: error.localizedDescription)
+                publishItems()
+                return .failed(items: items, message: error.localizedDescription)
             }
         }
 
         if await cancellationState.isRequested {
+            if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
+                markItemsCancelled(startingAt: firstUnfinished)
+            }
+            publishItems()
             bridge.clearGenerationActivity()
-            return .cancelled(completedCount: completedCount)
+            return .cancelled(items: items, restartFailedMessage: nil)
         }
 
-        onProgress(
-            makeProgressSnapshot(
-                completedCount: completedCount,
-                totalCount: total,
-                activeItemIndex: nil,
-                statusMessage: "Done"
-            )
-        )
-        return .completed(completedCount: completedCount)
+        publishProgress(activeItemIndex: nil, message: "Done")
+        return .completed(items: items)
     }
 
     func requestCancellation(pythonPath: String, appSupportDir: String) async throws {
@@ -540,22 +683,6 @@ final class BatchGenerationRunner {
             )
         }
     }
-
-    private func makeProgressSnapshot(
-        completedCount: Int,
-        totalCount: Int,
-        activeItemIndex: Int?,
-        backendFraction: Double? = nil,
-        statusMessage: String
-    ) -> BatchProgressSnapshot {
-        BatchProgressSnapshot(
-            completedCount: completedCount,
-            totalCount: totalCount,
-            activeItemIndex: activeItemIndex,
-            backendFraction: backendFraction,
-            statusMessage: statusMessage
-        )
-    }
 }
 
 actor BatchGenerationCancellationState {
@@ -563,16 +690,5 @@ actor BatchGenerationCancellationState {
 
     func request() {
         isRequested = true
-    }
-}
-
-private enum BatchGenerationRunnerError: LocalizedError {
-    case unexpectedResultCount(expected: Int, actual: Int)
-
-    var errorDescription: String? {
-        switch self {
-        case .unexpectedResultCount(let expected, let actual):
-            return "Clone batch generation returned \(actual) results for \(expected) requests."
-        }
     }
 }

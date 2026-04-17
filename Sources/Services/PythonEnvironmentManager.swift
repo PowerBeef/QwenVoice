@@ -22,7 +22,11 @@ final class PythonEnvironmentManager: ObservableObject {
         case updatingDependencies
     }
 
-    @Published private(set) var state: State = .idle
+    @Published private(set) var state: State = .idle {
+        didSet {
+            syncUITestEnvironmentState()
+        }
+    }
     @Published var needsBackendRestart = false
     private var setupTask: Task<Void, Never>?
     private var setupTaskID: UUID?
@@ -241,6 +245,40 @@ final class PythonEnvironmentManager: ObservableObject {
                     message: "The bundled Python runtime is present but failed validation.\n\n\(error.localizedDescription)\n\nThis is a packaging issue (often an MLX runtime built for a newer macOS). Reinstall the app or use a new release build."
                 )
             }
+        }
+    }
+
+    private func syncUITestEnvironmentState() {
+        guard UITestAutomationSupport.isEnabled else { return }
+
+        let activePythonPath: String?
+        if case .ready(let pythonPath) = state {
+            activePythonPath = pythonPath
+        } else {
+            activePythonPath = nil
+        }
+
+        let bundledRuntimeRoot = discovery.bundledPythonPath().map {
+            URL(fileURLWithPath: $0)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .path
+        }
+        let runtimeSource = TestStateProvider.runtimeSource(
+            for: activePythonPath,
+            bundledRuntimeRoot: bundledRuntimeRoot,
+            devVenvRoot: AppPaths.pythonVenvDir.path,
+            stubPythonPath: UITestAutomationSupport.stubPythonPath()
+        )
+
+        TestStateProvider.shared.setRuntimeStatus(
+            source: runtimeSource,
+            pythonPath: activePythonPath,
+            ffmpegPath: PythonBridge.findFFmpeg()
+        )
+        TestStateProvider.shared.setEnvironmentReady(activePythonPath != nil)
+        if activePythonPath != nil {
+            UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
         }
     }
 

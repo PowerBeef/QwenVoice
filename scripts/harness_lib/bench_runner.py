@@ -17,6 +17,10 @@ from .output import build_suite_result, build_test_result, eprint
 from .paths import APP_MODELS_DIR, PROJECT_DIR, resolve_backend_python, ensure_directory
 from .stats import summarize_numeric
 
+LATENCY_CLONE_REFERENCE_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.wav"
+LATENCY_CLONE_REFERENCE_TEXT_PATH = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.txt"
+LATENCY_STREAMING_INTERVAL = 0.32
+
 
 def run_benchmarks(
     category: str = "all",
@@ -73,6 +77,17 @@ def run_benchmarks(
             )
         )
 
+    if category == "tts_roundtrip":
+        eprint("==> Running TTS round-trip intelligibility benchmark...")
+        from .tts_roundtrip_runner import run_tts_roundtrip_bench
+
+        suites.append(
+            run_tts_roundtrip_bench(
+                python_path=python_path,
+                output_dir=output_dir,
+            )
+        )
+
     if category == "perf":
         eprint("==> Running exhaustive performance profiler...")
         suites.extend(_run_perf_benchmarks(
@@ -126,81 +141,149 @@ def _run_latency_bench(
         client.call("init", timeout=30)
 
         contract = load_contract()
+        clone_reference_path = (
+            str(LATENCY_CLONE_REFERENCE_PATH)
+            if LATENCY_CLONE_REFERENCE_PATH.exists()
+            else None
+        )
+        clone_reference_text = (
+            LATENCY_CLONE_REFERENCE_TEXT_PATH.read_text(encoding="utf-8").strip()
+            if LATENCY_CLONE_REFERENCE_TEXT_PATH.exists()
+            else None
+        )
 
         for mid in installed:
             model_def = next((m for m in contract["models"] if m["id"] == mid), None)
             if not model_def:
                 continue
             mode = model_def["mode"]
+            if mode == "clone" and not clone_reference_path:
+                for scenario in ("cold", "warm", "prewarmed"):
+                    results.append(build_test_result(
+                        f"latency_{mid}_{scenario}",
+                        passed=True,
+                        skip_reason="Committed clone reference fixture is unavailable",
+                    ))
+                continue
 
-            # Load model
-            eprint(f"  Loading {mid}...")
-            client.call("load_model", {"model_id": mid}, timeout=120)
+            for scenario in ("cold", "warm", "prewarmed"):
+                run_records: list[dict[str, Any]] = []
+                scenario_prewarm_timings: list[dict[str, Any]] = []
+                try:
+                    try:
+                        _ = client.call("unload_model", timeout=30)
+                    except Exception:
+                        pass
 
-            # Cold and warm runs
-            for warmth in ("cold", "warm"):
-                wall_times: list[float] = []
-                first_chunk_times: list[float] = []
-                actual_runs = runs
+                    scenario_load_result = None
+                    scenario_prewarm_result = None
+                    if scenario in ("warm", "prewarmed"):
+                        scenario_load_result = client.call(
+                            "load_model",
+                            {"model_id": mid, "benchmark": True},
+                            timeout=120,
+                        )
 
-                for i in range(actual_runs):
-                    eprint(f"  {mid} {warmth} run {i + 1}/{actual_runs}...")
-                    with tempfile.TemporaryDirectory() as tmp:
-                        output_path = os.path.join(tmp, f"bench_{i}.wav")
-                        params: dict[str, Any] = {
-                            "text": "The package is ready at the front desk for pickup.",
-                            "output_path": output_path,
-                        }
-                        if mode == "custom":
-                            params["voice"] = "vivian"
-                        elif mode == "design":
-                            params["voice_description"] = "A young female speaker"
-                        elif mode == "clone":
-                            # Skip clone latency if no reference available
-                            results.append(build_test_result(
-                                f"latency_{mid}_{warmth}",
-                                passed=True,
-                                skip_reason="No reference audio for clone benchmark",
-                            ))
-                            break
-
-                        t0 = time.perf_counter()
-                        try:
-                            result, notifications = client.call_collecting_notifications(
-                                "generate", params, timeout=300,
+                        if scenario == "prewarmed":
+                            prewarm_params: dict[str, Any] = {
+                                "model_id": mid,
+                                "mode": mode,
+                                "benchmark": True,
+                            }
+                            if mode == "custom":
+                                prewarm_params["voice"] = "vivian"
+                                prewarm_params["instruct"] = "Normal tone"
+                            elif mode == "clone":
+                                prewarm_params["ref_audio"] = clone_reference_path
+                                if clone_reference_text:
+                                    prewarm_params["ref_text"] = clone_reference_text
+                            scenario_prewarm_result = client.call(
+                                "prewarm_model",
+                                prewarm_params,
+                                timeout=120,
                             )
-                            wall_ms = (time.perf_counter() - t0) * 1000
-                            wall_times.append(wall_ms)
+                            scenario_prewarm_timings.append(
+                                dict(
+                                    scenario_prewarm_result.get("benchmark", {}).get(
+                                        "timings_ms", {}
+                                    )
+                                )
+                            )
 
-                            # Find first chunk notification
-                            first_chunk_ms = wall_ms
-                            for notif in notifications:
-                                if notif.get("method") == "generation_chunk":
-                                    first_chunk_ms = (time.perf_counter() - t0) * 1000
-                                    break
-                            first_chunk_times.append(first_chunk_ms)
-                        except Exception as exc:
-                            results.append(build_test_result(
-                                f"latency_{mid}_{warmth}_run{i}",
-                                passed=False,
-                                error=str(exc),
-                            ))
-                            break
-                else:
-                    if wall_times:
-                        summary = {
-                            "wall_ms": summarize_numeric(wall_times),
-                            "first_chunk_ms": summarize_numeric(first_chunk_times),
-                            "raw_wall_ms": [round(t, 1) for t in wall_times],
-                        }
-                        results.append(build_test_result(
-                            f"latency_{mid}_{warmth}",
-                            passed=True,
-                            details=summary,
-                        ))
-                        # Save raw samples
-                        samples_path = bench_dir / f"{mid}_{warmth}_samples.json"
-                        samples_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+                    for i in range(runs):
+                        eprint(f"  {mid} {scenario} run {i + 1}/{runs}...")
+
+                        load_result = None
+                        prewarm_result = None
+                        if scenario == "cold":
+                            try:
+                                _ = client.call("unload_model", timeout=30)
+                            except Exception:
+                                pass
+                            load_result = client.call(
+                                "load_model",
+                                {"model_id": mid, "benchmark": True},
+                                timeout=120,
+                            )
+                        elif i == 0:
+                            load_result = scenario_load_result
+                            prewarm_result = scenario_prewarm_result
+
+                        with tempfile.TemporaryDirectory() as tmp:
+                            output_path = os.path.join(tmp, f"{scenario}_{i}.wav")
+                            params = _latency_generate_params(
+                                mode=mode,
+                                output_path=output_path,
+                                clone_reference_path=clone_reference_path,
+                                clone_reference_text=clone_reference_text,
+                            )
+                            params["benchmark"] = True
+                            params["benchmark_label"] = f"latency_{mid}_{scenario}_run{i + 1}"
+
+                            try:
+                                result, notifications = client.call_collecting_notifications_timed(
+                                    "generate",
+                                    params,
+                                    timeout=300,
+                                )
+                            except Exception as exc:
+                                results.append(
+                                    build_test_result(
+                                        f"latency_{mid}_{scenario}_run{i + 1}",
+                                        passed=False,
+                                        error=str(exc),
+                                    )
+                                )
+                                break
+
+                            run_records.append(
+                                _latency_run_record(
+                                    scenario=scenario,
+                                    run_index=i + 1,
+                                    result=result,
+                                    notifications=notifications,
+                                    load_result=load_result,
+                                    prewarm_result=prewarm_result,
+                                )
+                            )
+                    else:
+                        summary = _latency_summary(run_records, scenario_prewarm_timings)
+                        results.append(
+                            build_test_result(
+                                f"latency_{mid}_{scenario}",
+                                passed=True,
+                                details=summary,
+                            )
+                        )
+                        samples_path = bench_dir / f"{mid}_{scenario}_samples.json"
+                        samples_path.write_text(
+                            json.dumps(summary, indent=2), encoding="utf-8"
+                        )
+                finally:
+                    try:
+                        _ = client.call("unload_model", timeout=30)
+                    except Exception:
+                        pass
 
             client.call("unload_model", timeout=30)
 
@@ -213,6 +296,128 @@ def _run_latency_bench(
 
     duration_ms = int((time.perf_counter() - start) * 1000)
     return build_suite_result("generation_latency", results, duration_ms)
+
+
+def _latency_generate_params(
+    *,
+    mode: str,
+    output_path: str,
+    clone_reference_path: str | None,
+    clone_reference_text: str | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "text": "The package is ready at the front desk for pickup.",
+        "output_path": output_path,
+        "stream": True,
+        "streaming_interval": LATENCY_STREAMING_INTERVAL,
+    }
+    if mode == "custom":
+        params["voice"] = "vivian"
+        params["instruct"] = "Normal tone"
+    elif mode == "design":
+        params["instruct"] = "A young female speaker with a clear voice"
+    elif mode == "clone":
+        if clone_reference_path is None:
+            raise RuntimeError("Clone latency params require a committed reference fixture")
+        params["ref_audio"] = clone_reference_path
+        if clone_reference_text:
+            params["ref_text"] = clone_reference_text
+    return params
+
+
+def _latency_first_chunk_ms(notifications: list[dict[str, Any]]) -> float | None:
+    for notification in notifications:
+        if notification.get("method") == "generation_chunk":
+            received_at_ms = notification.get("_received_at_ms")
+            if isinstance(received_at_ms, (int, float)):
+                return round(float(received_at_ms), 2)
+    return None
+
+
+def _latency_run_record(
+    *,
+    scenario: str,
+    run_index: int,
+    result: dict[str, Any],
+    notifications: list[dict[str, Any]],
+    load_result: dict[str, Any] | None,
+    prewarm_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "scenario": scenario,
+        "run_index": run_index,
+        "wall_ms": float(result.get("_wall_ms", 0.0) or 0.0),
+        "first_chunk_ms": _latency_first_chunk_ms(notifications),
+        "notification_count": len(notifications),
+        "load_model_total_ms": (
+            load_result.get("benchmark", {}).get("timings_ms", {}).get("load_model_total")
+            if load_result is not None
+            else None
+        ),
+        "prewarm_timings_ms": (
+            dict(prewarm_result.get("benchmark", {}).get("timings_ms", {}))
+            if prewarm_result is not None
+            else None
+        ),
+        "server_timings_ms": dict(result.get("benchmark", {}).get("timings_ms", {})),
+    }
+
+
+def _latency_summary(
+    run_records: list[dict[str, Any]],
+    prewarm_timings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "scenario": run_records[0]["scenario"] if run_records else "unknown",
+        "run_count": len(run_records),
+        "raw_records": run_records,
+    }
+    wall_times = [float(record["wall_ms"]) for record in run_records]
+    if wall_times:
+        summary["wall_ms"] = summarize_numeric(wall_times)
+
+    first_chunks = [
+        float(record["first_chunk_ms"])
+        for record in run_records
+        if isinstance(record.get("first_chunk_ms"), (int, float))
+    ]
+    if first_chunks:
+        summary["first_chunk_ms"] = summarize_numeric(first_chunks)
+
+    load_totals = [
+        float(record["load_model_total_ms"])
+        for record in run_records
+        if isinstance(record.get("load_model_total_ms"), (int, float))
+    ]
+    if load_totals:
+        summary["load_model_total_ms"] = summarize_numeric(load_totals)
+
+    server_timing_keys = {
+        key
+        for record in run_records
+        for key in record.get("server_timings_ms", {}).keys()
+    }
+    for key in sorted(server_timing_keys):
+        values = [
+            float(record["server_timings_ms"][key])
+            for record in run_records
+            if isinstance(record.get("server_timings_ms", {}).get(key), (int, float))
+        ]
+        if values:
+            summary[f"server_{key}_ms"] = summarize_numeric(values)
+
+    if prewarm_timings:
+        prewarm_timing_keys = {key for timing in prewarm_timings for key in timing.keys()}
+        for key in sorted(prewarm_timing_keys):
+            values = [
+                float(timing[key])
+                for timing in prewarm_timings
+                if isinstance(timing.get(key), (int, float))
+            ]
+            if values:
+                summary[f"prewarm_{key}_ms"] = summarize_numeric(values)
+
+    return summary
 
 
 # ---------------------------------------------------------------------------
