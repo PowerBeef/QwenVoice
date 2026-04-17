@@ -73,6 +73,28 @@ final class GenerationSemanticsTests: XCTestCase {
         )
     }
 
+    func testDesignConditioningWarmKeyTracksResolvedInstructionAndBucket() {
+        let shortRequest = GenerationRequest(
+            modelID: "pro_design",
+            text: "Hello there.",
+            outputPath: "/tmp/out.wav",
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+        let longRequest = GenerationRequest(
+            modelID: "pro_design",
+            text: GenerationSemantics.canonicalDesignWarmLongText,
+            outputPath: "/tmp/out.wav",
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+
+        XCTAssertNotEqual(
+            GenerationSemantics.designConditioningWarmKey(for: shortRequest),
+            GenerationSemantics.designConditioningWarmKey(for: longRequest)
+        )
+        XCTAssertEqual(GenerationSemantics.designWarmBucket(for: shortRequest.text), .short)
+        XCTAssertEqual(GenerationSemantics.designWarmBucket(for: longRequest.text), .long)
+    }
+
     func testClonePreparationKeyIncludesReferenceAudioAndTranscript() {
         let reference = CloneReference(audioPath: "/tmp/reference.wav", transcript: "Bonjour")
 

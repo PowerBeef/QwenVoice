@@ -4,14 +4,11 @@ import Foundation
 @MainActor
 public final class NativeMLXMacEngine: MacTTSEngine {
     public enum EngineError: LocalizedError {
-        case voiceDesignNotImplemented
         case voiceCloningNotImplemented
         case nativeBatchSupportsCustomOnly
 
         public var errorDescription: String? {
             switch self {
-            case .voiceDesignNotImplemented:
-                return "Native Voice Design is not implemented yet."
             case .voiceCloningNotImplemented:
                 return "Native Voice Cloning is not implemented yet."
             case .nativeBatchSupportsCustomOnly:
@@ -197,12 +194,8 @@ public final class NativeMLXMacEngine: MacTTSEngine {
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
         switch request.payload {
-        case .custom:
+        case .custom, .design:
             break
-        case .design:
-            let error = EngineError.voiceDesignNotImplemented
-            publishNonLoadError(error)
-            throw error
         case .clone:
             let error = EngineError.voiceCloningNotImplemented
             publishNonLoadError(error)

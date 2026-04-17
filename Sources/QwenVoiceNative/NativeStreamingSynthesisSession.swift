@@ -179,9 +179,16 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 instruct: GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle),
                 streamingInterval: GenerationSemantics.appStreamingInterval
             )
-        case .design:
-            throw NativeStreamingSessionError.unsupportedRequest(
-                "Native Voice Design is not implemented yet."
+        case .design(let voiceDescription, let deliveryStyle):
+            let resolvedVoiceDescription = GenerationSemantics.designInstruction(
+                voiceDescription: voiceDescription,
+                emotion: deliveryStyle ?? ""
+            )
+            return model.generateVoiceDesignStream(
+                text: request.text,
+                language: GenerationSemantics.qwenLanguageHint(for: request),
+                voiceDescription: resolvedVoiceDescription,
+                streamingInterval: GenerationSemantics.appStreamingInterval
             )
         case .clone:
             throw NativeStreamingSessionError.unsupportedRequest(

@@ -65,6 +65,20 @@ public actor MacNativeRuntime {
 
     typealias ModelLoader = @Sendable (NativeModelDescriptor, URL) async throws -> NativeSpeechGenerationModel
 
+    private enum DesignWarmSource: Sendable {
+        case prefetch
+        case generation
+    }
+
+    private struct DesignConditioningWarmState: Sendable {
+        let bucket: GenerationSemantics.DesignWarmBucket
+        let requestKey: String
+        let reused: Bool
+        let prefetchHit: Bool
+        let prewarmed: Bool
+        let streamStepPrewarmed: Bool
+    }
+
     private let fileManager: FileManager
     private let registryFactory: @Sendable () throws -> NativeModelRegistry
     private let loadOperation: @Sendable (NativeModelDescriptor) async throws -> Void
@@ -75,6 +89,9 @@ public actor MacNativeRuntime {
     private var modelRegistry: NativeModelRegistry?
     private var loadedModel: NativeSpeechGenerationModel?
     private var nextRequestID = 1
+    private var activeDesignConditioningWarmKey: String?
+    private var activeDesignConditioningWarmSource: DesignWarmSource?
+    private var activeDesignStreamStepWarmKey: String?
 
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -121,6 +138,7 @@ public actor MacNativeRuntime {
         initializedPaths = paths
         loadedModel = nil
         nextRequestID = 1
+        clearDesignWarmState()
         await loadCoordinator.unloadModel()
         return paths
     }
@@ -153,12 +171,20 @@ public actor MacNativeRuntime {
         try await ensureModelLoadedIfNeeded(id: request.modelID)
 
         let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
-        guard !(await loadCoordinator.isPrewarmed(identityKey: identityKey)) else {
-            return
-        }
-
         let model = try await requireLoadedModel(expectedModelID: request.modelID)
-        try await prepareWarmState(for: request, using: model)
+        switch request.payload {
+        case .design:
+            _ = try await ensureDesignConditioningWarmStateIfNeeded(
+                for: request,
+                using: model,
+                source: .prefetch
+            )
+        case .custom, .clone:
+            guard !(await loadCoordinator.isPrewarmed(identityKey: identityKey)) else {
+                return
+            }
+            try await prepareWarmState(for: request, using: model)
+        }
         await loadCoordinator.markPrewarmed(identityKey: identityKey)
     }
 
@@ -171,19 +197,46 @@ public actor MacNativeRuntime {
 
         model.resetPreparationDiagnostics()
         let warmState: EngineWarmState
-        if wasPrewarmed {
-            warmState = .warm
-        } else {
-            try await prepareWarmState(for: request, using: model)
-            await loadCoordinator.markPrewarmed(identityKey: identityKey)
-            warmState = .cold
+        var timingOverridesMS: [String: Int] = [:]
+        var booleanFlags: [String: Bool] = [:]
+        var stringFlags: [String: String] = [:]
+
+        switch request.payload {
+        case .design:
+            let designWarmState = try await ensureDesignConditioningWarmStateIfNeeded(
+                for: request,
+                using: model,
+                source: .generation
+            )
+            if !wasPrewarmed {
+                await loadCoordinator.markPrewarmed(identityKey: identityKey)
+            }
+            warmState = wasPrewarmed ? .warm : .cold
+            timingOverridesMS.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
+            booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+            booleanFlags["design_conditioning_reused"] = designWarmState.reused
+            booleanFlags["design_conditioning_prefetch_hit"] = designWarmState.prefetchHit
+            booleanFlags["design_conditioning_prewarmed"] = designWarmState.prewarmed
+            booleanFlags["design_stream_step_prewarmed"] = designWarmState.streamStepPrewarmed
+            booleanFlags["design_warm_bucket_short"] = designWarmState.bucket == .short
+            booleanFlags["design_warm_bucket_long"] = designWarmState.bucket == .long
+            booleanFlags["design_optimized_handler_used"] = model.supportsOptimizedVoiceDesign
+            stringFlags["design_conditioning_request_key"] = designWarmState.requestKey
+        case .custom, .clone:
+            if wasPrewarmed {
+                warmState = .warm
+            } else {
+                try await prepareWarmState(for: request, using: model)
+                await loadCoordinator.markPrewarmed(identityKey: identityKey)
+                warmState = .cold
+            }
+            timingOverridesMS = model.latestPreparationTimingsMS
+            booleanFlags = mergedBooleanFlags(for: model, warmState: warmState)
         }
 
         let requestID = takeNextRequestID()
-        let stringFlags: [String: String] = [
-            "generation_mode": request.modeIdentifier,
-            "warm_state": warmState.rawValue,
-        ]
+        stringFlags["generation_mode"] = request.modeIdentifier
+        stringFlags["warm_state"] = warmState.rawValue
 
         return NativePreparedGeneration(
             requestID: requestID,
@@ -191,14 +244,15 @@ public actor MacNativeRuntime {
             model: model,
             streamSessionsDirectory: try requirePaths().streamSessionsDirectory,
             warmState: warmState,
-            timingOverridesMS: model.latestPreparationTimingsMS,
-            booleanFlags: mergedBooleanFlags(for: model, warmState: warmState),
+            timingOverridesMS: timingOverridesMS,
+            booleanFlags: booleanFlags,
             stringFlags: stringFlags
         )
     }
 
     public func unloadModel() async {
         loadedModel = nil
+        clearDesignWarmState()
         await loadCoordinator.unloadModel()
     }
 
@@ -342,6 +396,78 @@ public actor MacNativeRuntime {
         }
     }
 
+    private func ensureDesignConditioningWarmStateIfNeeded(
+        for request: GenerationRequest,
+        using model: NativeSpeechGenerationModel,
+        source: DesignWarmSource
+    ) async throws -> DesignConditioningWarmState {
+        guard case .design(let voiceDescription, let deliveryStyle) = request.payload else {
+            return DesignConditioningWarmState(
+                bucket: .short,
+                requestKey: "",
+                reused: false,
+                prefetchHit: false,
+                prewarmed: false,
+                streamStepPrewarmed: false
+            )
+        }
+
+        let warmBucket = GenerationSemantics.designWarmBucket(for: request.text)
+        let trimmedVoiceDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedVoiceDescription.isEmpty,
+              let conditioningWarmKey = GenerationSemantics.designConditioningWarmKey(for: request) else {
+            return DesignConditioningWarmState(
+                bucket: warmBucket,
+                requestKey: "",
+                reused: false,
+                prefetchHit: false,
+                prewarmed: false,
+                streamStepPrewarmed: false
+            )
+        }
+
+        let reused = activeDesignConditioningWarmKey == conditioningWarmKey
+        if reused {
+            return DesignConditioningWarmState(
+                bucket: warmBucket,
+                requestKey: conditioningWarmKey,
+                reused: true,
+                prefetchHit: activeDesignConditioningWarmSource == .prefetch,
+                prewarmed: false,
+                streamStepPrewarmed: activeDesignStreamStepWarmKey == conditioningWarmKey
+            )
+        }
+
+        let language = GenerationSemantics.qwenLanguageHint(for: request)
+        let warmInstruction = GenerationSemantics.designInstruction(
+            voiceDescription: voiceDescription,
+            emotion: deliveryStyle ?? ""
+        )
+        let warmText = GenerationSemantics.canonicalDesignWarmText(for: warmBucket)
+        try await model.prepareVoiceDesign(
+            text: warmText,
+            language: language,
+            voiceDescription: warmInstruction
+        )
+
+        activeDesignConditioningWarmKey = conditioningWarmKey
+        activeDesignConditioningWarmSource = source
+        if model.latestPreparationBooleanFlags["design_stream_step_prewarmed"] == true {
+            activeDesignStreamStepWarmKey = conditioningWarmKey
+        } else {
+            activeDesignStreamStepWarmKey = nil
+        }
+
+        return DesignConditioningWarmState(
+            bucket: warmBucket,
+            requestKey: conditioningWarmKey,
+            reused: false,
+            prefetchHit: false,
+            prewarmed: true,
+            streamStepPrewarmed: activeDesignStreamStepWarmKey == conditioningWarmKey
+        )
+    }
+
     private func mergedBooleanFlags(
         for model: NativeSpeechGenerationModel,
         warmState: EngineWarmState
@@ -351,6 +477,12 @@ public actor MacNativeRuntime {
         flags["warm_state_warm"] = warmState == .warm
         flags["warm_state_cold"] = warmState == .cold
         return flags
+    }
+
+    private func clearDesignWarmState() {
+        activeDesignConditioningWarmKey = nil
+        activeDesignConditioningWarmSource = nil
+        activeDesignStreamStepWarmKey = nil
     }
 
     private func requireLoadedModel(expectedModelID: String) async throws -> NativeSpeechGenerationModel {
@@ -384,6 +516,7 @@ public actor MacNativeRuntime {
         case .available(let descriptor):
             let installDirectory = registry.installDirectory(for: descriptor, in: modelsDirectory)
             loadedModel = nil
+            clearDesignWarmState()
             try await loadOperation(descriptor)
             loadedModel = try await modelLoader(descriptor, installDirectory)
         }

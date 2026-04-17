@@ -49,6 +49,8 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
     private let resetPreparationDiagnosticsHandler: @Sendable () -> Void
     private let customPrewarmHandler: (@Sendable (String, String, String, String?) async throws -> Void)?
     private let customStreamHandler: (@Sendable (String, String, String, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)?
+    private let designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)?
+    private let designStreamHandler: (@Sendable (String, String, String, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)?
 
     private final class BaseModelBox: @unchecked Sendable {
         let base: any SpeechGenerationModel
@@ -125,9 +127,30 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
                     )
                 )
             }
+            self.designPrewarmHandler = { text, language, voiceDescription in
+                try await optimizedBox.base.prepareVoiceDesign(
+                    text: text,
+                    language: language,
+                    voiceDescription: voiceDescription,
+                    generationParameters: baseBox.base.defaultGenerationParameters
+                )
+            }
+            self.designStreamHandler = { text, language, voiceDescription, streamingInterval in
+                Self.map(
+                    stream: optimizedBox.base.generateVoiceDesignStream(
+                        text: text,
+                        language: language,
+                        voiceDescription: voiceDescription,
+                        generationParameters: baseBox.base.defaultGenerationParameters,
+                        streamingInterval: streamingInterval
+                    )
+                )
+            }
         } else {
             self.customPrewarmHandler = nil
             self.customStreamHandler = nil
+            self.designPrewarmHandler = nil
+            self.designStreamHandler = nil
         }
     }
 
@@ -144,7 +167,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         latestPreparationDiagnosticsProvider: @escaping @Sendable () -> [String: Int] = { [:] },
         latestPreparationBooleanFlagsProvider: @escaping @Sendable () -> [String: Bool] = { [:] },
         customPrewarmHandler: (@Sendable (String, String, String, String?) async throws -> Void)? = nil,
-        customStreamHandler: (@Sendable (String, String, String, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil
+        customStreamHandler: (@Sendable (String, String, String, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil,
+        designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)? = nil,
+        designStreamHandler: (@Sendable (String, String, String, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil
     ) {
         self.sampleRateProvider = { sampleRate }
         self.genericPrewarmHandler = genericPrewarmHandler
@@ -154,6 +179,8 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         self.resetPreparationDiagnosticsHandler = {}
         self.customPrewarmHandler = customPrewarmHandler
         self.customStreamHandler = customStreamHandler
+        self.designPrewarmHandler = designPrewarmHandler
+        self.designStreamHandler = designStreamHandler
     }
 
     static func placeholder() -> NativeSpeechGenerationModel {
@@ -162,6 +189,7 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
 
     var sampleRate: Int { sampleRateProvider() }
     var supportsDedicatedCustomVoice: Bool { customStreamHandler != nil }
+    var supportsOptimizedVoiceDesign: Bool { designPrewarmHandler != nil && designStreamHandler != nil }
     var latestPreparationTimingsMS: [String: Int] { latestPreparationDiagnosticsProvider() }
     var latestPreparationBooleanFlags: [String: Bool] { latestPreparationBooleanFlagsProvider() }
 
@@ -212,6 +240,35 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         return generateStream(
             text: text,
             voice: Self.fallbackCustomVoice(speaker: speaker, instruct: instruct),
+            language: language,
+            streamingInterval: streamingInterval
+        )
+    }
+
+    func prepareVoiceDesign(
+        text: String,
+        language: String,
+        voiceDescription: String
+    ) async throws {
+        if let designPrewarmHandler {
+            try await designPrewarmHandler(text, language, voiceDescription)
+            return
+        }
+        try await prepareForGeneration(text: text, voice: voiceDescription, language: language)
+    }
+
+    func generateVoiceDesignStream(
+        text: String,
+        language: String,
+        voiceDescription: String,
+        streamingInterval: Double
+    ) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> {
+        if let designStreamHandler {
+            return designStreamHandler(text, language, voiceDescription, streamingInterval)
+        }
+        return generateStream(
+            text: text,
+            voice: voiceDescription,
             language: language,
             streamingInterval: streamingInterval
         )
