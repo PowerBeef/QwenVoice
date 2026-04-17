@@ -39,6 +39,7 @@
 		300CAC911A13A25260815630 /* PlayerBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C927A0519C4B746668E5FC3 /* PlayerBarTests.swift */; };
 		33F2612C7D0236463E7CD53E /* GenerationPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE484A43E26B45CCB9B9703D /* GenerationPersistence.swift */; };
 		369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */; };
+		389B9081D0952B673607C62B /* NativeMLXMacEngineLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56827DDA7CE2BECD7B6A89D0 /* NativeMLXMacEngineLiveTests.swift */; };
 		3971E286607F4851A7D7CD68 /* backend_state.py in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91212A8A30870608C0CFDB6F /* backend_state.py */; };
 		3E7879D3644E06670F306F6F /* TestStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87ECFD554C0133DA227EDEC4 /* TestStateProvider.swift */; };
 		3EA77628D5341715077DCB0C /* PythonBridge+GenerationFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC5CD3AE05B12B8D8E56059 /* PythonBridge+GenerationFlows.swift */; };
@@ -257,6 +258,7 @@
 		52130E590A4CD0ED7447B159 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
 		52196EEF0820ABCE16E045FD /* AppStateRestorationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateRestorationPolicy.swift; sourceTree = "<group>"; };
 		53F47C4B97AF4841FDEEB907 /* VoiceCloningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningView.swift; sourceTree = "<group>"; };
+		56827DDA7CE2BECD7B6A89D0 /* NativeMLXMacEngineLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMLXMacEngineLiveTests.swift; sourceTree = "<group>"; };
 		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
 		5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationWorkflowView.swift; sourceTree = "<group>"; };
 		60591D23D59451BA2F06619F /* rpc_transport.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = rpc_transport.py; sourceTree = "<group>"; };
@@ -453,6 +455,7 @@
 				786E4C195547351A7BAD7CF6 /* GenerationDraftsTests.swift */,
 				E83A114E0405AC299EACA16D /* GenerationSemanticsTests.swift */,
 				3E945FA6D00942DDA36660B9 /* ModelManagerViewModelTests.swift */,
+				56827DDA7CE2BECD7B6A89D0 /* NativeMLXMacEngineLiveTests.swift */,
 				3B94E98E2B7BF0F032C30AC0 /* NativeMLXMacEngineTests.swift */,
 				E3116A83C75D87693500F239 /* NativeModelLoadCoordinatorTests.swift */,
 				F17D220A87B118CDAB8682AA /* NativeModelRegistryTests.swift */,
@@ -952,6 +955,7 @@
 				617FFFA682293C41172EE56F /* GenerationDraftsTests.swift in Sources */,
 				A7095C0807C680DA1B7C3029 /* GenerationSemanticsTests.swift in Sources */,
 				565CB307630274488593A8D1 /* ModelManagerViewModelTests.swift in Sources */,
+				389B9081D0952B673607C62B /* NativeMLXMacEngineLiveTests.swift in Sources */,
 				CB6386E9F7F97ED19237D868 /* NativeMLXMacEngineTests.swift in Sources */,
 				17732BA460611DD788EE2CB0 /* NativeModelLoadCoordinatorTests.swift in Sources */,
 				DC82C53833745F1993CB460B /* NativeModelRegistryTests.swift in Sources */,

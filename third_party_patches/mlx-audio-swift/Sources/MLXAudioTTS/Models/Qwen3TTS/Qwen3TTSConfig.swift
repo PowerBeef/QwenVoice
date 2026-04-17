@@ -1,6 +1,49 @@
 import Foundation
 import MLXLMCommon
 
+private enum StringOrBool: Codable, Sendable {
+    case string(String)
+    case bool(Bool)
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let stringValue = try? container.decode(String.self) {
+            self = .string(stringValue)
+            return
+        }
+        if let boolValue = try? container.decode(Bool.self) {
+            self = .bool(boolValue)
+            return
+        }
+        throw DecodingError.typeMismatch(
+            StringOrBool.self,
+            DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Expected a string or bool value."
+            )
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        }
+    }
+
+    var stringValue: String? {
+        switch self {
+        case .string(let value):
+            return value
+        case .bool:
+            return nil
+        }
+    }
+}
+
 // MARK: - Code Predictor Config
 
 public struct Qwen3TTSTalkerCodePredictorConfig: Codable, Sendable {
@@ -209,8 +252,14 @@ public struct Qwen3TTSTalkerConfig: Codable, Sendable {
         codecPadId = try c.decodeIfPresent(Int.self, forKey: .codecPadId) ?? 2148
         codecBosId = try c.decodeIfPresent(Int.self, forKey: .codecBosId) ?? 2149
         codecLanguageId = try c.decodeIfPresent([String: Int].self, forKey: .codecLanguageId)
-        spkId = try c.decodeIfPresent([String: [Int]].self, forKey: .spkId)
-        spkIsDialect = try c.decodeIfPresent([String: String].self, forKey: .spkIsDialect)
+        do {
+            spkId = try c.decodeIfPresent([String: [Int]].self, forKey: .spkId)
+        } catch DecodingError.typeMismatch {
+            let scalarSpeakerIDs = try c.decodeIfPresent([String: Int].self, forKey: .spkId)
+            spkId = scalarSpeakerIDs?.mapValues { [$0] }
+        }
+        let dialectValues = try c.decodeIfPresent([String: StringOrBool].self, forKey: .spkIsDialect)
+        spkIsDialect = dialectValues?.compactMapValues(\.stringValue)
     }
 
     var mropeSection: [Int]? {

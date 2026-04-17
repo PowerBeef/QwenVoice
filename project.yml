@@ -82,6 +82,12 @@ targets:
     dependencies:
       - package: GRDB
       - target: QwenVoiceNative
+    scheme:
+      testTargets:
+        - QwenVoiceTests
+        - QwenVoiceUITests
+      environmentVariables:
+        QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS: $(QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS)
     postBuildScripts:
       - name: Sanitize Bundled Backend Resources
         shell: /bin/bash

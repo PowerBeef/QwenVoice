@@ -80,4 +80,72 @@ enum NativeRuntimeTestSupport {
         }
         return installDirectory
     }
+
+    static func bundledModelEntry(id: String) throws -> ModelEntry {
+        let manifestURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Resources/qwenvoice_contract.json")
+        let data = try Data(contentsOf: manifestURL)
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = payload["models"] as? [[String: Any]],
+              let model = models.first(where: { ($0["id"] as? String) == id }),
+              let name = model["name"] as? String,
+              let folder = model["folder"] as? String,
+              let mode = model["mode"] as? String,
+              let requiredRelativePaths = model["requiredRelativePaths"] as? [String] else {
+            throw NSError(
+                domain: "NativeRuntimeTestSupport",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing bundled model entry for \(id)."]
+            )
+        }
+
+        return ModelEntry(
+            id: id,
+            name: name,
+            folder: folder,
+            mode: mode,
+            requiredRelativePaths: requiredRelativePaths
+        )
+    }
+
+    static func installedModelsRoot() -> URL {
+        let environment = ProcessInfo.processInfo.environment
+        if let override = environment["QWENVOICE_APP_SUPPORT_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+                .appendingPathComponent("models", isDirectory: true)
+        }
+
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/QwenVoice/models", isDirectory: true)
+    }
+
+    static func installedModelDirectory(for model: ModelEntry) -> URL {
+        installedModelsRoot().appendingPathComponent(model.folder, isDirectory: true)
+    }
+
+    static func mirrorInstalledModel(
+        _ model: ModelEntry,
+        into modelsDirectory: URL
+    ) throws -> URL {
+        let sourceURL = installedModelDirectory(for: model)
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            throw NSError(
+                domain: "NativeRuntimeTestSupport",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Installed model is missing at \(sourceURL.path)."]
+            )
+        }
+
+        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+        let targetURL = modelsDirectory.appendingPathComponent(model.folder, isDirectory: true)
+        if FileManager.default.fileExists(atPath: targetURL.path) {
+            try FileManager.default.removeItem(at: targetURL)
+        }
+        try FileManager.default.createSymbolicLink(at: targetURL, withDestinationURL: sourceURL)
+        return targetURL
+    }
 }
