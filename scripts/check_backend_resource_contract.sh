@@ -40,21 +40,24 @@ check_project_metadata() {
     [ -f "$PROJECT_YML" ] || fail "missing project.yml at $PROJECT_YML"
     [ -f "$PBXPROJ" ] || fail "missing generated project at $PBXPROJ"
 
-    search_fixed_in_file 'path: Sources/Resources/backend' "$PROJECT_YML" || fail "project.yml does not define Sources/Resources/backend as a target resource"
-    search_fixed_in_file 'destination: resources' "$PROJECT_YML" || fail "project.yml must copy the backend into the resources destination"
-    search_fixed_in_file 'subpath: backend' "$PROJECT_YML" || fail "project.yml must copy the backend into Resources/backend"
     search_fixed_in_file '"backend/**"' "$PROJECT_YML" || fail "project.yml must exclude backend/** from the flattened Sources/Resources resource entry"
-    search_fixed_in_file '"server_compat.py"' "$PROJECT_YML" || fail "project.yml must exclude server_compat.py from bundled backend resources"
-
-    search_regex_in_file 'dstPath = backend;' "$PBXPROJ" || fail "generated project is missing the backend copy-files subpath"
+    if search_fixed_in_file 'path: Sources/Resources/backend' "$PROJECT_YML"; then
+        fail "project.yml must not bundle Sources/Resources/backend into shipped app resources"
+    fi
+    if search_fixed_in_file 'subpath: backend' "$PROJECT_YML"; then
+        fail "project.yml must not copy production backend sources into Resources/backend"
+    fi
+    if search_regex_in_file 'dstPath = backend;' "$PBXPROJ"; then
+        fail "generated project must not include a backend copy-files phase"
+    fi
     if search_regex_in_file 'server_compat.py in Resources' "$PBXPROJ" || search_regex_in_file 'server_compat.py in CopyFiles' "$PBXPROJ"; then
         fail "generated project must not copy server_compat.py into app resources"
     fi
-    if search_regex_in_file 'server.py in Resources' "$PBXPROJ"; then
-        fail "generated project must not flatten server.py into the top-level resource phase"
+    if search_regex_in_file 'server.py in Resources' "$PBXPROJ" || search_regex_in_file 'server.py in CopyFiles' "$PBXPROJ"; then
+        fail "generated project must not bundle server.py into the app"
     fi
-    if search_regex_in_file 'mlx_audio_qwen_speed_patch.py in Resources' "$PBXPROJ"; then
-        fail "generated project must not flatten backend helper modules into top-level resources"
+    if search_regex_in_file 'mlx_audio_qwen_speed_patch.py in Resources' "$PBXPROJ" || search_regex_in_file 'mlx_audio_qwen_speed_patch.py in CopyFiles' "$PBXPROJ"; then
+        fail "generated project must not bundle backend helper modules into the app"
     fi
 }
 
@@ -64,21 +67,19 @@ check_app_bundle() {
 
     local resources_dir="$app_path/Contents/Resources"
     local backend_dir="$resources_dir/backend"
-    [ -d "$backend_dir" ] || fail "bundled backend directory missing: $backend_dir"
+    [ ! -e "$backend_dir" ] || fail "bundled backend directory must be absent: $backend_dir"
+    [ ! -e "$resources_dir/python" ] || fail "bundled Python runtime must be absent: $resources_dir/python"
+    [ ! -e "$resources_dir/ffmpeg" ] || fail "bundled ffmpeg must be absent: $resources_dir/ffmpeg"
 
     local backend_file
-    for backend_file in "${REQUIRED_BACKEND_FILES[@]}"; do
-        [ -f "$backend_dir/$backend_file" ] || fail "bundled backend file missing: $backend_dir/$backend_file"
-        if [ -f "$resources_dir/$backend_file" ]; then
-            fail "bundled backend file must not be flattened into Contents/Resources: $resources_dir/$backend_file"
+    for backend_file in "${REQUIRED_BACKEND_FILES[@]}" "server_compat.py"; do
+        if [ -e "$resources_dir/$backend_file" ]; then
+            fail "backend source file must not be bundled into Contents/Resources: $resources_dir/$backend_file"
         fi
     done
 
-    if [ -f "$backend_dir/server_compat.py" ] || [ -f "$resources_dir/server_compat.py" ]; then
-        fail "server_compat.py must not be bundled into the app runtime resources"
-    fi
-    if find "$backend_dir" \( -type d -name "__pycache__" -o -name "*.pyc" \) -print -quit | grep -q .; then
-        fail "compiled Python cache artifacts must not be bundled into the production backend directory"
+    if find "$resources_dir" \( -type d -name "__pycache__" -o -name "*.pyc" -o -name "*.whl" \) -print -quit | grep -q .; then
+        fail "Python runtime artifacts must not be bundled into the native app resources"
     fi
 }
 
@@ -100,12 +101,12 @@ case "$1" in
         [ $# -eq 1 ] || usage
         check_repo_source_files
         check_project_metadata
-        echo "==> Backend resource contract is clean."
+        echo "==> Native app resource contract is clean."
         ;;
     --app-bundle)
         [ $# -eq 2 ] || usage
         check_app_bundle "$2"
-        echo "==> Bundled backend resource contract is clean."
+        echo "==> Native app bundle resource contract is clean."
         ;;
     *)
         usage

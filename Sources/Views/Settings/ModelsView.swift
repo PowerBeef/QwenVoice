@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ModelsView: View {
     @EnvironmentObject private var viewModel: ModelManagerViewModel
-    @EnvironmentObject private var pythonBridge: PythonBridge
 
     @Binding var highlightedModelID: String?
 
@@ -72,7 +71,7 @@ struct ModelsView: View {
             }
             .accessibilityIdentifier("screen_models")
             .task {
-                await viewModel.refresh(using: pythonBridge)
+                await viewModel.refresh()
                 focusHighlightedModel(using: proxy)
             }
             .onChange(of: highlightedModelID) { _, _ in
@@ -135,8 +134,6 @@ private extension ModelsView {
 }
 
 struct ModelRow: View {
-    @EnvironmentObject private var pythonBridge: PythonBridge
-
     let model: TTSModel
     let viewModel: ModelManagerViewModel
     var isHighlighted: Bool = false
@@ -285,7 +282,7 @@ struct ModelRow: View {
             EmptyView()
         case .notDownloaded:
             Button("Download") {
-                Task { await viewModel.download(model, using: pythonBridge) }
+                Task { await viewModel.download(model) }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -299,7 +296,7 @@ struct ModelRow: View {
             .controlSize(.small)
         case .repairAvailable:
             Button("Repair") {
-                Task { await viewModel.download(model, using: pythonBridge) }
+                Task { await viewModel.download(model) }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)

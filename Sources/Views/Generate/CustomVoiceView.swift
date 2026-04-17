@@ -2,7 +2,6 @@ import QwenVoiceNative
 import SwiftUI
 
 struct CustomVoiceView: View {
-    @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
@@ -234,7 +233,7 @@ private extension CustomVoiceView {
                     accentColor: AppTheme.customVoice,
                     accessibilityIdentifier: "customVoice_modelRecovery",
                     onPrimaryAction: {
-                        Task { await modelManager.download(model, using: pythonBridge) }
+                        Task { await modelManager.download(model) }
                     },
                     onSecondaryAction: {
                         appCommandRouter.navigate(to: .models)

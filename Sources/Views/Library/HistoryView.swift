@@ -69,7 +69,6 @@ enum HistorySortOrder: String, CaseIterable, Identifiable {
 
 struct HistoryView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject private var pythonBridge: PythonBridge
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
     @EnvironmentObject private var generationLibraryEvents: GenerationLibraryEvents
@@ -130,7 +129,7 @@ struct HistoryView: View {
                 SavedVoiceSheet(configuration: configuration) { voice in
                     handleSavedVoice(voice)
                 }
-                .environmentObject(pythonBridge)
+                .environmentObject(ttsEngineStore)
             }
     }
 

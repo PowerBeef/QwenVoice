@@ -9,7 +9,7 @@ QwenVoice is a native macOS SwiftUI app for offline Qwen3-TTS on Apple Silicon.
 The repo has four important working surfaces:
 
 - `Sources/` contains the shipping macOS app, shared models, services, and views.
-- `Sources/Resources/backend/` contains the long-lived Python JSON-RPC backend bundled into the app.
+- `Sources/Resources/backend/` contains the retained Python JSON-RPC backend used for source/debug compatibility and the standalone CLI. It is no longer bundled into shipped app resources.
 - `Sources/Resources/qwenvoice_contract.json` is the shared Swift/Python contract for models, speakers, output subfolders, and required files.
 - `scripts/` plus `.github/workflows/` define validation, packaging, CI, and release behavior.
 
@@ -48,7 +48,7 @@ Prefer code, manifests, and scripts over prose whenever they disagree.
 ## Safe Edit Boundaries
 
 - `project.yml` drives `QwenVoice.xcodeproj`. Prefer editing `project.yml` and regenerating the project over hand-editing generated project files.
-- `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, and most contents of `Sources/Resources/vendor/` are generated or vendored runtime assets. Update them through the packaging or vendoring scripts, not by ad hoc manual edits.
+- `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, and most contents of `Sources/Resources/vendor/` are generated or vendored source/debug runtime assets. They are not part of the shipped native app bundle. Update them through the packaging or vendoring scripts, not by ad hoc manual edits.
 - `Sources/Resources/backend/server_compat.py` is harness-only compatibility glue. Do not treat it as bundled production backend source.
 - `third_party_patches/mlx-audio/` and `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py` are coupled through the helper-sync workflow. Keep them aligned.
 - `third_party_patches/mlx-audio-swift/` is the repo-owned native backend source boundary for MLXAudioSwift. Treat it as maintained source, keep its package manifest and pins aligned with `project.yml` and `Package.resolved`, and do not mix it into the Python wheel overlay flow.
@@ -59,9 +59,9 @@ Prefer code, manifests, and scripts over prose whenever they disagree.
 
 QwenVoice has repo-tracked local skills under `.agents/skills/`. Prefer these when the task matches their scope instead of rediscovering the same repo-specific workflows from scratch:
 
-- `qwenvoice-packaged-validation` for packaged-app validation, dual-UI release artifact checks, bundled dependency proof, screenshot-capture prompt issues, and full automated validation requests
+- `qwenvoice-packaged-validation` for packaged-app validation, dual-UI release artifact checks, native bundle proof, screenshot-capture prompt issues, and full automated validation requests
 - `qwenvoice-release-publish` for version/build bumps, checked-in release notes, CI gate waiting, `release-dual-ui` dispatch, and GitHub release verification
-- `qwenvoice-vendored-runtime` for `mlx-audio`, `mlx-audio-swift`, backend helper overlay and runtime packaging changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification
+- `qwenvoice-vendored-runtime` for `mlx-audio`, `mlx-audio-swift`, backend helper overlay and runtime packaging changes, `build_mlx_audio_wheel.sh`, source/debug Python compatibility flows, and packaged native-bundle verification
 - `qwenvoice-doc-sync` for README, AGENTS, current-state, and release-notes sync against `Sources/`, `project.yml`, and `scripts/`
 
 These local skills complement, rather than replace, the user-wide skills that are already useful in this repo:
@@ -100,13 +100,13 @@ Keep QwenVoice repo-truth-first and harness-first even when richer desktop tooli
 - `Sources/Services/AppPaths.swift` is the path boundary for app support, models, outputs, voices, and the `QWENVOICE_APP_SUPPORT_DIR` override used by harness and fixture-backed runs.
 - `Sources/Models/TTSContract.swift` and `Sources/Models/TTSModel.swift` load `Sources/Resources/qwenvoice_contract.json`. Change the manifest first for model, speaker, output-subfolder, or required-file updates.
 - `Sources/Services/AppCommandRouter.swift` and `Sources/Services/GenerationLibraryEvents.swift` are the typed MainActor event boundaries for screen navigation and history refresh. Keep harness-only `NotificationCenter` traffic inside the explicit test-support surfaces.
-- `Sources/Services/PythonEnvironmentManager.swift` is the readiness and restart façade. Runtime discovery and setup live in `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`. Do not casually change Python version search order, bundled-runtime validation, or `.setup-complete` marker behavior.
-- `Sources/Services/PythonBridge.swift` remains the app-facing backend façade. Process launch, JSON-RPC transport, streaming state, model-load dedupe, clone priming, sidebar activity, and mode-specific flows live in `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, `PythonBridgeActivityCoordinator.swift`, `PythonBridge+GenerationFlows.swift`, and `StubBackendTransport.swift`.
+- `Sources/Services/PythonEnvironmentManager.swift` is the source/debug Python-readiness façade. Runtime discovery and setup live in `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`. Do not casually change Python version search order, bundled-runtime validation, or `.setup-complete` marker behavior.
+- `Sources/Services/PythonBridge.swift` remains the source/debug backend façade. Process launch, JSON-RPC transport, streaming state, model-load dedupe, clone priming, sidebar activity, and mode-specific flows live in `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, `PythonBridgeActivityCoordinator.swift`, `PythonBridge+GenerationFlows.swift`, and `StubBackendTransport.swift`.
 - The backend RPC surface already includes app-visible coordination methods such as `prewarm_model`, `prepare_clone_reference`, `prime_clone_reference`, `get_model_info`, `get_speakers`, `list_voices`, `enroll_voice`, and `delete_voice`. If you change those payloads or semantics, keep Swift, Python, harness, and docs in sync.
-- `Sources/Resources/backend/server.py` is the thin Python entrypoint and wiring layer. Production backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. The shipped app bundles that production backend under `QwenVoice.app/Contents/Resources/backend/`.
+- `Sources/Resources/backend/server.py` is the thin Python entrypoint and wiring layer for the retained source/debug backend. Backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. Shipped app bundles must not include `Contents/Resources/backend/`.
 - `Sources/Services/GenerationPersistence.swift` centralizes save and autoplay handoff for the three generation screens. `Sources/Services/DatabaseService.swift` owns the GRDB SQLite history database and is `@MainActor`; keep persistence and library-refresh behavior aligned.
 - `Sources/Services/TestStateServer.swift` and `Sources/Services/TestStateProvider.swift` are the UI-test HTTP and query boundary. Keep UI-test state exposure, screenshot hooks, and window-activation telemetry there rather than leaking it into normal product flows.
-- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there. The shipped app now defaults `TTSEngineStore` to `NativeMLXMacEngine` through `AppEngineSelection`, while `QWENVOICE_APP_ENGINE=python` remains the rollback path and stub UI harness runs still force the adapter-backed engine path.
+- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there. The shipped app now defaults `TTSEngineStore` to `NativeMLXMacEngine` through `AppEngineSelection`, while `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path. Stub UI harness runs use `UITestStubMacEngine` so UI smoke remains deterministic without routing through the Python adapter.
 - `Sources/ViewModels/ModelManagerViewModel.swift` still uses manifest plus filesystem status for the shipping Models screen. Backend `get_model_info` exists and is harness-tested, but it is not yet the primary model-status source for `ModelsView`.
 - `Sources/ViewModels/AudioPlayerViewModel.swift` isolates timer-frequency playback state in nested `PlaybackProgress`. Do not move high-frequency playback fields back onto the parent observable object.
 - `cli/main.py` is a separate terminal app with cwd-based paths and a broader speaker map than the shipped GUI. Do not copy CLI assumptions into the app contract or app docs.
@@ -186,7 +186,7 @@ Notes:
 - `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
 - `ui`, `design`, and `perf` default to `--ui-backend-mode live --ui-data-root fixture`. Those runs reuse installed runtime and models while isolating writable app state under a disposable fixture root.
 - Use `--ui-backend-mode stub` when you want UI smoke coverage without requiring installed models or a live backend. CI uses stub mode for the `ui` smoke lane and macOS 26 screenshot-capture smoke.
-- `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs now default to `native`, `python` remains the rollback path, and stub UI harness mode still forces the adapter-backed engine path so fixture-backed preview events stay deterministic.
+- `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs default to `native`, `python` remains the source/debug compatibility path, and stub UI harness mode uses `UITestStubMacEngine` so fixture-backed preview events stay deterministic without depending on the Python adapter.
 - Do not jump to `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...`, `./scripts/release.sh`, `python3 scripts/harness.py test --layer release ...`, or live `ui` / forced `design` / `perf` lanes until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant targeted source gate are already green.
 - If a command starts a broad cold rebuild of the native MLX stack and that rebuild is not strictly required to answer the question, stop and re-scope instead of letting it continue.
 - `AppPaths.appSupportDir` respects `QWENVOICE_APP_SUPPORT_DIR`; the harness sets that for fixture-backed runs. Do not hardcode `~/Library/Application Support/QwenVoice/` in new test flows if they are supposed to be isolated.
@@ -202,7 +202,7 @@ Notes:
 The active GitHub workflows are:
 
 - `Project Inputs` for checked-in project and resource validation
-- `Test Suite` for source tests, strict-concurrency and alternate-profile compilation, packaged builds, runtime parity, UI smoke, and perf audit
+- `Test Suite` for source tests, strict-concurrency and alternate-profile compilation, packaged builds, source-backend compatibility, UI smoke, and perf audit
 - `Release Dual UI` for building, signing, notarizing, and optionally publishing the shipped DMGs
 
 Release facts:
@@ -211,6 +211,7 @@ Release facts:
 - `Release Dual UI` has three stages: `build-release`, `notarize-release`, and `publish-release`.
 - Intermediate build artifacts are uploaded as `qwenvoice-dual-ui-build-<run-number>-<variant>[-label]`.
 - Final notarized artifact bundles are uploaded as `qwenvoice-dual-ui-<run-number>-final[-label]` and are the preferred source for downloaded release validation.
+- Shipped app bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
 - Tagged publishes should provide `release_notes_path` and publish the checked-in notes file instead of hand-maintaining separate hosted release text.
 - Release signing and notarization belongs in GitHub Actions, not local packaging. The workflow uses App Store Connect API key auth; `APPLE_NOTARY_ISSUER_ID` is required for Team keys and omitted for Individual keys.
 - Local `./scripts/release.sh` output is useful for macOS 26 debug and runtime validation, but it is not authoritative release proof for either shipped variant.
@@ -247,7 +248,7 @@ Local packaging commands:
   Review `AppPaths.swift`, `UITestAutomationSupport.swift`, `TestStateServer.swift`, `scripts/harness_lib/ui_test_support.py`, and affected UI tests together.
 - Appearance-sensitive UI or design-baseline work:
   Keep `QWENVOICE_UI_TEST_APPEARANCE=light` and `dark` coverage green, and refresh the matching committed baselines under `tests/screenshots/baselines/light/` and `tests/screenshots/baselines/dark/`. If the shared system and default baselines are still used for the affected flow, refresh `tests/screenshots/baselines/` too.
-- Packaged validation, release artifacts, or bundled dependency checks:
+- Packaged validation, release artifacts, or native bundle-boundary checks:
   Prefer `qwenvoice-packaged-validation`, validate through the harness packaged and release lanes, use `./scripts/verify_release_bundle.sh`, and default screenshot checks to `QWENVOICE_UITEST_CAPTURE_MODE=content`.
 - GitHub release publication or hosted release notes:
   Prefer `qwenvoice-release-publish`, require a checked-in notes file, and keep the `Release Dual UI` inputs aligned, including `release_notes_path`.

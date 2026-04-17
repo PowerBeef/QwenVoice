@@ -359,7 +359,7 @@ final class PythonBridge: ObservableObject {
     // MARK: - Path Resolution
 
     nonisolated static func findServerScript() -> String? {
-        // 1. App bundle: the shipped production backend lives under Resources/backend/.
+        // 1. Legacy source/debug app bundles may still carry the retained backend under Resources/backend/.
         if let bundlePath = Bundle.main.path(forResource: "server", ofType: "py", inDirectory: "backend") {
             return bundlePath
         }

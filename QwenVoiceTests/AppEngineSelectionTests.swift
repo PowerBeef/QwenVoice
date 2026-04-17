@@ -28,10 +28,10 @@ final class AppEngineSelectionTests: XCTestCase {
         )
     }
 
-    func testAppEngineSelectionFallsBackToPythonForStubBackendMode() {
+    func testAppEngineSelectionPreservesNativeSelectionForStubBackendMode() {
         let selection = AppEngineSelection(environment: [:])
-        XCTAssertEqual(selection.effectiveSelection(isStubBackendMode: true), .python)
-        XCTAssertFalse(selection.requiresManualInitialization(isStubBackendMode: true))
+        XCTAssertEqual(selection.effectiveSelection(isStubBackendMode: true), .native)
+        XCTAssertTrue(selection.requiresManualInitialization(isStubBackendMode: true))
     }
 
     @MainActor
@@ -111,11 +111,11 @@ final class AppEngineSelectionTests: XCTestCase {
     }
 
     @MainActor
-    func testAppEngineSelectionBuildsPythonEngineForStubBackendMode() {
+    func testAppEngineSelectionBuildsNativeStubEngineForStubBackendMode() {
         let engine = AppEngineSelection(environment: [:]).makeEngine(
             pythonBridge: PythonBridge(),
             isStubBackendMode: true
         )
-        XCTAssertTrue(engine is PythonBridgeMacTTSEngineAdapter)
+        XCTAssertTrue(engine is UITestStubMacEngine)
     }
 }

@@ -10,25 +10,25 @@ QwenVoice has three maintained vendoring/runtime stories:
 
 In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then:
 
-- finds a local Python 3.11–3.14 install
-- creates a venv under `~/Library/Application Support/QwenVoice/python/`
-- installs dependencies from `Sources/Resources/requirements.txt`
-- records the requirements hash in `.setup-complete`
+- defaults to the native engine for normal app launches
+- only uses the retained Python setup flow when `QWENVOICE_APP_ENGINE=python` is selected explicitly for source/debug compatibility
+- then finds a local Python 3.11–3.14 install, creates a venv under `~/Library/Application Support/QwenVoice/python/`, installs dependencies from `Sources/Resources/requirements.txt`, and records the requirements hash in `.setup-complete`
 
 ## Release Packaging
 
-`./scripts/release.sh` bundles:
+`./scripts/release.sh` now builds a native-only app bundle. It must not ship:
 
-- standalone Python into `Sources/Resources/python/`
-- `ffmpeg` into `Sources/Resources/ffmpeg/`
+- `Contents/Resources/backend/`
+- `Contents/Resources/python/`
+- bundled `Contents/Resources/ffmpeg`
 
-Those directories are generated build assets, not hand-edited source files.
+`Sources/Resources/python/` and `Sources/Resources/ffmpeg/` remain repo-side generated assets for source/debug compatibility work, not shipped release-bundle inputs.
 
 The release pipeline also:
 
 - regenerates the Xcode project safely
 - builds the app
-- injects the bundled runtime resources into the final `.app`
+- strips any leaked backend or Python runtime artifacts from the final `.app`
 - removes vendored wheels and compiled Python artifacts from the packaged Resources directory
 - verifies the final bundle
 - creates the DMG
@@ -49,7 +49,7 @@ The native package boundary currently includes:
 
 When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
 
-Normal app launches now default the app-facing engine to `NativeMLXMacEngine`. `QWENVOICE_APP_ENGINE=python` remains the rollback path for source and debug runs. Stub UI harness mode still forces the adapter-backed engine path even if `QWENVOICE_APP_ENGINE=native` is set, because stub assertions depend on deterministic adapter-driven preview events rather than real native synthesis.
+Normal app launches now default the app-facing engine to `NativeMLXMacEngine`. `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path. Stub UI harness mode now uses `UITestStubMacEngine`, which keeps the harness deterministic without routing through the Python adapter.
 
 ## Qwen3-TTS Overlay Strategy
 
@@ -67,11 +67,11 @@ If the GUI app’s `mlx-audio` version changes, the standalone overlay and vendo
 
 ## Maintenance Cadence
 
-The pinned Python/runtime stack is intentionally conservative. Review it on a simple maintainer cadence instead of introducing automated dependency churn:
+The pinned Python/source-debug compatibility stack is intentionally conservative. Review it on a simple maintainer cadence instead of introducing automated dependency churn:
 
-- after any intentional `mlx-audio`, Python, bundled `ffmpeg`, or release-runtime update
+- after any intentional `mlx-audio`, Python-compatibility, bundled `ffmpeg`, or release-packaging update
 - before major tagged releases if the vendored/runtime stack changed since the previous tag
-- at least quarterly for the overlay, runtime manifest expectations, and packaged verification flow
+- at least quarterly for the overlay, source/debug runtime expectations, and packaged verification flow
 
 Every review should keep these artifacts aligned:
 

@@ -47,6 +47,19 @@ struct QwenVoiceApp: App {
             let windowCoordinator = UITestWindowCoordinator.shared
             testStateServer.start()
             windowCoordinator.start()
+            if appEngineSelection.effectiveSelection(
+                isStubBackendMode: UITestAutomationSupport.isStubBackendMode
+            ) == .native {
+                Task { @MainActor in
+                    TestStateProvider.shared.setRuntimeStatus(
+                        source: UITestAutomationSupport.isStubBackendMode ? .stub : .native,
+                        pythonPath: nil,
+                        ffmpegPath: nil
+                    )
+                    TestStateProvider.shared.setEnvironmentReady(true)
+                    TestStateProvider.shared.setBackendReady(false)
+                }
+            }
             DispatchQueue.main.async {
                 Task { @MainActor in
                     _ = await windowCoordinator.activateMainWindow(reason: "launch_init")
@@ -65,8 +78,8 @@ struct QwenVoiceApp: App {
                     )
                     .frame(minWidth: 520, minHeight: 420)
                 } else {
-                    switch envManager.state {
-                    case .ready(let pythonPath):
+                    switch bootstrapMode {
+                    case .native:
                         ContentView()
                             .environmentObject(pythonBridge)
                             .environmentObject(ttsEngineStore)
@@ -78,24 +91,36 @@ struct QwenVoiceApp: App {
                             .environmentObject(appCommandRouter)
                             .environmentObject(generationLibraryEvents)
                             .frame(minWidth: 720, minHeight: 560)
-                            .onAppear {
-                                appStartupCoordinator.syncUITestEnvironmentReadiness(
-                                    state: .ready(pythonPath: pythonPath),
-                                    pythonBridge: pythonBridge
-                                )
-                                backendLaunchCoordinator.startBackendIfNeeded(
-                                    pythonBridge: pythonBridge,
-                                    envManager: envManager,
-                                    pythonPath: pythonPath,
-                                    appSupportDir: Self.appSupportDir.path
-                                )
-                            }
-                    case .idle:
-                        SetupView(envManager: envManager)
-                            .frame(minWidth: 500, minHeight: 400)
-                    default:
-                        SetupView(envManager: envManager)
-                            .frame(minWidth: 500, minHeight: 400)
+                    case .python:
+                        switch envManager.state {
+                        case .ready(let pythonPath):
+                            ContentView()
+                                .environmentObject(pythonBridge)
+                                .environmentObject(ttsEngineStore)
+                                .environmentObject(audioPlayer)
+                                .environmentObject(audioPlayer.playbackProgress)
+                                .environmentObject(envManager)
+                                .environmentObject(modelManager)
+                                .environmentObject(savedVoicesViewModel)
+                                .environmentObject(appCommandRouter)
+                                .environmentObject(generationLibraryEvents)
+                                .frame(minWidth: 720, minHeight: 560)
+                                .onAppear {
+                                    syncUITestRuntimeState()
+                                    backendLaunchCoordinator.startBackendIfNeeded(
+                                        pythonBridge: pythonBridge,
+                                        envManager: envManager,
+                                        pythonPath: pythonPath,
+                                        appSupportDir: Self.appSupportDir.path
+                                    )
+                                }
+                        case .idle:
+                            SetupView(envManager: envManager)
+                                .frame(minWidth: 500, minHeight: 400)
+                        default:
+                            SetupView(envManager: envManager)
+                                .frame(minWidth: 500, minHeight: 400)
+                        }
                     }
                 }
             }
@@ -111,44 +136,36 @@ struct QwenVoiceApp: App {
                 appStartupCoordinator.refreshLaunchDiagnostics()
                 if UITestAutomationSupport.isEnabled {
                     UITestWindowCoordinator.shared.syncVisibleMainWindowState()
-                    TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode)
-                    TestStateProvider.shared.setBackendLastError(pythonBridge.lastError)
                 }
-                if appStartupCoordinator.launchDiagnostics == nil {
+                syncUITestRuntimeState()
+                if appStartupCoordinator.launchDiagnostics == nil, bootstrapMode == .python {
                     envManager.ensureEnvironment()
-                    appStartupCoordinator.syncUITestEnvironmentReadiness(
-                        state: envManager.state,
-                        pythonBridge: pythonBridge
-                    )
+                    syncUITestRuntimeState()
                 }
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
-            .onReceive(envManager.$state) { newState in
+            .onReceive(envManager.$state) { _ in
+                guard bootstrapMode == .python else { return }
                 guard appStartupCoordinator.launchDiagnostics == nil else { return }
-                appStartupCoordinator.syncUITestEnvironmentReadiness(
-                    state: newState,
-                    pythonBridge: pythonBridge
-                )
+                syncUITestRuntimeState()
             }
-            .onReceive(pythonBridge.$isReady) { isReady in
-                guard UITestAutomationSupport.isEnabled else { return }
-                TestStateProvider.shared.setBackendReady(UITestAutomationSupport.isStubBackendMode || isReady)
-                if isReady {
-                    UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "backend_ready")
-                }
+            .onReceive(pythonBridge.$isReady) { _ in
+                guard bootstrapMode == .python else { return }
+                syncUITestRuntimeState()
             }
             .onReceive(pythonBridge.$sidebarStatus) { _ in
                 syncUITestSidebarStatus()
             }
             .onReceive(ttsEngineStore.$snapshot) { _ in
+                syncUITestRuntimeState()
                 syncUITestSidebarStatus()
             }
             .onReceive(audioPlayer.$isLiveStream) { _ in
                 syncUITestSidebarStatus()
             }
-            .onReceive(pythonBridge.$lastError) { lastError in
-                guard UITestAutomationSupport.isEnabled else { return }
-                TestStateProvider.shared.setBackendLastError(lastError)
+            .onReceive(pythonBridge.$lastError) { _ in
+                guard bootstrapMode == .python else { return }
+                syncUITestRuntimeState()
             }
         }
         .defaultSize(width: 720, height: 560)
@@ -230,6 +247,17 @@ struct QwenVoiceApp: App {
         AppPaths.appSupportDir
     }
 
+    private enum BootstrapMode {
+        case native
+        case python
+    }
+
+    private var bootstrapMode: BootstrapMode {
+        appEngineSelection.effectiveSelection(
+            isStubBackendMode: UITestAutomationSupport.isStubBackendMode
+        ) == .python ? .python : .native
+    }
+
     static var modelsDir: URL { AppPaths.modelsDir }
     static var outputsDir: URL { AppPaths.outputsDir }
 
@@ -243,8 +271,14 @@ struct QwenVoiceApp: App {
         Task {
             do {
                 try await ttsEngineStore.initialize(appSupportDirectory: Self.appSupportDir)
+                await MainActor.run {
+                    syncUITestRuntimeState()
+                }
             } catch {
                 // Native engine initialization publishes its own failure snapshot.
+                await MainActor.run {
+                    syncUITestRuntimeState()
+                }
             }
         }
     }
@@ -253,10 +287,18 @@ struct QwenVoiceApp: App {
     private func retryLaunchPreflight() {
         appStartupCoordinator.refreshLaunchDiagnostics()
         guard appStartupCoordinator.launchDiagnostics == nil else { return }
-        envManager.ensureEnvironment()
-        appStartupCoordinator.syncUITestEnvironmentReadiness(
-            state: envManager.state,
-            pythonBridge: pythonBridge
+        if bootstrapMode == .python {
+            envManager.ensureEnvironment()
+        }
+        syncUITestRuntimeState()
+    }
+
+    private func syncUITestRuntimeState() {
+        appStartupCoordinator.syncUITestRuntimeReadiness(
+            appEngineSelection: appEngineSelection,
+            environmentState: envManager.state,
+            pythonBridge: pythonBridge,
+            ttsEngineSnapshot: ttsEngineStore.snapshot
         )
     }
 

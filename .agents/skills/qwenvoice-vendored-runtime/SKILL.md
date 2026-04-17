@@ -1,23 +1,23 @@
 ---
 name: qwenvoice-vendored-runtime
-description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches, `mlx-audio-swift`, and packaged dependency flows safely. Use when work touches `build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio`, `third_party_patches/mlx-audio-swift`, bundled Python or ffmpeg assets, backend runtime experiments, or release-bundle verification for packaged apps.
+description: Update QwenVoice source/debug Python compatibility assets, `mlx-audio` wheel patches, `mlx-audio-swift`, and packaged dependency flows safely. Use when work touches `build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio`, `third_party_patches/mlx-audio-swift`, Python compatibility assets, backend runtime experiments, or release-bundle verification for packaged apps.
 ---
 
 # QwenVoice Vendored Runtime
 
 ## Overview
 
-Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime or project artifacts from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
+Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the relevant source/debug runtime or project artifacts from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
 
 On this machine, keep runtime verification deliberately low-RAM: run the cheapest relevant source gates first, do not overlap heavy validation commands, and treat wheel rebuilds, rebundling, local packaging, and release-style validation as later steps once the lighter checks are already green.
 
 Current runtime policy:
 
-- both shipped release variants intentionally package the same macOS 15-compatible MLX/Metal runtime
+- both shipped release variants intentionally ship a native-only app bundle with no bundled Python backend, Python runtime, or bundled `ffmpeg`
 - the dual-release split is for app/UI build profile and SDK differences, not for two separate bundled MLX runtimes
 - moving the macOS 26 artifact to a macOS 26-specific MLX/Metal runtime would be a product/runtime decision, not a packaging optimization
-- normal app launches now default the app-facing engine to `NativeMLXMacEngine`; `QWENVOICE_APP_ENGINE=python` remains the rollback path for source/debug work
-- stub UI harness mode still forces the adapter-backed engine path even if `QWENVOICE_APP_ENGINE=native` is set, because those assertions depend on deterministic adapter-driven preview events rather than real native synthesis
+- normal app launches now default the app-facing engine to `NativeMLXMacEngine`; `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path
+- stub UI harness mode now uses `UITestStubMacEngine`, which keeps deterministic preview behavior without routing through the Python adapter
 
 ## Workflow
 
@@ -46,7 +46,7 @@ When the work touches Qwen3-TTS, cache strategies, streaming fixes, or vendored 
 - update the repo-owned patch sources under `third_party_patches/mlx-audio/`
 - keep any helper modules and wheel patches aligned
 - rebuild the wheel through `scripts/build_mlx_audio_wheel.sh`
-- rebundle Python from the rebuilt wheel
+- rebundle Python compatibility assets from the rebuilt wheel when the source/debug path is part of the request
 
 Do not hand-edit installed files under `Sources/Resources/python/` as the primary implementation path.
 
@@ -57,7 +57,7 @@ When the work touches the native backend package graph or Swift MLXAudio integra
 - regenerate the Xcode project
 - validate the app build and the targeted native tests before claiming the native runtime is healthy
 - use `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...` as the opt-in proof of real native synthesis when an installed model is available
-- if the change also affects app-engine selection, run the stub UI harness lane too, but remember that stub mode proves app-shell compatibility rather than real native synthesis because it forces the adapter-backed engine path
+- if the change also affects app-engine selection, run the stub UI harness lane too, but remember that stub mode proves deterministic app-shell compatibility through `UITestStubMacEngine`, not live model synthesis
 
 ### 3. Keep the app/backend boundary in sync
 
@@ -111,7 +111,7 @@ Treat performance/runtime spikes as internal until measurements prove otherwise:
 
 ### Bundled dependency questions
 
-When asked whether a packaged app uses bundled Python or ffmpeg, rely on runtime diagnostics and `verify_release_bundle.sh`, not inference from file presence.
+When asked whether a packaged app still uses bundled Python or `ffmpeg`, rely on runtime diagnostics and `verify_release_bundle.sh`, not inference from file presence.
 
 ## Failure Shields
 

@@ -1,13 +1,13 @@
 ---
 name: qwenvoice-packaged-validation
-description: Validate QwenVoice dev builds, packaged apps, and downloaded release artifacts with the repo harness and bundle checks. Use when asked to run automated testing, verify both macOS variants, check UI smoothness, confirm bundled Python or ffmpeg usage, investigate screenshot-capture prompts, or explain why a packaged validation lane failed.
+description: Validate QwenVoice dev builds, packaged apps, and downloaded release artifacts with the repo harness and bundle checks. Use when asked to run automated testing, verify both macOS variants, check UI smoothness, confirm native-only bundle behavior, investigate screenshot-capture prompts, or explain why a packaged validation lane failed.
 ---
 
 # QwenVoice Packaged Validation
 
 ## Overview
 
-Use this skill for QwenVoice validation requests that go beyond a plain local build. Favor the repo harness, packaged-app flows, and bundled-runtime checks over one-off manual app launches.
+Use this skill for QwenVoice validation requests that go beyond a plain local build. Favor the repo harness, packaged-app flows, and native-bundle checks over one-off manual app launches.
 
 Treat local and release surfaces differently:
 
@@ -89,8 +89,6 @@ Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as 
 - copy `QwenVoice.app` into a disposable temp install root
 - clear quarantine on the temp copy only if the spot-check flow requires it
 - test the copied app, not the mounted app
-- if you run bundled Python directly inside the copied app for inspection, set `PYTHONDONTWRITEBYTECODE=1` or avoid ad hoc interpreter runs that would create `__pycache__` noise in the audit copy
-
 ### 4. Keep UI screenshot capture permissionless by default
 
 For `ui` and `design` lanes, default to:
@@ -101,7 +99,7 @@ QWENVOICE_UITEST_CAPTURE_MODE=content
 
 Use `system` mode only when the user explicitly wants real system capture fidelity. If `system` mode fails because Screen Recording permission is missing, report that as an expected TCC limitation instead of treating it as a general app failure.
 
-### 5. Prove bundled dependencies, not just startup
+### 5. Prove native bundle boundaries, not just startup
 
 When validating packaged apps, run the bundle verifier:
 
@@ -111,12 +109,12 @@ When validating packaged apps, run the bundle verifier:
 
 Treat the following as the packaged-runtime acceptance checks:
 
-- `runtimeSource == bundled`
-- bundled Python path resolves under `QwenVoice.app/Contents/Resources/python`
-- bundled ffmpeg path resolves under `QwenVoice.app/Contents/Resources/ffmpeg`
-- packaged backend smoke passes
+- `runtimeSource == native`
+- `activePythonPath == ""`
+- `activeFFmpegPath == ""`
+- packaged app startup smoke passes
 
-If the request is about “using bundled dependencies,” do not stop at launch success.
+If the request is about proving native-only packaging, do not stop at launch success.
 When the request is about downloaded signed/notarized DMGs, treat trust checks plus copied-app bundle verification as the acceptance gate.
 
 ### 6. Handle live-model blockers explicitly
@@ -160,4 +158,4 @@ python3 scripts/harness.py test --layer design --ui-backend-mode stub
 - Do not assume the mounted DMG app is the real test target.
 - Do not treat missing live models as a code regression.
 - Do not default screenshot tests to `QWENVOICE_UITEST_CAPTURE_MODE=system`.
-- Do not claim success on bundled dependencies unless `verify_release_bundle.sh` or equivalent runtime diagnostics prove it.
+- Do not claim success on native-only bundle boundaries unless `verify_release_bundle.sh` or equivalent runtime diagnostics prove it.

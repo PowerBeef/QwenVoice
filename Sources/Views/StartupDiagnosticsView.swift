@@ -14,7 +14,7 @@ struct StartupDiagnosticsView: View {
                 Text(snapshot.issue.summary)
                     .font(.title3.weight(.semibold))
 
-                Text("The app can't continue until its bundled resources are valid. You can retry the startup checks or copy the diagnostics for troubleshooting.")
+                Text("The app can't continue until its native resources are valid. You can retry the startup checks or copy the diagnostics for troubleshooting.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -23,9 +23,8 @@ struct StartupDiagnosticsView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
                     diagnosticsRow("Manifest path", snapshot.manifestPath)
-                    diagnosticsRow("Backend path", snapshot.backendPath)
-                    diagnosticsRow("Python path", snapshot.pythonPath)
-                    diagnosticsRow("ffmpeg path", snapshot.ffmpegPath)
+                    diagnosticsRow("Bundle path", snapshot.bundlePath)
+                    diagnosticsRow("Resources path", snapshot.resourcesPath)
 
                     Divider()
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .contract import load_contract, model_ids, model_is_installed
-from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, APP_VENV_PYTHON, PROJECT_DIR, ensure_directory
+from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, PROJECT_DIR, ensure_directory
 
 
 XCODEBUILD_TIMEOUT_ENV = "QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS"
@@ -63,8 +63,6 @@ def check_live_prerequisites() -> dict[str, Any]:
     """Return the current live-backend prerequisites."""
     installed_models = [mid for mid in model_ids() if model_is_installed(mid)]
     return {
-        "python_exists": APP_VENV_PYTHON.exists(),
-        "python_path": str(APP_VENV_PYTHON),
         "models_dir": str(APP_MODELS_DIR),
         "installed_models": installed_models,
         "app_support_dir": str(APP_SUPPORT_DIR),
@@ -104,7 +102,6 @@ def prepare_ui_launch_context(
     fixture_root = Path(tempfile.mkdtemp(prefix="qwenvoice_ui_live_"))
     _create_base_directories(fixture_root)
     _mirror_item(APP_MODELS_DIR, fixture_root / "models")
-    _mirror_item(APP_SUPPORT_DIR / "python", fixture_root / "python")
     _copy_optional_tree(APP_SUPPORT_DIR / "voices", fixture_root / "voices")
     _copy_optional_file(APP_SUPPORT_DIR / "history.sqlite", fixture_root / "history.sqlite")
 

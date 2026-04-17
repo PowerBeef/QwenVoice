@@ -27,7 +27,7 @@ enum AppEngineSelection: String, Equatable {
     func effectiveSelection(
         isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
     ) -> Self {
-        isStubBackendMode ? .python : self
+        self
     }
 
     func requiresManualInitialization(
@@ -45,7 +45,7 @@ enum AppEngineSelection: String, Equatable {
         case .python:
             return PythonBridgeMacTTSEngineAdapter(bridge: pythonBridge)
         case .native:
-            return NativeMLXMacEngine()
+            return isStubBackendMode ? UITestStubMacEngine() : NativeMLXMacEngine()
         }
     }
 

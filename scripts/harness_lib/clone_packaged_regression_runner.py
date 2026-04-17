@@ -414,10 +414,10 @@ def _run_clone_pass(
             }
 
         runtime_diagnostics = _runtime_diagnostics(target, state)
-        if not runtime_diagnostics["bundled_runtime_ok"]:
+        if not runtime_diagnostics["native_runtime_ok"]:
             return {
                 "passed": False,
-                "error": "Packaged clone comparison requires bundled runtime diagnostics to pass",
+                "error": "Packaged clone comparison requires native runtime diagnostics to pass",
                 "details": {
                     "side": side,
                     "pass_index": pass_index,
@@ -681,33 +681,27 @@ def _run_clone_pass(
 
 
 def _runtime_diagnostics(target: UIAppTarget, state: dict[str, Any]) -> dict[str, Any]:
-    resources_dir = target.app_bundle / "Contents" / "Resources"
-    expected_python_prefix = _normalize_path(str(resources_dir / "python"))
-    expected_ffmpeg_path = _normalize_path(str(resources_dir / "ffmpeg"))
     runtime_source = state.get("runtimeSource")
     active_python_path = state.get("activePythonPath", "")
     active_ffmpeg_path = state.get("activeFFmpegPath", "")
     normalized_active_python_path = _normalize_path(active_python_path)
     normalized_active_ffmpeg_path = _normalize_path(active_ffmpeg_path)
 
-    bundled_runtime_ok = (
-        runtime_source == "bundled"
-        and (
-            normalized_active_python_path == expected_python_prefix
-            or normalized_active_python_path.startswith(expected_python_prefix + "/")
-        )
-        and normalized_active_ffmpeg_path == expected_ffmpeg_path
+    native_runtime_ok = (
+        runtime_source == "native"
+        and normalized_active_python_path == ""
+        and normalized_active_ffmpeg_path == ""
     )
 
     return {
         "runtimeSource": runtime_source,
         "activePythonPath": active_python_path,
         "activeFFmpegPath": active_ffmpeg_path,
-        "expectedPythonPrefix": str(resources_dir / "python"),
-        "expectedFFmpegPath": str(resources_dir / "ffmpeg"),
+        "expectedPythonPrefix": "",
+        "expectedFFmpegPath": "",
         "normalizedActivePythonPath": normalized_active_python_path,
         "normalizedActiveFFmpegPath": normalized_active_ffmpeg_path,
-        "bundled_runtime_ok": bundled_runtime_ok,
+        "native_runtime_ok": native_runtime_ok,
     }
 
 
@@ -858,8 +852,6 @@ def _collect_qwenvoice_processes() -> list[dict[str, Any]]:
         command = parts[1]
         if pid == current_pid:
             continue
-        if "/QwenVoice.app/Contents/MacOS/QwenVoice" in command or (
-            "/QwenVoice.app/Contents/Resources/python" in command and "python" in command
-        ):
+        if "/QwenVoice.app/Contents/MacOS/QwenVoice" in command:
             matches.append({"pid": pid, "command": command})
     return matches

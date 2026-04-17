@@ -7,35 +7,10 @@ struct PreferencesView: View {
     @EnvironmentObject private var envManager: PythonEnvironmentManager
 
     @State private var showResetConfirmation = false
+    private let appEngineSelection = AppEngineSelection.current()
 
-    private var usesBundledPython: Bool {
-        Bundle.main.path(forResource: "python3", ofType: nil, inDirectory: "python/bin") != nil
-    }
-
-    private var pythonActionTitle: String {
-        usesBundledPython ? "Restart Python Backend" : "Reset Python Environment"
-    }
-
-    private var pythonActionDescription: String {
-        if usesBundledPython {
-            return "Uses the bundled runtime included with the app. This restarts the backend without reinstalling dependencies."
-        }
-        return "Deletes the virtual environment and reinstalls all dependencies."
-    }
-
-    private var pythonActionButtonLabel: String {
-        usesBundledPython ? "Restart Backend" : "Reset Environment"
-    }
-
-    private var pythonActionConfirmationTitle: String {
-        usesBundledPython ? "Restart Python Backend?" : "Reset Python Environment?"
-    }
-
-    private var pythonActionConfirmationMessage: String {
-        if usesBundledPython {
-            return "This will restart the Python backend. The bundled runtime will remain in place and no dependencies will be reinstalled."
-        }
-        return "This will delete the Python virtual environment and recreate it from scratch. The app will need to reinstall all dependencies."
+    private var usesPythonMaintenancePath: Bool {
+        appEngineSelection == .python
     }
 
     var body: some View {
@@ -90,16 +65,23 @@ struct PreferencesView: View {
             }
 
             Section("Maintenance") {
-                Text(pythonActionDescription)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                if usesPythonMaintenancePath {
+                    Text("Python mode is enabled for source/debug compatibility. Resetting here recreates the local debug environment.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
 
-                Button(pythonActionButtonLabel) {
-                    showResetConfirmation = true
+                    Button("Reset Python Environment") {
+                        showResetConfirmation = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.preferences)
+                    .accessibilityIdentifier("preferences_resetEnvButton")
+                } else {
+                    Text("QwenVoice now runs natively and no longer needs a bundled Python backend in the shipped app.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("preferences_nativeMaintenanceNote")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.preferences)
-                .accessibilityIdentifier("preferences_resetEnvButton")
             }
         }
         .formStyle(.grouped)
@@ -112,13 +94,13 @@ struct PreferencesView: View {
                 hiddenReadinessMarker
             }
         }
-        .alert(pythonActionConfirmationTitle, isPresented: $showResetConfirmation) {
+        .alert("Reset Python Environment?", isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button(usesBundledPython ? "Restart" : "Reset", role: .destructive) {
+            Button("Reset", role: .destructive) {
                 envManager.resetEnvironment()
             }
         } message: {
-            Text(pythonActionConfirmationMessage)
+            Text("This will delete the local Python virtual environment and recreate it for source/debug compatibility.")
         }
     }
 

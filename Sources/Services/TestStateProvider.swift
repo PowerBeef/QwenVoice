@@ -6,6 +6,7 @@ import Foundation
 final class TestStateProvider: ObservableObject {
     enum RuntimeSource: String {
         case none
+        case native
         case bundled
         case devVenv = "dev_venv"
         case stub
@@ -275,7 +276,7 @@ final class TestStateProvider: ObservableObject {
     private func refreshInteractiveReady() {
         interactiveReady = windowMounted
             && environmentReady
-            && (UITestAutomationSupport.isStubBackendMode || backendReady)
+            && backendReady
         isReady = interactiveReady
         refreshLaunchDiagnostics()
     }
@@ -298,7 +299,7 @@ final class TestStateProvider: ObservableObject {
             return
         }
 
-        if !UITestAutomationSupport.isStubBackendMode && !backendReady {
+        if !backendReady {
             launchPhase = "backend_startup"
             readinessBlocker = "backend_not_ready"
             return

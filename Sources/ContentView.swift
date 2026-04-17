@@ -131,7 +131,6 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 @MainActor
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
-    @EnvironmentObject private var pythonBridge: PythonBridge
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
@@ -266,10 +265,6 @@ struct ContentView: View {
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
-        .onChange(of: pythonBridge.isReady) { _, isReady in
-            guard isReady else { return }
-            Task { await modelManager.refresh(using: pythonBridge) }
-        }
         .onReceive(appCommandRouter.sidebarSelection) { item in
             selectSidebarItemIfEnabled(item)
         }
@@ -392,7 +387,7 @@ struct ContentView: View {
     }
 
     private func handleInitialLoad() async {
-        await modelManager.refresh(using: pythonBridge)
+        await modelManager.refresh()
         didCompleteInitialAvailabilityRefresh = true
         if !isPreservingLaunchOverrideSelection {
             reconcileSelectionWithAvailability()

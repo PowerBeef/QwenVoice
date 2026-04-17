@@ -12,7 +12,7 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts reused by the other docs
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, cleanup outcomes, and live caveats
-- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — bundled Python, backend helper overlay, and runtime packaging notes
+- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — source/debug Python compatibility, backend helper overlay, native packaging, and runtime notes
 
 ## CLI Docs
 

@@ -2,20 +2,11 @@ import Foundation
 
 enum AppLaunchIssue: String, Equatable, Sendable {
     case invalidContract
-    case missingBackend
-    case missingPython
-    case missingFFmpeg
 
     var summary: String {
         switch self {
         case .invalidContract:
-            return "QwenVoice couldn't load its bundled model contract."
-        case .missingBackend:
-            return "QwenVoice couldn't locate its bundled Python backend."
-        case .missingPython:
-            return "QwenVoice couldn't locate its bundled Python runtime."
-        case .missingFFmpeg:
-            return "QwenVoice couldn't locate its bundled ffmpeg helper."
+            return "QwenVoice couldn't load its native model contract."
         }
     }
 }
@@ -23,18 +14,16 @@ enum AppLaunchIssue: String, Equatable, Sendable {
 struct AppLaunchDiagnosticsSnapshot: Equatable, Sendable {
     let issue: AppLaunchIssue
     let manifestPath: String?
-    let backendPath: String?
-    let pythonPath: String?
-    let ffmpegPath: String?
+    let bundlePath: String
+    let resourcesPath: String?
     let underlyingError: String
 
     var diagnosticsText: String {
         [
             issue.summary,
             "Manifest path: \(manifestPath ?? "not found")",
-            "Backend path: \(backendPath ?? "not found")",
-            "Python path: \(pythonPath ?? "not found")",
-            "ffmpeg path: \(ffmpegPath ?? "not found")",
+            "Bundle path: \(bundlePath)",
+            "Resources path: \(resourcesPath ?? "not found")",
             "Details: \(underlyingError)",
         ]
         .joined(separator: "\n")
@@ -62,53 +51,17 @@ enum AppLaunchPreflight {
     static func run() -> AppLaunchDiagnosticsSnapshot? {
         guard shouldShowDiagnostics else { return nil }
 
-        let discovery = PythonRuntimeDiscovery()
         let manifestPath = TTSContract.manifestURL?.path ?? TTSContract.loadError?.manifestPath
-        let backendPath = PythonBridge.findServerScript()
-        let pythonPath = discovery.bundledPythonPath()
-        let ffmpegPath = PythonBridge.findFFmpeg()
+        let bundlePath = Bundle.main.bundlePath
+        let resourcesPath = Bundle.main.resourceURL?.path
 
         if let loadError = TTSContract.loadError {
             return AppLaunchDiagnosticsSnapshot(
                 issue: .invalidContract,
                 manifestPath: manifestPath,
-                backendPath: backendPath,
-                pythonPath: pythonPath,
-                ffmpegPath: ffmpegPath,
+                bundlePath: bundlePath,
+                resourcesPath: resourcesPath,
                 underlyingError: "\(loadError.summary)\n\n\(loadError.details)"
-            )
-        }
-
-        if backendPath == nil {
-            return AppLaunchDiagnosticsSnapshot(
-                issue: .missingBackend,
-                manifestPath: manifestPath,
-                backendPath: backendPath,
-                pythonPath: pythonPath,
-                ffmpegPath: ffmpegPath,
-                underlyingError: "The bundled backend entrypoint `backend/server.py` could not be found."
-            )
-        }
-
-        if pythonPath == nil {
-            return AppLaunchDiagnosticsSnapshot(
-                issue: .missingPython,
-                manifestPath: manifestPath,
-                backendPath: backendPath,
-                pythonPath: pythonPath,
-                ffmpegPath: ffmpegPath,
-                underlyingError: "The bundled `python/bin/python3` executable could not be found."
-            )
-        }
-
-        if ffmpegPath == nil {
-            return AppLaunchDiagnosticsSnapshot(
-                issue: .missingFFmpeg,
-                manifestPath: manifestPath,
-                backendPath: backendPath,
-                pythonPath: pythonPath,
-                ffmpegPath: ffmpegPath,
-                underlyingError: "The bundled `ffmpeg` helper could not be found."
             )
         }
 

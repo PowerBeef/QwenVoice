@@ -186,11 +186,10 @@ jobs:
 
           test -d "$APP_PATH"
           test -d "$RESOURCES_PATH"
-          test -x "$RESOURCES_PATH/ffmpeg"
-          test -d "$RESOURCES_PATH/python"
-          test -f "$RESOURCES_PATH/python/.qwenvoice-runtime-manifest.json"
-          test -x "$RESOURCES_PATH/python/bin/python3" || test -x "$RESOURCES_PATH/python/bin/python3.13"
-          test -f "$RESOURCES_PATH/server.py" || test -f "$RESOURCES_PATH/backend/server.py"
+          test ! -e "$RESOURCES_PATH/ffmpeg"
+          test ! -e "$RESOURCES_PATH/python"
+          test ! -e "$RESOURCES_PATH/backend"
+          test ! -e "$RESOURCES_PATH/server.py"
 
           if find "$RESOURCES_PATH" -name "*.whl" -print -quit | grep -q .; then
             echo "Error: .whl files leaked into app resources"
@@ -213,10 +212,6 @@ jobs:
           METADATA_PATH="build/release-metadata-${{ matrix.variant.id }}.txt"
           EXPECTED_DMG_NAME="${{ matrix.variant.output_name }}.dmg"
           EXPECTED_UI_PROFILE="${{ matrix.variant.ui_profile }}"
-          EXPECTED_MLX_WHEEL_TAG="cp313-cp313-macosx_15_0_arm64"
-          EXPECTED_MLX_METAL_WHEEL_TAG="py3-none-macosx_15_0_arm64"
-          EXPECTED_MLX_CORE_MINOS="15.0"
-          MLX_METALLIB_PATH="$(find "$APP_PATH/Contents/Resources/python/lib" -path '*/site-packages/mlx/lib/mlx.metallib' -type f | head -n1)"
 
           test -d "$APP_PATH"
           test -f "$DMG_PATH"
@@ -228,14 +223,7 @@ jobs:
 
           META_UI_PROFILE="$(grep -E '^ui_profile=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
           META_DMG_NAME="$(grep -E '^dmg_name=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_VERSION="$(grep -E '^mlx_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_METAL_VERSION="$(grep -E '^mlx_metal_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_LM_VERSION="$(grep -E '^mlx_lm_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_AUDIO_VERSION="$(grep -E '^mlx_audio_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_TRANSFORMERS_VERSION="$(grep -E '^transformers_version=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_WHEEL_TAG="$(grep -E '^mlx_wheel_tag=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_METAL_WHEEL_TAG="$(grep -E '^mlx_metal_wheel_tag=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
-          META_MLX_CORE_MINOS="$(grep -E '^mlx_core_minos=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
+          META_RELEASE_MODE="$(grep -E '^release_mode=' build/release-metadata.txt | head -n1 | cut -d= -f2-)"
 
           if [ "$APP_MINOS" != "15.0" ]; then
             echo "Error: app minOS is $APP_MINOS (expected 15.0)"
@@ -250,20 +238,10 @@ jobs:
             echo "Error: metadata dmg_name is '$META_DMG_NAME' (expected '$EXPECTED_DMG_NAME')"
             exit 1
           fi
-          for value_name in \
-            META_MLX_VERSION \
-            META_MLX_METAL_VERSION \
-            META_MLX_LM_VERSION \
-            META_MLX_AUDIO_VERSION \
-            META_TRANSFORMERS_VERSION \
-            META_MLX_WHEEL_TAG \
-            META_MLX_METAL_WHEEL_TAG \
-            META_MLX_CORE_MINOS; do
-            if [ -z "${!value_name}" ]; then
-              echo "Error: release metadata is missing $value_name"
-              exit 1
-            fi
-          done
+          if [ "$META_RELEASE_MODE" != "native" ]; then
+            echo "Error: metadata release_mode is '$META_RELEASE_MODE' (expected 'native')"
+            exit 1
+          fi
 
           if ! printf '%s' "$APP_SDK_MAJOR" | grep -Eq '^[0-9]+$'; then
             echo "Error: could not parse SDK major from '$APP_SDK'"
@@ -272,24 +250,8 @@ jobs:
 
           case "${{ matrix.variant.id }}" in
             legacy-glass)
-              if [ -z "$MLX_METALLIB_PATH" ]; then
-                echo "Error: legacy-glass build is missing mlx.metallib in the packaged runtime"
-                exit 1
-              fi
               if [ "$APP_SDK_MAJOR" -ne 15 ]; then
                 echo "Error: legacy-glass SDK major is $APP_SDK_MAJOR (expected 15.x)"
-                exit 1
-              fi
-              if [ "$META_MLX_WHEEL_TAG" != "$EXPECTED_MLX_WHEEL_TAG" ]; then
-                echo "Error: legacy-glass mlx_wheel_tag is '$META_MLX_WHEEL_TAG' (expected '$EXPECTED_MLX_WHEEL_TAG')"
-                exit 1
-              fi
-              if [ "$META_MLX_METAL_WHEEL_TAG" != "$EXPECTED_MLX_METAL_WHEEL_TAG" ]; then
-                echo "Error: legacy-glass mlx_metal_wheel_tag is '$META_MLX_METAL_WHEEL_TAG' (expected '$EXPECTED_MLX_METAL_WHEEL_TAG')"
-                exit 1
-              fi
-              if [ "$META_MLX_CORE_MINOS" != "$EXPECTED_MLX_CORE_MINOS" ]; then
-                echo "Error: legacy-glass mlx_core_minos is '$META_MLX_CORE_MINOS' (expected '$EXPECTED_MLX_CORE_MINOS')"
                 exit 1
               fi
               ;;

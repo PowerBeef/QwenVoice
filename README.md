@@ -16,7 +16,7 @@
 
 QwenVoice is a native macOS app for Qwen3-TTS with custom voices, voice design, and voice cloning, 100% offline on Apple Silicon.
 
-It uses a SwiftUI frontend plus a long-lived Python backend that runs MLX inference locally. End users do not need to install Python or use the terminal when running the packaged app.
+The shipped app now runs fully natively through `QwenVoiceNative` and does not bundle a Python backend, Python runtime, or bundled `ffmpeg`. The repo still keeps the older Python backend under `Sources/Resources/backend/` for source/debug compatibility and the standalone CLI.
 
 ## Shipped Modes
 
@@ -135,7 +135,9 @@ python3 scripts/harness.py test --layer ui
 
 ### Development-mode Python behavior
 
-In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then creates a venv under `~/Library/Application Support/QwenVoice/python/` on first launch and installs the backend dependencies from `Sources/Resources/requirements.txt`.
+In a clean source checkout, `Sources/Resources/python/` is usually absent. Normal app launches still default to the native engine and do not need Python setup.
+
+If you explicitly opt into the source/debug compatibility path with `QWENVOICE_APP_ENGINE=python`, the app creates a venv under `~/Library/Application Support/QwenVoice/python/` and installs the backend dependencies from `Sources/Resources/requirements.txt`.
 
 Have a local Python 3.11-3.14 install available first. A typical setup is:
 
@@ -151,7 +153,7 @@ For a local release build and DMG:
 ./scripts/release.sh
 ```
 
-That script bundles Python and ffmpeg, builds the Release app, verifies the bundle, and by default produces `build/QwenVoice.dmg`.
+That script builds the native Release app, verifies that no Python/backend runtime assets leaked into the bundle, and by default produces `build/QwenVoice.dmg`.
 
 Use GitHub workflow artifacts for authoritative shipped release validation.
 
@@ -166,10 +168,11 @@ See [`qwen_tone.md`](qwen_tone.md) for the current app-oriented guidance on:
 
 ## Architecture
 
-QwenVoice uses a two-process architecture:
+QwenVoice uses a native app architecture for the shipped product:
 
 - **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
-- **Python backend** in `Sources/Resources/backend/server.py` for MLX inference over newline-delimited JSON-RPC 2.0
+- **Native MLX runtime** in `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` for shipped inference
+- **Source/debug Python backend** in `Sources/Resources/backend/server.py` for compatibility workflows and the standalone CLI
 
 Static TTS contract data is shared by Swift and Python through `Sources/Resources/qwenvoice_contract.json`.
 

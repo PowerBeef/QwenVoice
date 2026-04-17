@@ -7,6 +7,10 @@ final class SetupFlowTests: QwenVoiceUITestBase {
     override var shouldWaitForInitialReadiness: Bool { false }
     override var includesFastIdleLaunchArgument: Bool { false }
 
+    override func additionalLaunchEnvironment(fixtureRoot: String?) -> [String: String] {
+        ["QWENVOICE_APP_ENGINE": "python"]
+    }
+
     @MainActor
     func testSetupFailureShowsRetryButton() {
         let retryButton = app.buttons["setup_retryButton"]

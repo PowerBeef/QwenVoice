@@ -38,15 +38,6 @@ targets:
           - "Resources/**/*.whl"
           - "Resources/**/__pycache__/**"
           - "Resources/**/*.pyc"
-      - path: Sources/Resources/backend
-        buildPhase:
-          copyFiles:
-            destination: resources
-            subpath: backend
-        excludes:
-          - "server_compat.py"
-          - "__pycache__/**"
-          - "*.pyc"
     resources:
       - path: Sources/Resources
         buildPhase: resources
@@ -96,25 +87,6 @@ targets:
         - QwenVoiceUITests
       environmentVariables:
         QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS: $(QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS)
-    postBuildScripts:
-      - name: Sanitize Bundled Backend Resources
-        shell: /bin/bash
-        basedOnDependencyAnalysis: false
-        script: |
-          set -euo pipefail
-          RESOURCES_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
-          BACKEND_DIR="${RESOURCES_DIR}/backend"
-
-          rm -f \
-            "${RESOURCES_DIR}/server.py" \
-            "${RESOURCES_DIR}/mlx_audio_qwen_speed_patch.py" \
-            "${RESOURCES_DIR}/server_compat.py"
-
-          if [ -d "${BACKEND_DIR}" ]; then
-            rm -f "${BACKEND_DIR}/server_compat.py"
-            find "${BACKEND_DIR}" -type d -name "__pycache__" -prune -exec rm -rf {} +
-            find "${BACKEND_DIR}" -name "*.pyc" -delete
-          fi
 
   QwenVoiceNative:
     type: framework.static

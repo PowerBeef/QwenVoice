@@ -154,25 +154,25 @@ jobs:
             build/*.dmg
             build/release-metadata.txt
 
-  runtime-parity:
-    name: Runtime Parity
+  source-backend-compat:
+    name: Source Backend Compatibility
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
-      - name: Ensure runtime parity inputs exist
+      - name: Ensure source backend inputs exist
         run: |
           test -f Sources/Resources/requirements.txt
 
-      - name: Create clean parity environment
+      - name: Create clean compatibility environment
         run: |
           python3 -m venv .runtime-parity
           . .runtime-parity/bin/activate
           python -m pip install --quiet --upgrade pip
           python -m pip install --quiet -r Sources/Resources/requirements.txt
 
-      - name: Validate runtime alignment
+      - name: Validate source backend alignment
         run: |
           .runtime-parity/bin/python scripts/harness.py validate --python "$PWD/.runtime-parity/bin/python"
 

@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Unified release script: bundles dependencies, builds Release .app, creates .dmg
+# Unified release script: builds the native Release .app and creates a .dmg
 # Usage:
 #   ./scripts/release.sh              Full pipeline
-#   ./scripts/release.sh --skip-deps  Skip Python/ffmpeg bundling (fast rebuild)
+#   ./scripts/release.sh --skip-deps  Legacy no-op kept for compatibility
 #   ./scripts/release.sh --skip-build Skip xcodebuild (repackage existing build)
 #   ./scripts/release.sh --ui-profile liquid|legacy
 #   ./scripts/release.sh --output-name <dmg_basename>
@@ -16,7 +16,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 APP_BUNDLE_NAME="QwenVoice"
-EMBEDDED_RUNTIME_ENTITLEMENTS="$PROJECT_DIR/Sources/QwenVoiceEmbeddedRuntime.entitlements"
 TOTAL_START=$(date +%s)
 PROJECT_YML="$PROJECT_DIR/project.yml"
 DEFAULT_UI_DEFINE="SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID"
@@ -239,31 +238,21 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1: Bundle Python
+# Step 1: Native release inputs
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
+echo "[1/8] Native release inputs — no bundled Python or ffmpeg required"
 if $SKIP_DEPS; then
-    echo "[1/8] Bundle Python — skipped (--skip-deps)"
-else
-    echo "[1/8] Bundling Python..."
-    "$SCRIPT_DIR/bundle_python.sh"
-    echo ""
-    echo "[1/8] Bundle Python — done ($(step_time $STEP_START))"
+    echo "[1/8] --skip-deps acknowledged (no-op for native release builds)"
 fi
+echo "[1/8] Native release inputs — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 2: Bundle ffmpeg
+# Step 2: Clean native bundle assumptions
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
-if $SKIP_DEPS; then
-    echo "[2/8] Bundle ffmpeg — skipped (--skip-deps)"
-else
-    echo "[2/8] Bundling ffmpeg..."
-    "$SCRIPT_DIR/bundle_ffmpeg.sh"
-    echo ""
-    echo "[2/8] Bundle ffmpeg — done ($(step_time $STEP_START))"
-fi
+echo "[2/8] Native bundle assumptions — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -361,62 +350,28 @@ else
     cp -a "$APP_SOURCE" "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 fi
 
-# Inject bundled Python and ffmpeg into the .app (excluded from Xcode build to avoid conflicts)
-RESOURCES_SRC="$PROJECT_DIR/Sources/Resources"
 APP_RESOURCES="$BUILD_DIR/$APP_BUNDLE_NAME.app/Contents/Resources"
 
-if [ -d "$RESOURCES_SRC/python" ]; then
-    echo "[4/8] Copying bundled Python into .app..."
-    rm -rf "$APP_RESOURCES/python"
-    cp -a "$RESOURCES_SRC/python" "$APP_RESOURCES/python"
-else
-    release_fail "Bundled Python missing at $RESOURCES_SRC/python"
-fi
-
-if [ -f "$RESOURCES_SRC/ffmpeg" ]; then
-    echo "[4/8] Copying bundled ffmpeg into .app..."
-    cp -f "$RESOURCES_SRC/ffmpeg" "$APP_RESOURCES/ffmpeg"
-else
-    release_fail "Bundled ffmpeg missing at $RESOURCES_SRC/ffmpeg"
-fi
-
 echo "[4/8] Removing build-only resource artifacts..."
+rm -rf "$APP_RESOURCES/backend" 2>/dev/null || true
+rm -rf "$APP_RESOURCES/python" 2>/dev/null || true
+rm -f "$APP_RESOURCES/ffmpeg" 2>/dev/null || true
+rm -f "$APP_RESOURCES/server.py" "$APP_RESOURCES/mlx_audio_qwen_speed_patch.py" "$APP_RESOURCES/server_compat.py" 2>/dev/null || true
 rm -rf "$APP_RESOURCES/vendor" 2>/dev/null || true
 find "$APP_RESOURCES" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.pyc" -delete 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.whl" -delete 2>/dev/null || true
 
-[ -d "$APP_RESOURCES/python" ] || release_fail "Packaged app is missing Contents/Resources/python"
-[ -f "$APP_RESOURCES/python/.qwenvoice-runtime-manifest.json" ] || release_fail "Packaged app is missing the bundled runtime manifest"
-[ -x "$APP_RESOURCES/ffmpeg" ] || release_fail "Packaged app is missing an executable bundled ffmpeg binary"
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$BUILD_DIR/$APP_BUNDLE_NAME.app"
 
-echo "[4/8] Copy .app + deps — done ($(step_time $STEP_START))"
+echo "[4/8] Copy .app — done ($(step_time $STEP_START))"
 echo ""
 
 # ---------------------------------------------------------------------------
 # Step 5: Re-sign final app bundle
 # ---------------------------------------------------------------------------
 STEP_START=$(date +%s)
-echo "[5/8] Signing bundled executables and final app bundle..."
-
-[ -f "$EMBEDDED_RUNTIME_ENTITLEMENTS" ] || release_fail "Missing embedded runtime entitlements: $EMBEDDED_RUNTIME_ENTITLEMENTS"
-
-if [ -f "$APP_RESOURCES/ffmpeg" ]; then
-    sign_macho_executable "$APP_RESOURCES/ffmpeg" --options runtime
-fi
-
-while IFS= read -r -d '' py_bin; do
-    sign_macho_executable \
-        "$py_bin" \
-        --options runtime \
-        --force-library-entitlements \
-        --entitlements "$EMBEDDED_RUNTIME_ENTITLEMENTS"
-done < <(find "$APP_RESOURCES/python/bin" -type f -print0 2>/dev/null)
-
-while IFS= read -r -d '' native_file; do
-    sign_macho_library "$native_file"
-done < <(find "$APP_RESOURCES/python" -type f \( -name "*.so" -o -name "*.dylib" \) -print0 2>/dev/null)
+echo "[5/8] Signing final native app bundle..."
 
 run_codesign "$BUILD_DIR/$APP_BUNDLE_NAME.app" \
     --options runtime \
@@ -495,47 +450,16 @@ if [ -z "$COMMIT_SHA" ]; then
     COMMIT_SHA="unknown"
 fi
 
-MANIFEST_PATH="$BUILD_DIR/$APP_BUNDLE_NAME.app/Contents/Resources/python/.qwenvoice-runtime-manifest.json"
-if [ ! -f "$MANIFEST_PATH" ]; then
-    echo "Error: release manifest missing at $MANIFEST_PATH"
-    exit 1
-fi
-
-CORE_VERSIONS="$(
-python3 - "$MANIFEST_PATH" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-fields = [
-    "mlx_version",
-    "mlx_metal_version",
-    "mlx_lm_version",
-    "mlx_audio_version",
-    "transformers_version",
-    "mlx_wheel_tag",
-    "mlx_metal_wheel_tag",
-    "mlx_core_minos",
-]
-for field in fields:
-    value = manifest.get(field)
-    if not value:
-        raise SystemExit(f"Missing {field} in runtime manifest")
-    print(f"{field}={value}")
-PY
-)"
-
 METADATA_PATH="$BUILD_DIR/release-metadata.txt"
 {
     echo "commit_sha=$COMMIT_SHA"
+    echo "release_mode=native"
     echo "ui_profile=$UI_PROFILE"
     echo "xcode_version=$XCODE_VERSION"
     echo "sdk_version=$SDK_VERSION"
     echo "app_minos=$APP_MINOS"
     echo "dmg_name=$OUTPUT_NAME.dmg"
     echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    printf '%s\n' "$CORE_VERSIONS"
 } > "$METADATA_PATH"
 
 echo "[8/8] Release complete!"

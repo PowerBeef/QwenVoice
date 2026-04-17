@@ -3086,7 +3086,7 @@ def _append_live_preflight_results(results: list[dict[str, Any]], backend_mode: 
     return _append_live_preflight_results_for_target(
         results,
         backend_mode,
-        requires_app_support_python=True,
+        requires_app_support_python=False,
         requires_models=True,
     )
 
@@ -3107,19 +3107,9 @@ def _append_live_preflight_results_for_target(
         return True
 
     prerequisites = check_live_prerequisites()
-    python_ok = prerequisites["python_exists"]
     models_ok = bool(prerequisites["installed_models"])
     results.append(build_test_result(
-        "live_backend_python_available",
-        passed=python_ok or not requires_app_support_python,
-        skip_reason=None if requires_app_support_python or python_ok else "Packaged release targets use bundled Python instead of the app-support venv",
-        details={
-            "python_path": prerequisites["python_path"],
-            "required_for_target": requires_app_support_python,
-        },
-    ))
-    results.append(build_test_result(
-        "live_models_available",
+        "live_native_models_available",
         passed=models_ok or not requires_models,
         skip_reason=None if requires_models or models_ok else "Installed models are only required for live generation checks",
         details={
@@ -3129,10 +3119,21 @@ def _append_live_preflight_results_for_target(
         },
     ))
 
+    python_ok = True
+    if backend_mode == "live" and requires_app_support_python:
+        python_ok = bool(prerequisites.get("python_exists"))
+        results.append(build_test_result(
+            "live_python_compat_available",
+            passed=python_ok,
+            details={
+                "python_path": prerequisites.get("python_path"),
+                "required_for_target": True,
+            },
+        ))
     if backend_mode == "live" and python_ok and requires_app_support_python:
         runtime_ok, runtime_details = _validate_python_runtime_imports(prerequisites["python_path"])
         results.append(build_test_result(
-            "live_backend_runtime_validation",
+            "live_python_compat_runtime_validation",
             passed=runtime_ok,
             details=runtime_details,
         ))
@@ -3185,14 +3186,6 @@ def _release_thresholds_for(mode: str) -> dict[str, int]:
     }
 
 
-def _format_runtime_expectation(target: UIAppTarget) -> tuple[str, str]:
-    resources_dir = target.app_bundle / "Contents" / "Resources"
-    return (
-        str(resources_dir / "python") + "/",
-        str(resources_dir / "ffmpeg"),
-    )
-
-
 def _normalize_runtime_path(path: str) -> str:
     if not path:
         return ""
@@ -3207,9 +3200,6 @@ def _append_runtime_dependency_results(
     if app_target is None or app_target.source == "build":
         return
 
-    expected_python_prefix, expected_ffmpeg_path = _format_runtime_expectation(app_target)
-    normalized_python_prefix = _normalize_runtime_path(expected_python_prefix.rstrip("/")) + "/"
-    normalized_ffmpeg_path = _normalize_runtime_path(expected_ffmpeg_path)
     runtime_source = state.get("runtimeSource")
     active_python_path = state.get("activePythonPath", "")
     active_ffmpeg_path = state.get("activeFFmpegPath", "")
@@ -3217,31 +3207,29 @@ def _append_runtime_dependency_results(
     normalized_active_ffmpeg_path = _normalize_runtime_path(active_ffmpeg_path)
 
     results.append(build_test_result(
-        "bundled_runtime_source",
-        passed=runtime_source == "bundled",
+        "native_runtime_source",
+        passed=runtime_source == "native",
         details={
             "runtimeSource": runtime_source,
-            "expected": "bundled",
+            "expected": "native",
         },
     ))
     results.append(build_test_result(
-        "bundled_python_path",
-        passed=normalized_active_python_path.startswith(normalized_python_prefix),
+        "native_runtime_python_absent",
+        passed=normalized_active_python_path == "",
         details={
             "activePythonPath": active_python_path,
-            "expectedPrefix": expected_python_prefix,
             "normalizedActivePythonPath": normalized_active_python_path,
-            "normalizedExpectedPrefix": normalized_python_prefix,
+            "expected": "",
         },
     ))
     results.append(build_test_result(
-        "bundled_ffmpeg_path",
-        passed=normalized_active_ffmpeg_path == normalized_ffmpeg_path,
+        "native_runtime_ffmpeg_absent",
+        passed=normalized_active_ffmpeg_path == "",
         details={
             "activeFFmpegPath": active_ffmpeg_path,
-            "expected": expected_ffmpeg_path,
             "normalizedActiveFFmpegPath": normalized_active_ffmpeg_path,
-            "normalizedExpected": normalized_ffmpeg_path,
+            "expected": "",
         },
     ))
 
@@ -3349,7 +3337,7 @@ def _run_ui_tests(
     if not _append_live_preflight_results_for_target(
         results,
         backend_mode,
-        requires_app_support_python=target.source == "build",
+        requires_app_support_python=False,
         requires_models=False,
     ):
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -3606,7 +3594,7 @@ def _run_design_tests(
     if not _append_live_preflight_results_for_target(
         results,
         backend_mode,
-        requires_app_support_python=target.source == "build",
+        requires_app_support_python=False,
         requires_models=False,
     ):
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -3836,7 +3824,7 @@ def _run_perf_audit(
     if not _append_live_preflight_results_for_target(
         results,
         backend_mode,
-        requires_app_support_python=target.source == "build",
+        requires_app_support_python=False,
         requires_models=False,
     ):
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -3993,7 +3981,7 @@ def _run_release_generation_smoke(
     if not _append_live_preflight_results_for_target(
         results,
         backend_mode,
-        requires_app_support_python=target.source == "build",
+        requires_app_support_python=False,
         requires_models=True,
     ):
         duration_ms = int((time.perf_counter() - start) * 1000)

@@ -32,7 +32,6 @@ struct VoiceDesignSavedVoiceCandidate: Equatable {
 }
 
 struct VoiceDesignView: View {
-    @EnvironmentObject var pythonBridge: PythonBridge
     @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
@@ -293,7 +292,7 @@ private extension VoiceDesignView {
                     accentColor: AppTheme.voiceDesign,
                     accessibilityIdentifier: "voiceDesign_modelRecovery",
                     onPrimaryAction: {
-                        Task { await modelManager.download(model, using: pythonBridge) }
+                        Task { await modelManager.download(model) }
                     },
                     onSecondaryAction: {
                         appCommandRouter.navigate(to: .models)
