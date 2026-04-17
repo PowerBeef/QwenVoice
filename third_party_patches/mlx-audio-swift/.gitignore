@@ -1,0 +1,17 @@
+.build
+.swiftpm
+.DS_Store
+.xcbkptlist
+.claude
+Examples/VoicesApp/Config/Local.xcconfig
+xcuserdata/*
+*.pbxproj
+*.resolved
+*.xcworkspace
+*.xcuserdata
+*.xcuserstate
+*.xcuserdatad
+*.xcuserdatad/xcdebugger
+*.xcuserdatad/xcdebugger/Breakpoints_v2.xcbkptlist
+.tmp/
+audit-repo/

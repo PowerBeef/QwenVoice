@@ -43,7 +43,7 @@ final class NativeModelRegistryTests: XCTestCase {
         let registry = try NativeModelRegistry(manifestURL: manifestURL)
         let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
         try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
-        try NativeRuntimeTestSupport.installModel(
+        _ = try NativeRuntimeTestSupport.installModel(
             model,
             into: modelsDirectory,
             existingRelativePaths: ["config.json"]
@@ -61,6 +61,7 @@ final class NativeModelRegistryTests: XCTestCase {
                     id: "pro_clone",
                     name: "Voice Cloning",
                     folder: "Clone-Folder",
+                    huggingFaceRepo: "example/Clone-Folder",
                     modeIdentifier: "clone",
                     requiredRelativePaths: [
                         "config.json",

@@ -51,6 +51,7 @@ Prefer code, manifests, and scripts over prose whenever they disagree.
 - `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, and most contents of `Sources/Resources/vendor/` are generated or vendored runtime assets. Update them through the packaging or vendoring scripts, not by ad hoc manual edits.
 - `Sources/Resources/backend/server_compat.py` is harness-only compatibility glue. Do not treat it as bundled production backend source.
 - `third_party_patches/mlx-audio/` and `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py` are coupled through the helper-sync workflow. Keep them aligned.
+- `third_party_patches/mlx-audio-swift/` is the repo-owned native backend source boundary for MLXAudioSwift. Treat it as maintained source, keep its package manifest and pins aligned with `project.yml` and `Package.resolved`, and do not mix it into the Python wheel overlay flow.
 - App data under `~/Library/Application Support/QwenVoice/` or a `QWENVOICE_APP_SUPPORT_DIR` override is runtime state, not repo source.
 - Watch for accidental `__pycache__` and `.pyc` paths when regenerating or reviewing changes.
 
@@ -60,7 +61,7 @@ QwenVoice has repo-tracked local skills under `.agents/skills/`. Prefer these wh
 
 - `qwenvoice-packaged-validation` for packaged-app validation, dual-UI release artifact checks, bundled dependency proof, screenshot-capture prompt issues, and full automated validation requests
 - `qwenvoice-release-publish` for version/build bumps, checked-in release notes, CI gate waiting, `release-dual-ui` dispatch, and GitHub release verification
-- `qwenvoice-vendored-runtime` for `mlx-audio`, backend helper overlay and runtime packaging changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification
+- `qwenvoice-vendored-runtime` for `mlx-audio`, `mlx-audio-swift`, backend helper overlay and runtime packaging changes, `build_mlx_audio_wheel.sh`, bundled Python and ffmpeg flows, and packaged runtime verification
 - `qwenvoice-doc-sync` for README, AGENTS, current-state, and release-notes sync against `Sources/`, `project.yml`, and `scripts/`
 
 These local skills complement, rather than replace, the user-wide skills that are already useful in this repo:
@@ -87,6 +88,7 @@ These local skills complement, rather than replace, the user-wide skills that ar
 - `Sources/Resources/backend/server.py` is the thin Python entrypoint and wiring layer. Production backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. The shipped app bundles that production backend under `QwenVoice.app/Contents/Resources/backend/`.
 - `Sources/Services/GenerationPersistence.swift` centralizes save and autoplay handoff for the three generation screens. `Sources/Services/DatabaseService.swift` owns the GRDB SQLite history database and is `@MainActor`; keep persistence and library-refresh behavior aligned.
 - `Sources/Services/TestStateServer.swift` and `Sources/Services/TestStateProvider.swift` are the UI-test HTTP and query boundary. Keep UI-test state exposure, screenshot hooks, and window-activation telemetry there rather than leaking it into normal product flows.
+- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there, while the shipped app still boots `TTSEngineStore` with `PythonBridgeMacTTSEngineAdapter` until an explicit app-engine cutover lands.
 - `Sources/ViewModels/ModelManagerViewModel.swift` still uses manifest plus filesystem status for the shipping Models screen. Backend `get_model_info` exists and is harness-tested, but it is not yet the primary model-status source for `ModelsView`.
 - `Sources/ViewModels/AudioPlayerViewModel.swift` isolates timer-frequency playback state in nested `PlaybackProgress`. Do not move high-frequency playback fields back onto the parent observable object.
 - `cli/main.py` is a separate terminal app with cwd-based paths and a broader speaker map than the shipped GUI. Do not copy CLI assumptions into the app contract or app docs.
@@ -225,7 +227,7 @@ Local packaging commands:
 - GitHub release publication or hosted release notes:
   Prefer `qwenvoice-release-publish`, require a checked-in notes file, and keep the `Release Dual UI` inputs aligned, including `release_notes_path`.
 - Vendored runtime or `mlx-audio` changes:
-  Prefer `qwenvoice-vendored-runtime`, keep `scripts/build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio/`, `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`, `docs/reference/vendoring-runtime.md`, and the release verification flow aligned.
+  Prefer `qwenvoice-vendored-runtime`, keep `scripts/build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio/`, `third_party_patches/mlx-audio-swift/`, `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`, `project.yml`, `Package.resolved`, `docs/reference/vendoring-runtime.md`, and the release verification flow aligned.
 - Broad repo facts that users or contributors rely on:
   Prefer `qwenvoice-doc-sync`, and update `AGENTS.md`, `docs/README.md`, `docs/reference/current-state.md`, and any top-level docs that claim the changed behavior.
 

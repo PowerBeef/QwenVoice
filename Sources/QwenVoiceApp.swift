@@ -4,6 +4,8 @@ import QwenVoiceNative
 
 @main
 struct QwenVoiceApp: App {
+    @NSApplicationDelegateAdaptor(QwenVoiceApplicationDelegate.self)
+    private var appDelegate
     @StateObject private var pythonBridge: PythonBridge
     @StateObject private var ttsEngineStore: TTSEngineStore
     @StateObject private var audioPlayer = AudioPlayerViewModel()

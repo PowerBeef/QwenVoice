@@ -10,6 +10,14 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "7.0.0"
+  MLXAudio:
+    path: third_party_patches/mlx-audio-swift
+  MLXSwift:
+    url: https://github.com/ml-explore/mlx-swift.git
+    from: "0.30.6"
+  SwiftHuggingFace:
+    url: https://github.com/huggingface/swift-huggingface.git
+    from: "0.8.1"
 
 targets:
   QwenVoice:
@@ -107,6 +115,15 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
 
   QwenVoiceTests:
     type: bundle.unit-test
@@ -122,6 +139,14 @@ targets:
     dependencies:
       - target: QwenVoice
       - target: QwenVoiceNative
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
 
   QwenVoiceUITests:
     type: bundle.ui-testing

@@ -1,13 +1,13 @@
 ---
 name: qwenvoice-vendored-runtime
-description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches, and packaged dependency flows safely. Use when work touches `build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio`, bundled Python or ffmpeg assets, backend runtime experiments, or release-bundle verification for packaged apps.
+description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches, `mlx-audio-swift`, and packaged dependency flows safely. Use when work touches `build_mlx_audio_wheel.sh`, `third_party_patches/mlx-audio`, `third_party_patches/mlx-audio-swift`, bundled Python or ffmpeg assets, backend runtime experiments, or release-bundle verification for packaged apps.
 ---
 
 # QwenVoice Vendored Runtime
 
 ## Overview
 
-Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
+Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime or project artifacts from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
 
 Current runtime policy:
 
@@ -31,9 +31,11 @@ Prefer editing:
 - `scripts/bundle_python.sh`
 - `scripts/bundle_ffmpeg.sh`
 - `third_party_patches/mlx-audio/`
+- `third_party_patches/mlx-audio-swift/`
+- `project.yml`
 - repo-owned backend helper patches
 
-### 2. For `mlx-audio`, patch the wheel flow
+### 2. For `mlx-audio`, choose the right vendoring flow
 
 When the work touches Qwen3-TTS, cache strategies, streaming fixes, or vendored Python behavior:
 
@@ -43,6 +45,13 @@ When the work touches Qwen3-TTS, cache strategies, streaming fixes, or vendored 
 - rebundle Python from the rebuilt wheel
 
 Do not hand-edit installed files under `Sources/Resources/python/` as the primary implementation path.
+
+When the work touches the native backend package graph or Swift MLXAudio integration:
+
+- update the repo-owned source under `third_party_patches/mlx-audio-swift/`
+- keep `project.yml` and `Package.resolved` aligned with the package graph QwenVoice actually builds
+- regenerate the Xcode project
+- validate the app build and the targeted native tests before claiming the native runtime is healthy
 
 ### 3. Keep the app/backend boundary in sync
 
@@ -80,6 +89,7 @@ When vendoring or packaged dependency behavior changes, update the docs that mai
 - `docs/reference/vendoring-runtime.md`
 - `docs/reference/current-state.md`
 - `AGENTS.md` if the workflow expectations changed materially
+- `.agents/skills/qwenvoice-vendored-runtime/SKILL.md` if the maintained vendoring workflow changed materially
 
 ## Special Cases
 
@@ -100,6 +110,7 @@ When asked whether a packaged app uses bundled Python or ffmpeg, rely on runtime
 
 - Do not patch generated runtime assets directly when a repo-owned vendoring path exists.
 - Do not forget to rebuild the wheel after changing `third_party_patches/mlx-audio/`.
+- Do not change `third_party_patches/mlx-audio-swift/` without keeping `project.yml` and `Package.resolved` aligned.
 - Do not stop at source tests when packaged runtime behavior is part of the request.
 - Do not treat local macOS 26 packaging as authoritative release proof for either shipped variant.
 - Do not let `__pycache__` or `.pyc` files leak into tracked changes.

@@ -1,9 +1,10 @@
 # Vendoring and Runtime Packaging
 
-QwenVoice has two distinct Python/runtime stories:
+QwenVoice has three maintained vendoring/runtime stories:
 
 1. **Source builds / development mode**
 2. **Packaged release builds**
+3. **Native backend source vendoring**
 
 ## Development Mode
 
@@ -32,6 +33,22 @@ The release pipeline also:
 - verifies the final bundle
 - creates the DMG
 
+## Native Backend Source Vendoring
+
+The native backend keeps its Swift MLXAudio stack as a repo-owned local package at:
+
+- `third_party_patches/mlx-audio-swift/`
+
+That tree is maintained source, not a generated runtime artifact. It stays separate from the Python wheel overlay flow in `third_party_patches/mlx-audio/`.
+
+The native package boundary currently includes:
+
+- the local `MLXAudio` package path in `project.yml`
+- remote `MLXSwift` and `SwiftHuggingFace` package entries
+- `Package.resolved` pins for the package graph consumed by `QwenVoiceNative`
+
+When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
+
 ## Qwen3-TTS Overlay Strategy
 
 The app now installs stock `mlx-audio==0.4.2` and keeps the QwenVoice-specific Qwen3-TTS clone-speedup logic as a standalone backend helper overlay.
@@ -40,6 +57,7 @@ Relevant locations:
 
 - `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 - `third_party_patches/mlx-audio/`
+- `third_party_patches/mlx-audio-swift/`
 
 `scripts/build_mlx_audio_wheel.sh` is now just the source of truth for syncing the backend helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`.
 
@@ -58,7 +76,10 @@ Every review should keep these artifacts aligned:
 - `Sources/Resources/requirements.txt`
 - `scripts/build_mlx_audio_wheel.sh`
 - `third_party_patches/mlx-audio/`
+- `third_party_patches/mlx-audio-swift/`
 - `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
+- `project.yml`
+- `QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
 - `scripts/verify_release_bundle.sh`
 - the signed/notarized GitHub release verification flow
 
@@ -66,5 +87,6 @@ Every review should keep these artifacts aligned:
 
 - `scripts/check_project_inputs.sh`
 - `scripts/regenerate_project.sh`
+- `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
 - `scripts/verify_release_bundle.sh`
 - `.github/workflows/release-dual-ui.yml`

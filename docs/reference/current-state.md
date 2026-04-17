@@ -38,9 +38,11 @@ Interactive latency instrumentation uses Instruments-native signposts around mod
 The app shell and runtime coordination are split across explicit helper components instead of living inline in the largest entrypoints:
 
 - `QwenVoiceApp.swift` composes `AppStartupCoordinator.swift`, `BackendLaunchCoordinator.swift`, `AppCommandRouter.swift`, and `GenerationLibraryEvents.swift`, while `AppLaunchConfiguration.swift` and `UITestWindowCoordinator.swift` own UI-test launch flags and window automation details
+- UI-test launches now opt out of AppKit state restoration so harness stub/live runs deterministically create a fresh main window instead of depending on persisted window state
 - `AppPaths.swift` is the path boundary for app-support, model, output, and voice directories, including the `QWENVOICE_APP_SUPPORT_DIR` override used by fixture-backed UI runs
 - `PythonEnvironmentManager.swift` is the published-state façade over `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`
 - `PythonBridge.swift` composes `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, `PythonBridgeActivityCoordinator.swift`, `PythonBridge+GenerationFlows.swift`, and `StubBackendTransport.swift`
+- `Sources/QwenVoiceNative/` now builds against the repo-owned local Swift package at `third_party_patches/mlx-audio-swift/`, alongside `MLXSwift` and `SwiftHuggingFace`, for native backend runtime and synthesis work
 - `Sources/Resources/backend/server.py` is the Python wiring layer over `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`
 - `TestStateServer.swift` and `TestStateProvider.swift` provide the localhost HTTP state-query boundary used by UI automation and screenshot capture flows
 - Shipped app bundles treat `Contents/Resources/backend/` as the canonical production Python backend directory. `server_compat.py` remains harness-only and must not ship in app bundles or release artifacts.
@@ -132,6 +134,11 @@ Those two shipped release artifacts are workflow-built outputs. The GitHub workf
 Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unless an explicit output name is provided, but local packaging should be treated as script and runtime validation rather than the source of truth for shipped release artifacts.
 
 `./scripts/check_project_inputs.sh` validates that the checked-in Xcode project has not captured `__pycache__` or `.pyc` references and that the backend resource contract remains clean.
+
+`project.yml` now carries both runtime vendoring surfaces:
+
+- the Python-side `third_party_patches/mlx-audio/` helper overlay flow
+- the native backend `third_party_patches/mlx-audio-swift/` local package consumed by `QwenVoiceNative`
 
 `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
 

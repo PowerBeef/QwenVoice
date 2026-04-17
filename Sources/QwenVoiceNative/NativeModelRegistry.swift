@@ -4,6 +4,7 @@ struct NativeModelDescriptor: Codable, Equatable, Sendable {
     let id: String
     let name: String
     let folder: String
+    let huggingFaceRepo: String
     let modeIdentifier: String
     let requiredRelativePaths: [String]
 
@@ -11,6 +12,7 @@ struct NativeModelDescriptor: Codable, Equatable, Sendable {
         case id
         case name
         case folder
+        case huggingFaceRepo
         case modeIdentifier = "mode"
         case requiredRelativePaths
     }
@@ -58,6 +60,9 @@ struct NativeModelRegistry {
             }
             guard !descriptor.folder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw RegistryError.invalidManifest("model '\(descriptor.id)' is missing a folder name")
+            }
+            guard !descriptor.huggingFaceRepo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw RegistryError.invalidManifest("model '\(descriptor.id)' is missing a huggingFaceRepo")
             }
             guard !descriptor.requiredRelativePaths.isEmpty else {
                 throw RegistryError.invalidManifest("model '\(descriptor.id)' is missing requiredRelativePaths")

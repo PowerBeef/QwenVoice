@@ -4395,6 +4395,7 @@ def _run_swift_tests() -> dict[str, Any]:
                 "-scheme", "QwenVoice",
                 "-only-testing:QwenVoiceTests",
                 "-destination", "platform=macOS,arch=arm64",
+                "-enableCodeCoverage", "NO",
                 "-quiet",
             ],
             capture_output=True,

@@ -4,12 +4,18 @@ import Foundation
 @MainActor
 public final class NativeMLXMacEngine: MacTTSEngine {
     public enum EngineError: LocalizedError {
-        case synthesisNotImplemented
+        case voiceDesignNotImplemented
+        case voiceCloningNotImplemented
+        case nativeBatchSupportsCustomOnly
 
         public var errorDescription: String? {
             switch self {
-            case .synthesisNotImplemented:
-                return "Native MLX synthesis is not wired yet. The shell currently supports runtime state and saved voices only."
+            case .voiceDesignNotImplemented:
+                return "Native Voice Design is not implemented yet."
+            case .voiceCloningNotImplemented:
+                return "Native Voice Cloning is not implemented yet."
+            case .nativeBatchSupportsCustomOnly:
+                return "Native batch generation currently supports Custom Voice requests only."
             }
         }
     }
@@ -190,9 +196,73 @@ public final class NativeMLXMacEngine: MacTTSEngine {
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
-        let error = EngineError.synthesisNotImplemented
-        publishNonLoadError(error)
-        throw error
+        switch request.payload {
+        case .custom:
+            break
+        case .design:
+            let error = EngineError.voiceDesignNotImplemented
+            publishNonLoadError(error)
+            throw error
+        case .clone:
+            let error = EngineError.voiceCloningNotImplemented
+            publishNonLoadError(error)
+            throw error
+        }
+
+        let generationLabel = request.streamingTitle ?? String(request.text.prefix(40))
+        publishSnapshot { current in
+            TTSEngineSnapshot(
+                isReady: current.isReady,
+                loadState: .running(modelID: request.modelID, label: generationLabel, fraction: nil),
+                clonePreparationState: current.clonePreparationState,
+                latestEvent: nil,
+                visibleErrorMessage: nil
+            )
+        }
+
+        do {
+            let prepared = try await runtime.prepareGeneration(for: request)
+            let session = NativeStreamingSynthesisSession(
+                requestID: prepared.requestID,
+                request: prepared.request,
+                model: prepared.model,
+                streamSessionsDirectory: prepared.streamSessionsDirectory,
+                warmState: prepared.warmState,
+                timingOverridesMS: prepared.timingOverridesMS,
+                booleanFlags: prepared.booleanFlags,
+                stringFlags: prepared.stringFlags
+            )
+
+            let result = try await session.run { [weak self] event in
+                self?.publishSnapshot { current in
+                    TTSEngineSnapshot(
+                        isReady: current.isReady,
+                        loadState: .running(
+                            modelID: request.modelID,
+                            label: event.title,
+                            fraction: nil
+                        ),
+                        clonePreparationState: current.clonePreparationState,
+                        latestEvent: event,
+                        visibleErrorMessage: nil
+                    )
+                }
+            }
+
+            publishSnapshot { current in
+                TTSEngineSnapshot(
+                    isReady: current.isReady,
+                    loadState: .loaded(modelID: request.modelID),
+                    clonePreparationState: current.clonePreparationState,
+                    latestEvent: current.latestEvent,
+                    visibleErrorMessage: nil
+                )
+            }
+            return result
+        } catch {
+            await publishGenerationFailure(error)
+            throw error
+        }
     }
 
     public func generateBatch(
@@ -200,6 +270,16 @@ public final class NativeMLXMacEngine: MacTTSEngine {
         progressHandler: ((Double?, String) -> Void)?
     ) async throws -> [GenerationResult] {
         guard !requests.isEmpty else { return [] }
+        guard requests.allSatisfy({ request in
+            if case .custom = request.payload {
+                return true
+            }
+            return false
+        }) else {
+            let error = EngineError.nativeBatchSupportsCustomOnly
+            publishNonLoadError(error)
+            throw error
+        }
 
         var results: [GenerationResult] = []
         results.reserveCapacity(requests.count)
@@ -307,6 +387,22 @@ public final class NativeMLXMacEngine: MacTTSEngine {
                 latestEvent: current.latestEvent,
                 visibleErrorMessage: error.localizedDescription
             )
+        }
+    }
+
+    private func publishGenerationFailure(_ error: Error) async {
+        if let loadedModelID = await runtime.currentLoadedModelID() {
+            publishSnapshot { current in
+                TTSEngineSnapshot(
+                    isReady: current.isReady,
+                    loadState: .loaded(modelID: loadedModelID),
+                    clonePreparationState: current.clonePreparationState,
+                    latestEvent: current.latestEvent,
+                    visibleErrorMessage: error.localizedDescription
+                )
+            }
+        } else {
+            publishRuntimeFailure(error)
         }
     }
 
