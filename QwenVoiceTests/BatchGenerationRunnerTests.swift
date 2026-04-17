@@ -1,108 +1,81 @@
+import Combine
 import XCTest
 @testable import QwenVoice
+import QwenVoiceNative
 
 @MainActor
-private final class MockBatchBridge: BatchGenerationBridging {
-    struct CloneCall: Equatable {
-        let modelID: String
-        let text: String
-        let refAudio: String
-        let refText: String?
-        let outputPath: String
-        let batchIndex: Int?
-        let batchTotal: Int?
-    }
+private final class MockBatchEngine: MacTTSEngine {
+    private let subject = CurrentValueSubject<TTSEngineSnapshot, Never>(
+        TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: "pro_clone"),
+            clonePreparationState: .idle,
+            latestEvent: nil,
+            visibleErrorMessage: nil
+        )
+    )
 
-    struct CloneBatchCall: Equatable {
-        let modelID: String
-        let texts: [String]
-        let refAudio: String
-        let refText: String?
-        let outputPaths: [String]
-    }
-
-    var cloneCalls: [CloneCall] = []
-    var cloneBatchCalls: [CloneBatchCall] = []
-    var cloneBatchProgressEvents: [(Double?, String)] = []
+    var generateRequests: [GenerationRequest] = []
+    var batchGenerateRequests: [[GenerationRequest]] = []
+    var batchProgressEvents: [(Double?, String)] = []
+    var cancelActiveGenerationCallCount = 0
     var clearGenerationActivityCallCount = 0
 
-    func generateCustomFlow(
-        modelID: String,
-        text: String,
-        voice: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult {
-        GenerationResult(audioPath: outputPath, durationSeconds: 0.25, streamSessionDirectory: nil, metrics: nil)
-    }
+    var snapshot: TTSEngineSnapshot { subject.value }
+    var snapshotPublisher: AnyPublisher<TTSEngineSnapshot, Never> { subject.eraseToAnyPublisher() }
 
-    func generateDesignFlow(
-        modelID: String,
-        text: String,
-        voiceDescription: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult {
-        GenerationResult(audioPath: outputPath, durationSeconds: 0.25, streamSessionDirectory: nil, metrics: nil)
-    }
+    func initialize(appSupportDirectory: URL) async throws {}
+    func ping() async throws -> Bool { true }
+    func loadModel(id: String) async throws {}
+    func unloadModel() async throws {}
+    func ensureModelLoadedIfNeeded(id: String) async {}
+    func prewarmModelIfNeeded(for request: GenerationRequest) async {}
+    func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {}
+    func cancelClonePreparationIfNeeded() async {}
 
-    func generateCloneFlow(
-        modelID: String,
-        text: String,
-        refAudio: String,
-        refText: String?,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult {
-        cloneCalls.append(
-            CloneCall(
-                modelID: modelID,
-                text: text,
-                refAudio: refAudio,
-                refText: refText,
-                outputPath: outputPath,
-                batchIndex: batchIndex,
-                batchTotal: batchTotal
-            )
+    func generate(_ request: GenerationRequest) async throws -> QwenVoiceNative.GenerationResult {
+        generateRequests.append(request)
+        return QwenVoiceNative.GenerationResult(
+            audioPath: request.outputPath,
+            durationSeconds: 0.25,
+            streamSessionDirectory: nil,
+            benchmarkSample: BenchmarkSample(streamingUsed: request.shouldStream)
         )
-        return GenerationResult(audioPath: outputPath, durationSeconds: 0.25, streamSessionDirectory: nil, metrics: nil)
     }
 
-    func generateCloneBatchFlow(
-        modelID: String,
-        texts: [String],
-        refAudio: String,
-        refText: String?,
-        outputPaths: [String],
+    func generateBatch(
+        _ requests: [GenerationRequest],
         progressHandler: ((Double?, String) -> Void)?
-    ) async throws -> [GenerationResult] {
-        cloneBatchCalls.append(
-            CloneBatchCall(
-                modelID: modelID,
-                texts: texts,
-                refAudio: refAudio,
-                refText: refText,
-                outputPaths: outputPaths
-            )
-        )
-        for event in cloneBatchProgressEvents {
+    ) async throws -> [QwenVoiceNative.GenerationResult] {
+        batchGenerateRequests.append(requests)
+        for event in batchProgressEvents {
             progressHandler?(event.0, event.1)
         }
-        return outputPaths.map {
-            GenerationResult(audioPath: $0, durationSeconds: 0.25, streamSessionDirectory: nil, metrics: nil)
+        return requests.map {
+            QwenVoiceNative.GenerationResult(
+                audioPath: $0.outputPath,
+                durationSeconds: 0.25,
+                streamSessionDirectory: nil,
+                benchmarkSample: BenchmarkSample(streamingUsed: $0.shouldStream)
+            )
         }
     }
 
-    func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws {}
+    func cancelActiveGeneration() async throws {
+        cancelActiveGenerationCallCount += 1
+    }
+
+    func listPreparedVoices() async throws -> [PreparedVoice] { [] }
+    func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice {
+        PreparedVoice(id: name, name: name, audioPath: audioPath, hasTranscript: !(transcript?.isEmpty ?? true))
+    }
+    func deletePreparedVoice(id: String) async throws {}
 
     func clearGenerationActivity() {
         clearGenerationActivityCallCount += 1
     }
+
+    func clearVisibleError() {}
 }
 
 @MainActor
@@ -117,10 +90,11 @@ private final class MockGenerationStore: GenerationPersisting {
 
 final class BatchGenerationRunnerTests: XCTestCase {
     @MainActor
-    func testCloneBatchUsesSharedReferenceBatchBridgePath() async throws {
-        let bridge = MockBatchBridge()
+    func testCloneBatchUsesSharedReferenceEngineBatchPath() async throws {
+        let engine = MockBatchEngine()
+        let engineStore = TTSEngineStore(engine: engine)
         let store = MockGenerationStore()
-        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
         let model = try XCTUnwrap(TTSModel.model(for: .clone))
         let request = BatchGenerationRequest(
             mode: .clone,
@@ -148,17 +122,15 @@ final class BatchGenerationRunnerTests: XCTestCase {
         }
         XCTAssertEqual(items.count, 2)
         XCTAssertEqual(items.filter(\.isSaved).count, 2)
-        XCTAssertEqual(bridge.cloneBatchCalls.count, 1)
-        XCTAssertTrue(bridge.cloneCalls.isEmpty)
+        XCTAssertEqual(engine.batchGenerateRequests.count, 1)
+        XCTAssertTrue(engine.generateRequests.isEmpty)
         XCTAssertEqual(
-            bridge.cloneBatchCalls.first,
-            MockBatchBridge.CloneBatchCall(
-                modelID: model.id,
-                texts: ["First line", "Second line"],
-                refAudio: "/tmp/reference.wav",
-                refText: "Reference transcript",
-                outputPaths: ["/tmp/First_line.wav", "/tmp/Second_line.wav"]
-            )
+            engine.batchGenerateRequests.first?.map(\.text),
+            ["First line", "Second line"]
+        )
+        XCTAssertEqual(
+            engine.batchGenerateRequests.first?.map(\.outputPath),
+            ["/tmp/First_line.wav", "/tmp/Second_line.wav"]
         )
         XCTAssertEqual(store.savedGenerations.count, 2)
         XCTAssertEqual(progressSnapshots.first?.statusMessage, "Preparing batch...")
@@ -166,10 +138,11 @@ final class BatchGenerationRunnerTests: XCTestCase {
     }
 
     @MainActor
-    func testSingleCloneStillUsesLegacySingleItemBridgePath() async throws {
-        let bridge = MockBatchBridge()
+    func testSingleCloneStillUsesSingleRequestEnginePath() async throws {
+        let engine = MockBatchEngine()
+        let engineStore = TTSEngineStore(engine: engine)
         let store = MockGenerationStore()
-        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
         let model = try XCTUnwrap(TTSModel.model(for: .clone))
         let request = BatchGenerationRequest(
             mode: .clone,
@@ -194,20 +167,22 @@ final class BatchGenerationRunnerTests: XCTestCase {
         }
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.status, .saved(audioPath: "/tmp/solo.wav"))
-        XCTAssertTrue(bridge.cloneBatchCalls.isEmpty)
-        XCTAssertEqual(bridge.cloneCalls.count, 1)
+        XCTAssertTrue(engine.batchGenerateRequests.isEmpty)
+        XCTAssertEqual(engine.generateRequests.count, 1)
+        XCTAssertEqual(engine.generateRequests.first?.text, "Solo line")
         XCTAssertEqual(store.savedGenerations.count, 1)
     }
 
     @MainActor
     func testCloneBatchProgressSnapshotsIncludeBackendProgressEvents() async throws {
-        let bridge = MockBatchBridge()
-        bridge.cloneBatchProgressEvents = [
+        let engine = MockBatchEngine()
+        engine.batchProgressEvents = [
             (0.10, "Normalizing reference..."),
             (0.60, "Generating audio batch..."),
         ]
+        let engineStore = TTSEngineStore(engine: engine)
         let store = MockGenerationStore()
-        let runner = BatchGenerationRunner(bridge: bridge, store: store)
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
         let model = try XCTUnwrap(TTSModel.model(for: .clone))
         let request = BatchGenerationRequest(
             mode: .clone,
@@ -244,11 +219,12 @@ final class BatchGenerationRunnerTests: XCTestCase {
 
     @MainActor
     func testCoordinatorTracksCloneBatchProgressSnapshots() async throws {
-        let bridge = MockBatchBridge()
-        bridge.cloneBatchProgressEvents = [
+        let engine = MockBatchEngine()
+        engine.batchProgressEvents = [
             (0.25, "Preparing voice context..."),
             (0.75, "Generating audio batch..."),
         ]
+        let engineStore = TTSEngineStore(engine: engine)
         let store = MockGenerationStore()
         let coordinator = BatchGenerationCoordinator()
         let model = TTSModel(
@@ -278,7 +254,7 @@ final class BatchGenerationRunnerTests: XCTestCase {
             },
             isModelAvailable: { _ in true },
             recoveryDetail: { _ in "Install model" },
-            bridge: bridge,
+            engineStore: engineStore,
             store: store
         )
 
@@ -303,6 +279,18 @@ final class BatchGenerationRunnerTests: XCTestCase {
         XCTAssertEqual(items.filter(\.isSaved).count, 2)
         XCTAssertEqual(coordinator.itemStates.filter(\.isSaved).count, 2)
         XCTAssertEqual(store.savedGenerations.count, 2)
+    }
+
+    @MainActor
+    func testRunnerCancellationUsesEngineStoreCancellation() async throws {
+        let engine = MockBatchEngine()
+        let engineStore = TTSEngineStore(engine: engine)
+        let store = MockGenerationStore()
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
+
+        try await runner.requestCancellation()
+
+        XCTAssertEqual(engine.cancelActiveGenerationCallCount, 1)
     }
 
     func testBatchGenerationOutcomeRetryHelpersSeparateRemainingAndFailedLines() {

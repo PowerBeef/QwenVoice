@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QwenVoiceNative
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -73,7 +74,7 @@ final class VoiceCloningCoordinator: ObservableObject {
         isModelAvailable: Bool,
         clonePrimingRequestKey: String?,
         selectedVoice: Voice?,
-        pythonBridge: PythonBridge,
+        ttsEngineStore: TTSEngineStore,
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel
     ) {
@@ -99,7 +100,7 @@ final class VoiceCloningCoordinator: ObservableObject {
             isModelAvailable: isModelAvailable,
             clonePrimingRequestKey: clonePrimingRequestKey,
             selectedVoice: selectedVoice,
-            pythonBridge: pythonBridge,
+            ttsEngineStore: ttsEngineStore,
             audioPlayer: audioPlayer,
             modelManager: modelManager
         )
@@ -111,12 +112,12 @@ final class VoiceCloningCoordinator: ObservableObject {
         isModelAvailable: Bool,
         clonePrimingRequestKey: String?,
         selectedVoice: Voice?,
-        pythonBridge: PythonBridge,
+        ttsEngineStore: TTSEngineStore,
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel
     ) {
         guard !draft.wrappedValue.text.isEmpty else { return }
-        guard pythonBridge.isReady else { return }
+        guard ttsEngineStore.isReady else { return }
 
         if let model = cloneModel, !isModelAvailable {
             errorMessage = modelManager.recoveryDetail(for: model)
@@ -151,13 +152,18 @@ final class VoiceCloningCoordinator: ObservableObject {
                     return
                 }
 
-                if pythonBridge.cloneReferencePrimingPhase != .primed
-                    || pythonBridge.cloneReferencePrimingKey != clonePrimingRequestKey {
+                let primedReferenceMatches = ttsEngineStore.clonePreparationState.isPrimed
+                    && ttsEngineStore.clonePreparationState.key == clonePrimingRequestKey
+
+                if !primedReferenceMatches {
                     do {
-                        try await pythonBridge.ensureCloneReferencePrimed(
+                        try await ttsEngineStore.ensureCloneReferencePrimed(
                             modelID: model.id,
-                            refAudio: refPath,
-                            refText: currentDraft.referenceTranscript.isEmpty ? nil : currentDraft.referenceTranscript
+                            reference: CloneReference(
+                                audioPath: refPath,
+                                transcript: currentDraft.referenceTranscript.isEmpty ? nil : currentDraft.referenceTranscript,
+                                preparedVoiceID: currentDraft.selectedSavedVoiceID
+                            )
                         )
                     } catch {
                         #if DEBUG
@@ -171,18 +177,21 @@ final class VoiceCloningCoordinator: ObservableObject {
                     text: currentDraft.text
                 )
                 let title = String(currentDraft.text.prefix(40))
+                guard let generationRequest = Self.makeGenerationRequest(
+                    draft: currentDraft,
+                    model: model,
+                    outputPath: outputPath
+                ) else {
+                    errorMessage = "Select a reference audio file before generating."
+                    isGenerating = false
+                    return
+                }
                 audioPlayer.prepareStreamingPreview(
                     title: title,
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
 
-                let result = try await pythonBridge.generateCloneStreamingFlow(
-                    modelID: model.id,
-                    text: currentDraft.text,
-                    refAudio: refPath,
-                    refText: currentDraft.referenceTranscript.isEmpty ? nil : currentDraft.referenceTranscript,
-                    outputPath: outputPath
-                )
+                let result = try await ttsEngineStore.generate(generationRequest)
 
                 let voiceName = selectedVoice?.name
                     ?? URL(fileURLWithPath: refPath).deletingPathExtension().lastPathComponent
@@ -223,35 +232,60 @@ final class VoiceCloningCoordinator: ObservableObject {
         }
     }
 
+    static func makeGenerationRequest(
+        draft: VoiceCloningDraft,
+        model: TTSModel,
+        outputPath: String
+    ) -> GenerationRequest? {
+        guard let referenceAudioPath = draft.referenceAudioPath else { return nil }
+        return GenerationRequest(
+            modelID: model.id,
+            text: draft.text,
+            outputPath: outputPath,
+            shouldStream: true,
+            streamingTitle: String(draft.text.prefix(40)),
+            payload: .clone(
+                reference: CloneReference(
+                    audioPath: referenceAudioPath,
+                    transcript: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
+                    preparedVoiceID: draft.selectedSavedVoiceID
+                )
+            )
+        )
+    }
+
     func syncCloneReferencePriming(
         draft: VoiceCloningDraft,
         cloneModel: TTSModel?,
         isModelAvailable: Bool,
         clonePrimingRequestKey: String?,
-        pythonBridge: PythonBridge
+        ttsEngineStore: TTSEngineStore
     ) async {
         guard !isGenerating else { return }
         guard let model = cloneModel,
               isModelAvailable,
               let refPath = draft.referenceAudioPath,
               let clonePrimingRequestKey else {
-            await pythonBridge.cancelCloneReferencePrimingIfNeeded()
+            await ttsEngineStore.cancelClonePreparationIfNeeded()
             return
         }
 
         if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
            hydratedSavedVoiceID != selectedSavedVoiceID,
            transcriptLoadError == nil {
-            await pythonBridge.cancelCloneReferencePrimingIfNeeded()
+            await ttsEngineStore.cancelClonePreparationIfNeeded()
             return
         }
 
         let trimmedRefText = draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
         do {
-            try await pythonBridge.ensureCloneReferencePrimed(
+            try await ttsEngineStore.ensureCloneReferencePrimed(
                 modelID: model.id,
-                refAudio: refPath,
-                refText: trimmedRefText
+                reference: CloneReference(
+                    audioPath: refPath,
+                    transcript: trimmedRefText,
+                    preparedVoiceID: draft.selectedSavedVoiceID
+                )
             )
         } catch {
             #if DEBUG
@@ -263,11 +297,11 @@ final class VoiceCloningCoordinator: ObservableObject {
     func prepareSelectedModelIfNeeded(
         cloneModel: TTSModel?,
         isModelAvailable: Bool,
-        pythonBridge: PythonBridge
+        ttsEngineStore: TTSEngineStore
     ) async {
         guard let model = cloneModel else { return }
-        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        await pythonBridge.ensureModelLoadedIfNeeded(id: model.id)
+        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
+        await ttsEngineStore.ensureModelLoadedIfNeeded(id: model.id)
     }
 
     func selectSavedVoice(

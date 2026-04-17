@@ -1,3 +1,4 @@
+import QwenVoiceNative
 import SwiftUI
 
 private struct VoiceDesignActionAlert: Identifiable {
@@ -32,6 +33,7 @@ struct VoiceDesignSavedVoiceCandidate: Equatable {
 
 struct VoiceDesignView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
+    @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
@@ -63,20 +65,34 @@ struct VoiceDesignView: View {
     }
 
     private var canGenerate: Bool {
-        pythonBridge.isReady
+        ttsEngineStore.isReady
             && isModelAvailable
             && !draft.text.isEmpty
             && !draft.voiceDescription.isEmpty
     }
 
     private var canRunBatch: Bool {
-        pythonBridge.isReady
+        ttsEngineStore.isReady
             && isModelAvailable
             && !draft.voiceDescription.isEmpty
     }
 
+    private var idlePrewarmRequest: GenerationRequest? {
+        guard let model = activeModel else { return nil }
+        return GenerationRequest(
+            modelID: model.id,
+            text: draft.text,
+            outputPath: "",
+            payload: .design(
+                voiceDescription: draft.voiceDescription,
+                deliveryStyle: draft.emotion
+            )
+        )
+    }
+
     private var idlePrewarmTaskID: String {
-        "\(pythonBridge.isReady)-\(activeModel?.id ?? "none")-design-\(isModelAvailable)"
+        let identity = idlePrewarmRequest.map(GenerationSemantics.prewarmIdentityKey(for:)) ?? "none"
+        return "\(ttsEngineStore.isReady)-\(isModelAvailable)-\(identity)"
     }
 
     private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
@@ -110,14 +126,14 @@ struct VoiceDesignView: View {
                 emotion: draft.emotion,
                 voiceDescription: draft.voiceDescription
             )
-            .environmentObject(pythonBridge)
+            .environmentObject(ttsEngineStore)
             .environmentObject(audioPlayer)
         }
         .sheet(item: $savedVoiceSheetConfiguration) { configuration in
             SavedVoiceSheet(configuration: configuration) { voice in
                 handleSavedVoice(voice)
             }
-            .environmentObject(pythonBridge)
+            .environmentObject(ttsEngineStore)
         }
         .alert(item: $actionAlert) { alert in
             Alert(
@@ -189,7 +205,7 @@ private extension VoiceDesignView {
                     buttonColor: AppTheme.voiceDesign,
                     batchAction: { showingBatch = true },
                     batchDisabled: !canRunBatch,
-                    generateDisabled: !pythonBridge.isReady || !isModelAvailable || draft.voiceDescription.isEmpty,
+                    generateDisabled: !ttsEngineStore.isReady || !isModelAvailable || draft.voiceDescription.isEmpty,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
@@ -235,7 +251,7 @@ private extension VoiceDesignView {
     }
 
     var readinessTitle: String {
-        if !pythonBridge.isReady {
+        if !ttsEngineStore.isReady {
             return "Engine starting"
         }
         if !isModelAvailable {
@@ -251,7 +267,7 @@ private extension VoiceDesignView {
     }
 
     var readinessDetail: String {
-        if !pythonBridge.isReady {
+        if !ttsEngineStore.isReady {
             return "QwenVoice is still preparing the generation engine."
         }
         if !isModelAvailable {
@@ -373,7 +389,7 @@ private extension VoiceDesignView {
     }
 
     func generate() {
-        guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, pythonBridge.isReady else { return }
+        guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, ttsEngineStore.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = modelManager.recoveryDetail(for: model)
@@ -398,18 +414,21 @@ private extension VoiceDesignView {
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
+                let generationRequest = Self.makeGenerationRequest(
+                    draft: VoiceDesignDraft(
+                        voiceDescription: voiceDescription,
+                        emotion: emotion,
+                        text: text
+                    ),
+                    model: model,
+                    outputPath: outputPath
+                )
                 audioPlayer.prepareStreamingPreview(
                     title: String(text.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
 
-                let result = try await pythonBridge.generateDesignStreamingFlow(
-                    modelID: model.id,
-                    text: text,
-                    voiceDescription: voiceDescription,
-                    emotion: emotion,
-                    outputPath: outputPath
-                )
+                let result = try await ttsEngineStore.generate(generationRequest)
 
                 var generation = Generation(
                     text: text,
@@ -449,13 +468,9 @@ private extension VoiceDesignView {
     }
 
     func prewarmSelectedModelIfNeeded() async {
-        guard let model = activeModel else { return }
-        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-
-        await pythonBridge.prewarmModelIfNeeded(
-            modelID: model.id,
-            mode: activeMode
-        )
+        guard let idlePrewarmRequest else { return }
+        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
+        await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
     }
 
     func presentSavedVoiceSheet() {
@@ -473,10 +488,30 @@ private extension VoiceDesignView {
             latestSavedVoiceCandidate = candidate
         }
         savedVoicesViewModel.insertOrReplace(voice)
-        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
         actionAlert = VoiceDesignActionAlert(
             title: "Saved Voice Added",
             message: "\"\(voice.name)\" is ready in Saved Voices."
+        )
+    }
+}
+
+extension VoiceDesignView {
+    static func makeGenerationRequest(
+        draft: VoiceDesignDraft,
+        model: TTSModel,
+        outputPath: String
+    ) -> GenerationRequest {
+        GenerationRequest(
+            modelID: model.id,
+            text: draft.text,
+            outputPath: outputPath,
+            shouldStream: true,
+            streamingTitle: String(draft.text.prefix(40)),
+            payload: .design(
+                voiceDescription: draft.voiceDescription,
+                deliveryStyle: draft.emotion
+            )
         )
     }
 }

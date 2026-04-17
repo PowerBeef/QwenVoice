@@ -1,3 +1,4 @@
+import QwenVoiceNative
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -40,6 +41,7 @@ enum VoiceCloningReferenceAudioSupport {
 
 struct VoiceCloningView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
+    @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
@@ -63,12 +65,12 @@ struct VoiceCloningView: View {
     }
 
     private var canRunBatch: Bool {
-        pythonBridge.isReady && draft.referenceAudioPath != nil && isModelAvailable
+        ttsEngineStore.isReady && draft.referenceAudioPath != nil && isModelAvailable
     }
 
     private var clonePrimingRequestKey: String? {
         guard let model = cloneModel,
-              pythonBridge.isReady,
+              ttsEngineStore.isReady,
               isModelAvailable,
               let referenceAudioPath = draft.referenceAudioPath else {
             return nil
@@ -78,10 +80,13 @@ struct VoiceCloningView: View {
            coordinator.transcriptLoadError == nil {
             return nil
         }
-        return PythonBridge.cloneReferenceIdentityKey(
+        return GenerationSemantics.clonePreparationKey(
             modelID: model.id,
-            refAudio: referenceAudioPath,
-            refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
+            reference: CloneReference(
+                audioPath: referenceAudioPath,
+                transcript: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
+                preparedVoiceID: draft.selectedSavedVoiceID
+            )
         )
     }
 
@@ -90,7 +95,7 @@ struct VoiceCloningView: View {
     }
 
     private var modelPreparationTaskID: String {
-        "\(pythonBridge.isReady)-\(cloneModel?.id ?? "none")-\(isModelAvailable)-\(coordinator.isGenerating)"
+        "\(ttsEngineStore.isReady)-\(cloneModel?.id ?? "none")-\(isModelAvailable)-\(coordinator.isGenerating)"
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
@@ -104,8 +109,8 @@ struct VoiceCloningView: View {
 
         guard let clonePrimingRequestKey else { return nil }
 
-        if pythonBridge.cloneReferencePrimingKey == clonePrimingRequestKey {
-            switch pythonBridge.cloneReferencePrimingPhase {
+        if ttsEngineStore.clonePreparationState.key == clonePrimingRequestKey {
+            switch ttsEngineStore.clonePreparationState {
             case .idle:
                 break
             case .preparing:
@@ -114,7 +119,7 @@ struct VoiceCloningView: View {
                 return .primed
             case .failed:
                 return .fallback(
-                    pythonBridge.cloneReferencePrimingError
+                    ttsEngineStore.clonePreparationState.errorMessage
                         ?? "Voice context priming didn't finish. Generation is still available, but the first preview may be slower."
                 )
             }
@@ -125,7 +130,7 @@ struct VoiceCloningView: View {
 
     private var readinessDescriptor: VoiceCloningReadinessDescriptor {
         VoiceCloningReadiness.describe(
-            pythonReady: pythonBridge.isReady,
+            pythonReady: ttsEngineStore.isReady,
             isModelAvailable: isModelAvailable,
             modelDisplayName: modelDisplayName,
             referenceAudioPath: draft.referenceAudioPath,
@@ -135,7 +140,7 @@ struct VoiceCloningView: View {
     }
 
     private var savedVoicesLoadTaskID: String {
-        "\(pythonBridge.isReady)-\(draft.selectedSavedVoiceID ?? "none")"
+        "\(ttsEngineStore.isReady)-\(draft.selectedSavedVoiceID ?? "none")"
     }
 
     private var savedVoices: [Voice] {
@@ -192,13 +197,12 @@ struct VoiceCloningView: View {
     }
 
     static func shouldStartDeferredClonePrewarm(
-        primingPhase: CloneReferencePrimingPhase,
-        primingKey: String?,
+        clonePreparationState: ClonePreparationState,
         expectedKey: String?,
         isGenerating: Bool
     ) -> Bool {
-        primingPhase == .primed
-            && primingKey == expectedKey
+        clonePreparationState.isPrimed
+            && clonePreparationState.key == expectedKey
             && !isGenerating
     }
 
@@ -226,12 +230,12 @@ struct VoiceCloningView: View {
                 : nil
         )
         .task(id: savedVoicesLoadTaskID) {
-            guard pythonBridge.isReady else { return }
+            guard ttsEngineStore.isReady else { return }
 
             if draft.selectedSavedVoiceID != nil {
-                await savedVoicesViewModel.refresh(using: pythonBridge)
+                await savedVoicesViewModel.refresh(using: ttsEngineStore)
             } else {
-                await savedVoicesViewModel.ensureLoaded(using: pythonBridge)
+                await savedVoicesViewModel.ensureLoaded(using: ttsEngineStore)
             }
 
             coordinator.syncSavedVoiceSelectionState(
@@ -244,7 +248,7 @@ struct VoiceCloningView: View {
             await coordinator.prepareSelectedModelIfNeeded(
                 cloneModel: cloneModel,
                 isModelAvailable: isModelAvailable,
-                pythonBridge: pythonBridge
+                ttsEngineStore: ttsEngineStore
             )
         }
         .onChange(of: savedVoicesViewModel.voices) { _, _ in
@@ -260,7 +264,7 @@ struct VoiceCloningView: View {
                 cloneModel: cloneModel,
                 isModelAvailable: isModelAvailable,
                 clonePrimingRequestKey: clonePrimingRequestKey,
-                pythonBridge: pythonBridge
+                ttsEngineStore: ttsEngineStore
             )
         }
         .onAppear(perform: handleAppear)
@@ -270,8 +274,7 @@ struct VoiceCloningView: View {
         .onChange(of: coordinator.isGenerating) { _, _ in syncUITestState() }
         .onChange(of: coordinator.hydratedSavedVoiceID) { _, _ in syncUITestState() }
         .onChange(of: coordinator.transcriptLoadError) { _, _ in syncUITestState() }
-        .onChange(of: pythonBridge.cloneReferencePrimingPhase) { _, _ in syncUITestState() }
-        .onChange(of: pythonBridge.cloneReferencePrimingKey) { _, _ in syncUITestState() }
+        .onChange(of: ttsEngineStore.clonePreparationState) { _, _ in syncUITestState() }
         .onChange(of: pendingSavedVoiceHandoff) { _, _ in
             coordinator.consumePendingSavedVoiceHandoffIfNeeded(
                 draft: $draft,
@@ -289,7 +292,7 @@ struct VoiceCloningView: View {
                 isModelAvailable: isModelAvailable,
                 clonePrimingRequestKey: clonePrimingRequestKey,
                 selectedVoice: selectedVoice,
-                pythonBridge: pythonBridge,
+                ttsEngineStore: ttsEngineStore,
                 audioPlayer: audioPlayer,
                 modelManager: modelManager
             )
@@ -300,7 +303,7 @@ struct VoiceCloningView: View {
                 refAudio: draft.referenceAudioPath,
                 refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
             )
-            .environmentObject(pythonBridge)
+            .environmentObject(ttsEngineStore)
             .environmentObject(audioPlayer)
         }
     }
@@ -331,7 +334,7 @@ private extension VoiceCloningView {
                     transcriptLoadError: coordinator.transcriptLoadError,
                     browseForAudio: { coordinator.browseForAudio(draft: $draft) },
                     clearReference: { coordinator.clearReference(draft: $draft) },
-                    retrySavedVoices: { Task { await savedVoicesViewModel.refresh(using: pythonBridge) } }
+                    retrySavedVoices: { Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) } }
                 )
                 VoiceCloningTranscriptSettings(referenceTranscript: $draft.referenceTranscript)
             }
@@ -371,13 +374,13 @@ private extension VoiceCloningView {
                             isModelAvailable: isModelAvailable,
                             clonePrimingRequestKey: clonePrimingRequestKey,
                             selectedVoice: selectedVoice,
-                            pythonBridge: pythonBridge,
+                            ttsEngineStore: ttsEngineStore,
                             audioPlayer: audioPlayer,
                             modelManager: modelManager
                         )
                     }
                 )
-                .disabled(!pythonBridge.isReady || !isModelAvailable || draft.referenceAudioPath == nil)
+                .disabled(!ttsEngineStore.isReady || !isModelAvailable || draft.referenceAudioPath == nil)
 
                 VoiceCloningComposerFooter(
                     modelRecoveryCard: modelRecoveryCard,

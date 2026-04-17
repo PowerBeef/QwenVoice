@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceNative
 
 /// Shared generation persistence and autoplay logic used by all three generation views.
 @MainActor
@@ -18,7 +19,7 @@ enum GenerationPersistence {
     /// Saves a generation to the database, posts a notification, and triggers autoplay if configured.
     static func persistAndAutoplay(
         _ generation: inout Generation,
-        result: GenerationResult,
+        result: QwenVoiceNative.GenerationResult,
         text: String,
         audioPlayer: AudioPlayerViewModel,
         caller: String,

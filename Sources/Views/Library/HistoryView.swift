@@ -1,4 +1,5 @@
 import AppKit
+import QwenVoiceNative
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -69,6 +70,7 @@ enum HistorySortOrder: String, CaseIterable, Identifiable {
 struct HistoryView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
     @EnvironmentObject private var generationLibraryEvents: GenerationLibraryEvents
     @Binding var searchText: String
@@ -232,7 +234,7 @@ private extension HistoryView {
 
     func handleSavedVoice(_ voice: Voice) {
         savedVoicesViewModel.insertOrReplace(voice)
-        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
         presentActionAlert(
             title: "Saved Voice Added",
             message: "\"\(voice.name)\" is ready in Saved Voices."

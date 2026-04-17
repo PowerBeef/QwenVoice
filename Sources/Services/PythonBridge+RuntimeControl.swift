@@ -183,6 +183,30 @@ extension PythonBridge {
         }
     }
 
+    func cancelActiveGenerationAndRecover() async throws {
+        let appSupportDir = activeAppSupportDir ?? AppPaths.appSupportDir.path
+
+        if isStubBackendMode {
+            try await cancelActiveGenerationAndRestart(
+                pythonPath: processManager.activePythonPath ?? "",
+                appSupportDir: appSupportDir
+            )
+            return
+        }
+
+        guard let pythonPath = processManager.activePythonPath,
+              !pythonPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw PythonBridgeError.restartFailed(
+                "Active generation could not be cancelled because the Python runtime path is unavailable."
+            )
+        }
+
+        try await cancelActiveGenerationAndRestart(
+            pythonPath: pythonPath,
+            appSupportDir: appSupportDir
+        )
+    }
+
     func ensureCloneReferencePrimed(
         modelID: String,
         refAudio: String,

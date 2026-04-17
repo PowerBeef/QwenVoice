@@ -18,6 +18,8 @@ targets:
     sources:
       - path: Sources
         excludes:
+          - "QwenVoiceNative"
+          - "QwenVoiceNative/**"
           - "Resources/python/**"
           - "Resources/ffmpeg"
           - "Resources/ffmpeg/**"
@@ -71,6 +73,7 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
       - package: GRDB
+      - target: QwenVoiceNative
     postBuildScripts:
       - name: Sanitize Bundled Backend Resources
         shell: /bin/bash
@@ -91,6 +94,20 @@ targets:
             find "${BACKEND_DIR}" -name "*.pyc" -delete
           fi
 
+  QwenVoiceNative:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: Sources/QwenVoiceNative
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.native
+        PRODUCT_NAME: QwenVoiceNative
+        PRODUCT_MODULE_NAME: QwenVoiceNative
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+
   QwenVoiceTests:
     type: bundle.unit-test
     platform: macOS
@@ -104,6 +121,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: QwenVoice
+      - target: QwenVoiceNative
 
   QwenVoiceUITests:
     type: bundle.ui-testing

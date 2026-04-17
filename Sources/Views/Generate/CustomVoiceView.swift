@@ -1,7 +1,9 @@
+import QwenVoiceNative
 import SwiftUI
 
 struct CustomVoiceView: View {
     @EnvironmentObject var pythonBridge: PythonBridge
+    @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var appCommandRouter: AppCommandRouter
@@ -29,24 +31,32 @@ struct CustomVoiceView: View {
     }
 
     private var canGenerate: Bool {
-        pythonBridge.isReady
+        ttsEngineStore.isReady
             && isModelAvailable
             && !draft.text.isEmpty
     }
 
     private var canRunBatch: Bool {
-        pythonBridge.isReady
+        ttsEngineStore.isReady
             && isModelAvailable
     }
 
-    private var idlePrewarmTaskID: String {
-        let identity = PythonBridge.prewarmIdentityKey(
-            modelID: activeModel?.id ?? "none",
-            mode: activeMode,
-            voice: draft.selectedSpeaker,
-            instruct: draft.emotion
+    private var idlePrewarmRequest: GenerationRequest? {
+        guard let model = activeModel else { return nil }
+        return GenerationRequest(
+            modelID: model.id,
+            text: draft.text,
+            outputPath: "",
+            payload: .custom(
+                speakerID: draft.selectedSpeaker,
+                deliveryStyle: draft.emotion
+            )
         )
-        return "\(pythonBridge.isReady)|\(isModelAvailable)|\(identity)"
+    }
+
+    private var idlePrewarmTaskID: String {
+        let identity = idlePrewarmRequest.map(GenerationSemantics.prewarmIdentityKey(for:)) ?? "none"
+        return "\(ttsEngineStore.isReady)|\(isModelAvailable)|\(identity)"
     }
 
     init(draft: Binding<CustomVoiceDraft>) {
@@ -72,7 +82,7 @@ struct CustomVoiceView: View {
                 voice: draft.selectedSpeaker,
                 emotion: draft.emotion
             )
-            .environmentObject(pythonBridge)
+            .environmentObject(ttsEngineStore)
             .environmentObject(audioPlayer)
         }
         .task(id: idlePrewarmTaskID) {
@@ -142,7 +152,7 @@ private extension CustomVoiceView {
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: generate
                 )
-                .disabled(!pythonBridge.isReady || !isModelAvailable)
+                .disabled(!ttsEngineStore.isReady || !isModelAvailable)
 
                 composerFooter
             }
@@ -186,7 +196,7 @@ private extension CustomVoiceView {
     }
 
     var readinessTitle: String {
-        if !pythonBridge.isReady {
+        if !ttsEngineStore.isReady {
             return "Engine starting"
         }
         if !isModelAvailable {
@@ -199,7 +209,7 @@ private extension CustomVoiceView {
     }
 
     var readinessDetail: String {
-        if !pythonBridge.isReady {
+        if !ttsEngineStore.isReady {
             return "QwenVoice is still preparing the generation engine."
         }
         if !isModelAvailable {
@@ -290,7 +300,7 @@ private extension CustomVoiceView {
     }
 
     func generate() {
-        guard !draft.text.isEmpty, pythonBridge.isReady else { return }
+        guard !draft.text.isEmpty, ttsEngineStore.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = modelManager.recoveryDetail(for: model)
@@ -311,18 +321,17 @@ private extension CustomVoiceView {
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: draft.text)
+                let generationRequest = Self.makeGenerationRequest(
+                    draft: draft,
+                    model: model,
+                    outputPath: outputPath
+                )
                 audioPlayer.prepareStreamingPreview(
                     title: String(draft.text.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
                 )
 
-                let result = try await pythonBridge.generateCustomStreamingFlow(
-                    modelID: model.id,
-                    text: draft.text,
-                    voice: draft.selectedSpeaker,
-                    emotion: draft.emotion,
-                    outputPath: outputPath
-                )
+                let result = try await ttsEngineStore.generate(generationRequest)
 
                 var generation = Generation(
                     text: draft.text,
@@ -355,13 +364,29 @@ private extension CustomVoiceView {
     }
 
     func prewarmSelectedModelIfNeeded() async {
-        guard let model = activeModel else { return }
-        guard pythonBridge.isReady, isModelAvailable, !isGenerating else { return }
-        await pythonBridge.prewarmModelIfNeeded(
+        guard let idlePrewarmRequest else { return }
+        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
+        await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
+    }
+
+}
+
+extension CustomVoiceView {
+    static func makeGenerationRequest(
+        draft: CustomVoiceDraft,
+        model: TTSModel,
+        outputPath: String
+    ) -> GenerationRequest {
+        GenerationRequest(
             modelID: model.id,
-            mode: activeMode,
-            voice: draft.selectedSpeaker,
-            instruct: draft.emotion
+            text: draft.text,
+            outputPath: outputPath,
+            shouldStream: true,
+            streamingTitle: String(draft.text.prefix(40)),
+            payload: .custom(
+                speakerID: draft.selectedSpeaker,
+                deliveryStyle: draft.emotion
+            )
         )
     }
 }

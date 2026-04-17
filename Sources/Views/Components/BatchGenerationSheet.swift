@@ -1,9 +1,9 @@
+import QwenVoiceNative
 import SwiftUI
 
 struct BatchGenerationSheet: View {
-    @EnvironmentObject var pythonBridge: PythonBridge
+    @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject var envManager: PythonEnvironmentManager
     @EnvironmentObject var modelManager: ModelManagerViewModel
     @EnvironmentObject var appCommandRouter: AppCommandRouter
     @Environment(\.dismiss) private var dismiss
@@ -29,13 +29,6 @@ struct BatchGenerationSheet: View {
             summary.append("Tone: \(emotion)")
         }
         return summary
-    }
-
-    private var activePythonPath: String? {
-        if case .ready(let pythonPath) = envManager.state {
-            return pythonPath
-        }
-        return nil
     }
 
     var body: some View {
@@ -156,7 +149,6 @@ struct BatchGenerationSheet: View {
         HStack {
             Button("Cancel") {
                 coordinator.cancelBatch(
-                    pythonPath: activePythonPath,
                     dismiss: { dismiss() }
                 )
             }
@@ -381,7 +373,7 @@ struct BatchGenerationSheet: View {
             recoveryDetail: { model in
                 modelManager.recoveryDetail(for: model)
             },
-            bridge: pythonBridge
+            engineStore: ttsEngineStore
         )
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceNative
 
 struct BatchProgressSnapshot: Equatable {
     let completedCount: Int
@@ -103,56 +104,10 @@ struct BatchGenerationItemState: Identifiable, Equatable {
 }
 
 @MainActor
-protocol BatchGenerationBridging: AnyObject {
-    func generateCustomFlow(
-        modelID: String,
-        text: String,
-        voice: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult
-
-    func generateDesignFlow(
-        modelID: String,
-        text: String,
-        voiceDescription: String,
-        emotion: String,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult
-
-    func generateCloneFlow(
-        modelID: String,
-        text: String,
-        refAudio: String,
-        refText: String?,
-        outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?
-    ) async throws -> GenerationResult
-
-    func generateCloneBatchFlow(
-        modelID: String,
-        texts: [String],
-        refAudio: String,
-        refText: String?,
-        outputPaths: [String],
-        progressHandler: ((Double?, String) -> Void)?
-    ) async throws -> [GenerationResult]
-
-    func cancelActiveGenerationAndRestart(pythonPath: String, appSupportDir: String) async throws
-    func clearGenerationActivity()
-}
-
-@MainActor
 protocol GenerationPersisting {
     func saveGeneration(_ generation: inout Generation) throws
 }
 
-extension PythonBridge: BatchGenerationBridging { }
 extension DatabaseService: GenerationPersisting { }
 
 struct BatchGenerationRequest {
@@ -201,7 +156,7 @@ struct BatchGenerationRequest {
         return nil
     }
 
-    func makeHistoryRecord(for line: String, result: GenerationResult) -> Generation {
+    func makeHistoryRecord(for line: String, result: QwenVoiceNative.GenerationResult) -> Generation {
         let voiceName: String?
         switch mode {
         case .custom:
@@ -229,6 +184,70 @@ struct BatchGenerationRequest {
             duration: result.durationSeconds,
             createdAt: Date()
         )
+    }
+
+    func makeGenerationRequest(
+        for line: String,
+        outputPath: String,
+        batchIndex: Int?,
+        batchTotal: Int?
+    ) -> QwenVoiceNative.GenerationRequest {
+        switch mode {
+        case .custom:
+            return QwenVoiceNative.GenerationRequest(
+                modelID: model.id,
+                text: line,
+                outputPath: outputPath,
+                shouldStream: false,
+                batchIndex: batchIndex,
+                batchTotal: batchTotal,
+                payload: .custom(
+                    speakerID: voice ?? TTSModel.defaultSpeaker,
+                    deliveryStyle: emotion ?? "Normal tone"
+                )
+            )
+        case .design:
+            return QwenVoiceNative.GenerationRequest(
+                modelID: model.id,
+                text: line,
+                outputPath: outputPath,
+                shouldStream: false,
+                batchIndex: batchIndex,
+                batchTotal: batchTotal,
+                payload: .design(
+                    voiceDescription: voiceDescription ?? "",
+                    deliveryStyle: emotion ?? "Normal tone"
+                )
+            )
+        case .clone:
+            return QwenVoiceNative.GenerationRequest(
+                modelID: model.id,
+                text: line,
+                outputPath: outputPath,
+                shouldStream: false,
+                batchIndex: batchIndex,
+                batchTotal: batchTotal,
+                payload: .clone(
+                    reference: CloneReference(
+                        audioPath: refAudio ?? "",
+                        transcript: refText
+                    )
+                )
+            )
+        }
+    }
+
+    func makeBatchGenerationRequests(
+        makeOutputPath: (String, String) -> String
+    ) -> [QwenVoiceNative.GenerationRequest] {
+        lines.enumerated().map { index, line in
+            makeGenerationRequest(
+                for: line,
+                outputPath: makeOutputPath(model.outputSubfolder, line),
+                batchIndex: index + 1,
+                batchTotal: lines.count
+            )
+        }
     }
 }
 
@@ -305,7 +324,7 @@ final class BatchGenerationCoordinator: ObservableObject {
         requestBuilder: ([String]) -> BatchGenerationRequest?,
         isModelAvailable: (TTSModel) -> Bool,
         recoveryDetail: (TTSModel) -> String,
-        bridge: any BatchGenerationBridging,
+        engineStore: TTSEngineStore,
         store: any GenerationPersisting = DatabaseService.shared
     ) {
         let lines = batchText.components(separatedBy: .newlines)
@@ -327,7 +346,7 @@ final class BatchGenerationCoordinator: ObservableObject {
         }
 
         let runner = BatchGenerationRunner(
-            bridge: bridge,
+            engineStore: engineStore,
             store: store
         )
 
@@ -385,7 +404,6 @@ final class BatchGenerationCoordinator: ObservableObject {
     }
 
     func cancelBatch(
-        pythonPath: String?,
         dismiss: @escaping () -> Void
     ) {
         guard isProcessing else {
@@ -397,10 +415,6 @@ final class BatchGenerationCoordinator: ObservableObject {
         guard let runner else {
             isProcessing = false
             dismiss()
-            return
-        }
-        guard let pythonPath, !pythonPath.isEmpty else {
-            errorMessage = "Batch generation was interrupted, but the backend could not be restarted because the Python runtime path is unavailable."
             return
         }
 
@@ -417,10 +431,7 @@ final class BatchGenerationCoordinator: ObservableObject {
         cancelTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await runner.requestCancellation(
-                    pythonPath: pythonPath,
-                    appSupportDir: AppPaths.appSupportDir.path
-                )
+                try await runner.requestCancellation()
             } catch {
                 self.cancelRestartFailedMessage = "Batch generation was interrupted, but the backend could not be restarted: \(error.localizedDescription)"
             }
@@ -430,17 +441,17 @@ final class BatchGenerationCoordinator: ObservableObject {
 
 @MainActor
 final class BatchGenerationRunner {
-    private let bridge: any BatchGenerationBridging
+    private let engineStore: TTSEngineStore
     private let store: any GenerationPersisting
     private let generationEvents: GenerationLibraryEvents
     private let cancellationState = BatchGenerationCancellationState()
 
     init(
-        bridge: any BatchGenerationBridging,
+        engineStore: TTSEngineStore,
         store: any GenerationPersisting,
         generationEvents: GenerationLibraryEvents = .shared
     ) {
-        self.bridge = bridge
+        self.engineStore = engineStore
         self.store = store
         self.generationEvents = generationEvents
     }
@@ -486,7 +497,7 @@ final class BatchGenerationRunner {
             if await cancellationState.isRequested {
                 markItemsCancelled(startingAt: 0)
                 publishItems()
-                bridge.clearGenerationActivity()
+                engineStore.clearGenerationActivity()
                 return .cancelled(items: items, restartFailedMessage: nil)
             }
 
@@ -494,17 +505,11 @@ final class BatchGenerationRunner {
             publishItems()
             publishProgress(activeItemIndex: 0, message: "Preparing batch...")
 
-            let outputPaths = request.lines.map {
-                makeOutputPath(request.model.outputSubfolder, $0)
-            }
+            let batchRequests = request.makeBatchGenerationRequests(makeOutputPath: makeOutputPath)
 
             do {
-                let results = try await bridge.generateCloneBatchFlow(
-                    modelID: request.model.id,
-                    texts: request.lines,
-                    refAudio: request.refAudio ?? "",
-                    refText: request.refText,
-                    outputPaths: outputPaths,
+                let results = try await engineStore.generateBatch(
+                    batchRequests,
                     progressHandler: { fraction, message in
                         publishProgress(
                             activeItemIndex: completedCount < total ? completedCount : nil,
@@ -531,7 +536,7 @@ final class BatchGenerationRunner {
                     if await cancellationState.isRequested {
                         markItemsCancelled(startingAt: index)
                         publishItems()
-                        bridge.clearGenerationActivity()
+                        engineStore.clearGenerationActivity()
                         return .cancelled(items: items, restartFailedMessage: nil)
                     }
 
@@ -566,7 +571,7 @@ final class BatchGenerationRunner {
                         markItemsCancelled(startingAt: firstUnfinished)
                     }
                     publishItems()
-                    bridge.clearGenerationActivity()
+                    engineStore.clearGenerationActivity()
                     return .cancelled(items: items, restartFailedMessage: nil)
                 }
 
@@ -582,7 +587,7 @@ final class BatchGenerationRunner {
             if await cancellationState.isRequested {
                 markItemsCancelled(startingAt: index)
                 publishItems()
-                bridge.clearGenerationActivity()
+                engineStore.clearGenerationActivity()
                 return .cancelled(items: items, restartFailedMessage: nil)
             }
 
@@ -612,7 +617,7 @@ final class BatchGenerationRunner {
                 if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {
                     markItemsCancelled(startingAt: index)
                     publishItems()
-                    bridge.clearGenerationActivity()
+                    engineStore.clearGenerationActivity()
                     return .cancelled(items: items, restartFailedMessage: nil)
                 }
 
@@ -627,7 +632,7 @@ final class BatchGenerationRunner {
                 markItemsCancelled(startingAt: firstUnfinished)
             }
             publishItems()
-            bridge.clearGenerationActivity()
+            engineStore.clearGenerationActivity()
             return .cancelled(items: items, restartFailedMessage: nil)
         }
 
@@ -635,12 +640,9 @@ final class BatchGenerationRunner {
         return .completed(items: items)
     }
 
-    func requestCancellation(pythonPath: String, appSupportDir: String) async throws {
+    func requestCancellation() async throws {
         await cancellationState.request()
-        try await bridge.cancelActiveGenerationAndRestart(
-            pythonPath: pythonPath,
-            appSupportDir: appSupportDir
-        )
+        try await engineStore.cancelActiveGeneration()
     }
 
     private func generateResult(
@@ -649,39 +651,15 @@ final class BatchGenerationRunner {
         outputPath: String,
         batchIndex: Int,
         batchTotal: Int
-    ) async throws -> GenerationResult {
-        switch request.mode {
-        case .custom:
-            return try await bridge.generateCustomFlow(
-                modelID: request.model.id,
-                text: line,
-                voice: request.voice ?? TTSModel.defaultSpeaker,
-                emotion: request.emotion ?? "Normal tone",
+    ) async throws -> QwenVoiceNative.GenerationResult {
+        try await engineStore.generate(
+            request.makeGenerationRequest(
+                for: line,
                 outputPath: outputPath,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal
             )
-        case .design:
-            return try await bridge.generateDesignFlow(
-                modelID: request.model.id,
-                text: line,
-                voiceDescription: request.voiceDescription ?? "",
-                emotion: request.emotion ?? "Normal tone",
-                outputPath: outputPath,
-                batchIndex: batchIndex,
-                batchTotal: batchTotal
-            )
-        case .clone:
-            return try await bridge.generateCloneFlow(
-                modelID: request.model.id,
-                text: line,
-                refAudio: request.refAudio ?? "",
-                refText: request.refText,
-                outputPath: outputPath,
-                batchIndex: batchIndex,
-                batchTotal: batchTotal
-            )
-        }
+        )
     }
 }
 

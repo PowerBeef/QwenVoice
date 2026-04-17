@@ -1,0 +1,93 @@
+import Combine
+import Foundation
+
+@MainActor
+public final class TTSEngineStore: ObservableObject {
+    @Published public private(set) var snapshot: TTSEngineSnapshot
+
+    public var isReady: Bool { snapshot.isReady }
+    public var loadState: EngineLoadState { snapshot.loadState }
+    public var clonePreparationState: ClonePreparationState { snapshot.clonePreparationState }
+    public var latestEvent: GenerationEvent? { snapshot.latestEvent }
+    public var visibleErrorMessage: String? { snapshot.visibleErrorMessage }
+
+    private let engine: any MacTTSEngine
+    private var snapshotCancellable: AnyCancellable?
+
+    public init(engine: any MacTTSEngine) {
+        self.engine = engine
+        self.snapshot = engine.snapshot
+        snapshotCancellable = engine.snapshotPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] snapshot in
+                self?.snapshot = snapshot
+            }
+    }
+
+    public func initialize(appSupportDirectory: URL) async throws {
+        try await engine.initialize(appSupportDirectory: appSupportDirectory)
+    }
+
+    public func ping() async throws -> Bool {
+        try await engine.ping()
+    }
+
+    public func loadModel(id: String) async throws {
+        try await engine.loadModel(id: id)
+    }
+
+    public func unloadModel() async throws {
+        try await engine.unloadModel()
+    }
+
+    public func ensureModelLoadedIfNeeded(id: String) async {
+        await engine.ensureModelLoadedIfNeeded(id: id)
+    }
+
+    public func prewarmModelIfNeeded(for request: GenerationRequest) async {
+        await engine.prewarmModelIfNeeded(for: request)
+    }
+
+    public func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
+        try await engine.ensureCloneReferencePrimed(modelID: modelID, reference: reference)
+    }
+
+    public func cancelClonePreparationIfNeeded() async {
+        await engine.cancelClonePreparationIfNeeded()
+    }
+
+    public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        try await engine.generate(request)
+    }
+
+    public func generateBatch(
+        _ requests: [GenerationRequest],
+        progressHandler: ((Double?, String) -> Void)? = nil
+    ) async throws -> [GenerationResult] {
+        try await engine.generateBatch(requests, progressHandler: progressHandler)
+    }
+
+    public func cancelActiveGeneration() async throws {
+        try await engine.cancelActiveGeneration()
+    }
+
+    public func listPreparedVoices() async throws -> [PreparedVoice] {
+        try await engine.listPreparedVoices()
+    }
+
+    public func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice {
+        try await engine.enrollPreparedVoice(name: name, audioPath: audioPath, transcript: transcript)
+    }
+
+    public func deletePreparedVoice(id: String) async throws {
+        try await engine.deletePreparedVoice(id: id)
+    }
+
+    public func clearGenerationActivity() {
+        engine.clearGenerationActivity()
+    }
+
+    public func clearVisibleError() {
+        engine.clearVisibleError()
+    }
+}

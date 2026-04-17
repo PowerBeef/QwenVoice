@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceNative
 
 /// An enrolled voice reference for voice cloning.
 struct Voice: Identifiable, Hashable {
@@ -28,5 +29,12 @@ struct Voice: Identifiable, Hashable {
         self.name = name
         self.wavPath = wavPath
         self.hasTranscript = hasTranscript
+    }
+
+    init(preparedVoice: PreparedVoice) {
+        self.id = preparedVoice.id
+        self.name = preparedVoice.name
+        self.wavPath = preparedVoice.audioPath
+        self.hasTranscript = preparedVoice.hasTranscript
     }
 }

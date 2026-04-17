@@ -1,5 +1,53 @@
+import Combine
 import XCTest
 @testable import QwenVoice
+import QwenVoiceNative
+
+@MainActor
+private final class SavedVoiceClonePreloadMockEngine: MacTTSEngine {
+    private let subject = CurrentValueSubject<TTSEngineSnapshot, Never>(
+        TTSEngineSnapshot(
+            isReady: true,
+            loadState: .idle,
+            clonePreparationState: .idle,
+            latestEvent: nil,
+            visibleErrorMessage: nil
+        )
+    )
+
+    private(set) var ensuredModelLoadIDs: [String] = []
+
+    var snapshot: TTSEngineSnapshot { subject.value }
+    var snapshotPublisher: AnyPublisher<TTSEngineSnapshot, Never> { subject.eraseToAnyPublisher() }
+
+    func initialize(appSupportDirectory: URL) async throws {}
+    func ping() async throws -> Bool { true }
+    func loadModel(id: String) async throws {}
+    func unloadModel() async throws {}
+    func ensureModelLoadedIfNeeded(id: String) async {
+        ensuredModelLoadIDs.append(id)
+    }
+    func prewarmModelIfNeeded(for request: GenerationRequest) async {}
+    func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {}
+    func cancelClonePreparationIfNeeded() async {}
+    func generate(_ request: GenerationRequest) async throws -> QwenVoiceNative.GenerationResult {
+        throw NSError(domain: "SavedVoiceClonePreloadMockEngine", code: 1)
+    }
+    func generateBatch(
+        _ requests: [GenerationRequest],
+        progressHandler: ((Double?, String) -> Void)?
+    ) async throws -> [QwenVoiceNative.GenerationResult] {
+        throw NSError(domain: "SavedVoiceClonePreloadMockEngine", code: 2)
+    }
+    func cancelActiveGeneration() async throws {}
+    func listPreparedVoices() async throws -> [PreparedVoice] { [] }
+    func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice {
+        PreparedVoice(id: name, name: name, audioPath: audioPath, hasTranscript: !(transcript?.isEmpty ?? true))
+    }
+    func deletePreparedVoice(id: String) async throws {}
+    func clearGenerationActivity() {}
+    func clearVisibleError() {}
+}
 
 final class PythonBridgeLineParserTests: XCTestCase {
 
@@ -112,40 +160,42 @@ final class PythonBridgeLineParserTests: XCTestCase {
 
     @MainActor
     func testDesignPrewarmIdentityIgnoresEmotionOnlyChanges() {
-        let calmKey = PythonBridge.prewarmIdentityKey(
+        let calmKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_design",
-            mode: .design,
-            instruct: "Calm"
-        )
-        let intenseKey = PythonBridge.prewarmIdentityKey(
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        ))
+        let intenseKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_design",
-            mode: .design,
-            instruct: "Intense"
-        )
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Intense")
+        ))
 
         XCTAssertEqual(calmKey, intenseKey)
     }
 
     @MainActor
     func testCustomPrewarmIdentityStillTracksVoiceAndDeliveryChanges() {
-        let baseKey = PythonBridge.prewarmIdentityKey(
+        let baseKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_custom",
-            mode: .custom,
-            voice: "Vivian",
-            instruct: "Conversational"
-        )
-        let voiceChangedKey = PythonBridge.prewarmIdentityKey(
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "Vivian", deliveryStyle: "Conversational")
+        ))
+        let voiceChangedKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_custom",
-            mode: .custom,
-            voice: "Ethan",
-            instruct: "Conversational"
-        )
-        let instructionChangedKey = PythonBridge.prewarmIdentityKey(
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "Ethan", deliveryStyle: "Conversational")
+        ))
+        let instructionChangedKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_custom",
-            mode: .custom,
-            voice: "Vivian",
-            instruct: "Dramatic"
-        )
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "Vivian", deliveryStyle: "Dramatic")
+        ))
 
         XCTAssertNotEqual(baseKey, voiceChangedKey)
         XCTAssertNotEqual(baseKey, instructionChangedKey)
@@ -153,18 +203,18 @@ final class PythonBridgeLineParserTests: XCTestCase {
 
     @MainActor
     func testCustomPrewarmIdentityIgnoresNormalToneChanges() {
-        let defaultKey = PythonBridge.prewarmIdentityKey(
+        let defaultKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_custom",
-            mode: .custom,
-            voice: "Vivian",
-            instruct: "Normal tone"
-        )
-        let blankKey = PythonBridge.prewarmIdentityKey(
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "Vivian", deliveryStyle: "Normal tone")
+        ))
+        let blankKey = GenerationSemantics.prewarmIdentityKey(for: GenerationRequest(
             modelID: "pro_custom",
-            mode: .custom,
-            voice: "Vivian",
-            instruct: ""
-        )
+            text: "Hello",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "Vivian", deliveryStyle: "")
+        ))
 
         XCTAssertEqual(defaultKey, blankKey)
     }
@@ -180,32 +230,28 @@ final class PythonBridgeLineParserTests: XCTestCase {
     func testDeferredClonePrewarmRequiresMatchingPrimedReference() {
         XCTAssertTrue(
             VoiceCloningView.shouldStartDeferredClonePrewarm(
-                primingPhase: .primed,
-                primingKey: "clone-key",
+                clonePreparationState: .primed(key: "clone-key"),
                 expectedKey: "clone-key",
                 isGenerating: false
             )
         )
         XCTAssertFalse(
             VoiceCloningView.shouldStartDeferredClonePrewarm(
-                primingPhase: .preparing,
-                primingKey: "clone-key",
+                clonePreparationState: .preparing(key: "clone-key"),
                 expectedKey: "clone-key",
                 isGenerating: false
             )
         )
         XCTAssertFalse(
             VoiceCloningView.shouldStartDeferredClonePrewarm(
-                primingPhase: .primed,
-                primingKey: "other-key",
+                clonePreparationState: .primed(key: "other-key"),
                 expectedKey: "clone-key",
                 isGenerating: false
             )
         )
         XCTAssertFalse(
             VoiceCloningView.shouldStartDeferredClonePrewarm(
-                primingPhase: .primed,
-                primingKey: "clone-key",
+                clonePreparationState: .primed(key: "clone-key"),
                 expectedKey: "clone-key",
                 isGenerating: true
             )
@@ -281,5 +327,144 @@ final class PythonBridgeLineParserTests: XCTestCase {
             "Couldn't load the saved transcript for \"French Voice\". You can still clone from the audio file alone."
         )
         XCTAssertEqual(plan.cloneModelID, "pro_clone")
+    }
+
+    @MainActor
+    func testSavedVoiceCloneHandoffPreloadUsesTTSEngineStoreModelLoad() async {
+        let engine = SavedVoiceClonePreloadMockEngine()
+        let engineStore = TTSEngineStore(engine: engine)
+        let plan = SavedVoiceCloneHandoffPlan(
+            handoff: PendingVoiceCloningHandoff(
+                savedVoiceID: "voice-id",
+                wavPath: "/tmp/french.wav",
+                transcript: "Bonjour",
+                transcriptLoadError: nil
+            ),
+            cloneModelID: "pro_clone"
+        )
+
+        await ContentView.beginSavedVoiceClonePreloadIfPossible(
+            plan: plan,
+            engineStore: engineStore
+        )
+
+        XCTAssertEqual(engine.ensuredModelLoadIDs, ["pro_clone"])
+    }
+
+    @MainActor
+    func testCustomVoiceGenerationRequestBuilderProducesStreamingRequest() {
+        let draft = CustomVoiceDraft(
+            selectedSpeaker: "vivian",
+            emotion: "Conversational",
+            text: "Hello from native store"
+        )
+        let model = TTSModel(
+            id: "pro_custom",
+            name: "Custom Voice",
+            tier: "Pro",
+            folder: "ProCustom",
+            mode: .custom,
+            huggingFaceRepo: "test/repo",
+            outputSubfolder: "Custom",
+            requiredRelativePaths: []
+        )
+
+        let request = CustomVoiceView.makeGenerationRequest(
+            draft: draft,
+            model: model,
+            outputPath: "/tmp/custom.wav"
+        )
+
+        XCTAssertEqual(request.modelID, "pro_custom")
+        XCTAssertEqual(request.text, draft.text)
+        XCTAssertEqual(request.outputPath, "/tmp/custom.wav")
+        XCTAssertTrue(request.shouldStream)
+        XCTAssertEqual(request.streamingTitle, "Hello from native store")
+        XCTAssertEqual(
+            request.payload,
+            .custom(speakerID: "vivian", deliveryStyle: "Conversational")
+        )
+    }
+
+    @MainActor
+    func testVoiceDesignGenerationRequestBuilderProducesStreamingRequest() {
+        let draft = VoiceDesignDraft(
+            voiceDescription: "Warm documentary narrator",
+            emotion: "Calm",
+            text: "This is a guided tour."
+        )
+        let model = TTSModel(
+            id: "pro_design",
+            name: "Voice Design",
+            tier: "Pro",
+            folder: "ProDesign",
+            mode: .design,
+            huggingFaceRepo: "test/repo",
+            outputSubfolder: "Design",
+            requiredRelativePaths: []
+        )
+
+        let request = VoiceDesignView.makeGenerationRequest(
+            draft: draft,
+            model: model,
+            outputPath: "/tmp/design.wav"
+        )
+
+        XCTAssertEqual(request.modelID, "pro_design")
+        XCTAssertEqual(request.text, draft.text)
+        XCTAssertEqual(request.outputPath, "/tmp/design.wav")
+        XCTAssertTrue(request.shouldStream)
+        XCTAssertEqual(request.streamingTitle, "This is a guided tour.")
+        XCTAssertEqual(
+            request.payload,
+            .design(
+                voiceDescription: "Warm documentary narrator",
+                deliveryStyle: "Calm"
+            )
+        )
+    }
+
+    @MainActor
+    func testVoiceCloningGenerationRequestBuilderIncludesPreparedVoiceIdentity() throws {
+        let draft = VoiceCloningDraft(
+            selectedSavedVoiceID: "voice-id",
+            referenceAudioPath: "/tmp/reference.wav",
+            referenceTranscript: "Bonjour tout le monde",
+            text: "Hello from clone"
+        )
+        let model = TTSModel(
+            id: "pro_clone",
+            name: "Voice Cloning",
+            tier: "Pro",
+            folder: "ProClone",
+            mode: .clone,
+            huggingFaceRepo: "test/repo",
+            outputSubfolder: "Clones",
+            requiredRelativePaths: []
+        )
+
+        let request = try XCTUnwrap(
+            VoiceCloningCoordinator.makeGenerationRequest(
+                draft: draft,
+                model: model,
+                outputPath: "/tmp/clone.wav"
+            )
+        )
+
+        XCTAssertEqual(request.modelID, "pro_clone")
+        XCTAssertEqual(request.text, draft.text)
+        XCTAssertEqual(request.outputPath, "/tmp/clone.wav")
+        XCTAssertTrue(request.shouldStream)
+        XCTAssertEqual(request.streamingTitle, "Hello from clone")
+        XCTAssertEqual(
+            request.payload,
+            .clone(
+                reference: CloneReference(
+                    audioPath: "/tmp/reference.wav",
+                    transcript: "Bonjour tout le monde",
+                    preparedVoiceID: "voice-id"
+                )
+            )
+        )
     }
 }

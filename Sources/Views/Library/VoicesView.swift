@@ -1,4 +1,5 @@
 import AppKit
+import QwenVoiceNative
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,7 +10,7 @@ private struct VoicesAlertState: Identifiable {
 }
 
 struct VoicesView: View {
-    @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
 
@@ -38,7 +39,7 @@ struct VoicesView: View {
     }
 
     private var loadTaskID: String {
-        "\(pythonBridge.isReady)"
+        "\(ttsEngineStore.isReady)"
     }
 
     var body: some View {
@@ -46,8 +47,8 @@ struct VoicesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_voices")
             .task(id: loadTaskID) {
-                guard pythonBridge.isReady else { return }
-                await savedVoicesViewModel.refresh(using: pythonBridge)
+                guard ttsEngineStore.isReady else { return }
+                await savedVoicesViewModel.refresh(using: ttsEngineStore)
             }
             .onChange(of: enrollRequestID) { _, newValue in
                 guard newValue != nil else { return }
@@ -61,7 +62,7 @@ struct VoicesView: View {
                 SavedVoiceSheet(configuration: configuration) { voice in
                     handleSavedVoiceSheetCompletion(voice)
                 }
-                .environmentObject(pythonBridge)
+                .environmentObject(ttsEngineStore)
             }
             .alert("Delete Saved Voice?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {
@@ -86,15 +87,15 @@ struct VoicesView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !pythonBridge.isReady {
+        if !ttsEngineStore.isReady {
             voicesStateContainer(
                 identifier: "voices_emptyState",
                 markerLabel: "Saved voices backend startup state"
             ) {
                 ContentUnavailableView(
-                    "Starting backend...",
+                    "Starting speech engine...",
                     systemImage: "arrow.triangle.2.circlepath.circle",
-                    description: Text("Saved voices will appear once the Python service is ready.")
+                    description: Text("Saved voices will appear once the speech engine is ready.")
                 )
             }
         } else if let loadError, voices.isEmpty, !isLoading {
@@ -191,11 +192,11 @@ private extension VoicesView {
     func handleSavedVoiceSheetCompletion(_ voice: Voice) {
         pendingRevealVoiceID = voice.id
         savedVoicesViewModel.insertOrReplace(voice)
-        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
     }
 
     func retryLoadVoices() {
-        Task { await savedVoicesViewModel.refresh(using: pythonBridge) }
+        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
     }
 
     func playVoicePreview(_ voice: Voice) {
@@ -236,7 +237,7 @@ private extension VoicesView {
     func deleteVoice(_ voice: Voice) {
         Task {
             do {
-                try await pythonBridge.deleteVoice(name: voice.name)
+                try await ttsEngineStore.deletePreparedVoice(id: voice.id)
                 await MainActor.run {
                     savedVoicesViewModel.removeVoiceFromVisibleState(id: voice.id)
                 }
@@ -248,7 +249,7 @@ private extension VoicesView {
                     )
                 }
             }
-            await savedVoicesViewModel.refresh(using: pythonBridge)
+            await savedVoicesViewModel.refresh(using: ttsEngineStore)
         }
     }
 

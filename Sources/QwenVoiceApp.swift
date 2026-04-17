@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
+import QwenVoiceNative
 
 @main
 struct QwenVoiceApp: App {
-    @StateObject private var pythonBridge = PythonBridge()
+    @StateObject private var pythonBridge: PythonBridge
+    @StateObject private var ttsEngineStore: TTSEngineStore
     @StateObject private var audioPlayer = AudioPlayerViewModel()
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
@@ -15,6 +17,14 @@ struct QwenVoiceApp: App {
     private let backendLaunchCoordinator = BackendLaunchCoordinator()
 
     init() {
+        let pythonBridge = PythonBridge()
+        _pythonBridge = StateObject(wrappedValue: pythonBridge)
+        _ttsEngineStore = StateObject(
+            wrappedValue: TTSEngineStore(
+                engine: PythonBridgeMacTTSEngineAdapter(bridge: pythonBridge)
+            )
+        )
+
         // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
         // (e.g. Python backend terminates between isRunning check and write)
         signal(SIGPIPE, SIG_IGN)
@@ -50,6 +60,7 @@ struct QwenVoiceApp: App {
                     case .ready(let pythonPath):
                         ContentView()
                             .environmentObject(pythonBridge)
+                            .environmentObject(ttsEngineStore)
                             .environmentObject(audioPlayer)
                             .environmentObject(audioPlayer.playbackProgress)
                             .environmentObject(envManager)

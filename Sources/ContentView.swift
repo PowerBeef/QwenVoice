@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QwenVoiceNative
 
 extension Notification.Name {
     static let generationChunkReceived = Notification.Name("generationChunkReceived")
@@ -131,6 +132,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
     private let launchSidebarOverride: SidebarItem?
@@ -342,14 +344,28 @@ struct ContentView: View {
 
     private func startSavedVoiceCloningHandoff(_ plan: SavedVoiceCloneHandoffPlan) {
         pendingVoiceCloningHandoff = plan.handoff
-        if let cloneModelID = plan.cloneModelID,
-           !cloneModelID.isEmpty {
-            pythonBridge.beginCloneModelLoadIfPossible(modelID: cloneModelID)
+        Task {
+            await Self.beginSavedVoiceClonePreloadIfPossible(
+                plan: plan,
+                engineStore: ttsEngineStore
+            )
         }
         selectSidebarItemIfEnabled(
             .voiceCloning,
             bypassDisabledCheck: true
         )
+    }
+
+    static func beginSavedVoiceClonePreloadIfPossible(
+        plan: SavedVoiceCloneHandoffPlan,
+        engineStore: TTSEngineStore
+    ) async {
+        guard let cloneModelID = plan.cloneModelID?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !cloneModelID.isEmpty else {
+            return
+        }
+        await engineStore.ensureModelLoadedIfNeeded(id: cloneModelID)
     }
 
     private func handleTestUseSavedVoiceInCloning(_ notification: Notification) {

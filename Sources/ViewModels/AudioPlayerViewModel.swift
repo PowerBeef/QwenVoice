@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import QwenVoiceNative
 
 /// Manages playback state for the persistent sidebar player bar.
 @MainActor
@@ -248,7 +249,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         livePreviewPhase = .buffering
     }
 
-    func completeStreamingPreview(result: GenerationResult, title: String, shouldAutoPlay: Bool) {
+    func completeStreamingPreview(
+        result: QwenVoiceNative.GenerationResult,
+        title: String,
+        shouldAutoPlay: Bool
+    ) {
         UITestAutomationSupport.recordAction("sidebar-preview-finalized", appSupportDir: AppPaths.appSupportDir)
         if UITestAutomationSupport.isEnabled {
             TestStateProvider.shared.recordPreviewFinalized()

@@ -1,4 +1,5 @@
 import AppKit
+import QwenVoiceNative
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -97,7 +98,7 @@ enum SavedVoiceNameSuggestion {
 }
 
 struct SavedVoiceSheet: View {
-    @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @Environment(\.dismiss) private var dismiss
 
     let configuration: SavedVoiceSheetConfiguration
@@ -271,7 +272,7 @@ struct SavedVoiceSheet: View {
 
     private func loadExistingVoiceNames() async {
         do {
-            let voices = try await pythonBridge.listVoices()
+            let voices = try await ttsEngineStore.listPreparedVoices()
             await MainActor.run {
                 existingNormalizedNames = Set(voices.map(\.id))
             }
@@ -304,7 +305,7 @@ struct SavedVoiceSheet: View {
 
         Task {
             do {
-                let savedVoice = try await pythonBridge.enrollVoice(
+                let savedVoice = try await ttsEngineStore.enrollPreparedVoice(
                     name: trimmedName,
                     audioPath: audioPath.trimmingCharacters(in: .whitespacesAndNewlines),
                     transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -312,7 +313,7 @@ struct SavedVoiceSheet: View {
                         : transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
                 await MainActor.run {
-                    onComplete(savedVoice)
+                    onComplete(Voice(preparedVoice: savedVoice))
                     dismiss()
                 }
             } catch {

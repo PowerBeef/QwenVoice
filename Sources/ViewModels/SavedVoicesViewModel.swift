@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceNative
 
 @MainActor
 final class SavedVoicesViewModel: ObservableObject {
@@ -9,23 +10,23 @@ final class SavedVoicesViewModel: ObservableObject {
     private var hasLoadedOnce = !SavedVoicesSessionCache.voices.isEmpty
     private var pendingRefresh = false
     private var loadTask: Task<Void, Never>?
-    private weak var lastPythonBridge: PythonBridge?
+    private weak var lastTTSEngineStore: TTSEngineStore?
 
-    func ensureLoaded(using pythonBridge: PythonBridge) async {
-        guard pythonBridge.isReady else { return }
+    func ensureLoaded(using ttsEngineStore: TTSEngineStore) async {
+        guard ttsEngineStore.isReady else { return }
         guard !hasLoadedOnce else { return }
-        startLoad(using: pythonBridge, clearsVisibleError: true)
+        startLoad(using: ttsEngineStore, clearsVisibleError: true)
     }
 
-    func refresh(using pythonBridge: PythonBridge) async {
-        guard pythonBridge.isReady else { return }
+    func refresh(using ttsEngineStore: TTSEngineStore) async {
+        guard ttsEngineStore.isReady else { return }
 
         if isLoading {
             pendingRefresh = true
             return
         }
 
-        startLoad(using: pythonBridge, clearsVisibleError: voices.isEmpty)
+        startLoad(using: ttsEngineStore, clearsVisibleError: voices.isEmpty)
     }
 
     func insertOrReplace(_ voice: Voice) {
@@ -42,9 +43,9 @@ final class SavedVoicesViewModel: ObservableObject {
         SavedVoicesSessionCache.voices = voices
     }
 
-    private func startLoad(using pythonBridge: PythonBridge, clearsVisibleError: Bool) {
+    private func startLoad(using ttsEngineStore: TTSEngineStore, clearsVisibleError: Bool) {
         guard !isLoading else { return }
-        lastPythonBridge = pythonBridge
+        lastTTSEngineStore = ttsEngineStore
 
         let interval = AppPerformanceSignposts.begin("Saved Voices Load")
         let wallStart = DispatchTime.now().uptimeNanoseconds
@@ -62,7 +63,7 @@ final class SavedVoicesViewModel: ObservableObject {
             }
 
             do {
-                let loadedVoices = try await pythonBridge.listVoices()
+                let loadedVoices = try await ttsEngineStore.listPreparedVoices().map(Voice.init(preparedVoice:))
                 await MainActor.run {
                     self.voices = loadedVoices
                     SavedVoicesSessionCache.voices = loadedVoices
@@ -91,10 +92,10 @@ final class SavedVoicesViewModel: ObservableObject {
 
         if pendingRefresh {
             pendingRefresh = false
-            if let lastPythonBridge {
+            if let lastTTSEngineStore {
                 Task { [weak self] in
                     guard let self else { return }
-                    await self.refresh(using: lastPythonBridge)
+                    await self.refresh(using: lastTTSEngineStore)
                 }
             }
         }
