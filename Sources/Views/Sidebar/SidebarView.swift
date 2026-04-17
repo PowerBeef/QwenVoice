@@ -1,4 +1,5 @@
 import SwiftUI
+import QwenVoiceNative
 
 private struct SidebarSectionHeader: View {
     let title: String
@@ -254,16 +255,28 @@ private struct SidebarFooterRegion: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var pythonBridge: PythonBridge
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+
+    private let appEngineSelection = AppEngineSelection.current()
+
+    private var resolvedSidebarStatus: SidebarStatus {
+        appEngineSelection.resolveSidebarStatus(
+            pythonBridge: pythonBridge,
+            ttsEngineSnapshot: ttsEngineStore.snapshot,
+            prefersInlinePresentation: audioPlayer.isLiveStream
+        )
+    }
 
     private var footerPresentation: SidebarFooterPresentation {
         SidebarFooterPresentation.resolve(
-            sidebarStatus: pythonBridge.sidebarStatus,
+            sidebarStatus: resolvedSidebarStatus,
             isLiveStream: audioPlayer.isLiveStream
         )
     }
 
     private func syncUITestFooterState() {
         guard UITestAutomationSupport.isEnabled else { return }
+        TestStateProvider.shared.setSidebarStatus(resolvedSidebarStatus)
         TestStateProvider.shared.setSidebarFooter(
             inlineStatusVisible: footerPresentation.inlinePlayerActivity != nil,
             standaloneStatusVisible: footerPresentation.showsStandaloneStatus
@@ -288,7 +301,15 @@ private struct SidebarFooterRegion: View {
                 }
 
                 if footerPresentation.showsStandaloneStatus {
-                    SidebarStatusView()
+                    SidebarStatusView(
+                        sidebarStatus: resolvedSidebarStatus,
+                        clearError: {
+                            appEngineSelection.clearSidebarError(
+                                pythonBridge: pythonBridge,
+                                ttsEngineStore: ttsEngineStore
+                            )
+                        }
+                    )
                 }
             }
             .padding(.horizontal, LayoutConstants.shellPadding)
@@ -299,6 +320,7 @@ private struct SidebarFooterRegion: View {
         .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 1.0 : 0.985))
         .onAppear(perform: syncUITestFooterState)
         .onChange(of: pythonBridge.sidebarStatus) { _, _ in syncUITestFooterState() }
+        .onChange(of: ttsEngineStore.snapshot) { _, _ in syncUITestFooterState() }
         .onChange(of: audioPlayer.isLiveStream) { _, _ in syncUITestFooterState() }
     }
 }

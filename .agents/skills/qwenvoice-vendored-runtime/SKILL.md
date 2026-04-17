@@ -9,6 +9,8 @@ description: Update QwenVoice vendored Python runtime, `mlx-audio` wheel patches
 
 Use this skill for runtime and packaging changes where QwenVoice relies on generated or vendored assets. The main rule is simple: change the repo-owned vendoring flow, then regenerate the bundled runtime or project artifacts from that source of truth. Local packaging remains useful for macOS 26 debug/runtime investigation on this machine, but shipped release proof for either UI variant must come from the GitHub `Release Dual UI` workflow outputs.
 
+On this machine, keep runtime verification deliberately low-RAM: run the cheapest relevant source gates first, do not overlap heavy validation commands, and treat wheel rebuilds, rebundling, local packaging, and release-style validation as later steps once the lighter checks are already green.
+
 Current runtime policy:
 
 - both shipped release variants intentionally package the same macOS 15-compatible MLX/Metal runtime
@@ -85,6 +87,7 @@ python3 scripts/harness.py test --layer pipeline
 
 Add more targeted harness layers when the change touches UI-visible behavior.
 If the request is about shipped release behavior, validate against downloaded final notarized workflow artifacts after the local macOS 26 debug checks pass.
+If the user’s question can still be answered by the source gates or a narrower targeted test, stop there instead of eagerly jumping to wheel rebuilds, rebundling, `./scripts/release.sh`, or release-style validation.
 
 ### 5. Keep release-facing docs aligned
 
@@ -115,6 +118,9 @@ When asked whether a packaged app uses bundled Python or ffmpeg, rely on runtime
 - Do not patch generated runtime assets directly when a repo-owned vendoring path exists.
 - Do not forget to rebuild the wheel after changing `third_party_patches/mlx-audio/`.
 - Do not change `third_party_patches/mlx-audio-swift/` without keeping `project.yml` and `Package.resolved` aligned.
+- Do not overlap heavy rebuild, bundling, packaging, or release-validation commands on this machine.
+- Do not jump to `./scripts/release.sh` or packaged/release validation before the cheaper source gates are already green.
+- Do not let a broad cold native or MLX rebuild continue if it is not strictly necessary to answer the user’s question.
 - Do not stop at source tests when packaged runtime behavior is part of the request.
 - Do not treat local macOS 26 packaging as authoritative release proof for either shipped variant.
 - Do not let `__pycache__` or `.pyc` files leak into tracked changes.

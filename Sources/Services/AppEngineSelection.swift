@@ -48,4 +48,63 @@ enum AppEngineSelection: String, Equatable {
             return NativeMLXMacEngine()
         }
     }
+
+    @MainActor
+    func resolveSidebarStatus(
+        pythonBridge: PythonBridge,
+        ttsEngineSnapshot: TTSEngineSnapshot,
+        prefersInlinePresentation: Bool,
+        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
+    ) -> SidebarStatus {
+        switch effectiveSelection(isStubBackendMode: isStubBackendMode) {
+        case .python:
+            return pythonBridge.sidebarStatus
+        case .native:
+            return Self.nativeSidebarStatus(
+                from: ttsEngineSnapshot,
+                prefersInlinePresentation: prefersInlinePresentation
+            )
+        }
+    }
+
+    @MainActor
+    func clearSidebarError(
+        pythonBridge: PythonBridge,
+        ttsEngineStore: TTSEngineStore,
+        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
+    ) {
+        switch effectiveSelection(isStubBackendMode: isStubBackendMode) {
+        case .python:
+            pythonBridge.lastError = nil
+        case .native:
+            ttsEngineStore.clearVisibleError()
+        }
+    }
+
+    private static func nativeSidebarStatus(
+        from snapshot: TTSEngineSnapshot,
+        prefersInlinePresentation: Bool
+    ) -> SidebarStatus {
+        if let visibleErrorMessage = snapshot.visibleErrorMessage,
+           !visibleErrorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return snapshot.isReady ? .error(visibleErrorMessage) : .crashed(visibleErrorMessage)
+        }
+
+        switch snapshot.loadState {
+        case .idle, .loaded:
+            return snapshot.isReady ? .idle : .starting
+        case .starting:
+            return .starting
+        case .running(_, let label, let fraction):
+            return .running(
+                ActivityStatus(
+                    label: label ?? "Generating audio…",
+                    fraction: fraction,
+                    presentation: prefersInlinePresentation ? .inlinePlayer : .standaloneCard
+                )
+            )
+        case .failed(let message):
+            return snapshot.isReady ? .error(message) : .crashed(message)
+        }
+    }
 }

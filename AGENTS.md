@@ -75,6 +75,24 @@ These local skills complement, rather than replace, the user-wide skills that ar
 - `github:gh-fix-ci`
 - `app-store-changelog`
 
+## Desktop Tooling Workflow
+
+Keep QwenVoice repo-truth-first and harness-first even when richer desktop tooling is available in the current Codex session.
+
+- Start with `Sources/`, `project.yml`, `scripts/`, and the repo-local skills before using desktop-native tools.
+- Run the smallest relevant repo check first. Prefer `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, targeted `python3 scripts/harness.py test --layer ...`, and `xcodebuild` over manual app inspection.
+- Use repo-local skills as the first specialization layer:
+  - `qwenvoice-packaged-validation` for packaged, release, UI, design, and perf verification
+  - `qwenvoice-vendored-runtime` for vendored Python, ffmpeg, `mlx-audio`, `mlx-audio-swift`, backend helper overlay, and packaged runtime changes
+  - `qwenvoice-doc-sync` for contributor and repo docs
+  - `qwenvoice-release-publish` for versioning and release publication flows
+- Use Computer Use only when visual or interaction truth matters after repo checks have already narrowed the problem. Good fits include main-window chrome, sidebar/search/toolbar behavior, Settings scene issues, sheet presentation, playback controls, menu-style picker behavior, and packaged-app visual confirmation after automated validation.
+- When using Computer Use, follow this order: run the smallest relevant harness lane first, inspect the live app state, then interact only with the exact flow under investigation.
+- Prefer AppleScript or equivalent structured macOS automation over click-based interaction when the task is operational rather than visual. Good fits include launching or quitting `QwenVoice`, focusing the app, preparing stable window state, ensuring only one app instance is running, coordinating Finder or file-chooser flows, and setting up reproducible packaging-validation runs.
+- Use native image generation for architecture diagrams, UI mockups, and explanatory visuals only. Do not treat generated images as evidence that a QwenVoice implementation is correct.
+- For Apple-platform API lookup, prefer Apple docs tools when they are actually exposed in the session.
+- Only rely on tools that are surfaced in the current session. Treat configured-but-unavailable MCP servers as optional accelerators, not as assumptions baked into the repo workflow.
+
 ## Architecture Boundaries
 
 - `Sources/QwenVoiceApp.swift` composes shared app services, owns the separate Settings scene, bootstraps UI-test automation via `TestStateServer`, `AppStartupCoordinator`, `BackendLaunchCoordinator`, `AppLaunchConfiguration`, and `UITestWindowCoordinator`, and now selects the app-facing TTS engine through `AppEngineSelection`.
@@ -164,10 +182,13 @@ python3 scripts/harness.py bench --category tts_roundtrip
 Notes:
 
 - `scripts/harness.py` is the primary testing, diagnostic, and benchmark entrypoint.
+- On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, `./scripts/release.sh`, live app validation, or native smoke processes.
 - `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
 - `ui`, `design`, and `perf` default to `--ui-backend-mode live --ui-data-root fixture`. Those runs reuse installed runtime and models while isolating writable app state under a disposable fixture root.
 - Use `--ui-backend-mode stub` when you want UI smoke coverage without requiring installed models or a live backend. CI uses stub mode for the `ui` smoke lane and macOS 26 screenshot-capture smoke.
 - `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs now default to `native`, `python` remains the rollback path, and stub UI harness mode still forces the adapter-backed engine path so fixture-backed preview events stay deterministic.
+- Do not jump to `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...`, `./scripts/release.sh`, `python3 scripts/harness.py test --layer release ...`, or live `ui` / forced `design` / `perf` lanes until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant targeted source gate are already green.
+- If a command starts a broad cold rebuild of the native MLX stack and that rebuild is not strictly required to answer the question, stop and re-scope instead of letting it continue.
 - `AppPaths.appSupportDir` respects `QWENVOICE_APP_SUPPORT_DIR`; the harness sets that for fixture-backed runs. Do not hardcode `~/Library/Application Support/QwenVoice/` in new test flows if they are supposed to be isolated.
 - `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `design` compares against `tests/screenshots/baselines/<appearance>/`; the repo also keeps shared fallback baselines under `tests/screenshots/baselines/` for system and default comparisons.
 - Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. This is the correct automated comparison path, but it is not the highest-fidelity representation of Liquid Glass. Use `system` capture only for explicit visual-fidelity checks, and treat Screen Recording and TCC failures there as environment limits rather than general app regressions.
@@ -265,12 +286,17 @@ Use the harness commands in this file and the maintained docs listed above inste
 - Prefer asking before launching the full app unless the task clearly requires it.
 - Local source and packaged validation on this machine should be treated as macOS 26 / `QW_UI_LIQUID` dev work by default. macOS 15 coverage is CI and profile-driven unless you intentionally switch the compile flag and SDK surface.
 - Never treat a local macOS 15 package build as authoritative release validation.
+- Never overlap heavy `xcodebuild`, `scripts/harness.py`, `./scripts/release.sh`, live app validation, or native smoke processes on this machine.
+- Always start with the smallest relevant gate: `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, then the narrowest targeted `python3 scripts/harness.py test --layer ...` or targeted `xcodebuild`.
+- Treat live native smoke, local packaging, packaged-release validation, and live `ui` / forced `design` / `perf` lanes as later-stage proof, not default first steps.
 - Never run more than one heavy model load, generation, or benchmark at a time.
 - Never run clone or custom comparisons side by side or in parallel processes.
 - For clone-mode investigations, cold and warm runs may share one backend process only when intentionally measuring cache reuse. Do not overlap that process with any other model process.
 - If comparing two implementations or two packaged apps, run them in separate serial passes, not concurrently.
 - Unload the current model and let the backend fully exit before starting the next heavy comparison run.
 - Verify idle state with a lightweight process check before starting another heavy run, especially before clone benchmarks or helper/runtime comparisons.
+- If a heavy command begins a cold rebuild of the full MLX/native stack and that rebuild is not essential to answer the question, abort it and re-scope to a cheaper lane.
+- Use Computer Use only after heavy automation is finished; never keep desktop interaction active while memory-heavy build or validation work is still running.
 
 ## Before Finishing
 

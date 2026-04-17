@@ -158,6 +158,10 @@ CI still uses stub mode for the UI smoke lane and macOS 26 screenshot-capture sm
 
 Screenshot-based harness runs default to permissionless in-app window-content capture via `QWENVOICE_UITEST_CAPTURE_MODE=content`. That is the normal automated comparison path, but it is not the highest-fidelity view of Liquid Glass. For explicit appearance-polish or visual-fidelity checks, use real window capture instead of treating `content` capture as the source of truth. The legacy system capture path remains available only as an explicit opt-in with `QWENVOICE_UITEST_CAPTURE_MODE=system`; true pre-approval for that macOS permission requires device-management and PPPC policy, not an app-side setting.
 
+Maintainer and agent workflows remain harness-first. Repo scripts, targeted harness lanes, and `xcodebuild` are the source of truth for validation; desktop-native tools are secondary aids for UI- and interaction-specific investigation. When a session exposes macOS automation or visual tooling, prefer structured app orchestration for launch and focus control, and treat generated mockups or diagrams as communication aids rather than validation evidence.
+
+On the maintainer machine, validation is intentionally low-RAM and serialized: run one heavy validation job at a time, start with cheap source gates before live or packaged proof, and treat live native smoke plus packaged/release validation as later-stage confirmation rather than default first steps.
+
 ## Current Documentation Boundaries
 
 - `AGENTS.md` is the primary repo-operating guide for agents and maintainers.

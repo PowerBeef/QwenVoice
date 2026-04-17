@@ -17,10 +17,11 @@ struct SidebarFooterPresentation: Equatable {
 
 struct SidebarStatusView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject var pythonBridge: PythonBridge
+    let sidebarStatus: SidebarStatus
+    let clearError: @MainActor () -> Void
 
     private var stateKey: String {
-        switch pythonBridge.sidebarStatus {
+        switch sidebarStatus {
         case .idle: return "idle"
         case .starting: return "starting"
         case .running: return "active"
@@ -46,7 +47,7 @@ struct SidebarStatusView: View {
 
     @ViewBuilder
     private var statusContent: some View {
-        switch pythonBridge.sidebarStatus {
+        switch sidebarStatus {
         case .idle:
             idleView
         case .starting:
@@ -136,7 +137,7 @@ struct SidebarStatusView: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 Button {
-                    pythonBridge.lastError = nil
+                    clearError()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption2)

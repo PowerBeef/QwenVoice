@@ -18,6 +18,11 @@ BUILD_DIR="$PROJECT_DIR/build"
 APP_BUNDLE_NAME="QwenVoice"
 EMBEDDED_RUNTIME_ENTITLEMENTS="$PROJECT_DIR/Sources/QwenVoiceEmbeddedRuntime.entitlements"
 TOTAL_START=$(date +%s)
+PROJECT_YML="$PROJECT_DIR/project.yml"
+DEFAULT_UI_DEFINE="SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID"
+LEGACY_UI_DEFINE="SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LEGACY_GLASS"
+PROJECT_YML_BACKUP=""
+PROJECT_UI_PROFILE_MUTATED=false
 
 SKIP_DEPS=false
 SKIP_BUILD=false
@@ -88,9 +93,11 @@ done
 case "$UI_PROFILE" in
     liquid)
         UI_SWIFT_DEFINE="QW_UI_LIQUID"
+        DESIRED_PROJECT_UI_DEFINE="$DEFAULT_UI_DEFINE"
         ;;
     legacy)
         UI_SWIFT_DEFINE="QW_UI_LEGACY_GLASS"
+        DESIRED_PROJECT_UI_DEFINE="$LEGACY_UI_DEFINE"
         ;;
     *)
         echo "Error: unsupported --ui-profile '$UI_PROFILE' (expected liquid|legacy)"
@@ -134,6 +141,52 @@ step_time() {
 release_fail() {
     echo "Error: $*" >&2
     exit 1
+}
+
+restore_project_ui_profile() {
+    if ! $PROJECT_UI_PROFILE_MUTATED; then
+        return 0
+    fi
+
+    if [ -z "$PROJECT_YML_BACKUP" ] || [ ! -f "$PROJECT_YML_BACKUP" ]; then
+        echo "warning: project.yml backup missing; skipping UI profile restore" >&2
+        return 0
+    fi
+
+    echo ""
+    echo "Restoring project UI profile..."
+    cp "$PROJECT_YML_BACKUP" "$PROJECT_YML"
+    "$SCRIPT_DIR/regenerate_project.sh"
+    rm -f "$PROJECT_YML_BACKUP"
+    PROJECT_YML_BACKUP=""
+    PROJECT_UI_PROFILE_MUTATED=false
+}
+trap restore_project_ui_profile EXIT
+
+apply_project_ui_profile() {
+    local desired_define="$1"
+    local current_define="$DEFAULT_UI_DEFINE"
+
+    if [ ! -f "$PROJECT_YML" ]; then
+        release_fail "Missing project manifest at $PROJECT_YML"
+    fi
+
+    if grep -q "^[[:space:]]*${LEGACY_UI_DEFINE}$" "$PROJECT_YML"; then
+        current_define="$LEGACY_UI_DEFINE"
+    elif ! grep -q "^[[:space:]]*${DEFAULT_UI_DEFINE}$" "$PROJECT_YML"; then
+        release_fail "Could not find a supported UI compile flag in $PROJECT_YML"
+    fi
+
+    if [ "$current_define" = "$desired_define" ]; then
+        echo "[3/8] project.yml already configured for ${desired_define#SWIFT_ACTIVE_COMPILATION_CONDITIONS: }"
+        return 0
+    fi
+
+    PROJECT_YML_BACKUP="$(mktemp "${TMPDIR:-/tmp}/qwenvoice-project-yml.XXXXXX")"
+    cp "$PROJECT_YML" "$PROJECT_YML_BACKUP"
+    sed -i '' "s/${current_define}/${desired_define}/" "$PROJECT_YML"
+    PROJECT_UI_PROFILE_MUTATED=true
+    echo "[3/8] Patched project.yml for ${desired_define#SWIFT_ACTIVE_COMPILATION_CONDITIONS: }"
 }
 
 is_macho_file() {
@@ -226,6 +279,8 @@ else
     fi
     mkdir -p "$BUILD_DIR"
 
+    apply_project_ui_profile "$DESIRED_PROJECT_UI_DEFINE"
+
     echo "[3/8] Regenerating Xcode project..."
     "$SCRIPT_DIR/regenerate_project.sh"
     echo ""
@@ -238,9 +293,11 @@ else
     set +e
     xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
+        -destination 'platform=macOS,arch=arm64' \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$UI_SWIFT_DEFINE" \
+        ONLY_ACTIVE_ARCH=YES \
+        ARCHS=arm64 \
         build 2>&1 | tee "$XCODEBUILD_LOG"
     XCODEBUILD_STATUS=${PIPESTATUS[0]}
     set -e
@@ -281,7 +338,9 @@ else
     cd "$PROJECT_DIR"
     BUILT_PRODUCTS_DIR=$(xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
         -configuration Release \
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$UI_SWIFT_DEFINE" \
+        -destination 'platform=macOS,arch=arm64' \
+        ONLY_ACTIVE_ARCH=YES \
+        ARCHS=arm64 \
         -showBuildSettings 2>/dev/null \
         | grep '^\s*BUILT_PRODUCTS_DIR' \
         | sed 's/.*= //')

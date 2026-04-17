@@ -40,6 +40,13 @@ Run the fast gates first unless the user explicitly wants only one narrow lane:
 python3 scripts/harness.py validate
 ```
 
+Keep packaged validation deliberately low-RAM on this machine:
+
+- prefer the narrowest lane that answers the question
+- do not overlap heavy `xcodebuild`, `scripts/harness.py`, `./scripts/release.sh`, or live app validation runs
+- do not jump to `release`, local packaging, or live `ui` / `design` / `perf` proof until the source gates are already green
+- if a command starts a broad cold native/MLX rebuild that is not required for the user’s question, stop and re-scope to a cheaper lane
+
 Add only the layers that match the requested scope:
 
 ```bash
@@ -145,8 +152,10 @@ python3 scripts/harness.py test --layer design --ui-backend-mode stub
 ## Failure Shields
 
 - Do not hand-roll alternate test flows when the harness already has a lane.
+- Do not stack heavy validation commands or launch a second heavy run while the first is still active.
 - Do not build or validate macOS 15 release packages locally on this machine.
 - Do not use local `./scripts/release.sh` output as the authoritative proof for shipped macOS 26 or macOS 15 release artifacts.
+- Do not jump straight to `test --layer release`, local packaging, or live UI/design/perf proof when a cheaper source lane can answer the question first.
 - Do not treat the intermediate `qwenvoice-dual-ui-build-*` artifacts as the final shipped release packages.
 - Do not assume the mounted DMG app is the real test target.
 - Do not treat missing live models as a code regression.

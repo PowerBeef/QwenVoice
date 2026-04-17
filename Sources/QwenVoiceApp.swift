@@ -137,9 +137,14 @@ struct QwenVoiceApp: App {
                     UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "backend_ready")
                 }
             }
-            .onReceive(pythonBridge.$sidebarStatus) { status in
-                guard UITestAutomationSupport.isEnabled else { return }
-                TestStateProvider.shared.setSidebarStatus(status)
+            .onReceive(pythonBridge.$sidebarStatus) { _ in
+                syncUITestSidebarStatus()
+            }
+            .onReceive(ttsEngineStore.$snapshot) { _ in
+                syncUITestSidebarStatus()
+            }
+            .onReceive(audioPlayer.$isLiveStream) { _ in
+                syncUITestSidebarStatus()
             }
             .onReceive(pythonBridge.$lastError) { lastError in
                 guard UITestAutomationSupport.isEnabled else { return }
@@ -253,5 +258,15 @@ struct QwenVoiceApp: App {
             state: envManager.state,
             pythonBridge: pythonBridge
         )
+    }
+
+    private func syncUITestSidebarStatus() {
+        guard UITestAutomationSupport.isEnabled else { return }
+        let resolvedStatus = appEngineSelection.resolveSidebarStatus(
+            pythonBridge: pythonBridge,
+            ttsEngineSnapshot: ttsEngineStore.snapshot,
+            prefersInlinePresentation: audioPlayer.isLiveStream
+        )
+        TestStateProvider.shared.setSidebarStatus(resolvedStatus)
     }
 }
