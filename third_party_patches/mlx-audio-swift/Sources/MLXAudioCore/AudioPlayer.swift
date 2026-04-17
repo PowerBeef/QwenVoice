@@ -34,8 +34,10 @@ public class AudioPlayer: NSObject, ObservableObject {
         super.init()
     }
 
-    @MainActor deinit {
-        stop()
+    deinit {
+        MainActor.assumeIsolated {
+            stop()
+        }
     }
 
     // MARK: - Playback Control
