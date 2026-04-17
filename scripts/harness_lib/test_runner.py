@@ -45,6 +45,7 @@ from .ui_test_support import (
     kill_running_app_instances,
     launch_ui_app,
     prepare_ui_launch_context,
+    resolve_xcodebuild_timeout_seconds,
     resolve_ui_app_target,
 )
 
@@ -4400,7 +4401,7 @@ def _run_swift_tests() -> dict[str, Any]:
             ],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=resolve_xcodebuild_timeout_seconds(),
             cwd=str(PROJECT_DIR),
         )
         if proc.returncode != 0:

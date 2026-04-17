@@ -17,6 +17,10 @@ from .contract import load_contract, model_ids, model_is_installed
 from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, APP_VENV_PYTHON, PROJECT_DIR, ensure_directory
 
 
+XCODEBUILD_TIMEOUT_ENV = "QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS"
+DEFAULT_XCODEBUILD_TIMEOUT_SECONDS = 300
+
+
 @dataclass
 class UILaunchContext:
     backend_mode: str
@@ -39,6 +43,20 @@ class UIAppTarget:
     temp_root: Path | None = None
     mounted_device: str | None = None
     mounted_mount_point: Path | None = None
+
+
+def resolve_xcodebuild_timeout_seconds(default: int = DEFAULT_XCODEBUILD_TIMEOUT_SECONDS) -> int:
+    """Return the repo-owned xcodebuild timeout override when configured."""
+    raw_value = os.environ.get(XCODEBUILD_TIMEOUT_ENV, "").strip()
+    if not raw_value:
+        return default
+
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default
+
+    return parsed if parsed > 0 else default
 
 
 def check_live_prerequisites() -> dict[str, Any]:
@@ -140,6 +158,7 @@ def build_ui_launch_environment(
 
 def build_app_binary(timeout: int = 300) -> tuple[bool, str | None, dict[str, Any]]:
     """Build the app and return the app binary path when successful."""
+    timeout = resolve_xcodebuild_timeout_seconds(timeout)
     build_proc = subprocess.run(
         [
             "xcodebuild",

@@ -13,6 +13,8 @@ jobs:
     name: Unit & Contract Tests (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS: ${{ matrix.runner == 'macos-15' && '900' || '300' }}
     strategy:
       fail-fast: false
       matrix:
@@ -178,6 +180,8 @@ jobs:
     name: UI Tests (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    env:
+      QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS: ${{ matrix.runner == 'macos-15' && '900' || '300' }}
     strategy:
       fail-fast: false
       matrix:
@@ -234,6 +238,8 @@ jobs:
     name: Performance Audit (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS: ${{ matrix.runner == 'macos-15' && '900' || '300' }}
     strategy:
       fail-fast: false
       matrix:
