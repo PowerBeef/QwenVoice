@@ -2,17 +2,31 @@ import Combine
 import Foundation
 
 @MainActor
-public final class NativeMLXMacEngine: MacTTSEngine {
-    public enum EngineError: LocalizedError {
-        case voiceCloningNotImplemented
-        case nativeBatchSupportsCustomOnly
+    public final class NativeMLXMacEngine: MacTTSEngine {
+    public enum EngineError: LocalizedError, Equatable {
+        case nativeBatchRequiresSingleMode
 
         public var errorDescription: String? {
             switch self {
-            case .voiceCloningNotImplemented:
-                return "Native Voice Cloning is not implemented yet."
-            case .nativeBatchSupportsCustomOnly:
-                return "Native batch generation currently supports Custom Voice requests only."
+            case .nativeBatchRequiresSingleMode:
+                return "Native batch generation requires all requests to share the same generation mode."
+            }
+        }
+    }
+
+    private enum BatchMode: Equatable {
+        case custom
+        case design
+        case clone
+
+        init(payload: GenerationRequest.Payload) {
+            switch payload {
+            case .custom:
+                self = .custom
+            case .design:
+                self = .design
+            case .clone:
+                self = .clone
             }
         }
     }
@@ -169,14 +183,34 @@ public final class NativeMLXMacEngine: MacTTSEngine {
             )
         }
 
-        publishSnapshot { current in
-            TTSEngineSnapshot(
-                isReady: current.isReady,
-                loadState: current.loadState,
-                clonePreparationState: .primed(key: key),
-                latestEvent: current.latestEvent,
-                visibleErrorMessage: nil
+        do {
+            _ = try await runtime.ensureCloneReferencePrimed(
+                modelID: modelID,
+                reference: reference
             )
+            publishSnapshot { current in
+                TTSEngineSnapshot(
+                    isReady: current.isReady,
+                    loadState: current.loadState,
+                    clonePreparationState: .primed(key: key),
+                    latestEvent: current.latestEvent,
+                    visibleErrorMessage: nil
+                )
+            }
+        } catch {
+            publishSnapshot { current in
+                TTSEngineSnapshot(
+                    isReady: current.isReady,
+                    loadState: current.loadState,
+                    clonePreparationState: .failed(
+                        key: key,
+                        message: error.localizedDescription
+                    ),
+                    latestEvent: current.latestEvent,
+                    visibleErrorMessage: error.localizedDescription
+                )
+            }
+            throw error
         }
     }
 
@@ -194,12 +228,8 @@ public final class NativeMLXMacEngine: MacTTSEngine {
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
         switch request.payload {
-        case .custom, .design:
+        case .custom, .design, .clone:
             break
-        case .clone:
-            let error = EngineError.voiceCloningNotImplemented
-            publishNonLoadError(error)
-            throw error
         }
 
         let generationLabel = request.streamingTitle ?? String(request.text.prefix(40))
@@ -223,7 +253,8 @@ public final class NativeMLXMacEngine: MacTTSEngine {
                 warmState: prepared.warmState,
                 timingOverridesMS: prepared.timingOverridesMS,
                 booleanFlags: prepared.booleanFlags,
-                stringFlags: prepared.stringFlags
+                stringFlags: prepared.stringFlags,
+                cloneConditioning: prepared.cloneConditioning
             )
 
             let result = try await session.run { [weak self] event in
@@ -263,13 +294,9 @@ public final class NativeMLXMacEngine: MacTTSEngine {
         progressHandler: ((Double?, String) -> Void)?
     ) async throws -> [GenerationResult] {
         guard !requests.isEmpty else { return [] }
-        guard requests.allSatisfy({ request in
-            if case .custom = request.payload {
-                return true
-            }
-            return false
-        }) else {
-            let error = EngineError.nativeBatchSupportsCustomOnly
+        let batchMode = BatchMode(payload: requests[0].payload)
+        guard requests.dropFirst().allSatisfy({ BatchMode(payload: $0.payload) == batchMode }) else {
+            let error = EngineError.nativeBatchRequiresSingleMode
             publishNonLoadError(error)
             throw error
         }

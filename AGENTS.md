@@ -77,7 +77,7 @@ These local skills complement, rather than replace, the user-wide skills that ar
 
 ## Architecture Boundaries
 
-- `Sources/QwenVoiceApp.swift` composes shared app services, owns the separate Settings scene, and bootstraps UI-test automation via `TestStateServer`, `AppStartupCoordinator`, `BackendLaunchCoordinator`, `AppLaunchConfiguration`, and `UITestWindowCoordinator`.
+- `Sources/QwenVoiceApp.swift` composes shared app services, owns the separate Settings scene, bootstraps UI-test automation via `TestStateServer`, `AppStartupCoordinator`, `BackendLaunchCoordinator`, `AppLaunchConfiguration`, and `UITestWindowCoordinator`, and now selects the app-facing TTS engine through `AppEngineSelection`.
 - `Sources/ContentView.swift` owns `NavigationSplitView`, main-window toolbar/search/titlebar chrome, sidebar selection, and the persisted generation drafts that survive navigation between generation screens.
 - `Sources/Services/AppPaths.swift` is the path boundary for app support, models, outputs, voices, and the `QWENVOICE_APP_SUPPORT_DIR` override used by harness and fixture-backed runs.
 - `Sources/Models/TTSContract.swift` and `Sources/Models/TTSModel.swift` load `Sources/Resources/qwenvoice_contract.json`. Change the manifest first for model, speaker, output-subfolder, or required-file updates.
@@ -88,7 +88,7 @@ These local skills complement, rather than replace, the user-wide skills that ar
 - `Sources/Resources/backend/server.py` is the thin Python entrypoint and wiring layer. Production backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. The shipped app bundles that production backend under `QwenVoice.app/Contents/Resources/backend/`.
 - `Sources/Services/GenerationPersistence.swift` centralizes save and autoplay handoff for the three generation screens. `Sources/Services/DatabaseService.swift` owns the GRDB SQLite history database and is `@MainActor`; keep persistence and library-refresh behavior aligned.
 - `Sources/Services/TestStateServer.swift` and `Sources/Services/TestStateProvider.swift` are the UI-test HTTP and query boundary. Keep UI-test state exposure, screenshot hooks, and window-activation telemetry there rather than leaking it into normal product flows.
-- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there, while the shipped app still boots `TTSEngineStore` with `PythonBridgeMacTTSEngineAdapter` until an explicit app-engine cutover lands.
+- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there. The shipped app now defaults `TTSEngineStore` to `NativeMLXMacEngine` through `AppEngineSelection`, while `QWENVOICE_APP_ENGINE=python` remains the rollback path and stub UI harness runs still force the adapter-backed engine path.
 - `Sources/ViewModels/ModelManagerViewModel.swift` still uses manifest plus filesystem status for the shipping Models screen. Backend `get_model_info` exists and is harness-tested, but it is not yet the primary model-status source for `ModelsView`.
 - `Sources/ViewModels/AudioPlayerViewModel.swift` isolates timer-frequency playback state in nested `PlaybackProgress`. Do not move high-frequency playback fields back onto the parent observable object.
 - `cli/main.py` is a separate terminal app with cwd-based paths and a broader speaker map than the shipped GUI. Do not copy CLI assumptions into the app contract or app docs.
@@ -136,6 +136,9 @@ Core local commands:
 # Build the default checkout profile
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 
+# Opt-in live native engine smoke against an installed pro_custom model
+QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test
+
 # Swift / Python / contract / audio / RPC layers
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer pipeline
@@ -164,6 +167,7 @@ Notes:
 - `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
 - `ui`, `design`, and `perf` default to `--ui-backend-mode live --ui-data-root fixture`. Those runs reuse installed runtime and models while isolating writable app state under a disposable fixture root.
 - Use `--ui-backend-mode stub` when you want UI smoke coverage without requiring installed models or a live backend. CI uses stub mode for the `ui` smoke lane and macOS 26 screenshot-capture smoke.
+- `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs now default to `native`, `python` remains the rollback path, and stub UI harness mode still forces the adapter-backed engine path so fixture-backed preview events stay deterministic.
 - `AppPaths.appSupportDir` respects `QWENVOICE_APP_SUPPORT_DIR`; the harness sets that for fixture-backed runs. Do not hardcode `~/Library/Application Support/QwenVoice/` in new test flows if they are supposed to be isolated.
 - `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `design` compares against `tests/screenshots/baselines/<appearance>/`; the repo also keeps shared fallback baselines under `tests/screenshots/baselines/` for system and default comparisons.
 - Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. This is the correct automated comparison path, but it is not the highest-fidelity representation of Liquid Glass. Use `system` capture only for explicit visual-fidelity checks, and treat Screen Recording and TCC failures there as environment limits rather than general app regressions.

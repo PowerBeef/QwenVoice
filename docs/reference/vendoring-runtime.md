@@ -49,6 +49,8 @@ The native package boundary currently includes:
 
 When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
 
+Normal app launches now default the app-facing engine to `NativeMLXMacEngine`. `QWENVOICE_APP_ENGINE=python` remains the rollback path for source and debug runs. Stub UI harness mode still forces the adapter-backed engine path even if `QWENVOICE_APP_ENGINE=native` is set, because stub assertions depend on deterministic adapter-driven preview events rather than real native synthesis.
+
 ## Qwen3-TTS Overlay Strategy
 
 The app now installs stock `mlx-audio==0.4.2` and keeps the QwenVoice-specific Qwen3-TTS clone-speedup logic as a standalone backend helper overlay.
@@ -87,6 +89,10 @@ Every review should keep these artifacts aligned:
 
 - `scripts/check_project_inputs.sh`
 - `scripts/regenerate_project.sh`
+- `python3 scripts/harness.py validate`
+- `python3 scripts/harness.py test --layer swift`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
+- `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test`
+- `python3 scripts/harness.py test --layer ui --ui-backend-mode stub`
 - `scripts/verify_release_bundle.sh`
 - `.github/workflows/release-dual-ui.yml`

@@ -184,9 +184,14 @@ final class PythonBridgeMacTTSEngineAdapter: MacTTSEngine {
 
         var results: [QwenVoiceNative.GenerationResult] = []
         results.reserveCapacity(requests.count)
-        for request in requests {
+        for (index, request) in requests.enumerated() {
+            progressHandler?(
+                Double(index) / Double(max(requests.count, 1)),
+                "Generating item \(index + 1)/\(requests.count)..."
+            )
             results.append(try await generate(request))
         }
+        progressHandler?(1.0, "Done")
         return results
     }
 

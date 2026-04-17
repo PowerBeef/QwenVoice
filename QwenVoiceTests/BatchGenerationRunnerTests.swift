@@ -90,6 +90,45 @@ private final class MockGenerationStore: GenerationPersisting {
 
 final class BatchGenerationRunnerTests: XCTestCase {
     @MainActor
+    func testCustomBatchUsesEngineBatchPath() async throws {
+        let engine = MockBatchEngine()
+        let engineStore = TTSEngineStore(engine: engine)
+        let store = MockGenerationStore()
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
+        let model = try XCTUnwrap(TTSModel.model(for: .custom))
+        let request = BatchGenerationRequest(
+            mode: .custom,
+            model: model,
+            lines: ["First line", "Second line"],
+            voice: "vivian",
+            emotion: "Normal tone",
+            voiceDescription: nil,
+            refAudio: nil,
+            refText: nil
+        )
+
+        let outcome = await runner.run(
+            request: request,
+            makeOutputPath: { _, text in "/tmp/\(text.replacingOccurrences(of: " ", with: "_")).wav" },
+            onProgress: { _ in },
+            onItemsUpdated: { _ in }
+        )
+
+        guard case .completed(let items) = outcome else {
+            return XCTFail("Expected completed outcome, got \(outcome)")
+        }
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.filter(\.isSaved).count, 2)
+        XCTAssertEqual(engine.batchGenerateRequests.count, 1)
+        XCTAssertTrue(engine.generateRequests.isEmpty)
+        XCTAssertEqual(
+            engine.batchGenerateRequests.first?.map(\.text),
+            ["First line", "Second line"]
+        )
+        XCTAssertEqual(store.savedGenerations.count, 2)
+    }
+
+    @MainActor
     func testCloneBatchUsesSharedReferenceEngineBatchPath() async throws {
         let engine = MockBatchEngine()
         let engineStore = TTSEngineStore(engine: engine)

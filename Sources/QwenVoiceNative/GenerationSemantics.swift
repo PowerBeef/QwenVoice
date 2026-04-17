@@ -182,6 +182,19 @@ public enum GenerationSemantics {
         ].joined(separator: "|")
     }
 
+    public static func cloneReferenceIdentityKey(
+        modelID: String,
+        refAudio: String,
+        refText: String?
+    ) -> String {
+        [
+            modelID,
+            "clone",
+            refAudio.trimmingCharacters(in: .whitespacesAndNewlines),
+            refText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+        ].joined(separator: "|")
+    }
+
     private static func detectedQwenLanguage(in text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {

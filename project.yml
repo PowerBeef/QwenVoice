@@ -82,6 +82,14 @@ targets:
     dependencies:
       - package: GRDB
       - target: QwenVoiceNative
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
     scheme:
       testTargets:
         - QwenVoiceTests

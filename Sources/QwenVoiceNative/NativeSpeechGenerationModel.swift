@@ -42,8 +42,8 @@ enum NativeSpeechGenerationEvent: Sendable {
 
 final class NativeSpeechGenerationModel: @unchecked Sendable {
     private let sampleRateProvider: @Sendable () -> Int
-    private let genericPrewarmHandler: @Sendable (String, String?, String?) async throws -> Void
-    private let genericStreamHandler: @Sendable (String, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>
+    private let genericPrewarmHandler: @Sendable (String, String?, MLXArray?, String?, String?) async throws -> Void
+    private let genericStreamHandler: @Sendable (String, String?, MLXArray?, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>
     private let latestPreparationDiagnosticsProvider: @Sendable () -> [String: Int]
     private let latestPreparationBooleanFlagsProvider: @Sendable () -> [String: Bool]
     private let resetPreparationDiagnosticsHandler: @Sendable () -> Void
@@ -51,6 +51,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
     private let customStreamHandler: (@Sendable (String, String, String, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)?
     private let designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)?
     private let designStreamHandler: (@Sendable (String, String, String, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)?
+    private let clonePromptCreator: (@Sendable (MLXArray, String?, Bool) throws -> Qwen3TTSVoiceClonePrompt)?
+    private let clonePrewarmHandler: (@Sendable (String, String, Qwen3TTSVoiceClonePrompt) async throws -> Void)?
+    private let cloneStreamHandler: (@Sendable (String, String, Qwen3TTSVoiceClonePrompt, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)?
 
     private final class BaseModelBox: @unchecked Sendable {
         let base: any SpeechGenerationModel
@@ -71,23 +74,23 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
     init(base: any SpeechGenerationModel) {
         let baseBox = BaseModelBox(base: base)
         self.sampleRateProvider = { baseBox.base.sampleRate }
-        self.genericPrewarmHandler = { text, voice, language in
+        self.genericPrewarmHandler = { text, voice, refAudio, refText, language in
             try await baseBox.base.prepareForGeneration(
                 text: text,
                 voice: voice,
-                refAudio: nil,
-                refText: nil,
+                refAudio: refAudio,
+                refText: refText,
                 language: language,
                 generationParameters: baseBox.base.defaultGenerationParameters
             )
         }
-        self.genericStreamHandler = { text, voice, language, streamingInterval in
+        self.genericStreamHandler = { text, voice, refAudio, refText, language, streamingInterval in
             Self.map(
                 stream: baseBox.base.generateStream(
                     text: text,
                     voice: voice,
-                    refAudio: nil,
-                    refText: nil,
+                    refAudio: refAudio,
+                    refText: refText,
                     language: language,
                     generationParameters: baseBox.base.defaultGenerationParameters,
                     streamingInterval: streamingInterval
@@ -146,15 +149,79 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
                     )
                 )
             }
+            self.clonePromptCreator = { refAudio, refText, xVectorOnlyMode in
+                try optimizedBox.base.createVoiceClonePrompt(
+                    refAudio: refAudio,
+                    refText: refText,
+                    xVectorOnlyMode: xVectorOnlyMode
+                )
+            }
+            self.clonePrewarmHandler = { text, language, voiceClonePrompt in
+                try await optimizedBox.base.prepareVoiceClone(
+                    text: text,
+                    language: language,
+                    voiceClonePrompt: voiceClonePrompt,
+                    generationParameters: baseBox.base.defaultGenerationParameters
+                )
+            }
+            self.cloneStreamHandler = { text, language, voiceClonePrompt, streamingInterval in
+                Self.map(
+                    stream: optimizedBox.base.generateVoiceCloneStream(
+                        text: text,
+                        language: language,
+                        voiceClonePrompt: voiceClonePrompt,
+                        generationParameters: baseBox.base.defaultGenerationParameters,
+                        streamingInterval: streamingInterval
+                    )
+                )
+            }
         } else {
             self.customPrewarmHandler = nil
             self.customStreamHandler = nil
             self.designPrewarmHandler = nil
             self.designStreamHandler = nil
+            self.clonePromptCreator = nil
+            self.clonePrewarmHandler = nil
+            self.cloneStreamHandler = nil
         }
     }
 
     init(
+        sampleRate: Int = 24_000,
+        fullGenericPrewarmHandler: @escaping @Sendable (String, String?, MLXArray?, String?, String?) async throws -> Void = { _, _, _, _, _ in },
+        fullGenericStreamHandler: @escaping @Sendable (String, String?, MLXArray?, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> = { _, _, _, _, _, _ in
+            AsyncThrowingStream { continuation in
+                continuation.finish(throwing: NSError(domain: "QwenVoiceNative", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "No test stream configured for NativeSpeechGenerationModel."
+                ]))
+            }
+        },
+        latestPreparationDiagnosticsProvider: @escaping @Sendable () -> [String: Int] = { [:] },
+        latestPreparationBooleanFlagsProvider: @escaping @Sendable () -> [String: Bool] = { [:] },
+        customPrewarmHandler: (@Sendable (String, String, String, String?) async throws -> Void)? = nil,
+        customStreamHandler: (@Sendable (String, String, String, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil,
+        designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)? = nil,
+        designStreamHandler: (@Sendable (String, String, String, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil,
+        clonePromptCreator: (@Sendable (MLXArray, String?, Bool) throws -> Qwen3TTSVoiceClonePrompt)? = nil,
+        clonePrewarmHandler: (@Sendable (String, String, Qwen3TTSVoiceClonePrompt) async throws -> Void)? = nil,
+        cloneStreamHandler: (@Sendable (String, String, Qwen3TTSVoiceClonePrompt, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil
+    ) {
+        self.sampleRateProvider = { sampleRate }
+        self.genericPrewarmHandler = fullGenericPrewarmHandler
+        self.genericStreamHandler = fullGenericStreamHandler
+        self.latestPreparationDiagnosticsProvider = latestPreparationDiagnosticsProvider
+        self.latestPreparationBooleanFlagsProvider = latestPreparationBooleanFlagsProvider
+        self.resetPreparationDiagnosticsHandler = {}
+        self.customPrewarmHandler = customPrewarmHandler
+        self.customStreamHandler = customStreamHandler
+        self.designPrewarmHandler = designPrewarmHandler
+        self.designStreamHandler = designStreamHandler
+        self.clonePromptCreator = clonePromptCreator
+        self.clonePrewarmHandler = clonePrewarmHandler
+        self.cloneStreamHandler = cloneStreamHandler
+    }
+
+    convenience init(
         sampleRate: Int = 24_000,
         genericPrewarmHandler: @escaping @Sendable (String, String?, String?) async throws -> Void = { _, _, _ in },
         genericStreamHandler: @escaping @Sendable (String, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> = { _, _, _, _ in
@@ -171,16 +238,21 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)? = nil,
         designStreamHandler: (@Sendable (String, String, String, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error>)? = nil
     ) {
-        self.sampleRateProvider = { sampleRate }
-        self.genericPrewarmHandler = genericPrewarmHandler
-        self.genericStreamHandler = genericStreamHandler
-        self.latestPreparationDiagnosticsProvider = latestPreparationDiagnosticsProvider
-        self.latestPreparationBooleanFlagsProvider = latestPreparationBooleanFlagsProvider
-        self.resetPreparationDiagnosticsHandler = {}
-        self.customPrewarmHandler = customPrewarmHandler
-        self.customStreamHandler = customStreamHandler
-        self.designPrewarmHandler = designPrewarmHandler
-        self.designStreamHandler = designStreamHandler
+        self.init(
+            sampleRate: sampleRate,
+            fullGenericPrewarmHandler: { text, voice, _, _, language in
+                try await genericPrewarmHandler(text, voice, language)
+            },
+            fullGenericStreamHandler: { text, voice, _, _, language, streamingInterval in
+                genericStreamHandler(text, voice, language, streamingInterval)
+            },
+            latestPreparationDiagnosticsProvider: latestPreparationDiagnosticsProvider,
+            latestPreparationBooleanFlagsProvider: latestPreparationBooleanFlagsProvider,
+            customPrewarmHandler: customPrewarmHandler,
+            customStreamHandler: customStreamHandler,
+            designPrewarmHandler: designPrewarmHandler,
+            designStreamHandler: designStreamHandler
+        )
     }
 
     static func placeholder() -> NativeSpeechGenerationModel {
@@ -190,6 +262,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
     var sampleRate: Int { sampleRateProvider() }
     var supportsDedicatedCustomVoice: Bool { customStreamHandler != nil }
     var supportsOptimizedVoiceDesign: Bool { designPrewarmHandler != nil && designStreamHandler != nil }
+    var supportsOptimizedVoiceClone: Bool {
+        clonePromptCreator != nil && clonePrewarmHandler != nil && cloneStreamHandler != nil
+    }
     var latestPreparationTimingsMS: [String: Int] { latestPreparationDiagnosticsProvider() }
     var latestPreparationBooleanFlags: [String: Bool] { latestPreparationBooleanFlagsProvider() }
 
@@ -197,17 +272,25 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         resetPreparationDiagnosticsHandler()
     }
 
-    func prepareForGeneration(text: String, voice: String?, language: String?) async throws {
-        try await genericPrewarmHandler(text, voice, language)
+    func prepareForGeneration(
+        text: String,
+        voice: String?,
+        refAudio: MLXArray? = nil,
+        refText: String? = nil,
+        language: String?
+    ) async throws {
+        try await genericPrewarmHandler(text, voice, refAudio, refText, language)
     }
 
     func generateStream(
         text: String,
         voice: String?,
+        refAudio: MLXArray? = nil,
+        refText: String? = nil,
         language: String?,
         streamingInterval: Double
     ) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> {
-        genericStreamHandler(text, voice, language, streamingInterval)
+        genericStreamHandler(text, voice, refAudio, refText, language, streamingInterval)
     }
 
     func prepareCustomVoice(
@@ -272,6 +355,38 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
             language: language,
             streamingInterval: streamingInterval
         )
+    }
+
+    func createVoiceClonePrompt(
+        refAudio: MLXArray,
+        refText: String?,
+        xVectorOnlyMode: Bool
+    ) throws -> Qwen3TTSVoiceClonePrompt? {
+        try clonePromptCreator?(refAudio, refText, xVectorOnlyMode)
+    }
+
+    func prepareVoiceClone(
+        text: String,
+        language: String,
+        voiceClonePrompt: Qwen3TTSVoiceClonePrompt
+    ) async throws {
+        if let clonePrewarmHandler {
+            try await clonePrewarmHandler(text, language, voiceClonePrompt)
+            return
+        }
+        try await prepareForGeneration(text: text, voice: nil, language: language)
+    }
+
+    func generateVoiceCloneStream(
+        text: String,
+        language: String,
+        voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
+        streamingInterval: Double
+    ) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> {
+        if let cloneStreamHandler {
+            return cloneStreamHandler(text, language, voiceClonePrompt, streamingInterval)
+        }
+        return generateStream(text: text, voice: nil, language: language, streamingInterval: streamingInterval)
     }
 
     private static func fallbackCustomVoice(speaker: String, instruct: String?) -> String {

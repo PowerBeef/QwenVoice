@@ -15,6 +15,7 @@ struct NativePreparedGeneration: Sendable {
     let timingOverridesMS: [String: Int]
     let booleanFlags: [String: Bool]
     let stringFlags: [String: String]
+    let cloneConditioning: ResolvedCloneConditioning?
 }
 
 public actor MacNativeRuntime {
@@ -84,6 +85,8 @@ public actor MacNativeRuntime {
     private let loadOperation: @Sendable (NativeModelDescriptor) async throws -> Void
     private let modelLoader: ModelLoader
     private let loadCoordinator: NativeModelLoadCoordinator
+    private let audioPreparationService: any AudioPreparationService
+    private let preparedCloneConditioningCache: NativePreparedCloneConditioningCache
 
     private var initializedPaths: Paths?
     private var modelRegistry: NativeModelRegistry?
@@ -92,6 +95,9 @@ public actor MacNativeRuntime {
     private var activeDesignConditioningWarmKey: String?
     private var activeDesignConditioningWarmSource: DesignWarmSource?
     private var activeDesignStreamStepWarmKey: String?
+    private var activeCloneConditioning: ResolvedCloneConditioning?
+    private var primedCloneReferenceKeys: Set<String> = []
+    private var clonePrimeTimingOverridesMS: [String: [String: Int]] = [:]
 
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -101,6 +107,8 @@ public actor MacNativeRuntime {
         self.loadOperation = { _ in }
         self.modelLoader = Self.defaultModelLoader
         self.loadCoordinator = NativeModelLoadCoordinator()
+        self.audioPreparationService = NativeAudioPreparationService()
+        self.preparedCloneConditioningCache = NativePreparedCloneConditioningCache()
     }
 
     init(
@@ -108,7 +116,9 @@ public actor MacNativeRuntime {
         manifestURL: URL? = nil,
         loadOperation: @escaping @Sendable (NativeModelDescriptor) async throws -> Void = { _ in },
         modelLoader: @escaping ModelLoader = MacNativeRuntime.defaultModelLoader,
-        loadCoordinator: NativeModelLoadCoordinator = NativeModelLoadCoordinator()
+        loadCoordinator: NativeModelLoadCoordinator = NativeModelLoadCoordinator(),
+        audioPreparationService: any AudioPreparationService = NativeAudioPreparationService(),
+        preparedCloneConditioningCache: NativePreparedCloneConditioningCache = NativePreparedCloneConditioningCache()
     ) {
         self.fileManager = fileManager
         self.registryFactory = {
@@ -117,6 +127,8 @@ public actor MacNativeRuntime {
         self.loadOperation = loadOperation
         self.modelLoader = modelLoader
         self.loadCoordinator = loadCoordinator
+        self.audioPreparationService = audioPreparationService
+        self.preparedCloneConditioningCache = preparedCloneConditioningCache
     }
 
     @discardableResult
@@ -139,6 +151,7 @@ public actor MacNativeRuntime {
         loadedModel = nil
         nextRequestID = 1
         clearDesignWarmState()
+        await clearCloneState()
         await loadCoordinator.unloadModel()
         return paths
     }
@@ -179,11 +192,41 @@ public actor MacNativeRuntime {
                 using: model,
                 source: .prefetch
             )
-        case .custom, .clone:
+        case .custom:
             guard !(await loadCoordinator.isPrewarmed(identityKey: identityKey)) else {
                 return
             }
             try await prepareWarmState(for: request, using: model)
+        case .clone(let reference):
+            let conditioning = try await resolveCloneConditioning(
+                modelID: request.modelID,
+                reference: reference,
+                sampleRate: model.sampleRate
+            )
+            let resolvedConditioning = if let activeCloneConditioning,
+                                          activeCloneConditioning.internalIdentityKey == conditioning.internalIdentityKey {
+                activeCloneConditioning
+            } else {
+                try await preparedCloneConditioningCache.resolveVoiceClonePrompt(
+                    for: conditioning,
+                    modelID: request.modelID,
+                    model: model,
+                    voicesDirectory: try requirePaths().voicesDirectory
+                )
+            }
+            guard !(await loadCoordinator.isPrewarmed(identityKey: resolvedConditioning.internalIdentityKey)) else {
+                activeCloneConditioning = resolvedConditioning
+                return
+            }
+            _ = try await primeCloneConditioning(
+                modelID: request.modelID,
+                reference: reference,
+                conditioning: resolvedConditioning,
+                model: model
+            )
+        }
+        if case .clone = request.payload {
+            return
         }
         await loadCoordinator.markPrewarmed(identityKey: identityKey)
     }
@@ -192,17 +235,17 @@ public actor MacNativeRuntime {
         try await ensureModelLoadedIfNeeded(id: request.modelID)
 
         let model = try await requireLoadedModel(expectedModelID: request.modelID)
-        let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
-        let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
-
         model.resetPreparationDiagnostics()
         let warmState: EngineWarmState
         var timingOverridesMS: [String: Int] = [:]
         var booleanFlags: [String: Bool] = [:]
         var stringFlags: [String: String] = [:]
+        var cloneConditioning: ResolvedCloneConditioning?
 
         switch request.payload {
         case .design:
+            let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
+            let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
             let designWarmState = try await ensureDesignConditioningWarmStateIfNeeded(
                 for: request,
                 using: model,
@@ -222,7 +265,9 @@ public actor MacNativeRuntime {
             booleanFlags["design_warm_bucket_long"] = designWarmState.bucket == .long
             booleanFlags["design_optimized_handler_used"] = model.supportsOptimizedVoiceDesign
             stringFlags["design_conditioning_request_key"] = designWarmState.requestKey
-        case .custom, .clone:
+        case .custom:
+            let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
+            let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
             if wasPrewarmed {
                 warmState = .warm
             } else {
@@ -232,6 +277,61 @@ public actor MacNativeRuntime {
             }
             timingOverridesMS = model.latestPreparationTimingsMS
             booleanFlags = mergedBooleanFlags(for: model, warmState: warmState)
+        case .clone(let reference):
+            let resolvedConditioning = try await resolveCloneConditioning(
+                modelID: request.modelID,
+                reference: reference,
+                sampleRate: model.sampleRate
+            )
+            let reusedActiveConditioning = activeCloneConditioning?.internalIdentityKey
+                == resolvedConditioning.internalIdentityKey
+            let conditioning = if let activeCloneConditioning, reusedActiveConditioning {
+                activeCloneConditioning
+            } else {
+                try await preparedCloneConditioningCache.resolveVoiceClonePrompt(
+                    for: resolvedConditioning,
+                    modelID: request.modelID,
+                    model: model,
+                    voicesDirectory: try requirePaths().voicesDirectory
+                )
+            }
+            cloneConditioning = conditioning
+            activeCloneConditioning = conditioning
+
+            let identityKey = conditioning.internalIdentityKey
+            let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
+            if wasPrewarmed {
+                warmState = .warm
+                if let primeTimings = clonePrimeTimingOverridesMS[identityKey] {
+                    timingOverridesMS.merge(primeTimings) { current, _ in current }
+                }
+            } else {
+                let prewarmTimings = try await primeCloneConditioning(
+                    modelID: request.modelID,
+                    reference: reference,
+                    conditioning: conditioning,
+                    model: model
+                )
+                timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
+                warmState = .cold
+            }
+
+            timingOverridesMS.merge(conditioning.timingsMS) { current, _ in current }
+            timingOverridesMS.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
+
+            booleanFlags = mergedBooleanFlags(for: model, warmState: warmState)
+            booleanFlags["clone_conditioning_reused"] =
+                conditioning.cloneConditioningReused
+                || reusedActiveConditioning
+            booleanFlags["clone_optimized_handler_used"] =
+                conditioning.voiceClonePrompt != nil && model.supportsOptimizedVoiceClone
+            if let cloneCacheHit = conditioning.cloneCacheHit {
+                booleanFlags["prepared_clone_cache_hit"] = cloneCacheHit
+            }
+            if let clonePromptCacheHit = conditioning.clonePromptCacheHit {
+                booleanFlags["clone_prompt_cache_hit"] = clonePromptCacheHit
+            }
+            stringFlags["clone_transcript_mode"] = conditioning.transcriptMode.rawValue
         }
 
         let requestID = takeNextRequestID()
@@ -246,13 +346,15 @@ public actor MacNativeRuntime {
             warmState: warmState,
             timingOverridesMS: timingOverridesMS,
             booleanFlags: booleanFlags,
-            stringFlags: stringFlags
+            stringFlags: stringFlags,
+            cloneConditioning: cloneConditioning
         )
     }
 
     public func unloadModel() async {
         loadedModel = nil
         clearDesignWarmState()
+        await clearCloneState()
         await loadCoordinator.unloadModel()
     }
 
@@ -396,6 +498,108 @@ public actor MacNativeRuntime {
         }
     }
 
+    func ensureCloneReferencePrimed(
+        modelID: String,
+        reference: CloneReference
+    ) async throws -> ResolvedCloneConditioning {
+        try await ensureModelLoadedIfNeeded(id: modelID)
+
+        let model = try await requireLoadedModel(expectedModelID: modelID)
+        model.resetPreparationDiagnostics()
+
+        let conditioning = try await resolveCloneConditioning(
+            modelID: modelID,
+            reference: reference,
+            sampleRate: model.sampleRate
+        )
+        let resolvedConditioning = if let activeCloneConditioning,
+                                       activeCloneConditioning.internalIdentityKey == conditioning.internalIdentityKey {
+            activeCloneConditioning
+        } else {
+            try await preparedCloneConditioningCache.resolveVoiceClonePrompt(
+                for: conditioning,
+                modelID: modelID,
+                model: model,
+                voicesDirectory: try requirePaths().voicesDirectory
+            )
+        }
+
+        guard !primedCloneReferenceKeys.contains(resolvedConditioning.internalIdentityKey) else {
+            activeCloneConditioning = resolvedConditioning
+            return resolvedConditioning
+        }
+
+        _ = try await primeCloneConditioning(
+            modelID: modelID,
+            reference: reference,
+            conditioning: resolvedConditioning,
+            model: model
+        )
+        return resolvedConditioning
+    }
+
+    private func resolveCloneConditioning(
+        modelID: String,
+        reference: CloneReference,
+        sampleRate: Int
+    ) async throws -> ResolvedCloneConditioning {
+        try await preparedCloneConditioningCache.resolve(
+            modelID: modelID,
+            reference: reference,
+            sampleRate: sampleRate,
+            audioPreparationService: audioPreparationService,
+            normalizedCloneReferenceDirectory: try requirePaths().normalizedCloneReferencesDirectory
+        )
+    }
+
+    private func primeCloneConditioning(
+        modelID: String,
+        reference: CloneReference,
+        conditioning: ResolvedCloneConditioning,
+        model: NativeSpeechGenerationModel
+    ) async throws -> [String: Int] {
+        let startedAt = ContinuousClock.now
+        let warmText = GenerationSemantics.canonicalDesignWarmShortText
+        let warmRequest = GenerationRequest(
+            modelID: modelID,
+            text: warmText,
+            outputPath: "",
+            shouldStream: false,
+            payload: .clone(reference: reference)
+        )
+        let language = GenerationSemantics.qwenLanguageHint(
+            for: warmRequest,
+            resolvedCloneTranscript: conditioning.resolvedTranscript
+        )
+
+        if let voiceClonePrompt = conditioning.voiceClonePrompt,
+           model.supportsOptimizedVoiceClone {
+            try await model.prepareVoiceClone(
+                text: warmText,
+                language: language,
+                voiceClonePrompt: voiceClonePrompt
+            )
+        } else {
+            try await model.prepareForGeneration(
+                text: warmText,
+                voice: nil,
+                refAudio: conditioning.referenceAudio,
+                refText: conditioning.resolvedTranscript,
+                language: language
+            )
+        }
+
+        await loadCoordinator.markPrewarmed(identityKey: conditioning.internalIdentityKey)
+        primedCloneReferenceKeys.insert(conditioning.internalIdentityKey)
+        activeCloneConditioning = conditioning
+
+        var timings = conditioning.timingsMS
+        timings.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
+        timings["prime_clone_reference"] = startedAt.elapsedMilliseconds
+        clonePrimeTimingOverridesMS[conditioning.internalIdentityKey] = timings
+        return timings
+    }
+
     private func ensureDesignConditioningWarmStateIfNeeded(
         for request: GenerationRequest,
         using model: NativeSpeechGenerationModel,
@@ -485,6 +689,13 @@ public actor MacNativeRuntime {
         activeDesignStreamStepWarmKey = nil
     }
 
+    private func clearCloneState() async {
+        await preparedCloneConditioningCache.clear()
+        activeCloneConditioning = nil
+        primedCloneReferenceKeys.removeAll()
+        clonePrimeTimingOverridesMS.removeAll()
+    }
+
     private func requireLoadedModel(expectedModelID: String) async throws -> NativeSpeechGenerationModel {
         guard await loadCoordinator.currentLoadedModelID() == expectedModelID,
               let loadedModel else {
@@ -517,6 +728,7 @@ public actor MacNativeRuntime {
             let installDirectory = registry.installDirectory(for: descriptor, in: modelsDirectory)
             loadedModel = nil
             clearDesignWarmState()
+            await clearCloneState()
             try await loadOperation(descriptor)
             loadedModel = try await modelLoader(descriptor, installDirectory)
         }
@@ -558,5 +770,20 @@ public actor MacNativeRuntime {
                 modelType: "qwen3_tts"
             )
         )
+    }
+}
+
+private extension ContinuousClock.Instant {
+    var elapsedMilliseconds: Int {
+        duration(to: .now).roundedMilliseconds
+    }
+}
+
+private extension Duration {
+    var roundedMilliseconds: Int {
+        let components = components
+        let secondsMS = Double(components.seconds) * 1_000
+        let attosecondsMS = Double(components.attoseconds) / 1_000_000_000_000_000
+        return Int((secondsMS + attosecondsMS).rounded())
     }
 }

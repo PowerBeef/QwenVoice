@@ -8,6 +8,7 @@ struct QwenVoiceApp: App {
     private var appDelegate
     @StateObject private var pythonBridge: PythonBridge
     @StateObject private var ttsEngineStore: TTSEngineStore
+    @State private var didInitializeSelectedTTSEngine = false
     @StateObject private var audioPlayer = AudioPlayerViewModel()
     @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
@@ -15,15 +16,21 @@ struct QwenVoiceApp: App {
     @StateObject private var appCommandRouter = AppCommandRouter.shared
     @StateObject private var generationLibraryEvents = GenerationLibraryEvents.shared
     @StateObject private var appStartupCoordinator = AppStartupCoordinator()
+    private let appEngineSelection: AppEngineSelection
     private let testStateServer = TestStateServer()
     private let backendLaunchCoordinator = BackendLaunchCoordinator()
 
     init() {
         let pythonBridge = PythonBridge()
+        let appEngineSelection = AppEngineSelection.current()
+        self.appEngineSelection = appEngineSelection
         _pythonBridge = StateObject(wrappedValue: pythonBridge)
         _ttsEngineStore = StateObject(
             wrappedValue: TTSEngineStore(
-                engine: PythonBridgeMacTTSEngineAdapter(bridge: pythonBridge)
+                engine: appEngineSelection.makeEngine(
+                    pythonBridge: pythonBridge,
+                    isStubBackendMode: UITestAutomationSupport.isStubBackendMode
+                )
             )
         )
 
@@ -100,6 +107,7 @@ struct QwenVoiceApp: App {
             )
             .onAppear {
                 appStartupCoordinator.setupAppSupport()
+                startSelectedTTSEngineIfNeeded()
                 appStartupCoordinator.refreshLaunchDiagnostics()
                 if UITestAutomationSupport.isEnabled {
                     UITestWindowCoordinator.shared.syncVisibleMainWindowState()
@@ -219,6 +227,22 @@ struct QwenVoiceApp: App {
 
     static var modelsDir: URL { AppPaths.modelsDir }
     static var outputsDir: URL { AppPaths.outputsDir }
+
+    private func startSelectedTTSEngineIfNeeded() {
+        guard appEngineSelection.requiresManualInitialization(
+            isStubBackendMode: UITestAutomationSupport.isStubBackendMode
+        ) else { return }
+        guard !didInitializeSelectedTTSEngine else { return }
+        didInitializeSelectedTTSEngine = true
+
+        Task {
+            do {
+                try await ttsEngineStore.initialize(appSupportDirectory: Self.appSupportDir)
+            } catch {
+                // Native engine initialization publishes its own failure snapshot.
+            }
+        }
+    }
     static var voicesDir: URL { AppPaths.voicesDir }
 
     private func retryLaunchPreflight() {

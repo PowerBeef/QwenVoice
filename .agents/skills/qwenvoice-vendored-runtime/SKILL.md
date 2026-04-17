@@ -14,6 +14,8 @@ Current runtime policy:
 - both shipped release variants intentionally package the same macOS 15-compatible MLX/Metal runtime
 - the dual-release split is for app/UI build profile and SDK differences, not for two separate bundled MLX runtimes
 - moving the macOS 26 artifact to a macOS 26-specific MLX/Metal runtime would be a product/runtime decision, not a packaging optimization
+- normal app launches now default the app-facing engine to `NativeMLXMacEngine`; `QWENVOICE_APP_ENGINE=python` remains the rollback path for source/debug work
+- stub UI harness mode still forces the adapter-backed engine path even if `QWENVOICE_APP_ENGINE=native` is set, because those assertions depend on deterministic adapter-driven preview events rather than real native synthesis
 
 ## Workflow
 
@@ -52,6 +54,8 @@ When the work touches the native backend package graph or Swift MLXAudio integra
 - keep `project.yml` and `Package.resolved` aligned with the package graph QwenVoice actually builds
 - regenerate the Xcode project
 - validate the app build and the targeted native tests before claiming the native runtime is healthy
+- use `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...` as the opt-in proof of real native synthesis when an installed model is available
+- if the change also affects app-engine selection, run the stub UI harness lane too, but remember that stub mode proves app-shell compatibility rather than real native synthesis because it forces the adapter-backed engine path
 
 ### 3. Keep the app/backend boundary in sync
 

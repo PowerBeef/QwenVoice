@@ -1,5 +1,7 @@
 import XCTest
 import Combine
+@preconcurrency import MLX
+@preconcurrency import MLXAudioTTS
 @testable import QwenVoiceNative
 
 @MainActor
@@ -16,12 +18,27 @@ final class NativeMLXMacEngineTests: XCTestCase {
         let voiceDescription: String
     }
 
+    private struct ClonePromptCall: Equatable {
+        let text: String
+        let language: String
+        let refText: String?
+    }
+
     private final class DesignInvocationBox: @unchecked Sendable {
         var latestPreparationBooleanFlags: [String: Bool] = [:]
         var genericPrewarmCalls: [GenericGenerationCall] = []
         var genericStreamCalls: [GenericGenerationCall] = []
         var designPrewarmCalls: [DesignGenerationCall] = []
         var designStreamCalls: [DesignGenerationCall] = []
+    }
+
+    private final class CloneInvocationBox: @unchecked Sendable {
+        var latestPreparationBooleanFlags: [String: Bool] = [:]
+        var genericPrewarmRefTexts: [String?] = []
+        var genericStreamRefTexts: [String?] = []
+        var optimizedClonePrewarmCalls: [ClonePromptCall] = []
+        var optimizedCloneStreamCalls: [ClonePromptCall] = []
+        var clonePromptCreationCount = 0
     }
 
     private var cancellables: Set<AnyCancellable> = []
@@ -222,10 +239,12 @@ final class NativeMLXMacEngineTests: XCTestCase {
         )
         try await engine.initialize(appSupportDirectory: root)
 
+        let referenceURL = root.appendingPathComponent("reference.wav")
+        try NativeRuntimeTestSupport.writeTestWAV(to: referenceURL, sampleRate: 24_000, channels: 1)
         try await engine.loadModel(id: "pro_clone")
         try await engine.ensureCloneReferencePrimed(
             modelID: "pro_clone",
-            reference: CloneReference(audioPath: "/tmp/ref.wav", transcript: "Reference")
+            reference: CloneReference(audioPath: referenceURL.path, transcript: "Reference")
         )
         guard case .primed(let key) = engine.snapshot.clonePreparationState else {
             return XCTFail("Expected clone reference to be primed")
@@ -234,13 +253,59 @@ final class NativeMLXMacEngineTests: XCTestCase {
             key,
             GenerationSemantics.clonePreparationKey(
                 modelID: "pro_clone",
-                reference: CloneReference(audioPath: "/tmp/ref.wav", transcript: "Reference")
+                reference: CloneReference(audioPath: referenceURL.path, transcript: "Reference")
             )
         )
 
         try await engine.unloadModel()
         XCTAssertEqual(engine.snapshot.loadState, EngineLoadState.idle)
         XCTAssertEqual(engine.snapshot.clonePreparationState, ClonePreparationState.idle)
+    }
+
+    func testNativeMLXMacEnginePublishesFailedClonePreparationStateForInvalidReferenceAfterLoad() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_clone",
+            name: "Voice Cloning",
+            folder: "Clone-Model",
+            mode: "clone"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in .placeholder() }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+        try await engine.loadModel(id: "pro_clone")
+
+        let missingReference = root.appendingPathComponent("missing.wav")
+        await XCTAssertThrowsErrorAsync {
+            try await engine.ensureCloneReferencePrimed(
+                modelID: "pro_clone",
+                reference: CloneReference(audioPath: missingReference.path, transcript: "Reference")
+            )
+        }
+
+        XCTAssertEqual(engine.snapshot.loadState, .loaded(modelID: "pro_clone"))
+        guard case .failed(let key, let message) = engine.snapshot.clonePreparationState else {
+            return XCTFail("Expected failed clone preparation state")
+        }
+        XCTAssertEqual(
+            key,
+            GenerationSemantics.clonePreparationKey(
+                modelID: "pro_clone",
+                reference: CloneReference(audioPath: missingReference.path, transcript: "Reference")
+            )
+        )
+        XCTAssertNotNil(message)
+        XCTAssertEqual(engine.snapshot.visibleErrorMessage, message)
     }
 
     func testNativeMLXMacEngineGeneratesCustomAudioAndPublishesChunkEvents() async throws {
@@ -347,7 +412,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertFalse(sample.telemetryStageMarks.isEmpty)
     }
 
-    func testNativeMLXMacEngineGenerateBatchSupportsCustomRequestsOnly() async throws {
+    func testNativeMLXMacEngineGenerateBatchSupportsHomogeneousCustomRequests() async throws {
         let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -403,6 +468,193 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: second.outputPath))
         XCTAssertFalse(results[0].usedStreaming)
         XCTAssertFalse(results[1].usedStreaming)
+    }
+
+    func testNativeMLXMacEngineGenerateBatchSupportsHomogeneousDesignRequests() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_design",
+            name: "Voice Design",
+            folder: "Design-Model",
+            mode: "design"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let designModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            designPrewarmHandler: { _, _, _ in },
+            designStreamHandler: { text, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    let samples: [Float] = text.contains("Second") ? [0.0, 0.1] : [0.0, -0.1]
+                    continuation.yield(.audio(samples))
+                    continuation.finish()
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in designModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        let first = GenerationRequest(
+            modelID: "pro_design",
+            text: "First design item",
+            outputPath: root.appendingPathComponent("design-first.wav").path,
+            shouldStream: false,
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+        let second = GenerationRequest(
+            modelID: "pro_design",
+            text: "Second design item",
+            outputPath: root.appendingPathComponent("design-second.wav").path,
+            shouldStream: false,
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+
+        let results = try await engine.generateBatch([first, second]) { _, _ in }
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.outputPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: second.outputPath))
+        XCTAssertFalse(results[0].usedStreaming)
+        XCTAssertFalse(results[1].usedStreaming)
+    }
+
+    func testNativeMLXMacEngineGenerateBatchSupportsHomogeneousCloneRequestsAndReusesConditioning() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_clone",
+            name: "Voice Cloning",
+            folder: "Clone-Model",
+            mode: "clone"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let referenceURL = root.appendingPathComponent("batch-reference.wav")
+        try NativeRuntimeTestSupport.writeTestWAV(to: referenceURL, sampleRate: 24_000, channels: 1)
+
+        let box = CloneInvocationBox()
+        let cloneModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            clonePromptCreator: { _, refText, xVectorOnlyMode in
+                box.clonePromptCreationCount += 1
+                return Qwen3TTSVoiceClonePrompt(
+                    refCodes: MLXArray([Int32(1), Int32(2), Int32(3)]),
+                    speakerEmbedding: MLXArray([Float32(0.25), Float32(0.5)]),
+                    refText: refText,
+                    xVectorOnlyMode: xVectorOnlyMode,
+                    iclMode: false
+                )
+            },
+            clonePrewarmHandler: { _, _, _ in },
+            cloneStreamHandler: { text, language, voiceClonePrompt, _ in
+                box.optimizedCloneStreamCalls.append(
+                    ClonePromptCall(text: text, language: language, refText: voiceClonePrompt.refText)
+                )
+                return AsyncThrowingStream { continuation in
+                    let samples: [Float] = text.contains("Second") ? [0.0, 0.1] : [0.0, -0.1]
+                    continuation.yield(.audio(samples))
+                    continuation.finish()
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in cloneModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        let reference = CloneReference(
+            audioPath: referenceURL.path,
+            transcript: "Batch transcript"
+        )
+        let first = GenerationRequest(
+            modelID: "pro_clone",
+            text: "First clone item",
+            outputPath: root.appendingPathComponent("clone-first.wav").path,
+            shouldStream: false,
+            payload: .clone(reference: reference)
+        )
+        let second = GenerationRequest(
+            modelID: "pro_clone",
+            text: "Second clone item",
+            outputPath: root.appendingPathComponent("clone-second.wav").path,
+            shouldStream: false,
+            payload: .clone(reference: reference)
+        )
+
+        let results = try await engine.generateBatch([first, second]) { _, _ in }
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(box.clonePromptCreationCount, 1)
+        XCTAssertEqual(
+            box.optimizedCloneStreamCalls.map(\.text),
+            ["First clone item", "Second clone item"]
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.outputPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: second.outputPath))
+        let firstSample = try XCTUnwrap(results[0].benchmarkSample)
+        let secondSample = try XCTUnwrap(results[1].benchmarkSample)
+        XCTAssertEqual(firstSample.booleanFlags["clone_conditioning_reused"], false)
+        XCTAssertEqual(secondSample.booleanFlags["clone_conditioning_reused"], true)
+    }
+
+    func testNativeMLXMacEngineGenerateBatchRejectsMixedModes() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [])
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in .placeholder() }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        let custom = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Custom item",
+            outputPath: root.appendingPathComponent("custom.wav").path,
+            shouldStream: false,
+            payload: .custom(speakerID: "vivian", deliveryStyle: "Conversational")
+        )
+        let design = GenerationRequest(
+            modelID: "pro_design",
+            text: "Design item",
+            outputPath: root.appendingPathComponent("design.wav").path,
+            shouldStream: false,
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await engine.generateBatch([custom, design]) { _, _ in }
+        } verify: { error in
+            XCTAssertEqual(
+                error as? NativeMLXMacEngine.EngineError,
+                .nativeBatchRequiresSingleMode
+            )
+        }
+
+        XCTAssertEqual(
+            engine.snapshot.visibleErrorMessage,
+            NativeMLXMacEngine.EngineError.nativeBatchRequiresSingleMode.localizedDescription
+        )
     }
 
     func testNativeMLXMacEngineGeneratesDesignAudioAndPublishesOptimizedBenchmarkFlags() async throws {
@@ -629,28 +881,207 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertEqual(sample.booleanFlags["design_optimized_handler_used"], false)
     }
 
-    func testNativeMLXMacEngineRejectsNativeCloneGenerationExplicitly() async throws {
+    func testNativeMLXMacEngineGeneratesOptimizedCloneAudioAndPublishesCloneBenchmarkFlags() async throws {
         let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_clone",
+            name: "Voice Cloning",
+            folder: "Clone-Model",
+            mode: "clone"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let referenceURL = root.appendingPathComponent("reference.wav")
+        try NativeRuntimeTestSupport.writeTestWAV(to: referenceURL, sampleRate: 24_000, channels: 1)
+
+        let box = CloneInvocationBox()
+        let cloneModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            latestPreparationBooleanFlagsProvider: { box.latestPreparationBooleanFlags },
+            clonePromptCreator: { _, refText, xVectorOnlyMode in
+                Qwen3TTSVoiceClonePrompt(
+                    refCodes: MLXArray([Int32(1), Int32(2), Int32(3)]),
+                    speakerEmbedding: MLXArray([Float32(0.25), Float32(0.5)]),
+                    refText: refText,
+                    xVectorOnlyMode: xVectorOnlyMode,
+                    iclMode: false
+                )
+            },
+            clonePrewarmHandler: { text, language, voiceClonePrompt in
+                box.optimizedClonePrewarmCalls.append(
+                    ClonePromptCall(text: text, language: language, refText: voiceClonePrompt.refText)
+                )
+                box.latestPreparationBooleanFlags = ["clone_stream_step_prewarmed": true]
+            },
+            cloneStreamHandler: { text, language, voiceClonePrompt, _ in
+                box.optimizedCloneStreamCalls.append(
+                    ClonePromptCall(text: text, language: language, refText: voiceClonePrompt.refText)
+                )
+                let (stream, continuation) = AsyncThrowingStream<NativeSpeechGenerationEvent, Error>.makeStream()
+                Task {
+                    continuation.yield(.audio([0.0, 0.2, -0.1, 0.05]))
+                    continuation.yield(.audio([0.05, -0.02, 0.0, 0.1]))
+                    continuation.yield(
+                        .info(
+                            NativeSpeechGenerationInfo(
+                                promptTokenCount: 10,
+                                generationTokenCount: 28,
+                                prefillTime: 0.2,
+                                generateTime: 0.35,
+                                peakMemoryUsage: 1.8
+                            )
+                        )
+                    )
+                    continuation.finish()
+                }
+                return stream
+            }
+        )
+
         let engine = NativeMLXMacEngine(
-            runtime: MacNativeRuntime(manifestURL: try NativeRuntimeTestSupport.writeManifest(at: root, models: []))
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in cloneModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+        try await engine.ensureCloneReferencePrimed(
+            modelID: "pro_clone",
+            reference: CloneReference(
+                audioPath: referenceURL.path,
+                transcript: "Reference transcript",
+                preparedVoiceID: "SavedVoice"
+            )
+        )
+
+        var observedEvents: [GenerationEvent] = []
+        engine.snapshotPublisher
+            .compactMap { $0.latestEvent }
+            .sink { observedEvents.append($0) }
+            .store(in: &cancellables)
+
+        let request = GenerationRequest(
+            modelID: "pro_clone",
+            text: "Clone me natively",
+            outputPath: root.appendingPathComponent("clone.wav").path,
+            shouldStream: true,
+            streamingTitle: "Native Clone Preview",
+            payload: .clone(
+                reference: CloneReference(
+                    audioPath: referenceURL.path,
+                    transcript: "Reference transcript",
+                    preparedVoiceID: "SavedVoice"
+                )
+            )
+        )
+
+        let result = try await engine.generate(request)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioPath))
+        XCTAssertEqual(
+            box.optimizedClonePrewarmCalls,
+            [
+                ClonePromptCall(
+                    text: GenerationSemantics.canonicalDesignWarmShortText,
+                    language: "auto",
+                    refText: "Reference transcript"
+                )
+            ]
+        )
+        XCTAssertEqual(
+            box.optimizedCloneStreamCalls,
+            [
+                ClonePromptCall(
+                    text: request.text,
+                    language: "auto",
+                    refText: "Reference transcript"
+                )
+            ]
+        )
+        XCTAssertEqual(observedEvents.count, 3)
+        XCTAssertEqual(observedEvents.last?.isFinal, true)
+
+        let sample = try XCTUnwrap(result.benchmarkSample)
+        XCTAssertTrue(sample.streamingUsed)
+        XCTAssertEqual(sample.preparedCloneUsed, true)
+        XCTAssertEqual(sample.cloneCacheHit, false)
+        XCTAssertEqual(sample.booleanFlags["clone_optimized_handler_used"], true)
+        XCTAssertEqual(sample.booleanFlags["clone_prompt_cache_hit"], false)
+        XCTAssertEqual(sample.booleanFlags["clone_conditioning_reused"], true)
+        XCTAssertEqual(sample.stringFlags["clone_transcript_mode"], "inline")
+    }
+
+    func testNativeMLXMacEngineFallsBackToGenericReferenceAudioForCloneGeneration() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_clone",
+            name: "Voice Cloning",
+            folder: "Clone-Model",
+            mode: "clone"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let referenceURL = root.appendingPathComponent("reference.wav")
+        try NativeRuntimeTestSupport.writeTestWAV(to: referenceURL, sampleRate: 24_000, channels: 1)
+
+        let box = CloneInvocationBox()
+        let cloneModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            fullGenericPrewarmHandler: { _, _, refAudio, refText, _ in
+                XCTAssertNotNil(refAudio)
+                box.genericPrewarmRefTexts.append(refText)
+            },
+            fullGenericStreamHandler: { _, _, refAudio, refText, _, _ in
+                XCTAssertNotNil(refAudio)
+                box.genericStreamRefTexts.append(refText)
+                let (stream, continuation) = AsyncThrowingStream<NativeSpeechGenerationEvent, Error>.makeStream()
+                Task {
+                    continuation.yield(.audio([0.0, 0.1, -0.1, 0.0]))
+                    continuation.finish()
+                }
+                return stream
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in cloneModel }
+            )
         )
         try await engine.initialize(appSupportDirectory: root)
 
-        await XCTAssertThrowsErrorAsync {
-            _ = try await engine.generate(
-                GenerationRequest(
-                    modelID: "pro_clone",
-                    text: "Clone me",
-                    outputPath: root.appendingPathComponent("clone.wav").path,
-                    shouldStream: true,
-                    payload: .clone(reference: CloneReference(audioPath: "/tmp/ref.wav", transcript: "Reference"))
+        let request = GenerationRequest(
+            modelID: "pro_clone",
+            text: "Fallback clone generation",
+            outputPath: root.appendingPathComponent("clone-fallback.wav").path,
+            shouldStream: true,
+            payload: .clone(
+                reference: CloneReference(
+                    audioPath: referenceURL.path,
+                    transcript: "Fallback transcript"
                 )
             )
-        } verify: { error in
-            XCTAssertEqual(error.localizedDescription, "Native Voice Cloning is not implemented yet.")
-        }
+        )
+
+        let result = try await engine.generate(request)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioPath))
+        XCTAssertEqual(box.genericPrewarmRefTexts, ["Fallback transcript"])
+        XCTAssertEqual(box.genericStreamRefTexts, ["Fallback transcript"])
+
+        let sample = try XCTUnwrap(result.benchmarkSample)
+        XCTAssertEqual(sample.preparedCloneUsed, false)
+        XCTAssertEqual(sample.booleanFlags["clone_optimized_handler_used"], false)
+        XCTAssertEqual(sample.stringFlags["clone_transcript_mode"], "inline")
     }
 }
 

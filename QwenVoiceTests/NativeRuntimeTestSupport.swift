@@ -1,4 +1,6 @@
+@preconcurrency import AVFoundation
 import Foundation
+import XCTest
 
 enum NativeRuntimeTestSupport {
     struct ModelEntry {
@@ -147,5 +149,99 @@ enum NativeRuntimeTestSupport {
         }
         try FileManager.default.createSymbolicLink(at: targetURL, withDestinationURL: sourceURL)
         return targetURL
+    }
+
+    static func writeTestWAV(
+        to url: URL,
+        sampleRate: Double = 24_000,
+        channels: AVAudioChannelCount = 1,
+        frameCount: Int = 480
+    ) throws {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: sampleRate,
+                channels: channels,
+                interleaved: false
+            )
+        )
+        let frameCapacity = AVAudioFrameCount(frameCount)
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)
+        )
+        buffer.frameLength = frameCapacity
+
+        for channel in 0..<Int(channels) {
+            let samples = try XCTUnwrap(buffer.floatChannelData?[channel])
+            for frame in 0..<frameCount {
+                let baseSample = Float(frame % 32) / 32.0
+                samples[frame] = channel == 0 ? baseSample : -baseSample
+            }
+        }
+
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
+    }
+
+    static func writeCanonicalPCM16WAV(
+        to url: URL,
+        sampleRate: Double = 24_000,
+        channels: AVAudioChannelCount = 1,
+        frameCount: Int = 480
+    ) throws {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: sampleRate,
+                channels: channels,
+                interleaved: false
+            )
+        )
+        let frameCapacity = AVAudioFrameCount(frameCount)
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)
+        )
+        buffer.frameLength = frameCapacity
+
+        for channel in 0..<Int(channels) {
+            let samples = try XCTUnwrap(buffer.int16ChannelData?[channel])
+            for frame in 0..<frameCount {
+                let magnitude = Int16((frame % 32) * 512)
+                samples[frame] = channel == 0 ? magnitude : -magnitude
+            }
+        }
+
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channels,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: settings,
+            commonFormat: .pcmFormatInt16,
+            interleaved: false
+        )
+        try file.write(from: buffer)
     }
 }

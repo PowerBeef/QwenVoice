@@ -493,7 +493,7 @@ final class BatchGenerationRunner {
 
         publishItems()
 
-        if request.mode == .clone && total > 1 {
+        if total > 1 {
             if await cancellationState.isRequested {
                 markItemsCancelled(startingAt: 0)
                 publishItems()
@@ -522,13 +522,13 @@ final class BatchGenerationRunner {
                 guard results.count == request.lines.count else {
                     if let firstRunningIndex = items.firstIndex(where: { $0.status == .running || $0.status == .pending }) {
                         items[firstRunningIndex].status = .failed(
-                            message: "Clone batch generation returned \(results.count) results for \(request.lines.count) requests."
+                            message: "Batch generation returned \(results.count) results for \(request.lines.count) requests."
                         )
                     }
                     publishItems()
                     return .failed(
                         items: items,
-                        message: "Clone batch generation returned \(results.count) results for \(request.lines.count) requests."
+                        message: "Batch generation returned \(results.count) results for \(request.lines.count) requests."
                     )
                 }
 

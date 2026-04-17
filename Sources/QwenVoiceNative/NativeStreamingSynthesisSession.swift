@@ -33,6 +33,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
     private let timingOverridesMS: [String: Int]
     private let booleanFlags: [String: Bool]
     private let stringFlags: [String: String]
+    private let cloneConditioning: ResolvedCloneConditioning?
     private let telemetryRecorder: NativeTelemetryRecorder
 
     init(
@@ -44,6 +45,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         timingOverridesMS: [String: Int] = [:],
         booleanFlags: [String: Bool] = [:],
         stringFlags: [String: String] = [:],
+        cloneConditioning: ResolvedCloneConditioning? = nil,
         telemetryRecorder: NativeTelemetryRecorder = NativeTelemetryRecorder()
     ) {
         self.requestID = requestID
@@ -54,6 +56,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         self.timingOverridesMS = timingOverridesMS
         self.booleanFlags = booleanFlags
         self.stringFlags = stringFlags
+        self.cloneConditioning = cloneConditioning
         self.telemetryRecorder = telemetryRecorder
     }
 
@@ -140,16 +143,37 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             resolvedBooleanFlags["custom_dedicated_handler_used"] = model.supportsDedicatedCustomVoice
             resolvedBooleanFlags["warm_state_warm"] = warmState == .warm
             resolvedBooleanFlags["warm_state_cold"] = warmState == .cold
+            if let cloneConditioning {
+                resolvedBooleanFlags["clone_conditioning_reused"] =
+                    (resolvedBooleanFlags["clone_conditioning_reused"] ?? false)
+                    || cloneConditioning.cloneConditioningReused
+                resolvedBooleanFlags["used_temp_reference"] = cloneConditioning.usedTemporaryReference
+                resolvedBooleanFlags["reused_normalized_reference"] = cloneConditioning.reusedNormalizedReference
+                resolvedBooleanFlags["reused_decoded_reference"] = cloneConditioning.reusedDecodedReference
+                if let cloneCacheHit = cloneConditioning.cloneCacheHit {
+                    resolvedBooleanFlags["prepared_clone_cache_hit"] = cloneCacheHit
+                }
+                if let clonePromptCacheHit = cloneConditioning.clonePromptCacheHit {
+                    resolvedBooleanFlags["clone_prompt_cache_hit"] = clonePromptCacheHit
+                }
+            }
+
+            var resolvedStringFlags = stringFlags
+            if let cloneConditioning {
+                resolvedStringFlags["clone_transcript_mode"] = cloneConditioning.transcriptMode.rawValue
+            }
 
             let benchmarkSample = BenchmarkSample(
                 tokenCount: info?.generationTokenCount,
                 processingTimeSeconds: info.map { $0.prefillTime + $0.generateTime },
                 peakMemoryUsage: info?.peakMemoryUsage,
                 streamingUsed: request.shouldStream,
+                preparedCloneUsed: cloneConditioning?.preparedCloneUsed,
+                cloneCacheHit: cloneConditioning?.cloneCacheHit,
                 firstChunkMs: firstChunkMS,
                 timingsMS: timingsMS,
                 booleanFlags: resolvedBooleanFlags,
-                stringFlags: stringFlags,
+                stringFlags: resolvedStringFlags,
                 telemetryStageMarks: telemetrySummary.stageMarks
             )
 
@@ -191,8 +215,31 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 streamingInterval: GenerationSemantics.appStreamingInterval
             )
         case .clone:
-            throw NativeStreamingSessionError.unsupportedRequest(
-                "Native Voice Cloning is not implemented yet."
+            guard let cloneConditioning else {
+                throw NativeStreamingSessionError.unsupportedRequest(
+                    "Native Voice Cloning needs resolved native clone conditioning."
+                )
+            }
+            let language = GenerationSemantics.qwenLanguageHint(
+                for: request,
+                resolvedCloneTranscript: cloneConditioning.resolvedTranscript
+            )
+            if let voiceClonePrompt = cloneConditioning.voiceClonePrompt,
+               model.supportsOptimizedVoiceClone {
+                return model.generateVoiceCloneStream(
+                    text: request.text,
+                    language: language,
+                    voiceClonePrompt: voiceClonePrompt,
+                    streamingInterval: GenerationSemantics.appStreamingInterval
+                )
+            }
+            return model.generateStream(
+                text: request.text,
+                voice: nil,
+                refAudio: cloneConditioning.referenceAudio,
+                refText: cloneConditioning.resolvedTranscript,
+                language: language,
+                streamingInterval: GenerationSemantics.appStreamingInterval
             )
         }
     }
