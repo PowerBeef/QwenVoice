@@ -11,7 +11,27 @@ final class VoiceCloningCoordinator: ObservableObject {
     @Published var transcriptLoadError: String?
     @Published var hydratedSavedVoiceID: String?
     @Published var isDragOver = false
-    @Published var showingBatch = false
+    @Published var presentedSheet: VoiceCloningPresentedSheet?
+
+    private var lastModelWarmupActivationID: Int?
+
+    func handleScreenActivation(
+        activationID: Int,
+        cloneModel: TTSModel?,
+        isModelAvailable: Bool,
+        ttsEngineStore: TTSEngineStore
+    ) async {
+        guard activationID > 0 else { return }
+        guard lastModelWarmupActivationID != activationID else { return }
+        guard let model = cloneModel, ttsEngineStore.isReady, isModelAvailable else { return }
+
+        lastModelWarmupActivationID = activationID
+        await ttsEngineStore.ensureModelLoadedIfNeeded(id: model.id)
+    }
+
+    func presentBatch(draft: VoiceCloningDraft) {
+        presentedSheet = .batch(.clone(draft: draft))
+    }
 
     func handleAppear(
         draft: Binding<VoiceCloningDraft>,
@@ -207,16 +227,6 @@ final class VoiceCloningCoordinator: ObservableObject {
         }
     }
 
-    func prepareSelectedModelIfNeeded(
-        cloneModel: TTSModel?,
-        isModelAvailable: Bool,
-        ttsEngineStore: TTSEngineStore
-    ) async {
-        guard let model = cloneModel else { return }
-        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
-        await ttsEngineStore.ensureModelLoadedIfNeeded(id: model.id)
-    }
-
     func selectSavedVoice(
         _ voice: Voice,
         draft: Binding<VoiceCloningDraft>
@@ -346,22 +356,5 @@ final class VoiceCloningCoordinator: ObservableObject {
         draft.wrappedValue.selectedSavedVoiceID = nil
         transcriptLoadError = nil
         hydratedSavedVoiceID = nil
-    }
-
-    private func cloneContextStatusTestValue(
-        _ status: VoiceCloningContextStatus?
-    ) -> String {
-        switch status {
-        case .none:
-            return "none"
-        case .waitingForHydration:
-            return "waitingForHydration"
-        case .preparing:
-            return "preparing"
-        case .primed:
-            return "primed"
-        case .fallback:
-            return "fallback"
-        }
     }
 }

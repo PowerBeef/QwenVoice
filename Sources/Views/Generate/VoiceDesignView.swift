@@ -1,50 +1,16 @@
 import QwenVoiceNative
 import SwiftUI
 
-private struct VoiceDesignActionAlert: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-}
-
-struct VoiceDesignSavedVoiceCandidate: Equatable {
-    let audioPath: String
-    let transcript: String
-    let suggestedName: String
-    let voiceDescription: String
-    let emotion: String
-    let text: String
-    private(set) var savedVoiceName: String?
-
-    var isSaved: Bool {
-        savedVoiceName != nil
-    }
-
-    func matches(draft: VoiceDesignDraft) -> Bool {
-        voiceDescription == draft.voiceDescription
-            && emotion == draft.emotion
-            && text == draft.text
-    }
-
-    mutating func markSaved(as voiceName: String) {
-        savedVoiceName = voiceName
-    }
-}
-
 struct VoiceDesignView: View {
-    @EnvironmentObject var ttsEngineStore: TTSEngineStore
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject var modelManager: ModelManagerViewModel
-    @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
-    @EnvironmentObject var appCommandRouter: AppCommandRouter
-
     @Binding private var draft: VoiceDesignDraft
-    @State private var isGenerating = false
-    @State private var errorMessage: String?
-    @State private var showingBatch = false
-    @State private var actionAlert: VoiceDesignActionAlert?
-    @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
-    @State private var latestSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate?
+    @StateObject private var coordinator = VoiceDesignCoordinator()
+
+    private let activationID: Int
+    private let ttsEngineStore: TTSEngineStore
+    private let audioPlayer: AudioPlayerViewModel
+    private let modelManager: ModelManagerViewModel
+    private let savedVoicesViewModel: SavedVoicesViewModel
+    private let appCommandRouter: AppCommandRouter
 
     private var activeMode: GenerationMode {
         .design
@@ -76,34 +42,35 @@ struct VoiceDesignView: View {
             && !draft.voiceDescription.isEmpty
     }
 
-    private var idlePrewarmRequest: GenerationRequest? {
-        guard let model = activeModel, draft.shouldIdlePrewarm else { return nil }
-        return GenerationRequest(
-            modelID: model.id,
-            text: draft.text,
-            outputPath: "",
-            payload: .design(
-                voiceDescription: draft.voiceDescription,
-                deliveryStyle: draft.emotion
-            )
-        )
-    }
-
     private var idlePrewarmTaskID: String {
         let debounceKey = draft.idlePrewarmDebounceKey ?? "none"
         return "\(ttsEngineStore.isReady)-\(isModelAvailable)-\(debounceKey)"
     }
 
-    private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
-        guard let latestSavedVoiceCandidate,
-              latestSavedVoiceCandidate.matches(draft: draft) else {
-            return nil
-        }
-        return latestSavedVoiceCandidate
+    private var screenActivationTaskID: String {
+        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
     }
 
-    init(draft: Binding<VoiceDesignDraft>) {
+    private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
+        coordinator.currentSavedVoiceCandidate(for: draft)
+    }
+
+    init(
+        draft: Binding<VoiceDesignDraft>,
+        activationID: Int,
+        ttsEngineStore: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        modelManager: ModelManagerViewModel,
+        savedVoicesViewModel: SavedVoicesViewModel,
+        appCommandRouter: AppCommandRouter
+    ) {
         _draft = draft
+        self.activationID = activationID
+        self.ttsEngineStore = ttsEngineStore
+        self.audioPlayer = audioPlayer
+        self.modelManager = modelManager
+        self.savedVoicesViewModel = savedVoicesViewModel
+        self.appCommandRouter = appCommandRouter
     }
 
     var body: some View {
@@ -119,30 +86,53 @@ struct VoiceDesignView: View {
             composerPanel
                 .layoutPriority(1)
         }
-        .sheet(isPresented: $showingBatch) {
-            BatchGenerationSheet(
-                mode: .design,
-                emotion: draft.emotion,
-                voiceDescription: draft.voiceDescription
-            )
-            .environmentObject(ttsEngineStore)
-            .environmentObject(audioPlayer)
-        }
-        .sheet(item: $savedVoiceSheetConfiguration) { configuration in
-            SavedVoiceSheet(configuration: configuration) { voice in
-                handleSavedVoice(voice)
+        .sheet(item: $coordinator.presentedSheet) { presentedSheet in
+            switch presentedSheet {
+            case .batch(let configuration):
+                BatchGenerationSheet(
+                    mode: configuration.mode,
+                    voice: configuration.voice,
+                    emotion: configuration.emotion,
+                    voiceDescription: configuration.voiceDescription,
+                    refAudio: configuration.refAudio,
+                    refText: configuration.refText
+                )
+                .environmentObject(ttsEngineStore)
+                .environmentObject(audioPlayer)
+            case .saveVoice(let configuration):
+                SavedVoiceSheet(configuration: configuration) { voice in
+                    coordinator.handleSavedVoice(
+                        voice,
+                        draft: draft,
+                        savedVoicesViewModel: savedVoicesViewModel,
+                        ttsEngineStore: ttsEngineStore
+                    )
+                }
+                .environmentObject(ttsEngineStore)
             }
-            .environmentObject(ttsEngineStore)
         }
-        .alert(item: $actionAlert) { alert in
+        .alert(item: $coordinator.actionAlert) { alert in
             Alert(
                 title: Text(alert.title),
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
         }
+        .task(id: screenActivationTaskID) {
+            await coordinator.handleScreenActivation(
+                activationID: activationID,
+                model: activeModel,
+                isModelAvailable: isModelAvailable,
+                ttsEngineStore: ttsEngineStore
+            )
+        }
         .task(id: idlePrewarmTaskID) {
-            await scheduleIdlePrewarmIfNeeded()
+            await coordinator.scheduleIdlePrewarmIfNeeded(
+                draft: draft,
+                model: activeModel,
+                isModelAvailable: isModelAvailable,
+                ttsEngineStore: ttsEngineStore
+            )
         }
     }
 }
@@ -188,15 +178,24 @@ private extension VoiceDesignView {
             VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
                     text: $draft.text,
-                    isGenerating: isGenerating,
+                    isGenerating: coordinator.isGenerating,
                     placeholder: "What should I say?",
                     buttonColor: AppTheme.voiceDesign,
-                    batchAction: { showingBatch = true },
+                    batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
                     generateDisabled: !ttsEngineStore.isReady || !isModelAvailable || draft.voiceDescription.isEmpty,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
-                    onGenerate: generate
+                    onGenerate: {
+                        coordinator.generate(
+                            draft: draft,
+                            activeModel: activeModel,
+                            isModelAvailable: isModelAvailable,
+                            ttsEngineStore: ttsEngineStore,
+                            audioPlayer: audioPlayer,
+                            modelManager: modelManager
+                        )
+                    }
                 )
 
                 composerFooter
@@ -292,7 +291,7 @@ private extension VoiceDesignView {
             generationReadiness
             saveVoiceAction
 
-            if let errorMessage {
+            if let errorMessage = coordinator.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundColor(.red)
                     .font(.callout)
@@ -316,7 +315,7 @@ private extension VoiceDesignView {
                     .accessibilityValue(candidate.savedVoiceName ?? "")
             } else {
                 Button {
-                    presentSavedVoiceSheet()
+                    coordinator.presentSavedVoiceSheet(for: draft)
                 } label: {
                     Label("Save to Saved Voices", systemImage: "person.crop.circle.badge.plus")
                 }
@@ -325,144 +324,6 @@ private extension VoiceDesignView {
                 .accessibilityIdentifier("voiceDesign_saveVoiceButton")
             }
         }
-    }
-}
-
-// MARK: - Actions
-
-private extension VoiceDesignView {
-    func generate() {
-        guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, ttsEngineStore.isReady else { return }
-
-        if let model = activeModel, !isModelAvailable {
-            errorMessage = modelManager.recoveryDetail(for: model)
-            return
-        }
-
-        isGenerating = true
-        errorMessage = nil
-        latestSavedVoiceCandidate = nil
-        let text = draft.text
-        let voiceDescription = draft.voiceDescription
-        let emotion = draft.emotion
-
-        Task {
-            do {
-                guard let model = activeModel else {
-                    errorMessage = "Model configuration not found"
-                    isGenerating = false
-                    return
-                }
-
-                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: text)
-                let generationRequest = Self.makeGenerationRequest(
-                    draft: VoiceDesignDraft(
-                        voiceDescription: voiceDescription,
-                        emotion: emotion,
-                        text: text
-                    ),
-                    model: model,
-                    outputPath: outputPath
-                )
-                audioPlayer.prepareStreamingPreview(
-                    title: String(text.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
-
-                let result = try await ttsEngineStore.generate(generationRequest)
-
-                var generation = Generation(
-                    text: text,
-                    mode: model.mode.rawValue,
-                    modelTier: model.tier,
-                    voice: voiceDescription,
-                    emotion: emotion,
-                    speed: nil,
-                    audioPath: result.audioPath,
-                    duration: result.durationSeconds,
-                    createdAt: Date()
-                )
-
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation, result: result, text: text,
-                    audioPlayer: audioPlayer, caller: "VoiceDesignView"
-                )
-                latestSavedVoiceCandidate = VoiceDesignSavedVoiceCandidate(
-                    audioPath: generation.audioPath,
-                    transcript: text,
-                    suggestedName: SavedVoiceNameSuggestion.designResultName(from: voiceDescription),
-                    voiceDescription: voiceDescription,
-                    emotion: emotion,
-                    text: text
-                )
-            } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
-                errorMessage = error.localizedDescription
-            }
-
-            isGenerating = false
-        }
-    }
-
-    func prewarmSelectedModelIfNeeded() async {
-        guard let idlePrewarmRequest else { return }
-        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
-        await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
-    }
-
-    func scheduleIdlePrewarmIfNeeded() async {
-        guard draft.idlePrewarmDebounceKey != nil else { return }
-        do {
-            try await Task.sleep(nanoseconds: 350_000_000)
-        } catch {
-            return
-        }
-        guard !Task.isCancelled else { return }
-        await prewarmSelectedModelIfNeeded()
-    }
-
-    func presentSavedVoiceSheet() {
-        guard let candidate = currentSavedVoiceCandidate else { return }
-        savedVoiceSheetConfiguration = .designResult(
-            voiceDescription: candidate.voiceDescription,
-            audioPath: candidate.audioPath,
-            transcript: candidate.transcript
-        )
-    }
-
-    func handleSavedVoice(_ voice: Voice) {
-        if var candidate = latestSavedVoiceCandidate, candidate.matches(draft: draft) {
-            candidate.markSaved(as: voice.name)
-            latestSavedVoiceCandidate = candidate
-        }
-        savedVoicesViewModel.insertOrReplace(voice)
-        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
-        actionAlert = VoiceDesignActionAlert(
-            title: "Saved Voice Added",
-            message: "\"\(voice.name)\" is ready in Saved Voices."
-        )
-    }
-}
-
-extension VoiceDesignView {
-    static func makeGenerationRequest(
-        draft: VoiceDesignDraft,
-        model: TTSModel,
-        outputPath: String
-    ) -> GenerationRequest {
-        GenerationRequest(
-            modelID: model.id,
-            text: draft.text,
-            outputPath: outputPath,
-            shouldStream: true,
-            streamingTitle: String(draft.text.prefix(40)),
-            payload: .design(
-                voiceDescription: draft.voiceDescription,
-                deliveryStyle: draft.emotion
-            )
-        )
     }
 }
 

@@ -9,7 +9,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
         let client = XPCNativeEngineClient()
         try await client.initialize(appSupportDirectory: root)
 
-        XCTAssertTrue(try await client.ping())
+        let pingResult = try await client.ping()
+        XCTAssertTrue(pingResult)
         XCTAssertTrue(client.snapshot.isReady)
         XCTAssertEqual(client.snapshot.loadState, .idle)
         XCTAssertNil(client.snapshot.visibleErrorMessage)
@@ -38,7 +39,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
         XCTAssertTrue(listed.first?.hasTranscript ?? false)
 
         try await client.deletePreparedVoice(id: enrolled.id)
-        XCTAssertTrue(try await client.listPreparedVoices().isEmpty)
+        let remainingVoices = try await client.listPreparedVoices()
+        XCTAssertTrue(remainingVoices.isEmpty)
     }
 
     func testClientReinitializesAfterConnectionInvalidation() async throws {
@@ -47,7 +49,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
 
         let client = XPCNativeEngineClient()
         try await client.initialize(appSupportDirectory: root)
-        XCTAssertTrue(try await client.ping())
+        let initialPing = try await client.ping()
+        XCTAssertTrue(initialPing)
 
         await client.debugInvalidateConnectionForTesting()
 
@@ -57,7 +60,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
         XCTAssertFalse(client.snapshot.isReady)
         XCTAssertNotNil(client.snapshot.visibleErrorMessage)
 
-        XCTAssertTrue(try await client.ping())
+        let reconnectPing = try await client.ping()
+        XCTAssertTrue(reconnectPing)
         for _ in 0..<20 where !client.snapshot.isReady {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }

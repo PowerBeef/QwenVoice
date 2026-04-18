@@ -128,6 +128,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
     private let launchSidebarOverride: SidebarItem?
@@ -143,6 +145,9 @@ struct ContentView: View {
     @State private var voiceCloningDraft = VoiceCloningDraft()
     @State private var pendingVoiceCloningHandoff: PendingVoiceCloningHandoff?
     @State private var didCompleteInitialAvailabilityRefresh = false
+    @State private var customVoiceActivationID: Int
+    @State private var voiceDesignActivationID: Int
+    @State private var voiceCloningActivationID: Int
 
     private var currentWindowTitle: String {
         selectedItem?.rawValue ?? "QwenVoice"
@@ -190,6 +195,9 @@ struct ContentView: View {
         )
         _selectedItem = State(initialValue: initialSelection)
         _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
+        _customVoiceActivationID = State(initialValue: initialSelection == .customVoice ? 1 : 0)
+        _voiceDesignActivationID = State(initialValue: initialSelection == .voiceDesign ? 1 : 0)
+        _voiceCloningActivationID = State(initialValue: initialSelection == .voiceCloning ? 1 : 0)
     }
 
     static func savedVoiceCloneHandoffPlan(
@@ -277,13 +285,34 @@ struct ContentView: View {
     private func screenView(for item: SidebarItem) -> some View {
         switch item {
         case .customVoice:
-            CustomVoiceView(draft: $customVoiceDraft)
+            CustomVoiceView(
+                draft: $customVoiceDraft,
+                activationID: customVoiceActivationID,
+                ttsEngineStore: ttsEngineStore,
+                audioPlayer: audioPlayer,
+                modelManager: modelManager,
+                appCommandRouter: appCommandRouter
+            )
         case .voiceDesign:
-            VoiceDesignView(draft: $voiceDesignDraft)
+            VoiceDesignView(
+                draft: $voiceDesignDraft,
+                activationID: voiceDesignActivationID,
+                ttsEngineStore: ttsEngineStore,
+                audioPlayer: audioPlayer,
+                modelManager: modelManager,
+                savedVoicesViewModel: savedVoicesViewModel,
+                appCommandRouter: appCommandRouter
+            )
         case .voiceCloning:
             VoiceCloningView(
                 draft: $voiceCloningDraft,
-                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff
+                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff,
+                activationID: voiceCloningActivationID,
+                ttsEngineStore: ttsEngineStore,
+                audioPlayer: audioPlayer,
+                modelManager: modelManager,
+                savedVoicesViewModel: savedVoicesViewModel,
+                appCommandRouter: appCommandRouter
             )
         case .history:
             HistoryView(
@@ -350,6 +379,7 @@ struct ContentView: View {
         if let protectedLaunchOverride, newValue != protectedLaunchOverride {
             self.protectedLaunchOverride = nil
         }
+        bumpGenerationActivationCounter(for: newValue)
     }
 
     private func handleStatusesChange() {
@@ -379,6 +409,19 @@ struct ContentView: View {
         }
 
         self.selectedItem = .models
+    }
+
+    private func bumpGenerationActivationCounter(for item: SidebarItem?) {
+        switch item {
+        case .customVoice:
+            customVoiceActivationID += 1
+        case .voiceDesign:
+            voiceDesignActivationID += 1
+        case .voiceCloning:
+            voiceCloningActivationID += 1
+        case .history, .voices, .models, .none:
+            break
+        }
     }
 }
 

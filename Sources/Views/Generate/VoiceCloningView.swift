@@ -40,15 +40,16 @@ enum VoiceCloningReferenceAudioSupport {
 }
 
 struct VoiceCloningView: View {
-    @EnvironmentObject var ttsEngineStore: TTSEngineStore
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject var modelManager: ModelManagerViewModel
-    @EnvironmentObject var savedVoicesViewModel: SavedVoicesViewModel
-    @EnvironmentObject var appCommandRouter: AppCommandRouter
-
     @Binding private var draft: VoiceCloningDraft
     @Binding private var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
     @StateObject private var coordinator = VoiceCloningCoordinator()
+
+    private let activationID: Int
+    private let ttsEngineStore: TTSEngineStore
+    private let audioPlayer: AudioPlayerViewModel
+    private let modelManager: ModelManagerViewModel
+    private let savedVoicesViewModel: SavedVoicesViewModel
+    private let appCommandRouter: AppCommandRouter
 
     private var cloneModel: TTSModel? {
         TTSModel.model(for: .clone)
@@ -93,8 +94,8 @@ struct VoiceCloningView: View {
         clonePrimingRequestKey ?? "clone-priming-idle"
     }
 
-    private var modelPreparationTaskID: String {
-        "\(ttsEngineStore.isReady)-\(cloneModel?.id ?? "none")-\(isModelAvailable)-\(coordinator.isGenerating)"
+    private var screenActivationTaskID: String {
+        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
@@ -180,19 +181,24 @@ struct VoiceCloningView: View {
         )
     }
 
-    private var isShowingBatchBinding: Binding<Bool> {
-        Binding(
-            get: { coordinator.showingBatch },
-            set: { coordinator.showingBatch = $0 }
-        )
-    }
-
     init(
         draft: Binding<VoiceCloningDraft>,
-        pendingSavedVoiceHandoff: Binding<PendingVoiceCloningHandoff?>
+        pendingSavedVoiceHandoff: Binding<PendingVoiceCloningHandoff?>,
+        activationID: Int,
+        ttsEngineStore: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        modelManager: ModelManagerViewModel,
+        savedVoicesViewModel: SavedVoicesViewModel,
+        appCommandRouter: AppCommandRouter
     ) {
         _draft = draft
         _pendingSavedVoiceHandoff = pendingSavedVoiceHandoff
+        self.activationID = activationID
+        self.ttsEngineStore = ttsEngineStore
+        self.audioPlayer = audioPlayer
+        self.modelManager = modelManager
+        self.savedVoicesViewModel = savedVoicesViewModel
+        self.appCommandRouter = appCommandRouter
     }
 
     static func shouldStartDeferredClonePrewarm(
@@ -243,8 +249,9 @@ struct VoiceCloningView: View {
                 savedVoicesViewModel: savedVoicesViewModel
             )
         }
-        .task(id: modelPreparationTaskID) {
-            await coordinator.prepareSelectedModelIfNeeded(
+        .task(id: screenActivationTaskID) {
+            await coordinator.handleScreenActivation(
+                activationID: activationID,
                 cloneModel: cloneModel,
                 isModelAvailable: isModelAvailable,
                 ttsEngineStore: ttsEngineStore
@@ -273,14 +280,20 @@ struct VoiceCloningView: View {
                 pendingSavedVoiceHandoff: $pendingSavedVoiceHandoff
             )
         }
-        .sheet(isPresented: isShowingBatchBinding) {
-            BatchGenerationSheet(
-                mode: .clone,
-                refAudio: draft.referenceAudioPath,
-                refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript
-            )
-            .environmentObject(ttsEngineStore)
-            .environmentObject(audioPlayer)
+        .sheet(item: $coordinator.presentedSheet) { presentedSheet in
+            switch presentedSheet {
+            case .batch(let configuration):
+                BatchGenerationSheet(
+                    mode: configuration.mode,
+                    voice: configuration.voice,
+                    emotion: configuration.emotion,
+                    voiceDescription: configuration.voiceDescription,
+                    refAudio: configuration.refAudio,
+                    refText: configuration.refText
+                )
+                .environmentObject(ttsEngineStore)
+                .environmentObject(audioPlayer)
+            }
         }
     }
 }
@@ -339,7 +352,7 @@ private extension VoiceCloningView {
                     isGenerating: coordinator.isGenerating,
                     placeholder: "What should the cloned voice say?",
                     buttonColor: AppTheme.voiceCloning,
-                    batchAction: { coordinator.showingBatch = true },
+                    batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,

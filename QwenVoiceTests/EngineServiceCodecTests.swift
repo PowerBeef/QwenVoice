@@ -58,7 +58,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let chunk = EngineEventEnvelope.generationChunk(
             GenerationEvent(
                 kind: .streamChunk,
-                requestID: "request-1",
+                requestID: 1,
                 mode: "custom",
                 title: "Chunk title",
                 chunkPath: "/tmp/chunk.wav",

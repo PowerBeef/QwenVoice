@@ -2,15 +2,14 @@ import QwenVoiceNative
 import SwiftUI
 
 struct CustomVoiceView: View {
-    @EnvironmentObject var ttsEngineStore: TTSEngineStore
-    @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject var modelManager: ModelManagerViewModel
-    @EnvironmentObject var appCommandRouter: AppCommandRouter
-
     @Binding private var draft: CustomVoiceDraft
-    @State private var isGenerating = false
-    @State private var errorMessage: String?
-    @State private var showingBatch = false
+    @StateObject private var coordinator = CustomVoiceCoordinator()
+
+    private let activationID: Int
+    private let ttsEngineStore: TTSEngineStore
+    private let audioPlayer: AudioPlayerViewModel
+    private let modelManager: ModelManagerViewModel
+    private let appCommandRouter: AppCommandRouter
 
     private var activeMode: GenerationMode {
         .custom
@@ -40,26 +39,29 @@ struct CustomVoiceView: View {
             && isModelAvailable
     }
 
-    private var idlePrewarmRequest: GenerationRequest? {
-        guard let model = activeModel, draft.shouldIdlePrewarm else { return nil }
-        return GenerationRequest(
-            modelID: model.id,
-            text: draft.text,
-            outputPath: "",
-            payload: .custom(
-                speakerID: draft.selectedSpeaker,
-                deliveryStyle: draft.emotion
-            )
-        )
-    }
-
     private var idlePrewarmTaskID: String {
         let debounceKey = draft.idlePrewarmDebounceKey ?? "none"
         return "\(ttsEngineStore.isReady)|\(isModelAvailable)|\(debounceKey)"
     }
 
-    init(draft: Binding<CustomVoiceDraft>) {
+    private var screenActivationTaskID: String {
+        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
+    }
+
+    init(
+        draft: Binding<CustomVoiceDraft>,
+        activationID: Int,
+        ttsEngineStore: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        modelManager: ModelManagerViewModel,
+        appCommandRouter: AppCommandRouter
+    ) {
         _draft = draft
+        self.activationID = activationID
+        self.ttsEngineStore = ttsEngineStore
+        self.audioPlayer = audioPlayer
+        self.modelManager = modelManager
+        self.appCommandRouter = appCommandRouter
     }
 
     var body: some View {
@@ -75,17 +77,36 @@ struct CustomVoiceView: View {
             composerPanel
                 .layoutPriority(1)
         }
-        .sheet(isPresented: $showingBatch) {
-            BatchGenerationSheet(
-                mode: .custom,
-                voice: draft.selectedSpeaker,
-                emotion: draft.emotion
+        .sheet(item: $coordinator.presentedSheet) { presentedSheet in
+            switch presentedSheet {
+            case .batch(let configuration):
+                BatchGenerationSheet(
+                    mode: configuration.mode,
+                    voice: configuration.voice,
+                    emotion: configuration.emotion,
+                    voiceDescription: configuration.voiceDescription,
+                    refAudio: configuration.refAudio,
+                    refText: configuration.refText
+                )
+                .environmentObject(ttsEngineStore)
+                .environmentObject(audioPlayer)
+            }
+        }
+        .task(id: screenActivationTaskID) {
+            await coordinator.handleScreenActivation(
+                activationID: activationID,
+                model: activeModel,
+                isModelAvailable: isModelAvailable,
+                ttsEngineStore: ttsEngineStore
             )
-            .environmentObject(ttsEngineStore)
-            .environmentObject(audioPlayer)
         }
         .task(id: idlePrewarmTaskID) {
-            await scheduleIdlePrewarmIfNeeded()
+            await coordinator.scheduleIdlePrewarmIfNeeded(
+                draft: draft,
+                model: activeModel,
+                isModelAvailable: isModelAvailable,
+                ttsEngineStore: ttsEngineStore
+            )
         }
     }
 }
@@ -131,14 +152,23 @@ private extension CustomVoiceView {
             VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
                 TextInputView(
                     text: $draft.text,
-                    isGenerating: isGenerating,
+                    isGenerating: coordinator.isGenerating,
                     placeholder: "What should I say?",
                     buttonColor: AppTheme.customVoice,
-                    batchAction: { showingBatch = true },
+                    batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
-                    onGenerate: generate
+                    onGenerate: {
+                        coordinator.generate(
+                            draft: draft,
+                            activeModel: activeModel,
+                            isModelAvailable: isModelAvailable,
+                            ttsEngineStore: ttsEngineStore,
+                            audioPlayer: audioPlayer,
+                            modelManager: modelManager
+                        )
+                    }
                 )
                 .disabled(!ttsEngineStore.isReady || !isModelAvailable)
 
@@ -232,7 +262,7 @@ private extension CustomVoiceView {
 
             generationReadiness
 
-            if let errorMessage {
+            if let errorMessage = coordinator.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundColor(.red)
                     .font(.callout)
@@ -242,107 +272,6 @@ private extension CustomVoiceView {
             maxWidth: .infinity,
             minHeight: LayoutConstants.generationComposerFooterMinHeight,
             alignment: .topLeading
-        )
-    }
-}
-
-// MARK: - Actions
-
-private extension CustomVoiceView {
-    func generate() {
-        guard !draft.text.isEmpty, ttsEngineStore.isReady else { return }
-
-        if let model = activeModel, !isModelAvailable {
-            errorMessage = modelManager.recoveryDetail(for: model)
-            return
-        }
-
-        isGenerating = true
-        errorMessage = nil
-
-        Task {
-            do {
-                guard let model = activeModel else {
-                    errorMessage = "Model configuration not found"
-                    isGenerating = false
-                    return
-                }
-
-                let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: draft.text)
-                let generationRequest = Self.makeGenerationRequest(
-                    draft: draft,
-                    model: model,
-                    outputPath: outputPath
-                )
-                audioPlayer.prepareStreamingPreview(
-                    title: String(draft.text.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
-
-                let result = try await ttsEngineStore.generate(generationRequest)
-
-                var generation = Generation(
-                    text: draft.text,
-                    mode: model.mode.rawValue,
-                    modelTier: model.tier,
-                    voice: draft.selectedSpeaker,
-                    emotion: draft.emotion,
-                    speed: nil,
-                    audioPath: result.audioPath,
-                    duration: result.durationSeconds,
-                    createdAt: Date()
-                )
-
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation, result: result, text: draft.text,
-                    audioPlayer: audioPlayer, caller: "CustomVoiceView"
-                )
-            } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
-                errorMessage = error.localizedDescription
-            }
-
-            isGenerating = false
-        }
-    }
-
-    func prewarmSelectedModelIfNeeded() async {
-        guard let idlePrewarmRequest else { return }
-        guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
-        await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
-    }
-
-    func scheduleIdlePrewarmIfNeeded() async {
-        guard draft.idlePrewarmDebounceKey != nil else { return }
-        do {
-            try await Task.sleep(nanoseconds: 350_000_000)
-        } catch {
-            return
-        }
-        guard !Task.isCancelled else { return }
-        await prewarmSelectedModelIfNeeded()
-    }
-
-}
-
-extension CustomVoiceView {
-    static func makeGenerationRequest(
-        draft: CustomVoiceDraft,
-        model: TTSModel,
-        outputPath: String
-    ) -> GenerationRequest {
-        GenerationRequest(
-            modelID: model.id,
-            text: draft.text,
-            outputPath: outputPath,
-            shouldStream: true,
-            streamingTitle: String(draft.text.prefix(40)),
-            payload: .custom(
-                speakerID: draft.selectedSpeaker,
-                deliveryStyle: draft.emotion
-            )
         )
     }
 }
