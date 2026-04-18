@@ -248,20 +248,6 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear(perform: handleAppear)
-        .onDisappear {
-            if UITestAutomationSupport.isEnabled {
-                TestStateProvider.shared.markWindowUnmounted()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testNavigateToScreen)) { notification in
-            guard let screen = notification.userInfo?["screen"] as? String else { return }
-            if let item = SidebarItem(testScreenID: screen) {
-                selectSidebarItemIfEnabled(item)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testUseSavedVoiceInCloning)) { notification in
-            handleTestUseSavedVoiceInCloning(notification)
-        }
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
@@ -328,13 +314,6 @@ struct ContentView: View {
     // MARK: - Inline closure methods
 
     private func handleAppear() {
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.markWindowMounted(
-                activeScreen: currentActiveScreenID,
-                windowTitle: currentWindowTitle,
-                disabledSidebarItems: currentDisabledSidebarIdentifiers
-            )
-        }
     }
 
     private func startSavedVoiceCloningHandoff(_ plan: SavedVoiceCloneHandoffPlan) {
@@ -363,29 +342,6 @@ struct ContentView: View {
         await engineStore.ensureModelLoadedIfNeeded(id: cloneModelID)
     }
 
-    private func handleTestUseSavedVoiceInCloning(_ notification: Notification) {
-        guard UITestAutomationSupport.isEnabled else { return }
-        guard let savedVoiceID = notification.userInfo?["savedVoiceID"] as? String,
-              let wavPath = notification.userInfo?["wavPath"] as? String else {
-            return
-        }
-
-        let transcript = notification.userInfo?["transcript"] as? String ?? ""
-        let transcriptLoadError = notification.userInfo?["transcriptLoadError"] as? String
-        let handoff = PendingVoiceCloningHandoff(
-            savedVoiceID: savedVoiceID,
-            wavPath: wavPath,
-            transcript: transcript,
-            transcriptLoadError: transcriptLoadError
-        )
-        startSavedVoiceCloningHandoff(
-            SavedVoiceCloneHandoffPlan(
-                handoff: handoff,
-                cloneModelID: TTSModel.model(for: .clone)?.id
-            )
-        )
-    }
-
     private func handleInitialLoad() async {
         await modelManager.refresh()
         didCompleteInitialAvailabilityRefresh = true
@@ -397,14 +353,6 @@ struct ContentView: View {
     private func handleSelectionChange(_ newValue: SidebarItem?) {
         if let protectedLaunchOverride, newValue != protectedLaunchOverride {
             self.protectedLaunchOverride = nil
-        }
-
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.markSidebarSelectionCompleted(
-                activeScreen: newValue?.screenAccessibilityID ?? "",
-                windowTitle: newValue?.rawValue ?? "QwenVoice",
-                disabledSidebarItems: currentDisabledSidebarIdentifiers
-            )
         }
     }
 
@@ -418,18 +366,8 @@ struct ContentView: View {
 
     private func selectSidebarItemIfEnabled(_ item: SidebarItem, bypassDisabledCheck: Bool = false) {
         guard bypassDisabledCheck || !disabledSidebarItems.contains(item) else { return }
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.markSidebarSelectionStarted(targetScreen: item.screenAccessibilityID)
-        }
         AppPerformanceSignposts.emit("Sidebar Selection")
         if selectedItem == item {
-            if UITestAutomationSupport.isEnabled {
-                TestStateProvider.shared.markSidebarSelectionCompleted(
-                    activeScreen: item.screenAccessibilityID,
-                    windowTitle: item.rawValue,
-                    disabledSidebarItems: currentDisabledSidebarIdentifiers
-                )
-            }
             return
         }
         selectedItem = item
@@ -451,7 +389,6 @@ struct ContentView: View {
 // MARK: - HiddenWindowMarkers
 
 private struct HiddenWindowMarkers: View {
-    @ObservedObject private var testState = TestStateProvider.shared
     let windowTitle: String
     let activeScreenID: String
     let disabledIdentifiers: String
@@ -470,24 +407,10 @@ private struct HiddenWindowMarkers: View {
                 value: disabledIdentifiers,
                 identifier: "mainWindow_disabledSidebarItems"
             )
-            if UITestAutomationSupport.isEnabled {
-                hiddenMarker(
-                    value: "true",
-                    identifier: "mainWindow_ready"
-                )
-                hiddenMarker(
-                    value: testState.environmentReady ? "true" : "false",
-                    identifier: "mainWindow_environmentReady"
-                )
-                hiddenMarker(
-                    value: testState.backendReady ? "true" : "false",
-                    identifier: "mainWindow_backendReady"
-                )
-                hiddenMarker(
-                    value: testState.interactiveReady ? "true" : "false",
-                    identifier: "mainWindow_interactiveReady"
-                )
-            }
+            hiddenMarker(
+                value: "true",
+                identifier: "mainWindow_ready"
+            )
         }
     }
 

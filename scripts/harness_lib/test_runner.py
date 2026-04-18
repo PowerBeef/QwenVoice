@@ -35,7 +35,6 @@ from .paths import (
 )
 from .ui_test_support import (
     UIAppTarget,
-    build_app_binary,
     build_ui_launch_environment,
     check_live_prerequisites,
     cleanup_ui_launch_context,
@@ -54,10 +53,6 @@ def run_tests(
     layer: str = "all",
     python_path: str | None = None,
     artifact_dir: str | None = None,
-    ui_backend_mode: str = "live",
-    ui_data_root: str = "fixture",
-    app_bundle: str | None = None,
-    dmg: str | None = None,
     artifacts_root: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run selected test layers and return suite results."""
@@ -88,36 +83,8 @@ def run_tests(
         from .audio_test_runner import run_audio_tests
         suites.append(run_audio_tests(python_path=python_path, artifact_dir=artifact_dir))
 
-    if layer == "ui":
-        suites.append(_run_ui_tests(
-            backend_mode=ui_backend_mode,
-            data_root=ui_data_root,
-            app_bundle=app_bundle,
-            dmg=dmg,
-        ))
-
-    if layer == "design":
-        suites.append(_run_design_tests(
-            backend_mode=ui_backend_mode,
-            data_root=ui_data_root,
-            app_bundle=app_bundle,
-            dmg=dmg,
-        ))
-
-    if layer == "perf":
-        suites.append(_run_perf_audit(
-            backend_mode=ui_backend_mode,
-            data_root=ui_data_root,
-            app_bundle=app_bundle,
-            dmg=dmg,
-        ))
-
     if layer == "release":
-        suites.extend(_run_release_tests(
-            backend_mode=ui_backend_mode,
-            data_root=ui_data_root,
-            artifacts_root=artifacts_root,
-        ))
+        suites.extend(_run_release_tests(artifacts_root=artifacts_root))
 
     return suites
 
@@ -447,37 +414,6 @@ def _run_pipeline_tests() -> dict[str, Any]:
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
 
-    def test_ui_state_client_wraps_transport_errors():
-        from .ui_state_client import UIStateClient, UIStateClientError
-
-        client = UIStateClient(base_url="http://127.0.0.1:1")
-        try:
-            client.navigate("history")
-        except UIStateClientError as exc:
-            assert exc.operation == "navigate"
-            assert exc.kind == "transport"
-            assert exc.url.endswith("/navigate?screen=history")
-        else:
-            raise AssertionError("Expected UIStateClientError for refused connection")
-
-    def test_build_ui_transport_failure_result():
-        from .ui_state_client import UIStateClientError
-
-        exc = UIStateClientError(
-            "navigate",
-            "http://localhost:19876/navigate?screen=history",
-            "transport",
-            "[Errno 61] Connection refused",
-        )
-        result = _build_ui_transport_failure_result(
-            "sidebar_history_run_1",
-            exc,
-            last_state={"activeScreen": "screen_customVoice"},
-        )
-        assert result["passed"] is False
-        assert result["details"]["failure_reason"] == "navigation_transport_error"
-        assert result["details"]["state"]["activeScreen"] == "screen_customVoice"
-
     def test_click_detection_ignores_matching_final_boundary_transient():
         import numpy as np
 
@@ -538,33 +474,23 @@ def _run_pipeline_tests() -> dict[str, Any]:
         )
         assert result["passed"] is True
 
-    def test_build_ui_launch_environment_defaults_screenshot_capture_mode():
+    def test_build_ui_launch_environment_uses_stub_fixture_root():
         context = prepare_ui_launch_context(backend_mode="stub", data_root="fixture")
         try:
-            env = build_ui_launch_environment(
-                context,
-                screenshot_dir="/tmp/qwenvoice-screenshots",
-            )
-            assert env["QWENVOICE_UITEST_CAPTURE_MODE"] == "content"
+            env = build_ui_launch_environment(context)
+            assert env["QWENVOICE_UI_TEST_FIXTURE_ROOT"] == str(context.app_support_dir)
+            assert "QWENVOICE_APP_SUPPORT_DIR" not in env
         finally:
             cleanup_ui_launch_context(context)
 
-    def test_build_ui_launch_environment_preserves_explicit_capture_mode():
-        previous_value = os.environ.get("QWENVOICE_UITEST_CAPTURE_MODE")
-        os.environ["QWENVOICE_UITEST_CAPTURE_MODE"] = "system"
-        context = prepare_ui_launch_context(backend_mode="stub", data_root="fixture")
+    def test_build_ui_launch_environment_uses_live_app_support_root():
+        context = prepare_ui_launch_context(backend_mode="live", data_root="fixture")
         try:
-            env = build_ui_launch_environment(
-                context,
-                screenshot_dir="/tmp/qwenvoice-screenshots",
-            )
-            assert env["QWENVOICE_UITEST_CAPTURE_MODE"] == "system"
+            env = build_ui_launch_environment(context)
+            assert env["QWENVOICE_APP_SUPPORT_DIR"] == str(context.app_support_dir)
+            assert "QWENVOICE_UI_TEST_FIXTURE_ROOT" not in env
         finally:
             cleanup_ui_launch_context(context)
-            if previous_value is None:
-                os.environ.pop("QWENVOICE_UITEST_CAPTURE_MODE", None)
-            else:
-                os.environ["QWENVOICE_UITEST_CAPTURE_MODE"] = previous_value
 
     def test_split_generation_pipeline_forwards_voice_kwarg():
         module = _load_module_from_path(
@@ -593,13 +519,11 @@ def _run_pipeline_tests() -> dict[str, Any]:
         assert "speaker" not in kwargs
 
     tests = [
-        ("ui_state_client_wraps_transport_errors", test_ui_state_client_wraps_transport_errors),
-        ("build_ui_transport_failure_result", test_build_ui_transport_failure_result),
         ("click_detection_ignores_matching_final_boundary_transient", test_click_detection_ignores_matching_final_boundary_transient),
         ("click_detection_detects_boundary_not_present_in_final_audio", test_click_detection_detects_boundary_not_present_in_final_audio),
         ("click_detection_ignores_matching_boundary_with_small_final_alignment_drift", test_click_detection_ignores_matching_boundary_with_small_final_alignment_drift),
-        ("build_ui_launch_environment_defaults_screenshot_capture_mode", test_build_ui_launch_environment_defaults_screenshot_capture_mode),
-        ("build_ui_launch_environment_preserves_explicit_capture_mode", test_build_ui_launch_environment_preserves_explicit_capture_mode),
+        ("build_ui_launch_environment_uses_stub_fixture_root", test_build_ui_launch_environment_uses_stub_fixture_root),
+        ("build_ui_launch_environment_uses_live_app_support_root", test_build_ui_launch_environment_uses_live_app_support_root),
         ("split_generation_pipeline_forwards_voice_kwarg", test_split_generation_pipeline_forwards_voice_kwarg),
         ("pipeline_tests_retired", lambda: {"skip_reason": "No pipeline-specific tests remain after clone delivery cleanup"}),
     ]
@@ -3233,24 +3157,6 @@ def _append_runtime_dependency_results(
         },
     ))
 
-
-def _resolve_test_app_target(
-    *,
-    app_bundle: str | None = None,
-    dmg: str | None = None,
-    app_target: UIAppTarget | None = None,
-) -> tuple[bool, UIAppTarget | None, dict[str, Any]]:
-    if app_target is not None:
-        return True, app_target, {
-            "source": app_target.source,
-            "app_bundle": str(app_target.app_bundle),
-            "app_binary": str(app_target.app_binary),
-            "variant_id": app_target.variant_id,
-            "ui_profile": app_target.ui_profile,
-        }
-    return resolve_ui_app_target(app_bundle=app_bundle, dmg=dmg)
-
-
 def _prefix_suite(suite: dict[str, Any], prefix: str) -> dict[str, Any]:
     prefixed = dict(suite)
     prefixed["name"] = f"{prefix}_{suite['name']}"
@@ -3309,30 +3215,33 @@ def _terminate_ui_process(app_proc: subprocess.Popen[Any] | None) -> None:
         app_proc.kill()
     kill_running_app_instances()
 
+def _is_process_running(process_name: str) -> bool:
+    proc = subprocess.run(
+        ["pgrep", "-x", process_name],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
 
-def _run_ui_tests(
-    backend_mode: str = "live",
-    data_root: str = "fixture",
+
+def _wait_for_process_running(process_name: str, timeout_s: float) -> bool:
+    deadline = time.perf_counter() + timeout_s
+    while time.perf_counter() < deadline:
+        if _is_process_running(process_name):
+            return True
+        time.sleep(0.1)
+    return _is_process_running(process_name)
+
+
+def _run_packaged_startup_smoke(
+    app_target: UIAppTarget,
     *,
-    app_bundle: str | None = None,
-    dmg: str | None = None,
-    app_target: UIAppTarget | None = None,
+    backend_mode: str,
+    data_root: str,
+    variant_label: str,
 ) -> dict[str, Any]:
-    """Run UI smoke coverage via the test-state server."""
-    from .ui_state_client import UIStateClient, UIStateClientError
-
     start = time.perf_counter()
     results: list[dict[str, Any]] = []
-
-    resolved, target, target_details = _resolve_test_app_target(
-        app_bundle=app_bundle,
-        dmg=dmg,
-        app_target=app_target,
-    )
-    results.append(build_test_result("resolve_app_target", passed=resolved, details=target_details))
-    if not resolved or target is None:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("ui_http_tests", results, duration_ms)
 
     if not _append_live_preflight_results_for_target(
         results,
@@ -3341,617 +3250,43 @@ def _run_ui_tests(
         requires_models=False,
     ):
         duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("ui_http_tests", results, duration_ms)
+        return _prefix_suite(build_suite_result("packaged_startup_smoke", results, duration_ms), variant_label)
 
     context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
     results.append(build_test_result(
-        "ui_launch_context",
+        "packaged_launch_context",
         passed=True,
         details=describe_launch_context(context),
     ))
 
     app_proc: subprocess.Popen[Any] | None = None
-    client = UIStateClient()
-    try:
-        kill_running_app_instances()
-        results.append(build_test_result("terminate_existing_instances", passed=True))
-
-        eprint("  Launching app with test state server...")
-        env = build_ui_launch_environment(context)
-        launch_start = time.perf_counter()
-        app_proc = launch_ui_app(str(target.app_binary), env)
-        ready, state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
-        ready_ms = int((time.perf_counter() - launch_start) * 1000)
-        results.append(build_test_result(
-            "app_launch_to_ready",
-            passed=ready,
-            duration_ms=ready_ms,
-            details={
-                "ready_ms": ready_ms,
-                "ready_field": _ui_ready_field(backend_mode),
-                "failure_reason": failure_reason,
-                "state": state,
-            },
-        ))
-        if not ready:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("ui_http_tests", results, duration_ms)
-
-        _append_runtime_dependency_results(results, state, target)
-
-        disabled_sidebar_items = {
-            item for item in state.get("disabledSidebarItems", "").split(",")
-            if item and item != "none"
-        }
-        expected_default_screen = (
-            "screen_models"
-            if "sidebar_customVoice" in disabled_sidebar_items
-            else "screen_customVoice"
-        )
-        default_ok = state.get("activeScreen") == expected_default_screen
-        results.append(build_test_result(
-            "default_screen_is_customVoice",
-            passed=default_ok,
-            details={
-                "activeScreen": state.get("activeScreen"),
-                "expected": expected_default_screen,
-                "disabledSidebarItems": sorted(disabled_sidebar_items),
-            },
-        ))
-
-        screens = [
-            ("history", "screen_history", "sidebar_history"),
-            ("voices", "screen_voices", "sidebar_voices"),
-            ("models", "screen_models", "sidebar_models"),
-            ("voiceDesign", "screen_voiceDesign", "sidebar_voiceDesign"),
-            ("voiceCloning", "screen_voiceCloning", "sidebar_voiceCloning"),
-            ("customVoice", "screen_customVoice", "sidebar_customVoice"),
-        ]
-        for screen_arg, expected_id, sidebar_id in screens:
-            if sidebar_id in disabled_sidebar_items:
-                results.append(build_test_result(
-                    f"screen_{screen_arg}",
-                    passed=True,
-                    skip_reason=f"{sidebar_id} is disabled in the current launch context",
-                    details={"disabledSidebarItems": sorted(disabled_sidebar_items)},
-                ))
-                continue
-            nav_start = time.perf_counter()
-            try:
-                state = client.navigate(screen_arg)
-            except UIStateClientError as exc:
-                results.append(_build_ui_transport_failure_result(
-                    f"screen_{screen_arg}",
-                    exc,
-                    last_state=state,
-                ))
-                continue
-            navigated, nav_state = client.wait_for_navigation(
-                expected_id,
-                timeout=15 if backend_mode == "live" else 5,
-            )
-            if nav_state:
-                state = nav_state
-            nav_ms = int((time.perf_counter() - nav_start) * 1000)
-            results.append(build_test_result(
-                f"screen_{screen_arg}",
-                passed=navigated and nav_state.get("activeScreen") == expected_id,
-                duration_ms=nav_ms,
-                details={
-                    "expected": expected_id,
-                    "actual": nav_state.get("activeScreen"),
-                    "navigation_wall_ms": nav_ms,
-                    "app_navigation_duration_ms": nav_state.get("lastNavigationDurationMS"),
-                    "backend_mode": backend_mode,
-                    "data_root": data_root,
-                },
-            ))
-
-        if "sidebar_customVoice" not in disabled_sidebar_items:
-            try:
-                state = client.navigate("customVoice")
-                preview_started = client.start_preview("customVoice", "Hello there buddy")
-                state = preview_started
-            except UIStateClientError as exc:
-                preview_started = None
-                results.append(_build_ui_transport_failure_result(
-                    "custom_voice_preview_start",
-                    exc,
-                    last_state=state,
-                ))
-            if preview_started is not None:
-                results.append(build_test_result(
-                    "custom_voice_preview_start",
-                    passed=preview_started.get("activeScreen") == "screen_customVoice",
-                    details={
-                        "activeScreen": preview_started.get("activeScreen"),
-                        "text": preview_started.get("text"),
-                        "selectedSpeaker": preview_started.get("selectedSpeaker"),
-                    },
-                ))
-
-                if backend_mode == "stub":
-                    preview_completed = _wait_for_stub_event(
-                        str(context.app_support_dir),
-                        "custom-generate-success",
-                    )
-                    preview_finalized = _wait_for_stub_event(
-                        str(context.app_support_dir),
-                        "sidebar-preview-finalized",
-                    )
-                    events_dir = str(Path(context.app_support_dir) / ".stub-events")
-                    results.append(build_test_result(
-                        "custom_voice_preview_inline_status",
-                        passed=preview_completed,
-                        details={
-                            "stub_event": "custom-generate-success",
-                            "events_dir": events_dir,
-                        },
-                    ))
-                    results.append(build_test_result(
-                        "custom_voice_preview_status_resets",
-                        passed=preview_finalized,
-                        details={
-                            "stub_event": "sidebar-preview-finalized",
-                            "events_dir": events_dir,
-                        },
-                    ))
-                else:
-                    inline_visible, inline_state = client.wait_for_state(
-                        lambda state: (
-                            state.get("sidebarInlineStatusVisible") is True
-                            and state.get("sidebarStatusKind") == "running"
-                            and state.get("sidebarStatusPresentation") == "inlinePlayer"
-                        ),
-                        timeout=45 if backend_mode == "live" else 15,
-                    )
-                    results.append(build_test_result(
-                        "custom_voice_preview_inline_status",
-                        passed=inline_visible,
-                        details={
-                            "sidebarStatusKind": inline_state.get("sidebarStatusKind"),
-                            "sidebarStatusLabel": inline_state.get("sidebarStatusLabel"),
-                            "sidebarStatusPresentation": inline_state.get("sidebarStatusPresentation"),
-                            "sidebarInlineStatusVisible": inline_state.get("sidebarInlineStatusVisible"),
-                            "sidebarStandaloneStatusVisible": inline_state.get("sidebarStandaloneStatusVisible"),
-                            "isGenerating": inline_state.get("isGenerating"),
-                        },
-                    ))
-
-                    reset_to_idle, idle_state = client.wait_for_state(
-                        lambda state: (
-                            state.get("sidebarStatusKind") == "idle"
-                            and state.get("sidebarInlineStatusVisible") is False
-                            and state.get("sidebarStandaloneStatusVisible") is True
-                        ),
-                        timeout=120 if backend_mode == "live" else 30,
-                    )
-                    results.append(build_test_result(
-                        "custom_voice_preview_status_resets",
-                        passed=reset_to_idle,
-                        details={
-                            "sidebarStatusKind": idle_state.get("sidebarStatusKind"),
-                            "sidebarStatusLabel": idle_state.get("sidebarStatusLabel"),
-                            "sidebarStatusPresentation": idle_state.get("sidebarStatusPresentation"),
-                            "sidebarInlineStatusVisible": idle_state.get("sidebarInlineStatusVisible"),
-                            "sidebarStandaloneStatusVisible": idle_state.get("sidebarStandaloneStatusVisible"),
-                            "isGenerating": idle_state.get("isGenerating"),
-                        },
-                    ))
-    finally:
-        _terminate_ui_process(app_proc)
-        cleanup_ui_launch_context(context)
-        if app_target is None:
-            cleanup_ui_app_target(target)
-
-    duration_ms = int((time.perf_counter() - start) * 1000)
-    return build_suite_result("ui_http_tests", results, duration_ms)
-
-
-def _run_design_tests(
-    backend_mode: str = "live",
-    data_root: str = "fixture",
-    *,
-    app_bundle: str | None = None,
-    dmg: str | None = None,
-    app_target: UIAppTarget | None = None,
-    force_capture_only: bool | None = None,
-) -> dict[str, Any]:
-    """Launch through the UI path and compare captures when baselines exist."""
-    from .ui_state_client import UIStateClient, UIStateClientError
-
-    start = time.perf_counter()
-    results: list[dict[str, Any]] = []
-    capture_only = os.environ.get("QWENVOICE_UI_DESIGN_CAPTURE_ONLY", "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
-    appearance = _ui_test_appearance()
-    baselines_dir = PROJECT_DIR / "tests" / "screenshots" / "baselines"
-    captures_dir = PROJECT_DIR / "build" / "test" / "screenshots"
-    diffs_dir = PROJECT_DIR / "tests" / "screenshots" / "diffs"
-    capture_targets = [
-        ("customVoice", "screen_customVoice", "screenshot_customVoice_default", "sidebar_customVoice"),
-        ("voiceDesign", "screen_voiceDesign", "screenshot_voiceDesign_default", "sidebar_voiceDesign"),
-        ("voiceCloning", "screen_voiceCloning", "screenshot_voiceCloning_default", "sidebar_voiceCloning"),
-        ("history", "screen_history", "screenshot_history_empty", "sidebar_history"),
-        ("voices", "screen_voices", "screenshot_voices_empty", "sidebar_voices"),
-        ("models", "screen_models", "screenshot_models_default", "sidebar_models"),
-    ]
-    shutil.rmtree(captures_dir, ignore_errors=True)
-    os.makedirs(captures_dir, exist_ok=True)
-    os.makedirs(diffs_dir, exist_ok=True)
-
-    resolved, target, target_details = _resolve_test_app_target(
-        app_bundle=app_bundle,
-        dmg=dmg,
-        app_target=app_target,
-    )
-    results.append(build_test_result("resolve_app_target", passed=resolved, details=target_details))
-    if not resolved or target is None:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("design_comparison", results, duration_ms)
-
-    if not _append_live_preflight_results_for_target(
-        results,
-        backend_mode,
-        requires_app_support_python=False,
-        requires_models=False,
-    ):
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("design_comparison", results, duration_ms)
-
-    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
-    results.append(build_test_result(
-        "design_launch_context",
-        passed=True,
-        details={
-            **describe_launch_context(context),
-            "appearance": appearance,
-        },
-    ))
-
-    app_proc: subprocess.Popen[Any] | None = None
-    client = UIStateClient()
-    try:
-        kill_running_app_instances()
-        env = build_ui_launch_environment(context, screenshot_dir=str(captures_dir))
-        launch_start = time.perf_counter()
-        app_proc = launch_ui_app(str(target.app_binary), env)
-        ready, state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
-        ready_ms = int((time.perf_counter() - launch_start) * 1000)
-        results.append(build_test_result(
-            "design_launch_to_ready",
-            passed=ready,
-            duration_ms=ready_ms,
-            details={
-                "ready_ms": ready_ms,
-                "ready_field": _ui_ready_field(backend_mode),
-                "failure_reason": failure_reason,
-                "state": state,
-            },
-        ))
-        if not ready:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("design_comparison", results, duration_ms)
-
-        _append_runtime_dependency_results(results, state, target)
-        disabled_sidebar_items = {
-            item for item in state.get("disabledSidebarItems", "").split(",")
-            if item and item != "none"
-        }
-
-        for screen_arg, expected_id, screenshot_name, sidebar_id in capture_targets:
-            if sidebar_id in disabled_sidebar_items:
-                results.append(build_test_result(
-                    f"capture_prepare_{screenshot_name}",
-                    passed=True,
-                    skip_reason=f"{sidebar_id} is disabled in the current launch context",
-                    details={"disabledSidebarItems": sorted(disabled_sidebar_items)},
-                ))
-                continue
-            try:
-                state = client.navigate(screen_arg)
-            except UIStateClientError as exc:
-                results.append(_build_ui_transport_failure_result(
-                    f"capture_prepare_{screenshot_name}",
-                    exc,
-                    last_state=state,
-                ))
-                continue
-
-            if state.get("activeScreen") == expected_id:
-                navigated = True
-            else:
-                navigated, nav_state = client.wait_for_navigation(
-                    expected_id,
-                    timeout=10 if backend_mode == "live" else 5,
-                )
-                if nav_state:
-                    state = nav_state
-            results.append(build_test_result(
-                f"capture_prepare_{screenshot_name}",
-                passed=navigated and state.get("activeScreen") == expected_id,
-                details={
-                    "expected": expected_id,
-                    "actual": state.get("activeScreen"),
-                },
-            ))
-            if not navigated or state.get("activeScreen") != expected_id:
-                continue
-
-            time.sleep(0.5)
-            try:
-                capture_state = client.capture_screenshot(screenshot_name)
-            except UIStateClientError as exc:
-                results.append(_build_ui_transport_failure_result(
-                    f"capture_{screenshot_name}",
-                    exc,
-                    last_state=state,
-                ))
-                continue
-
-            results.append(build_test_result(
-                f"capture_{screenshot_name}",
-                passed=bool(capture_state.get("screenshotCaptured")),
-                details={
-                    "screenshotCaptured": capture_state.get("screenshotCaptured"),
-                    "screenshotName": capture_state.get("screenshotName"),
-                    "screenshotCaptureMode": capture_state.get("screenshotCaptureMode"),
-                    "screenshotFailureReason": capture_state.get("screenshotFailureReason"),
-                    "captures_dir": str(captures_dir),
-                },
-            ))
-
-        variant_baselines_dir = baselines_dir / target.variant_id if target.variant_id else None
-        if appearance != "system":
-            appearance_baselines_dir = baselines_dir / appearance
-        else:
-            appearance_baselines_dir = baselines_dir
-
-        variant_baselines_dir = (
-            appearance_baselines_dir / target.variant_id if target.variant_id else None
-        )
-        has_variant_baselines = bool(
-            variant_baselines_dir is not None
-            and variant_baselines_dir.is_dir()
-            and any(variant_baselines_dir.glob("*.png"))
-        )
-        packaged_capture_only = (
-            target.source != "build"
-            and not has_variant_baselines
-        )
-        capture_only = force_capture_only if force_capture_only is not None else (capture_only or packaged_capture_only)
-
-        if capture_only:
-            results.append(build_test_result(
-                "design_capture_only",
-                passed=True,
-                skip_reason="Baseline comparison disabled for this environment",
-                details={
-                    "captures_dir": str(captures_dir),
-                    "appearance": appearance,
-                    "variant_id": target.variant_id,
-                    "variant_baselines_dir": str(variant_baselines_dir) if variant_baselines_dir else None,
-                },
-            ))
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("design_comparison", results, duration_ms)
-
-        active_baselines_dir = (
-            variant_baselines_dir
-            if has_variant_baselines and variant_baselines_dir is not None
-            else appearance_baselines_dir
-        )
-        baseline_names = sorted(
-            name for name in os.listdir(active_baselines_dir)
-            if name.endswith(".png")
-        ) if active_baselines_dir.is_dir() else []
-        if not baseline_names:
-            results.append(build_test_result(
-                "missing_baselines",
-                passed=False,
-                details={
-                    "error": "missing_baselines",
-                    "captures_dir": str(captures_dir),
-                    "baselines_dir": str(active_baselines_dir),
-                },
-            ))
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("design_comparison", results, duration_ms)
-
-        try:
-            from .screenshot_diff import compare_screenshots
-        except ImportError:
-            results.append(build_test_result(
-                "import_error",
-                passed=False,
-                details={"error": "screenshot_diff_import_failed"},
-            ))
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("design_comparison", results, duration_ms)
-
-        for name in baseline_names:
-            baseline_path = active_baselines_dir / name
-            capture_path = captures_dir / name
-            diff_path = diffs_dir / name.replace(".png", "_diff.png")
-
-            if not capture_path.exists():
-                results.append(build_test_result(name, passed=False, details={"error": "capture_not_found"}))
-                continue
-
-            diff_result = compare_screenshots(
-                str(baseline_path),
-                str(capture_path),
-                str(diff_path),
-                max_diff_percent=1.0,
-            )
-            results.append(build_test_result(name, passed=diff_result["passed"], details=diff_result))
-    finally:
-        _terminate_ui_process(app_proc)
-        cleanup_ui_launch_context(context)
-        if app_target is None:
-            cleanup_ui_app_target(target)
-
-    duration_ms = int((time.perf_counter() - start) * 1000)
-    return build_suite_result("design_comparison", results, duration_ms)
-
-
-def _run_perf_audit(
-    backend_mode: str = "live",
-    data_root: str = "fixture",
-    *,
-    app_bundle: str | None = None,
-    dmg: str | None = None,
-    app_target: UIAppTarget | None = None,
-    enforce_thresholds: bool | None = None,
-) -> dict[str, Any]:
-    """Run live-backed launch and sidebar navigation measurements."""
-    from .ui_state_client import UIStateClient, UIStateClientError
-
-    start = time.perf_counter()
-    results: list[dict[str, Any]] = []
-
-    resolved, target, target_details = _resolve_test_app_target(
-        app_bundle=app_bundle,
-        dmg=dmg,
-        app_target=app_target,
-    )
-    results.append(build_test_result("resolve_app_target", passed=resolved, details=target_details))
-    if not resolved or target is None:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("perf_audit", results, duration_ms)
-
-    if not _append_live_preflight_results_for_target(
-        results,
-        backend_mode,
-        requires_app_support_python=False,
-        requires_models=False,
-    ):
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("perf_audit", results, duration_ms)
-
-    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
-    results.append(build_test_result(
-        "perf_launch_context",
-        passed=True,
-        details=describe_launch_context(context),
-    ))
-
-    app_proc: subprocess.Popen[Any] | None = None
-    client = UIStateClient()
     try:
         kill_running_app_instances()
         env = build_ui_launch_environment(context)
-        launch_start = time.perf_counter()
-        app_proc = launch_ui_app(str(target.app_binary), env)
-        ready, ready_state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
-        ready_ms = int((time.perf_counter() - launch_start) * 1000)
-        launch_threshold_ms = 20_000
-        should_enforce = enforce_thresholds if enforce_thresholds is not None else target.source != "build"
+        app_proc = launch_ui_app(str(app_target.app_binary), env)
+        started = _wait_for_process_running("QwenVoice", timeout_s=20.0)
+        stable = False
+        if started:
+            time.sleep(2.0)
+            stable = _is_process_running("QwenVoice")
         results.append(build_test_result(
-            "launch_to_interactive_ready",
-            passed=ready and (not should_enforce or ready_ms <= launch_threshold_ms),
-            duration_ms=ready_ms,
+            "packaged_app_launches",
+            passed=started and stable,
             details={
-                "ready_ms": ready_ms,
-                "ready_field": _ui_ready_field(backend_mode),
-                "failure_reason": failure_reason,
-                "state": ready_state,
-                "threshold_ms": launch_threshold_ms if should_enforce else None,
+                "app_bundle": str(app_target.app_bundle),
+                "variant_id": app_target.variant_id,
+                "ui_profile": app_target.ui_profile,
+                "backend_mode": backend_mode,
+                "data_root": data_root,
             },
-        ))
-        if not ready:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("perf_audit", results, duration_ms)
-
-        _append_runtime_dependency_results(results, ready_state, target)
-        disabled_sidebar_items = {
-            item for item in ready_state.get("disabledSidebarItems", "").split(",")
-            if item and item != "none"
-        }
-
-        navigation_loop = [
-            ("voiceDesign", "screen_voiceDesign", "sidebar_voiceDesign"),
-            ("voiceCloning", "screen_voiceCloning", "sidebar_voiceCloning"),
-            ("history", "screen_history", "sidebar_history"),
-            ("models", "screen_models", "sidebar_models"),
-            ("customVoice", "screen_customVoice", "sidebar_customVoice"),
-        ]
-        aggregate_wall: dict[str, list[int]] = {screen: [] for _, screen, _ in navigation_loop}
-        aggregate_app: dict[str, list[int]] = {screen: [] for _, screen, _ in navigation_loop}
-        last_state = ready_state
-
-        for run_index in range(2):
-            for screen_arg, expected_id, sidebar_id in navigation_loop:
-                if sidebar_id in disabled_sidebar_items:
-                    results.append(build_test_result(
-                        f"sidebar_{screen_arg}_run_{run_index + 1}",
-                        passed=True,
-                        skip_reason=f"{sidebar_id} is disabled in the current launch context",
-                        details={"disabledSidebarItems": sorted(disabled_sidebar_items)},
-                    ))
-                    continue
-                nav_start = time.perf_counter()
-                try:
-                    last_state = client.navigate(screen_arg)
-                except UIStateClientError as exc:
-                    results.append(_build_ui_transport_failure_result(
-                        f"sidebar_{screen_arg}_run_{run_index + 1}",
-                        exc,
-                        last_state=last_state,
-                    ))
-                    continue
-                navigated, nav_state = client.wait_for_navigation(expected_id, timeout=15)
-                wall_ms = int((time.perf_counter() - nav_start) * 1000)
-                if nav_state:
-                    last_state = nav_state
-                app_duration = nav_state.get("lastNavigationDurationMS")
-                if isinstance(app_duration, int):
-                    aggregate_app[expected_id].append(app_duration)
-                aggregate_wall[expected_id].append(wall_ms)
-                within_threshold = wall_ms <= 1_500
-                results.append(build_test_result(
-                    f"sidebar_{screen_arg}_run_{run_index + 1}",
-                    passed=navigated and nav_state.get("activeScreen") == expected_id and (not should_enforce or within_threshold),
-                    duration_ms=wall_ms,
-                    details={
-                        "expected": expected_id,
-                        "actual": nav_state.get("activeScreen"),
-                        "wall_ms": wall_ms,
-                        "app_navigation_duration_ms": app_duration,
-                        "lastNavigationTargetScreen": nav_state.get("lastNavigationTargetScreen"),
-                        "lastNavigationCompletedScreen": nav_state.get("lastNavigationCompletedScreen"),
-                        "threshold_ms": 1_500 if should_enforce else None,
-                    },
-                ))
-
-        median_threshold_failures = {}
-        for screen_id, samples in aggregate_wall.items():
-            if not samples:
-                continue
-            sorted_samples = sorted(samples)
-            median = sorted_samples[len(sorted_samples) // 2]
-            if median > 800:
-                median_threshold_failures[screen_id] = median
-        results.append(build_test_result(
-            "sidebar_navigation_summary",
-            passed=not should_enforce or not median_threshold_failures,
-            details={
-                "wall_ms_by_screen": aggregate_wall,
-                "app_navigation_duration_ms_by_screen": aggregate_app,
-                "runs_per_screen": 2,
-                "median_wall_threshold_ms": 800 if should_enforce else None,
-                "median_wall_failures": median_threshold_failures,
-            },
+            error=None if started and stable else "Packaged app did not stay running long enough to pass startup smoke",
         ))
     finally:
         _terminate_ui_process(app_proc)
         cleanup_ui_launch_context(context)
-        if app_target is None:
-            cleanup_ui_app_target(target)
 
     duration_ms = int((time.perf_counter() - start) * 1000)
-    return build_suite_result("perf_audit", results, duration_ms)
+    return _prefix_suite(build_suite_result("packaged_startup_smoke", results, duration_ms), variant_label)
 
 
 def _run_release_generation_smoke(
@@ -3962,336 +3297,29 @@ def _run_release_generation_smoke(
     dmg: str | None = None,
     app_target: UIAppTarget | None = None,
 ) -> dict[str, Any]:
-    """Run packaged-app generation smoke for custom, design, and clone."""
-    from .ui_state_client import UIStateClient, UIStateClientError
-
-    start = time.perf_counter()
-    results: list[dict[str, Any]] = []
-
-    resolved, target, target_details = _resolve_test_app_target(
-        app_bundle=app_bundle,
-        dmg=dmg,
-        app_target=app_target,
+    """Retire the old packaged generation smoke that depended on localhost UI control."""
+    details = {
+        "backend_mode": backend_mode,
+        "data_root": data_root,
+        "app_bundle": app_bundle,
+        "dmg": dmg,
+        "app_target_source": app_target.source if app_target is not None else None,
+    }
+    return build_suite_result(
+        "release_generation_smoke",
+        [
+            build_test_result(
+                "release_generation_smoke_retired",
+                passed=True,
+                skip_reason="Packaged generation smoke depended on the retired localhost UI control plane. Use release bundle verification plus source-native generation checks instead.",
+                details=details,
+            )
+        ],
+        0,
     )
-    results.append(build_test_result("resolve_app_target", passed=resolved, details=target_details))
-    if not resolved or target is None:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("release_generation_smoke", results, duration_ms)
-
-    if not _append_live_preflight_results_for_target(
-        results,
-        backend_mode,
-        requires_app_support_python=False,
-        requires_models=True,
-    ):
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("release_generation_smoke", results, duration_ms)
-
-    clone_fixture_path = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.wav"
-    clone_fixture_transcript_path = PROJECT_DIR / "tests" / "fixtures" / "release_clone_reference.txt"
-    clone_fixture_exists = clone_fixture_path.exists() and clone_fixture_transcript_path.exists()
-    results.append(build_test_result(
-        "clone_reference_fixture_present",
-        passed=clone_fixture_exists,
-        details={
-            "audio_path": str(clone_fixture_path),
-            "transcript_path": str(clone_fixture_transcript_path),
-        },
-    ))
-    if not clone_fixture_exists:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        return build_suite_result("release_generation_smoke", results, duration_ms)
-    clone_fixture_transcript = clone_fixture_transcript_path.read_text(encoding="utf-8").strip()
-
-    scenarios = [
-        {
-            "screen": "customVoice",
-            "screen_id": "screen_customVoice",
-            "mode": "custom",
-            "text": "Packaged custom release smoke line.",
-            "trigger_kwargs": {},
-        },
-        {
-            "screen": "voiceDesign",
-            "screen_id": "screen_voiceDesign",
-            "mode": "design",
-            "text": "Packaged design release smoke line.",
-            "trigger_kwargs": {
-                "voice_description": "Warm cinematic narrator with calm, confident pacing.",
-                "emotion": "Calm tone",
-            },
-        },
-        {
-            "screen": "voiceCloning",
-            "screen_id": "screen_voiceCloning",
-            "mode": "clone",
-            "text": "Packaged clone release smoke line.",
-            "trigger_kwargs": {
-                "reference_audio_path": str(clone_fixture_path),
-                "reference_transcript": clone_fixture_transcript,
-            },
-        },
-    ]
-
-    context = prepare_ui_launch_context(backend_mode=backend_mode, data_root=data_root)
-    results.append(build_test_result(
-        "release_generation_launch_context",
-        passed=True,
-        details=describe_launch_context(context),
-    ))
-
-    app_proc: subprocess.Popen[Any] | None = None
-    client = UIStateClient()
-    try:
-        kill_running_app_instances()
-        env = build_ui_launch_environment(context)
-        launch_start = time.perf_counter()
-        app_proc = launch_ui_app(str(target.app_binary), env)
-        ready, state, failure_reason = _wait_for_ui_launch_ready(client, backend_mode)
-        ready_ms = int((time.perf_counter() - launch_start) * 1000)
-        results.append(build_test_result(
-            "release_generation_launch_to_ready",
-            passed=ready and ready_ms <= 20_000,
-            duration_ms=ready_ms,
-            details={
-                "ready_ms": ready_ms,
-                "failure_reason": failure_reason,
-                "state": state,
-                "threshold_ms": 20_000,
-            },
-        ))
-        if not ready:
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            return build_suite_result("release_generation_smoke", results, duration_ms)
-
-        _append_runtime_dependency_results(results, state, target)
-
-        settled, settled_state = client.wait_for_state(
-            lambda snapshot: (
-                snapshot.get("sidebarStatusKind") == "idle"
-                and snapshot.get("sidebarInlineStatusVisible") is False
-                and snapshot.get("sidebarStandaloneStatusVisible") is True
-            ),
-            timeout=5,
-            interval=0.05,
-        )
-        if settled_state:
-            state = settled_state
-        results.append(build_test_result(
-            "release_generation_launch_settled",
-            passed=settled,
-            details={
-                "state": state,
-                "threshold_ms": 5000,
-            },
-        ))
-
-        for scenario in scenarios:
-            thresholds = _release_thresholds_for(scenario["mode"])
-            if state.get("activeScreen") == scenario["screen_id"]:
-                navigated = True
-            else:
-                try:
-                    nav_state = client.navigate(scenario["screen"])
-                except UIStateClientError as exc:
-                    results.append(_build_ui_transport_failure_result(
-                        f"{scenario['mode']}_navigate",
-                        exc,
-                        last_state=state,
-                    ))
-                    continue
-                navigated, ready_state = client.wait_for_navigation(scenario["screen_id"], timeout=15)
-                state = ready_state or nav_state
-            results.append(build_test_result(
-                f"{scenario['mode']}_screen_ready",
-                passed=state.get("activeScreen") == scenario["screen_id"],
-                details={
-                    "navigated": navigated,
-                    "expected": scenario["screen_id"],
-                    "actual": state.get("activeScreen"),
-                },
-            ))
-            if state.get("activeScreen") != scenario["screen_id"]:
-                continue
-
-            trigger_kwargs = dict(scenario["trigger_kwargs"])
-            if scenario["mode"] == "clone":
-                try:
-                    state = client.seed_screen(
-                        scenario["screen"],
-                        text=scenario["text"],
-                        reference_audio_path=trigger_kwargs.get("reference_audio_path"),
-                        reference_transcript=trigger_kwargs.get("reference_transcript"),
-                    )
-                except UIStateClientError as exc:
-                    results.append(_build_ui_transport_failure_result(
-                        "clone_seed_reference",
-                        exc,
-                        last_state=state,
-                    ))
-                    continue
-
-                primed, primed_state = client.wait_for_state(
-                    lambda snapshot: (
-                        snapshot.get("activeScreen") == scenario["screen_id"]
-                        and snapshot.get("cloneFastReady") is True
-                    ),
-                    timeout=20,
-                    interval=0.1,
-                )
-                if primed_state:
-                    state = primed_state
-                results.append(build_test_result(
-                    "clone_context_ready",
-                    passed=primed,
-                    details={
-                        "state": state,
-                        "threshold_ms": 20_000,
-                    },
-                ))
-                trigger_kwargs = {}
-                if not primed:
-                    continue
-
-            baseline_chunk_count = int(state.get("previewChunkCount", 0))
-            baseline_finalized_count = int(state.get("previewFinalizedCount", 0))
-            trigger_start = time.perf_counter()
-            try:
-                state = client.start_generation(
-                    scenario["screen"],
-                    scenario["text"],
-                    **trigger_kwargs,
-                )
-            except UIStateClientError as exc:
-                results.append(_build_ui_transport_failure_result(
-                    f"{scenario['mode']}_start_generation",
-                    exc,
-                    last_state=state,
-                ))
-                continue
-
-            results.append(build_test_result(
-                f"{scenario['mode']}_generation_triggered",
-                passed=state.get("activeScreen") == scenario["screen_id"],
-                details={
-                    "activeScreen": state.get("activeScreen"),
-                    "text": scenario["text"],
-                    **trigger_kwargs,
-                },
-            ))
-
-            running_visible = (
-                state.get("sidebarStatusKind") == "running"
-                and state.get("sidebarStatusPresentation") == "inlinePlayer"
-                and state.get("sidebarInlineStatusVisible") is True
-            )
-            running_state = state
-            if not running_visible:
-                running_visible, running_state = client.wait_for_state(
-                    lambda snapshot: (
-                        snapshot.get("sidebarStatusKind") == "running"
-                        and snapshot.get("sidebarStatusPresentation") == "inlinePlayer"
-                        and snapshot.get("sidebarInlineStatusVisible") is True
-                    ),
-                    timeout=thresholds["running_ms"] / 1000,
-                )
-            running_ms = int((time.perf_counter() - trigger_start) * 1000)
-            if running_state:
-                state = running_state
-            results.append(build_test_result(
-                f"{scenario['mode']}_running_visible",
-                passed=running_visible and running_ms <= thresholds["running_ms"],
-                duration_ms=running_ms,
-                details={
-                    "running_ms": running_ms,
-                    "threshold_ms": thresholds["running_ms"],
-                    "state": state,
-                },
-            ))
-
-            chunk_visible = int(state.get("previewChunkCount", 0)) > baseline_chunk_count
-            chunk_state = state
-            if not chunk_visible:
-                chunk_visible, chunk_state = client.wait_for_state(
-                    lambda snapshot: int(snapshot.get("previewChunkCount", 0)) > baseline_chunk_count,
-                    timeout=thresholds["first_chunk_ms"] / 1000,
-                )
-            first_chunk_ms = int((time.perf_counter() - trigger_start) * 1000)
-            if chunk_state:
-                state = chunk_state
-            results.append(build_test_result(
-                f"{scenario['mode']}_first_chunk",
-                passed=chunk_visible and first_chunk_ms <= thresholds["first_chunk_ms"],
-                duration_ms=first_chunk_ms,
-                details={
-                    "first_chunk_ms": first_chunk_ms,
-                    "threshold_ms": thresholds["first_chunk_ms"],
-                    "previewChunkCount": state.get("previewChunkCount"),
-                },
-            ))
-
-            finalized = int(state.get("previewFinalizedCount", 0)) > baseline_finalized_count
-            finalized_state = state
-            if not finalized:
-                finalized, finalized_state = client.wait_for_state(
-                    lambda snapshot: int(snapshot.get("previewFinalizedCount", 0)) > baseline_finalized_count,
-                    timeout=thresholds["finalized_ms"] / 1000,
-                )
-            finalized_ms = int((time.perf_counter() - trigger_start) * 1000)
-            if finalized_state:
-                state = finalized_state
-            results.append(build_test_result(
-                f"{scenario['mode']}_preview_finalized",
-                passed=finalized and finalized_ms <= thresholds["finalized_ms"],
-                duration_ms=finalized_ms,
-                details={
-                    "preview_finalized_ms": finalized_ms,
-                    "threshold_ms": thresholds["finalized_ms"],
-                    "previewFinalizedCount": state.get("previewFinalizedCount"),
-                },
-            ))
-
-            idle_ready = (
-                state.get("sidebarStatusKind") == "idle"
-                and state.get("sidebarInlineStatusVisible") is False
-                and state.get("sidebarStandaloneStatusVisible") is True
-            )
-            idle_state = state
-            if not idle_ready:
-                idle_ready, idle_state = client.wait_for_state(
-                    lambda snapshot: (
-                        snapshot.get("sidebarStatusKind") == "idle"
-                        and snapshot.get("sidebarInlineStatusVisible") is False
-                        and snapshot.get("sidebarStandaloneStatusVisible") is True
-                    ),
-                    timeout=thresholds["idle_ms"] / 1000,
-                )
-            idle_ms = int((time.perf_counter() - trigger_start) * 1000)
-            if idle_state:
-                state = idle_state
-            results.append(build_test_result(
-                f"{scenario['mode']}_returns_to_idle",
-                passed=idle_ready and idle_ms <= thresholds["idle_ms"],
-                duration_ms=idle_ms,
-                details={
-                    "idle_ms": idle_ms,
-                    "threshold_ms": thresholds["idle_ms"],
-                    "state": state,
-                },
-            ))
-    finally:
-        _terminate_ui_process(app_proc)
-        cleanup_ui_launch_context(context)
-        if app_target is None:
-            cleanup_ui_app_target(target)
-
-    duration_ms = int((time.perf_counter() - start) * 1000)
-    return build_suite_result("release_generation_smoke", results, duration_ms)
 
 
 def _run_release_tests(
-    backend_mode: str = "live",
-    data_root: str = "fixture",
     *,
     artifacts_root: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -4334,26 +3362,15 @@ def _run_release_tests(
 
         try:
             suites.append(_run_release_bundle_verification(target, variant_label=variant_label))
-            suites.append(_prefix_suite(_run_ui_tests(
-                backend_mode=backend_mode,
-                data_root=data_root,
-                app_target=target,
-            ), variant_label))
-            suites.append(_prefix_suite(_run_design_tests(
-                backend_mode=backend_mode,
-                data_root=data_root,
-                app_target=target,
-                force_capture_only=True,
-            ), variant_label))
-            suites.append(_prefix_suite(_run_perf_audit(
-                backend_mode=backend_mode,
-                data_root=data_root,
-                app_target=target,
-                enforce_thresholds=True,
-            ), variant_label))
+            suites.append(_run_packaged_startup_smoke(
+                target,
+                backend_mode="live",
+                data_root="fixture",
+                variant_label=variant_label,
+            ))
             suites.append(_prefix_suite(_run_release_generation_smoke(
-                backend_mode=backend_mode,
-                data_root=data_root,
+                backend_mode="live",
+                data_root="fixture",
                 app_target=target,
             ), variant_label))
         finally:

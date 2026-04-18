@@ -37,16 +37,15 @@ Interactive latency instrumentation uses Instruments-native signposts around mod
 
 The app shell and runtime coordination are split across explicit helper components instead of living inline in the largest entrypoints:
 
-- `QwenVoiceApp.swift` composes `AppStartupCoordinator.swift`, `BackendLaunchCoordinator.swift`, `AppCommandRouter.swift`, and `GenerationLibraryEvents.swift`, while `AppLaunchConfiguration.swift` and `UITestWindowCoordinator.swift` own UI-test launch flags and window automation details
-- UI-test launches now opt out of AppKit state restoration so harness stub/live runs deterministically create a fresh main window instead of depending on persisted window state
+- `QwenVoiceApp.swift` composes `AppStartupCoordinator.swift`, `BackendLaunchCoordinator.swift`, `AppCommandRouter.swift`, and `GenerationLibraryEvents.swift`, while `AppLaunchConfiguration.swift` and `UITestWindowCoordinator.swift` own launch flags, stable window setup, and manual desktop-control helpers
+- Manual fixture-backed launches still opt out of AppKit state restoration so reproducible local Computer Use passes can create a fresh main window instead of depending on persisted window state
 - `AppPaths.swift` is the path boundary for app-support, model, output, and voice directories, including the `QWENVOICE_APP_SUPPORT_DIR` override used by fixture-backed UI runs
 - `PythonEnvironmentManager.swift` is the published-state façade for the retained source/debug Python path over `PythonRuntimeDiscovery.swift`, `PythonRuntimeProvisioner.swift`, `RequirementsInstaller.swift`, `PythonRuntimeValidator.swift`, and `EnvironmentSetupStateMachine.swift`
 - `PythonBridge.swift` composes `PythonProcessManager.swift`, `PythonJSONRPCTransport.swift`, `GenerationStreamCoordinator.swift`, `ModelLoadCoordinator.swift`, `ClonePreparationCoordinator.swift`, `PythonBridgeActivityCoordinator.swift`, `PythonBridge+GenerationFlows.swift`, and `StubBackendTransport.swift` for the retained source/debug backend path
 - `Sources/QwenVoiceNative/` now builds against the repo-owned local Swift package at `third_party_patches/mlx-audio-swift/`, alongside `MLXSwift` and `SwiftHuggingFace`, for native backend runtime and synthesis work
-- `AppEngineSelection.swift` now defaults the app-facing `TTSEngineStore` engine to `NativeMLXMacEngine` for normal runs, keeps `QWENVOICE_APP_ENGINE=python` as the source/debug compatibility path, and uses `UITestStubMacEngine` during stub UI harness runs so fixture-backed preview events remain deterministic without depending on the Python adapter
+- `AppEngineSelection.swift` now defaults the app-facing `TTSEngineStore` engine to `NativeMLXMacEngine` for normal runs, keeps `QWENVOICE_APP_ENGINE=python` as the source/debug compatibility path, and can still use `UITestStubMacEngine` during manual fixture-backed desktop-control runs when deterministic app-shell behavior is useful
 - Native app-engine support now covers Custom Voice, Voice Design, and Voice Cloning generation, along with truthful clone priming and homogeneous-by-mode native batch execution behind the stable `MacTTSEngine` / `TTSEngineStore` boundary
 - `Sources/Resources/backend/server.py` is the retained Python wiring layer over `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`
-- `TestStateServer.swift` and `TestStateProvider.swift` provide the localhost HTTP state-query boundary used by UI automation and screenshot capture flows
 - Shipped app bundles are native-only and must not include `Contents/Resources/backend/`, `Contents/Resources/python/`, or bundled `Contents/Resources/ffmpeg`. `server_compat.py` remains harness-only and must not ship in app bundles or release artifacts.
 
 ## Models, Speakers, and Contract Ownership
@@ -122,7 +121,7 @@ Project and workflow source of truth:
 The active GitHub workflows are:
 
 - `Project Inputs` for checked-in project and native app resource validation
-- `Test Suite` for unit, contract, pipeline, server, audio, packaged-build, source-backend compatibility, UI smoke, perf, strict-concurrency, and alternate-profile compile coverage
+- `Test Suite` for unit, contract, pipeline, server, audio, packaged-build, source-backend compatibility, strict-concurrency, and alternate-profile compile coverage
 - `Release Dual UI` for building, signing, notarizing, and optionally publishing the two shipped DMGs
 
 The dual-release workflow builds:
@@ -153,15 +152,9 @@ Local `./scripts/release.sh` still produces `build/QwenVoice.dmg` by default unl
 
 `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` enables the opt-in `NativeMLXMacEngineLiveTests` smoke against an installed `pro_custom` model.
 
-`python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
+`python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `release`.
 
-The UI-oriented harness layers (`test --layer ui`, `design`, and `perf`) default to live backend mode with an isolated app-support fixture. Those runs reuse the installed models from `~/Library/Application Support/QwenVoice/`, but keep writable outputs, cache, defaults, and copied library state inside the disposable fixture root. In live UI test mode, readiness means the main window is mounted, the environment is ready, and the active engine has initialized successfully.
-
-CI still uses stub mode for the UI smoke lane and macOS 26 screenshot-capture smoke when it does not need live model coverage. Stub mode now uses `UITestStubMacEngine`, which keeps the harness deterministic without depending on the Python adapter path.
-
-`QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design harness runs. When appearance is forced away from `system`, `python3 scripts/harness.py test --layer design` resolves baselines from `tests/screenshots/baselines/<appearance>/` so light and dark visual regressions can be tracked independently. The repo also keeps shared fallback baselines under `tests/screenshots/baselines/` for system and default comparisons. Run the forced `light` and `dark` design lanes sequentially, not in parallel, because they share the same UI app and test transport.
-
-Screenshot-based harness runs default to permissionless in-app window-content capture via `QWENVOICE_UITEST_CAPTURE_MODE=content`. That is the normal automated comparison path, but it is not the highest-fidelity view of Liquid Glass. For explicit appearance-polish or visual-fidelity checks, use real window capture instead of treating `content` capture as the source of truth. The legacy system capture path remains available only as an explicit opt-in with `QWENVOICE_UITEST_CAPTURE_MODE=system`; true pre-approval for that macOS permission requires device-management and PPPC policy, not an app-side setting.
+The repo no longer keeps maintained automated XCUI `ui`, `design`, or `perf` lanes. Visual and interaction truth now comes from local Codex Computer Use passes after cheap source gates are green. Fixture-backed manual launches can still use `QWENVOICE_APP_SUPPORT_DIR`, `QWENVOICE_UI_TEST_FIXTURE_ROOT`, and `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` when a deterministic app state is useful for desktop control.
 
 Maintainer and agent workflows remain harness-first. Repo scripts, targeted harness lanes, and `xcodebuild` are the source of truth for validation; desktop-native tools are secondary aids for UI- and interaction-specific investigation. When a session exposes macOS automation or visual tooling, prefer structured app orchestration for launch and focus control, and treat generated mockups or diagrams as communication aids rather than validation evidence.
 

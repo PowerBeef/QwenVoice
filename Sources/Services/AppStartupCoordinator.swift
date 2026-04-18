@@ -1,5 +1,4 @@
 import Foundation
-import QwenVoiceNative
 
 @MainActor
 final class AppStartupCoordinator: ObservableObject {
@@ -31,66 +30,5 @@ final class AppStartupCoordinator: ObservableObject {
 
     func clearLaunchDiagnostics() {
         launchDiagnostics = nil
-    }
-
-    func syncUITestRuntimeReadiness(
-        appEngineSelection: AppEngineSelection,
-        environmentState: PythonEnvironmentManager.State,
-        pythonBridge: PythonBridge,
-        ttsEngineSnapshot: TTSEngineSnapshot
-    ) {
-        guard UITestAutomationSupport.isEnabled else { return }
-
-        switch appEngineSelection.effectiveSelection(
-            isStubBackendMode: UITestAutomationSupport.isStubBackendMode
-        ) {
-        case .native:
-            TestStateProvider.shared.setRuntimeStatus(
-                source: UITestAutomationSupport.isStubBackendMode ? .stub : .native,
-                pythonPath: nil,
-                ffmpegPath: nil
-            )
-            TestStateProvider.shared.setEnvironmentReady(true)
-            TestStateProvider.shared.setBackendReady(ttsEngineSnapshot.isReady)
-            TestStateProvider.shared.setBackendLastError(ttsEngineSnapshot.visibleErrorMessage)
-            if ttsEngineSnapshot.isReady {
-                UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "engine_ready")
-            }
-        case .python:
-            let activePythonPath: String?
-            if case .ready(let pythonPath) = environmentState {
-                activePythonPath = pythonPath
-            } else {
-                activePythonPath = nil
-            }
-
-            let runtimeSource = TestStateProvider.runtimeSource(
-                for: activePythonPath,
-                bundledRuntimeRoot: bundledRuntimeRoot(),
-                devVenvRoot: AppPaths.pythonVenvDir.path,
-                stubPythonPath: UITestAutomationSupport.stubPythonPath()
-            )
-            let activeFFmpegPath = PythonBridge.findFFmpeg()
-
-            TestStateProvider.shared.setRuntimeStatus(
-                source: runtimeSource,
-                pythonPath: activePythonPath,
-                ffmpegPath: activeFFmpegPath
-            )
-            TestStateProvider.shared.setEnvironmentReady(activePythonPath != nil)
-            TestStateProvider.shared.setBackendReady(
-                UITestAutomationSupport.isStubBackendMode || pythonBridge.isReady
-            )
-            TestStateProvider.shared.setBackendLastError(pythonBridge.lastError)
-            if activePythonPath != nil {
-                UITestWindowCoordinator.shared.scheduleRecoveryIfNeeded(reason: "environment_ready")
-            }
-        }
-    }
-
-    private func bundledRuntimeRoot() -> String? {
-        Bundle.main.resourceURL?
-            .appendingPathComponent("python", isDirectory: true)
-            .path
     }
 }

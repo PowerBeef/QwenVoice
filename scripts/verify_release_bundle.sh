@@ -100,63 +100,32 @@ QWENVOICE_APP_SUPPORT_DIR="$TMP_UI_FIXTURE" \
 >"$TMP_UI_STDOUT" 2>"$TMP_UI_STDERR"
 
 if ! python3 - <<'PY'
-import json
+import subprocess
 import time
-import urllib.error
-import urllib.request
 
-base_url = "http://127.0.0.1:19876"
-deadline = time.time() + 60
-health_seen = False
-last_state: dict[str, object] = {}
+deadline = time.time() + 30
+process_seen = False
+
+def is_running() -> bool:
+    proc = subprocess.run(
+        ["pgrep", "-x", "QwenVoice"],
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
 
 while time.time() < deadline:
-    try:
-        with urllib.request.urlopen(f"{base_url}/health", timeout=1.5):
-            health_seen = True
-    except Exception:
-        time.sleep(0.5)
-        continue
+    if is_running():
+        process_seen = True
+        time.sleep(2.0)
+        if is_running():
+            raise SystemExit(0)
+        raise SystemExit("QwenVoice launched but did not remain running long enough to pass startup smoke")
+    time.sleep(0.25)
 
-    try:
-        with urllib.request.urlopen(f"{base_url}/state", timeout=2) as response:
-            last_state = json.load(response)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        time.sleep(0.5)
-        continue
-
-    if last_state.get("interactiveReady") is True:
-        runtime_source = last_state.get("runtimeSource")
-        active_python_path = (last_state.get("activePythonPath") or "").strip()
-        active_ffmpeg_path = (last_state.get("activeFFmpegPath") or "").strip()
-        backend_last_error = (last_state.get("backendLastError") or "").strip()
-
-        if runtime_source != "native":
-            raise SystemExit(
-                f"Packaged app reported unexpected runtimeSource={runtime_source!r}; state={last_state}"
-            )
-        if active_python_path:
-            raise SystemExit(
-                f"Packaged app should not expose an active Python path: {active_python_path!r}"
-            )
-        if active_ffmpeg_path:
-            raise SystemExit(
-                f"Packaged app should not expose an active ffmpeg path: {active_ffmpeg_path!r}"
-            )
-        if backend_last_error:
-            raise SystemExit(
-                f"Packaged app reported an unexpected runtime error: {backend_last_error!r}"
-            )
-        raise SystemExit(0)
-
-    time.sleep(0.5)
-
-reason = "state_server_unreachable"
-if health_seen:
-    reason = last_state.get("readinessBlocker") or last_state.get("launchPhase") or "interactive_ready_timeout"
-raise SystemExit(
-    f"Timed out waiting for packaged app readiness: reason={reason} last_state={last_state}"
-)
+if process_seen:
+    raise SystemExit("QwenVoice process exited before startup smoke completed")
+raise SystemExit("Timed out waiting for packaged QwenVoice process to launch")
 PY
 then
     echo "Packaged-app smoke stdout tail:" >&2

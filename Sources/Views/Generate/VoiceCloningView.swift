@@ -267,33 +267,10 @@ struct VoiceCloningView: View {
             )
         }
         .onAppear(perform: handleAppear)
-        .onChange(of: draft.referenceAudioPath) { _, _ in syncUITestState() }
-        .onChange(of: draft.referenceTranscript) { _, _ in syncUITestState() }
-        .onChange(of: draft.text) { _, _ in syncUITestState() }
-        .onChange(of: coordinator.isGenerating) { _, _ in syncUITestState() }
-        .onChange(of: coordinator.hydratedSavedVoiceID) { _, _ in syncUITestState() }
-        .onChange(of: coordinator.transcriptLoadError) { _, _ in syncUITestState() }
-        .onChange(of: ttsEngineStore.clonePreparationState) { _, _ in syncUITestState() }
         .onChange(of: pendingSavedVoiceHandoff) { _, _ in
             coordinator.consumePendingSavedVoiceHandoffIfNeeded(
                 draft: $draft,
                 pendingSavedVoiceHandoff: $pendingSavedVoiceHandoff
-            )
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
-            coordinator.handleTestSeedScreenState(notification, draft: $draft)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
-            coordinator.handleTestStartGeneration(
-                notification,
-                draft: $draft,
-                cloneModel: cloneModel,
-                isModelAvailable: isModelAvailable,
-                clonePrimingRequestKey: clonePrimingRequestKey,
-                selectedVoice: selectedVoice,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager
             )
         }
         .sheet(isPresented: isShowingBatchBinding) {
@@ -401,15 +378,6 @@ private extension VoiceCloningView {
         coordinator.handleAppear(
             draft: $draft,
             pendingSavedVoiceHandoff: $pendingSavedVoiceHandoff
-        )
-        syncUITestState()
-    }
-
-    func syncUITestState() {
-        coordinator.syncUITestState(
-            draft: draft,
-            cloneContextStatus: cloneContextStatus,
-            readinessDescriptor: readinessDescriptor
         )
     }
 

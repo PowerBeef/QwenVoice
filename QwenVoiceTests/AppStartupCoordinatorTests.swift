@@ -77,7 +77,7 @@ final class AppStartupCoordinatorTests: XCTestCase {
     }
 
     func testRuntimeSourcePrefersBundledRuntimeForPackagedPath() {
-        let source = TestStateProvider.runtimeSource(
+        let source = UITestAutomationSupport.runtimeSource(
             for: "/Applications/QwenVoice.app/Contents/Resources/python/bin/python3",
             bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
             devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
@@ -89,7 +89,7 @@ final class AppStartupCoordinatorTests: XCTestCase {
 
     func testRuntimeSourceIdentifiesDevVenvAndStub() {
         XCTAssertEqual(
-            TestStateProvider.runtimeSource(
+            UITestAutomationSupport.runtimeSource(
                 for: "/Users/test/Library/Application Support/QwenVoice/python/bin/python3",
                 bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
                 devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
@@ -99,7 +99,7 @@ final class AppStartupCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            TestStateProvider.runtimeSource(
+            UITestAutomationSupport.runtimeSource(
                 for: UITestAutomationSupport.stubPythonPath(),
                 bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
                 devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
@@ -109,31 +109,15 @@ final class AppStartupCoordinatorTests: XCTestCase {
         )
     }
 
-    func testScreenshotCaptureModeDefaultsToContent() {
+    func testRuntimeSourceReturnsNoneWhenPythonPathIsMissing() {
         XCTAssertEqual(
-            UITestAutomationSupport.screenshotCaptureMode(from: [:]),
-            .content
-        )
-        XCTAssertEqual(
-            UITestAutomationSupport.screenshotCaptureMode(from: [
-                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "content"
-            ]),
-            .content
-        )
-    }
-
-    func testScreenshotCaptureModeSupportsExplicitSystemOverride() {
-        XCTAssertEqual(
-            UITestAutomationSupport.screenshotCaptureMode(from: [
-                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "system"
-            ]),
-            .system
-        )
-        XCTAssertEqual(
-            UITestAutomationSupport.screenshotCaptureMode(from: [
-                UITestAutomationSupport.screenshotCaptureModeEnvironmentKey: "invalid"
-            ]),
-            .content
+            UITestAutomationSupport.runtimeSource(
+                for: nil,
+                bundledRuntimeRoot: "/Applications/QwenVoice.app/Contents/Resources/python",
+                devVenvRoot: "/Users/test/Library/Application Support/QwenVoice/python",
+                stubPythonPath: UITestAutomationSupport.stubPythonPath()
+            ),
+            .none
         )
     }
 

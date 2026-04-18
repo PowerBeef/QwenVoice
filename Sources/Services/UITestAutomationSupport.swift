@@ -6,11 +6,6 @@ enum UITestBackendMode {
     case stub
 }
 
-enum UITestScreenshotCaptureMode: String {
-    case content
-    case system
-}
-
 enum UITestSetupScenario: String {
     case success
     case failOnce = "fail_once"
@@ -23,6 +18,14 @@ enum UITestAppearanceMode: String {
 }
 
 enum UITestAutomationSupport {
+    enum RuntimeSource: String {
+        case none
+        case bundled
+        case devVenv = "dev_venv"
+        case stub
+        case other
+    }
+
     private static let environment = ProcessInfo.processInfo.environment
 
     static let uiTestEnvironmentKey = "QWENVOICE_UI_TEST"
@@ -31,8 +34,6 @@ enum UITestAutomationSupport {
     static let importAudioPathEnvironmentKey = "QWENVOICE_UI_TEST_IMPORT_AUDIO_PATH"
     static let enrollAudioPathEnvironmentKey = "QWENVOICE_UI_TEST_ENROLL_AUDIO_PATH"
     static let outputDirectoryEnvironmentKey = "QWENVOICE_UI_TEST_OUTPUT_DIRECTORY"
-    static let screenshotDirectoryEnvironmentKey = "QWENVOICE_UITEST_SCREENSHOT_DIR"
-    static let screenshotCaptureModeEnvironmentKey = "QWENVOICE_UITEST_CAPTURE_MODE"
     static let appearanceEnvironmentKey = "QWENVOICE_UI_TEST_APPEARANCE"
     static let defaultsSuiteEnvironmentKey = "QWENVOICE_UI_TEST_DEFAULTS_SUITE"
     static let setupScenarioEnvironmentKey = "QWENVOICE_UI_TEST_SETUP_SCENARIO"
@@ -81,14 +82,6 @@ enum UITestAutomationSupport {
 
     static var outputDirectoryURL: URL? {
         pathURL(for: outputDirectoryEnvironmentKey)
-    }
-
-    static var screenshotDirectoryURL: URL? {
-        pathURL(for: screenshotDirectoryEnvironmentKey)
-    }
-
-    static var screenshotCaptureMode: UITestScreenshotCaptureMode {
-        screenshotCaptureMode(from: environment)
     }
 
     static var appearanceMode: UITestAppearanceMode {
@@ -143,10 +136,6 @@ enum UITestAutomationSupport {
         appSupportDir.appendingPathComponent(".stub-state", isDirectory: true)
     }
 
-    static func stubEventsDirectory(in appSupportDir: URL) -> URL {
-        appSupportDir.appendingPathComponent(".stub-events", isDirectory: true)
-    }
-
     static func consumeFailOnceFlag(namespace: String, identifier: String? = nil, appSupportDir: URL) -> Bool {
         guard isEnabled else { return false }
         let stateDirectory = stubStateDirectory(in: appSupportDir)
@@ -158,16 +147,6 @@ enum UITestAutomationSupport {
 
         FileManager.default.createFile(atPath: markerURL.path, contents: Data())
         return true
-    }
-
-    static func recordAction(_ name: String, details: String = "", appSupportDir: URL) {
-        guard isEnabled else { return }
-        let eventsDirectory = stubEventsDirectory(in: appSupportDir)
-        try? FileManager.default.createDirectory(at: eventsDirectory, withIntermediateDirectories: true)
-        let fileName = name.replacingOccurrences(of: "/", with: "-")
-        let fileURL = eventsDirectory.appendingPathComponent("\(fileName).txt")
-        let contents = details.isEmpty ? name : "\(name)\n\(details)"
-        try? contents.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
     static func stubPythonPath() -> String {
@@ -182,18 +161,6 @@ enum UITestAutomationSupport {
         default:
             return false
         }
-    }
-
-    static func screenshotCaptureMode(
-        from environment: [String: String]
-    ) -> UITestScreenshotCaptureMode {
-        guard let rawValue = environment[screenshotCaptureModeEnvironmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased(),
-            let mode = UITestScreenshotCaptureMode(rawValue: rawValue) else {
-            return .content
-        }
-        return mode
     }
 
     static func appearanceMode(
@@ -224,5 +191,42 @@ enum UITestAutomationSupport {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return Set(values)
+    }
+
+    nonisolated static func runtimeSource(
+        for pythonPath: String?,
+        bundledRuntimeRoot: String?,
+        devVenvRoot: String,
+        stubPythonPath: String
+    ) -> RuntimeSource {
+        guard let pythonPath,
+              !pythonPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .none
+        }
+
+        let normalizedPythonPath = normalizePath(pythonPath)
+        if normalizedPythonPath == normalizePath(stubPythonPath) {
+            return .stub
+        }
+
+        if let bundledRuntimeRoot,
+           isPath(normalizedPythonPath, inside: bundledRuntimeRoot) {
+            return .bundled
+        }
+
+        if isPath(normalizedPythonPath, inside: devVenvRoot) {
+            return .devVenv
+        }
+
+        return .other
+    }
+
+    private nonisolated static func normalizePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
+    private nonisolated static func isPath(_ path: String, inside root: String) -> Bool {
+        let normalizedRoot = normalizePath(root)
+        return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
     }
 }

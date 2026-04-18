@@ -274,15 +274,6 @@ private struct SidebarFooterRegion: View {
         )
     }
 
-    private func syncUITestFooterState() {
-        guard UITestAutomationSupport.isEnabled else { return }
-        TestStateProvider.shared.setSidebarStatus(resolvedSidebarStatus)
-        TestStateProvider.shared.setSidebarFooter(
-            inlineStatusVisible: footerPresentation.inlinePlayerActivity != nil,
-            standaloneStatusVisible: footerPresentation.showsStandaloneStatus
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             Rectangle()
@@ -318,9 +309,5 @@ private struct SidebarFooterRegion: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 1.0 : 0.985))
-        .onAppear(perform: syncUITestFooterState)
-        .onChange(of: pythonBridge.sidebarStatus) { _, _ in syncUITestFooterState() }
-        .onChange(of: ttsEngineStore.snapshot) { _, _ in syncUITestFooterState() }
-        .onChange(of: audioPlayer.isLiveStream) { _, _ in syncUITestFooterState() }
     }
 }

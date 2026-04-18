@@ -50,17 +50,6 @@
                ReferencedContainer = "container:QwenVoice.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0318FC467E67E44AA3398017"
-               BuildableName = "QwenVoiceUITests.xctest"
-               BlueprintName = "QwenVoiceUITests"
-               ReferencedContainer = "container:QwenVoice.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

@@ -64,16 +64,24 @@ def run_benchmarks(
         )
 
     if category == "clone_packaged_regression":
-        eprint("==> Running packaged clone regression isolation...")
-        from .clone_packaged_regression_runner import run_clone_packaged_regression_bench
-
+        eprint("==> Packaged clone regression isolation is retired...")
         suites.append(
-            run_clone_packaged_regression_bench(
-                output_dir=output_dir,
-                legacy_app_bundle=legacy_app_bundle,
-                legacy_dmg=legacy_dmg,
-                current_app_bundle=current_app_bundle,
-                current_dmg=current_dmg,
+            build_suite_result(
+                "clone_packaged_regression",
+                [
+                    build_test_result(
+                        "clone_packaged_regression_retired",
+                        passed=True,
+                        skip_reason="Packaged clone regression automation depended on the retired localhost UI control plane.",
+                        details={
+                            "legacy_app_bundle": legacy_app_bundle,
+                            "legacy_dmg": legacy_dmg,
+                            "current_app_bundle": current_app_bundle,
+                            "current_dmg": current_dmg,
+                        },
+                    )
+                ],
+                0,
             )
         )
 

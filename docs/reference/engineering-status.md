@@ -30,7 +30,7 @@ QwenVoice is currently in a strong maintenance state for a local macOS ML app: t
 - Generation screens still rely on the separate Models destination for download and repair flows rather than supporting inline model installs.
 - `ModelsView` still uses filesystem status through `ModelManagerViewModel` rather than backend `get_model_info`.
 - The repo still carries the older Python backend for source/debug compatibility and the standalone CLI, so Swift/Python contract changes still need cross-surface synchronization even though shipped app launches are now native-only.
-- On some Xcode and macOS combinations, macOS UI test sessions can still fail before a control session is established even when the app code is healthy.
+- Visual and interaction verification is now intentionally manual through Codex Computer Use rather than maintained XCUI automation, so local UI confidence depends on a scoped human-reviewed pass after cheap source gates are green.
 
 ## Source Of Truth
 

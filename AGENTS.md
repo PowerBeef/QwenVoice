@@ -81,13 +81,14 @@ Keep QwenVoice repo-truth-first and harness-first even when richer desktop tooli
 
 - Start with `Sources/`, `project.yml`, `scripts/`, and the repo-local skills before using desktop-native tools.
 - Run the smallest relevant repo check first. Prefer `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, targeted `python3 scripts/harness.py test --layer ...`, and `xcodebuild` over manual app inspection.
+- Hard prohibition: do not use the legacy invasive QwenVoice UI automation workflow in this checkout, and do not reintroduce any XCUI-driven `ui`, `design`, or `perf` automation lane. Do not run localhost test-control routes, background app-driving automation, automated screenshot/design capture flows, or checked-in XCUI app-driving suites, even if older scripts or docs still mention them.
 - Use repo-local skills as the first specialization layer:
-  - `qwenvoice-packaged-validation` for packaged, release, UI, design, and perf verification
+  - `qwenvoice-packaged-validation` for packaged builds, release-artifact validation, native bundle proof, and manual Computer Use follow-through after cheap repo gates
   - `qwenvoice-vendored-runtime` for vendored Python, ffmpeg, `mlx-audio`, `mlx-audio-swift`, backend helper overlay, and packaged runtime changes
   - `qwenvoice-doc-sync` for contributor and repo docs
   - `qwenvoice-release-publish` for versioning and release publication flows
-- Use Computer Use only when visual or interaction truth matters after repo checks have already narrowed the problem. Good fits include main-window chrome, sidebar/search/toolbar behavior, Settings scene issues, sheet presentation, playback controls, menu-style picker behavior, and packaged-app visual confirmation after automated validation.
-- When using Computer Use, follow this order: run the smallest relevant harness lane first, inspect the live app state, then interact only with the exact flow under investigation.
+- Use Codex Computer Use instead when visual or interaction truth matters after repo checks have already narrowed the problem. Good fits include main-window chrome, sidebar/search/toolbar behavior, Settings scene issues, sheet presentation, playback controls, menu-style picker behavior, and packaged-app visual confirmation after automated validation.
+- When using Computer Use, follow this order: run `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate first, then inspect the live app state and interact only with the exact flow under investigation.
 - Prefer AppleScript or equivalent structured macOS automation over click-based interaction when the task is operational rather than visual. Good fits include launching or quitting `QwenVoice`, focusing the app, preparing stable window state, ensuring only one app instance is running, coordinating Finder or file-chooser flows, and setting up reproducible packaging-validation runs.
 - Use native image generation for architecture diagrams, UI mockups, and explanatory visuals only. Do not treat generated images as evidence that a QwenVoice implementation is correct.
 - For Apple-platform API lookup, prefer Apple docs tools when they are actually exposed in the session.
@@ -95,7 +96,7 @@ Keep QwenVoice repo-truth-first and harness-first even when richer desktop tooli
 
 ## Architecture Boundaries
 
-- `Sources/QwenVoiceApp.swift` composes shared app services, owns the separate Settings scene, bootstraps UI-test automation via `TestStateServer`, `AppStartupCoordinator`, `BackendLaunchCoordinator`, `AppLaunchConfiguration`, and `UITestWindowCoordinator`, and now selects the app-facing TTS engine through `AppEngineSelection`.
+- `Sources/QwenVoiceApp.swift` composes shared app services, owns the separate Settings scene, coordinates launch preflight through `AppStartupCoordinator`, `BackendLaunchCoordinator`, `AppLaunchConfiguration`, and `UITestWindowCoordinator`, and selects the app-facing TTS engine through `AppEngineSelection`.
 - `Sources/ContentView.swift` owns `NavigationSplitView`, main-window toolbar/search/titlebar chrome, sidebar selection, and the persisted generation drafts that survive navigation between generation screens.
 - `Sources/Services/AppPaths.swift` is the path boundary for app support, models, outputs, voices, and the `QWENVOICE_APP_SUPPORT_DIR` override used by harness and fixture-backed runs.
 - `Sources/Models/TTSContract.swift` and `Sources/Models/TTSModel.swift` load `Sources/Resources/qwenvoice_contract.json`. Change the manifest first for model, speaker, output-subfolder, or required-file updates.
@@ -105,8 +106,7 @@ Keep QwenVoice repo-truth-first and harness-first even when richer desktop tooli
 - The backend RPC surface already includes app-visible coordination methods such as `prewarm_model`, `prepare_clone_reference`, `prime_clone_reference`, `get_model_info`, `get_speakers`, `list_voices`, `enroll_voice`, and `delete_voice`. If you change those payloads or semantics, keep Swift, Python, harness, and docs in sync.
 - `Sources/Resources/backend/server.py` is the thin Python entrypoint and wiring layer for the retained source/debug backend. Backend behavior is split across `backend_state.py`, `rpc_transport.py`, `output_paths.py`, `audio_io.py`, `clone_context.py`, `generation_pipeline.py`, and `rpc_handlers.py`. Shipped app bundles must not include `Contents/Resources/backend/`.
 - `Sources/Services/GenerationPersistence.swift` centralizes save and autoplay handoff for the three generation screens. `Sources/Services/DatabaseService.swift` owns the GRDB SQLite history database and is `@MainActor`; keep persistence and library-refresh behavior aligned.
-- `Sources/Services/TestStateServer.swift` and `Sources/Services/TestStateProvider.swift` are the UI-test HTTP and query boundary. Keep UI-test state exposure, screenshot hooks, and window-activation telemetry there rather than leaking it into normal product flows.
-- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there. The shipped app now defaults `TTSEngineStore` to `NativeMLXMacEngine` through `AppEngineSelection`, while `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path. Stub UI harness runs use `UITestStubMacEngine` so UI smoke remains deterministic without routing through the Python adapter.
+- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native backend boundary. Keep native runtime, load-state, and synthesis work there. The shipped app now defaults `TTSEngineStore` to `NativeMLXMacEngine` through `AppEngineSelection`, while `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path. `UITestStubMacEngine` remains available only for fixture-backed manual desktop-control runs and lightweight packaged startup smoke support.
 - `Sources/ViewModels/ModelManagerViewModel.swift` still uses manifest plus filesystem status for the shipping Models screen. Backend `get_model_info` exists and is harness-tested, but it is not yet the primary model-status source for `ModelsView`.
 - `Sources/ViewModels/AudioPlayerViewModel.swift` isolates timer-frequency playback state in nested `PlaybackProgress`. Do not move high-frequency playback fields back onto the parent observable object.
 - `cli/main.py` is a separate terminal app with cwd-based paths and a broader speaker map than the shipped GUI. Do not copy CLI assumptions into the app contract or app docs.
@@ -124,7 +124,7 @@ Large coordinator files still deserve small, surgical changes and focused verifi
 - `SetupView` intentionally receives `envManager` as `@ObservedObject`, not `@EnvironmentObject`, because it is shown before environment injection is attached in `QwenVoiceApp`.
 - Voice Cloning does not expose delivery or emotion controls. The base clone model ignores them.
 - `Sources/Views/Components/TextInputView.swift` uses an `NSTextView` wrapper for placeholder alignment, editing behavior, and scrollbars. Do not replace it with SwiftUI `TextEditor`.
-- macOS picker-style controls often surface as `MenuButton` and `MenuItem` in XCUI, not ordinary buttons.
+- In manual Computer Use passes, macOS picker-style controls often surface as menu buttons and menu items rather than ordinary buttons.
 - The default checkout profile in `project.yml` is `QW_UI_LIQUID`. That path needs a macOS 26 SDK and Xcode 26+ to compile.
 - `QW_UI_LEGACY_GLASS` remains supported and is validated through CI and explicit profile switching rather than the default checkout config. `scripts/set_ci_ui_profile.sh` is the repo-owned helper that patches `project.yml` for macOS 15 CI runs.
 - Keep shared styling centralized in `Sources/Views/Components/AppTheme.swift`, and avoid `Shape.fill(...).glassEffect(...)` chains that fail across older compiler and SDK combinations.
@@ -165,13 +165,8 @@ python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer rpc
 python3 scripts/harness.py test --layer audio
 
-# UI, design, and perf
-python3 scripts/harness.py test --layer ui
-python3 scripts/harness.py test --layer design
-python3 scripts/harness.py test --layer perf
-
 # Packaged release-artifact validation
-python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
+python3 scripts/harness.py test --layer release --artifacts-root <dir>
 
 # Diagnostics and targeted benchmarks
 python3 scripts/harness.py diagnose
@@ -183,17 +178,14 @@ Notes:
 
 - `scripts/harness.py` is the primary testing, diagnostic, and benchmark entrypoint.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, `./scripts/release.sh`, live app validation, or native smoke processes.
-- `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `ui`, `design`, `perf`, and `release`.
-- `ui`, `design`, and `perf` default to `--ui-backend-mode live --ui-data-root fixture`. Those runs reuse installed runtime and models while isolating writable app state under a disposable fixture root.
-- Use `--ui-backend-mode stub` when you want UI smoke coverage without requiring installed models or a live backend. CI uses stub mode for the `ui` smoke lane and macOS 26 screenshot-capture smoke.
-- `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs default to `native`, `python` remains the source/debug compatibility path, and stub UI harness mode uses `UITestStubMacEngine` so fixture-backed preview events stay deterministic without depending on the Python adapter.
-- Do not jump to `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...`, `./scripts/release.sh`, `python3 scripts/harness.py test --layer release ...`, or live `ui` / forced `design` / `perf` lanes until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant targeted source gate are already green.
+- `python3 scripts/harness.py test --layer all` runs the normal combined source layers (`pipeline`, `server`, `contract`, `rpc`, `swift`, `audio`) and excludes `release`.
+- There are no maintained automated `ui`, `design`, or `perf` harness lanes in this checkout. Use scoped Codex Computer Use instead for any visual or interaction verification after the cheap repo gates are green.
+- `QWENVOICE_APP_ENGINE=native|python` is the internal app-engine override. Normal app runs default to `native`, `python` remains the source/debug compatibility path, and manual fixture-backed desktop-control runs can still opt into `UITestStubMacEngine` when deterministic app-shell behavior is useful.
+- Do not jump to `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 ... NativeMLXMacEngineLiveTests ...`, `./scripts/release.sh`, `python3 scripts/harness.py test --layer release ...`, or a manual Computer Use pass until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant targeted source gate are already green.
 - If a command starts a broad cold rebuild of the native MLX stack and that rebuild is not strictly required to answer the question, stop and re-scope instead of letting it continue.
 - `AppPaths.appSupportDir` respects `QWENVOICE_APP_SUPPORT_DIR`; the harness sets that for fixture-backed runs. Do not hardcode `~/Library/Application Support/QwenVoice/` in new test flows if they are supposed to be isolated.
-- `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` is the supported appearance override for UI and design runs. When appearance is forced, `design` compares against `tests/screenshots/baselines/<appearance>/`; the repo also keeps shared fallback baselines under `tests/screenshots/baselines/` for system and default comparisons.
-- Screenshot-based UI validation should default to `QWENVOICE_UITEST_CAPTURE_MODE=content`. This is the correct automated comparison path, but it is not the highest-fidelity representation of Liquid Glass. Use `system` capture only for explicit visual-fidelity checks, and treat Screen Recording and TCC failures there as environment limits rather than general app regressions.
-- Run forced `light` and `dark` `design` lanes sequentially, not in parallel, because they share the UI app and test transport.
-- `python3 scripts/harness.py test --layer release ...` is for workflow-built artifacts. Prefer a downloaded or extracted final artifact bundle from `Release Dual UI`, not local ad hoc DMGs and not the intermediate build-only artifact set.
+- `QWENVOICE_UI_TEST_APPEARANCE=light|dark|system` remains available when you need a stable light or dark manual Computer Use pass.
+- `python3 scripts/harness.py test --layer release ...` is for workflow-built artifacts and packaged startup smoke. Prefer a downloaded or extracted final artifact bundle from `Release Dual UI`, not local ad hoc DMGs and not the intermediate build-only artifact set.
 - `python3 scripts/harness.py bench ...` typically requires the app runtime plus installed models. Prefer tiny prompts and serialized `benchmark=true` runs for profiling and regression isolation.
 - `python3 scripts/harness.py bench --category tts_roundtrip` also requires a locally available ASR evaluator. Set `QWENVOICE_TTS_ROUNDTRIP_ASR_MODEL` to an installed local path or cached Hugging Face repo if you want to override the default candidate list; otherwise the benchmark skips cleanly.
 
@@ -202,7 +194,7 @@ Notes:
 The active GitHub workflows are:
 
 - `Project Inputs` for checked-in project and resource validation
-- `Test Suite` for source tests, strict-concurrency and alternate-profile compilation, packaged builds, source-backend compatibility, UI smoke, and perf audit
+- `Test Suite` for source tests, strict-concurrency and alternate-profile compilation, packaged builds, and source-backend compatibility
 - `Release Dual UI` for building, signing, notarizing, and optionally publishing the shipped DMGs
 
 Release facts:
@@ -244,12 +236,12 @@ Local packaging commands:
   Prefer `Sources/Services/GenerationPersistence.swift` over duplicating logic inside individual generation views.
 - History or database access:
   Keep `DatabaseService.swift` and affected library views in sync, and respect MainActor isolation.
-- App-support path handling or UI fixture behavior:
-  Review `AppPaths.swift`, `UITestAutomationSupport.swift`, `TestStateServer.swift`, `scripts/harness_lib/ui_test_support.py`, and affected UI tests together.
-- Appearance-sensitive UI or design-baseline work:
-  Keep `QWENVOICE_UI_TEST_APPEARANCE=light` and `dark` coverage green, and refresh the matching committed baselines under `tests/screenshots/baselines/light/` and `tests/screenshots/baselines/dark/`. If the shared system and default baselines are still used for the affected flow, refresh `tests/screenshots/baselines/` too.
+- App-support path handling or manual fixture behavior:
+  Review `AppPaths.swift`, `UITestAutomationSupport.swift`, `UITestWindowCoordinator.swift`, `scripts/harness_lib/ui_test_support.py`, and any packaged startup smoke or Computer Use launch guidance together.
+- Appearance-sensitive UI work:
+  Use scoped Computer Use passes for light and dark checks when the changed flow depends on appearance, and keep any documented manual screenshot workflow aligned.
 - Packaged validation, release artifacts, or native bundle-boundary checks:
-  Prefer `qwenvoice-packaged-validation`, validate through the harness packaged and release lanes, use `./scripts/verify_release_bundle.sh`, and default screenshot checks to `QWENVOICE_UITEST_CAPTURE_MODE=content`.
+  Prefer `qwenvoice-packaged-validation`, validate through the harness packaged and release lanes, use `./scripts/verify_release_bundle.sh`, and rely on Computer Use rather than automated XCUI or screenshot-diff proof for visual confirmation.
 - GitHub release publication or hosted release notes:
   Prefer `qwenvoice-release-publish`, require a checked-in notes file, and keep the `Release Dual UI` inputs aligned, including `release_notes_path`.
 - Vendored runtime or `mlx-audio` changes:
@@ -289,7 +281,8 @@ Use the harness commands in this file and the maintained docs listed above inste
 - Never treat a local macOS 15 package build as authoritative release validation.
 - Never overlap heavy `xcodebuild`, `scripts/harness.py`, `./scripts/release.sh`, live app validation, or native smoke processes on this machine.
 - Always start with the smallest relevant gate: `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, then the narrowest targeted `python3 scripts/harness.py test --layer ...` or targeted `xcodebuild`.
-- Treat live native smoke, local packaging, packaged-release validation, and live `ui` / forced `design` / `perf` lanes as later-stage proof, not default first steps.
+- Never restart or re-enable the legacy invasive QwenVoice UI automation workflow after it has been stopped. If visual verification is needed, use scoped Computer Use interaction instead of automated app-driving or localhost test-control tooling.
+- Treat live native smoke, local packaging, packaged-release validation, and any manual Computer Use pass as later-stage proof, not default first steps.
 - Never run more than one heavy model load, generation, or benchmark at a time.
 - Never run clone or custom comparisons side by side or in parallel processes.
 - For clone-mode investigations, cold and warm runs may share one backend process only when intentionally measuring cache reuse. Do not overlap that process with any other model process.

@@ -144,17 +144,6 @@ struct VoiceDesignView: View {
         .task(id: idlePrewarmTaskID) {
             await prewarmSelectedModelIfNeeded()
         }
-        .onAppear(perform: syncUITestState)
-        .onChange(of: draft.voiceDescription) { _, _ in syncUITestState() }
-        .onChange(of: draft.emotion) { _, _ in syncUITestState() }
-        .onChange(of: draft.text) { _, _ in syncUITestState() }
-        .onChange(of: isGenerating) { _, _ in syncUITestState() }
-        .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
-            handleTestSeedScreenState(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
-            handleTestStartGeneration(notification)
-        }
     }
 }
 
@@ -342,51 +331,6 @@ private extension VoiceDesignView {
 // MARK: - Actions
 
 private extension VoiceDesignView {
-    func syncUITestState() {
-        guard UITestAutomationSupport.isEnabled else { return }
-        TestStateProvider.shared.voiceDescription = draft.voiceDescription
-        TestStateProvider.shared.emotion = draft.emotion
-        TestStateProvider.shared.text = draft.text
-        TestStateProvider.shared.isGenerating = isGenerating
-    }
-
-    func handleTestSeedScreenState(_ notification: Notification) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "voiceDesign" else { return }
-
-        if let voiceDescription = notification.userInfo?["voiceDescription"] as? String {
-            draft.voiceDescription = voiceDescription
-        }
-        if let emotion = notification.userInfo?["emotion"] as? String {
-            draft.emotion = emotion
-        }
-        if let text = notification.userInfo?["text"] as? String {
-            draft.text = text
-        }
-    }
-
-    func handleTestStartGeneration(_ notification: Notification) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "voiceDesign" else { return }
-
-        if let text = notification.userInfo?["text"] as? String,
-           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.text = text
-        }
-        if let voiceDescription = notification.userInfo?["voiceDescription"] as? String,
-           !voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.voiceDescription = voiceDescription
-        }
-        if let emotion = notification.userInfo?["emotion"] as? String,
-           !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.emotion = emotion
-        }
-
-        generate()
-    }
-
     func generate() {
         guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, ttsEngineStore.isReady else { return }
 
@@ -404,8 +348,6 @@ private extension VoiceDesignView {
 
         Task {
             do {
-                UITestAutomationSupport.recordAction("design-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
-
                 guard let model = activeModel else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -453,9 +395,7 @@ private extension VoiceDesignView {
                     emotion: emotion,
                     text: text
                 )
-                UITestAutomationSupport.recordAction("design-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
-                UITestAutomationSupport.recordAction("design-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }

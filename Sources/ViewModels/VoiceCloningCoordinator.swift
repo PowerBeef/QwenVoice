@@ -32,80 +32,6 @@ final class VoiceCloningCoordinator: ObservableObject {
         pendingSavedVoiceHandoff.wrappedValue = nil
     }
 
-    func syncUITestState(
-        draft: VoiceCloningDraft,
-        cloneContextStatus: VoiceCloningContextStatus?,
-        readinessDescriptor: VoiceCloningReadinessDescriptor
-    ) {
-        guard UITestAutomationSupport.isEnabled else { return }
-        TestStateProvider.shared.referenceAudioPath = draft.referenceAudioPath ?? ""
-        TestStateProvider.shared.referenceTranscript = draft.referenceTranscript
-        TestStateProvider.shared.text = draft.text
-        TestStateProvider.shared.isGenerating = isGenerating
-        TestStateProvider.shared.clonePrimingPhase = cloneContextStatusTestValue(cloneContextStatus)
-        TestStateProvider.shared.cloneFastReady = readinessDescriptor.noteIsReady
-    }
-
-    func handleTestSeedScreenState(
-        _ notification: Notification,
-        draft: Binding<VoiceCloningDraft>
-    ) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "voiceCloning" else { return }
-
-        if let referenceAudioPath = notification.userInfo?["referenceAudioPath"] as? String {
-            draft.wrappedValue.selectedSavedVoiceID = nil
-            draft.wrappedValue.referenceAudioPath = referenceAudioPath.isEmpty ? nil : referenceAudioPath
-            hydratedSavedVoiceID = nil
-        }
-        if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
-            draft.wrappedValue.referenceTranscript = referenceTranscript
-        }
-        if let text = notification.userInfo?["text"] as? String {
-            draft.wrappedValue.text = text
-        }
-    }
-
-    func handleTestStartGeneration(
-        _ notification: Notification,
-        draft: Binding<VoiceCloningDraft>,
-        cloneModel: TTSModel?,
-        isModelAvailable: Bool,
-        clonePrimingRequestKey: String?,
-        selectedVoice: Voice?,
-        ttsEngineStore: TTSEngineStore,
-        audioPlayer: AudioPlayerViewModel,
-        modelManager: ModelManagerViewModel
-    ) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "voiceCloning" else { return }
-
-        if let text = notification.userInfo?["text"] as? String,
-           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.wrappedValue.text = text
-        }
-        if let referenceAudioPath = notification.userInfo?["referenceAudioPath"] as? String,
-           !referenceAudioPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            replaceReference(with: referenceAudioPath, draft: draft)
-        }
-        if let referenceTranscript = notification.userInfo?["referenceTranscript"] as? String {
-            draft.wrappedValue.referenceTranscript = referenceTranscript
-        }
-
-        generate(
-            draft: draft,
-            cloneModel: cloneModel,
-            isModelAvailable: isModelAvailable,
-            clonePrimingRequestKey: clonePrimingRequestKey,
-            selectedVoice: selectedVoice,
-            ttsEngineStore: ttsEngineStore,
-            audioPlayer: audioPlayer,
-            modelManager: modelManager
-        )
-    }
-
     func generate(
         draft: Binding<VoiceCloningDraft>,
         cloneModel: TTSModel?,
@@ -129,11 +55,6 @@ final class VoiceCloningCoordinator: ObservableObject {
 
         Task { @MainActor in
             do {
-                UITestAutomationSupport.recordAction(
-                    "clone-generate-start",
-                    appSupportDir: QwenVoiceApp.appSupportDir
-                )
-
                 guard let model = cloneModel else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -213,15 +134,7 @@ final class VoiceCloningCoordinator: ObservableObject {
                     audioPlayer: audioPlayer,
                     caller: "VoiceCloningCoordinator"
                 )
-                UITestAutomationSupport.recordAction(
-                    "clone-generate-success",
-                    appSupportDir: QwenVoiceApp.appSupportDir
-                )
             } catch {
-                UITestAutomationSupport.recordAction(
-                    "clone-generate-error",
-                    appSupportDir: QwenVoiceApp.appSupportDir
-                )
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }

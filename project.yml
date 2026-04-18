@@ -84,7 +84,6 @@ targets:
     scheme:
       testTargets:
         - QwenVoiceTests
-        - QwenVoiceUITests
       environmentVariables:
         QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS: $(QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS)
 
@@ -133,18 +132,3 @@ targets:
         product: MLX
       - package: SwiftHuggingFace
         product: HuggingFace
-
-  QwenVoiceUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    sources:
-      - path: QwenVoiceUITests
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.uitests
-        SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
-        GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: QwenVoice
-    dependencies:
-      - target: QwenVoice

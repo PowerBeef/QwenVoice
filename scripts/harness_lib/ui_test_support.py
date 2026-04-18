@@ -1,4 +1,4 @@
-"""Shared launch helpers for UI, design, and perf harness layers."""
+"""Shared launch helpers for UI and perf harness layers."""
 
 from __future__ import annotations
 
@@ -127,7 +127,6 @@ def build_ui_launch_environment(
     *,
     setup_scenario: str = "success",
     setup_delay_ms: str = "1",
-    screenshot_dir: str | None = None,
     extra_environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return the app environment for a UI-oriented launch."""
@@ -145,9 +144,6 @@ def build_ui_launch_environment(
     else:
         env["QWENVOICE_APP_SUPPORT_DIR"] = str(context.app_support_dir)
 
-    if screenshot_dir:
-        env["QWENVOICE_UITEST_SCREENSHOT_DIR"] = screenshot_dir
-        env.setdefault("QWENVOICE_UITEST_CAPTURE_MODE", "content")
     if extra_environment:
         env.update(extra_environment)
     return env

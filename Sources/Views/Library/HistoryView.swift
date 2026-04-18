@@ -371,7 +371,6 @@ private extension HistoryView {
                 let destination = outputDirectoryURL.appendingPathComponent(URL(fileURLWithPath: item.generation.audioPath).lastPathComponent)
                 try? FileManager.default.removeItem(at: destination)
                 try FileManager.default.copyItem(at: URL(fileURLWithPath: item.generation.audioPath), to: destination)
-                UITestAutomationSupport.recordAction("history-export", details: destination.path, appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
                 presentActionAlert(
                     title: "Export Error",

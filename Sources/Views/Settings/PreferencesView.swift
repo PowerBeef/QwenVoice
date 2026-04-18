@@ -127,11 +127,7 @@ struct PreferencesView: View {
     }
 
     private func openAppSupportDirectory() {
-        if UITestAutomationSupport.isStubBackendMode {
-            UITestAutomationSupport.recordAction("open-app-support", appSupportDir: QwenVoiceApp.appSupportDir)
-        } else {
-            NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
-        }
+        NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
     }
 
     private var hiddenReadinessMarker: some View {

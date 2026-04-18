@@ -130,8 +130,9 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer server
 python3 scripts/harness.py test --layer contract
-python3 scripts/harness.py test --layer ui
 ```
+
+Use Codex Computer Use for local visual or interaction checks after those source gates are green. This repo no longer keeps checked-in XCUI smoke, design, or perf automation.
 
 ### Development-mode Python behavior
 

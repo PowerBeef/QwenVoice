@@ -217,10 +217,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     func prepareStreamingPreview(title: String, shouldAutoPlay: Bool) {
-        UITestAutomationSupport.recordAction("sidebar-preview-prepared", appSupportDir: AppPaths.appSupportDir)
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.recordPreviewPrepared()
-        }
         teardownLivePlayback(clearSession: true)
         stopFilePlayback(clearPlayer: true)
         clearPendingFirstChunkInterval()
@@ -254,10 +250,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         title: String,
         shouldAutoPlay: Bool
     ) {
-        UITestAutomationSupport.recordAction("sidebar-preview-finalized", appSupportDir: AppPaths.appSupportDir)
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.recordPreviewFinalized()
-        }
         guard result.usedStreaming else {
             if shouldAutoPlay {
                 playFile(result.audioPath, title: title)
@@ -325,11 +317,6 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func handleGenerationChunk(_ chunk: ChunkInfo) {
-        UITestAutomationSupport.recordAction("sidebar-preview-chunk", appSupportDir: AppPaths.appSupportDir)
-        if UITestAutomationSupport.isEnabled {
-            TestStateProvider.shared.recordPreviewChunk()
-        }
-
         let sessionID = String(chunk.requestID)
         let sessionDirectory = chunk.sessionDirectory
         let cumulativeDuration = chunk.cumulativeDuration

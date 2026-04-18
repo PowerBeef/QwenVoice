@@ -53,19 +53,16 @@ Add only the layers that match the requested scope:
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer server
 python3 scripts/harness.py test --layer contract
-python3 scripts/harness.py test --layer ui
-python3 scripts/harness.py test --layer design
-python3 scripts/harness.py test --layer perf
 ```
 
-Remember that `test --layer all` excludes `ui`, `design`, and `perf`.
+Remember that `test --layer all` excludes `release`.
 
 ### 3. Prefer the packaged-release lane for shipped-artifact checks
 
 When the request is about the actual release packages, prefer the packaged flow:
 
 ```bash
-python3 scripts/harness.py test --layer release --artifacts-root <dir> --ui-backend-mode live --ui-data-root fixture
+python3 scripts/harness.py test --layer release --artifacts-root <dir>
 ```
 
 For this repo, both `QwenVoice-macos26.dmg` and `QwenVoice-macos15.dmg` should come from the GitHub `Release Dual UI` workflow. Validate the final downloaded or uploaded notarized workflow artifact bundle rather than rebuilding release packages locally or relying on the intermediate `qwenvoice-dual-ui-build-*` artifacts.
@@ -89,15 +86,18 @@ Use `--dmg` or `--app-bundle` only for narrow spot checks. Treat DMG targets as 
 - copy `QwenVoice.app` into a disposable temp install root
 - clear quarantine on the temp copy only if the spot-check flow requires it
 - test the copied app, not the mounted app
-### 4. Keep UI screenshot capture permissionless by default
+### 4. Use Computer Use for visual truth
 
-For `ui` and `design` lanes, default to:
+This checkout no longer keeps maintained automated XCUI `ui`, `design`, or `perf` lanes.
 
-```bash
-QWENVOICE_UITEST_CAPTURE_MODE=content
-```
+For visual or interaction proof:
 
-Use `system` mode only when the user explicitly wants real system capture fidelity. If `system` mode fails because Screen Recording permission is missing, report that as an expected TCC limitation instead of treating it as a general app failure.
+- run `./scripts/check_project_inputs.sh`
+- run `python3 scripts/harness.py validate`
+- run the narrowest relevant source lane
+- then use local Codex Computer Use for the actual visual pass
+
+Do not try to recreate the removed XCUI or screenshot-diff path.
 
 ### 5. Prove native bundle boundaries, not just startup
 
@@ -119,9 +119,9 @@ When the request is about downloaded signed/notarized DMGs, treat trust checks p
 
 ### 6. Handle live-model blockers explicitly
 
-The `ui`, `design`, `perf`, and `release` lanes default to live backend mode with a fixture data root. If installed models are missing under `~/Library/Application Support/QwenVoice/models`, say so directly and separate:
+If installed models are missing under `~/Library/Application Support/QwenVoice/models`, say so directly and separate:
 
-- what passed with stub or packaged structural checks
+- what passed with packaged structural checks
 - what could not be proven live because the machine lacks models
 
 Do not blur “packaged app launches” into “full live generation works.”
@@ -142,9 +142,8 @@ Call out the exact lane that failed and the first concrete blocker.
 
 ```bash
 python3 scripts/harness.py diagnose
-python3 scripts/harness.py test --layer ui --dmg <path-to-dmg> --ui-backend-mode live --ui-data-root fixture
-python3 scripts/harness.py test --layer perf --app-bundle <path-to-app> --ui-backend-mode live --ui-data-root fixture
-python3 scripts/harness.py test --layer design --ui-backend-mode stub
+python3 scripts/harness.py test --layer release --artifacts-root <dir>
+./scripts/verify_release_bundle.sh <path-to-app-or-build/QwenVoice.app>
 ```
 
 ## Failure Shields
@@ -153,9 +152,9 @@ python3 scripts/harness.py test --layer design --ui-backend-mode stub
 - Do not stack heavy validation commands or launch a second heavy run while the first is still active.
 - Do not build or validate macOS 15 release packages locally on this machine.
 - Do not use local `./scripts/release.sh` output as the authoritative proof for shipped macOS 26 or macOS 15 release artifacts.
-- Do not jump straight to `test --layer release`, local packaging, or live UI/design/perf proof when a cheaper source lane can answer the question first.
+- Do not jump straight to `test --layer release`, local packaging, or a manual Computer Use pass when a cheaper source lane can answer the question first.
 - Do not treat the intermediate `qwenvoice-dual-ui-build-*` artifacts as the final shipped release packages.
 - Do not assume the mounted DMG app is the real test target.
 - Do not treat missing live models as a code regression.
-- Do not default screenshot tests to `QWENVOICE_UITEST_CAPTURE_MODE=system`.
+- Do not recreate removed XCUI or screenshot-diff automation in an ad hoc way.
 - Do not claim success on native-only bundle boundaries unless `verify_release_bundle.sh` or equivalent runtime diagnostics prove it.

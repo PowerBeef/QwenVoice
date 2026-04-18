@@ -87,17 +87,6 @@ struct CustomVoiceView: View {
         .task(id: idlePrewarmTaskID) {
             await prewarmSelectedModelIfNeeded()
         }
-        .onAppear(perform: syncUITestState)
-        .onChange(of: draft.selectedSpeaker) { _, _ in syncUITestState() }
-        .onChange(of: draft.emotion) { _, _ in syncUITestState() }
-        .onChange(of: draft.text) { _, _ in syncUITestState() }
-        .onChange(of: isGenerating) { _, _ in syncUITestState() }
-        .onReceive(NotificationCenter.default.publisher(for: .testSeedScreenState)) { notification in
-            handleTestSeedScreenState(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .testStartGeneration)) { notification in
-            handleTestStartGeneration(notification)
-        }
     }
 }
 
@@ -260,44 +249,6 @@ private extension CustomVoiceView {
 // MARK: - Actions
 
 private extension CustomVoiceView {
-    func syncUITestState() {
-        guard UITestAutomationSupport.isEnabled else { return }
-        TestStateProvider.shared.selectedSpeaker = draft.selectedSpeaker
-        TestStateProvider.shared.emotion = draft.emotion
-        TestStateProvider.shared.text = draft.text
-        TestStateProvider.shared.isGenerating = isGenerating
-    }
-
-    func handleTestStartGeneration(_ notification: Notification) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "customVoice" else { return }
-
-        if let text = notification.userInfo?["text"] as? String,
-           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.text = text
-        }
-
-        generate()
-    }
-
-    func handleTestSeedScreenState(_ notification: Notification) {
-        guard UITestAutomationSupport.isEnabled,
-              let screen = notification.userInfo?["screen"] as? String,
-              screen == "customVoice" else { return }
-
-        if let speaker = notification.userInfo?["speaker"] as? String,
-           !speaker.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            draft.selectedSpeaker = speaker
-        }
-        if let emotion = notification.userInfo?["emotion"] as? String {
-            draft.emotion = emotion
-        }
-        if let text = notification.userInfo?["text"] as? String {
-            draft.text = text
-        }
-    }
-
     func generate() {
         guard !draft.text.isEmpty, ttsEngineStore.isReady else { return }
 
@@ -311,8 +262,6 @@ private extension CustomVoiceView {
 
         Task {
             do {
-                UITestAutomationSupport.recordAction("custom-generate-start", appSupportDir: QwenVoiceApp.appSupportDir)
-
                 guard let model = activeModel else {
                     errorMessage = "Model configuration not found"
                     isGenerating = false
@@ -348,9 +297,7 @@ private extension CustomVoiceView {
                     &generation, result: result, text: draft.text,
                     audioPlayer: audioPlayer, caller: "CustomVoiceView"
                 )
-                UITestAutomationSupport.recordAction("custom-generate-success", appSupportDir: QwenVoiceApp.appSupportDir)
             } catch {
-                UITestAutomationSupport.recordAction("custom-generate-error", appSupportDir: QwenVoiceApp.appSupportDir)
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }
@@ -358,7 +305,6 @@ private extension CustomVoiceView {
             }
 
             isGenerating = false
-            syncUITestState()
         }
     }
 
