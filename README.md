@@ -162,10 +162,12 @@ Use GitHub workflow artifacts for authoritative shipped release validation.
 
 Custom Voice and Voice Design are guided by natural-language instructions rather than SSML-style sliders or markup.
 
-See [`qwen_tone.md`](qwen_tone.md) for the current app-oriented guidance on:
+See [`qwen_tone.md`](qwen_tone.md) for supplemental app- and CLI-oriented guidance on:
 
 - what the shipped app exposes
 - what broader Qwen3-TTS ecosystem notes are informational only
+
+For current repo truth about shipped behavior, trust this README plus [`docs/reference/current-state.md`](docs/reference/current-state.md) over supplemental prose.
 
 ## Architecture
 

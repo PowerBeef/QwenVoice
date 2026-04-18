@@ -29,6 +29,8 @@ The maintained repo docs in this checkout are:
 
 Do not point contributors at missing supplementary docs. Use the maintained files above instead.
 
+Supplemental prose such as `qwen_tone.md` may still be useful, but it is not part of the maintained reference set.
+
 ## Source Of Truth
 
 When repo facts disagree, trust sources in this order:

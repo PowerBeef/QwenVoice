@@ -2,21 +2,29 @@
 
 This folder contains the current, repo-authored documentation for QwenVoice.
 
-## Public Docs
-
-- [`../README.md`](../README.md) — GitHub landing page and end-user overview
-- [`../qwen_tone.md`](../qwen_tone.md) — practical guide to tone, emotion, and instruction writing in the shipped app and CLI
-
-## Contributor And Agent Docs
+## Maintained Reference Docs
 
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts reused by the other docs
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, cleanup outcomes, and live caveats
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — source/debug Python compatibility, backend helper overlay, native packaging, and runtime notes
 
-## CLI Docs
+These are the maintained source-of-truth documents for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and then these reference docs in that order.
 
+## Product And Public Docs
+
+- [`../README.md`](../README.md) — GitHub landing page and end-user overview
 - [`../cli/README.md`](../cli/README.md) — standalone CLI usage and setup
+
+## Supplemental Guides
+
+- [`../qwen_tone.md`](../qwen_tone.md) — supplemental tone and prompt-writing guidance for the app and CLI
+
+Supplemental guides are useful, but they are not the primary source of truth for current repo structure or shipped-product behavior.
+
+## Historical Docs
+
+- [`releases/`](releases/) — checked-in release notes for past published versions
 
 ## Repo-Local Skills
 
@@ -24,6 +32,6 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 
 ## Notes
 
-- Maintained contributor guidance in this checkout lives in the files listed above. Do not assume missing supplementary docs still exist.
+- Maintained contributor guidance in this checkout lives in the maintained reference docs listed above. Do not assume missing supplementary docs still exist.
 - Generated and vendor documentation under `Sources/Resources/python/`, `cli/.venv/`, and dependency package directories is intentionally out of scope for the repo docs.
-- Historical notes may still appear in git history or external references, but the maintained repo docs live in the files listed above.
+- Historical notes may still appear in git history or external references, but the maintained repo facts live in the reference docs listed above.

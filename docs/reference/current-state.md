@@ -167,5 +167,6 @@ On the maintainer machine, validation is intentionally low-RAM and serialized: r
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `README.md` is the public GitHub landing page.
 - `cli/README.md` documents the standalone CLI, which has a broader speaker map than the shipped GUI.
+- `qwen_tone.md` is a supplemental guidance doc, not a maintained reference doc.
 
-The maintained docs in this checkout are the files listed above. Do not assume older supplementary docs still exist.
+The maintained docs in this checkout are the files listed above. Do not assume older supplementary docs still exist, and do not treat supplemental prose as equal to the maintained reference set.

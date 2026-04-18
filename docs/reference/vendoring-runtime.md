@@ -6,6 +6,17 @@ QwenVoice has three maintained vendoring/runtime stories:
 2. **Packaged release builds**
 3. **Native backend source vendoring**
 
+## Tracked Surface Boundaries
+
+Treat tracked surfaces in this repo as four different classes:
+
+- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, workflows, and repo-local skills
+- **Repo-owned vendored source**: `third_party_patches/`, where QwenVoice intentionally carries patched upstream code as maintained source
+- **Generated or bundled compatibility assets**: `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, most of `Sources/Resources/vendor/`, and similar script-produced payloads
+- **Local-only state**: `build/`, `.worktrees/`, `DerivedData/`, app-support data, local virtualenvs, and other machine-specific outputs
+
+Only the first three classes belong in tracked cleanup conversations. Local-only state should be managed through ignore rules, maintainer docs, or machine cleanup, not treated as repo source.
+
 ## Development Mode
 
 In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then:

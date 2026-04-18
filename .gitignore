@@ -14,6 +14,11 @@ xcuserdata/
 *.swp
 *~
 
+# Python cache leftovers
+__pycache__/
+*.pyc
+*.pyo
+
 # Dependencies
 Packages/
 

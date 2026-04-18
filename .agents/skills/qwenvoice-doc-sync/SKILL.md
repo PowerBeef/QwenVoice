@@ -44,6 +44,7 @@ Use these pairings as defaults:
 - **Runtime or vendoring behavior**: `docs/reference/vendoring-runtime.md`
 - **Versioned release messaging**: `docs/releases/vX.Y.md`
 - **Repo-local agent guidance**: `.agents/skills/*.md`
+- **Supplemental prose**: `qwen_tone.md` and similar non-reference guides that should follow, not redefine, the maintained docs
 
 If a doc is intentionally user-facing, keep the wording concise and benefit-led. If it is maintainer-facing, keep the wording factual and operational.
 If signing or notarization behavior changed, explicitly re-check the public install path in `README.md` so official releases are described as signed/notarized/stapled and unsigned-build workarounds stay out of the normal install steps.

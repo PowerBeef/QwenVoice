@@ -1,6 +1,12 @@
 # Tone and Emotion in QwenVoice
 
-This guide focuses on what QwenVoice currently exposes, then calls out where the standalone CLI or broader Qwen3-TTS ecosystem goes beyond the shipped macOS app.
+This guide is a supplemental prompt-writing reference. It focuses on what QwenVoice currently exposes, then calls out where the standalone CLI or broader Qwen3-TTS ecosystem goes beyond the shipped macOS app.
+
+For current repo truth about app structure, workflow names, or shipped behavior, trust:
+
+1. `README.md`
+2. `docs/reference/current-state.md`
+3. `AGENTS.md`
 
 ## What the Shipped App Exposes
 
@@ -9,8 +15,8 @@ The shipped GUI controls tone and emotion through natural-language instructions,
 Current app behavior:
 
 - **Custom Voice** uses one of the shipped English speakers plus an instruction prompt
-- **Voice Design** is reached inside the Custom Voice screen by switching to the `Custom` speaker chip
-- **Voice Cloning** clones from reference audio and does not expose a separate instruction-style tone control surface
+- **Voice Design** is its own main-window destination with a separate screen and prompt flow
+- **Voice Cloning** clones from reference audio and can optionally use a transcript for better preparation quality, but it does not expose a separate instruction-style tone control surface
 - the shipping GUI exposes live streaming preview for single generations, but not temperature or max-token controls
 
 Useful instruction patterns in the shipped app:
@@ -44,7 +50,7 @@ Those are informational for power users and benchmark tooling, but they are not 
 - Be specific: combine voice character, emotional state, and pacing in one instruction.
 - Keep requests concrete: `calm middle-aged narrator with steady pacing` works better than `make it better`.
 - Iterate wording: instruction following is probabilistic, so small prompt changes can materially change the result.
-- For consistent stylized production, design a voice first and then clone from a reference workflow rather than trying to rediscover the exact same tone every run.
+- For consistent stylized production, use Voice Design when you want a reusable prompt-driven voice shape, then use Voice Cloning when you want a specific reference identity rather than trying to rediscover the same tone every run.
 
 ## Examples
 
