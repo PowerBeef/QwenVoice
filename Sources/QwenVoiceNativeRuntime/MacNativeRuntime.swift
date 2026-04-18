@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import MLXAudioTTS
+import QwenVoiceEngineSupport
 
 enum EngineWarmState: String, Sendable {
     case cold

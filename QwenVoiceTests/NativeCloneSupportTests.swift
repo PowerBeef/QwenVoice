@@ -1,7 +1,7 @@
 import XCTest
 @preconcurrency import MLX
 @preconcurrency import MLXAudioTTS
-@testable import QwenVoiceNative
+@testable import QwenVoiceNativeRuntime
 
 final class NativeCloneSupportTests: XCTestCase {
     func testResolveCloneConditioningPrefersInlineTranscriptThenSidecarThenNone() async throws {

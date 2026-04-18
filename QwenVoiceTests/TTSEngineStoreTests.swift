@@ -3,8 +3,7 @@ import Foundation
 import XCTest
 import QwenVoiceNative
 
-@MainActor
-private final class MockMacTTSEngine: MacTTSEngine {
+private final class MockMacTTSEngine: MacTTSEngine, @unchecked Sendable {
     private let subject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private(set) var generateRequests: [GenerationRequest] = []
     private(set) var batchGenerateRequests: [[GenerationRequest]] = []
@@ -56,7 +55,7 @@ private final class MockMacTTSEngine: MacTTSEngine {
 
     func generateBatch(
         _ requests: [GenerationRequest],
-        progressHandler: ((Double?, String) -> Void)?
+        progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [GenerationResult] {
         batchGenerateRequests.append(requests)
         progressHandler?(0.5, "Generating batch...")
@@ -92,7 +91,6 @@ final class TTSEngineStoreTests: XCTestCase {
             isReady: false,
             loadState: .starting,
             clonePreparationState: .idle,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
         let engine = MockMacTTSEngine(snapshot: initial)
@@ -105,14 +103,6 @@ final class TTSEngineStoreTests: XCTestCase {
             isReady: true,
             loadState: .loaded(modelID: "pro_custom"),
             clonePreparationState: .primed(key: "clone-key"),
-            latestEvent: GenerationEvent(
-                kind: .streamChunk,
-                requestID: 7,
-                mode: "custom",
-                title: "Hello",
-                chunkPath: "/tmp/chunk.wav",
-                isFinal: false
-            ),
             visibleErrorMessage: nil
         )
         engine.pushSnapshot(updated)
@@ -122,7 +112,6 @@ final class TTSEngineStoreTests: XCTestCase {
         XCTAssertTrue(store.isReady)
         XCTAssertEqual(store.loadState, .loaded(modelID: "pro_custom"))
         XCTAssertEqual(store.clonePreparationState, .primed(key: "clone-key"))
-        XCTAssertEqual(store.latestEvent?.requestID, 7)
     }
 
     @MainActor
@@ -132,7 +121,6 @@ final class TTSEngineStoreTests: XCTestCase {
                 isReady: true,
                 loadState: .loaded(modelID: "pro_custom"),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         )
@@ -160,7 +148,6 @@ final class TTSEngineStoreTests: XCTestCase {
                 isReady: true,
                 loadState: .loaded(modelID: "pro_clone"),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         )
@@ -199,7 +186,6 @@ final class TTSEngineStoreTests: XCTestCase {
                 isReady: true,
                 loadState: .loaded(modelID: "pro_clone"),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         )
@@ -208,5 +194,35 @@ final class TTSEngineStoreTests: XCTestCase {
         try await store.cancelActiveGeneration()
 
         XCTAssertEqual(engine.cancelActiveGenerationCallCount, 1)
+    }
+
+    @MainActor
+    func testTTSEngineStoreIgnoresChunkBrokerEventsForGlobalSnapshotState() async {
+        let initialSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: "pro_custom"),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        let engine = MockMacTTSEngine(snapshot: initialSnapshot)
+        let store = TTSEngineStore(engine: engine)
+
+        GenerationChunkBroker.publish(
+            GenerationEvent(
+                kind: .streamChunk,
+                requestID: 1,
+                mode: "custom",
+                title: "Preview",
+                chunkPath: "/tmp/chunk.wav",
+                isFinal: false,
+                chunkDurationSeconds: 0.25,
+                cumulativeDurationSeconds: 0.25,
+                streamSessionDirectory: "/tmp/session"
+            )
+        )
+
+        await Task.yield()
+
+        XCTAssertEqual(store.snapshot, initialSnapshot)
     }
 }

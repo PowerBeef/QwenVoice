@@ -26,7 +26,6 @@ final class AppEngineSelectionTests: XCTestCase {
                     fraction: 0.45
                 ),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             ),
             prefersInlinePresentation: true
@@ -47,7 +46,6 @@ final class AppEngineSelectionTests: XCTestCase {
                 isReady: true,
                 loadState: .loaded(modelID: "pro_custom"),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             ),
             prefersInlinePresentation: false
@@ -63,7 +61,6 @@ final class AppEngineSelectionTests: XCTestCase {
                 isReady: true,
                 loadState: .loaded(modelID: "pro_custom"),
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: "Native preview failed"
             ),
             prefersInlinePresentation: false
@@ -75,7 +72,7 @@ final class AppEngineSelectionTests: XCTestCase {
     @MainActor
     func testAppEngineSelectionBuildsNativeEngineByDefault() {
         let engine = AppEngineSelection.current().makeEngine()
-        XCTAssertTrue(engine is NativeMLXMacEngine)
+        XCTAssertTrue(engine is XPCNativeEngineClient)
     }
 
     @MainActor

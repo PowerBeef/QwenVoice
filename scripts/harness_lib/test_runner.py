@@ -130,6 +130,7 @@ def _run_native_tests() -> dict[str, Any]:
             "QwenVoice",
             "-destination",
             "platform=macOS",
+            "-only-testing:QwenVoiceTests/EngineServiceCodecTests",
             "-only-testing:QwenVoiceTests/NativeAudioPreparationTests",
             "-only-testing:QwenVoiceTests/NativeCloneSupportTests",
             "-only-testing:QwenVoiceTests/NativeMLXMacEngineTests",
@@ -137,6 +138,7 @@ def _run_native_tests() -> dict[str, Any]:
             "-only-testing:QwenVoiceTests/NativeModelRegistryTests",
             "-only-testing:QwenVoiceTests/TTSEngineStoreTests",
             "-only-testing:QwenVoiceTests/VoiceCloningReferenceAudioSupportTests",
+            "-only-testing:QwenVoiceTests/XPCNativeEngineClientTests",
             "test",
         ],
     )

@@ -26,7 +26,7 @@ enum AppEngineSelection: Equatable {
     func makeEngine(
         isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
     ) -> any MacTTSEngine {
-        isStubBackendMode ? UITestStubMacEngine() : NativeMLXMacEngine()
+        isStubBackendMode ? UITestStubMacEngine() : XPCNativeEngineClient()
     }
 
     @MainActor

@@ -3,6 +3,7 @@ import Foundation
 @preconcurrency import MLX
 import MLXAudioCore
 @preconcurrency import MLXAudioTTS
+import QwenVoiceEngineSupport
 
 enum ResolvedCloneTranscriptMode: String, Sendable {
     case inline

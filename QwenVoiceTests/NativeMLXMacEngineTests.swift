@@ -2,7 +2,7 @@ import XCTest
 import Combine
 @preconcurrency import MLX
 @preconcurrency import MLXAudioTTS
-@testable import QwenVoiceNative
+@testable import QwenVoiceNativeRuntime
 
 @MainActor
 final class NativeMLXMacEngineTests: XCTestCase {
@@ -144,6 +144,9 @@ final class NativeMLXMacEngineTests: XCTestCase {
             try await engine.loadModel(id: "pro_clone")
         }
         await Task.yield()
+        for _ in 0..<20 where engine.snapshot.loadState != .starting {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
         XCTAssertEqual(engine.snapshot.loadState, .starting)
         try await loadTask.value
         XCTAssertEqual(engine.snapshot.loadState, EngineLoadState.loaded(modelID: "pro_clone"))
@@ -359,8 +362,8 @@ final class NativeMLXMacEngineTests: XCTestCase {
         try await engine.initialize(appSupportDirectory: root)
 
         var observedEvents: [GenerationEvent] = []
-        engine.snapshotPublisher
-            .compactMap { $0.latestEvent }
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
             .sink { observedEvents.append($0) }
             .store(in: &cancellables)
 
@@ -396,11 +399,10 @@ final class NativeMLXMacEngineTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(observedEvents.count, 3)
+        XCTAssertEqual(observedEvents.count, 2)
         XCTAssertEqual(observedEvents.first?.isFinal, false)
         XCTAssertTrue(observedEvents.dropFirst().allSatisfy(\.isFinal))
         XCTAssertEqual(observedEvents.last?.isFinal, true)
-        XCTAssertEqual(engine.snapshot.latestEvent?.isFinal, true)
         XCTAssertEqual(engine.snapshot.loadState.currentModelID, "pro_custom")
         XCTAssertNil(engine.snapshot.visibleErrorMessage)
 
@@ -720,8 +722,8 @@ final class NativeMLXMacEngineTests: XCTestCase {
         try await engine.initialize(appSupportDirectory: root)
 
         var observedEvents: [GenerationEvent] = []
-        engine.snapshotPublisher
-            .compactMap { $0.latestEvent }
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
             .sink { observedEvents.append($0) }
             .store(in: &cancellables)
 
@@ -762,7 +764,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
             ]
         )
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioPath))
-        XCTAssertEqual(observedEvents.count, 3)
+        XCTAssertEqual(observedEvents.count, 2)
         XCTAssertEqual(observedEvents.first?.isFinal, false)
         XCTAssertEqual(observedEvents.last?.isFinal, true)
 
@@ -959,8 +961,8 @@ final class NativeMLXMacEngineTests: XCTestCase {
         )
 
         var observedEvents: [GenerationEvent] = []
-        engine.snapshotPublisher
-            .compactMap { $0.latestEvent }
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
             .sink { observedEvents.append($0) }
             .store(in: &cancellables)
 
@@ -1002,7 +1004,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
                 )
             ]
         )
-        XCTAssertEqual(observedEvents.count, 3)
+        XCTAssertEqual(observedEvents.count, 2)
         XCTAssertEqual(observedEvents.last?.isFinal, true)
 
         let sample = try XCTUnwrap(result.benchmarkSample)

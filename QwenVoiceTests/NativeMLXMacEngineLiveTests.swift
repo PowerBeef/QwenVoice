@@ -1,5 +1,5 @@
 import XCTest
-@testable import QwenVoiceNative
+@testable import QwenVoiceNativeRuntime
 
 @MainActor
 final class NativeMLXMacEngineLiveTests: XCTestCase {

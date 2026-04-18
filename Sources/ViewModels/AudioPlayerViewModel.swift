@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import QwenVoiceNative
+import Combine
 
 /// Manages playback state for the persistent sidebar player bar.
 @MainActor
@@ -79,7 +80,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var livePlaybackTimeOffset: TimeInterval = 0
     private var liveUnderrunCount = 0
     private let livePreviewConfiguration: LivePreviewConfiguration
-    private var chunkObserver: NSObjectProtocol?
+    private var chunkCancellable: AnyCancellable?
     private var timer: Timer?
 
     var hasAudio: Bool { currentFilePath != nil || isLiveStream || liveSessionID != nil }
@@ -100,15 +101,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     override init() {
         livePreviewConfiguration = .current()
         super.init()
-        bindNotifications()
+        bindChunkBroker()
     }
 
     deinit {
         MainActor.assumeIsolated {
             timer?.invalidate()
-            if let chunkObserver {
-                NotificationCenter.default.removeObserver(chunkObserver)
-            }
+            chunkCancellable?.cancel()
         }
     }
 
@@ -292,28 +291,20 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         let cumulativeDuration: Double?
     }
 
-    private func bindNotifications() {
-        chunkObserver = NotificationCenter.default.addObserver(
-            forName: .generationChunkReceived,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let userInfo = notification.userInfo,
-                  let requestID = userInfo["requestID"] as? Int,
-                  let title = userInfo["title"] as? String,
-                  let chunkPath = userInfo["chunkPath"] as? String
-            else { return }
-            let chunk = ChunkInfo(
-                requestID: requestID,
-                title: title,
-                chunkPath: chunkPath,
-                sessionDirectory: userInfo["streamSessionDirectory"] as? String,
-                cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
-            )
-            Task { [weak self] in
-                await self?.handleGenerationChunk(chunk)
+    private func bindChunkBroker() {
+        chunkCancellable = GenerationChunkBroker.shared.publisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self, let chunkPath = event.chunkPath else { return }
+                let chunk = ChunkInfo(
+                    requestID: event.requestID,
+                    title: event.title,
+                    chunkPath: chunkPath,
+                    sessionDirectory: event.streamSessionDirectory,
+                    cumulativeDuration: event.cumulativeDurationSeconds
+                )
+                self.handleGenerationChunk(chunk)
             }
-        }
     }
 
     private func handleGenerationChunk(_ chunk: ChunkInfo) {

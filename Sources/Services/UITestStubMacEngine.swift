@@ -2,8 +2,7 @@ import Combine
 import Foundation
 import QwenVoiceNative
 
-@MainActor
-final class UITestStubMacEngine: MacTTSEngine {
+final class UITestStubMacEngine: MacTTSEngine, @unchecked Sendable {
     private let transport: StubBackendTransport
     private let snapshotSubject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private var appSupportDirectory: URL?
@@ -15,7 +14,6 @@ final class UITestStubMacEngine: MacTTSEngine {
                 isReady: false,
                 loadState: .idle,
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         )
@@ -36,7 +34,6 @@ final class UITestStubMacEngine: MacTTSEngine {
             isReady: true,
             loadState: .idle,
             clonePreparationState: .idle,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
     }
@@ -49,7 +46,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: .starting,
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: snapshot.latestEvent,
             visibleErrorMessage: nil
         )
 
@@ -58,7 +54,6 @@ final class UITestStubMacEngine: MacTTSEngine {
             publishSnapshot(
                 loadState: .loaded(modelID: id),
                 clonePreparationState: snapshot.clonePreparationState,
-                latestEvent: snapshot.latestEvent,
                 visibleErrorMessage: nil
             )
         } catch {
@@ -71,7 +66,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: .idle,
             clonePreparationState: .idle,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
     }
@@ -98,7 +92,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: .loaded(modelID: modelID),
             clonePreparationState: .preparing(key: key),
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
 
@@ -107,7 +100,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: .loaded(modelID: modelID),
             clonePreparationState: .primed(key: key),
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
     }
@@ -116,7 +108,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: snapshot.loadState,
             clonePreparationState: .idle,
-            latestEvent: snapshot.latestEvent,
             visibleErrorMessage: snapshot.visibleErrorMessage
         )
     }
@@ -131,7 +122,6 @@ final class UITestStubMacEngine: MacTTSEngine {
                 fraction: nil
             ),
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
 
@@ -158,13 +148,15 @@ final class UITestStubMacEngine: MacTTSEngine {
                 text: request.text,
                 outputPath: request.outputPath,
                 stream: request.shouldStream,
-                streamingContext: streamingContext
+                streamingContext: streamingContext,
+                chunkHandler: { event in
+                    GenerationChunkBroker.publish(event)
+                }
             )
             let loadState: EngineLoadState = .loaded(modelID: request.modelID)
             publishSnapshot(
                 loadState: loadState,
                 clonePreparationState: snapshot.clonePreparationState,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
             let benchmarkSample = result.metrics.map { metrics in
@@ -193,7 +185,7 @@ final class UITestStubMacEngine: MacTTSEngine {
 
     func generateBatch(
         _ requests: [GenerationRequest],
-        progressHandler: ((Double?, String) -> Void)?
+        progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [QwenVoiceNative.GenerationResult] {
         guard !requests.isEmpty else { return [] }
 
@@ -216,13 +208,12 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: snapshot.loadState.currentModelID.map { .loaded(modelID: $0) } ?? .idle,
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
     }
 
     func listPreparedVoices() async throws -> [PreparedVoice] {
-        try transport.listVoices().map { voice in
+        try await transport.listVoices().map { voice in
             PreparedVoice(
                 id: voice.id,
                 name: voice.name,
@@ -237,7 +228,11 @@ final class UITestStubMacEngine: MacTTSEngine {
         audioPath: String,
         transcript: String?
     ) async throws -> PreparedVoice {
-        let voice = try transport.enrollVoice(name: name, audioPath: audioPath, transcript: transcript)
+        let voice = try await transport.enrollVoice(
+            name: name,
+            audioPath: audioPath,
+            transcript: transcript
+        )
         return PreparedVoice(
             id: voice.id,
             name: voice.name,
@@ -247,14 +242,13 @@ final class UITestStubMacEngine: MacTTSEngine {
     }
 
     func deletePreparedVoice(id: String) async throws {
-        try transport.deleteVoice(name: id)
+        try await transport.deleteVoice(name: id)
     }
 
     func clearGenerationActivity() {
         publishSnapshot(
             loadState: snapshot.loadState.currentModelID.map { .loaded(modelID: $0) } ?? .idle,
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: nil,
             visibleErrorMessage: snapshot.visibleErrorMessage
         )
     }
@@ -263,7 +257,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: snapshot.loadState,
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: snapshot.latestEvent,
             visibleErrorMessage: nil
         )
     }
@@ -272,7 +265,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         publishSnapshot(
             loadState: .failed(message: error.localizedDescription),
             clonePreparationState: snapshot.clonePreparationState,
-            latestEvent: nil,
             visibleErrorMessage: error.localizedDescription
         )
     }
@@ -281,7 +273,6 @@ final class UITestStubMacEngine: MacTTSEngine {
         isReady: Bool? = nil,
         loadState: EngineLoadState,
         clonePreparationState: ClonePreparationState,
-        latestEvent: GenerationEvent?,
         visibleErrorMessage: String?
     ) {
         snapshotSubject.send(
@@ -289,7 +280,6 @@ final class UITestStubMacEngine: MacTTSEngine {
                 isReady: isReady ?? snapshot.isReady,
                 loadState: loadState,
                 clonePreparationState: clonePreparationState,
-                latestEvent: latestEvent,
                 visibleErrorMessage: visibleErrorMessage
             )
         )

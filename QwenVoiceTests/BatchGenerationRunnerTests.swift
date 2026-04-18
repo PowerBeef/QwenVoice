@@ -3,14 +3,12 @@ import XCTest
 @testable import QwenVoice
 import QwenVoiceNative
 
-@MainActor
-private final class MockBatchEngine: MacTTSEngine {
+private final class MockBatchEngine: MacTTSEngine, @unchecked Sendable {
     private let subject = CurrentValueSubject<TTSEngineSnapshot, Never>(
         TTSEngineSnapshot(
             isReady: true,
             loadState: .loaded(modelID: "pro_clone"),
             clonePreparationState: .idle,
-            latestEvent: nil,
             visibleErrorMessage: nil
         )
     )
@@ -45,7 +43,7 @@ private final class MockBatchEngine: MacTTSEngine {
 
     func generateBatch(
         _ requests: [GenerationRequest],
-        progressHandler: ((Double?, String) -> Void)?
+        progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [QwenVoiceNative.GenerationResult] {
         batchGenerateRequests.append(requests)
         for event in batchProgressEvents {

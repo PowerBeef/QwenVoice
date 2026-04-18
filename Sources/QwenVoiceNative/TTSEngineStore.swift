@@ -1,6 +1,20 @@
 import Combine
 import Foundation
 
+private final class BatchProgressRelay: @unchecked Sendable {
+    private let handler: (Double?, String) -> Void
+
+    init(handler: @escaping (Double?, String) -> Void) {
+        self.handler = handler
+    }
+
+    func send(_ fraction: Double?, _ message: String) {
+        Task { @MainActor in
+            handler(fraction, message)
+        }
+    }
+}
+
 @MainActor
 public final class TTSEngineStore: ObservableObject {
     @Published public private(set) var snapshot: TTSEngineSnapshot
@@ -8,7 +22,6 @@ public final class TTSEngineStore: ObservableObject {
     public var isReady: Bool { snapshot.isReady }
     public var loadState: EngineLoadState { snapshot.loadState }
     public var clonePreparationState: ClonePreparationState { snapshot.clonePreparationState }
-    public var latestEvent: GenerationEvent? { snapshot.latestEvent }
     public var visibleErrorMessage: String? { snapshot.visibleErrorMessage }
 
     private let engine: any MacTTSEngine
@@ -64,7 +77,13 @@ public final class TTSEngineStore: ObservableObject {
         _ requests: [GenerationRequest],
         progressHandler: ((Double?, String) -> Void)? = nil
     ) async throws -> [GenerationResult] {
-        try await engine.generateBatch(requests, progressHandler: progressHandler)
+        let progressRelay = progressHandler.map { BatchProgressRelay(handler: $0) }
+        let forwardedHandler = progressRelay.map { relay in
+            { @Sendable (fraction: Double?, message: String) in
+                relay.send(fraction, message)
+            }
+        }
+        return try await engine.generateBatch(requests, progressHandler: forwardedHandler)
     }
 
     public func cancelActiveGeneration() async throws {

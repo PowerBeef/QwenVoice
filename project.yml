@@ -26,8 +26,14 @@ targets:
     sources:
       - path: Sources
         excludes:
+          - "QwenVoiceEngineService"
+          - "QwenVoiceEngineService/**"
+          - "QwenVoiceEngineSupport"
+          - "QwenVoiceEngineSupport/**"
           - "QwenVoiceNative"
           - "QwenVoiceNative/**"
+          - "QwenVoiceNativeRuntime"
+          - "QwenVoiceNativeRuntime/**"
           - "Resources/ffmpeg"
           - "Resources/ffmpeg/**"
           - "Resources/vendor"
@@ -66,15 +72,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
       - package: GRDB
+      - target: QwenVoiceEngineService
+      - target: QwenVoiceEngineSupport
       - target: QwenVoiceNative
-      - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
-      - package: MLXSwift
-        product: MLX
-      - package: SwiftHuggingFace
-        product: HuggingFace
     scheme:
       testTargets:
         - QwenVoiceTests
@@ -95,6 +95,64 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
+      - target: QwenVoiceEngineSupport
+
+  QwenVoiceEngineSupport:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: Sources/QwenVoiceEngineSupport
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.engine-support
+        PRODUCT_NAME: QwenVoiceEngineSupport
+        PRODUCT_MODULE_NAME: QwenVoiceEngineSupport
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+
+  QwenVoiceNativeRuntime:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: Sources/QwenVoiceNativeRuntime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.native-runtime
+        PRODUCT_NAME: QwenVoiceNativeRuntime
+        PRODUCT_MODULE_NAME: QwenVoiceNativeRuntime
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: QwenVoiceEngineSupport
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
+
+  QwenVoiceEngineService:
+    type: xpc-service
+    platform: macOS
+    sources:
+      - path: Sources/QwenVoiceEngineService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.engine-service
+        PRODUCT_NAME: QwenVoiceEngineService
+        PRODUCT_MODULE_NAME: QwenVoiceEngineService
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        INFOPLIST_FILE: Sources/QwenVoiceEngineService/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: QwenVoiceEngineSupport
+      - target: QwenVoiceNativeRuntime
       - package: MLXAudio
         product: MLXAudioCore
       - package: MLXAudio
@@ -118,11 +176,5 @@ targets:
     dependencies:
       - target: QwenVoice
       - target: QwenVoiceNative
-      - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
-      - package: MLXSwift
-        product: MLX
-      - package: SwiftHuggingFace
-        product: HuggingFace
+      - target: QwenVoiceEngineSupport
+      - target: QwenVoiceNativeRuntime

@@ -1,5 +1,5 @@
 import XCTest
-@testable import QwenVoiceNative
+@testable import QwenVoiceNativeRuntime
 
 final class NativeModelRegistryTests: XCTestCase {
     func testRegistryUsesContractFolderForInstallDirectory() throws {

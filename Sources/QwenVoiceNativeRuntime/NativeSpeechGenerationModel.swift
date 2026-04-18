@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import MLX
 @preconcurrency import MLXAudioCore
 @preconcurrency import MLXAudioTTS
+import QwenVoiceEngineSupport
 
 struct NativeSpeechGenerationInfo: Sendable {
     let promptTokenCount: Int

@@ -1,8 +1,8 @@
-import Combine
+@preconcurrency import Combine
 import Foundation
+import QwenVoiceEngineSupport
 
-@MainActor
-    public final class NativeMLXMacEngine: MacTTSEngine {
+public final class NativeMLXMacEngine: @unchecked Sendable {
     public enum EngineError: LocalizedError, Equatable {
         case nativeBatchRequiresSingleMode
 
@@ -33,6 +33,7 @@ import Foundation
 
     private let runtime: MacNativeRuntime
     private let snapshotSubject: CurrentValueSubject<TTSEngineSnapshot, Never>
+    private let generationEventSubject: PassthroughSubject<GenerationEvent, Never>
 
     public init(runtime: MacNativeRuntime = MacNativeRuntime()) {
         self.runtime = runtime
@@ -41,10 +42,10 @@ import Foundation
                 isReady: false,
                 loadState: .idle,
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         )
+        self.generationEventSubject = PassthroughSubject()
     }
 
     public var snapshot: TTSEngineSnapshot {
@@ -55,6 +56,10 @@ import Foundation
         snapshotSubject.eraseToAnyPublisher()
     }
 
+    public var generationEventPublisher: AnyPublisher<GenerationEvent, Never> {
+        generationEventSubject.eraseToAnyPublisher()
+    }
+
     public func initialize(appSupportDirectory: URL) async throws {
         do {
             _ = try await runtime.initialize(appSupportDirectory: appSupportDirectory)
@@ -63,7 +68,6 @@ import Foundation
                     isReady: true,
                     loadState: .idle,
                     clonePreparationState: .idle,
-                    latestEvent: nil,
                     visibleErrorMessage: nil
                 )
             }
@@ -73,7 +77,6 @@ import Foundation
                     isReady: false,
                     loadState: .failed(message: error.localizedDescription),
                     clonePreparationState: .idle,
-                    latestEvent: nil,
                     visibleErrorMessage: error.localizedDescription
                 )
             }
@@ -92,7 +95,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .starting,
                     clonePreparationState: .idle,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -105,7 +107,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .loaded(modelID: id),
                     clonePreparationState: current.clonePreparationState,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -122,7 +123,6 @@ import Foundation
                 isReady: current.isReady,
                 loadState: .idle,
                 clonePreparationState: .idle,
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: nil
             )
         }
@@ -147,7 +147,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .starting,
                     clonePreparationState: .idle,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -160,7 +159,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .loaded(modelID: request.modelID),
                     clonePreparationState: current.clonePreparationState,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -178,7 +176,6 @@ import Foundation
                 isReady: current.isReady,
                 loadState: current.loadState,
                 clonePreparationState: .preparing(key: key),
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: nil
             )
         }
@@ -193,7 +190,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: current.loadState,
                     clonePreparationState: .primed(key: key),
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -206,7 +202,6 @@ import Foundation
                         key: key,
                         message: error.localizedDescription
                     ),
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: error.localizedDescription
                 )
             }
@@ -220,25 +215,18 @@ import Foundation
                 isReady: current.isReady,
                 loadState: current.loadState,
                 clonePreparationState: .idle,
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: current.visibleErrorMessage
             )
         }
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
-        switch request.payload {
-        case .custom, .design, .clone:
-            break
-        }
-
         let generationLabel = request.streamingTitle ?? String(request.text.prefix(40))
         publishSnapshot { current in
             TTSEngineSnapshot(
                 isReady: current.isReady,
                 loadState: .running(modelID: request.modelID, label: generationLabel, fraction: nil),
                 clonePreparationState: current.clonePreparationState,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             )
         }
@@ -258,19 +246,7 @@ import Foundation
             )
 
             let result = try await session.run { [weak self] event in
-                self?.publishSnapshot { current in
-                    TTSEngineSnapshot(
-                        isReady: current.isReady,
-                        loadState: .running(
-                            modelID: request.modelID,
-                            label: event.title,
-                            fraction: nil
-                        ),
-                        clonePreparationState: current.clonePreparationState,
-                        latestEvent: event,
-                        visibleErrorMessage: nil
-                    )
-                }
+                self?.generationEventSubject.send(event)
             }
 
             publishSnapshot { current in
@@ -278,7 +254,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .loaded(modelID: request.modelID),
                     clonePreparationState: current.clonePreparationState,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: nil
                 )
             }
@@ -291,7 +266,7 @@ import Foundation
 
     public func generateBatch(
         _ requests: [GenerationRequest],
-        progressHandler: ((Double?, String) -> Void)?
+        progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [GenerationResult] {
         guard !requests.isEmpty else { return [] }
         let batchMode = BatchMode(payload: requests[0].payload)
@@ -362,9 +337,10 @@ import Foundation
         publishSnapshot { current in
             TTSEngineSnapshot(
                 isReady: current.isReady,
-                loadState: current.loadState,
+                loadState: current.loadState.currentModelID.map {
+                    .loaded(modelID: $0)
+                } ?? .idle,
                 clonePreparationState: current.clonePreparationState,
-                latestEvent: nil,
                 visibleErrorMessage: current.visibleErrorMessage
             )
         }
@@ -376,7 +352,6 @@ import Foundation
                 isReady: current.isReady,
                 loadState: current.loadState,
                 clonePreparationState: current.clonePreparationState,
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: nil
             )
         }
@@ -392,7 +367,6 @@ import Foundation
                 isReady: current.isReady,
                 loadState: .failed(message: error.localizedDescription),
                 clonePreparationState: .idle,
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: error.localizedDescription
             )
         }
@@ -404,7 +378,6 @@ import Foundation
                 isReady: current.isReady,
                 loadState: current.loadState,
                 clonePreparationState: current.clonePreparationState,
-                latestEvent: current.latestEvent,
                 visibleErrorMessage: error.localizedDescription
             )
         }
@@ -417,7 +390,6 @@ import Foundation
                     isReady: current.isReady,
                     loadState: .loaded(modelID: loadedModelID),
                     clonePreparationState: current.clonePreparationState,
-                    latestEvent: current.latestEvent,
                     visibleErrorMessage: error.localizedDescription
                 )
             }
@@ -426,9 +398,7 @@ import Foundation
         }
     }
 
-    private func publishSnapshot(
-        _ transform: (TTSEngineSnapshot) -> TTSEngineSnapshot
-    ) {
+    private func publishSnapshot(_ transform: (TTSEngineSnapshot) -> TTSEngineSnapshot) {
         snapshotSubject.send(transform(snapshotSubject.value))
     }
 }

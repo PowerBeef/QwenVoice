@@ -2,10 +2,6 @@ import SwiftUI
 import AppKit
 import QwenVoiceNative
 
-extension Notification.Name {
-    static let generationChunkReceived = Notification.Name("generationChunkReceived")
-}
-
 struct SavedVoiceCloneHandoffPlan: Equatable {
     let handoff: PendingVoiceCloningHandoff
     let cloneModelID: String?

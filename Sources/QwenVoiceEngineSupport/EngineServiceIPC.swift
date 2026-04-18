@@ -1,0 +1,74 @@
+import Foundation
+
+public let QwenVoiceEngineServiceBundleIdentifier = "com.qwenvoice.app.engine-service"
+
+public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, LocalizedError {
+    public let message: String
+    public let domain: String?
+
+    public init(message: String, domain: String? = nil) {
+        self.message = message
+        self.domain = domain
+    }
+
+    public var errorDescription: String? {
+        message
+    }
+}
+
+public enum EngineCommand: Codable, Equatable, Sendable {
+    case initialize(appSupportDirectoryPath: String)
+    case ping
+    case loadModel(id: String)
+    case unloadModel
+    case ensureModelLoadedIfNeeded(id: String)
+    case prewarmModelIfNeeded(request: GenerationRequest)
+    case ensureCloneReferencePrimed(modelID: String, reference: CloneReference)
+    case cancelClonePreparationIfNeeded
+    case generate(request: GenerationRequest)
+    case generateBatch(commandID: UUID, requests: [GenerationRequest])
+    case cancelActiveGeneration
+    case listPreparedVoices
+    case enrollPreparedVoice(name: String, audioPath: String, transcript: String?)
+    case deletePreparedVoice(id: String)
+    case clearGenerationActivity
+    case clearVisibleError
+}
+
+public enum EngineReply: Codable, Equatable, Sendable {
+    case void
+    case bool(Bool)
+    case generationResult(GenerationResult)
+    case generationResults([GenerationResult])
+    case preparedVoice(PreparedVoice)
+    case preparedVoices([PreparedVoice])
+    case snapshot(TTSEngineSnapshot)
+    case failure(RemoteErrorPayload)
+}
+
+public enum EngineEventEnvelope: Codable, Equatable, Sendable {
+    case snapshot(TTSEngineSnapshot)
+    case batchProgress(EngineBatchProgressUpdate)
+    case generationChunk(GenerationEvent)
+}
+
+public enum EngineServiceCodec {
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+
+    public static func encode<T: Encodable>(_ value: T) throws -> Data {
+        try encoder.encode(value)
+    }
+
+    public static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        try decoder.decode(T.self, from: data)
+    }
+}
+
+@objc public protocol QwenVoiceEngineClientEventXPCProtocol {
+    func handleEvent(_ payload: Data)
+}
+
+@objc public protocol QwenVoiceEngineServiceXPCProtocol {
+    func perform(_ payload: Data, withReply reply: @escaping (Data) -> Void)
+}

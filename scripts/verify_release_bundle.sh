@@ -30,6 +30,8 @@ fi
 APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 
 APP_BINARY="$APP_PATH/Contents/MacOS/QwenVoice"
+XPC_SERVICE_PATH="$APP_PATH/Contents/XPCServices/QwenVoiceEngineService.xpc"
+XPC_SERVICE_BINARY="$XPC_SERVICE_PATH/Contents/MacOS/QwenVoiceEngineService"
 RESOURCES_DIR="$APP_PATH/Contents/Resources"
 TMP_UI_HOME=""
 TMP_UI_FIXTURE=""
@@ -50,6 +52,8 @@ echo ""
 
 echo "[1/4] Checking native bundle contents..."
 [ -x "$APP_BINARY" ] || fail "App binary missing: $APP_BINARY"
+[ -d "$XPC_SERVICE_PATH" ] || fail "Bundled XPC service missing: $XPC_SERVICE_PATH"
+[ -x "$XPC_SERVICE_BINARY" ] || fail "Bundled XPC service binary missing: $XPC_SERVICE_BINARY"
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$APP_PATH" >/dev/null
 if find "$RESOURCES_DIR" -name "*.whl" -print -quit | grep -q .; then
     fail "Vendored wheel files must not be packaged into the native app bundle"
@@ -64,6 +68,8 @@ echo "[2/4] Verifying app code signature..."
 if [ "$EXPECT_SIGNED_RELEASE" = "1" ]; then
     codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1 || fail "Signed release code signature verification failed"
     codesign_has_runtime_metadata "$APP_PATH" || fail "Signed release is missing hardened runtime metadata"
+    codesign --verify --strict "$XPC_SERVICE_PATH" >/dev/null 2>&1 || fail "Bundled XPC service code signature verification failed"
+    codesign_has_runtime_metadata "$XPC_SERVICE_PATH" || fail "Bundled XPC service is missing hardened runtime metadata"
     echo "[2/4] Signed release checks OK"
 else
     echo "[2/4] Signature checks skipped (set QWENVOICE_EXPECT_SIGNED_RELEASE=1 for release verification)"

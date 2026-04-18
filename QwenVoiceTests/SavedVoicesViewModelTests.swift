@@ -3,8 +3,7 @@ import XCTest
 @testable import QwenVoice
 import QwenVoiceNative
 
-@MainActor
-private final class SavedVoicesMockEngine: MacTTSEngine {
+private final class SavedVoicesMockEngine: MacTTSEngine, @unchecked Sendable {
     private let subject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private(set) var listPreparedVoicesCallCount = 0
     var preparedVoices: [PreparedVoice]
@@ -35,7 +34,7 @@ private final class SavedVoicesMockEngine: MacTTSEngine {
 
     func generateBatch(
         _ requests: [GenerationRequest],
-        progressHandler: ((Double?, String) -> Void)?
+        progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [QwenVoiceNative.GenerationResult] {
         throw NSError(domain: "SavedVoicesMockEngine", code: 2)
     }
@@ -64,7 +63,6 @@ final class SavedVoicesViewModelTests: XCTestCase {
                 isReady: true,
                 loadState: .idle,
                 clonePreparationState: .idle,
-                latestEvent: nil,
                 visibleErrorMessage: nil
             ),
             preparedVoices: [

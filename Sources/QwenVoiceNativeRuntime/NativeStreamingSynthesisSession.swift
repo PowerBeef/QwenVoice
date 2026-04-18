@@ -1,9 +1,10 @@
 import AVFoundation
 import Foundation
+import QwenVoiceEngineSupport
 
 protocol NativeStreamingSessionRunning {
     func run(
-        eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void
+        eventSink: @escaping @Sendable (GenerationEvent) -> Void
     ) async throws -> GenerationResult
 }
 
@@ -61,7 +62,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
     }
 
     func run(
-        eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void
+        eventSink: @escaping @Sendable (GenerationEvent) -> Void
     ) async throws -> GenerationResult {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let sessionDirectory = try makeSessionDirectory()
@@ -273,7 +274,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         cumulativeDuration: inout Double,
         allSamples: inout [Float],
         firstChunkMS: inout Int?,
-        eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void
+        eventSink: @escaping @Sendable (GenerationEvent) -> Void
     ) async throws -> (path: String, duration: Double) {
         let chunkURL = Self.chunkURL(in: sessionDirectory, chunkIndex: chunkIndex)
         try Self.writeWAV(
@@ -295,7 +296,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         }
 
         if request.shouldStream {
-            await eventSink(
+            eventSink(
                 GenerationEvent(
                     kind: .streamChunk,
                     requestID: requestID,

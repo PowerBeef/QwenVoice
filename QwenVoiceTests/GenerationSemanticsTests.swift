@@ -1,6 +1,6 @@
 import XCTest
 @testable import QwenVoice
-import QwenVoiceNative
+import QwenVoiceNativeRuntime
 
 final class GenerationSemanticsTests: XCTestCase {
     func testCustomPrewarmIdentityTracksVoiceAndMeaningfulDeliveryChanges() {

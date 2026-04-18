@@ -125,7 +125,8 @@ final class StubBackendTransport {
         text: String,
         outputPath: String,
         stream: Bool,
-        streamingContext: StreamingRequestContext?
+        streamingContext: StreamingRequestContext?,
+        chunkHandler: ((GenerationEvent) -> Void)? = nil
     ) async throws -> StubGenerationResult {
         let requestID = nextStubRequestID()
         let finalURL = URL(fileURLWithPath: outputPath)
@@ -165,19 +166,18 @@ final class StubBackendTransport {
             }
 
             if stream, let streamingContext {
-                NotificationCenter.default.post(
-                    name: .generationChunkReceived,
-                    object: nil,
-                    userInfo: [
-                        "requestID": requestID,
-                        "mode": streamingContext.mode.rawValue,
-                        "title": streamingContext.title,
-                        "chunkPath": chunkURL.path,
-                        "isFinal": index == chunkDurations.count - 1,
-                        "chunkDurationSeconds": durationSeconds,
-                        "cumulativeDurationSeconds": chunkDurations.prefix(index + 1).reduce(0.0, +),
-                        "streamSessionDirectory": streamSessionDirectory.path,
-                    ]
+                chunkHandler?(
+                    GenerationEvent(
+                        kind: .streamChunk,
+                        requestID: requestID,
+                        mode: streamingContext.mode.rawValue,
+                        title: streamingContext.title,
+                        chunkPath: chunkURL.path,
+                        isFinal: index == chunkDurations.count - 1,
+                        chunkDurationSeconds: durationSeconds,
+                        cumulativeDurationSeconds: chunkDurations.prefix(index + 1).reduce(0.0, +),
+                        streamSessionDirectory: streamSessionDirectory.path
+                    )
                 )
             }
         }
@@ -211,7 +211,8 @@ final class StubBackendTransport {
                 text: text,
                 outputPath: outputPath,
                 stream: false,
-                streamingContext: nil
+                streamingContext: nil,
+                chunkHandler: nil
             )
             results.append(result)
         }
