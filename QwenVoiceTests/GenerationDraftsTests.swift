@@ -60,6 +60,77 @@ final class GenerationDraftsTests: XCTestCase {
         XCTAssertEqual(draft.text, "Keep this script")
     }
 
+    func testCustomVoiceDraftIdlePrewarmRequiresNonEmptyScript() {
+        XCTAssertFalse(CustomVoiceDraft().shouldIdlePrewarm)
+        XCTAssertTrue(
+            CustomVoiceDraft(
+                selectedSpeaker: TTSModel.defaultSpeaker,
+                emotion: "Normal tone",
+                text: "Hello there"
+            ).shouldIdlePrewarm
+        )
+    }
+
+    func testCustomVoiceDraftIdlePrewarmDebounceKeyTracksTypingState() {
+        XCTAssertNil(CustomVoiceDraft().idlePrewarmDebounceKey)
+
+        let shortDraft = CustomVoiceDraft(
+            selectedSpeaker: "Vivian",
+            emotion: "Normal tone",
+            text: "H"
+        )
+        let longerDraft = CustomVoiceDraft(
+            selectedSpeaker: "Vivian",
+            emotion: "Normal tone",
+            text: "Hello"
+        )
+
+        XCTAssertNotNil(shortDraft.idlePrewarmDebounceKey)
+        XCTAssertNotEqual(shortDraft.idlePrewarmDebounceKey, longerDraft.idlePrewarmDebounceKey)
+    }
+
+    func testVoiceDesignDraftIdlePrewarmRequiresBriefAndScript() {
+        XCTAssertFalse(
+            VoiceDesignDraft(
+                voiceDescription: "",
+                emotion: "Normal tone",
+                text: "Hello there"
+            ).shouldIdlePrewarm
+        )
+        XCTAssertFalse(
+            VoiceDesignDraft(
+                voiceDescription: "Warm narrator",
+                emotion: "Normal tone",
+                text: ""
+            ).shouldIdlePrewarm
+        )
+        XCTAssertTrue(
+            VoiceDesignDraft(
+                voiceDescription: "Warm narrator",
+                emotion: "Normal tone",
+                text: "Hello there"
+            ).shouldIdlePrewarm
+        )
+    }
+
+    func testVoiceDesignDraftIdlePrewarmDebounceKeyRequiresBriefAndScriptAndTracksTyping() {
+        XCTAssertNil(VoiceDesignDraft().idlePrewarmDebounceKey)
+
+        let baseDraft = VoiceDesignDraft(
+            voiceDescription: "Warm narrator",
+            emotion: "Normal tone",
+            text: "H"
+        )
+        let editedDraft = VoiceDesignDraft(
+            voiceDescription: "Warm narrator",
+            emotion: "Normal tone",
+            text: "Hello"
+        )
+
+        XCTAssertNotNil(baseDraft.idlePrewarmDebounceKey)
+        XCTAssertNotEqual(baseDraft.idlePrewarmDebounceKey, editedDraft.idlePrewarmDebounceKey)
+    }
+
     func testDesignResultNameSuggestionSanitizesAndTruncatesBrief() {
         let suggestedName = SavedVoiceNameSuggestion.designResultName(
             from: "Warm, deep narrator with a subtle British accent and soft radio finish."
@@ -172,7 +243,7 @@ final class GenerationDraftsTests: XCTestCase {
 
     func testVoiceCloningReadinessShowsPreparingStateBeforeClonePrimingCompletes() {
         let descriptor = VoiceCloningReadiness.describe(
-            pythonReady: true,
+            engineReady: true,
             isModelAvailable: true,
             modelDisplayName: "Qwen3-TTS Pro Clone",
             referenceAudioPath: "/tmp/reference.wav",
@@ -187,7 +258,7 @@ final class GenerationDraftsTests: XCTestCase {
 
     func testVoiceCloningReadinessBecomesReadyAfterClonePrimingCompletes() {
         let descriptor = VoiceCloningReadiness.describe(
-            pythonReady: true,
+            engineReady: true,
             isModelAvailable: true,
             modelDisplayName: "Qwen3-TTS Pro Clone",
             referenceAudioPath: "/tmp/reference.wav",

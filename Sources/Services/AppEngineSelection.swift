@@ -1,84 +1,52 @@
 import Foundation
 import QwenVoiceNative
 
-enum AppEngineSelection: String, Equatable {
-    static let environmentKey = "QWENVOICE_APP_ENGINE"
+enum AppEngineSelection: Equatable {
     static let defaultSelection: Self = .native
 
-    case python
     case native
 
-    init(
-        environment: [String: String],
-        defaultSelection: Self = Self.defaultSelection
-    ) {
-        let rawValue = environment[Self.environmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        self = rawValue.flatMap(Self.init(rawValue:)) ?? defaultSelection
+    init(environment _: [String: String] = ProcessInfo.processInfo.environment) {
+        self = .native
     }
 
-    static func current(
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> Self {
-        Self(environment: environment)
+    static func current(environment _: [String: String] = ProcessInfo.processInfo.environment) -> Self {
+        .native
     }
 
-    func effectiveSelection(
-        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
-    ) -> Self {
+    func effectiveSelection(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Self {
         self
     }
 
-    func requiresManualInitialization(
-        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
-    ) -> Bool {
-        effectiveSelection(isStubBackendMode: isStubBackendMode) == .native
+    func requiresManualInitialization(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Bool {
+        true
     }
 
     @MainActor
     func makeEngine(
-        pythonBridge: PythonBridge,
         isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
     ) -> any MacTTSEngine {
-        switch effectiveSelection(isStubBackendMode: isStubBackendMode) {
-        case .python:
-            return PythonBridgeMacTTSEngineAdapter(bridge: pythonBridge)
-        case .native:
-            return isStubBackendMode ? UITestStubMacEngine() : NativeMLXMacEngine()
-        }
+        isStubBackendMode ? UITestStubMacEngine() : NativeMLXMacEngine()
     }
 
     @MainActor
     func resolveSidebarStatus(
-        pythonBridge: PythonBridge,
         ttsEngineSnapshot: TTSEngineSnapshot,
         prefersInlinePresentation: Bool,
         isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
     ) -> SidebarStatus {
-        switch effectiveSelection(isStubBackendMode: isStubBackendMode) {
-        case .python:
-            return pythonBridge.sidebarStatus
-        case .native:
-            return Self.nativeSidebarStatus(
-                from: ttsEngineSnapshot,
-                prefersInlinePresentation: prefersInlinePresentation
-            )
-        }
+        Self.nativeSidebarStatus(
+            from: ttsEngineSnapshot,
+            prefersInlinePresentation: prefersInlinePresentation
+        )
     }
 
     @MainActor
     func clearSidebarError(
-        pythonBridge: PythonBridge,
         ttsEngineStore: TTSEngineStore,
         isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
     ) {
-        switch effectiveSelection(isStubBackendMode: isStubBackendMode) {
-        case .python:
-            pythonBridge.lastError = nil
-        case .native:
-            ttsEngineStore.clearVisibleError()
-        }
+        ttsEngineStore.clearVisibleError()
     }
 
     private static func nativeSidebarStatus(

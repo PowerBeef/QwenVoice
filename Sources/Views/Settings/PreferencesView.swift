@@ -4,15 +4,6 @@ struct PreferencesView: View {
     @AppStorage("autoPlay") private var autoPlay = true
     @AppStorage("outputDirectory") private var outputDirectory = ""
 
-    @EnvironmentObject private var envManager: PythonEnvironmentManager
-
-    @State private var showResetConfirmation = false
-    private let appEngineSelection = AppEngineSelection.current()
-
-    private var usesPythonMaintenancePath: Bool {
-        appEngineSelection == .python
-    }
-
     var body: some View {
         Form {
             Section("General") {
@@ -65,23 +56,10 @@ struct PreferencesView: View {
             }
 
             Section("Maintenance") {
-                if usesPythonMaintenancePath {
-                    Text("Python mode is enabled for source/debug compatibility. Resetting here recreates the local debug environment.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-
-                    Button("Reset Python Environment") {
-                        showResetConfirmation = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.preferences)
-                    .accessibilityIdentifier("preferences_resetEnvButton")
-                } else {
-                    Text("QwenVoice now runs natively and no longer needs a bundled Python backend in the shipped app.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("preferences_nativeMaintenanceNote")
-                }
+                Text("QwenVoice runs natively and keeps generation and voice management inside the Swift runtime.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("preferences_nativeMaintenanceNote")
             }
         }
         .formStyle(.grouped)
@@ -93,14 +71,6 @@ struct PreferencesView: View {
             if UITestAutomationSupport.isEnabled {
                 hiddenReadinessMarker
             }
-        }
-        .alert("Reset Python Environment?", isPresented: $showResetConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
-                envManager.resetEnvironment()
-            }
-        } message: {
-            Text("This will delete the local Python virtual environment and recreate it for source/debug compatibility.")
         }
     }
 

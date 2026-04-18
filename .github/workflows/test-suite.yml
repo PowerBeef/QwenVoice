@@ -33,14 +33,6 @@ jobs:
       - name: Ensure XcodeGen
         run: which xcodegen || brew install xcodegen
 
-      - name: Set up Python test environment
-        run: |
-          python3 -m venv .ci-python
-          . .ci-python/bin/activate
-          python -m pip install --quiet --upgrade pip
-          python -m pip install --quiet numpy pillow
-          echo "$PWD/.ci-python/bin" >> "$GITHUB_PATH"
-
       - name: Set UI profile for runner
         run: |
           ./scripts/set_ci_ui_profile.sh "${{ matrix.runner }}"
@@ -57,11 +49,8 @@ jobs:
       - name: Contract tests
         run: python3 scripts/harness.py test --layer contract
 
-      - name: Pipeline tests
-        run: python3 scripts/harness.py test --layer pipeline
-
-      - name: Server tests
-        run: python3 scripts/harness.py test --layer server
+      - name: Native runtime tests
+        run: python3 scripts/harness.py test --layer native
 
       - name: Verify strict concurrency
         run: |
@@ -153,25 +142,3 @@ jobs:
           path: |
             build/*.dmg
             build/release-metadata.txt
-
-  source-backend-compat:
-    name: Source Backend Compatibility
-    runs-on: macos-15
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Ensure source backend inputs exist
-        run: |
-          test -f Sources/Resources/requirements.txt
-
-      - name: Create clean compatibility environment
-        run: |
-          python3 -m venv .runtime-parity
-          . .runtime-parity/bin/activate
-          python -m pip install --quiet --upgrade pip
-          python -m pip install --quiet -r Sources/Resources/requirements.txt
-
-      - name: Validate source backend alignment
-        run: |
-          .runtime-parity/bin/python scripts/harness.py validate --python "$PWD/.runtime-parity/bin/python"

@@ -1,4 +1,38 @@
 import Foundation
+import QwenVoiceNative
+
+enum StubEngineError: LocalizedError {
+    case message(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .message(let message):
+            return message
+        }
+    }
+}
+
+struct StreamingRequestContext {
+    let mode: GenerationMode
+    let title: String
+}
+
+struct StubGenerationMetrics {
+    let tokenCount: Int?
+    let processingTimeSeconds: Double?
+    let peakMemoryUsage: Double?
+    let streamingUsed: Bool
+    let preparedCloneUsed: Bool?
+    let cloneCacheHit: Bool?
+    let firstChunkMs: Int?
+}
+
+struct StubGenerationResult {
+    let audioPath: String
+    let durationSeconds: Double
+    let streamSessionDirectory: String?
+    let metrics: StubGenerationMetrics?
+}
 
 @MainActor
 final class StubBackendTransport {
@@ -8,16 +42,15 @@ final class StubBackendTransport {
         try? await Task.sleep(nanoseconds: 60_000_000)
     }
 
-    func loadModel(id: String) async throws -> [String: RPCValue] {
+    func loadModel(id: String) async throws {
         guard let model = TTSModel.model(id: id) else {
-            throw PythonBridgeError.rpcError(code: -32001, message: "Unknown model '\(id)'")
+            throw StubEngineError.message("Unknown model '\(id)'")
         }
         guard model.isAvailable(in: QwenVoiceApp.modelsDir) else {
-            throw PythonBridgeError.rpcError(code: -32010, message: "Model '\(model.name)' is unavailable or incomplete.")
+            throw StubEngineError.message("Model '\(model.name)' is unavailable or incomplete.")
         }
 
         try? await Task.sleep(nanoseconds: 120_000_000)
-        return stubModelLoadResult(for: model, cached: false)
     }
 
     func listVoices() throws -> [Voice] {
@@ -45,13 +78,13 @@ final class StubBackendTransport {
     func enrollVoice(name: String, audioPath: String, transcript: String?) throws -> Voice {
         let sourcePath = audioPath.isEmpty ? (UITestAutomationSupport.enrollAudioURL?.path ?? "") : audioPath
         guard !sourcePath.isEmpty, FileManager.default.fileExists(atPath: sourcePath) else {
-            throw PythonBridgeError.rpcError(code: -32020, message: "Reference audio file not found.")
+            throw StubEngineError.message("Reference audio file not found.")
         }
 
         try FileManager.default.createDirectory(at: AppPaths.voicesDir, withIntermediateDirectories: true)
         let safeName = SavedVoiceNameSanitizer.normalizedName(name)
         guard !safeName.isEmpty else {
-            throw PythonBridgeError.rpcError(code: -32022, message: "Invalid saved voice name.")
+            throw StubEngineError.message("Invalid saved voice name.")
         }
 
         let destination = AppPaths.voicesDir.appendingPathComponent("\(safeName).wav")
@@ -59,10 +92,7 @@ final class StubBackendTransport {
 
         if FileManager.default.fileExists(atPath: destination.path)
             || FileManager.default.fileExists(atPath: transcriptDestination.path) {
-            throw PythonBridgeError.rpcError(
-                code: -32023,
-                message: "A saved voice named \"\(safeName)\" already exists. Choose a different name."
-            )
+            throw StubEngineError.message("A saved voice named \"\(safeName)\" already exists. Choose a different name.")
         }
 
         try FileManager.default.copyItem(at: URL(fileURLWithPath: sourcePath), to: destination)
@@ -83,53 +113,11 @@ final class StubBackendTransport {
         let transcriptURL = AppPaths.voicesDir.appendingPathComponent("\(name).txt")
 
         guard FileManager.default.fileExists(atPath: wavURL.path) else {
-            throw PythonBridgeError.rpcError(code: -32021, message: "Voice '\(name)' does not exist.")
+            throw StubEngineError.message("Voice '\(name)' does not exist.")
         }
 
         try FileManager.default.removeItem(at: wavURL)
         try? FileManager.default.removeItem(at: transcriptURL)
-    }
-
-    func modelInfo() -> [ModelInfo] {
-        TTSModel.all.map { model in
-            let modelDirectory = model.installDirectory(in: QwenVoiceApp.modelsDir)
-            let rootExists = FileManager.default.fileExists(atPath: modelDirectory.path)
-            let missingRequiredPaths = rootExists
-                ? model.requiredRelativePaths.filter {
-                    !FileManager.default.fileExists(
-                        atPath: modelDirectory.appendingPathComponent($0).path
-                    )
-                }
-                : []
-            let complete = rootExists && missingRequiredPaths.isEmpty
-            let size = rootExists ? Self.directorySize(url: modelDirectory) : 0
-
-            return ModelInfo(
-                id: model.id,
-                name: model.name,
-                folder: model.folder,
-                mode: model.mode,
-                tier: model.tier,
-                outputSubfolder: model.outputSubfolder,
-                huggingFaceRepo: model.huggingFaceRepo,
-                requiredRelativePaths: model.requiredRelativePaths,
-                resolvedPath: rootExists ? modelDirectory.path : nil,
-                downloaded: rootExists,
-                complete: complete,
-                repairable: rootExists && !complete,
-                missingRequiredPaths: missingRequiredPaths,
-                sizeBytes: size,
-                mlxAudioVersion: "0.4.2",
-                supportsStreaming: true,
-                supportsPreparedClone: model.mode == .clone,
-                supportsCloneStreaming: model.mode == .clone,
-                supportsBatch: true
-            )
-        }
-    }
-
-    func speakers() -> [String: [String]] {
-        TTSModel.speakerGroups
     }
 
     func generate(
@@ -138,7 +126,7 @@ final class StubBackendTransport {
         outputPath: String,
         stream: Bool,
         streamingContext: StreamingRequestContext?
-    ) async throws -> GenerationResult {
+    ) async throws -> StubGenerationResult {
         let requestID = nextStubRequestID()
         let finalURL = URL(fileURLWithPath: outputPath)
         let finalDirectory = finalURL.deletingLastPathComponent()
@@ -196,11 +184,11 @@ final class StubBackendTransport {
 
         try Self.writeStubWAV(to: finalURL, samples: combinedSamples, sampleRate: sampleRate)
 
-        return GenerationResult(
+        return StubGenerationResult(
             audioPath: finalURL.path,
             durationSeconds: chunkDurations.reduce(0, +),
             streamSessionDirectory: stream ? streamSessionDirectory.path : nil,
-            metrics: .init(
+            metrics: StubGenerationMetrics(
                 tokenCount: 96,
                 processingTimeSeconds: Date().timeIntervalSince(startedAt),
                 peakMemoryUsage: 0.12,
@@ -215,8 +203,8 @@ final class StubBackendTransport {
     func generateCloneBatch(
         texts: [String],
         outputPaths: [String]
-    ) async throws -> [GenerationResult] {
-        var results: [GenerationResult] = []
+    ) async throws -> [StubGenerationResult] {
+        var results: [StubGenerationResult] = []
         for (text, outputPath) in zip(texts, outputPaths) {
             let result = try await generate(
                 mode: .clone,
@@ -233,31 +221,6 @@ final class StubBackendTransport {
     private func nextStubRequestID() -> Int {
         stubRequestSeed += 1
         return stubRequestSeed
-    }
-
-    private func stubModelLoadResult(for model: TTSModel, cached: Bool) -> [String: RPCValue] {
-        [
-            "success": .bool(true),
-            "cached": .bool(cached),
-            "model_id": .string(model.id),
-            "mlx_audio_version": .string("0.4.2"),
-            "supports_streaming": .bool(true),
-            "supports_prepared_clone": .bool(model.mode == .clone),
-            "supports_clone_streaming": .bool(model.mode == .clone),
-            "supports_batch": .bool(true),
-        ]
-    }
-
-    private static func directorySize(url: URL) -> Int {
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
-        var total = 0
-        for case let fileURL as URL in enumerator {
-            if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                total += size
-            }
-        }
-        return total
     }
 
     private static func stubSineWave(sampleRate: Int, durationSeconds: Double, frequency: Int) -> [Int16] {

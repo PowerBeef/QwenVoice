@@ -129,7 +129,7 @@ struct VoiceCloningView: View {
 
     private var readinessDescriptor: VoiceCloningReadinessDescriptor {
         VoiceCloningReadiness.describe(
-            pythonReady: ttsEngineStore.isReady,
+            engineReady: ttsEngineStore.isReady,
             isModelAvailable: isModelAvailable,
             modelDisplayName: modelDisplayName,
             referenceAudioPath: draft.referenceAudioPath,

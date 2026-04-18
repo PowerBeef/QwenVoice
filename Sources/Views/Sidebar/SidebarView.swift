@@ -254,14 +254,12 @@ struct SidebarView: View {
 private struct SidebarFooterRegion: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject private var pythonBridge: PythonBridge
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
 
     private let appEngineSelection = AppEngineSelection.current()
 
     private var resolvedSidebarStatus: SidebarStatus {
         appEngineSelection.resolveSidebarStatus(
-            pythonBridge: pythonBridge,
             ttsEngineSnapshot: ttsEngineStore.snapshot,
             prefersInlinePresentation: audioPlayer.isLiveStream
         )
@@ -296,7 +294,6 @@ private struct SidebarFooterRegion: View {
                         sidebarStatus: resolvedSidebarStatus,
                         clearError: {
                             appEngineSelection.clearSidebarError(
-                                pythonBridge: pythonBridge,
                                 ttsEngineStore: ttsEngineStore
                             )
                         }

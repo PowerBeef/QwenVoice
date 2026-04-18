@@ -16,14 +16,6 @@ struct Voice: Identifiable, Hashable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Initialize from a Python backend response
-    init(from rpcValue: [String: RPCValue]) {
-        self.name = rpcValue["name"]?.stringValue ?? ""
-        self.id = self.name
-        self.wavPath = rpcValue["wav_path"]?.stringValue ?? ""
-        self.hasTranscript = rpcValue["has_transcript"]?.boolValue ?? false
-    }
-
     init(name: String, wavPath: String, hasTranscript: Bool) {
         self.id = name
         self.name = name

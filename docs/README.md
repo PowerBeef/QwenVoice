@@ -7,18 +7,17 @@ This folder contains the current, repo-authored documentation for QwenVoice.
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts reused by the other docs
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, cleanup outcomes, and live caveats
-- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — source/debug Python compatibility, backend helper overlay, native packaging, and runtime notes
+- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — native runtime, vendoring, and packaging notes
 
 These are the maintained source-of-truth documents for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and then these reference docs in that order.
 
 ## Product And Public Docs
 
 - [`../README.md`](../README.md) — GitHub landing page and end-user overview
-- [`../cli/README.md`](../cli/README.md) — standalone CLI usage and setup
 
 ## Supplemental Guides
 
-- [`../qwen_tone.md`](../qwen_tone.md) — supplemental tone and prompt-writing guidance for the app and CLI
+- [`../qwen_tone.md`](../qwen_tone.md) — supplemental tone and prompt-writing guidance
 
 Supplemental guides are useful, but they are not the primary source of truth for current repo structure or shipped-product behavior.
 
@@ -28,10 +27,10 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 ## Repo-Local Skills
 
-- [`../.agents/skills/`](../.agents/skills/) — repo-tracked QwenVoice skills for doc sync, packaged validation, release publishing, and vendored-runtime work
+- [`../.agents/skills/`](../.agents/skills/) — repo-tracked QwenVoice skills for doc sync, packaged validation, release publishing, and native runtime vendoring work
 
 ## Notes
 
-- Maintained contributor guidance in this checkout lives in the maintained reference docs listed above. Do not assume missing supplementary docs still exist.
-- Generated and vendor documentation under `Sources/Resources/python/`, `cli/.venv/`, and dependency package directories is intentionally out of scope for the repo docs.
+- Maintained contributor guidance in this checkout lives in the maintained reference docs listed above.
+- Generated or vendored dependency documentation is intentionally out of scope for the repo docs.
 - Historical notes may still appear in git history or external references, but the maintained repo facts live in the reference docs listed above.

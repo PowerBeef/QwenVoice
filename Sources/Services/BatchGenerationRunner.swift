@@ -566,7 +566,7 @@ final class BatchGenerationRunner {
                 publishProgress(activeItemIndex: nil, message: "Done")
                 return .completed(items: items)
             } catch {
-                if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {
+                if await cancellationState.isRequested {
                     if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
                         markItemsCancelled(startingAt: firstUnfinished)
                     }
@@ -614,7 +614,7 @@ final class BatchGenerationRunner {
                 items[index].status = .saved(audioPath: result.audioPath)
                 publishItems()
             } catch {
-                if await cancellationState.isRequested, case PythonBridgeError.cancelled = error {
+                if await cancellationState.isRequested {
                     markItemsCancelled(startingAt: index)
                     publishItems()
                     engineStore.clearGenerationActivity()

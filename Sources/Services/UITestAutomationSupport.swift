@@ -18,14 +18,6 @@ enum UITestAppearanceMode: String {
 }
 
 enum UITestAutomationSupport {
-    enum RuntimeSource: String {
-        case none
-        case bundled
-        case devVenv = "dev_venv"
-        case stub
-        case other
-    }
-
     private static let environment = ProcessInfo.processInfo.environment
 
     static let uiTestEnvironmentKey = "QWENVOICE_UI_TEST"
@@ -149,10 +141,6 @@ enum UITestAutomationSupport {
         return true
     }
 
-    static func stubPythonPath() -> String {
-        "stub-python3"
-    }
-
     static func isTruthy(_ value: String?) -> Bool {
         guard let value else { return false }
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -191,42 +179,5 @@ enum UITestAutomationSupport {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return Set(values)
-    }
-
-    nonisolated static func runtimeSource(
-        for pythonPath: String?,
-        bundledRuntimeRoot: String?,
-        devVenvRoot: String,
-        stubPythonPath: String
-    ) -> RuntimeSource {
-        guard let pythonPath,
-              !pythonPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .none
-        }
-
-        let normalizedPythonPath = normalizePath(pythonPath)
-        if normalizedPythonPath == normalizePath(stubPythonPath) {
-            return .stub
-        }
-
-        if let bundledRuntimeRoot,
-           isPath(normalizedPythonPath, inside: bundledRuntimeRoot) {
-            return .bundled
-        }
-
-        if isPath(normalizedPythonPath, inside: devVenvRoot) {
-            return .devVenv
-        }
-
-        return .other
-    }
-
-    private nonisolated static func normalizePath(_ path: String) -> String {
-        URL(fileURLWithPath: path).standardizedFileURL.path
-    }
-
-    private nonisolated static func isPath(_ path: String, inside root: String) -> Bool {
-        let normalizedRoot = normalizePath(root)
-        return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
     }
 }

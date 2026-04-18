@@ -6,41 +6,30 @@ import QwenVoiceNative
 struct QwenVoiceApp: App {
     @NSApplicationDelegateAdaptor(QwenVoiceApplicationDelegate.self)
     private var appDelegate
-    @StateObject private var pythonBridge: PythonBridge
     @StateObject private var ttsEngineStore: TTSEngineStore
     @State private var didInitializeSelectedTTSEngine = false
     @StateObject private var audioPlayer = AudioPlayerViewModel()
-    @StateObject private var envManager = PythonEnvironmentManager()
     @StateObject private var modelManager = ModelManagerViewModel()
     @StateObject private var savedVoicesViewModel = SavedVoicesViewModel()
     @StateObject private var appCommandRouter = AppCommandRouter.shared
     @StateObject private var generationLibraryEvents = GenerationLibraryEvents.shared
     @StateObject private var appStartupCoordinator = AppStartupCoordinator()
     private let appEngineSelection: AppEngineSelection
-    private let backendLaunchCoordinator = BackendLaunchCoordinator()
 
     init() {
-        let pythonBridge = PythonBridge()
         let appEngineSelection = AppEngineSelection.current()
         self.appEngineSelection = appEngineSelection
-        _pythonBridge = StateObject(wrappedValue: pythonBridge)
         _ttsEngineStore = StateObject(
             wrappedValue: TTSEngineStore(
                 engine: appEngineSelection.makeEngine(
-                    pythonBridge: pythonBridge,
                     isStubBackendMode: UITestAutomationSupport.isStubBackendMode
                 )
             )
         )
 
-        // Ignore SIGPIPE to prevent crashes when writing to a broken pipe
-        // (e.g. Python backend terminates between isRunning check and write)
-        signal(SIGPIPE, SIG_IGN)
-
         if let forcedAppearance = UITestAutomationSupport.forcedNSAppearance {
             NSApplication.shared.appearance = forcedAppearance
         }
-
     }
 
     var body: some Scene {
@@ -53,49 +42,15 @@ struct QwenVoiceApp: App {
                     )
                     .frame(minWidth: 520, minHeight: 420)
                 } else {
-                    switch bootstrapMode {
-                    case .native:
-                        ContentView()
-                            .environmentObject(pythonBridge)
-                            .environmentObject(ttsEngineStore)
-                            .environmentObject(audioPlayer)
-                            .environmentObject(audioPlayer.playbackProgress)
-                            .environmentObject(envManager)
-                            .environmentObject(modelManager)
-                            .environmentObject(savedVoicesViewModel)
-                            .environmentObject(appCommandRouter)
-                            .environmentObject(generationLibraryEvents)
-                            .frame(minWidth: 720, minHeight: 560)
-                    case .python:
-                        switch envManager.state {
-                        case .ready(let pythonPath):
-                            ContentView()
-                                .environmentObject(pythonBridge)
-                                .environmentObject(ttsEngineStore)
-                                .environmentObject(audioPlayer)
-                                .environmentObject(audioPlayer.playbackProgress)
-                                .environmentObject(envManager)
-                                .environmentObject(modelManager)
-                                .environmentObject(savedVoicesViewModel)
-                                .environmentObject(appCommandRouter)
-                                .environmentObject(generationLibraryEvents)
-                                .frame(minWidth: 720, minHeight: 560)
-                                .onAppear {
-                                    backendLaunchCoordinator.startBackendIfNeeded(
-                                        pythonBridge: pythonBridge,
-                                        envManager: envManager,
-                                        pythonPath: pythonPath,
-                                        appSupportDir: Self.appSupportDir.path
-                                    )
-                                }
-                        case .idle:
-                            SetupView(envManager: envManager)
-                                .frame(minWidth: 500, minHeight: 400)
-                        default:
-                            SetupView(envManager: envManager)
-                                .frame(minWidth: 500, minHeight: 400)
-                        }
-                    }
+                    ContentView()
+                        .environmentObject(ttsEngineStore)
+                        .environmentObject(audioPlayer)
+                        .environmentObject(audioPlayer.playbackProgress)
+                        .environmentObject(modelManager)
+                        .environmentObject(savedVoicesViewModel)
+                        .environmentObject(appCommandRouter)
+                        .environmentObject(generationLibraryEvents)
+                        .frame(minWidth: 720, minHeight: 560)
                 }
             }
             .defaultAppStorage(UITestAutomationSupport.appStorage)
@@ -108,16 +63,12 @@ struct QwenVoiceApp: App {
                 appStartupCoordinator.setupAppSupport()
                 startSelectedTTSEngineIfNeeded()
                 appStartupCoordinator.refreshLaunchDiagnostics()
-                if appStartupCoordinator.launchDiagnostics == nil, bootstrapMode == .python {
-                    envManager.ensureEnvironment()
-                }
                 AppLaunchConfiguration.openSettingsWindowIfNeeded()
             }
         }
         .defaultSize(width: 720, height: 560)
         Settings {
             PreferencesView()
-                .environmentObject(envManager)
                 .defaultAppStorage(UITestAutomationSupport.appStorage)
         }
         .commands {
@@ -193,17 +144,6 @@ struct QwenVoiceApp: App {
         AppPaths.appSupportDir
     }
 
-    private enum BootstrapMode {
-        case native
-        case python
-    }
-
-    private var bootstrapMode: BootstrapMode {
-        appEngineSelection.effectiveSelection(
-            isStubBackendMode: UITestAutomationSupport.isStubBackendMode
-        ) == .python ? .python : .native
-    }
-
     static var modelsDir: URL { AppPaths.modelsDir }
     static var outputsDir: URL { AppPaths.outputsDir }
 
@@ -226,9 +166,5 @@ struct QwenVoiceApp: App {
 
     private func retryLaunchPreflight() {
         appStartupCoordinator.refreshLaunchDiagnostics()
-        guard appStartupCoordinator.launchDiagnostics == nil else { return }
-        if bootstrapMode == .python {
-            envManager.ensureEnvironment()
-        }
     }
 }

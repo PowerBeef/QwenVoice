@@ -356,7 +356,6 @@ echo "[4/8] Removing build-only resource artifacts..."
 rm -rf "$APP_RESOURCES/backend" 2>/dev/null || true
 rm -rf "$APP_RESOURCES/python" 2>/dev/null || true
 rm -f "$APP_RESOURCES/ffmpeg" 2>/dev/null || true
-rm -f "$APP_RESOURCES/server.py" "$APP_RESOURCES/mlx_audio_qwen_speed_patch.py" "$APP_RESOURCES/server_compat.py" 2>/dev/null || true
 rm -rf "$APP_RESOURCES/vendor" 2>/dev/null || true
 find "$APP_RESOURCES" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.pyc" -delete 2>/dev/null || true

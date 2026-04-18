@@ -116,32 +116,3 @@ final class HuggingFaceDownloaderPathValidationTests: XCTestCase {
         XCTAssertEqual(destination.deletingLastPathComponent().lastPathComponent, "speech_tokenizer")
     }
 }
-
-final class ModelLoadCoordinatorTests: XCTestCase {
-    @MainActor
-    func testMarkUnloadedClearsTrackedPrewarmKeys() async {
-        let coordinator = ModelLoadCoordinator()
-        let key = "pro_custom|custom|vivian|Conversational"
-
-        let firstPrewarm = await coordinator.prewarmIfNeeded(key: key) {}
-        coordinator.markLoadedModel(id: "pro_custom")
-        coordinator.markUnloaded()
-        let secondPrewarm = await coordinator.prewarmIfNeeded(key: key) {}
-
-        XCTAssertTrue(firstPrewarm)
-        XCTAssertTrue(secondPrewarm)
-    }
-
-    @MainActor
-    func testLoadingDifferentModelClearsTrackedPrewarmKeys() async {
-        let coordinator = ModelLoadCoordinator()
-        let key = "pro_custom|custom|vivian|Conversational"
-
-        _ = await coordinator.prewarmIfNeeded(key: key) {}
-        coordinator.markLoadedModel(id: "pro_custom")
-        coordinator.markLoadedModel(id: "pro_design")
-        let secondPrewarm = await coordinator.prewarmIfNeeded(key: key) {}
-
-        XCTAssertTrue(secondPrewarm)
-    }
-}

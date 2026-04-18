@@ -4,12 +4,39 @@ struct CustomVoiceDraft: Equatable {
     var selectedSpeaker = TTSModel.defaultSpeaker
     var emotion = "Normal tone"
     var text = ""
+
+    var shouldIdlePrewarm: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var idlePrewarmDebounceKey: String? {
+        guard shouldIdlePrewarm else { return nil }
+        return [
+            selectedSpeaker,
+            emotion,
+            text,
+        ].joined(separator: "|")
+    }
 }
 
 struct VoiceDesignDraft: Equatable {
     var voiceDescription = ""
     var emotion = "Normal tone"
     var text = ""
+
+    var shouldIdlePrewarm: Bool {
+        !voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var idlePrewarmDebounceKey: String? {
+        guard shouldIdlePrewarm else { return nil }
+        return [
+            voiceDescription,
+            emotion,
+            text,
+        ].joined(separator: "|")
+    }
 }
 
 struct VoiceCloningDraft: Equatable {
@@ -105,18 +132,18 @@ struct VoiceCloningReadinessDescriptor: Equatable {
 
 enum VoiceCloningReadiness {
     static func describe(
-        pythonReady: Bool,
+        engineReady: Bool,
         isModelAvailable: Bool,
         modelDisplayName: String,
         referenceAudioPath: String?,
         text: String,
         contextStatus: VoiceCloningContextStatus?
     ) -> VoiceCloningReadinessDescriptor {
-        if !pythonReady {
+        if !engineReady {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Engine starting",
-                detail: "QwenVoice is still preparing the generation engine.",
+                detail: "QwenVoice is still starting the native generation engine.",
                 trailingText: nil
             )
         }

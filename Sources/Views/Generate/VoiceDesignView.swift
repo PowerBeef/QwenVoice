@@ -77,7 +77,7 @@ struct VoiceDesignView: View {
     }
 
     private var idlePrewarmRequest: GenerationRequest? {
-        guard let model = activeModel else { return nil }
+        guard let model = activeModel, draft.shouldIdlePrewarm else { return nil }
         return GenerationRequest(
             modelID: model.id,
             text: draft.text,
@@ -90,8 +90,8 @@ struct VoiceDesignView: View {
     }
 
     private var idlePrewarmTaskID: String {
-        let identity = idlePrewarmRequest.map(GenerationSemantics.prewarmIdentityKey(for:)) ?? "none"
-        return "\(ttsEngineStore.isReady)-\(isModelAvailable)-\(identity)"
+        let debounceKey = draft.idlePrewarmDebounceKey ?? "none"
+        return "\(ttsEngineStore.isReady)-\(isModelAvailable)-\(debounceKey)"
     }
 
     private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
@@ -142,7 +142,7 @@ struct VoiceDesignView: View {
             )
         }
         .task(id: idlePrewarmTaskID) {
-            await prewarmSelectedModelIfNeeded()
+            await scheduleIdlePrewarmIfNeeded()
         }
     }
 }
@@ -410,6 +410,17 @@ private extension VoiceDesignView {
         guard let idlePrewarmRequest else { return }
         guard ttsEngineStore.isReady, isModelAvailable, !isGenerating else { return }
         await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
+    }
+
+    func scheduleIdlePrewarmIfNeeded() async {
+        guard draft.idlePrewarmDebounceKey != nil else { return }
+        do {
+            try await Task.sleep(nanoseconds: 350_000_000)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        await prewarmSelectedModelIfNeeded()
     }
 
     func presentSavedVoiceSheet() {

@@ -3,42 +3,21 @@ import QwenVoiceNative
 @testable import QwenVoice
 
 final class AppEngineSelectionTests: XCTestCase {
-    func testAppEngineSelectionDefaultsToNative() {
-        XCTAssertEqual(
-            AppEngineSelection(environment: [:]),
-            .native
-        )
+    func testAppEngineSelectionAlwaysResolvesToNative() {
+        XCTAssertEqual(AppEngineSelection(environment: [:]), .native)
+        XCTAssertEqual(AppEngineSelection.current(), .native)
     }
 
-    func testAppEngineSelectionHonorsExplicitOverrides() {
-        XCTAssertEqual(
-            AppEngineSelection(environment: [AppEngineSelection.environmentKey: "python"]),
-            .python
-        )
-        XCTAssertEqual(
-            AppEngineSelection(environment: [AppEngineSelection.environmentKey: "native"]),
-            .native
-        )
-    }
-
-    func testAppEngineSelectionFallsBackToNativeForInvalidOverride() {
-        XCTAssertEqual(
-            AppEngineSelection(environment: [AppEngineSelection.environmentKey: "invalid"]),
-            .native
-        )
-    }
-
-    func testAppEngineSelectionPreservesNativeSelectionForStubBackendMode() {
-        let selection = AppEngineSelection(environment: [:])
-        XCTAssertEqual(selection.effectiveSelection(isStubBackendMode: true), .native)
+    func testAppEngineSelectionRequiresManualInitialization() {
+        let selection = AppEngineSelection.current()
+        XCTAssertEqual(selection.effectiveSelection(isStubBackendMode: false), .native)
+        XCTAssertTrue(selection.requiresManualInitialization(isStubBackendMode: false))
         XCTAssertTrue(selection.requiresManualInitialization(isStubBackendMode: true))
     }
 
     @MainActor
     func testAppEngineSelectionResolvesNativeRunningSidebarStatusForLivePreview() {
-        let selection = AppEngineSelection(environment: [:])
-        let status = selection.resolveSidebarStatus(
-            pythonBridge: PythonBridge(),
+        let status = AppEngineSelection.current().resolveSidebarStatus(
             ttsEngineSnapshot: TTSEngineSnapshot(
                 isReady: true,
                 loadState: .running(
@@ -63,9 +42,7 @@ final class AppEngineSelectionTests: XCTestCase {
 
     @MainActor
     func testAppEngineSelectionResolvesNativeLoadedSidebarStatusToIdle() {
-        let selection = AppEngineSelection(environment: [:])
-        let status = selection.resolveSidebarStatus(
-            pythonBridge: PythonBridge(),
+        let status = AppEngineSelection.current().resolveSidebarStatus(
             ttsEngineSnapshot: TTSEngineSnapshot(
                 isReady: true,
                 loadState: .loaded(modelID: "pro_custom"),
@@ -81,9 +58,7 @@ final class AppEngineSelectionTests: XCTestCase {
 
     @MainActor
     func testAppEngineSelectionResolvesNativeVisibleErrors() {
-        let selection = AppEngineSelection(environment: [:])
-        let status = selection.resolveSidebarStatus(
-            pythonBridge: PythonBridge(),
+        let status = AppEngineSelection.current().resolveSidebarStatus(
             ttsEngineSnapshot: TTSEngineSnapshot(
                 isReady: true,
                 loadState: .loaded(modelID: "pro_custom"),
@@ -99,23 +74,13 @@ final class AppEngineSelectionTests: XCTestCase {
 
     @MainActor
     func testAppEngineSelectionBuildsNativeEngineByDefault() {
-        let engine = AppEngineSelection(environment: [:]).makeEngine(pythonBridge: PythonBridge())
+        let engine = AppEngineSelection.current().makeEngine()
         XCTAssertTrue(engine is NativeMLXMacEngine)
     }
 
     @MainActor
-    func testAppEngineSelectionBuildsPythonEngineWhenRequested() {
-        let engine = AppEngineSelection(environment: [AppEngineSelection.environmentKey: "python"])
-            .makeEngine(pythonBridge: PythonBridge())
-        XCTAssertTrue(engine is PythonBridgeMacTTSEngineAdapter)
-    }
-
-    @MainActor
     func testAppEngineSelectionBuildsNativeStubEngineForStubBackendMode() {
-        let engine = AppEngineSelection(environment: [:]).makeEngine(
-            pythonBridge: PythonBridge(),
-            isStubBackendMode: true
-        )
+        let engine = AppEngineSelection.current().makeEngine(isStubBackendMode: true)
         XCTAssertTrue(engine is UITestStubMacEngine)
     }
 }

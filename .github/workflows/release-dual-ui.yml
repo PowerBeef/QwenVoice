@@ -189,7 +189,6 @@ jobs:
           test ! -e "$RESOURCES_PATH/ffmpeg"
           test ! -e "$RESOURCES_PATH/python"
           test ! -e "$RESOURCES_PATH/backend"
-          test ! -e "$RESOURCES_PATH/server.py"
 
           if find "$RESOURCES_PATH" -name "*.whl" -print -quit | grep -q .; then
             echo "Error: .whl files leaked into app resources"

@@ -28,13 +28,10 @@ targets:
         excludes:
           - "QwenVoiceNative"
           - "QwenVoiceNative/**"
-          - "Resources/python/**"
           - "Resources/ffmpeg"
           - "Resources/ffmpeg/**"
           - "Resources/vendor"
           - "Resources/vendor/**"
-          - "Resources/backend"
-          - "Resources/backend/**"
           - "Resources/**/*.whl"
           - "Resources/**/__pycache__/**"
           - "Resources/**/*.pyc"
@@ -42,12 +39,9 @@ targets:
       - path: Sources/Resources
         buildPhase: resources
         excludes:
-          - "python/**"
           - "ffmpeg"
           - "vendor"
           - "vendor/**"
-          - "backend"
-          - "backend/**"
           - "**/*.whl"
           - "**/__pycache__/**"
           - "**/*.pyc"

@@ -61,7 +61,6 @@ final class ModelManagerViewModel: ObservableObject {
 
     private let fileManager: FileManager
     private let modelsDirectory: URL
-    private weak var bridge: PythonBridge?
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
@@ -84,21 +83,16 @@ final class ModelManagerViewModel: ObservableObject {
         }
     }
 
-    func refresh(using bridge: PythonBridge? = nil) async {
-        if let bridge {
-            self.bridge = bridge
-        }
-
+    func refresh() async {
         if let refreshTask {
             await refreshTask.value
             return
         }
 
-        let currentBridge = self.bridge
         let task = Task { @MainActor in
             let interval = AppPerformanceSignposts.begin("Model Status Refresh")
             let wallStart = DispatchTime.now().uptimeNanoseconds
-            await performRefresh(using: currentBridge)
+            await performRefresh()
             AppPerformanceSignposts.end(interval)
             #if DEBUG
             let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
@@ -140,11 +134,7 @@ final class ModelManagerViewModel: ObservableObject {
         return "Install \(model.name) to enable \(model.mode.displayName)."
     }
 
-    func download(_ model: TTSModel, using bridge: PythonBridge? = nil) async {
-        if let bridge {
-            self.bridge = bridge
-        }
-
+    func download(_ model: TTSModel) async {
         if let existingTask = downloadTasks[model.id] {
             await existingTask.value
             return
@@ -272,22 +262,12 @@ final class ModelManagerViewModel: ObservableObject {
         }
     }
 
-    private func performRefresh(using bridge: PythonBridge?) async {
-        let snapshots = await fetchSnapshots(using: bridge)
+    private func performRefresh() async {
+        let snapshots = fetchSnapshots()
         applySnapshots(snapshots)
     }
 
-    private func fetchSnapshots(using bridge: PythonBridge?) async -> [ModelInfo] {
-        if let bridge, bridge.isStubBackendMode || bridge.isReady {
-            do {
-                return try await bridge.getModelInfo()
-            } catch {
-                #if DEBUG
-                print("[ModelManagerViewModel] backend refresh fallback: \(error.localizedDescription)")
-                #endif
-            }
-        }
-
+    private func fetchSnapshots() -> [ModelInfo] {
         return TTSModel.all.map(localModelInfo)
     }
 
@@ -387,11 +367,9 @@ final class ModelManagerViewModel: ObservableObject {
     }
 
     private func scheduleRefreshIfPossible() {
-        guard let bridge else { return }
-        guard bridge.isStubBackendMode || bridge.isReady else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.refresh(using: bridge)
+            await self.refresh()
         }
     }
 

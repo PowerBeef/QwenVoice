@@ -1,6 +1,6 @@
 # Vendoring and Runtime Packaging
 
-QwenVoice has three maintained vendoring/runtime stories:
+QwenVoice has three maintained runtime stories:
 
 1. **Source builds / development mode**
 2. **Packaged release builds**
@@ -12,30 +12,22 @@ Treat tracked surfaces in this repo as four different classes:
 
 - **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, workflows, and repo-local skills
 - **Repo-owned vendored source**: `third_party_patches/`, where QwenVoice intentionally carries patched upstream code as maintained source
-- **Generated or bundled compatibility assets**: `Sources/Resources/python/`, `Sources/Resources/ffmpeg/`, most of `Sources/Resources/vendor/`, and similar script-produced payloads
-- **Local-only state**: `build/`, `.worktrees/`, `DerivedData/`, app-support data, local virtualenvs, and other machine-specific outputs
-
-Only the first three classes belong in tracked cleanup conversations. Local-only state should be managed through ignore rules, maintainer docs, or machine cleanup, not treated as repo source.
+- **Generated or bundled resources**: `Sources/Resources/ffmpeg/`, most of `Sources/Resources/vendor/`, and similar script-produced payloads
+- **Local-only state**: `build/`, `.worktrees/`, `DerivedData/`, app-support data, and other machine-specific outputs
 
 ## Development Mode
 
-In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then:
-
-- defaults to the native engine for normal app launches
-- only uses the retained Python setup flow when `QWENVOICE_APP_ENGINE=python` is selected explicitly for source/debug compatibility
-- then finds a local Python 3.11–3.14 install, creates a venv under `~/Library/Application Support/QwenVoice/python/`, installs dependencies from `Sources/Resources/requirements.txt`, and records the requirements hash in `.setup-complete`
+In a clean source checkout, the app uses the native runtime directly. Normal development builds do not require repo-managed Python setup, backend bootstrap, or compatibility runtime provisioning.
 
 ## Release Packaging
 
-`./scripts/release.sh` now builds a native-only app bundle. It must not ship:
+`./scripts/release.sh` builds a native-only app bundle. It must not ship:
 
 - `Contents/Resources/backend/`
 - `Contents/Resources/python/`
 - bundled `Contents/Resources/ffmpeg`
 
-`Sources/Resources/python/` and `Sources/Resources/ffmpeg/` remain repo-side generated assets for source/debug compatibility work, not shipped release-bundle inputs.
-
-The release pipeline also:
+The release pipeline:
 
 - regenerates the Xcode project safely
 - builds the app
@@ -50,7 +42,7 @@ The native backend keeps its Swift MLXAudio stack as a repo-owned local package 
 
 - `third_party_patches/mlx-audio-swift/`
 
-That tree is maintained source, not a generated runtime artifact. It stays separate from the Python wheel overlay flow in `third_party_patches/mlx-audio/`.
+That tree is maintained source, not a generated runtime artifact.
 
 The native package boundary currently includes:
 
@@ -60,37 +52,19 @@ The native package boundary currently includes:
 
 When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
 
-Normal app launches now default the app-facing engine to `NativeMLXMacEngine`. `QWENVOICE_APP_ENGINE=python` remains the source/debug compatibility path. `UITestStubMacEngine` remains available for manual fixture-backed desktop-control runs when deterministic app-shell behavior is useful.
-
-## Qwen3-TTS Overlay Strategy
-
-The app now installs stock `mlx-audio==0.4.2` and keeps the QwenVoice-specific Qwen3-TTS clone-speedup logic as a standalone backend helper overlay.
-
-Relevant locations:
-
-- `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
-- `third_party_patches/mlx-audio/`
-- `third_party_patches/mlx-audio-swift/`
-
-`scripts/build_mlx_audio_wheel.sh` is now just the source of truth for syncing the backend helper from `third_party_patches/mlx-audio/qwenvoice_speed_patch.py`.
-
-If the GUI app’s `mlx-audio` version changes, the standalone overlay and vendoring notes must be reviewed together.
+`UITestStubMacEngine` remains available for fixture-backed manual desktop-control runs when deterministic app-shell behavior is useful.
 
 ## Maintenance Cadence
 
-The pinned Python/source-debug compatibility stack is intentionally conservative. Review it on a simple maintainer cadence instead of introducing automated dependency churn:
+Review the native vendoring stack:
 
-- after any intentional `mlx-audio`, Python-compatibility, bundled `ffmpeg`, or release-packaging update
-- before major tagged releases if the vendored/runtime stack changed since the previous tag
-- at least quarterly for the overlay, source/debug runtime expectations, and packaged verification flow
+- after any intentional `mlx-audio-swift`, `MLXSwift`, `SwiftHuggingFace`, or release-packaging update
+- before major tagged releases if the native runtime stack changed since the previous tag
+- at least quarterly for package pins and release verification flow
 
 Every review should keep these artifacts aligned:
 
-- `Sources/Resources/requirements.txt`
-- `scripts/build_mlx_audio_wheel.sh`
-- `third_party_patches/mlx-audio/`
 - `third_party_patches/mlx-audio-swift/`
-- `Sources/Resources/backend/mlx_audio_qwen_speed_patch.py`
 - `project.yml`
 - `QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
 - `scripts/verify_release_bundle.sh`
@@ -102,6 +76,8 @@ Every review should keep these artifacts aligned:
 - `scripts/regenerate_project.sh`
 - `python3 scripts/harness.py validate`
 - `python3 scripts/harness.py test --layer swift`
+- `python3 scripts/harness.py test --layer contract`
+- `python3 scripts/harness.py test --layer native`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
 - `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test`
 - `scripts/verify_release_bundle.sh`

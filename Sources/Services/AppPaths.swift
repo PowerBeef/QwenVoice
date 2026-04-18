@@ -29,8 +29,4 @@ enum AppPaths {
     static var voicesDir: URL {
         appSupportDir.appendingPathComponent("voices", isDirectory: true)
     }
-
-    static var pythonVenvDir: URL {
-        appSupportDir.appendingPathComponent("python", isDirectory: true)
-    }
 }

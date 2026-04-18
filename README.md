@@ -14,9 +14,7 @@
 
 ## Overview
 
-QwenVoice is a native macOS app for Qwen3-TTS with custom voices, voice design, and voice cloning, 100% offline on Apple Silicon.
-
-The shipped app now runs fully natively through `QwenVoiceNative` and does not bundle a Python backend, Python runtime, or bundled `ffmpeg`. The repo still keeps the older Python backend under `Sources/Resources/backend/` for source/debug compatibility and the standalone CLI.
+QwenVoice is a native macOS app for offline Qwen3-TTS on Apple Silicon. The repo is now native-only: the shipped app, local source build, maintained harness, and release packaging flow all use the Swift/MLX runtime in `Sources/QwenVoiceNative/` and `third_party_patches/mlx-audio-swift/`.
 
 ## Shipped Modes
 
@@ -31,7 +29,7 @@ Generate speech with the app’s built-in English speakers:
 
 ### Voice Design
 
-Voice Design is a standalone destination. Describe the voice you want, then shape tone before generating.
+Describe the voice you want, then shape the delivery before generating.
 
 ### Voice Cloning
 
@@ -42,11 +40,7 @@ Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, 
 - no temperature or max-token controls
 - no streaming batch UI
 
-Single-generation flows in the shipping GUI use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based.
-
-The backend still supports additional benchmark/internal advanced sampling parameters beyond what the shipped GUI exposes.
-
-For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENVOICE_CACHE_POLICY=always` remains available as a conservative diagnostic override for backend benchmarking and regression checks.
+Single-generation flows use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based in the GUI.
 
 ## Features
 
@@ -74,19 +68,12 @@ Current GitHub release builds are produced by the dual-release workflow and typi
 - `QwenVoice-macos26.dmg` — modern liquid UI build
 - `QwenVoice-macos15.dmg` — legacy glass UI build
 
-Those workflow-built DMGs are the release source of truth. Local `./scripts/release.sh` output is useful for debug validation, but it is not authoritative shipped-release proof.
-
 Then:
 
 1. Drag `QwenVoice.app` to `/Applications`
 2. Open the app normally. Official GitHub workflow releases are signed, notarized, and stapled.
 3. macOS may still show the standard first-open “downloaded from the Internet” confirmation prompt.
 4. Go to **Models**, download a model, and generate speech
-
-If you are testing an older unsigned build or an unofficial local/debug artifact, you may still need to remove quarantine manually:
-   ```sh
-   xattr -cr "/Applications/QwenVoice.app"
-   ```
 
 ## Models
 
@@ -120,30 +107,14 @@ Build the `QwenVoice` scheme from Xcode, or use:
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 ```
 
-The checked-in `project.yml` defaults to `QW_UI_LIQUID`, so a local build of the default checkout needs a macOS 26 SDK. CI still validates the macOS 15 legacy profile by patching `project.yml` through `scripts/set_ci_ui_profile.sh` before regenerating the project.
-
 Useful local checks:
 
 ```sh
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
-python3 scripts/harness.py test --layer server
 python3 scripts/harness.py test --layer contract
-```
-
-Use Codex Computer Use for local visual or interaction checks after those source gates are green. This repo no longer keeps checked-in XCUI smoke, design, or perf automation.
-
-### Development-mode Python behavior
-
-In a clean source checkout, `Sources/Resources/python/` is usually absent. Normal app launches still default to the native engine and do not need Python setup.
-
-If you explicitly opt into the source/debug compatibility path with `QWENVOICE_APP_ENGINE=python`, the app creates a venv under `~/Library/Application Support/QwenVoice/python/` and installs the backend dependencies from `Sources/Resources/requirements.txt`.
-
-Have a local Python 3.11-3.14 install available first. A typical setup is:
-
-```sh
-brew install python@3.13
+python3 scripts/harness.py test --layer native
 ```
 
 ### Local release packaging
@@ -154,30 +125,21 @@ For a local release build and DMG:
 ./scripts/release.sh
 ```
 
-That script builds the native Release app, verifies that no Python/backend runtime assets leaked into the bundle, and by default produces `build/QwenVoice.dmg`.
-
-Use GitHub workflow artifacts for authoritative shipped release validation.
+That script builds a native-only Release app, verifies that no backend/python runtime assets leaked into the bundle, and by default produces `build/QwenVoice.dmg`.
 
 ## Tone and Emotion Control
 
 Custom Voice and Voice Design are guided by natural-language instructions rather than SSML-style sliders or markup.
 
-See [`qwen_tone.md`](qwen_tone.md) for supplemental app- and CLI-oriented guidance on:
-
-- what the shipped app exposes
-- what broader Qwen3-TTS ecosystem notes are informational only
-
-For current repo truth about shipped behavior, trust this README plus [`docs/reference/current-state.md`](docs/reference/current-state.md) over supplemental prose.
+See [`qwen_tone.md`](qwen_tone.md) for supplemental prompt-writing guidance. For current repo truth about shipped behavior, trust this README plus [`docs/reference/current-state.md`](docs/reference/current-state.md) over supplemental prose.
 
 ## Architecture
 
-QwenVoice uses a native app architecture for the shipped product:
+QwenVoice uses a native app architecture:
 
 - **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
-- **Native MLX runtime** in `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` for shipped inference
-- **Source/debug Python backend** in `Sources/Resources/backend/server.py` for compatibility workflows and the standalone CLI
-
-Static TTS contract data is shared by Swift and Python through `Sources/Resources/qwenvoice_contract.json`.
+- **Native MLX runtime** in `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` for inference and clone support
+- **Manifest-backed metadata** in `Sources/Resources/qwenvoice_contract.json` for models, speakers, output folders, and required files
 
 Default runtime output layout:
 
@@ -203,6 +165,6 @@ Default runtime output layout:
 QwenVoice builds on:
 
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
-- [mlx-audio](https://github.com/Blaizzy/mlx-audio)
+- [mlx-audio-swift](https://github.com/Blaizzy/mlx-audio-swift)
 - [MLX](https://github.com/ml-explore/mlx)
 - [GRDB.swift](https://github.com/groue/GRDB.swift)
