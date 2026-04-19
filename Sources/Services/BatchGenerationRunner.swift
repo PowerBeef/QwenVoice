@@ -494,7 +494,7 @@ final class BatchGenerationRunner {
         publishItems()
 
         if total > 1 {
-            if await cancellationState.isRequested {
+            if await cancellationState.wasRequested() {
                 markItemsCancelled(startingAt: 0)
                 publishItems()
                 engineStore.clearGenerationActivity()
@@ -533,7 +533,7 @@ final class BatchGenerationRunner {
                 }
 
                 for (index, pair) in zip(request.lines, results).enumerated() {
-                    if await cancellationState.isRequested {
+                    if await cancellationState.wasRequested() {
                         markItemsCancelled(startingAt: index)
                         publishItems()
                         engineStore.clearGenerationActivity()
@@ -566,7 +566,8 @@ final class BatchGenerationRunner {
                 publishProgress(activeItemIndex: nil, message: "Done")
                 return .completed(items: items)
             } catch {
-                if await cancellationState.isRequested {
+                let cancellationRequested = await cancellationState.wasRequested()
+                if error is CancellationError || cancellationRequested {
                     if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
                         markItemsCancelled(startingAt: firstUnfinished)
                     }
@@ -584,7 +585,7 @@ final class BatchGenerationRunner {
         }
 
         for (index, line) in request.lines.enumerated() {
-            if await cancellationState.isRequested {
+            if await cancellationState.wasRequested() {
                 markItemsCancelled(startingAt: index)
                 publishItems()
                 engineStore.clearGenerationActivity()
@@ -614,7 +615,8 @@ final class BatchGenerationRunner {
                 items[index].status = .saved(audioPath: result.audioPath)
                 publishItems()
             } catch {
-                if await cancellationState.isRequested {
+                let cancellationRequested = await cancellationState.wasRequested()
+                if error is CancellationError || cancellationRequested {
                     markItemsCancelled(startingAt: index)
                     publishItems()
                     engineStore.clearGenerationActivity()
@@ -627,7 +629,7 @@ final class BatchGenerationRunner {
             }
         }
 
-        if await cancellationState.isRequested {
+        if await cancellationState.wasRequested() {
             if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
                 markItemsCancelled(startingAt: firstUnfinished)
             }
@@ -664,9 +666,13 @@ final class BatchGenerationRunner {
 }
 
 actor BatchGenerationCancellationState {
-    private(set) var isRequested = false
+    private var isRequested = false
 
     func request() {
         isRequested = true
+    }
+
+    func wasRequested() -> Bool {
+        isRequested
     }
 }

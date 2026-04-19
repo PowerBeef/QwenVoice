@@ -154,6 +154,9 @@ final class VoiceCloningCoordinator: ObservableObject {
                     audioPlayer: audioPlayer,
                     caller: "VoiceCloningCoordinator"
                 )
+            } catch is CancellationError {
+                audioPlayer.abortLivePreviewIfNeeded()
+                errorMessage = nil
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()

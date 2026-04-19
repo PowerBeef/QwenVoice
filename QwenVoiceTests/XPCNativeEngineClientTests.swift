@@ -111,4 +111,100 @@ final class XPCNativeEngineClientTests: XCTestCase {
 
         await invalidateAndDrain(firstClient, secondClient)
     }
+
+    func testClientMapsRemoteCancelledGenerationReplyToCancellationError() async throws {
+        let transport = ClientTestXPCTransport()
+        let client = XPCNativeEngineClient(
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            }
+        )
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        async let initialize: Void = client.initialize(appSupportDirectory: root)
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .void
+            )
+        )
+        try await initialize
+
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Cancel me",
+            outputPath: root.appendingPathComponent("cancel.wav").path,
+            shouldStream: true,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        async let generation: GenerationResult = client.generate(request)
+        try await waitForPerformCallCount(2, transport: transport)
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .failure(
+                    RemoteErrorPayload(
+                        message: "Generation cancelled",
+                        domain: "QwenVoiceNative",
+                        code: .cancelled
+                    )
+                )
+            )
+        )
+
+        do {
+            _ = try await generation
+            XCTFail("Expected cancelled generation to throw.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
+    private func waitForPerformCallCount(
+        _ expectedCount: Int,
+        transport: ClientTestXPCTransport,
+        timeoutSeconds: TimeInterval = 1.0
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if transport.performCallCount >= expectedCount {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for transport perform count \(expectedCount)")
+    }
+}
+
+private final class ClientTestXPCTransport: XPCNativeEngineTransporting, @unchecked Sendable {
+    var handlers: XPCNativeEngineTransportHandlers?
+    private(set) var performCallCount = 0
+    private(set) var lastRequestID: UUID?
+    private var replyHandlers: [(@Sendable (Data) -> Void)] = []
+
+    func install(handlers: XPCNativeEngineTransportHandlers) {
+        self.handlers = handlers
+    }
+
+    func resume() {}
+
+    func invalidate() {}
+
+    func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void) {
+        performCallCount += 1
+        lastRequestID = try? EngineServiceCodec.decode(EngineRequestEnvelope.self, from: payload).id
+        replyHandlers.append(reply)
+    }
+
+    func reply(with envelope: EngineReplyEnvelope) {
+        guard !replyHandlers.isEmpty else { return }
+        let replyHandler = replyHandlers.removeFirst()
+        let payload = try! EngineServiceCodec.encode(envelope)
+        replyHandler(payload)
+    }
 }

@@ -437,7 +437,29 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     private let snapshotSubject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private let coordinator: XPCNativeEngineCoordinator
 
-    public init() {
+    public convenience init() {
+        self.init(
+            transportFactory: { handlers in
+                XPCServiceTransport(handlers: handlers)
+            },
+            timeoutResolver: { command in
+                command.transportTimeout
+            },
+            onChunk: { event in
+                GenerationChunkBroker.publish(event)
+            }
+        )
+    }
+
+    init(
+        transportFactory: @escaping XPCNativeEngineTransportFactory,
+        timeoutResolver: @escaping XPCNativeEngineTimeoutResolver = { command in
+            command.transportTimeout
+        },
+        onChunk: @escaping @Sendable (GenerationEvent) -> Void = { event in
+            GenerationChunkBroker.publish(event)
+        }
+    ) {
         let initialSnapshot = TTSEngineSnapshot(
             isReady: false,
             loadState: .idle,
@@ -449,9 +471,9 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
             onSnapshot: { [snapshotSubject] snapshot in
                 snapshotSubject.send(snapshot)
             },
-            onChunk: { event in
-                GenerationChunkBroker.publish(event)
-            }
+            onChunk: onChunk,
+            transportFactory: transportFactory,
+            timeoutResolver: timeoutResolver
         )
     }
 
@@ -500,11 +522,15 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
-        let reply = try await coordinator.send(.generate(request: request))
-        guard case .generationResult(let result) = reply else {
-            throw EngineTransportError.invalidReply
+        do {
+            let reply = try await coordinator.send(.generate(request: request))
+            guard case .generationResult(let result) = reply else {
+                throw EngineTransportError.invalidReply
+            }
+            return result
+        } catch {
+            throw Self.remappedTransportError(error)
         }
-        return result
     }
 
     public func generateBatch(
@@ -519,11 +545,15 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
             }
         }
 
-        let reply = try await coordinator.send(.generateBatch(commandID: commandID, requests: requests))
-        guard case .generationResults(let results) = reply else {
-            throw EngineTransportError.invalidReply
+        do {
+            let reply = try await coordinator.send(.generateBatch(commandID: commandID, requests: requests))
+            guard case .generationResults(let results) = reply else {
+                throw EngineTransportError.invalidReply
+            }
+            return results
+        } catch {
+            throw Self.remappedTransportError(error)
         }
-        return results
     }
 
     public func cancelActiveGeneration() async throws {
@@ -583,6 +613,14 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
         await coordinator.invalidateForTesting()
     }
     #endif
+
+    private static func remappedTransportError(_ error: Error) -> Error {
+        guard let remoteError = error as? RemoteErrorPayload,
+              remoteError.code == .cancelled else {
+            return error
+        }
+        return CancellationError()
+    }
 }
 
 private extension EngineCommand {

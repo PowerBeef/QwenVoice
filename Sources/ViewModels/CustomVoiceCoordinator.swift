@@ -107,6 +107,9 @@ final class CustomVoiceCoordinator: ObservableObject {
                     audioPlayer: audioPlayer,
                     caller: "CustomVoiceCoordinator"
                 )
+            } catch is CancellationError {
+                audioPlayer.abortLivePreviewIfNeeded()
+                self.errorMessage = nil
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()

@@ -66,6 +66,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
     ) async throws -> GenerationResult {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let sessionDirectory = try makeSessionDirectory()
+        let outputURL = URL(fileURLWithPath: request.outputPath)
         let telemetrySampler = NativeTelemetrySampler(startUptimeSeconds: startedAt)
         await telemetryRecorder.reset()
         await telemetryRecorder.mark(stage: .streamStartup)
@@ -79,12 +80,15 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         var lastChunkPath: String?
 
         do {
+            try Task.checkCancellation()
             let stream = try buildStream()
 
             for try await event in stream {
+                try Task.checkCancellation()
                 switch event {
                 case .audio(let samples):
                     if let pendingSamples {
+                        try Task.checkCancellation()
                         let emitted = try await emitChunk(
                             samples: pendingSamples,
                             isFinal: false,
@@ -106,6 +110,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             }
 
             if let pendingSamples {
+                try Task.checkCancellation()
                 let emitted = try await emitChunk(
                     samples: pendingSamples,
                     isFinal: true,
@@ -120,14 +125,16 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 lastChunkPath = emitted.path
             }
 
+            try Task.checkCancellation()
             guard !allSamples.isEmpty else {
                 throw NativeStreamingSessionError.noAudioGenerated
             }
 
+            try Task.checkCancellation()
             try Self.writeWAV(
                 samples: allSamples,
                 sampleRate: model.sampleRate,
-                to: URL(fileURLWithPath: request.outputPath)
+                to: outputURL
             )
 
             await telemetryRecorder.mark(stage: .streamCompleted)
@@ -185,6 +192,13 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 streamSessionDirectory: sessionDirectory.path,
                 benchmarkSample: benchmarkSample
             )
+        } catch is CancellationError {
+            try? Self.removeFileIfPresent(at: outputURL)
+            await telemetryRecorder.mark(
+                stage: .streamFailed,
+                metadata: ["error": "cancelled"]
+            )
+            throw CancellationError()
         } catch {
             await telemetryRecorder.mark(
                 stage: .streamFailed,
@@ -276,6 +290,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         firstChunkMS: inout Int?,
         eventSink: @escaping @Sendable (GenerationEvent) -> Void
     ) async throws -> (path: String, duration: Double) {
+        try Task.checkCancellation()
         let chunkURL = Self.chunkURL(in: sessionDirectory, chunkIndex: chunkIndex)
         try Self.writeWAV(
             samples: samples,
@@ -296,6 +311,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         }
 
         if request.shouldStream {
+            try Task.checkCancellation()
             eventSink(
                 GenerationEvent(
                     kind: .streamChunk,
@@ -357,5 +373,11 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         }
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
         try file.write(from: buffer)
+    }
+
+    private static func removeFileIfPresent(at url: URL) throws {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
     }
 }

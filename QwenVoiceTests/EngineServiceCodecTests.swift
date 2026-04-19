@@ -2,6 +2,26 @@ import XCTest
 @testable import QwenVoiceEngineSupport
 
 final class EngineServiceCodecTests: XCTestCase {
+    func testRemoteErrorPayloadMakeMapsCancellationErrorToCancelledCode() {
+        let payload = RemoteErrorPayload.make(for: CancellationError())
+
+        XCTAssertEqual(payload.code, .cancelled)
+        XCTAssertFalse(payload.message.isEmpty)
+    }
+
+    func testRemoteErrorPayloadRoundTripsCancellationCode() throws {
+        let payload = RemoteErrorPayload(
+            message: "Generation cancelled",
+            domain: "QwenVoiceNative",
+            code: .cancelled
+        )
+
+        let encoded = try EngineServiceCodec.encode(payload)
+        let decoded = try EngineServiceCodec.decode(RemoteErrorPayload.self, from: encoded)
+
+        XCTAssertEqual(decoded, payload)
+    }
+
     func testRequestEnvelopeRoundTripsThroughCodec() throws {
         let request = EngineRequestEnvelope(
             id: UUID(uuidString: "99999999-8888-7777-6666-555555555555")!,

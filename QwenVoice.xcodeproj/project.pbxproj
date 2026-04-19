@@ -489,7 +489,6 @@
 			isa = PBXGroup;
 			children = (
 				617BE72142511CD5043C341E /* qwenvoice_contract.json */,
-				95492ADA14A92F5806116026 /* vendor */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -603,13 +602,6 @@
 			);
 			sourceTree = "<group>";
 		};
-		95492ADA14A92F5806116026 /* vendor */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = vendor;
-			sourceTree = "<group>";
-		};
 		9EF4E551B79B35D60032C17C /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -625,7 +617,6 @@
 				F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */,
 				652CF3434A19FF8823B9CCA2 /* WaveformView.swift */,
 				D4ED24544C9C26510DFCFE5C /* WindowChromeConfigurator.swift */,
-				C1FC88E299FA8685AA781D8D /* V2 */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -638,13 +629,6 @@
 				0D3C6777F2ABFE603D026E0D /* VoicesView.swift */,
 			);
 			path = Library;
-			sourceTree = "<group>";
-		};
-		C1FC88E299FA8685AA781D8D /* V2 */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = V2;
 			sourceTree = "<group>";
 		};
 		D04B5DF95506C7083D60178B /* Sidebar */ = {

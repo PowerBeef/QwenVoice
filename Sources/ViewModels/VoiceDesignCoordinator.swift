@@ -193,6 +193,9 @@ final class VoiceDesignCoordinator: ObservableObject {
                     emotion: emotion,
                     text: text
                 )
+            } catch is CancellationError {
+                audioPlayer.abortLivePreviewIfNeeded()
+                self.errorMessage = nil
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()

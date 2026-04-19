@@ -2,6 +2,32 @@
 import Foundation
 import QwenVoiceEngineSupport
 
+private actor NativeActiveGenerationCoordinator {
+    private struct ActiveGeneration {
+        let id: UUID
+        let cancel: @Sendable () -> Void
+    }
+
+    private var activeGeneration: ActiveGeneration?
+
+    func register(cancel: @escaping @Sendable () -> Void) -> UUID {
+        let id = UUID()
+        activeGeneration = ActiveGeneration(id: id, cancel: cancel)
+        return id
+    }
+
+    func finish(id: UUID) {
+        guard activeGeneration?.id == id else { return }
+        activeGeneration = nil
+    }
+
+    func cancelCurrent() {
+        let cancel = activeGeneration?.cancel
+        activeGeneration = nil
+        cancel?()
+    }
+}
+
 public final class NativeMLXMacEngine: @unchecked Sendable {
     public enum EngineError: LocalizedError, Equatable {
         case nativeBatchRequiresSingleMode
@@ -34,6 +60,7 @@ public final class NativeMLXMacEngine: @unchecked Sendable {
     private let runtime: MacNativeRuntime
     private let snapshotSubject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private let generationEventSubject: PassthroughSubject<GenerationEvent, Never>
+    private let activeGenerationCoordinator = NativeActiveGenerationCoordinator()
 
     public init(runtime: MacNativeRuntime = MacNativeRuntime()) {
         self.runtime = runtime
@@ -231,7 +258,7 @@ public final class NativeMLXMacEngine: @unchecked Sendable {
             )
         }
 
-        do {
+        let task = Task { () throws -> GenerationResult in
             let prepared = try await runtime.prepareGeneration(for: request)
             let session = NativeStreamingSynthesisSession(
                 requestID: prepared.requestID,
@@ -245,19 +272,26 @@ public final class NativeMLXMacEngine: @unchecked Sendable {
                 cloneConditioning: prepared.cloneConditioning
             )
 
-            let result = try await session.run { [weak self] event in
+            return try await session.run { [weak self] event in
                 self?.generationEventSubject.send(event)
             }
-
-            publishSnapshot { current in
-                TTSEngineSnapshot(
-                    isReady: current.isReady,
-                    loadState: .loaded(modelID: request.modelID),
-                    clonePreparationState: current.clonePreparationState,
-                    visibleErrorMessage: nil
-                )
+        }
+        let generationID = await activeGenerationCoordinator.register {
+            task.cancel()
+        }
+        defer {
+            Task {
+                await self.activeGenerationCoordinator.finish(id: generationID)
             }
+        }
+
+        do {
+            let result = try await task.value
+            publishGenerationLoaded(modelID: request.modelID)
             return result
+        } catch is CancellationError {
+            await publishGenerationCancelled()
+            throw CancellationError()
         } catch {
             await publishGenerationFailure(error)
             throw error
@@ -292,6 +326,7 @@ public final class NativeMLXMacEngine: @unchecked Sendable {
     }
 
     public func cancelActiveGeneration() async throws {
+        await activeGenerationCoordinator.cancelCurrent()
         clearGenerationActivity()
     }
 
@@ -395,6 +430,32 @@ public final class NativeMLXMacEngine: @unchecked Sendable {
             }
         } else {
             publishRuntimeFailure(error)
+        }
+    }
+
+    private func publishGenerationCancelled() async {
+        if let loadedModelID = await runtime.currentLoadedModelID() {
+            publishSnapshot { current in
+                TTSEngineSnapshot(
+                    isReady: current.isReady,
+                    loadState: .loaded(modelID: loadedModelID),
+                    clonePreparationState: current.clonePreparationState,
+                    visibleErrorMessage: nil
+                )
+            }
+        } else {
+            clearGenerationActivity()
+        }
+    }
+
+    private func publishGenerationLoaded(modelID: String) {
+        publishSnapshot { current in
+            TTSEngineSnapshot(
+                isReady: current.isReady,
+                loadState: .loaded(modelID: modelID),
+                clonePreparationState: current.clonePreparationState,
+                visibleErrorMessage: nil
+            )
         }
     }
 

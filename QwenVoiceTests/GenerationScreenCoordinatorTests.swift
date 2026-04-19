@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SwiftUI
 import XCTest
 import QwenVoiceNative
 @testable import QwenVoice
@@ -9,6 +10,7 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
     private(set) var ensureModelLoadedIDs: [String] = []
     private(set) var prewarmRequests: [GenerationRequest] = []
     private(set) var primedReferences: [(String, CloneReference)] = []
+    var generateError: Error?
 
     init(snapshot: TTSEngineSnapshot) {
         subject = CurrentValueSubject(snapshot)
@@ -42,7 +44,10 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
     func cancelClonePreparationIfNeeded() async {}
 
     func generate(_ request: GenerationRequest) async throws -> GenerationResult {
-        GenerationResult(
+        if let generateError {
+            throw generateError
+        }
+        return GenerationResult(
             audioPath: "/tmp/out.wav",
             durationSeconds: 1.0,
             streamSessionDirectory: nil,
@@ -230,5 +235,113 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         XCTAssertEqual(configuration.mode, .clone)
         XCTAssertEqual(configuration.refAudio, "/tmp/reference.wav")
         XCTAssertEqual(configuration.refText, "Reference transcript")
+    }
+
+    @MainActor
+    func testCustomVoiceCoordinatorSwallowsCancellationWithoutErrorBanner() async throws {
+        let (store, engine) = makeReadyStore()
+        engine.generateError = CancellationError()
+        let coordinator = CustomVoiceCoordinator()
+        let audioPlayer = AudioPlayerViewModel()
+
+        coordinator.generate(
+            draft: CustomVoiceDraft(
+                selectedSpeaker: "Vivian",
+                emotion: "Normal tone",
+                text: "Hello there"
+            ),
+            activeModel: TTSModel.model(for: .custom),
+            isModelAvailable: true,
+            ttsEngineStore: store,
+            audioPlayer: audioPlayer,
+            modelManager: ModelManagerViewModel()
+        )
+
+        try await waitUntil(timeoutSeconds: 1.0) {
+            coordinator.isGenerating == false
+        }
+
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertFalse(audioPlayer.isLiveStream)
+    }
+
+    @MainActor
+    func testVoiceDesignCoordinatorSwallowsCancellationWithoutErrorBanner() async throws {
+        let (store, engine) = makeReadyStore()
+        engine.generateError = CancellationError()
+        let coordinator = VoiceDesignCoordinator()
+        let audioPlayer = AudioPlayerViewModel()
+
+        coordinator.generate(
+            draft: VoiceDesignDraft(
+                voiceDescription: "Warm narrator",
+                emotion: "Conversational",
+                text: "Design this voice"
+            ),
+            activeModel: TTSModel.model(for: .design),
+            isModelAvailable: true,
+            ttsEngineStore: store,
+            audioPlayer: audioPlayer,
+            modelManager: ModelManagerViewModel()
+        )
+
+        try await waitUntil(timeoutSeconds: 1.0) {
+            coordinator.isGenerating == false
+        }
+
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertFalse(audioPlayer.isLiveStream)
+    }
+
+    @MainActor
+    func testVoiceCloningCoordinatorSwallowsCancellationWithoutErrorBanner() async throws {
+        let (store, engine) = makeReadyStore()
+        engine.generateError = CancellationError()
+        let coordinator = VoiceCloningCoordinator()
+        let audioPlayer = AudioPlayerViewModel()
+        let draft = Binding(
+            get: {
+                VoiceCloningDraft(
+                    selectedSavedVoiceID: nil,
+                    referenceAudioPath: "/tmp/reference.wav",
+                    referenceTranscript: "Reference transcript",
+                    text: "Clone this line"
+                )
+            },
+            set: { _ in }
+        )
+
+        coordinator.generate(
+            draft: draft,
+            cloneModel: TTSModel.model(for: .clone),
+            isModelAvailable: true,
+            clonePrimingRequestKey: nil,
+            selectedVoice: nil,
+            ttsEngineStore: store,
+            audioPlayer: audioPlayer,
+            modelManager: ModelManagerViewModel()
+        )
+
+        try await waitUntil(timeoutSeconds: 1.0) {
+            coordinator.isGenerating == false
+        }
+
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertFalse(audioPlayer.isLiveStream)
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeoutSeconds: TimeInterval,
+        condition: @escaping () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if condition() {
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTFail("Timed out waiting for condition")
     }
 }

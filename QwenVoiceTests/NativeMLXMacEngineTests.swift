@@ -41,6 +41,23 @@ final class NativeMLXMacEngineTests: XCTestCase {
         var clonePromptCreationCount = 0
     }
 
+    private final class StreamCallBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String] = []
+
+        func append(_ value: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            values.append(value)
+        }
+
+        var allValues: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return values
+        }
+    }
+
     private var cancellables: Set<AnyCancellable> = []
 
     func testInitializeCreatesNativeRuntimeDirectoriesAndSupportsPreparedVoices() async throws {
@@ -1084,6 +1101,262 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertEqual(sample.preparedCloneUsed, false)
         XCTAssertEqual(sample.booleanFlags["clone_optimized_handler_used"], false)
         XCTAssertEqual(sample.stringFlags["clone_transcript_mode"], "inline")
+    }
+
+    func testNativeMLXMacEngineCancellationBeforeFirstChunkDoesNotWriteFinalOutput() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_custom",
+            name: "Custom Voice",
+            folder: "Custom-Model",
+            mode: "custom"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let customModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    Task {
+                        do {
+                            try await Task.sleep(for: .milliseconds(500))
+                            continuation.yield(.audio([0.0, 0.1, -0.1, 0.0]))
+                            continuation.finish()
+                        } catch is CancellationError {
+                            continuation.finish(throwing: CancellationError())
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in customModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        var observedEvents: [GenerationEvent] = []
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { observedEvents.append($0) }
+            .store(in: &cancellables)
+
+        let outputPath = root.appendingPathComponent("cancel-before-first-chunk.wav").path
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Cancel before first chunk",
+            outputPath: outputPath,
+            shouldStream: true,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        let task = Task {
+            try await engine.generate(request)
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        try await engine.cancelActiveGeneration()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected generation to be cancelled.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputPath))
+        XCTAssertTrue(observedEvents.isEmpty)
+        XCTAssertEqual(engine.snapshot.loadState, .loaded(modelID: "pro_custom"))
+        XCTAssertNil(engine.snapshot.visibleErrorMessage)
+    }
+
+    func testNativeMLXMacEngineCancellationMidStreamStopsFurtherChunksAndFinalOutput() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_custom",
+            name: "Custom Voice",
+            folder: "Custom-Model",
+            mode: "custom"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let customModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    Task {
+                        do {
+                            continuation.yield(.audio([0.0, 0.1, -0.1, 0.0]))
+                            try await Task.sleep(for: .milliseconds(50))
+                            continuation.yield(.audio([0.05, -0.05, 0.02, -0.02]))
+                            try await Task.sleep(for: .milliseconds(500))
+                            continuation.yield(.audio([0.1, 0.0, -0.05, 0.02]))
+                            continuation.finish()
+                        } catch is CancellationError {
+                            continuation.finish(throwing: CancellationError())
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in customModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        var observedEvents: [GenerationEvent] = []
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { observedEvents.append($0) }
+            .store(in: &cancellables)
+
+        let outputPath = root.appendingPathComponent("cancel-mid-stream.wav").path
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Cancel after first chunk",
+            outputPath: outputPath,
+            shouldStream: true,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        let task = Task {
+            try await engine.generate(request)
+        }
+
+        try await waitUntil(timeoutSeconds: 1.0) {
+            observedEvents.count == 1
+        }
+        try await engine.cancelActiveGeneration()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected generation to be cancelled.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(observedEvents.count, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputPath))
+        XCTAssertEqual(engine.snapshot.loadState, .loaded(modelID: "pro_custom"))
+        XCTAssertNil(engine.snapshot.visibleErrorMessage)
+    }
+
+    func testNativeMLXMacEngineBatchCancellationStopsBeforeLaterItemsStart() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_custom",
+            name: "Custom Voice",
+            folder: "Custom-Model",
+            mode: "custom"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let streamCalls = StreamCallBox()
+        let customModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { text, _, _, _, _ in
+                streamCalls.append(text)
+                return AsyncThrowingStream { continuation in
+                    Task {
+                        do {
+                            try await Task.sleep(for: .milliseconds(500))
+                            continuation.yield(.audio([0.0, 0.1, -0.1, 0.0]))
+                            continuation.finish()
+                        } catch is CancellationError {
+                            continuation.finish(throwing: CancellationError())
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in customModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        let first = GenerationRequest(
+            modelID: "pro_custom",
+            text: "First item",
+            outputPath: root.appendingPathComponent("first.wav").path,
+            shouldStream: false,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+        let second = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Second item",
+            outputPath: root.appendingPathComponent("second.wav").path,
+            shouldStream: false,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        let task = Task {
+            try await engine.generateBatch([first, second]) { _, _ in }
+        }
+
+        try await waitUntil(timeoutSeconds: 1.0) {
+            streamCalls.allValues == ["First item"]
+        }
+        try await engine.cancelActiveGeneration()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected batch generation to be cancelled.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        XCTAssertEqual(streamCalls.allValues, ["First item"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.outputPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.outputPath))
+    }
+
+    private func waitUntil(
+        timeoutSeconds: TimeInterval,
+        condition: @escaping () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if condition() {
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTFail("Timed out waiting for condition")
     }
 }
 

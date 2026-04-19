@@ -107,14 +107,14 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             } catch {
                 return EngineReplyEnvelope(
                     id: request.id,
-                    reply: .failure(Self.remoteErrorPayload(for: error))
+                    reply: .failure(RemoteErrorPayload.make(for: error))
                 )
             }
         } catch {
             Self.logger.error("Failed to decode engine request envelope: \(error.localizedDescription, privacy: .public)")
             return EngineReplyEnvelope(
                 id: UUID(),
-                reply: .failure(Self.remoteErrorPayload(for: error))
+                reply: .failure(RemoteErrorPayload.make(for: error))
             )
         }
     }
@@ -239,16 +239,5 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         guard let eventSink else { return }
         guard let payload = try? EngineServiceCodec.encode(event) else { return }
         eventSink.handleEvent(payload)
-    }
-
-    private static func remoteErrorPayload(for error: Error) -> RemoteErrorPayload {
-        if let remoteError = error as? RemoteErrorPayload {
-            return remoteError
-        }
-        let nsError = error as NSError
-        return RemoteErrorPayload(
-            message: error.localizedDescription,
-            domain: nsError.domain
-        )
     }
 }

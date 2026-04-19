@@ -18,6 +18,8 @@ private final class MockBatchEngine: MacTTSEngine, @unchecked Sendable {
     var batchProgressEvents: [(Double?, String)] = []
     var cancelActiveGenerationCallCount = 0
     var clearGenerationActivityCallCount = 0
+    var generateError: Error?
+    var generateBatchError: Error?
 
     var snapshot: TTSEngineSnapshot { subject.value }
     var snapshotPublisher: AnyPublisher<TTSEngineSnapshot, Never> { subject.eraseToAnyPublisher() }
@@ -32,6 +34,9 @@ private final class MockBatchEngine: MacTTSEngine, @unchecked Sendable {
     func cancelClonePreparationIfNeeded() async {}
 
     func generate(_ request: GenerationRequest) async throws -> QwenVoiceNative.GenerationResult {
+        if let generateError {
+            throw generateError
+        }
         generateRequests.append(request)
         return QwenVoiceNative.GenerationResult(
             audioPath: request.outputPath,
@@ -45,6 +50,9 @@ private final class MockBatchEngine: MacTTSEngine, @unchecked Sendable {
         _ requests: [GenerationRequest],
         progressHandler: (@Sendable (Double?, String) -> Void)?
     ) async throws -> [QwenVoiceNative.GenerationResult] {
+        if let generateBatchError {
+            throw generateBatchError
+        }
         batchGenerateRequests.append(requests)
         for event in batchProgressEvents {
             progressHandler?(event.0, event.1)
@@ -328,6 +336,39 @@ final class BatchGenerationRunnerTests: XCTestCase {
         try await runner.requestCancellation()
 
         XCTAssertEqual(engine.cancelActiveGenerationCallCount, 1)
+    }
+
+    @MainActor
+    func testRunnerTreatsEngineCancellationAsCancelledOutcome() async throws {
+        let engine = MockBatchEngine()
+        engine.generateBatchError = CancellationError()
+        let engineStore = TTSEngineStore(engine: engine)
+        let store = MockGenerationStore()
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
+        let model = try XCTUnwrap(TTSModel.model(for: .clone))
+        let request = BatchGenerationRequest(
+            mode: .clone,
+            model: model,
+            lines: ["First line", "Second line"],
+            voice: nil,
+            emotion: nil,
+            voiceDescription: nil,
+            refAudio: "/tmp/reference.wav",
+            refText: "Reference transcript"
+        )
+
+        let outcome = await runner.run(
+            request: request,
+            makeOutputPath: { _, text in "/tmp/\(text.replacingOccurrences(of: " ", with: "_")).wav" },
+            onProgress: { _ in },
+            onItemsUpdated: { _ in }
+        )
+
+        guard case .cancelled(let items, let restartFailedMessage) = outcome else {
+            return XCTFail("Expected cancelled outcome, got \(outcome)")
+        }
+        XCTAssertNil(restartFailedMessage)
+        XCTAssertEqual(items.map(\.status), [.cancelled, .cancelled])
     }
 
     func testBatchGenerationOutcomeRetryHelpersSeparateRemainingAndFailedLines() {

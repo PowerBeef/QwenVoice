@@ -2,17 +2,41 @@ import Foundation
 
 public let QwenVoiceEngineServiceBundleIdentifier = "com.qwenvoice.app.engine-service"
 
+public enum RemoteErrorCode: String, Codable, Equatable, Sendable {
+    case generic
+    case cancelled
+}
+
 public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, LocalizedError {
     public let message: String
     public let domain: String?
+    public let code: RemoteErrorCode
 
-    public init(message: String, domain: String? = nil) {
+    public init(
+        message: String,
+        domain: String? = nil,
+        code: RemoteErrorCode = .generic
+    ) {
         self.message = message
         self.domain = domain
+        self.code = code
     }
 
     public var errorDescription: String? {
         message
+    }
+
+    public static func make(for error: Error) -> RemoteErrorPayload {
+        if let remoteError = error as? RemoteErrorPayload {
+            return remoteError
+        }
+        let nsError = error as NSError
+        let code: RemoteErrorCode = error is CancellationError ? .cancelled : .generic
+        return RemoteErrorPayload(
+            message: nsError.localizedDescription,
+            domain: nsError.domain,
+            code: code
+        )
     }
 }
 
