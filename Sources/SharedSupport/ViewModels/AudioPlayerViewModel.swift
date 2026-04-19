@@ -1,11 +1,36 @@
 import Foundation
 import AVFoundation
-import QwenVoiceNative
 import Combine
+
+#if canImport(QwenVoiceCore)
+import QwenVoiceCore
+#endif
+
+#if canImport(QwenVoiceNative)
+import QwenVoiceNative
+#endif
+
+#if canImport(QwenVoiceNative)
+typealias PlaybackGenerationResult = QwenVoiceNative.GenerationResult
+#elseif canImport(QwenVoiceCore)
+typealias PlaybackGenerationResult = QwenVoiceCore.GenerationResult
+#endif
 
 /// Manages playback state for the persistent sidebar player bar.
 @MainActor
 final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
+
+    enum PlaybackPresentationContext: Equatable, Sendable {
+        case none
+        case generatePreview
+        case library
+    }
+
+    enum GeneratePreviewVisibilityState: Equatable, Sendable {
+        case hidden
+        case preparing
+        case ready
+    }
 
     // MARK: - High-frequency playback progress (isolated to avoid fan-out)
 
@@ -37,6 +62,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     @Published private(set) var isLiveStream = false
     @Published private(set) var livePreviewQueueDepth = 0
     @Published private(set) var livePreviewPhase: LivePreviewPhase = .idle
+    @Published private(set) var playbackPresentationContext: PlaybackPresentationContext = .none
+    @Published private(set) var generatePreviewVisibilityState: GeneratePreviewVisibilityState = .hidden
 
     private enum PlaybackMode {
         case none
@@ -80,12 +107,32 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var livePlaybackTimeOffset: TimeInterval = 0
     private var liveUnderrunCount = 0
     private let livePreviewConfiguration: LivePreviewConfiguration
+    private var chunkObserver: NSObjectProtocol?
     private var chunkCancellable: AnyCancellable?
     private var timer: Timer?
 
     var hasAudio: Bool { currentFilePath != nil || isLiveStream || liveSessionID != nil }
     var canSeek: Bool { playbackMode == .file || liveFinalFilePath != nil }
     var durationDisplayText: String { isLiveStream && liveFinalFilePath == nil ? "Live" : playbackProgress.formattedDuration }
+    var activeGeneratePreviewVisibilityState: GeneratePreviewVisibilityState {
+        playbackPresentationContext == .generatePreview ? generatePreviewVisibilityState : .hidden
+    }
+
+    /// True when the global now-playing rail should be mounted above the studio dock.
+    /// Covers Generate-preview preparing/ready states and any Library playback.
+    var isShowingNowPlayingRail: Bool {
+        if generatePreviewVisibilityState != .hidden { return true }
+        return currentFilePath != nil || isLiveStream
+    }
+
+    /// Label for the rail's context chip, or nil when no chip should render.
+    var nowPlayingContextChipLabel: String? {
+        switch playbackPresentationContext {
+        case .generatePreview: return "Preview"
+        case .library: return "Library"
+        case .none: return nil
+        }
+    }
 
     /// Non-published pass-through for callers that need the current value without subscribing.
     var currentTime: TimeInterval {
@@ -101,19 +148,26 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     override init() {
         livePreviewConfiguration = .current()
         super.init()
-        bindChunkBroker()
+        bindGenerationEventSource()
     }
 
     deinit {
         MainActor.assumeIsolated {
             timer?.invalidate()
+            if let chunkObserver {
+                NotificationCenter.default.removeObserver(chunkObserver)
+            }
             chunkCancellable?.cancel()
         }
     }
 
     // MARK: - Playback
 
-    func load(filePath: String, title: String = "") {
+    func load(
+        filePath: String,
+        title: String = "",
+        presentationContext: PlaybackPresentationContext = .library
+    ) {
         pendingAutoplaySignpost = false
         teardownLivePlayback(clearSession: true)
         stopFilePlayback(clearPlayer: true)
@@ -124,10 +178,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 title: title,
                 preserveCurrentTime: 0,
                 autoPlay: false,
-                transitionFromLive: false
+                transitionFromLive: false,
+                presentationContext: presentationContext
             )
         } catch {
             clearLoadedAudio()
+            resetPresentationState()
             playbackError = error.localizedDescription
         }
     }
@@ -185,6 +241,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         isLiveStream = false
         livePreviewQueueDepth = 0
         livePreviewPhase = .idle
+        resetPresentationState()
     }
 
     func seek(to fraction: Double) {
@@ -206,8 +263,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         currentTime = targetTime
     }
 
-    func playFile(_ path: String, title: String = "", isAutoplay: Bool = false) {
-        load(filePath: path, title: title)
+    func playFile(
+        _ path: String,
+        title: String = "",
+        isAutoplay: Bool = false,
+        presentationContext: PlaybackPresentationContext = .library
+    ) {
+        load(filePath: path, title: title, presentationContext: presentationContext)
         if isAutoplay {
             pendingAutoplaySignpost = true
         }
@@ -242,16 +304,19 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         isLiveStream = true
         livePreviewQueueDepth = 0
         livePreviewPhase = .buffering
+        playbackPresentationContext = .generatePreview
+        generatePreviewVisibilityState = .preparing
     }
 
-    func completeStreamingPreview(
-        result: QwenVoiceNative.GenerationResult,
-        title: String,
-        shouldAutoPlay: Bool
-    ) {
+    func completeStreamingPreview(result: PlaybackGenerationResult, title: String, shouldAutoPlay: Bool) {
         guard result.usedStreaming else {
             if shouldAutoPlay {
-                playFile(result.audioPath, title: title)
+                playFile(
+                    result.audioPath,
+                    title: title,
+                    isAutoplay: true,
+                    presentationContext: .generatePreview
+                )
             }
             return
         }
@@ -291,7 +356,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         let cumulativeDuration: Double?
     }
 
-    private func bindChunkBroker() {
+    private func bindGenerationEventSource() {
+#if canImport(QwenVoiceNative)
         chunkCancellable = GenerationChunkBroker.shared.publisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
@@ -305,6 +371,29 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 )
                 self.handleGenerationChunk(chunk)
             }
+#else
+        chunkObserver = NotificationCenter.default.addObserver(
+            forName: .generationChunkReceived,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let userInfo = notification.userInfo,
+                  let requestID = userInfo["requestID"] as? Int,
+                  let title = userInfo["title"] as? String,
+                  let chunkPath = userInfo["chunkPath"] as? String
+            else { return }
+            let chunk = ChunkInfo(
+                requestID: requestID,
+                title: title,
+                chunkPath: chunkPath,
+                sessionDirectory: userInfo["streamSessionDirectory"] as? String,
+                cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
+            )
+            Task { @MainActor [weak self] in
+                self?.handleGenerationChunk(chunk)
+            }
+        }
+#endif
     }
 
     private func handleGenerationChunk(_ chunk: ChunkInfo) {
@@ -353,6 +442,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         isLiveStream = true
         livePreviewQueueDepth = 0
         livePreviewPhase = .buffering
+        playbackPresentationContext = .generatePreview
+        generatePreviewVisibilityState = .preparing
     }
 
     private func appendLiveChunk(from url: URL, cumulativeDuration: TimeInterval?) {
@@ -370,6 +461,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         scheduleLiveBuffer(buffer)
 
         duration = cumulativeDuration ?? (duration + TimeInterval(buffer.frameLength) / fileFormat.sampleRate)
+        markGeneratePreviewReadyIfNeeded()
         if let pendingFirstChunkInterval {
             AppPerformanceSignposts.end(pendingFirstChunkInterval)
             AppPerformanceSignposts.emit("First Chunk Received")
@@ -435,8 +527,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         livePlayerNode?.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { @Sendable [weak self] _ in
             // AVFAudio invokes completion handlers on its own queue, so keep
             // the callback nonisolated and hop back to MainActor explicitly.
-            Task { [weak self] in
-                await self?.handleLiveBufferPlaybackCompletion()
+            Task { @MainActor [weak self] in
+                self?.handleLiveBufferPlaybackCompletion()
             }
         }
     }
@@ -493,7 +585,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 title: currentTitle,
                 preserveCurrentTime: preserveCurrentTime,
                 autoPlay: autoPlay,
-                transitionFromLive: true
+                transitionFromLive: true,
+                presentationContext: playbackPresentationContext
             )
         } catch {
             playbackError = error.localizedDescription
@@ -568,7 +661,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         title: String,
         preserveCurrentTime: TimeInterval,
         autoPlay: Bool,
-        transitionFromLive: Bool
+        transitionFromLive: Bool,
+        presentationContext: PlaybackPresentationContext
     ) throws {
         let url = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: filePath) else {
@@ -586,6 +680,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             liveScheduledCount = 0
             livePlaybackStarted = false
             livePlaybackTimeOffset = 0
+            liveUnderrunCount = 0
             liveFormat = nil
             cleanupLiveSessionDirectory()
             liveSessionID = nil
@@ -610,6 +705,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         isLiveStream = false
         livePreviewQueueDepth = 0
         livePreviewPhase = .idle
+        playbackPresentationContext = presentationContext
+        generatePreviewVisibilityState = presentationContext == .generatePreview ? .ready : .hidden
         extractWaveform(from: url, replace: true)
 
         if autoPlay {
@@ -688,6 +785,17 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         duration = 0
         currentTime = 0
         waveformSamples = []
+    }
+
+    private func markGeneratePreviewReadyIfNeeded() {
+        guard playbackPresentationContext == .generatePreview else { return }
+        guard generatePreviewVisibilityState != .ready else { return }
+        generatePreviewVisibilityState = .ready
+    }
+
+    private func resetPresentationState() {
+        playbackPresentationContext = .none
+        generatePreviewVisibilityState = .hidden
     }
 
     // MARK: - Timer
@@ -785,27 +893,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         let snapshotTime = player.currentTime
         let playerID = ObjectIdentifier(player)
-        Task { [weak self] in
-            guard let self else { return }
-            await self.finishPlaybackIfCurrent(
-                playerID: playerID,
-                succeeded: flag,
-                snapshotTime: snapshotTime
-            )
-        }
-    }
-
-    private func finishPlaybackIfCurrent(
-        playerID: ObjectIdentifier,
-        succeeded: Bool,
-        snapshotTime: TimeInterval
-    ) {
-        guard player.map(ObjectIdentifier.init) == playerID else { return }
-        isPlaying = false
-        currentTime = succeeded ? duration : snapshotTime
-        stopTimer()
-        if !succeeded {
-            playbackError = "Playback stopped unexpectedly."
+        Task { @MainActor [weak self] in
+            guard let self, self.player.map(ObjectIdentifier.init) == playerID else { return }
+            self.isPlaying = false
+            self.currentTime = flag ? self.duration : snapshotTime
+            self.stopTimer()
+            if !flag {
+                self.playbackError = "Playback stopped unexpectedly."
+            }
         }
     }
 }

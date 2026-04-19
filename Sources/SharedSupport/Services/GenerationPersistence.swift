@@ -1,5 +1,18 @@
 import Foundation
+
+#if canImport(QwenVoiceCore)
 import QwenVoiceCore
+#endif
+
+#if canImport(QwenVoiceNative)
+import QwenVoiceNative
+#endif
+
+#if canImport(QwenVoiceNative)
+typealias PersistenceGenerationResult = QwenVoiceNative.GenerationResult
+#elseif canImport(QwenVoiceCore)
+typealias PersistenceGenerationResult = QwenVoiceCore.GenerationResult
+#endif
 
 /// Shared generation persistence and autoplay logic used by all three generation views.
 @MainActor
@@ -19,7 +32,7 @@ enum GenerationPersistence {
     /// Saves a generation to the database, posts a notification, and triggers autoplay if configured.
     static func persistAndAutoplay(
         _ generation: inout Generation,
-        result: GenerationResult,
+        result: PersistenceGenerationResult,
         text: String,
         audioPlayer: AudioPlayerViewModel,
         caller: String
@@ -57,7 +70,11 @@ enum GenerationPersistence {
             #endif
 
             let notificationStart = DispatchTime.now().uptimeNanoseconds
+            #if canImport(QwenVoiceNative)
+            GenerationLibraryEvents.shared.announceGenerationSaved()
+            #else
             NotificationCenter.default.post(name: .generationSaved, object: nil)
+            #endif
             #if DEBUG
             print("[Performance][\(caller)] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
             #endif

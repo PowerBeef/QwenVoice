@@ -42,7 +42,8 @@ macOS runtime split:
 iPhone runtime split:
 
 - `Sources/iOS/` for the SwiftUI app shell and UI-owned orchestration
-- `Sources/iOSSupport/` for shared iPhone support services, paths, model delivery, and persistence layers
+- `Sources/iOSSupport/` for iPhone-only support services, paths, and model-delivery layers
+- `Sources/SharedSupport/` for cross-platform playback state, generation persistence, and other shared app-layer helpers
 - `Sources/iOSEngineExtension/` for the isolated engine-extension process hosted through ExtensionFoundation
 
 Vendored native backend boundary:

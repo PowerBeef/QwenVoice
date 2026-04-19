@@ -6,6 +6,7 @@ QwenVoice is now a merged Apple-platform repository for Vocello. The repo carrie
 
 - One shared Apple-platform codebase with explicit separation between UI orchestration and isolated engine execution
 - Shared manifest-driven contract for model, speaker, and platform-variant metadata
+- Shared app-layer playback and generation-persistence ownership now lives in `Sources/SharedSupport/` instead of drifting across separate platform copies
 - Process isolation preserved on both platforms during generation and prewarm work
 - Explicit low-RAM policy surfaces for the iPhone path, including guarded and critical memory bands
 - Restored repo workflows for project inputs, Apple-platform validation, macOS release packaging/notarization, and iPhone TestFlight packaging
@@ -21,6 +22,7 @@ QwenVoice is now a merged Apple-platform repository for Vocello. The repo carrie
 - The restored iPhone TestFlight workflow still depends on real Apple signing materials, provisioning, and App Store Connect credentials when run outside local source-only validation.
 - Visual and interaction verification remains intentionally partly manual through local Computer Use rather than full maintained XCUI parity across both platforms.
 - The public README is intentionally conservative during the refactor period, so public GitHub messaging is narrower than the internal repo architecture docs by design.
+- Preview, debug, and manual-verification helper surfaces still need a keep/refactor/delete pass so the cleanup tracker can close with explicit ownership.
 
 ## Source Of Truth
 

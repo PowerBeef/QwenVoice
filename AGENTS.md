@@ -20,7 +20,8 @@ The main working surfaces are:
 - `Sources/QwenVoiceEngineSupport/` for shared macOS engine IPC and transport types
 - `Sources/QwenVoiceNativeRuntime/` for macOS service-only native execution
 - `Sources/QwenVoiceEngineService/` for the bundled macOS XPC helper
-- `Sources/iOS/` and `Sources/iOSSupport/` for the iPhone app shell and support layers
+- `Sources/iOS/` and `Sources/iOSSupport/` for the iPhone app shell and iPhone-only support layers
+- `Sources/SharedSupport/` for cross-platform playback, persistence, and other shared app-layer helpers
 - `Sources/iOSEngineExtension/` for the isolated iPhone engine extension target
 - `Sources/Resources/qwenvoice_contract.json` for shared model, variant, speaker, output, and required-file metadata
 - `scripts/` plus `.github/workflows/` for validation, release packaging, and CI behavior
@@ -86,7 +87,8 @@ When repo facts disagree, trust sources in this order:
 - `Sources/QwenVoiceEngineService/` owns the bundled macOS XPC helper entrypoint and session/host behavior.
 - `Sources/QwenVoiceCore/` is the cross-platform engine core and shared semantic boundary. Keep it free of app-process UI assumptions.
 - `Sources/iOSEngineExtension/` hosts the isolated iPhone engine process through ExtensionFoundation. Heavy generation and prewarm work belongs there, not in the iPhone UI app process.
-- `Sources/iOS/` and `Sources/iOSSupport/` own the iPhone SwiftUI shell, model delivery UX, playback UI, library/history views, and memory-pressure coordination.
+- `Sources/iOS/` and `Sources/iOSSupport/` own the iPhone SwiftUI shell, model delivery UX, library/history views, and memory-pressure coordination.
+- `Sources/SharedSupport/` owns shared playback and generation-persistence surfaces that now serve both the macOS and iPhone apps.
 - `Sources/Services/AppPaths.swift` and `Sources/iOSSupport/Services/AppPaths.swift` are the path boundaries for runtime data on each platform.
 - `Sources/Models/TTSContract.swift`, `Sources/Models/TTSModel.swift`, and the `QwenVoiceCore` semantic types load `Sources/Resources/qwenvoice_contract.json`.
 
@@ -174,6 +176,8 @@ Release facts:
   review `Sources/QwenVoiceCore/Extension*`, `Sources/iOSEngineExtension/`, `Sources/iOS/VocelloEngineExtensionPoint.swift`, and iPhone build/test coverage together.
 - Memory-pressure, prewarm, or low-RAM admission behavior:
   review `Sources/QwenVoiceCore/IOSMemorySnapshot.swift`, `Sources/iOS/TTSEngineStore.swift`, `Sources/iOS/QVoiceiOSApp.swift`, and iPhone settings/status UI together.
+- Playback or generation-persistence behavior:
+  review `Sources/SharedSupport/`, affected macOS or iPhone feature views, and the relevant harness/tests together.
 - macOS release packaging or notarization behavior:
   keep `scripts/release.sh`, `scripts/create_dmg.sh`, `scripts/verify_release_bundle.sh`, `scripts/verify_packaged_dmg.sh`, `.github/workflows/macos-release.yml`, and release-facing docs aligned.
 - iPhone archive/export/TestFlight behavior:

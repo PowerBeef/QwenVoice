@@ -256,6 +256,7 @@ targets:
     sources:
       - path: Sources/iOS
       - path: Sources/iOSSupport
+      - path: Sources/SharedSupport
     resources:
       - path: Sources/iOS/LaunchScreen.storyboard
         buildPhase: resources
