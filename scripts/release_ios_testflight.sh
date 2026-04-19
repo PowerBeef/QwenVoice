@@ -14,6 +14,12 @@ CONFIGURATION="Release"
 TEAM_ID="${QVOICE_IOS_TEAM_ID:-FK2D8X36G2}"
 BUNDLE_ID="com.qvoice.ios"
 CATALOG_URL="${QVOICE_IOS_MODEL_CATALOG_URL:-https://downloads.qvoice.app/ios/catalog/v1/models.json}"
+VALIDATED_DEVICE_MODEL="${QVOICE_IOS_VALIDATED_DEVICE_MODEL:-unrecorded}"
+VALIDATED_DEVICE_OS="${QVOICE_IOS_VALIDATED_DEVICE_OS:-unrecorded}"
+OWNED_DEVICE_VALIDATION_STATUS="${QVOICE_IOS_OWNED_DEVICE_VALIDATION_STATUS:-unrecorded}"
+OWNED_DEVICE_VALIDATION_TARGET="${QVOICE_IOS_OWNED_DEVICE_VALIDATION_TARGET:-iPhone 17 Pro}"
+OFFICIAL_MINIMUM_DEVICE="${QVOICE_IOS_OFFICIAL_MINIMUM_DEVICE:-iPhone 15 Pro}"
+MINIMUM_DEVICE_PROOF_STATUS="${QVOICE_IOS_MINIMUM_DEVICE_PROOF_STATUS:-pending}"
 DESTINATION_MODE="export"
 SKIP_CATALOG_CHECK=false
 SKIP_ARCHIVE=false
@@ -32,6 +38,15 @@ Options:
 Environment:
   QVOICE_IOS_TEAM_ID                 Override the export team ID (default: $TEAM_ID)
   QVOICE_IOS_MODEL_CATALOG_URL       Override the catalog URL used for the preflight check
+  QVOICE_IOS_VALIDATED_DEVICE_MODEL  Record the owned validation device model (default: $VALIDATED_DEVICE_MODEL)
+  QVOICE_IOS_VALIDATED_DEVICE_OS     Record the owned validation device OS build/version
+  QVOICE_IOS_OWNED_DEVICE_VALIDATION_STATUS
+                                     Record owned-device validation status (default: $OWNED_DEVICE_VALIDATION_STATUS)
+  QVOICE_IOS_OWNED_DEVICE_VALIDATION_TARGET
+                                     Record the active owned validation target (default: $OWNED_DEVICE_VALIDATION_TARGET)
+  QVOICE_IOS_OFFICIAL_MINIMUM_DEVICE Record the official minimum supported iPhone (default: $OFFICIAL_MINIMUM_DEVICE)
+  QVOICE_IOS_MINIMUM_DEVICE_PROOF_STATUS
+                                     Record minimum-device proof status: pending|recorded|not_applicable
   APP_STORE_CONNECT_API_KEY_PATH     Optional App Store Connect API key path
   APP_STORE_CONNECT_API_KEY_ID       Required with APP_STORE_CONNECT_API_KEY_PATH
   APP_STORE_CONNECT_ISSUER_ID        Required with APP_STORE_CONNECT_API_KEY_PATH
@@ -133,6 +148,7 @@ echo "  mode: $DESTINATION_MODE"
 echo "  archive: $ARCHIVE_PATH"
 echo "  export: $EXPORT_DIR"
 echo "  catalog: $CATALOG_URL"
+echo "  validation target: $OWNED_DEVICE_VALIDATION_TARGET"
 echo ""
 
 STEP_START="$(date +%s)"
@@ -205,13 +221,19 @@ echo "[5/6] Export TestFlight package — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[6/6] Writing release metadata..."
+echo "[6/7] Writing release metadata..."
 SHOW_BUILD_SETTINGS="$(xcodebuild -project "$PROJECT_FILE" -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings 2>/dev/null)"
 MARKETING_VERSION="$(printf '%s\n' "$SHOW_BUILD_SETTINGS" | awk -F' = ' '/MARKETING_VERSION/ {print $2; exit}')"
 CURRENT_PROJECT_VERSION="$(printf '%s\n' "$SHOW_BUILD_SETTINGS" | awk -F' = ' '/CURRENT_PROJECT_VERSION/ {print $2; exit}')"
 COMMIT_SHA="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
 [ -n "$COMMIT_SHA" ] || COMMIT_SHA="unknown"
 IPA_PATH="$(find "$EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit || true)"
+TESTFLIGHT_UPLOAD_STATUS="local_export_only"
+APP_STORE_CONNECT_CONFIRMATION="not_requested"
+if [ "$DESTINATION_MODE" = "upload" ]; then
+    TESTFLIGHT_UPLOAD_STATUS="uploaded_via_xcodebuild"
+    APP_STORE_CONNECT_CONFIRMATION="pending_manual_check"
+fi
 
 {
     echo "commit_sha=$COMMIT_SHA"
@@ -223,6 +245,14 @@ IPA_PATH="$(find "$EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit || true)"
     echo "build_number=$CURRENT_PROJECT_VERSION"
     echo "catalog_url=$CATALOG_URL"
     echo "destination_mode=$DESTINATION_MODE"
+    echo "owned_device_validation_target=$OWNED_DEVICE_VALIDATION_TARGET"
+    echo "validated_device_model=$VALIDATED_DEVICE_MODEL"
+    echo "validated_device_os=$VALIDATED_DEVICE_OS"
+    echo "owned_device_validation_status=$OWNED_DEVICE_VALIDATION_STATUS"
+    echo "official_minimum_device=$OFFICIAL_MINIMUM_DEVICE"
+    echo "minimum_device_proof_status=$MINIMUM_DEVICE_PROOF_STATUS"
+    echo "testflight_upload_status=$TESTFLIGHT_UPLOAD_STATUS"
+    echo "app_store_connect_confirmation=$APP_STORE_CONNECT_CONFIRMATION"
     echo "archive_path=$ARCHIVE_PATH"
     echo "export_path=$EXPORT_DIR"
     echo "ipa_path=${IPA_PATH:-none}"
@@ -230,7 +260,14 @@ IPA_PATH="$(find "$EXPORT_DIR" -maxdepth 1 -name '*.ipa' -print -quit || true)"
     echo "testflight_internal_only=true"
 } > "$METADATA_PATH"
 
-echo "[6/6] Write release metadata — done ($(step_time "$STEP_START"))"
+echo "[6/7] Write release metadata — done ($(step_time "$STEP_START"))"
+echo ""
+
+STEP_START="$(date +%s)"
+echo "[7/7] Verifying archive/export structure..."
+"$SCRIPT_DIR/verify_ios_release_archive.sh" "$ARCHIVE_PATH" "$EXPORT_DIR" "$METADATA_PATH"
+echo "archive_verification_status=passed" >> "$METADATA_PATH"
+echo "[7/7] Archive/export verification — done ($(step_time "$STEP_START"))"
 echo ""
 
 echo "Vocello iPhone release build complete."
@@ -245,7 +282,7 @@ if [ "$DESTINATION_MODE" = "export" ]; then
     echo "Next:"
     echo "  1. Upload the archive or IPA to App Store Connect with Xcode Organizer or Transporter."
     echo "  2. Add the build to the Internal Testing group in TestFlight."
-    echo "  3. Install it from TestFlight on an iPhone 15 Pro or newer that is not connected to Xcode."
+    echo "  3. Validate it on your owned device target ($OWNED_DEVICE_VALIDATION_TARGET), record the actual tested device, and keep $OFFICIAL_MINIMUM_DEVICE proof status accurate in the release evidence."
 else
     echo "The build was exported with destination=upload. Confirm it appears in App Store Connect -> TestFlight."
 fi

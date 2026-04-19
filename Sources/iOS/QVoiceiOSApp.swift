@@ -105,6 +105,17 @@ struct QVoiceiOSApp: App {
                                 executeDeferredMemoryPressureReliefIfNeeded()
                                 executeDeferredRuntimeReleaseIfNeeded()
                             }
+                            .onReceive(engine.$extensionLifecycleState.removeDuplicates()) { lifecycleState in
+                                switch lifecycleState {
+                                case .interrupted, .invalidated:
+                                    audioPlayer.abortLivePreviewIfNeeded()
+                                case .connected:
+                                    executeDeferredMemoryPressureReliefIfNeeded()
+                                    executeDeferredRuntimeReleaseIfNeeded()
+                                case .idle, .connecting, .recovering, .failed:
+                                    break
+                                }
+                            }
                     } else {
                         IOSUnsupportedDeviceView(reason: IOSDeviceSupport.unsupportedReason)
                     }

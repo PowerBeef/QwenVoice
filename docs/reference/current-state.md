@@ -16,6 +16,13 @@ This document is the shared factual reference for the current QwenVoice reposito
 
 The iPhone app target is already Vocello-branded. The macOS target graph still keeps several internal `QwenVoice` names for continuity, while the intended hosted macOS release asset is `Vocello-macos26.dmg`.
 
+## Public Homepage Freeze
+
+- `README.md` and the GitHub repo description are intentionally frozen to the currently shipped macOS product reality.
+- That public freeze is a messaging constraint, not an architecture rollback.
+- Maintained reference docs remain the place to record the actual merged Apple-platform repo state.
+- The GitHub homepage URL should stay blank unless the repo owner explicitly asks to set it again.
+
 ## Architecture
 
 This repo now carries one Apple-platform codebase with a shared engine core and platform-specific isolated hosts.

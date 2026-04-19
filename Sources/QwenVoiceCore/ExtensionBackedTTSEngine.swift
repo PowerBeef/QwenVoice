@@ -3,6 +3,16 @@ import ExtensionFoundation
 import Foundation
 import OSLog
 
+public enum ExtensionEngineLifecycleState: String, Codable, Equatable, Sendable {
+    case idle
+    case connecting
+    case connected
+    case interrupted
+    case invalidated
+    case recovering
+    case failed
+}
+
 enum ExtensionEngineTransportError: LocalizedError, Equatable, Sendable {
     case interrupted
     case invalidated
@@ -136,6 +146,7 @@ actor ExtensionEngineCoordinator {
 
     private let onSnapshot: @Sendable (TTSEngineSnapshot) -> Void
     private let onChunk: @Sendable (GenerationEvent) -> Void
+    private let onLifecycleState: @Sendable (ExtensionEngineLifecycleState) -> Void
     private let transportFactory: ExtensionEngineTransportFactory
     private let timeoutResolver: ExtensionEngineTimeoutResolver
 
@@ -143,10 +154,12 @@ actor ExtensionEngineCoordinator {
     private var didInitializeCurrentConnection = false
     private var initializedAppSupportDirectory: URL?
     private var pendingRequests: [UUID: PendingExtensionRequestBox] = [:]
+    private var lastDisconnectState: ExtensionEngineLifecycleState?
 
     init(
         onSnapshot: @escaping @Sendable (TTSEngineSnapshot) -> Void,
         onChunk: @escaping @Sendable (GenerationEvent) -> Void,
+        onLifecycleState: @escaping @Sendable (ExtensionEngineLifecycleState) -> Void,
         transportFactory: @escaping ExtensionEngineTransportFactory,
         timeoutResolver: @escaping ExtensionEngineTimeoutResolver = { command in
             command.transportTimeout
@@ -154,6 +167,7 @@ actor ExtensionEngineCoordinator {
     ) {
         self.onSnapshot = onSnapshot
         self.onChunk = onChunk
+        self.onLifecycleState = onLifecycleState
         self.transportFactory = transportFactory
         self.timeoutResolver = timeoutResolver
     }
@@ -255,6 +269,8 @@ actor ExtensionEngineCoordinator {
             return activeConnection
         }
 
+        let reconnecting = lastDisconnectState != nil
+        onLifecycleState(reconnecting ? .recovering : .connecting)
         let connectionID = UUID()
         let handlers = ExtensionEngineTransportHandlers(
             onEventData: { [weak self] payload in
@@ -279,12 +295,19 @@ actor ExtensionEngineCoordinator {
             }
         )
 
-        let transport = try await transportFactory(handlers)
-        transport.resume()
-        let connection = ActiveConnection(id: connectionID, transport: transport)
-        activeConnection = connection
-        didInitializeCurrentConnection = false
-        return connection
+        do {
+            let transport = try await transportFactory(handlers)
+            transport.resume()
+            let connection = ActiveConnection(id: connectionID, transport: transport)
+            activeConnection = connection
+            didInitializeCurrentConnection = false
+            lastDisconnectState = nil
+            onLifecycleState(.connected)
+            return connection
+        } catch {
+            onLifecycleState(.failed)
+            throw error
+        }
     }
 
     private func perform(
@@ -386,6 +409,9 @@ actor ExtensionEngineCoordinator {
         }
         connectionToInvalidate.invalidate()
         didInitializeCurrentConnection = false
+        let lifecycleState = lifecycleState(for: transportError)
+        lastDisconnectState = lifecycleState
+        onLifecycleState(lifecycleState)
 
         let pendingRequestBoxes = pendingRequests.values
         pendingRequests.removeAll()
@@ -403,6 +429,17 @@ actor ExtensionEngineCoordinator {
                 visibleErrorMessage: visibleMessage
             )
         )
+    }
+
+    private func lifecycleState(for transportError: ExtensionEngineTransportError) -> ExtensionEngineLifecycleState {
+        switch transportError {
+        case .interrupted:
+            return .interrupted
+        case .invalidated:
+            return .invalidated
+        case .timedOut, .staleOrMismatchedReply, .invalidReply:
+            return .failed
+        }
     }
 
     private func isCurrentConnection(_ connectionID: UUID) -> Bool {
@@ -424,6 +461,7 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
     @Published public private(set) var loadState: EngineLoadState = .idle
     @Published public private(set) var clonePreparationState: ClonePreparationState = .idle
     @Published public private(set) var latestEvent: GenerationEvent?
+    @Published public private(set) var lifecycleState: ExtensionEngineLifecycleState = .idle
     public private(set) var visibleErrorMessage: String?
 
     public var isReady: Bool {
@@ -445,6 +483,11 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
                 Task { @MainActor [weak self] in
                     self?.chunkForwarder(event)
                     self?.latestEvent = event
+                }
+            },
+            onLifecycleState: { [weak self] lifecycleState in
+                Task { @MainActor [weak self] in
+                    self?.applyLifecycleState(lifecycleState)
                 }
             },
             transportFactory: transportFactory
@@ -490,6 +533,7 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
     public func start() {}
 
     public func stop() {
+        lifecycleState = .idle
         Task {
             await coordinator.invalidate()
         }
@@ -638,6 +682,21 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
         loadState = snapshot.loadState
         clonePreparationState = snapshot.clonePreparationState
         visibleErrorMessage = snapshot.visibleErrorMessage
+    }
+
+    private func applyLifecycleState(_ nextState: ExtensionEngineLifecycleState) {
+        let previousState = lifecycleState
+        lifecycleState = nextState
+
+        guard nextState == .connected else { return }
+        guard previousState == .interrupted || previousState == .invalidated || previousState == .recovering || previousState == .failed else {
+            return
+        }
+
+        if case .crashed = loadState {
+            loadState = .idle
+        }
+        visibleErrorMessage = nil
     }
 
     private static func remappedTransportError(_ error: Error) -> Error {

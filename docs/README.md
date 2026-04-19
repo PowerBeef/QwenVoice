@@ -1,12 +1,13 @@
 # QwenVoice Documentation
 
-This folder contains the current repo-authored documentation for QwenVoice, the home of Vocello for Mac and iPhone.
+This folder contains the current repo-authored documentation for QwenVoice.
 
 ## Maintained Reference Docs
 
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
+- [`reference/release-readiness.md`](reference/release-readiness.md) — release-readiness matrix, proof status, and public-homepage freeze rules
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — runtime, vendoring, and packaging boundaries
 
 These are the maintained source-of-truth docs for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and workflows first, then these reference docs.
@@ -14,6 +15,8 @@ These are the maintained source-of-truth docs for contributor and repository beh
 ## Product And Public Docs
 
 - [`../README.md`](../README.md) — public GitHub landing page and end-user overview
+
+The public landing page is intentionally conservative right now. It stays aligned with the currently shipped macOS product reality until the repo owner explicitly approves a broader homepage update.
 
 ## Supplemental Guides
 

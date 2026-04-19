@@ -332,7 +332,7 @@ private struct IOSModelRow: View {
             Button("Download", action: onInstall)
                 .iosSettingsProminentActionButtonStyle(tint: IOSBrandTheme.modeColor(for: model.mode))
                 .accessibilityIdentifier("iosModelDownload_\(model.id)")
-        case .downloading:
+        case .downloading, .interrupted, .resuming, .restarting:
             Button("Cancel", action: onCancel)
                 .controlSize(.small)
                 .iosAdaptiveUtilityButtonStyle(tint: IOSBrandTheme.modeColor(for: model.mode))
@@ -357,6 +357,23 @@ private struct IOSModelRow: View {
     private var statusDetailView: some View {
         switch operationState {
         case .downloading(let progress, let downloadedBytes, let totalBytes):
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: progress ?? 0)
+                Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
+                    .font(.footnote)
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+            }
+        case .interrupted(let message, let downloadedBytes, let totalBytes):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message ?? "Download interrupted.")
+                    .font(.footnote)
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
+                    .font(.footnote)
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+            }
+        case .resuming(let progress, let downloadedBytes, let totalBytes),
+                .restarting(let progress, let downloadedBytes, let totalBytes):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: progress ?? 0)
                 Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
@@ -403,6 +420,12 @@ private struct IOSModelRow: View {
             return "Download \(IOSSettingsFormatters.fileSize(estimatedBytes))"
         case .downloading:
             return "Downloading…"
+        case .interrupted:
+            return "Interrupted"
+        case .resuming:
+            return "Resuming…"
+        case .restarting:
+            return "Restarting…"
         case .verifying:
             return "Verifying…"
         case .installing:

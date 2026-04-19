@@ -113,6 +113,9 @@ jobs:
           APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          QVOICE_IOS_OWNED_DEVICE_VALIDATION_TARGET: iPhone 17 Pro
+          QVOICE_IOS_OWNED_DEVICE_VALIDATION_STATUS: unrecorded
+          QVOICE_IOS_MINIMUM_DEVICE_PROOF_STATUS: pending
         run: |
           if [ "${{ inputs.upload_to_testflight }}" = "true" ]; then
             ./scripts/release_ios_testflight.sh --upload

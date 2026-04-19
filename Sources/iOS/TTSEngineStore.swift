@@ -40,6 +40,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     @Published private(set) var clonePreparationState: ClonePreparationState = .idle
     @Published private(set) var latestEvent: GenerationEvent?
     @Published private(set) var hasActiveGeneration = false
+    @Published private(set) var extensionLifecycleState: ExtensionEngineLifecycleState = .idle
 
     let modelRegistry: any ModelRegistry
     let supportsSavedVoiceMutation: Bool
@@ -272,6 +273,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         loadState = snapshot.loadState
         clonePreparationState = snapshot.clonePreparationState
         latestEvent = snapshot.latestEvent
+        extensionLifecycleState = snapshot.extensionLifecycleState ?? .idle
         applyMemoryPolicyContext(for: currentMemorySnapshot())
 
         guard previousLatestEvent != snapshot.latestEvent,
@@ -347,6 +349,7 @@ private struct TTSEngineStateSnapshot {
     let latestEvent: GenerationEvent?
     let isReady: Bool
     let visibleErrorMessage: String?
+    let extensionLifecycleState: ExtensionEngineLifecycleState?
 }
 
 @MainActor
@@ -382,6 +385,7 @@ final class AnyTTSEngineBackend {
     private let setVisibleErrorBlock: (String?) -> Void
     private let setAllowsProactiveWarmOperationsBlock: (Bool) -> Void
     private let trimMemoryBlock: (NativeMemoryTrimLevel, String) async -> Void
+    private let extensionLifecycleStateBlock: () -> ExtensionEngineLifecycleState?
 
     init<Engine: TTSEngine & AnyObject>(
         engine: Engine,
@@ -402,7 +406,8 @@ final class AnyTTSEngineBackend {
                 clonePreparationState: engine.clonePreparationState,
                 latestEvent: engine.latestEvent,
                 isReady: engine.isReady,
-                visibleErrorMessage: engine.visibleErrorMessage
+                visibleErrorMessage: engine.visibleErrorMessage,
+                extensionLifecycleState: nil
             )
         }
         self.supportDecisionBlock = { engine.supportDecision(for: $0) }
@@ -441,9 +446,24 @@ final class AnyTTSEngineBackend {
             self.setAllowsProactiveWarmOperationsBlock = { _ in }
             self.trimMemoryBlock = { _, _ in }
         }
+        if let engine = engine as? ExtensionBackedTTSEngine {
+            self.extensionLifecycleStateBlock = { engine.lifecycleState }
+        } else {
+            self.extensionLifecycleStateBlock = { nil }
+        }
     }
 
-    fileprivate func snapshot() -> TTSEngineStateSnapshot { snapshotBlock() }
+    fileprivate func snapshot() -> TTSEngineStateSnapshot {
+        let snapshot = snapshotBlock()
+        return TTSEngineStateSnapshot(
+            loadState: snapshot.loadState,
+            clonePreparationState: snapshot.clonePreparationState,
+            latestEvent: snapshot.latestEvent,
+            isReady: snapshot.isReady,
+            visibleErrorMessage: snapshot.visibleErrorMessage,
+            extensionLifecycleState: extensionLifecycleStateBlock()
+        )
+    }
     func supportDecision(for request: GenerationRequest) -> GenerationSupportDecision { supportDecisionBlock(request) }
     func start() { startBlock() }
     func stop() { stopBlock() }

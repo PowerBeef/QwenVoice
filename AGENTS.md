@@ -36,9 +36,17 @@ The maintained repo docs are:
 - `docs/README.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`
+- `docs/reference/release-readiness.md`
 - `docs/reference/vendoring-runtime.md`
 
 Do not point contributors at removed CLI docs, deleted backend references, or deleted repo-scoped QwenVoice skills.
+
+Public homepage freeze:
+
+- `README.md` is intentionally locked to the currently shipped macOS product reality.
+- The GitHub repo description must stay aligned with that conservative public README posture.
+- Leave the GitHub homepage URL blank unless the user explicitly asks to restore or change it.
+- Do not expand public README or repo-description messaging to the not-yet-shipped merged product until the user explicitly instructs otherwise.
 
 ## Source Of Truth
 
@@ -47,7 +55,7 @@ When repo facts disagree, trust sources in this order:
 1. `Sources/`
 2. `project.yml`
 3. `scripts/` plus `.github/workflows/`
-4. `docs/reference/current-state.md` and `docs/reference/engineering-status.md`
+4. `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/release-readiness.md`
 5. other prose docs
 
 `Sources/Resources/qwenvoice_contract.json` is the source of truth for shared model, speaker, and platform-variant metadata.
@@ -149,6 +157,7 @@ Release facts:
 - iPhone distribution is App Store / TestFlight only. Do not add iPhone install artifacts to GitHub Releases.
 - `scripts/release.sh` is the maintained local macOS packaging entrypoint.
 - `scripts/release_ios_testflight.sh` is the maintained iPhone archive/export entrypoint.
+- `scripts/verify_ios_release_archive.sh` is the maintained structural verifier for the iPhone archive/export artifacts.
 - Shipped macOS bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
 
 ## When Changing X, Also Update Y
@@ -168,9 +177,9 @@ Release facts:
 - macOS release packaging or notarization behavior:
   keep `scripts/release.sh`, `scripts/create_dmg.sh`, `scripts/verify_release_bundle.sh`, `scripts/verify_packaged_dmg.sh`, `.github/workflows/macos-release.yml`, and release-facing docs aligned.
 - iPhone archive/export/TestFlight behavior:
-  keep `scripts/check_ios_catalog.py`, `scripts/release_ios_testflight.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
+  keep `scripts/check_ios_catalog.py`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, and `docs/reference/engineering-status.md`.
+  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 
@@ -185,6 +194,7 @@ Release facts:
 - Prefer manifest-backed data over duplicated constants.
 - Keep accessibility identifiers stable when UI control types change.
 - If you changed engine architecture or runtime ownership, verify `AGENTS.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
-- If you changed release behavior, verify the scripts, workflows, artifact names, and README/docs all still agree.
+- If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
+- If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public-homepage freeze unless the user explicitly changed that policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.
 - Run the most relevant harness layer plus `python3 scripts/harness.py validate` before calling work complete.

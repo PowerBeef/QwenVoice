@@ -115,6 +115,9 @@ enum IOSSimulatorPreviewPolicy {
         switch operationState {
         case .available,
                 .downloading,
+                .interrupted,
+                .resuming,
+                .restarting,
                 .verifying,
                 .installing,
                 .installed,

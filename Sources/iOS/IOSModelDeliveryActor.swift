@@ -4,6 +4,9 @@ import QwenVoiceCore
 struct IOSModelDeliverySnapshot: Equatable, Sendable {
     enum Phase: String, Codable, Sendable {
         case downloading
+        case interrupted
+        case resuming
+        case restarting
         case verifying
         case installing
         case installed
@@ -30,6 +33,63 @@ private struct IOSPersistedModelInstallState: Codable, Sendable {
     let completedBytes: Int64
     let totalBytes: Int64
     let currentFileRetryCount: Int
+    let currentResumeDataPath: String?
+    let currentPhase: IOSModelDeliverySnapshot.Phase
+
+    private enum CodingKeys: String, CodingKey {
+        case modelID
+        case artifactVersion
+        case stagingDirectoryPath
+        case catalogEntry
+        case pendingRelativePaths
+        case currentRelativePath
+        case completedBytes
+        case totalBytes
+        case currentFileRetryCount
+        case currentResumeDataPath
+        case currentPhase
+    }
+
+    init(
+        modelID: String,
+        artifactVersion: String,
+        stagingDirectoryPath: String,
+        catalogEntry: IOSModelCatalogEntry,
+        pendingRelativePaths: [String],
+        currentRelativePath: String?,
+        completedBytes: Int64,
+        totalBytes: Int64,
+        currentFileRetryCount: Int,
+        currentResumeDataPath: String?,
+        currentPhase: IOSModelDeliverySnapshot.Phase
+    ) {
+        self.modelID = modelID
+        self.artifactVersion = artifactVersion
+        self.stagingDirectoryPath = stagingDirectoryPath
+        self.catalogEntry = catalogEntry
+        self.pendingRelativePaths = pendingRelativePaths
+        self.currentRelativePath = currentRelativePath
+        self.completedBytes = completedBytes
+        self.totalBytes = totalBytes
+        self.currentFileRetryCount = currentFileRetryCount
+        self.currentResumeDataPath = currentResumeDataPath
+        self.currentPhase = currentPhase
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.modelID = try container.decode(String.self, forKey: .modelID)
+        self.artifactVersion = try container.decode(String.self, forKey: .artifactVersion)
+        self.stagingDirectoryPath = try container.decode(String.self, forKey: .stagingDirectoryPath)
+        self.catalogEntry = try container.decode(IOSModelCatalogEntry.self, forKey: .catalogEntry)
+        self.pendingRelativePaths = try container.decode([String].self, forKey: .pendingRelativePaths)
+        self.currentRelativePath = try container.decodeIfPresent(String.self, forKey: .currentRelativePath)
+        self.completedBytes = try container.decode(Int64.self, forKey: .completedBytes)
+        self.totalBytes = try container.decode(Int64.self, forKey: .totalBytes)
+        self.currentFileRetryCount = try container.decodeIfPresent(Int.self, forKey: .currentFileRetryCount) ?? 0
+        self.currentResumeDataPath = try container.decodeIfPresent(String.self, forKey: .currentResumeDataPath)
+        self.currentPhase = try container.decodeIfPresent(IOSModelDeliverySnapshot.Phase.self, forKey: .currentPhase) ?? .downloading
+    }
 }
 
 private struct IOSModelDownloadTaskDescription: Codable, Sendable {
@@ -180,11 +240,11 @@ actor IOSModelDeliveryActor {
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: persisted.modelID,
-                phase: .downloading,
+                phase: persisted.currentPhase,
                 downloadedBytes: persisted.completedBytes,
                 totalBytes: persisted.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: statusMessage(for: persisted.currentPhase)
             )
         )
 
@@ -249,7 +309,9 @@ actor IOSModelDeliveryActor {
             currentRelativePath: nil,
             completedBytes: 0,
             totalBytes: totalBytes,
-            currentFileRetryCount: 0
+            currentFileRetryCount: 0,
+            currentResumeDataPath: nil,
+            currentPhase: .downloading
         )
         activeInstall = persisted
         savePersistedState(persisted)
@@ -328,21 +390,37 @@ actor IOSModelDeliveryActor {
             return
         }
 
-        let nextRelativePath = activeInstall.pendingRelativePaths[0]
+        let nextRelativePath = activeInstall.currentRelativePath ?? activeInstall.pendingRelativePaths[0]
         let nextFile = try requireFile(relativePath: nextRelativePath, in: activeInstall.catalogEntry)
         let descriptor = try requireDescriptor(id: activeInstall.modelID).model
-        let downloadURL = try IOSModelDeliverySupport.downloadURL(
-            for: nextFile,
-            entry: activeInstall.catalogEntry,
-            configuration: configuration
-        )
         let taskDescription = IOSModelDownloadTaskDescription(
             modelID: activeInstall.modelID,
             relativePath: nextRelativePath
         )
-        let task = downloadSession.downloadTask(with: downloadURL)
+        let isRetry = activeInstall.currentRelativePath != nil || activeInstall.currentFileRetryCount > 0
+        var phase: IOSModelDeliverySnapshot.Phase = .downloading
+        var task: URLSessionDownloadTask
+
+        if let currentResumeDataPath = activeInstall.currentResumeDataPath,
+           let resumeData = try? Data(contentsOf: URL(fileURLWithPath: currentResumeDataPath)) {
+            task = downloadSession.downloadTask(withResumeData: resumeData)
+            cleanupResumeData(atPath: currentResumeDataPath)
+            phase = .resuming
+        } else {
+            if let currentResumeDataPath = activeInstall.currentResumeDataPath {
+                cleanupResumeData(atPath: currentResumeDataPath)
+            }
+            let downloadURL = try IOSModelDeliverySupport.downloadURL(
+                for: nextFile,
+                entry: activeInstall.catalogEntry,
+                configuration: configuration
+            )
+            task = downloadSession.downloadTask(with: downloadURL)
+            phase = isRetry ? .restarting : .downloading
+        }
         task.taskDescription = encodeTaskDescription(taskDescription)
 
+        let retryCount = activeInstall.currentRelativePath == nil ? 0 : activeInstall.currentFileRetryCount
         activeInstall = IOSPersistedModelInstallState(
             modelID: activeInstall.modelID,
             artifactVersion: activeInstall.artifactVersion,
@@ -352,7 +430,9 @@ actor IOSModelDeliveryActor {
             currentRelativePath: nextRelativePath,
             completedBytes: activeInstall.completedBytes,
             totalBytes: activeInstall.totalBytes,
-            currentFileRetryCount: 0
+            currentFileRetryCount: retryCount,
+            currentResumeDataPath: nil,
+            currentPhase: phase
         )
         self.activeInstall = activeInstall
         savePersistedState(activeInstall)
@@ -361,11 +441,11 @@ actor IOSModelDeliveryActor {
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: activeInstall.modelID,
-                phase: .downloading,
+                phase: phase,
                 downloadedBytes: activeInstall.completedBytes,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: statusMessage(for: phase)
             )
         )
     }
@@ -374,6 +454,7 @@ actor IOSModelDeliveryActor {
         guard let activeInstall else { return }
         let descriptor = try requireDescriptor(id: activeInstall.modelID).model
         let stagingRoot = URL(fileURLWithPath: activeInstall.stagingDirectoryPath, isDirectory: true)
+        cleanupTransientInstallArtifacts(at: stagingRoot)
 
         await publishSnapshot(
             IOSModelDeliverySnapshot(
@@ -468,11 +549,11 @@ actor IOSModelDeliveryActor {
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: activeInstall.modelID,
-                phase: .downloading,
+                phase: activeInstall.currentPhase,
                 downloadedBytes: downloadedBytes,
                 totalBytes: activeInstall.totalBytes > 0 ? activeInstall.totalBytes : expectedBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: statusMessage(for: activeInstall.currentPhase)
             )
         )
     }
@@ -507,7 +588,9 @@ actor IOSModelDeliveryActor {
                 currentRelativePath: nil,
                 completedBytes: activeInstall.completedBytes + currentFile.sizeBytes,
                 totalBytes: activeInstall.totalBytes,
-                currentFileRetryCount: 0
+                currentFileRetryCount: 0,
+                currentResumeDataPath: nil,
+                currentPhase: .downloading
             )
             self.activeInstall = activeInstall
             savePersistedState(activeInstall)
@@ -537,6 +620,7 @@ actor IOSModelDeliveryActor {
 
         if shouldRetry(error), activeInstall.currentFileRetryCount < maxRetriesPerFile {
             let newRetryCount = activeInstall.currentFileRetryCount + 1
+            let resumeDataPath = extractResumeData(from: error).flatMap { saveResumeData($0, for: activeInstall) }
             #if DEBUG
             print("[IOSModelDeliveryActor] Retrying file download (attempt \(newRetryCount)/\(maxRetriesPerFile)) modelID=\(activeInstall.modelID) path=\(activeInstall.currentRelativePath ?? "unknown") error=\(error.localizedDescription)")
             #endif
@@ -545,14 +629,29 @@ actor IOSModelDeliveryActor {
                 artifactVersion: activeInstall.artifactVersion,
                 stagingDirectoryPath: activeInstall.stagingDirectoryPath,
                 catalogEntry: activeInstall.catalogEntry,
-                pendingRelativePaths: [activeInstall.currentRelativePath ?? ""] + activeInstall.pendingRelativePaths,
-                currentRelativePath: nil,
+                pendingRelativePaths: activeInstall.pendingRelativePaths,
+                currentRelativePath: activeInstall.currentRelativePath,
                 completedBytes: activeInstall.completedBytes,
                 totalBytes: activeInstall.totalBytes,
-                currentFileRetryCount: newRetryCount
+                currentFileRetryCount: newRetryCount,
+                currentResumeDataPath: resumeDataPath,
+                currentPhase: resumeDataPath == nil ? .restarting : .resuming
             )
             self.activeInstall = updatedInstall
             savePersistedState(updatedInstall)
+            let descriptor = modelAssetStore.descriptor(id: activeInstall.modelID)?.model
+            await publishSnapshot(
+                IOSModelDeliverySnapshot(
+                    modelID: activeInstall.modelID,
+                    phase: .interrupted,
+                    downloadedBytes: activeInstall.completedBytes,
+                    totalBytes: activeInstall.totalBytes,
+                    estimatedBytes: descriptor?.estimatedDownloadBytes,
+                    message: resumeDataPath == nil
+                        ? "Connection interrupted. Restarting the current file."
+                        : "Connection interrupted. Resuming the current file."
+                )
+            )
             do {
                 try await startNextDownloadIfNeeded()
             } catch {
@@ -650,6 +749,57 @@ actor IOSModelDeliveryActor {
     private func decodeTaskDescription(_ rawValue: String?) -> IOSModelDownloadTaskDescription? {
         guard let rawValue, let data = rawValue.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(IOSModelDownloadTaskDescription.self, from: data)
+    }
+
+    private func deliveryTransientDirectory(for install: IOSPersistedModelInstallState) -> URL {
+        URL(fileURLWithPath: install.stagingDirectoryPath, isDirectory: true)
+            .appendingPathComponent(".delivery", isDirectory: true)
+    }
+
+    private func resumeDataURL(for install: IOSPersistedModelInstallState) -> URL {
+        let fileKey = (install.currentRelativePath ?? "current").replacingOccurrences(of: "/", with: "__")
+        return deliveryTransientDirectory(for: install).appendingPathComponent("\(fileKey).resume", isDirectory: false)
+    }
+
+    private func saveResumeData(_ data: Data, for install: IOSPersistedModelInstallState) -> String? {
+        let url = resumeDataURL(for: install)
+        do {
+            try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            return url.path
+        } catch {
+            #if DEBUG
+            print("[IOSModelDeliveryActor] Failed to persist resume data: \(error.localizedDescription)")
+            #endif
+            return nil
+        }
+    }
+
+    private func cleanupResumeData(atPath path: String?) {
+        guard let path else { return }
+        try? fileManager.removeItem(at: URL(fileURLWithPath: path))
+    }
+
+    private func cleanupTransientInstallArtifacts(at stagingRoot: URL) {
+        try? fileManager.removeItem(at: stagingRoot.appendingPathComponent(".delivery", isDirectory: true))
+    }
+
+    private func extractResumeData(from error: Error) -> Data? {
+        let nsError = error as NSError
+        return nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+    }
+
+    private func statusMessage(for phase: IOSModelDeliverySnapshot.Phase) -> String? {
+        switch phase {
+        case .interrupted:
+            return "Download interrupted."
+        case .resuming:
+            return "Resuming interrupted file…"
+        case .restarting:
+            return "Restarting current file…"
+        case .downloading, .verifying, .installing, .installed, .deleting, .deleted, .failed:
+            return nil
+        }
     }
 
     private func savePersistedState(_ state: IOSPersistedModelInstallState) {

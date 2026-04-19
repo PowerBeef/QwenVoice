@@ -10,14 +10,17 @@ QwenVoice is now a merged Apple-platform repository for Vocello. The repo carrie
 - Explicit low-RAM policy surfaces for the iPhone path, including guarded and critical memory bands
 - Restored repo workflows for project inputs, Apple-platform validation, macOS release packaging/notarization, and iPhone TestFlight packaging
 - Maintained release scripts for signed/notarized macOS DMGs and iPhone archive/export flows
+- An explicit public-homepage freeze that keeps GitHub landing-page messaging aligned with the currently shipped macOS product instead of the unshipped merged product
 
 ## Current Caveats
 
 - The iPhone target is Vocello-branded, but the macOS target graph still keeps several internal `QwenVoice` names and bundle paths for continuity.
 - The supported macOS minimum-hardware path is the 4-bit `Speed` lane on `Mac mini M1, 8 GB RAM`; `Quality` remains opt-in and must stay admission-guarded.
-- The repo compiles the iPhone app and engine extension, but final floor-device proof still depends on real `iPhone 15 Pro` validation under load.
-- The restored iPhone TestFlight workflow still depends on real Apple signing materials, provisioning, and App Store Connect credentials.
+- The repo compiles the iPhone app and engine extension, but official minimum-device proof still depends on real `iPhone 15 Pro` validation under load.
+- Owned-device iPhone validation currently centers on `iPhone 17 Pro`; that does not replace the separate `iPhone 15 Pro` proof obligation.
+- The restored iPhone TestFlight workflow still depends on real Apple signing materials, provisioning, and App Store Connect credentials when run outside local source-only validation.
 - Visual and interaction verification remains intentionally partly manual through local Computer Use rather than full maintained XCUI parity across both platforms.
+- The public README is intentionally conservative during the refactor period, so public GitHub messaging is narrower than the internal repo architecture docs by design.
 
 ## Source Of Truth
 
@@ -26,5 +29,5 @@ When documentation and code drift, trust:
 1. `Sources/`
 2. `project.yml`
 3. `scripts/` plus `.github/workflows/`
-4. `docs/reference/current-state.md` and `docs/reference/engineering-status.md`
+4. `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/release-readiness.md`
 5. other prose docs

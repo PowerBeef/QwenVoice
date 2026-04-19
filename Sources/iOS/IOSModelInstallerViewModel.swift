@@ -7,6 +7,9 @@ final class IOSModelInstallerViewModel: ObservableObject {
         case idle
         case available(estimatedBytes: Int64?)
         case downloading(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
+        case interrupted(message: String?, downloadedBytes: Int64, totalBytes: Int64?)
+        case resuming(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
+        case restarting(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
         case verifying
         case installing
         case installed
@@ -182,6 +185,36 @@ final class IOSModelInstallerViewModel: ObservableObject {
                 progress = nil
             }
             states[snapshot.modelID] = .downloading(
+                progress: progress,
+                downloadedBytes: snapshot.downloadedBytes,
+                totalBytes: snapshot.totalBytes
+            )
+        case .interrupted:
+            states[snapshot.modelID] = .interrupted(
+                message: snapshot.message,
+                downloadedBytes: snapshot.downloadedBytes,
+                totalBytes: snapshot.totalBytes
+            )
+        case .resuming:
+            let progress: Double?
+            if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
+                progress = Double(snapshot.downloadedBytes) / Double(totalBytes)
+            } else {
+                progress = nil
+            }
+            states[snapshot.modelID] = .resuming(
+                progress: progress,
+                downloadedBytes: snapshot.downloadedBytes,
+                totalBytes: snapshot.totalBytes
+            )
+        case .restarting:
+            let progress: Double?
+            if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
+                progress = Double(snapshot.downloadedBytes) / Double(totalBytes)
+            } else {
+                progress = nil
+            }
+            states[snapshot.modelID] = .restarting(
                 progress: progress,
                 downloadedBytes: snapshot.downloadedBytes,
                 totalBytes: snapshot.totalBytes
