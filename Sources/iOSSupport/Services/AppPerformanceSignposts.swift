@@ -1,0 +1,25 @@
+import OSLog
+
+enum AppPerformanceSignposts {
+    struct Interval {
+        let name: StaticString
+        let state: OSSignpostIntervalState
+    }
+
+    private static let signposter = OSSignposter(
+        subsystem: "com.qvoice.app",
+        category: "performance"
+    )
+
+    static func begin(_ name: StaticString) -> Interval {
+        Interval(name: name, state: signposter.beginInterval(name))
+    }
+
+    static func end(_ interval: Interval) {
+        signposter.endInterval(interval.name, interval.state)
+    }
+
+    static func emit(_ name: StaticString) {
+        signposter.emitEvent(name)
+    }
+}

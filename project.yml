@@ -2,8 +2,9 @@ name: QwenVoice
 options:
   bundleIdPrefix: com.qwenvoice
   deploymentTarget:
-    macOS: "15.0"
-  xcodeVersion: "16.3"
+    macOS: "26.0"
+    iOS: "26.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: true
 
 packages:
@@ -26,10 +27,18 @@ targets:
     sources:
       - path: Sources
         excludes:
+          - "QwenVoiceCore"
+          - "QwenVoiceCore/**"
           - "QwenVoiceEngineService"
           - "QwenVoiceEngineService/**"
           - "QwenVoiceEngineSupport"
           - "QwenVoiceEngineSupport/**"
+          - "iOS"
+          - "iOS/**"
+          - "iOSEngineExtension"
+          - "iOSEngineExtension/**"
+          - "iOSSupport"
+          - "iOSSupport/**"
           - "QwenVoiceNative"
           - "QwenVoiceNative/**"
           - "QwenVoiceNativeRuntime"
@@ -62,8 +71,9 @@ targets:
         CURRENT_PROJECT_VERSION: "15"
         SWIFT_VERSION: "6"
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         INFOPLIST_FILE: Sources/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Vocello
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
@@ -92,7 +102,7 @@ targets:
         PRODUCT_NAME: QwenVoiceNative
         PRODUCT_MODULE_NAME: QwenVoiceNative
         SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: QwenVoiceEngineSupport
@@ -108,8 +118,33 @@ targets:
         PRODUCT_NAME: QwenVoiceEngineSupport
         PRODUCT_MODULE_NAME: QwenVoiceEngineSupport
         SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
+
+  QwenVoiceCore:
+    type: framework.static
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Sources/QwenVoiceCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.core
+        PRODUCT_NAME: QwenVoiceCore
+        PRODUCT_MODULE_NAME: QwenVoiceCore
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/QwenVoiceCore/QwenVoiceCore-Bridging-Header.h
+    dependencies:
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
 
   QwenVoiceNativeRuntime:
     type: framework.static
@@ -122,7 +157,7 @@ targets:
         PRODUCT_NAME: QwenVoiceNativeRuntime
         PRODUCT_MODULE_NAME: QwenVoiceNativeRuntime
         SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: QwenVoiceEngineSupport
@@ -148,7 +183,7 @@ targets:
         PRODUCT_NAME: QwenVoiceEngineService
         PRODUCT_MODULE_NAME: QwenVoiceEngineService
         SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         INFOPLIST_FILE: Sources/QwenVoiceEngineService/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
         GENERATE_INFOPLIST_FILE: NO
@@ -173,10 +208,111 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.tests
         SWIFT_VERSION: "6"
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: QwenVoice
+      - target: QwenVoiceCore
       - target: QwenVoiceNative
       - target: QwenVoiceEngineSupport
       - target: QwenVoiceNativeRuntime
+
+  VocelloEngineExtension:
+    type: extensionkit-extension
+    platform: iOS
+    sources:
+      - path: Sources/iOSEngineExtension
+    resources:
+      - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.ios.engine-extension
+        PRODUCT_NAME: VocelloEngineExtension
+        PRODUCT_MODULE_NAME: VocelloEngineExtension
+        MARKETING_VERSION: "1.2.3"
+        CURRENT_PROJECT_VERSION: "15"
+        SWIFT_VERSION: "6"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/iOSEngineExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/iOSEngineExtension/VocelloEngineExtension.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: FK2D8X36G2
+    dependencies:
+      - target: QwenVoiceCore
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
+
+  VocelloiOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/iOS
+      - path: Sources/iOSSupport
+    resources:
+      - path: Sources/iOS/LaunchScreen.storyboard
+        buildPhase: resources
+      - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
+      - path: Sources/Assets.xcassets
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.ios
+        PRODUCT_NAME: Vocello
+        PRODUCT_MODULE_NAME: QVoiceiOS
+        EXECUTABLE_NAME: Vocello
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: FK2D8X36G2
+        QVOICE_IOS_DEFAULT_MODEL_CATALOG_URL: https://downloads.qvoice.app/ios/catalog/v1/models.json
+        INFOPLIST_KEY_QVoiceModelCatalogURL: $(QVOICE_IOS_DEFAULT_MODEL_CATALOG_URL)
+        INFOPLIST_KEY_CFBundleDisplayName: Vocello
+        MARKETING_VERSION: "1.2.3"
+        CURRENT_PROJECT_VERSION: "15"
+        SWIFT_VERSION: "6"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/iOS/VocelloiOS.entitlements
+        INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
+        ASSETCATALOG_COMPILER_APPICON_NAME: VocelloIOSIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - package: GRDB
+      - target: QwenVoiceCore
+      - target: VocelloEngineExtension
+        embed: true
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
+
+  QVoiceBenchmarkUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: QVoiceBenchmarkUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.ios.benchmarks
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: FK2D8X36G2
+        SWIFT_VERSION: "6"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: VocelloiOS
+    dependencies:
+      - target: VocelloiOS

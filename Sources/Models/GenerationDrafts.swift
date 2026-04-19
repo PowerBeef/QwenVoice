@@ -143,7 +143,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Engine starting",
-                detail: "QwenVoice is still starting the native generation engine.",
+                detail: "Vocello is still starting the native generation engine.",
                 trailingText: nil
             )
         }
@@ -170,7 +170,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Preparing saved voice",
-                detail: "QwenVoice is loading the saved transcript and voice context for cloning.",
+                detail: "Vocello is loading the saved transcript and voice context for cloning.",
                 trailingText: nil
             )
         }
@@ -179,7 +179,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Preparing voice context",
-                detail: "QwenVoice is priming this reference so the first live preview starts quickly.",
+                detail: "Vocello is priming this reference so the first live preview starts quickly.",
                 trailingText: nil
             )
         }

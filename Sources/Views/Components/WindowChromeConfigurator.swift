@@ -77,13 +77,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
         splitView.dividerStyle = AppTheme.splitDividerStyle
         splitView.needsDisplay = true
 
-        switch AppTheme.uiProfile {
-        case .liquid:
-            tearDownLegacyHandling(for: splitKey)
-        case .legacy:
-            installSplitObserversIfNeeded(for: splitView)
-            applyLegacyDividerBlendIfNeeded(to: splitView)
-        }
+        tearDownLegacyHandling(for: splitKey)
     }
 
     private static func findSplitViews(in rootView: NSView?) -> [NSSplitView] {
@@ -168,83 +162,7 @@ struct WindowChromeConfigurator: NSViewRepresentable {
     }
 
     private static func applyLegacyDividerBlendIfNeeded(to splitView: NSSplitView) {
-        guard AppTheme.uiProfile == .legacy else {
-            removeLegacyDividerBlend(from: splitView)
-            return
-        }
-
-        splitView.wantsLayer = true
-        guard let splitLayer = splitView.layer else { return }
-
-        let containerLayer = ensureOverlayLayer(
-            named: WindowChromeState.dividerOverlayContainerLayerName,
-            in: splitLayer
-        )
-        let blendBandLayer = ensureOverlayLayer(
-            named: WindowChromeState.dividerOverlayBandLayerName,
-            in: containerLayer
-        )
-        let leadingEdgeLayer = ensureOverlayLayer(
-            named: WindowChromeState.dividerOverlayLeadingEdgeLayerName,
-            in: containerLayer
-        )
-        let trailingEdgeLayer = ensureOverlayLayer(
-            named: WindowChromeState.dividerOverlayTrailingEdgeLayerName,
-            in: containerLayer
-        )
-
-        containerLayer.zPosition = 10
-        containerLayer.frame = splitView.bounds
-
-        let blendFrame = expandedDividerFrame(for: splitView).integral
-        guard !blendFrame.isEmpty else {
-            containerLayer.isHidden = true
-            return
-        }
-        containerLayer.isHidden = false
-
-        let isDark = splitView.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let baseColor = (isDark ? NSColor.white : NSColor.black)
-        let blendColor = baseColor.withAlphaComponent(AppTheme.legacyDividerBlendAlpha).cgColor
-        let edgeColor = baseColor.withAlphaComponent(AppTheme.legacyDividerEdgeAlpha).cgColor
-        let scale = splitView.window?.backingScaleFactor
-            ?? NSScreen.main?.backingScaleFactor
-            ?? 2.0
-        let hairline = max(1.0 / scale, 0.5)
-
-        blendBandLayer.frame = blendFrame
-        blendBandLayer.backgroundColor = blendColor
-
-        if splitView.isVertical {
-            leadingEdgeLayer.frame = CGRect(
-                x: blendFrame.minX,
-                y: blendFrame.minY,
-                width: hairline,
-                height: blendFrame.height
-            ).integral
-            trailingEdgeLayer.frame = CGRect(
-                x: blendFrame.maxX - hairline,
-                y: blendFrame.minY,
-                width: hairline,
-                height: blendFrame.height
-            ).integral
-        } else {
-            leadingEdgeLayer.frame = CGRect(
-                x: blendFrame.minX,
-                y: blendFrame.minY,
-                width: blendFrame.width,
-                height: hairline
-            ).integral
-            trailingEdgeLayer.frame = CGRect(
-                x: blendFrame.minX,
-                y: blendFrame.maxY - hairline,
-                width: blendFrame.width,
-                height: hairline
-            ).integral
-        }
-
-        leadingEdgeLayer.backgroundColor = edgeColor
-        trailingEdgeLayer.backgroundColor = edgeColor
+        removeLegacyDividerBlend(from: splitView)
     }
 
     private static func ensureOverlayLayer(named name: String, in parentLayer: CALayer) -> CALayer {

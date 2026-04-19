@@ -1,23 +1,23 @@
 # QwenVoice Documentation
 
-This folder contains the current, repo-authored documentation for QwenVoice.
+This folder contains the current repo-authored documentation for QwenVoice, the home of Vocello for Mac and iPhone.
 
 ## Maintained Reference Docs
 
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
-- [`reference/current-state.md`](reference/current-state.md) — shared current repo facts reused by the other docs
-- [`reference/engineering-status.md`](reference/engineering-status.md) — current engineering status, cleanup outcomes, and live caveats
-- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — native runtime, vendoring, and packaging notes
+- [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
+- [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
+- [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — runtime, vendoring, and packaging boundaries
 
-These are the maintained source-of-truth documents for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and then these reference docs in that order.
+These are the maintained source-of-truth docs for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and workflows first, then these reference docs.
 
 ## Product And Public Docs
 
-- [`../README.md`](../README.md) — GitHub landing page and end-user overview
+- [`../README.md`](../README.md) — public GitHub landing page and end-user overview
 
 ## Supplemental Guides
 
-- [`../qwen_tone.md`](../qwen_tone.md) — supplemental tone and prompt-writing guidance
+- [`qwen_tone.md`](qwen_tone.md) — supplemental tone and prompt-writing guidance
 
 Supplemental guides are useful, but they are not the primary source of truth for current repo structure or shipped-product behavior.
 
@@ -29,6 +29,5 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 - Maintained contributor guidance in this checkout lives in the maintained reference docs listed above.
 - This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
-- This repo also does not maintain active GitHub Actions workflows or hosted release-packaging guidance; current contributor workflows are local and source-build oriented.
+- Current automation surfaces live in `scripts/` and `.github/workflows/`, including macOS release packaging and iPhone TestFlight workflows.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.
-- Historical notes may still appear in git history or external references, but the maintained repo facts live in the reference docs listed above.

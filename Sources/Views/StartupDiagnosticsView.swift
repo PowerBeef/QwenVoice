@@ -8,7 +8,7 @@ struct StartupDiagnosticsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
-                Label("QwenVoice", systemImage: "waveform")
+                Label("Vocello", systemImage: "waveform")
                     .font(.title.weight(.semibold))
 
                 Text(snapshot.issue.summary)

@@ -49,6 +49,7 @@ usage() {
 Usage:
   ./scripts/check_backend_resource_contract.sh --project
   ./scripts/check_backend_resource_contract.sh --app-bundle /path/to/QwenVoice.app
+  ./scripts/check_backend_resource_contract.sh --app-bundle /path/to/Vocello.app
 EOF
     exit 1
 }

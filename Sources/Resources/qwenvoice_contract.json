@@ -16,6 +16,9 @@
       "mode": "custom",
       "folder": "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
       "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+      "artifactVersion": "2026.04.05.2",
+      "iosDownloadEligible": false,
+      "estimatedDownloadBytes": null,
       "outputSubfolder": "CustomVoice",
       "requiredRelativePaths": [
         "README.md",
@@ -31,6 +34,65 @@
         "speech_tokenizer/preprocessor_config.json",
         "tokenizer_config.json",
         "vocab.json"
+      ],
+      "variants": [
+        {
+          "id": "speed",
+          "name": "Speed",
+          "kind": "speed",
+          "platforms": [
+            "iOS",
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": true,
+          "estimatedDownloadBytes": 2312057897,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        },
+        {
+          "id": "quality",
+          "name": "Quality",
+          "kind": "quality",
+          "platforms": [
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": false,
+          "estimatedDownloadBytes": null,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        }
       ]
     },
     {
@@ -40,6 +102,9 @@
       "mode": "design",
       "folder": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
       "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+      "artifactVersion": "2026.04.05.2",
+      "iosDownloadEligible": false,
+      "estimatedDownloadBytes": null,
       "outputSubfolder": "VoiceDesign",
       "requiredRelativePaths": [
         "README.md",
@@ -55,6 +120,65 @@
         "speech_tokenizer/preprocessor_config.json",
         "tokenizer_config.json",
         "vocab.json"
+      ],
+      "variants": [
+        {
+          "id": "speed",
+          "name": "Speed",
+          "kind": "speed",
+          "platforms": [
+            "iOS",
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": true,
+          "estimatedDownloadBytes": 2312057276,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        },
+        {
+          "id": "quality",
+          "name": "Quality",
+          "kind": "quality",
+          "platforms": [
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": false,
+          "estimatedDownloadBytes": null,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        }
       ]
     },
     {
@@ -64,6 +188,9 @@
       "mode": "clone",
       "folder": "Qwen3-TTS-12Hz-1.7B-Base-8bit",
       "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+      "artifactVersion": "2026.04.05.2",
+      "iosDownloadEligible": false,
+      "estimatedDownloadBytes": null,
       "outputSubfolder": "Clones",
       "requiredRelativePaths": [
         "README.md",
@@ -79,6 +206,65 @@
         "speech_tokenizer/preprocessor_config.json",
         "tokenizer_config.json",
         "vocab.json"
+      ],
+      "variants": [
+        {
+          "id": "speed",
+          "name": "Speed",
+          "kind": "speed",
+          "platforms": [
+            "iOS",
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-Base-4bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": true,
+          "estimatedDownloadBytes": 2336075167,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        },
+        {
+          "id": "quality",
+          "name": "Quality",
+          "kind": "quality",
+          "platforms": [
+            "macOS"
+          ],
+          "folder": "Qwen3-TTS-12Hz-1.7B-Base-8bit",
+          "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+          "artifactVersion": "2026.04.05.2",
+          "iosDownloadEligible": false,
+          "estimatedDownloadBytes": null,
+          "requiredRelativePaths": [
+            "README.md",
+            "config.json",
+            "generation_config.json",
+            "merges.txt",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "preprocessor_config.json",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/configuration.json",
+            "speech_tokenizer/model.safetensors",
+            "speech_tokenizer/preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ]
+        }
       ]
     }
   ]

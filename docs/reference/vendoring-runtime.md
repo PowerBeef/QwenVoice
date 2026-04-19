@@ -1,55 +1,71 @@
-# Vendoring and Runtime Notes
+# Vendoring And Runtime Notes
 
-QwenVoice has two maintained runtime stories:
+QwenVoice now has three maintained runtime stories:
 
-1. **Source builds / development mode**
-2. **Native backend source vendoring**
+1. shared Apple-platform engine semantics in `QwenVoiceCore`
+2. macOS execution through the bundled XPC helper
+3. iPhone execution through the isolated engine extension process
 
 ## Tracked Surface Boundaries
 
-Treat tracked surfaces in this repo as four different classes:
+Treat tracked surfaces in this repo as five classes:
 
-- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, and local harness scripts
+- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, and active scripts under `scripts/`
+- **Product assets**: `Sources/Assets.xcassets/` and public docs images under `docs/`
+- **Test fixtures**: `tests/fixtures/` plus screenshot baselines under `tests/screenshots/baselines/`
+- **Historical records**: `docs/releases/`
 - **Repo-owned vendored source**: `third_party_patches/`, where QwenVoice intentionally carries patched upstream code as maintained source
-- **Generated or bundled resources**: `Sources/Resources/ffmpeg/`, most of `Sources/Resources/vendor/`, and similar script-produced payloads
-- **Local-only state**: `build/`, `.worktrees/`, `DerivedData/`, app-support data, and other machine-specific outputs
 
-## Development Mode
+Local-only state includes `build/`, `.worktrees/`, `DerivedData/`, app-support data, generated screenshot diffs, Finder metadata, Python caches, coverage artifacts, and any temporary `Sources/Resources/ffmpeg/` or `Sources/Resources/vendor/` leftovers that appear during local experiments.
 
-In a clean source checkout, the app uses the native runtime through the bundled XPC helper and the app-side proxy/store layer. Normal development builds do not require repo-managed Python setup, backend bootstrap, compatibility runtime provisioning, or release-packaging automation.
+## Shared Engine Core
+
+`Sources/QwenVoiceCore/` is the shared engine boundary for:
+
+- semantic request/result types
+- platform-specific model variant resolution
+- iPhone memory-pressure policy types
+- engine-extension transport and IPC
+- shared runtime helpers that do not belong to a specific UI process
+
+Keep `QwenVoiceCore` free of UI-process assumptions so it can be hosted by both:
+
+- the macOS XPC helper
+- the iPhone engine extension
 
 ## Native Backend Source Vendoring
 
-The native backend keeps its Swift MLXAudio stack as a repo-owned local package at:
+The shared MLX runtime stack still uses one repo-owned vendored package at:
 
 - `third_party_patches/mlx-audio-swift/`
 
-That tree is maintained source, not a generated runtime artifact.
+That tree remains maintained source, not a generated runtime artifact.
 
 The native package boundary currently includes:
 
 - the local `MLXAudio` package path in `project.yml`
 - remote `MLXSwift` and `SwiftHuggingFace` package entries
-- `Package.resolved` pins for the package graph consumed by the app and runtime targets
+- `Package.resolved` pins for the package graph consumed by the macOS, iPhone, and shared-core targets
 
-When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
+When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the build.
 
-`UITestStubMacEngine` remains available for fixture-backed manual desktop-control runs when deterministic app-shell behavior is useful.
+## Packaging And Verification Surfaces
 
-## Maintenance Cadence
+Maintained local packaging entrypoints:
 
-Review the native vendoring stack:
+- `scripts/release.sh` for the macOS signed/notarized DMG pipeline
+- `scripts/create_dmg.sh`
+- `scripts/verify_release_bundle.sh`
+- `scripts/verify_packaged_dmg.sh`
+- `scripts/check_ios_catalog.py`
+- `scripts/release_ios_testflight.sh`
 
-- after any intentional `mlx-audio-swift`, `MLXSwift`, or `SwiftHuggingFace` update
-- after any change to the app/runtime/XPC boundary that affects the consumed package graph
-- at least quarterly for package pins and runtime compatibility assumptions
+Maintained CI/release workflow surfaces:
 
-Every review should keep these artifacts aligned:
-
-- `third_party_patches/mlx-audio-swift/`
-- `project.yml`
-- `QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
-- maintained docs that describe runtime ownership or vendoring boundaries
+- `.github/workflows/project-inputs.yml`
+- `.github/workflows/apple-platform-validation.yml`
+- `.github/workflows/macos-release.yml`
+- `.github/workflows/ios-testflight.yml`
 
 ## Current Verification Surface
 
@@ -60,6 +76,9 @@ Every review should keep these artifacts aligned:
 - `python3 scripts/harness.py test --layer contract`
 - `python3 scripts/harness.py test --layer native`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
-- `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test`
+- `xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build`
+- `python3 scripts/check_ios_catalog.py`
+- `./scripts/release.sh`
+- `./scripts/release_ios_testflight.sh`
 
-Visual and interaction verification is manual in this checkout. After the cheap source gates are green, use Codex Computer Use instead of any automated XCUI smoke, design, perf, or packaged-release lane.
+Visual and interaction verification still includes manual local passes after the cheap source gates are green.

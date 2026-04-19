@@ -56,7 +56,7 @@ struct PreferencesView: View {
             }
 
             Section("Maintenance") {
-                Text("QwenVoice runs natively and keeps generation and voice management inside the Swift runtime.")
+                Text("Vocello runs natively and keeps generation and voice management inside the Swift runtime.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("preferences_nativeMaintenanceNote")

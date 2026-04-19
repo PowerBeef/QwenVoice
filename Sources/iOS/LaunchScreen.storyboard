@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24129" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+    <device id="retina6_12" orientation="portrait" appearance="dark"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24127"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="EHf-IW-A2E">
+            <objects>
+                <viewController id="01J-lp-oVM" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="VocelloLaunchBackground" translatesAutoresizingMaskIntoConstraints="NO" id="bM4-tE-4Pp">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="VocelloLaunchLogo" translatesAutoresizingMaskIntoConstraints="NO" id="6Tk-OH-lwY">
+                                <rect key="frame" x="72.5" y="378" width="248" height="96"/>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
+                        <color key="backgroundColor" red="0.078431372549019607" green="0.090196078431372548" blue="0.10980392156862745" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <constraints>
+                            <constraint firstItem="bM4-tE-4Pp" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="1BA-zE-2iu"/>
+                            <constraint firstItem="bM4-tE-4Pp" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="3P7-Lj-r8n"/>
+                            <constraint firstItem="6Tk-OH-lwY" firstAttribute="centerX" secondItem="Bcu-3y-fUS" secondAttribute="centerX" id="OeR-1j-fyg"/>
+                            <constraint firstItem="6Tk-OH-lwY" firstAttribute="centerY" secondItem="Bcu-3y-fUS" secondAttribute="centerY" id="U8h-x1-Xs7"/>
+                            <constraint firstItem="6Tk-OH-lwY" firstAttribute="width" constant="248" id="VnM-Ke-BZU"/>
+                            <constraint firstAttribute="trailing" secondItem="bM4-tE-4Pp" secondAttribute="trailing" id="Y8S-fv-o0V"/>
+                            <constraint firstItem="6Tk-OH-lwY" firstAttribute="height" secondItem="6Tk-OH-lwY" secondAttribute="width" multiplier="12:31" id="ZkQ-mK-9mo"/>
+                            <constraint firstAttribute="bottom" secondItem="bM4-tE-4Pp" secondAttribute="bottom" id="gI6-Du-SgF"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="VocelloLaunchBackground" width="393" height="852"/>
+        <image name="VocelloLaunchLogo" width="248" height="96"/>
+    </resources>
+</document>

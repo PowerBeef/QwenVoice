@@ -150,7 +150,7 @@ struct ContentView: View {
     @State private var voiceCloningActivationID: Int
 
     private var currentWindowTitle: String {
-        selectedItem?.rawValue ?? "QwenVoice"
+        selectedItem?.rawValue ?? "Vocello"
     }
 
     private var currentActiveScreenID: String {

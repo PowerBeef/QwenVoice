@@ -30,15 +30,12 @@ DRY_RUN=false
 
 # ── Find ffmpeg ───────────────────────────────────────────────────────────────
 
-FFMPEG="$PROJECT_DIR/Sources/Resources/ffmpeg"
-if [ ! -x "$FFMPEG" ]; then
-    FFMPEG="$(command -v ffmpeg 2>/dev/null || true)"
-    if [[ -z "$FFMPEG" ]]; then
-        echo "ERROR: ffmpeg not found (checked Sources/Resources/ffmpeg and PATH)"
-        exit 1
-    fi
+FFMPEG="${QWENVOICE_FFMPEG:-$(command -v ffmpeg 2>/dev/null || true)}"
+if [[ -z "$FFMPEG" || ! -x "$FFMPEG" ]]; then
+    echo "ERROR: ffmpeg not found. Install it on PATH or set QWENVOICE_FFMPEG=/absolute/path/to/ffmpeg"
+    exit 1
 fi
-FFPROBE="$(command -v ffprobe 2>/dev/null || true)"
+FFPROBE="${QWENVOICE_FFPROBE:-$(command -v ffprobe 2>/dev/null || true)}"
 echo "ffmpeg: $FFMPEG"
 
 # ── Pre-flight checks ────────────────────────────────────────────────────────

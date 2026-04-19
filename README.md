@@ -1,155 +1,110 @@
-## Screenshots
+## QwenVoice, Home Of Vocello For Mac And iPhone
 
-### Custom Voice
+QwenVoice is the repository and continuity brand. Vocello is the shipped app brand for the merged Apple-platform product line.
 
-![Custom Voice screenshot](docs/screenshots/readme_custom_voice.png)
+This repo now contains one shared Apple-platform codebase for:
 
-### Voice Design
+- Vocello for Mac
+- Vocello for iPhone
 
-![Voice Design screenshot](docs/screenshots/readme_voice_design.png)
+Internal module, path, and target names still use `QwenVoice` in several places for repo continuity and lower migration churn.
 
-### Voice Cloning
+## Product Direction
 
-![Voice Cloning screenshot](docs/screenshots/readme_voice_cloning.png)
+The merged architecture is built around:
 
-## Overview
+- `Sources/QwenVoiceCore/` for shared runtime semantics, contract types, model variants, and iOS extension transport
+- `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, `Sources/QwenVoiceNativeRuntime/`, and `Sources/QwenVoiceEngineService/` for the macOS app-side XPC client, shared IPC, service runtime, and bundled helper
+- `Sources/iOS/`, `Sources/iOSSupport/`, and `Sources/iOSEngineExtension/` for the iPhone shell, support layers, and isolated engine extension process
+- `third_party_patches/mlx-audio-swift/` as the single vendored MLXAudioSwift boundary
 
-QwenVoice is a native macOS app for offline Qwen3-TTS on Apple Silicon. The repo is native-only and source-build-focused: the app, maintained local harness, and current contributor workflow all use the Swift/MLX runtime split across `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, `Sources/QwenVoiceNativeRuntime/`, and `third_party_patches/mlx-audio-swift/`.
+Heavy generation, prewarm, and model-load work stays out of the UI process on both platforms:
 
-## Shipped Modes
+- macOS uses the bundled XPC helper
+- iPhone uses an ExtensionFoundation-hosted engine extension on iOS 26
 
-### Custom Voice
+## Supported Platforms
 
-Generate speech with the app’s built-in English speakers:
+| Platform | Minimum OS | Minimum Hardware | Distribution |
+|---|---|---|---|
+| macOS | `26.0+` | `Mac mini M1, 8 GB RAM` | signed and notarized DMG on GitHub Releases |
+| iPhone | `iOS 26.0+` | `iPhone 15 Pro` | App Store / TestFlight |
 
-- Ryan
-- Aiden
-- Serena
-- Vivian
+Source builds remain supported for both platforms.
 
-### Voice Design
+## Model Variants
 
-Describe the voice you want, then shape the delivery before generating.
+Static model metadata lives in [`Sources/Resources/qwenvoice_contract.json`](Sources/Resources/qwenvoice_contract.json).
 
-### Voice Cloning
+The shared logical mode families remain:
 
-Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, OGG, and WebM input and can also use an optional transcript for better cloning accuracy.
+- Custom Voice
+- Voice Design
+- Voice Cloning
 
-## What the App Does Not Expose
+Install variants now diverge by platform:
 
-- no temperature or max-token controls
-- no streaming batch UI
+- iPhone uses 4-bit `Speed` variants only
+- macOS defaults to 4-bit `Speed` on minimum hardware and can also use 8-bit `Quality`
 
-Single-generation flows use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based in the GUI.
+## Current Build And Validation Surface
 
-## Features
-
-- Native model downloads from Hugging Face
-- Live streaming preview for single generations
-- Local generation history stored in SQLite via GRDB
-- Batch generation for multi-line jobs
-- Sidebar waveform playback UI
-- Configurable output directory and autoplay preference
-
-## Requirements
-
-| Requirement | Detail |
-|---|---|
-| macOS | 15.0+ |
-| Chip | Apple Silicon |
-| RAM | 8 GB+ recommended |
-
-## Get Started
-
-This checkout is maintained as a source-build project rather than a hosted DMG/release pipeline. Clone the repo, regenerate the Xcode project, and build locally:
-
-```sh
-git clone https://github.com/PowerBeef/QwenVoice.git
-cd QwenVoice
-./scripts/regenerate_project.sh
-open QwenVoice.xcodeproj
-```
-
-Then build the `QwenVoice` scheme from Xcode, or use:
-
-```sh
-xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
-```
-
-After launching the app:
-
-1. Go to **Models**
-2. Download a model
-3. Generate speech from one of the three generation modes
-
-## Models
-
-Static model metadata comes from [`Sources/Resources/qwenvoice_contract.json`](Sources/Resources/qwenvoice_contract.json).
-
-| Mode | Model Folder | Hugging Face Repo |
-|---|---|---|
-| Custom Voice | `Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit) |
-| Voice Design | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit) |
-| Voice Cloning | `Qwen3-TTS-12Hz-1.7B-Base-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit) |
-
-## Building from Source
-
-Source-build prerequisites:
-
-- macOS 15+
-- Apple Silicon
-- Xcode 26+ for the default `QW_UI_LIQUID` checkout
-- XcodeGen
-
-Useful local checks:
+Fast local gates:
 
 ```sh
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
+```
+
+Core source checks:
+
+```sh
+./scripts/regenerate_project.sh
+xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
 ```
 
-## Tone and Emotion Control
+Release-oriented local commands:
 
-Custom Voice and Voice Design are guided by natural-language instructions rather than SSML-style sliders or markup.
-
-See [`qwen_tone.md`](qwen_tone.md) for supplemental prompt-writing guidance. For current repo truth about shipped behavior, trust this README plus [`docs/reference/current-state.md`](docs/reference/current-state.md) over supplemental prose.
-
-## Architecture
-
-QwenVoice uses a native app architecture:
-
-- **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
-- **App-facing engine layer** in `Sources/QwenVoiceNative/` for the proxy/client/store surface used by the app
-- **Shared engine IPC** in `Sources/QwenVoiceEngineSupport/`
-- **Service-side runtime** in `Sources/QwenVoiceNativeRuntime/` and `Sources/QwenVoiceEngineService/`
-- **Vendored MLXAudioSwift source** in `third_party_patches/mlx-audio-swift/`
-- **Manifest-backed metadata** in `Sources/Resources/qwenvoice_contract.json` for models, speakers, output folders, and required files
-
-Default runtime output layout:
-
-```text
-~/Library/Application Support/QwenVoice/
-  models/
-  outputs/
-    CustomVoice/
-    VoiceDesign/
-    Clones/
-  voices/
-  history.sqlite
+```sh
+./scripts/release.sh
+./scripts/verify_release_bundle.sh build/QwenVoice.app
+./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt
+python3 scripts/check_ios_catalog.py
+./scripts/release_ios_testflight.sh
 ```
 
-## More Docs
+The macOS release asset is Vocello-branded even though the current macOS target graph still keeps `QwenVoice` as its internal target/scheme identity.
 
+## Distribution
+
+macOS:
+
+- GitHub Releases are the supported hosted install path
+- the maintained release workflow produces a signed and notarized `Vocello-macos26.dmg`
+
+iPhone:
+
+- App Store / TestFlight are the supported install paths
+- GitHub Releases are not the iPhone install surface
+- source builds stay available from this repo
+
+StoreKit one-time unlock work is intentionally deferred until after the merge stabilizes.
+
+## Maintained Docs
+
+- [`AGENTS.md`](AGENTS.md) — primary repo operating guide
 - [`docs/README.md`](docs/README.md) — documentation index
 - [`docs/reference/current-state.md`](docs/reference/current-state.md) — current repo facts
-- [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — current strengths and caveats
+- [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — strengths, caveats, and validation posture
+- [`docs/reference/vendoring-runtime.md`](docs/reference/vendoring-runtime.md) — vendoring and runtime ownership notes
 
 ## Credits
 
-QwenVoice builds on:
+Vocello builds on:
 
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [mlx-audio-swift](https://github.com/Blaizzy/mlx-audio-swift)

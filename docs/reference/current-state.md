@@ -4,108 +4,109 @@ This document is the shared factual reference for the current QwenVoice reposito
 
 ## Product Surface
 
-- App type: native macOS SwiftUI app for Qwen3-TTS on Apple Silicon
-- Deployment target: macOS 15+
-- Product name: `QwenVoice`
+- Repo identity: `QwenVoice`
+- Shipped product brand: `Vocello`
+- Platforms in this repo: macOS and iPhone
+- Deployment targets: `macOS 26.0+` and `iOS 26.0+`
+- Official minimum hardware floor:
+  - `Mac mini M1, 8 GB RAM`
+  - `iPhone 15 Pro`
 - Version source: `project.yml`
 - Current version/build: `1.2.3` / `15`
-- Supported acquisition path in maintained docs: source build from this checkout
 
-## Shipped UI
+The iPhone app target is already Vocello-branded. The macOS target graph still keeps several internal `QwenVoice` names for continuity, while the intended hosted macOS release asset is `Vocello-macos26.dmg`.
 
-The app exposes six sidebar destinations in the main window, plus a dedicated macOS Settings window:
+## Architecture
 
-1. Custom Voice
-2. Voice Design
-3. Voice Cloning
-4. History
-5. Saved Voices
-6. Models
+This repo now carries one Apple-platform codebase with a shared engine core and platform-specific isolated hosts.
 
-Single-generation flows use live streaming preview for:
+Shared engine core:
 
-- Custom Voice
-- Voice Design
-- Voice Cloning
+- `Sources/QwenVoiceCore/` for semantic types, contract-backed model descriptors, platform-specific artifact resolution, low-RAM iPhone policy, and engine-extension IPC
 
-Batch generation remains sequential and non-streaming in the shipped GUI even though the native runtime supports homogeneous-by-mode native batches internally.
+macOS runtime split:
 
-The app shell and runtime coordination are split across explicit helper components:
+- `Sources/` for the macOS app shell, views, services, and app-owned state
+- `Sources/QwenVoiceNative/` for the macOS app-facing engine proxy/store/client layer
+- `Sources/QwenVoiceEngineSupport/` for shared macOS engine IPC and transport types
+- `Sources/QwenVoiceNativeRuntime/` for service-only native execution and MLX runtime ownership
+- `Sources/QwenVoiceEngineService/` for the bundled XPC helper embedded into the Mac app
 
-- `QwenVoiceApp.swift` composes `AppStartupCoordinator.swift`, `AppCommandRouter.swift`, `GenerationLibraryEvents.swift`, `AppLaunchConfiguration.swift`, and `UITestWindowCoordinator.swift`
-- `ContentView.swift` owns the navigation split view, toolbar/search chrome, and persisted generation drafts
-- `AppPaths.swift` is the path boundary for app-support, model, output, and voice directories, including `QWENVOICE_APP_SUPPORT_DIR`
-- `AppEngineSelection.swift` always selects the native engine for normal runs and can still use `UITestStubMacEngine` during fixture-backed manual desktop-control runs
-- `Sources/QwenVoiceNative/` is the app-facing engine layer: `TTSEngineStore`, `XPCNativeEngineClient`, and chunk-broker coordination live there
-- `Sources/QwenVoiceEngineSupport/` defines the shared engine IPC, request/reply envelopes, and transport-facing types
-- `Sources/QwenVoiceNativeRuntime/` owns service-only native execution, model load, generation, and clone preparation
-- `Sources/QwenVoiceEngineService/` is the bundled XPC helper entrypoint embedded into the shipped app
-- `third_party_patches/mlx-audio-swift/` remains the vendored MLXAudioSwift source boundary used by the service/runtime side
-- local source builds still produce an app bundle embedding `Contents/XPCServices/QwenVoiceEngineService.xpc`
+iPhone runtime split:
 
-## Models, Speakers, and Contract Ownership
+- `Sources/iOS/` for the SwiftUI app shell and UI-owned orchestration
+- `Sources/iOSSupport/` for shared iPhone support services, paths, model delivery, and persistence layers
+- `Sources/iOSEngineExtension/` for the isolated engine-extension process hosted through ExtensionFoundation
+
+Vendored native backend boundary:
+
+- `third_party_patches/mlx-audio-swift/`
+
+Heavy generation, prewarm, and model-load work stays out of the UI process on both platforms:
+
+- macOS uses the bundled XPC helper
+- iPhone uses the engine extension process
+
+## Models, Variants, And Contract Ownership
 
 Static TTS contract data lives in `Sources/Resources/qwenvoice_contract.json`.
 
 That manifest is the source of truth for:
 
 - model registry
+- model variants per platform
 - default speaker
 - grouped speakers
-- model tier
 - output subfolders
 - required model files
 - Hugging Face repos
 
-Swift loads that manifest through:
+The shared logical mode families remain:
 
-- `Sources/Models/TTSContract.swift`
-- `Sources/Models/TTSModel.swift`
+- `custom`
+- `design`
+- `clone`
 
-The shipped app currently exposes three 1.7B models:
+Platform-specific install policy:
 
-- Custom Voice
-- Voice Design
-- Voice Cloning
+- iPhone resolves to 4-bit `Speed` variants only
+- macOS resolves to 8-bit `Quality` by default when available, while minimum-hardware guidance recommends 4-bit `Speed`
 
-The shipped app currently exposes four built-in English speakers:
+## Memory And Isolation Posture
 
-- `ryan`
-- `aiden`
-- `serena`
-- `vivian`
+- iPhone memory policy lives in `Sources/QwenVoiceCore/IOSMemorySnapshot.swift` and the iPhone `TTSEngineStore` / app shell layers.
+- The shared memory bands are `healthy`, `guarded`, and `critical`.
+- iPhone shell code reacts to memory and thermal pressure and can trim or unload proactively.
+- The repo’s supported minimum-hardware path is “smooth and reliable on the default path,” not “every optional quality mode is guaranteed on floor hardware.”
 
-## Runtime Layout
+## Distribution
 
-Default app data lives under:
+macOS:
 
-```text
-~/Library/Application Support/QwenVoice/
-  models/
-  outputs/
-    CustomVoice/
-    VoiceDesign/
-    Clones/
-  voices/
-  cache/
-    normalized_clone_refs/
-    stream_sessions/
-  history.sqlite
-```
+- supported hosted install path: signed and notarized DMG on GitHub Releases
+- intended release asset name: `Vocello-macos26.dmg`
 
-If the user sets a custom output directory in Preferences, generated audio may be written outside the default `outputs/` tree.
+iPhone:
 
-Saved-voice native clone preparation may also persist prepared prompt artifacts under `voices/<voiceID>.clone_prompt/<modelID>/` after the prompt is built successfully.
+- supported hosted install path: App Store / TestFlight
+- GitHub Releases are not the supported iPhone install surface
 
-## Build And Test
+Source builds remain supported for both platforms.
 
-Project and local automation source of truth:
+## Build And Validation Surface
 
-- `project.yml` for XcodeGen-managed project structure
-- `scripts/check_project_inputs.sh`
-- `scripts/harness.py`
+Project and automation source of truth:
 
-There are currently no active GitHub Actions workflows in this checkout.
+- `project.yml`
+- `scripts/`
+- `.github/workflows/`
+
+Active GitHub workflows:
+
+- `Project Inputs`
+- `Apple Platform Validation`
+- `Vocello macOS Release`
+- `Vocello iOS TestFlight`
 
 Key local checks:
 
@@ -115,17 +116,16 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
+xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
+python3 scripts/check_ios_catalog.py
+./scripts/release.sh
+./scripts/release_ios_testflight.sh
 ```
 
-`QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` enables the opt-in `NativeMLXMacEngineLiveTests` smoke against an installed `pro_custom` model.
+`QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` still enables the opt-in macOS live smoke test against an installed model.
 
-The repo no longer keeps maintained automated XCUI `ui`, `design`, `perf`, or packaged-release lanes. Visual and interaction truth comes from local Codex Computer Use passes after the cheap source gates are green.
-
-## Distribution
-
-- Maintained docs present QwenVoice as a source-build-only project.
-- This checkout does not maintain hosted DMG distribution or GitHub Actions release automation.
-- Historical release notes remain under `docs/releases/` as past records, not as the current supported distribution path.
+Visual and interaction verification remains partly manual through local Computer Use passes after the cheap source gates are green.
 
 ## Current Documentation Boundaries
 
@@ -133,4 +133,4 @@ The repo no longer keeps maintained automated XCUI `ui`, `design`, `perf`, or pa
 - `docs/README.md` is the index of the maintained documentation set.
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `README.md` is the public GitHub landing page.
-- `qwen_tone.md` is a supplemental guidance doc, not a maintained reference doc.
+- `docs/qwen_tone.md` is a supplemental guidance doc, not a maintained reference doc.

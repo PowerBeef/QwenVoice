@@ -20,6 +20,12 @@ if grep -nE 'path = .*(__pycache__|\.pyc)' "$PBXPROJ" >/dev/null 2>&1; then
     exit 1
 fi
 
+if [ -d "$PROJECT_DIR/Assets.xcassets" ]; then
+    echo "error: retired repo-root Assets.xcassets directory is present." >&2
+    echo "Keep the asset catalog under Sources/Assets.xcassets and remove the stale root directory." >&2
+    exit 1
+fi
+
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --project
 
 echo "==> Project inputs are clean."

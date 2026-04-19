@@ -228,7 +228,7 @@ private extension CustomVoiceView {
 
     var readinessDetail: String {
         if !ttsEngineStore.isReady {
-            return "QwenVoice is still preparing the generation engine."
+            return "Vocello is still preparing the generation engine."
         }
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."

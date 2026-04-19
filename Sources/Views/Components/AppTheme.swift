@@ -13,18 +13,13 @@ extension Color {
 enum AppTheme {
     enum UIProfile: String {
         case liquid
-        case legacy
     }
 
     static let uiProfile: UIProfile = {
-        #if QW_UI_LIQUID && QW_UI_LEGACY_GLASS
-        return .legacy
-        #elseif QW_UI_LIQUID
+        #if QW_UI_LIQUID
         return .liquid
-        #elseif QW_UI_LEGACY_GLASS
-        return .legacy
         #else
-        return .legacy
+        return .liquid
         #endif
     }()
 
