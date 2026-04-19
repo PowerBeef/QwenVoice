@@ -1,40 +1,22 @@
-# Vendoring and Runtime Packaging
+# Vendoring and Runtime Notes
 
-QwenVoice has three maintained runtime stories:
+QwenVoice has two maintained runtime stories:
 
 1. **Source builds / development mode**
-2. **Packaged release builds**
-3. **Native backend source vendoring**
+2. **Native backend source vendoring**
 
 ## Tracked Surface Boundaries
 
 Treat tracked surfaces in this repo as four different classes:
 
-- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, workflows, and repo-local skills
+- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, and local harness scripts
 - **Repo-owned vendored source**: `third_party_patches/`, where QwenVoice intentionally carries patched upstream code as maintained source
 - **Generated or bundled resources**: `Sources/Resources/ffmpeg/`, most of `Sources/Resources/vendor/`, and similar script-produced payloads
 - **Local-only state**: `build/`, `.worktrees/`, `DerivedData/`, app-support data, and other machine-specific outputs
 
 ## Development Mode
 
-In a clean source checkout, the app uses the native runtime directly. Normal development builds do not require repo-managed Python setup, backend bootstrap, or compatibility runtime provisioning.
-
-## Release Packaging
-
-`./scripts/release.sh` builds a native-only app bundle. It must not ship:
-
-- `Contents/Resources/backend/`
-- `Contents/Resources/python/`
-- bundled `Contents/Resources/ffmpeg`
-
-The release pipeline:
-
-- regenerates the Xcode project safely
-- builds the app
-- strips any leaked backend or Python runtime artifacts from the final `.app`
-- removes vendored wheels and compiled Python artifacts from the packaged Resources directory
-- verifies the final bundle
-- creates the DMG
+In a clean source checkout, the app uses the native runtime through the bundled XPC helper and the app-side proxy/store layer. Normal development builds do not require repo-managed Python setup, backend bootstrap, compatibility runtime provisioning, or release-packaging automation.
 
 ## Native Backend Source Vendoring
 
@@ -48,7 +30,7 @@ The native package boundary currently includes:
 
 - the local `MLXAudio` package path in `project.yml`
 - remote `MLXSwift` and `SwiftHuggingFace` package entries
-- `Package.resolved` pins for the package graph consumed by `QwenVoiceNative`
+- `Package.resolved` pins for the package graph consumed by the app and runtime targets
 
 When the native backend package changes, keep the source tree, `project.yml`, and `Package.resolved` aligned, then regenerate the Xcode project before validating the app build.
 
@@ -58,17 +40,16 @@ When the native backend package changes, keep the source tree, `project.yml`, an
 
 Review the native vendoring stack:
 
-- after any intentional `mlx-audio-swift`, `MLXSwift`, `SwiftHuggingFace`, or release-packaging update
-- before major tagged releases if the native runtime stack changed since the previous tag
-- at least quarterly for package pins and release verification flow
+- after any intentional `mlx-audio-swift`, `MLXSwift`, or `SwiftHuggingFace` update
+- after any change to the app/runtime/XPC boundary that affects the consumed package graph
+- at least quarterly for package pins and runtime compatibility assumptions
 
 Every review should keep these artifacts aligned:
 
 - `third_party_patches/mlx-audio-swift/`
 - `project.yml`
 - `QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
-- `scripts/verify_release_bundle.sh`
-- the signed/notarized GitHub release verification flow
+- maintained docs that describe runtime ownership or vendoring boundaries
 
 ## Current Verification Surface
 
@@ -80,7 +61,5 @@ Every review should keep these artifacts aligned:
 - `python3 scripts/harness.py test --layer native`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
 - `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test`
-- `scripts/verify_release_bundle.sh`
-- `.github/workflows/release-dual-ui.yml`
 
-Visual and interaction verification is manual in this checkout. After the cheap source gates are green, use Codex Computer Use instead of any automated XCUI smoke, design, or perf lane.
+Visual and interaction verification is manual in this checkout. After the cheap source gates are green, use Codex Computer Use instead of any automated XCUI smoke, design, perf, or packaged-release lane.

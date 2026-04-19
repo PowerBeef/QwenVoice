@@ -1,4 +1,0 @@
-interface:
-  display_name: "QwenVoice Vendored Runtime"
-  short_description: "Update vendored runtime safely"
-  default_prompt: "Use $qwenvoice-vendored-runtime to update the QwenVoice vendored runtime and verify packaging."

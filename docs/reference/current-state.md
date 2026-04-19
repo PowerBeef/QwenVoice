@@ -9,6 +9,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Product name: `QwenVoice`
 - Version source: `project.yml`
 - Current version/build: `1.2.3` / `15`
+- Supported acquisition path in maintained docs: source build from this checkout
 
 ## Shipped UI
 
@@ -35,8 +36,12 @@ The app shell and runtime coordination are split across explicit helper componen
 - `ContentView.swift` owns the navigation split view, toolbar/search chrome, and persisted generation drafts
 - `AppPaths.swift` is the path boundary for app-support, model, output, and voice directories, including `QWENVOICE_APP_SUPPORT_DIR`
 - `AppEngineSelection.swift` always selects the native engine for normal runs and can still use `UITestStubMacEngine` during fixture-backed manual desktop-control runs
-- `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` are the native runtime boundary
-- shipped app bundles must not include `Contents/Resources/backend/`, `Contents/Resources/python/`, or bundled `Contents/Resources/ffmpeg`
+- `Sources/QwenVoiceNative/` is the app-facing engine layer: `TTSEngineStore`, `XPCNativeEngineClient`, and chunk-broker coordination live there
+- `Sources/QwenVoiceEngineSupport/` defines the shared engine IPC, request/reply envelopes, and transport-facing types
+- `Sources/QwenVoiceNativeRuntime/` owns service-only native execution, model load, generation, and clone preparation
+- `Sources/QwenVoiceEngineService/` is the bundled XPC helper entrypoint embedded into the shipped app
+- `third_party_patches/mlx-audio-swift/` remains the vendored MLXAudioSwift source boundary used by the service/runtime side
+- local source builds still produce an app bundle embedding `Contents/XPCServices/QwenVoiceEngineService.xpc`
 
 ## Models, Speakers, and Contract Ownership
 
@@ -92,25 +97,15 @@ If the user sets a custom output directory in Preferences, generated audio may b
 
 Saved-voice native clone preparation may also persist prepared prompt artifacts under `voices/<voiceID>.clone_prompt/<modelID>/` after the prompt is built successfully.
 
-## Build, Test, and Release
+## Build And Test
 
-Project and workflow source of truth:
+Project and local automation source of truth:
 
 - `project.yml` for XcodeGen-managed project structure
-- `.github/workflows/project-inputs.yml`
-- `.github/workflows/test-suite.yml`
-- `.github/workflows/release-dual-ui.yml`
+- `scripts/check_project_inputs.sh`
+- `scripts/harness.py`
 
-The active GitHub workflows are:
-
-- `Project Inputs` for checked-in project and native app resource validation
-- `Test Suite` for unit, contract, native runtime, strict-concurrency, packaged-build, and alternate-profile compile coverage
-- `Release Dual UI` for building, signing, notarizing, and optionally publishing the two shipped DMGs
-
-The dual-release workflow builds:
-
-- `QwenVoice-macos26.dmg` for the modern liquid UI profile
-- `QwenVoice-macos15.dmg` for the legacy glass UI profile
+There are currently no active GitHub Actions workflows in this checkout.
 
 Key local checks:
 
@@ -124,7 +119,13 @@ python3 scripts/harness.py test --layer native
 
 `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` enables the opt-in `NativeMLXMacEngineLiveTests` smoke against an installed `pro_custom` model.
 
-The repo no longer keeps maintained automated XCUI `ui`, `design`, or `perf` lanes. Visual and interaction truth comes from local Codex Computer Use passes after the cheap source gates are green.
+The repo no longer keeps maintained automated XCUI `ui`, `design`, `perf`, or packaged-release lanes. Visual and interaction truth comes from local Codex Computer Use passes after the cheap source gates are green.
+
+## Distribution
+
+- Maintained docs present QwenVoice as a source-build-only project.
+- This checkout does not maintain hosted DMG distribution or GitHub Actions release automation.
+- Historical release notes remain under `docs/releases/` as past records, not as the current supported distribution path.
 
 ## Current Documentation Boundaries
 

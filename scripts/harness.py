@@ -23,7 +23,6 @@ def _run_test(args: argparse.Namespace) -> None:
     suites = run_tests(
         layer=args.layer,
         artifact_dir=getattr(args, "artifact_dir", None),
-        artifacts_root=getattr(args, "artifacts_root", None),
     )
     duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("test", suites, duration_ms)
@@ -80,7 +79,7 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["contract", "swift", "native", "audio", "release", "all"],
+        choices=["contract", "swift", "native", "audio", "all"],
         default="all",
     )
     p_test.add_argument(
@@ -88,17 +87,12 @@ def main() -> None:
         default=None,
         help="Directory with chunk_*.wav plus final.wav for offline audio analysis",
     )
-    p_test.add_argument(
-        "--artifacts-root",
-        default=None,
-        help="Release artifacts root directory for --layer release",
-    )
     p_test.set_defaults(func=_run_test)
 
     p_bench = sub.add_parser("bench", help="Run benchmark suites")
     p_bench.add_argument(
         "--category",
-        choices=["latency", "load", "quality", "release", "tts_roundtrip", "perf", "all"],
+        choices=["latency", "load", "quality", "tts_roundtrip", "perf", "all"],
         default="all",
     )
     p_bench.add_argument("--runs", type=int, default=3, help="Runs per benchmark")

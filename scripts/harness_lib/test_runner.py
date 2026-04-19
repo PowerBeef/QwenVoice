@@ -9,13 +9,12 @@ from typing import Any
 from .contract import load_contract, speaker_list
 from .output import build_suite_result, build_test_result, eprint
 from .paths import CONTRACT_PATH, PROJECT_DIR
-from .ui_test_support import discover_release_artifacts, resolve_xcodebuild_timeout_seconds
+from .ui_test_support import resolve_xcodebuild_timeout_seconds
 
 
 def run_tests(
     layer: str = "all",
     artifact_dir: str | None = None,
-    artifacts_root: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run selected test layers and return suite results."""
     suites: list[dict[str, Any]] = []
@@ -37,9 +36,6 @@ def run_tests(
         from .audio_test_runner import run_audio_tests
 
         suites.append(run_audio_tests(artifact_dir=artifact_dir))
-
-    if layer == "release":
-        suites.extend(_run_release_tests(artifacts_root=artifacts_root))
 
     return suites
 
@@ -167,47 +163,3 @@ def _run_xcodebuild_suite(suite_name: str, command: list[str]) -> dict[str, Any]
         details=details,
     )
     return build_suite_result(suite_name, [result], result["duration_ms"])
-
-
-def _run_release_tests(artifacts_root: str | None = None) -> list[dict[str, Any]]:
-    artifacts = discover_release_artifacts(artifacts_root)
-    if not artifacts:
-        return [
-            build_suite_result(
-                "release_artifacts",
-                [
-                    build_test_result(
-                        "release_artifacts_available",
-                        passed=True,
-                        skip_reason="No downloaded release artifacts found.",
-                    )
-                ],
-                0,
-            )
-        ]
-
-    verify_script = PROJECT_DIR / "scripts" / "verify_packaged_dmg.sh"
-    suites: list[dict[str, Any]] = []
-    for artifact in artifacts:
-        name = f"release_{artifact['variant_id']}"
-        start = time.perf_counter()
-        proc = subprocess.run(
-            [str(verify_script), artifact["dmg_path"], artifact["metadata_path"]],
-            cwd=str(PROJECT_DIR),
-            capture_output=True,
-            text=True,
-        )
-        result = build_test_result(
-            name,
-            passed=proc.returncode == 0,
-            error=None if proc.returncode == 0 else f"verify_packaged_dmg.sh exited with {proc.returncode}",
-            duration_ms=int((time.perf_counter() - start) * 1000),
-            details={
-                "dmg_path": artifact["dmg_path"],
-                "metadata_path": artifact["metadata_path"],
-                "stdout_tail": proc.stdout.splitlines()[-20:],
-                "stderr_tail": proc.stderr.splitlines()[-20:],
-            },
-        )
-        suites.append(build_suite_result(name, [result], result["duration_ms"]))
-    return suites

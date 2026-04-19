@@ -25,12 +25,10 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 - [`releases/`](releases/) — checked-in release notes for past published versions
 
-## Repo-Local Skills
-
-- [`../.agents/skills/`](../.agents/skills/) — repo-tracked QwenVoice skills for doc sync, packaged validation, release publishing, and native runtime vendoring work
-
 ## Notes
 
 - Maintained contributor guidance in this checkout lives in the maintained reference docs listed above.
+- This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
+- This repo also does not maintain active GitHub Actions workflows or hosted release-packaging guidance; current contributor workflows are local and source-build oriented.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.
 - Historical notes may still appear in git history or external references, but the maintained repo facts live in the reference docs listed above.

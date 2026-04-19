@@ -14,7 +14,7 @@
 
 ## Overview
 
-QwenVoice is a native macOS app for offline Qwen3-TTS on Apple Silicon. The repo is now native-only: the shipped app, local source build, maintained harness, and release packaging flow all use the Swift/MLX runtime in `Sources/QwenVoiceNative/` and `third_party_patches/mlx-audio-swift/`.
+QwenVoice is a native macOS app for offline Qwen3-TTS on Apple Silicon. The repo is native-only and source-build-focused: the app, maintained local harness, and current contributor workflow all use the Swift/MLX runtime split across `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, `Sources/QwenVoiceNativeRuntime/`, and `third_party_patches/mlx-audio-swift/`.
 
 ## Shipped Modes
 
@@ -59,21 +59,28 @@ Single-generation flows use live streaming preview and sidebar playback. Batch g
 | Chip | Apple Silicon |
 | RAM | 8 GB+ recommended |
 
-## Install from GitHub Releases
+## Get Started
 
-Download the appropriate DMG from [Releases](https://github.com/PowerBeef/QwenVoice/releases).
+This checkout is maintained as a source-build project rather than a hosted DMG/release pipeline. Clone the repo, regenerate the Xcode project, and build locally:
 
-Current GitHub release builds are produced by the dual-release workflow and typically appear as:
+```sh
+git clone https://github.com/PowerBeef/QwenVoice.git
+cd QwenVoice
+./scripts/regenerate_project.sh
+open QwenVoice.xcodeproj
+```
 
-- `QwenVoice-macos26.dmg` — modern liquid UI build
-- `QwenVoice-macos15.dmg` — legacy glass UI build
+Then build the `QwenVoice` scheme from Xcode, or use:
 
-Then:
+```sh
+xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+```
 
-1. Drag `QwenVoice.app` to `/Applications`
-2. Open the app normally. Official GitHub workflow releases are signed, notarized, and stapled.
-3. macOS may still show the standard first-open “downloaded from the Internet” confirmation prompt.
-4. Go to **Models**, download a model, and generate speech
+After launching the app:
+
+1. Go to **Models**
+2. Download a model
+3. Generate speech from one of the three generation modes
 
 ## Models
 
@@ -94,19 +101,6 @@ Source-build prerequisites:
 - Xcode 26+ for the default `QW_UI_LIQUID` checkout
 - XcodeGen
 
-```sh
-git clone https://github.com/PowerBeef/QwenVoice.git
-cd QwenVoice
-./scripts/regenerate_project.sh
-open QwenVoice.xcodeproj
-```
-
-Build the `QwenVoice` scheme from Xcode, or use:
-
-```sh
-xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
-```
-
 Useful local checks:
 
 ```sh
@@ -116,16 +110,6 @@ python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
 ```
-
-### Local release packaging
-
-For a local release build and DMG:
-
-```sh
-./scripts/release.sh
-```
-
-That script builds a native-only Release app, verifies that no backend/python runtime assets leaked into the bundle, and by default produces `build/QwenVoice.dmg`.
 
 ## Tone and Emotion Control
 
@@ -138,7 +122,10 @@ See [`qwen_tone.md`](qwen_tone.md) for supplemental prompt-writing guidance. For
 QwenVoice uses a native app architecture:
 
 - **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
-- **Native MLX runtime** in `Sources/QwenVoiceNative/` plus `third_party_patches/mlx-audio-swift/` for inference and clone support
+- **App-facing engine layer** in `Sources/QwenVoiceNative/` for the proxy/client/store surface used by the app
+- **Shared engine IPC** in `Sources/QwenVoiceEngineSupport/`
+- **Service-side runtime** in `Sources/QwenVoiceNativeRuntime/` and `Sources/QwenVoiceEngineService/`
+- **Vendored MLXAudioSwift source** in `third_party_patches/mlx-audio-swift/`
 - **Manifest-backed metadata** in `Sources/Resources/qwenvoice_contract.json` for models, speakers, output folders, and required files
 
 Default runtime output layout:

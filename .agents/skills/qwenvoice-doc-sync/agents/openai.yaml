@@ -1,4 +1,0 @@
-interface:
-  display_name: "QwenVoice Doc Sync"
-  short_description: "Keep docs aligned with repo truth"
-  default_prompt: "Use $qwenvoice-doc-sync to refresh QwenVoice docs against source, scripts, and release truth."

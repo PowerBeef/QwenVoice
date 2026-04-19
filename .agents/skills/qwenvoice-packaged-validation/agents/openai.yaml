@@ -1,4 +1,0 @@
-interface:
-  display_name: "QwenVoice Packaged Validation"
-  short_description: "Validate packaged builds and artifacts"
-  default_prompt: "Use $qwenvoice-packaged-validation to validate QwenVoice builds, packaged artifacts, and bundled dependencies."
