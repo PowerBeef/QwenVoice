@@ -16,6 +16,16 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
     }
 }
 
+public struct EngineRequestEnvelope: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let command: EngineCommand
+
+    public init(id: UUID, command: EngineCommand) {
+        self.id = id
+        self.command = command
+    }
+}
+
 public enum EngineCommand: Codable, Equatable, Sendable {
     case initialize(appSupportDirectoryPath: String)
     case ping
@@ -33,6 +43,16 @@ public enum EngineCommand: Codable, Equatable, Sendable {
     case deletePreparedVoice(id: String)
     case clearGenerationActivity
     case clearVisibleError
+}
+
+public struct EngineReplyEnvelope: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let reply: EngineReply
+
+    public init(id: UUID, reply: EngineReply) {
+        self.id = id
+        self.reply = reply
+    }
 }
 
 public enum EngineReply: Codable, Equatable, Sendable {

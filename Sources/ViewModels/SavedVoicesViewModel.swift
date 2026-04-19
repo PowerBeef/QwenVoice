@@ -105,3 +105,12 @@ final class SavedVoicesViewModel: ObservableObject {
 @MainActor private enum SavedVoicesSessionCache {
     static var voices: [Voice] = []
 }
+
+@MainActor
+extension SavedVoicesViewModel {
+    // Tests need an explicit escape hatch because this view model seeds
+    // itself from a session cache that otherwise survives across cases.
+    static func resetSessionCacheForTesting() {
+        SavedVoicesSessionCache.voices = []
+    }
+}

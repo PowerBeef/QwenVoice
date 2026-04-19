@@ -2,6 +2,13 @@ import XCTest
 @testable import QwenVoiceNative
 
 final class XPCNativeEngineClientTests: XCTestCase {
+    private func invalidateAndDrain(_ clients: XPCNativeEngineClient...) async {
+        for client in clients {
+            await client.debugInvalidateConnectionForTesting()
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+
     func testClientInitializesAndPingsBundledEngineService() async throws {
         let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -14,6 +21,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
         XCTAssertTrue(client.snapshot.isReady)
         XCTAssertEqual(client.snapshot.loadState, .idle)
         XCTAssertNil(client.snapshot.visibleErrorMessage)
+
+        await invalidateAndDrain(client)
     }
 
     func testClientPreparedVoiceLifecycleUsesEngineServiceAppSupportDirectory() async throws {
@@ -41,6 +50,8 @@ final class XPCNativeEngineClientTests: XCTestCase {
         try await client.deletePreparedVoice(id: enrolled.id)
         let remainingVoices = try await client.listPreparedVoices()
         XCTAssertTrue(remainingVoices.isEmpty)
+
+        await invalidateAndDrain(client)
     }
 
     func testClientReinitializesAfterConnectionInvalidation() async throws {
@@ -68,5 +79,36 @@ final class XPCNativeEngineClientTests: XCTestCase {
         XCTAssertTrue(client.snapshot.isReady)
         XCTAssertEqual(client.snapshot.loadState, .idle)
         XCTAssertNil(client.snapshot.visibleErrorMessage)
+
+        await invalidateAndDrain(client)
+    }
+
+    func testSecondClientRemainsActiveWhenFirstConnectionInvalidates() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let firstClient = XPCNativeEngineClient()
+        let secondClient = XPCNativeEngineClient()
+
+        try await firstClient.initialize(appSupportDirectory: root)
+        try await secondClient.initialize(appSupportDirectory: root)
+
+        let firstPing = try await firstClient.ping()
+        let secondInitialPing = try await secondClient.ping()
+        XCTAssertTrue(firstPing)
+        XCTAssertTrue(secondInitialPing)
+
+        await firstClient.debugInvalidateConnectionForTesting()
+
+        for _ in 0..<20 where secondClient.snapshot.visibleErrorMessage != nil {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        let secondPing = try await secondClient.ping()
+        XCTAssertTrue(secondPing)
+        XCTAssertTrue(secondClient.snapshot.isReady)
+        XCTAssertNil(secondClient.snapshot.visibleErrorMessage)
+
+        await invalidateAndDrain(firstClient, secondClient)
     }
 }

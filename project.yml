@@ -140,6 +140,8 @@ targets:
     platform: macOS
     sources:
       - path: Sources/QwenVoiceEngineService
+      - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.engine-service

@@ -59,6 +59,7 @@
 		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
 		6CCE745C787CC14B0193FD48 /* NativeMLXMacEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CED27360BBBEA5D0A0A7AA /* NativeMLXMacEngine.swift */; };
 		6D8320A11572D09DAD88429C /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = CD5E9087DF62FBA2EC21B0EF /* MLX */; };
+		6FE8129518C5F51DF294199F /* qwenvoice_contract.json in Resources */ = {isa = PBXBuildFile; fileRef = 617BE72142511CD5043C341E /* qwenvoice_contract.json */; };
 		712EF5135E17F9CE4052CCE8 /* UITestWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C87A8E0307B1098429346 /* UITestWindowCoordinator.swift */; };
 		7142299093710E7ECD0887F6 /* AppStartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEC7B0D62CB687A465F31B8 /* AppStartupCoordinatorTests.swift */; };
 		7197E0B1B11DA77FF707BB2B /* GenerationScreenPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A7E4D67B06F288693FEAC2 /* GenerationScreenPresentation.swift */; };
@@ -108,6 +109,7 @@
 		CB6386E9F7F97ED19237D868 /* NativeMLXMacEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B94E98E2B7BF0F032C30AC0 /* NativeMLXMacEngineTests.swift */; };
 		CDA31B55F78B96D43385E1E6 /* AppStartupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40385AC6FD361E190A8E3CE3 /* AppStartupCoordinator.swift */; };
 		CE9FB73376B49D81E5BEFAF3 /* StartupDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21943A54ED34AAA37626A252 /* StartupDiagnosticsView.swift */; };
+		D2DD8D5683671707CF6C06AA /* XPCNativeEngineCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */; };
 		DC82C53833745F1993CB460B /* NativeModelRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17D220A87B118CDAB8682AA /* NativeModelRegistryTests.swift */; };
 		DFDC2DB9B267DB938A862746 /* NativeStreamingSynthesisSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066A78E7232A89C203BE60A3 /* NativeStreamingSynthesisSession.swift */; };
 		E14FE0C5EF47848560CB00E8 /* XPCNativeEngineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584102582A0CD1F4A0D5734B /* XPCNativeEngineClient.swift */; };
@@ -285,6 +287,7 @@
 		82A05DAF95ECD80C6A42AD1F /* TTSEngineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSEngineStore.swift; sourceTree = "<group>"; };
 		84CD1C46D8B6C5E3FFD1C92E /* NativeSpeechGenerationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSpeechGenerationModel.swift; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCNativeEngineCoordinatorTests.swift; sourceTree = "<group>"; };
 		8C51C60AA5F36A5B74A07FEC /* VoiceDesignCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignCoordinator.swift; sourceTree = "<group>"; };
 		9582B9C7E0ED43B81560CFB1 /* AudioPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreparation.swift; sourceTree = "<group>"; };
 		958B08B9790BD411BEE24FA0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -453,6 +456,7 @@
 				98C65FFC6BA471E3A19EA0C2 /* TTSEngineStoreTests.swift */,
 				C638D9430AD706E6A2E1E74C /* VoiceCloningReferenceAudioSupportTests.swift */,
 				E9957072AE57E8050122A472 /* XPCNativeEngineClientTests.swift */,
+				895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */,
 			);
 			path = QwenVoiceTests;
 			sourceTree = "<group>";
@@ -776,6 +780,7 @@
 			buildConfigurationList = 8953407C6DBB64854F3F49F7 /* Build configuration list for PBXNativeTarget "QwenVoiceEngineService" */;
 			buildPhases = (
 				564E2240153272200B71521E /* Sources */,
+				CB781ABD49F7B8ECF66F814B /* Resources */,
 				BF2EBB72584AF9FE2039A825 /* Frameworks */,
 			);
 			buildRules = (
@@ -843,6 +848,14 @@
 			files = (
 				782CC4A0B12968AC18654792 /* Assets.xcassets in Resources */,
 				80B162A6B2D1D7E86252D5B3 /* qwenvoice_contract.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB781ABD49F7B8ECF66F814B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6FE8129518C5F51DF294199F /* qwenvoice_contract.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -988,6 +1001,7 @@
 				5322D8472C691B7477367F3D /* TTSEngineStoreTests.swift in Sources */,
 				C04458039B9545EDB4B7D4B0 /* VoiceCloningReferenceAudioSupportTests.swift in Sources */,
 				17EEF4B2D7D0F6DC0DF5F0E6 /* XPCNativeEngineClientTests.swift in Sources */,
+				D2DD8D5683671707CF6C06AA /* XPCNativeEngineCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

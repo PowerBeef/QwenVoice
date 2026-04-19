@@ -1,22 +1,65 @@
 @preconcurrency import Combine
 import Foundation
+import OSLog
 
-private enum XPCNativeEngineClientError: LocalizedError {
+enum EngineTransportError: LocalizedError, Equatable, Sendable {
+    case interrupted
+    case invalidated
+    case timedOut(commandName: String)
+    case staleOrMismatchedReply(id: UUID)
     case invalidReply
 
     var errorDescription: String? {
         switch self {
+        case .interrupted:
+            return "The engine service connection was interrupted."
+        case .invalidated:
+            return "The engine service connection was invalidated."
+        case .timedOut(let commandName):
+            return "The engine service request timed out while running \(commandName)."
+        case .staleOrMismatchedReply(let id):
+            return "The engine service returned a stale or mismatched reply for request \(id.uuidString)."
         case .invalidReply:
             return "The engine service returned an invalid reply."
         }
     }
 }
 
+struct XPCNativeEngineTransportHandlers: Sendable {
+    let onEventData: @Sendable (Data) -> Void
+    let onRemoteError: @Sendable (Error) -> Void
+    let onInterrupted: @Sendable () -> Void
+    let onInvalidated: @Sendable () -> Void
+}
+
+protocol XPCNativeEngineTransporting: AnyObject, Sendable {
+    func resume()
+    func invalidate()
+    func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void)
+}
+
+typealias XPCNativeEngineTransportFactory = @Sendable (XPCNativeEngineTransportHandlers) -> any XPCNativeEngineTransporting
+typealias XPCNativeEngineTimeoutResolver = @Sendable (EngineCommand) -> Duration?
+
 private final class BatchProgressHandlerBox: @unchecked Sendable {
     let handler: @Sendable (Double?, String) -> Void
 
     init(handler: @escaping @Sendable (Double?, String) -> Void) {
         self.handler = handler
+    }
+}
+
+private final class PendingRequestBox: @unchecked Sendable {
+    let commandName: String
+    let resume: @Sendable (Result<EngineReply, Error>) -> Void
+    var timeoutTask: Task<Void, Never>?
+
+    init(
+        commandName: String,
+        resume: @escaping @Sendable (Result<EngineReply, Error>) -> Void
+    ) {
+        self.commandName = commandName
+        self.resume = resume
     }
 }
 
@@ -32,21 +75,84 @@ private final class XPCNativeEngineClientEventSink: NSObject, QwenVoiceEngineCli
     }
 }
 
-private actor XPCNativeEngineCoordinator {
+private final class XPCServiceTransport: NSObject, XPCNativeEngineTransporting, @unchecked Sendable {
+    private let connection: NSXPCConnection
+    private let eventSink: XPCNativeEngineClientEventSink
+    private let handlers: XPCNativeEngineTransportHandlers
+
+    init(handlers: XPCNativeEngineTransportHandlers) {
+        self.handlers = handlers
+
+        let sink = XPCNativeEngineClientEventSink(onEvent: handlers.onEventData)
+        self.eventSink = sink
+        let connection = NSXPCConnection(serviceName: QwenVoiceEngineServiceBundleIdentifier)
+        connection.remoteObjectInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
+        connection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineClientEventXPCProtocol.self)
+        connection.exportedObject = sink
+        self.connection = connection
+
+        super.init()
+
+        connection.interruptionHandler = { [handlers] in
+            handlers.onInterrupted()
+        }
+        connection.invalidationHandler = { [handlers] in
+            handlers.onInvalidated()
+        }
+    }
+
+    func resume() {
+        connection.resume()
+    }
+
+    func invalidate() {
+        connection.invalidate()
+    }
+
+    func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void) {
+        let proxy = connection.remoteObjectProxyWithErrorHandler { [handlers] error in
+            handlers.onRemoteError(error)
+        } as! QwenVoiceEngineServiceXPCProtocol
+        proxy.perform(payload, withReply: reply)
+    }
+}
+
+actor XPCNativeEngineCoordinator {
+    private struct ActiveConnection {
+        let id: UUID
+        let transport: any XPCNativeEngineTransporting
+    }
+
+    private static let logger = Logger(
+        subsystem: "com.qwenvoice.app",
+        category: "XPCNativeEngineClient"
+    )
+
     private let onSnapshot: @Sendable (TTSEngineSnapshot) -> Void
     private let onChunk: @Sendable (GenerationEvent) -> Void
+    private let transportFactory: XPCNativeEngineTransportFactory
+    private let timeoutResolver: XPCNativeEngineTimeoutResolver
 
-    private var connection: NSXPCConnection?
+    private var activeConnection: ActiveConnection?
     private var didInitializeCurrentConnection = false
     private var initializedAppSupportDirectory: URL?
     private var batchProgressHandlers: [UUID: BatchProgressHandlerBox] = [:]
+    private var pendingRequests: [UUID: PendingRequestBox] = [:]
 
     init(
         onSnapshot: @escaping @Sendable (TTSEngineSnapshot) -> Void,
-        onChunk: @escaping @Sendable (GenerationEvent) -> Void
+        onChunk: @escaping @Sendable (GenerationEvent) -> Void,
+        transportFactory: @escaping XPCNativeEngineTransportFactory = { handlers in
+            XPCServiceTransport(handlers: handlers)
+        },
+        timeoutResolver: @escaping XPCNativeEngineTimeoutResolver = { command in
+            command.transportTimeout
+        }
     ) {
         self.onSnapshot = onSnapshot
         self.onChunk = onChunk
+        self.transportFactory = transportFactory
+        self.timeoutResolver = timeoutResolver
     }
 
     func initialize(appSupportDirectory: URL) async throws {
@@ -55,22 +161,22 @@ private actor XPCNativeEngineCoordinator {
     }
 
     func send(_ command: EngineCommand) async throws -> EngineReply {
-        let proxy = ensureConnection()
+        let transport = ensureConnection()
         switch command {
         case .initialize(let path):
             initializedAppSupportDirectory = URL(fileURLWithPath: path)
-            let reply = try await perform(proxy: proxy, command: command)
+            let reply = try await perform(transport: transport, command: command)
             didInitializeCurrentConnection = true
             return reply
         default:
             if !didInitializeCurrentConnection, let initializedAppSupportDirectory {
                 _ = try await perform(
-                    proxy: proxy,
+                    transport: transport,
                     command: .initialize(appSupportDirectoryPath: initializedAppSupportDirectory.path)
                 )
                 didInitializeCurrentConnection = true
             }
-            return try await perform(proxy: proxy, command: command)
+            return try await perform(transport: transport, command: command)
         }
     }
 
@@ -91,15 +197,29 @@ private actor XPCNativeEngineCoordinator {
 
     func fireAndForget(_ command: EngineCommand) {
         Task {
-            _ = try? await send(command)
+            do {
+                _ = try await send(command)
+            } catch {
+                Self.logger.error(
+                    "Best-effort command '\(command.transportName, privacy: .public)' failed: \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
     }
 
     func invalidateForTesting() {
-        handleConnectionInvalidated()
+        guard let connectionID = activeConnection?.id else { return }
+        handleConnectionInvalidated(for: connectionID)
     }
 
-    func handleEventData(_ data: Data) {
+    func handleEventData(_ data: Data, from connectionID: UUID) {
+        guard isCurrentConnection(connectionID) else {
+            Self.logger.debug(
+                "Ignoring engine event from stale connection \(connectionID.uuidString, privacy: .public)."
+            )
+            return
+        }
+
         do {
             let event = try EngineServiceCodec.decode(EngineEventEnvelope.self, from: data)
             switch event {
@@ -114,99 +234,202 @@ private actor XPCNativeEngineCoordinator {
                 }
             }
         } catch {
-            handleDisconnect(message: "The engine service sent an unreadable event: \(error.localizedDescription)")
+            Self.logger.error("Unreadable engine event payload: \(error.localizedDescription, privacy: .public)")
+            handleDisconnect(
+                connectionID: connectionID,
+                transportError: .invalidReply,
+                message: "The engine service sent an unreadable event: \(error.localizedDescription)"
+            )
         }
     }
 
-    func handleRemoteError(_ error: Error) {
-        handleDisconnect(message: error.localizedDescription)
+    func handleRemoteError(_ error: Error, from connectionID: UUID) {
+        handleDisconnect(
+            connectionID: connectionID,
+            transportError: .invalidated,
+            message: error.localizedDescription
+        )
     }
 
-    func handleConnectionInterrupted() {
-        handleDisconnect(message: "The engine service connection was interrupted.")
+    func handleConnectionInterrupted(for connectionID: UUID) {
+        handleDisconnect(
+            connectionID: connectionID,
+            transportError: .interrupted,
+            message: EngineTransportError.interrupted.localizedDescription
+        )
     }
 
-    func handleConnectionInvalidated() {
-        handleDisconnect(message: "The engine service connection was invalidated.")
+    func handleConnectionInvalidated(for connectionID: UUID) {
+        handleDisconnect(
+            connectionID: connectionID,
+            transportError: .invalidated,
+            message: EngineTransportError.invalidated.localizedDescription
+        )
     }
 
-    private func ensureConnection() -> QwenVoiceEngineServiceXPCProtocol {
-        if let connection {
-            return connection.remoteObjectProxyWithErrorHandler { [weak self] error in
+    private func ensureConnection() -> ActiveConnection {
+        if let activeConnection {
+            return activeConnection
+        }
+
+        let connectionID = UUID()
+        let handlers = XPCNativeEngineTransportHandlers(
+            onEventData: { [weak self] payload in
                 Task {
-                    await self?.handleRemoteError(error)
+                    await self?.handleEventData(payload, from: connectionID)
                 }
-            } as! QwenVoiceEngineServiceXPCProtocol
-        }
-
-        let sink = XPCNativeEngineClientEventSink { [weak self] payload in
-            Task {
-                await self?.handleEventData(payload)
+            },
+            onRemoteError: { [weak self] error in
+                Task {
+                    await self?.handleRemoteError(error, from: connectionID)
+                }
+            },
+            onInterrupted: { [weak self] in
+                Task {
+                    await self?.handleConnectionInterrupted(for: connectionID)
+                }
+            },
+            onInvalidated: { [weak self] in
+                Task {
+                    await self?.handleConnectionInvalidated(for: connectionID)
+                }
             }
-        }
+        )
 
-        let connection = NSXPCConnection(serviceName: QwenVoiceEngineServiceBundleIdentifier)
-        connection.remoteObjectInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
-        connection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineClientEventXPCProtocol.self)
-        connection.exportedObject = sink
-        connection.interruptionHandler = { [weak self] in
-            Task {
-                await self?.handleConnectionInterrupted()
-            }
-        }
-        connection.invalidationHandler = { [weak self] in
-            Task {
-                await self?.handleConnectionInvalidated()
-            }
-        }
-        connection.resume()
-
-        let proxy = connection.remoteObjectProxyWithErrorHandler { [weak self] error in
-            Task {
-                await self?.handleRemoteError(error)
-            }
-        } as! QwenVoiceEngineServiceXPCProtocol
-
-        self.connection = connection
-        self.didInitializeCurrentConnection = false
-        return proxy
+        let transport = transportFactory(handlers)
+        transport.resume()
+        let connection = ActiveConnection(id: connectionID, transport: transport)
+        activeConnection = connection
+        didInitializeCurrentConnection = false
+        return connection
     }
 
     private func perform(
-        proxy: QwenVoiceEngineServiceXPCProtocol,
+        transport: ActiveConnection,
         command: EngineCommand
     ) async throws -> EngineReply {
-        let payload = try EngineServiceCodec.encode(command)
+        let requestEnvelope = EngineRequestEnvelope(id: UUID(), command: command)
+        let payload = try EngineServiceCodec.encode(requestEnvelope)
+
+        Self.logger.debug("Sending engine command '\(command.transportName, privacy: .public)' with id \(requestEnvelope.id.uuidString, privacy: .public)")
 
         return try await withCheckedThrowingContinuation { continuation in
-            proxy.perform(payload) { replyData in
-                do {
-                    let reply = try EngineServiceCodec.decode(EngineReply.self, from: replyData)
-                    if case .failure(let error) = reply {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume(returning: reply)
+            let pendingRequest = PendingRequestBox(
+                commandName: command.transportName,
+                resume: { result in
+                    continuation.resume(with: result)
+                }
+            )
+            if let timeout = timeoutResolver(command) {
+                pendingRequest.timeoutTask = Task { [requestID = requestEnvelope.id] in
+                    do {
+                        try await Task.sleep(for: timeout)
+                    } catch {
+                        return
                     }
-                } catch {
-                    continuation.resume(throwing: XPCNativeEngineClientError.invalidReply)
+                    self.handleTimeout(for: requestID)
+                }
+            }
+            pendingRequests[requestEnvelope.id] = pendingRequest
+
+            transport.transport.perform(payload) { [weak self] replyData in
+                Task {
+                    await self?.handleReplyData(replyData, from: transport.id)
                 }
             }
         }
     }
 
-    private func handleDisconnect(message: String) {
-        connection?.invalidate()
-        connection = nil
+    private func handleReplyData(_ data: Data, from connectionID: UUID) {
+        guard isCurrentConnection(connectionID) else {
+            Self.logger.debug(
+                "Ignoring engine reply from stale connection \(connectionID.uuidString, privacy: .public)."
+            )
+            return
+        }
+
+        let envelope: EngineReplyEnvelope
+        do {
+            envelope = try EngineServiceCodec.decode(EngineReplyEnvelope.self, from: data)
+        } catch {
+            Self.logger.error("Unreadable engine reply payload: \(error.localizedDescription, privacy: .public)")
+            handleDisconnect(
+                connectionID: connectionID,
+                transportError: .invalidReply,
+                message: EngineTransportError.invalidReply.localizedDescription
+            )
+            return
+        }
+
+        guard let pendingRequest = pendingRequests.removeValue(forKey: envelope.id) else {
+            let transportError = EngineTransportError.staleOrMismatchedReply(id: envelope.id)
+            Self.logger.warning("\(transportError.localizedDescription, privacy: .public)")
+            return
+        }
+
+        pendingRequest.timeoutTask?.cancel()
+
+        if case .failure(let error) = envelope.reply {
+            pendingRequest.resume(.failure(error))
+        } else {
+            pendingRequest.resume(.success(envelope.reply))
+        }
+    }
+
+    private func handleTimeout(for requestID: UUID) {
+        guard let pendingRequest = pendingRequests.removeValue(forKey: requestID) else { return }
+        pendingRequest.timeoutTask?.cancel()
+        let error = EngineTransportError.timedOut(commandName: pendingRequest.commandName)
+        Self.logger.error("\(error.localizedDescription, privacy: .public)")
+        pendingRequest.resume(.failure(error))
+    }
+
+    private func handleDisconnect(
+        connectionID: UUID,
+        transportError: EngineTransportError,
+        message: String?
+    ) {
+        if let message {
+            Self.logger.error("Disconnect cleanup: \(message, privacy: .public)")
+        }
+
+        guard let connectionToInvalidate = disconnectCurrentConnectionIfNeeded(connectionID: connectionID) else {
+            Self.logger.debug(
+                "Ignoring disconnect cleanup from stale connection \(connectionID.uuidString, privacy: .public)."
+            )
+            return
+        }
+        connectionToInvalidate.invalidate()
         didInitializeCurrentConnection = false
         batchProgressHandlers.removeAll()
+
+        let pendingRequestBoxes = pendingRequests.values
+        pendingRequests.removeAll()
+        for pendingRequest in pendingRequestBoxes {
+            pendingRequest.timeoutTask?.cancel()
+            pendingRequest.resume(.failure(transportError))
+        }
+
+        let visibleMessage = message ?? transportError.localizedDescription
         onSnapshot(
             TTSEngineSnapshot(
                 isReady: false,
-                loadState: .failed(message: message),
+                loadState: .failed(message: visibleMessage),
                 clonePreparationState: .idle,
-                visibleErrorMessage: message
+                visibleErrorMessage: visibleMessage
             )
         )
+    }
+
+    private func isCurrentConnection(_ connectionID: UUID) -> Bool {
+        activeConnection?.id == connectionID
+    }
+
+    private func disconnectCurrentConnectionIfNeeded(connectionID: UUID) -> (any XPCNativeEngineTransporting)? {
+        guard activeConnection?.id == connectionID else { return nil }
+        let transport = activeConnection?.transport
+        activeConnection = nil
+        return transport
     }
 }
 
@@ -247,7 +470,7 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     public func ping() async throws -> Bool {
         let reply = try await coordinator.send(.ping)
         guard case .bool(let value) = reply else {
-            throw XPCNativeEngineClientError.invalidReply
+            throw EngineTransportError.invalidReply
         }
         return value
     }
@@ -261,11 +484,11 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     }
 
     public func ensureModelLoadedIfNeeded(id: String) async {
-        _ = try? await coordinator.send(.ensureModelLoadedIfNeeded(id: id))
+        await coordinator.fireAndForget(.ensureModelLoadedIfNeeded(id: id))
     }
 
     public func prewarmModelIfNeeded(for request: GenerationRequest) async {
-        _ = try? await coordinator.send(.prewarmModelIfNeeded(request: request))
+        await coordinator.fireAndForget(.prewarmModelIfNeeded(request: request))
     }
 
     public func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
@@ -273,13 +496,13 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     }
 
     public func cancelClonePreparationIfNeeded() async {
-        _ = try? await coordinator.send(.cancelClonePreparationIfNeeded)
+        await coordinator.fireAndForget(.cancelClonePreparationIfNeeded)
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
         let reply = try await coordinator.send(.generate(request: request))
         guard case .generationResult(let result) = reply else {
-            throw XPCNativeEngineClientError.invalidReply
+            throw EngineTransportError.invalidReply
         }
         return result
     }
@@ -298,7 +521,7 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
 
         let reply = try await coordinator.send(.generateBatch(commandID: commandID, requests: requests))
         guard case .generationResults(let results) = reply else {
-            throw XPCNativeEngineClientError.invalidReply
+            throw EngineTransportError.invalidReply
         }
         return results
     }
@@ -310,7 +533,7 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
     public func listPreparedVoices() async throws -> [PreparedVoice] {
         let reply = try await coordinator.send(.listPreparedVoices)
         guard case .preparedVoices(let voices) = reply else {
-            throw XPCNativeEngineClientError.invalidReply
+            throw EngineTransportError.invalidReply
         }
         return voices
     }
@@ -320,7 +543,7 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
             .enrollPreparedVoice(name: name, audioPath: audioPath, transcript: transcript)
         )
         guard case .preparedVoice(let voice) = reply else {
-            throw XPCNativeEngineClientError.invalidReply
+            throw EngineTransportError.invalidReply
         }
         return voice
     }
@@ -360,4 +583,57 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
         await coordinator.invalidateForTesting()
     }
     #endif
+}
+
+private extension EngineCommand {
+    var transportName: String {
+        switch self {
+        case .initialize:
+            "initialize"
+        case .ping:
+            "ping"
+        case .loadModel:
+            "loadModel"
+        case .unloadModel:
+            "unloadModel"
+        case .ensureModelLoadedIfNeeded:
+            "ensureModelLoadedIfNeeded"
+        case .prewarmModelIfNeeded:
+            "prewarmModelIfNeeded"
+        case .ensureCloneReferencePrimed:
+            "ensureCloneReferencePrimed"
+        case .cancelClonePreparationIfNeeded:
+            "cancelClonePreparationIfNeeded"
+        case .generate:
+            "generate"
+        case .generateBatch:
+            "generateBatch"
+        case .cancelActiveGeneration:
+            "cancelActiveGeneration"
+        case .listPreparedVoices:
+            "listPreparedVoices"
+        case .enrollPreparedVoice:
+            "enrollPreparedVoice"
+        case .deletePreparedVoice:
+            "deletePreparedVoice"
+        case .clearGenerationActivity:
+            "clearGenerationActivity"
+        case .clearVisibleError:
+            "clearVisibleError"
+        }
+    }
+
+    var transportTimeout: Duration? {
+        switch self {
+        case .generate, .generateBatch:
+            nil
+        case .initialize, .loadModel, .unloadModel, .ensureModelLoadedIfNeeded,
+             .prewarmModelIfNeeded, .ensureCloneReferencePrimed:
+            .seconds(180)
+        case .ping, .cancelClonePreparationIfNeeded, .cancelActiveGeneration,
+             .listPreparedVoices, .enrollPreparedVoice, .deletePreparedVoice,
+             .clearGenerationActivity, .clearVisibleError:
+            .seconds(10)
+        }
+    }
 }

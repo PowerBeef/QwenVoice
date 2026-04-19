@@ -58,6 +58,11 @@ private final class SavedVoicesMockEngine: MacTTSEngine, @unchecked Sendable {
 final class SavedVoicesViewModelTests: XCTestCase {
     @MainActor
     func testRefreshLoadsPreparedVoicesThroughTTSEngineStore() async {
+        SavedVoicesViewModel.resetSessionCacheForTesting()
+        defer {
+            SavedVoicesViewModel.resetSessionCacheForTesting()
+        }
+
         let engine = SavedVoicesMockEngine(
             snapshot: TTSEngineSnapshot(
                 isReady: true,
