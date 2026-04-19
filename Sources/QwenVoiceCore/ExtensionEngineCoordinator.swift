@@ -138,7 +138,7 @@ actor ExtensionEngineCoordinator {
         }
 
         let reconnecting = lastDisconnectState != nil
-        onLifecycleState(reconnecting ? .recovering : .connecting)
+        onLifecycleState(reconnecting ? .recovering : .launching)
         let connectionID = UUID()
         let handlers = ExtensionEngineTransportHandlers(
             onEventData: { [weak self] payload in
@@ -292,7 +292,7 @@ actor ExtensionEngineCoordinator {
         onSnapshot(
             TTSEngineSnapshot(
                 isReady: false,
-                loadState: .crashed(visibleMessage),
+                loadState: .failed(message: visibleMessage),
                 clonePreparationState: .idle,
                 visibleErrorMessage: visibleMessage
             )

@@ -287,7 +287,10 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
                 object: self,
                 userInfo: ["chunk": chunk]
             )
-            let chunkIndex = Self.chunkIndex(from: chunk.chunkPath)
+            guard let chunkPath = chunk.chunkPath else {
+                return
+            }
+            let chunkIndex = Self.chunkIndex(from: chunkPath)
             Task { @MainActor in
                 await AppGenerationTelemetryCoordinator.shared.recordPreviewChunk(
                     chunkIndex: chunkIndex

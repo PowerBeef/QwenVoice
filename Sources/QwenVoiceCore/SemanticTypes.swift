@@ -293,13 +293,13 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
         engineKind: EngineImplementationKind? = nil,
         routingPolicy: EngineRoutingPolicy? = nil,
         warmState: EngineWarmState? = nil,
-        tokenCount: Int?,
-        processingTimeSeconds: Double?,
-        peakMemoryUsage: Double?,
+        tokenCount: Int? = nil,
+        processingTimeSeconds: Double? = nil,
+        peakMemoryUsage: Double? = nil,
         streamingUsed: Bool,
-        preparedCloneUsed: Bool?,
-        cloneCacheHit: Bool?,
-        firstChunkMs: Int?,
+        preparedCloneUsed: Bool? = nil,
+        cloneCacheHit: Bool? = nil,
+        firstChunkMs: Int? = nil,
         peakResidentMB: Double? = nil,
         peakPhysFootprintMB: Double? = nil,
         residentStartMB: Double? = nil,
@@ -407,16 +407,27 @@ public struct EngineActivity: Hashable, Codable, Sendable {
 public enum EngineLoadState: Hashable, Codable, Sendable {
     case idle
     case starting
-    case running(EngineActivity)
-    case error(String)
-    case crashed(String)
+    case loaded(modelID: String)
+    case running(modelID: String?, label: String?, fraction: Double?)
+    case failed(message: String)
 
     public var isReady: Bool {
         switch self {
-        case .idle, .running, .error:
+        case .idle, .loaded, .running, .failed:
             return true
-        case .starting, .crashed:
+        case .starting:
             return false
+        }
+    }
+
+    public var currentModelID: String? {
+        switch self {
+        case .loaded(let modelID):
+            return modelID
+        case .running(let modelID, _, _):
+            return modelID
+        case .idle, .starting, .failed:
+            return nil
         }
     }
 }
@@ -444,6 +455,34 @@ public struct ClonePreparationState: Hashable, Codable, Sendable {
     }
 
     public static let idle = ClonePreparationState(phase: .idle)
+
+    public static func preparing(key: String?) -> ClonePreparationState {
+        ClonePreparationState(phase: .preparing, identityKey: key)
+    }
+
+    public static func primed(key: String?) -> ClonePreparationState {
+        ClonePreparationState(phase: .primed, identityKey: key)
+    }
+
+    public static func failed(key: String?, message: String?) -> ClonePreparationState {
+        ClonePreparationState(phase: .failed, identityKey: key, message: message)
+    }
+
+    public var key: String? {
+        identityKey
+    }
+
+    public var errorMessage: String? {
+        phase == .failed ? message : nil
+    }
+
+    public var isPreparingOrPrimed: Bool {
+        phase == .preparing || phase == .primed
+    }
+
+    public var isPrimed: Bool {
+        phase == .primed
+    }
 }
 
 public struct GenerationRequest: Hashable, Codable, Sendable {
@@ -461,6 +500,7 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
     public let streamingInterval: Double?
     public let batchIndex: Int?
     public let batchTotal: Int?
+    public let streamingTitle: String?
     public let payload: Payload
 
     public init(
@@ -472,6 +512,7 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         streamingInterval: Double? = nil,
         batchIndex: Int? = nil,
         batchTotal: Int? = nil,
+        streamingTitle: String? = nil,
         payload: Payload
     ) {
         self.mode = mode
@@ -482,7 +523,47 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         self.streamingInterval = streamingInterval
         self.batchIndex = batchIndex
         self.batchTotal = batchTotal
+        self.streamingTitle = streamingTitle
         self.payload = payload
+    }
+
+    public init(
+        modelID: String,
+        text: String,
+        outputPath: String,
+        shouldStream: Bool = false,
+        streamingInterval: Double? = nil,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil,
+        streamingTitle: String? = nil,
+        payload: Payload
+    ) {
+        let resolvedMode: GenerationMode
+        switch payload {
+        case .custom:
+            resolvedMode = .custom
+        case .design:
+            resolvedMode = .design
+        case .clone:
+            resolvedMode = .clone
+        }
+
+        self.init(
+            mode: resolvedMode,
+            modelID: modelID,
+            text: text,
+            outputPath: outputPath,
+            shouldStream: shouldStream,
+            streamingInterval: streamingInterval,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal,
+            streamingTitle: streamingTitle,
+            payload: payload
+        )
+    }
+
+    public var modeIdentifier: String {
+        mode.rawValue
     }
 }
 
@@ -498,8 +579,9 @@ public struct GenerationProgress: Hashable, Codable, Sendable {
 
 public struct GenerationChunk: Hashable, Codable, Sendable {
     public let requestID: Int?
+    public let mode: String
     public let title: String
-    public let chunkPath: String
+    public let chunkPath: String?
     public let isFinal: Bool
     public let chunkDurationSeconds: Double?
     public let cumulativeDurationSeconds: Double?
@@ -507,14 +589,16 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
 
     public init(
         requestID: Int? = nil,
+        mode: String,
         title: String,
-        chunkPath: String,
+        chunkPath: String?,
         isFinal: Bool,
         chunkDurationSeconds: Double?,
         cumulativeDurationSeconds: Double?,
         streamSessionDirectory: String?
     ) {
         self.requestID = requestID
+        self.mode = mode
         self.title = title
         self.chunkPath = chunkPath
         self.isFinal = isFinal
@@ -525,10 +609,96 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
 }
 
 public enum GenerationEvent: Hashable, Codable, Sendable {
+    public enum Kind: String, Hashable, Codable, Sendable {
+        case streamChunk
+        case progress
+        case completed
+        case failed
+    }
+
     case progress(GenerationProgress)
     case chunk(GenerationChunk)
     case completed(GenerationResult)
     case failed(String)
+
+    public init(
+        kind: Kind,
+        requestID: Int,
+        mode: String,
+        title: String,
+        chunkPath: String? = nil,
+        isFinal: Bool,
+        chunkDurationSeconds: Double? = nil,
+        cumulativeDurationSeconds: Double? = nil,
+        streamSessionDirectory: String? = nil
+    ) {
+        precondition(kind == .streamChunk, "This initializer only supports chunk events.")
+        self = .chunk(
+            GenerationChunk(
+                requestID: requestID,
+                mode: mode,
+                title: title,
+                chunkPath: chunkPath,
+                isFinal: isFinal,
+                chunkDurationSeconds: chunkDurationSeconds,
+                cumulativeDurationSeconds: cumulativeDurationSeconds,
+                streamSessionDirectory: streamSessionDirectory
+            )
+        )
+    }
+
+    public var kind: Kind {
+        switch self {
+        case .progress:
+            return .progress
+        case .chunk:
+            return .streamChunk
+        case .completed:
+            return .completed
+        case .failed:
+            return .failed
+        }
+    }
+
+    public var requestID: Int? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.requestID
+    }
+
+    public var mode: String? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.mode
+    }
+
+    public var title: String? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.title
+    }
+
+    public var chunkPath: String? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.chunkPath
+    }
+
+    public var isFinal: Bool? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.isFinal
+    }
+
+    public var chunkDurationSeconds: Double? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.chunkDurationSeconds
+    }
+
+    public var cumulativeDurationSeconds: Double? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.cumulativeDurationSeconds
+    }
+
+    public var streamSessionDirectory: String? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.streamSessionDirectory
+    }
 }
 
 public struct TTSEngineSnapshot: Hashable, Codable, Sendable {
@@ -547,5 +717,17 @@ public struct TTSEngineSnapshot: Hashable, Codable, Sendable {
         self.loadState = loadState
         self.clonePreparationState = clonePreparationState
         self.visibleErrorMessage = visibleErrorMessage
+    }
+}
+
+public struct EngineBatchProgressUpdate: Hashable, Codable, Sendable {
+    public let commandID: UUID
+    public let fraction: Double?
+    public let message: String
+
+    public init(commandID: UUID, fraction: Double?, message: String) {
+        self.commandID = commandID
+        self.fraction = fraction
+        self.message = message
     }
 }

@@ -110,7 +110,7 @@ struct VoiceCloningView: View {
         guard let clonePrimingRequestKey else { return nil }
 
         if ttsEngineStore.clonePreparationState.key == clonePrimingRequestKey {
-            switch ttsEngineStore.clonePreparationState {
+            switch ttsEngineStore.clonePreparationState.phase {
             case .idle:
                 break
             case .preparing:

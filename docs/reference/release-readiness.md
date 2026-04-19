@@ -57,6 +57,8 @@ Release-facing metadata and docs should record:
 - the official minimum iPhone device
 - whether minimum-device proof is `pending`, `recorded`, or `not_applicable`
 - whether the TestFlight path was exported locally or uploaded to App Store Connect
+- the current capability and entitlement baseline from `config/apple-platform-capability-matrix.json`
+- the `.xcresult` evidence paths for maintained source/runtime lanes and maintained archive/release lanes when relevant
 
 ## Program Priorities
 
@@ -67,3 +69,10 @@ The current execution order is:
 3. harden the iPhone TestFlight/App Store path
 4. harden engine-extension interruption and recovery behavior
 5. add resumable iPhone model delivery and keep the validation tracker current
+
+## CI Proof Surface
+
+- `Apple Platform Validation` is the maintained clean-state CI proof for project inputs, source/runtime test plans, generic builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
+- `Vocello macOS Release` remains the CI-owned signed/notarized DMG proof path.
+- `Vocello iOS TestFlight` remains the CI-owned archive/export/upload-prep proof path.
+- Local release scripts remain deterministic unsigned/source-validation tools; they are not the repo’s signing or notarization source of truth.

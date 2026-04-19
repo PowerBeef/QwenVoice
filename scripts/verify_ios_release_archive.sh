@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
+
 fail() {
     echo "Error: $*" >&2
     exit 1
@@ -54,6 +57,28 @@ if data.get(key) is not True:
 PY
 }
 
+matrix_read() {
+    local selector="$1"
+    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
+value = data
+    for part in os.environ["MATRIX_SELECTOR"].split("/"):
+        value = value[part]
+
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif isinstance(value, list):
+    for item in value:
+        print(item)
+else:
+    print(value)
+PY
+}
+
 metadata_read() {
     local metadata_path="$1"
     local key="$2"
@@ -72,7 +97,7 @@ verify_app_bundle() {
 
     local bundle_id
     bundle_id="$(plist_read "$info_plist" CFBundleIdentifier)"
-    [ "$bundle_id" = "com.qvoice.ios" ] || fail "$label app bundle identifier mismatch: expected com.qvoice.ios, got ${bundle_id:-missing}"
+    [ "$bundle_id" = "$IOS_APP_BUNDLE_ID" ] || fail "$label app bundle identifier mismatch: expected $IOS_APP_BUNDLE_ID, got ${bundle_id:-missing}"
 
     mapfile -t extension_paths < <(find "$app_path" -type d -name '*.appex' | sort)
     [ "${#extension_paths[@]}" -eq 1 ] || fail "$label app must embed exactly one .appex bundle; found ${#extension_paths[@]}"
@@ -90,22 +115,28 @@ verify_app_bundle() {
 
     local extension_bundle_id
     extension_bundle_id="$(plist_read "$extension_info_plist" CFBundleIdentifier)"
-    [ "$extension_bundle_id" = "com.qvoice.ios.engine-extension" ] || fail "$label extension bundle identifier mismatch: expected com.qvoice.ios.engine-extension, got ${extension_bundle_id:-missing}"
+    [ "$extension_bundle_id" = "$IOS_EXTENSION_BUNDLE_ID" ] || fail "$label extension bundle identifier mismatch: expected $IOS_EXTENSION_BUNDLE_ID, got ${extension_bundle_id:-missing}"
 
     local app_entitlements="$temp_root/${label}_app_entitlements.plist"
     local extension_entitlements="$temp_root/${label}_extension_entitlements.plist"
     entitlements_to_file "$app_path" "$app_entitlements"
     entitlements_to_file "$extension_path" "$extension_entitlements"
 
-    plist_array_contains "$app_entitlements" "com.apple.security.application-groups" "group.com.qvoice.shared" \
-        || fail "$label app is missing App Group group.com.qvoice.shared"
-    plist_array_contains "$extension_entitlements" "com.apple.security.application-groups" "group.com.qvoice.shared" \
-        || fail "$label extension is missing App Group group.com.qvoice.shared"
+    for required_app_group in "${IOS_REQUIRED_APP_GROUPS[@]}"; do
+        plist_array_contains "$app_entitlements" "com.apple.security.application-groups" "$required_app_group" \
+            || fail "$label app is missing App Group $required_app_group"
+        plist_array_contains "$extension_entitlements" "com.apple.security.application-groups" "$required_app_group" \
+            || fail "$label extension is missing App Group $required_app_group"
+    done
 
-    plist_bool_true "$app_entitlements" "com.apple.developer.kernel.increased-memory-limit" \
-        || fail "$label app is missing com.apple.developer.kernel.increased-memory-limit=true"
-    plist_bool_true "$extension_entitlements" "com.apple.developer.kernel.increased-memory-limit" \
-        || fail "$label extension is missing com.apple.developer.kernel.increased-memory-limit=true"
+    if [ "$IOS_APP_EXPECTS_INCREASED_MEMORY_LIMIT" = "true" ]; then
+        plist_bool_true "$app_entitlements" "com.apple.developer.kernel.increased-memory-limit" \
+            || fail "$label app is missing com.apple.developer.kernel.increased-memory-limit=true"
+    fi
+    if [ "$IOS_EXTENSION_EXPECTS_INCREASED_MEMORY_LIMIT" = "true" ]; then
+        plist_bool_true "$extension_entitlements" "com.apple.developer.kernel.increased-memory-limit" \
+            || fail "$label extension is missing com.apple.developer.kernel.increased-memory-limit=true"
+    fi
 }
 
 if [ $# -ne 3 ]; then
@@ -123,6 +154,12 @@ METADATA_PATH="$3"
 ARCHIVE_PATH="$(cd "$(dirname "$ARCHIVE_PATH")" && pwd)/$(basename "$ARCHIVE_PATH")"
 EXPORT_DIR="$(cd "$(dirname "$EXPORT_DIR")" && pwd)/$(basename "$EXPORT_DIR")"
 METADATA_PATH="$(cd "$(dirname "$METADATA_PATH")" && pwd)/$(basename "$METADATA_PATH")"
+
+IOS_APP_BUNDLE_ID="$(matrix_read "iOS/app/bundleIdentifier")"
+IOS_EXTENSION_BUNDLE_ID="$(matrix_read "iOS/extension/bundleIdentifier")"
+mapfile -t IOS_REQUIRED_APP_GROUPS < <(matrix_read "iOS/app/applicationGroups")
+IOS_APP_EXPECTS_INCREASED_MEMORY_LIMIT="$(matrix_read "iOS/app/booleanEntitlements/com.apple.developer.kernel.increased-memory-limit")"
+IOS_EXTENSION_EXPECTS_INCREASED_MEMORY_LIMIT="$(matrix_read "iOS/extension/booleanEntitlements/com.apple.developer.kernel.increased-memory-limit")"
 
 TEMP_ROOT="$(mktemp -d)"
 cleanup() {

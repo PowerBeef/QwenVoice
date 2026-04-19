@@ -98,6 +98,47 @@ final class ExtensionBackedTTSEngineTests: XCTestCase {
         XCTAssertTrue(pingResult)
     }
 
+    func testExtensionBackedEngineAcceptsCapabilityReplyForPing() async throws {
+        let transport = ExtensionEngineTestTransport()
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let engine = ExtensionBackedTTSEngine(
+            modelRegistry: StubModelRegistry(),
+            documentIO: LocalDocumentIO(importedReferenceDirectory: root.appendingPathComponent("imports", isDirectory: true)),
+            transportFactory: { _ in transport }
+        )
+
+        let initializeTask = Task { try await engine.initialize(appSupportDirectory: root) }
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .snapshot(
+                    TTSEngineSnapshot(
+                        isReady: true,
+                        loadState: .idle,
+                        clonePreparationState: .idle,
+                        visibleErrorMessage: nil
+                    )
+                )
+            )
+        )
+        try await initializeTask.value
+
+        let pingTask = Task { try await engine.ping() }
+        try await waitForPerformCallCount(2, transport: transport)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .capabilities(.iOSExtensionDefault)
+            )
+        )
+
+        let pingResult = try await pingTask.value
+        XCTAssertTrue(pingResult)
+    }
+
     func testExtensionBackedEngineMapsCancelledGenerationReplyToCancellationError() async throws {
         let transport = ExtensionEngineTestTransport()
         let root = try makeTemporaryRoot()

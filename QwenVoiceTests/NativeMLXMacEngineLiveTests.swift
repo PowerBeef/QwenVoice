@@ -50,7 +50,7 @@ final class NativeMLXMacEngineLiveTests: XCTestCase {
 
         let sample = try XCTUnwrap(result.benchmarkSample)
         XCTAssertTrue(sample.streamingUsed)
-        XCTAssertFalse(sample.telemetryStageMarks.isEmpty)
+        XCTAssertFalse(sample.telemetryStageMarks?.isEmpty ?? true)
         XCTAssertFalse(sample.timingsMS.isEmpty)
     }
 }

@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import QwenVoiceCore
 import QwenVoiceEngineSupport
 
 protocol NativeStreamingSessionRunning {
@@ -67,9 +68,12 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let sessionDirectory = try makeSessionDirectory()
         let outputURL = URL(fileURLWithPath: request.outputPath)
-        let telemetrySampler = NativeTelemetrySampler(startUptimeSeconds: startedAt)
+        let telemetrySampler = NativeTelemetrySampler(
+            startUptimeSeconds: startedAt,
+            sampleIntervalMS: 50
+        )
         await telemetryRecorder.reset()
-        await telemetryRecorder.mark(stage: .streamStartup)
+        await telemetryRecorder.mark(stage: "stream_startup")
 
         var allSamples: [Float] = []
         var pendingSamples: [Float]?
@@ -137,12 +141,12 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 to: outputURL
             )
 
-            await telemetryRecorder.mark(stage: .streamCompleted)
+            await telemetryRecorder.mark(stage: "stream_completed")
             let stageMarks = await telemetryRecorder.snapshot()
-            let telemetrySummary = await telemetrySampler.stop(stageMarks: stageMarks)
+            let telemetryCapture = await telemetrySampler.stop(stageMarks: stageMarks)
 
             var timingsMS = timingOverridesMS
-            timingsMS["generation_total_ms"] = telemetrySummary.totalTimeMS
+            timingsMS["generation_total_ms"] = telemetryCapture.samples.last?.tMS ?? 0
             if let firstChunkMS {
                 timingsMS["first_chunk_ms"] = firstChunkMS
             }
@@ -179,10 +183,10 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 preparedCloneUsed: cloneConditioning?.preparedCloneUsed,
                 cloneCacheHit: cloneConditioning?.cloneCacheHit,
                 firstChunkMs: firstChunkMS,
+                telemetryStageMarks: telemetryCapture.summary.stageMarks,
                 timingsMS: timingsMS,
                 booleanFlags: resolvedBooleanFlags,
-                stringFlags: resolvedStringFlags,
-                telemetryStageMarks: telemetrySummary.stageMarks
+                stringFlags: resolvedStringFlags
             )
 
             _ = lastChunkPath
@@ -195,13 +199,13 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         } catch is CancellationError {
             try? Self.removeFileIfPresent(at: outputURL)
             await telemetryRecorder.mark(
-                stage: .streamFailed,
+                stage: "stream_failed",
                 metadata: ["error": "cancelled"]
             )
             throw CancellationError()
         } catch {
             await telemetryRecorder.mark(
-                stage: .streamFailed,
+                stage: "stream_failed",
                 metadata: ["error": error.localizedDescription]
             )
             throw error

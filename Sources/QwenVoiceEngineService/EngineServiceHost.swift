@@ -48,6 +48,9 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         let sessionID = UUID()
+        newConnection.setCodeSigningRequirement(
+            EngineServiceTrustPolicy.clientRequirement()
+        )
         newConnection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
         newConnection.exportedObject = self
         newConnection.remoteObjectInterface = NSXPCInterface(with: QwenVoiceEngineClientEventXPCProtocol.self)
@@ -125,7 +128,8 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             try await engine.initialize(appSupportDirectory: URL(fileURLWithPath: appSupportDirectoryPath))
             return .snapshot(engine.snapshot)
         case .ping:
-            return .bool(try await engine.ping())
+            _ = try await engine.ping()
+            return .capabilities(.macOSXPCDefault)
         case .loadModel(let id):
             try await engine.loadModel(id: id)
             return .void

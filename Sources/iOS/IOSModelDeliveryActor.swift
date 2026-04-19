@@ -162,6 +162,7 @@ actor IOSModelDeliveryActor {
     init(
         modelAssetStore: LocalModelAssetStore,
         configuration: IOSModelDeliveryConfiguration = .default(),
+        stateFileURL: URL = AppPaths.modelDeliveryStateFile,
         fileManager: FileManager = .default,
         snapshotSink: @escaping SnapshotSink
     ) {
@@ -169,7 +170,7 @@ actor IOSModelDeliveryActor {
         self.configuration = configuration
         self.fileManager = fileManager
         self.snapshotSink = snapshotSink
-        self.stateFileURL = AppPaths.modelDeliveryStateFile
+        self.stateFileURL = stateFileURL
 
         let delegate = IOSModelDeliveryDownloadDelegate()
         self.delegate = delegate

@@ -266,11 +266,12 @@ final class NativeMLXMacEngineTests: XCTestCase {
             modelID: "pro_clone",
             reference: CloneReference(audioPath: referenceURL.path, transcript: "Reference")
         )
-        guard case .primed(let key) = engine.snapshot.clonePreparationState else {
+        let primedState = engine.snapshot.clonePreparationState
+        guard primedState.phase == .primed else {
             return XCTFail("Expected clone reference to be primed")
         }
         XCTAssertEqual(
-            key,
+            primedState.key,
             GenerationSemantics.clonePreparationKey(
                 modelID: "pro_clone",
                 reference: CloneReference(audioPath: referenceURL.path, transcript: "Reference")
@@ -314,18 +315,19 @@ final class NativeMLXMacEngineTests: XCTestCase {
         }
 
         XCTAssertEqual(engine.snapshot.loadState, .loaded(modelID: "pro_clone"))
-        guard case .failed(let key, let message) = engine.snapshot.clonePreparationState else {
+        let failedState = engine.snapshot.clonePreparationState
+        guard failedState.phase == .failed else {
             return XCTFail("Expected failed clone preparation state")
         }
         XCTAssertEqual(
-            key,
+            failedState.key,
             GenerationSemantics.clonePreparationKey(
                 modelID: "pro_clone",
                 reference: CloneReference(audioPath: missingReference.path, transcript: "Reference")
             )
         )
-        XCTAssertNotNil(message)
-        XCTAssertEqual(engine.snapshot.visibleErrorMessage, message)
+        XCTAssertNotNil(failedState.errorMessage)
+        XCTAssertEqual(engine.snapshot.visibleErrorMessage, failedState.errorMessage)
     }
 
     func testNativeMLXMacEngineGeneratesCustomAudioAndPublishesChunkEvents() async throws {
@@ -418,7 +420,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
 
         XCTAssertEqual(observedEvents.count, 2)
         XCTAssertEqual(observedEvents.first?.isFinal, false)
-        XCTAssertTrue(observedEvents.dropFirst().allSatisfy(\.isFinal))
+        XCTAssertTrue(observedEvents.dropFirst().allSatisfy { $0.isFinal == true })
         XCTAssertEqual(observedEvents.last?.isFinal, true)
         XCTAssertEqual(engine.snapshot.loadState.currentModelID, "pro_custom")
         XCTAssertNil(engine.snapshot.visibleErrorMessage)
@@ -428,7 +430,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertEqual(sample.tokenCount, 34)
         XCTAssertEqual(sample.booleanFlags["custom_dedicated_handler_used"], true)
         XCTAssertNotNil(sample.firstChunkMs)
-        XCTAssertFalse(sample.telemetryStageMarks.isEmpty)
+        XCTAssertFalse(sample.telemetryStageMarks?.isEmpty ?? true)
     }
 
     func testNativeMLXMacEngineGenerateBatchSupportsHomogeneousCustomRequests() async throws {

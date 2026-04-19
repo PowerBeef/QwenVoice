@@ -9,6 +9,11 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = PROJECT_DIR / "Sources" / "Resources" / "qwenvoice_contract.json"
 STUB_BACKEND_TRANSPORT_PATH = PROJECT_DIR / "Sources" / "Services" / "StubBackendTransport.swift"
+BUILD_ROOT = PROJECT_DIR / "build"
+HARNESS_ROOT = BUILD_ROOT / "harness"
+HARNESS_DERIVED_DATA_ROOT = HARNESS_ROOT / "derived-data"
+HARNESS_RESULT_BUNDLES_ROOT = HARNESS_ROOT / "results"
+HARNESS_SOURCE_PACKAGES_ROOT = HARNESS_ROOT / "source-packages"
 APP_SUPPORT_DIR = Path(
     os.environ.get(
         "QWENVOICE_APP_SUPPORT_DIR",
@@ -34,5 +39,13 @@ def resolve_ffmpeg_binary() -> str | None:
 
 def ensure_directory(path: Path) -> Path:
     """Create a directory and parents if they do not already exist."""
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def reset_directory(path: Path) -> Path:
+    """Remove and recreate a directory."""
+    if path.exists():
+        shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
     return path

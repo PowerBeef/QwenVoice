@@ -79,7 +79,7 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["contract", "swift", "native", "audio", "all"],
+        choices=["contract", "swift", "native", "ios", "audio", "all"],
         default="all",
     )
     p_test.add_argument(

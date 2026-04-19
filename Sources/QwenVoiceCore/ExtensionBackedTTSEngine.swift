@@ -2,15 +2,7 @@ import Combine
 import ExtensionFoundation
 import Foundation
 
-public enum ExtensionEngineLifecycleState: String, Codable, Equatable, Sendable {
-    case idle
-    case connecting
-    case connected
-    case interrupted
-    case invalidated
-    case recovering
-    case failed
-}
+public typealias ExtensionEngineLifecycleState = EngineLifecycleState
 
 @MainActor
 public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
@@ -61,10 +53,25 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
             modelRegistry: modelRegistry,
             documentIO: documentIO,
             transportFactory: { handlers in
-                try await AppExtensionProcessTransport(
-                    identityResolver: identityResolver,
+                let identity = try await identityResolver()
+                return try await AppExtensionProcessTransport(
+                    identity: identity,
                     handlers: handlers
                 )
+            }
+        )
+    }
+
+    public convenience init<Identity: Sendable>(
+        modelRegistry: any ModelRegistry,
+        documentIO: any DocumentIO,
+        hostManager: ExtensionEngineHostManager<Identity>
+    ) {
+        self.init(
+            modelRegistry: modelRegistry,
+            documentIO: documentIO,
+            transportFactory: { handlers in
+                try await hostManager.makeTransport(handlers: handlers)
             }
         )
     }
@@ -109,10 +116,14 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
 
     public func ping() async throws -> Bool {
         let reply = try await coordinator.send(.ping)
-        guard case .bool(let value) = reply else {
+        switch reply {
+        case .bool(let value):
+            return value
+        case .capabilities:
+            return true
+        default:
             throw ExtensionEngineTransportError.invalidReply
         }
-        return value
     }
 
     public func loadModel(id: String) async throws {
@@ -251,7 +262,7 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
             return
         }
 
-        if case .crashed = loadState {
+        if case .failed = loadState {
             loadState = .idle
         }
         visibleErrorMessage = nil

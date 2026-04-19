@@ -29,7 +29,7 @@ This repo now carries one Apple-platform codebase with a shared engine core and 
 
 Shared engine core:
 
-- `Sources/QwenVoiceCore/` for semantic types, contract-backed model descriptors, platform-specific artifact resolution, low-RAM iPhone policy, and engine-extension IPC
+- `Sources/QwenVoiceCore/` for the repo-owned semantic source of truth, contract-backed model descriptors, shared lifecycle/capability primitives, platform-specific artifact resolution, low-RAM iPhone policy, and engine-extension IPC
 
 macOS runtime split:
 
@@ -45,6 +45,11 @@ iPhone runtime split:
 - `Sources/iOSSupport/` for iPhone-only support services, paths, and model-delivery layers
 - `Sources/SharedSupport/` for cross-platform playback state, generation persistence, and other shared app-layer helpers
 - `Sources/iOSEngineExtension/` for the isolated engine-extension process hosted through ExtensionFoundation
+
+iPhone host ownership:
+
+- `Sources/iOS/VocelloEngineExtensionPoint.swift` owns monitor-backed extension discovery and preferred-identity selection
+- `Sources/QwenVoiceCore/ExtensionEngineHostManager.swift` owns active transport replacement, invalidation, and teardown for the iPhone host/runtime boundary
 
 Vendored native backend boundary:
 
@@ -85,6 +90,7 @@ Platform-specific install policy:
 - iPhone memory policy lives in `Sources/QwenVoiceCore/IOSMemorySnapshot.swift` and the iPhone `TTSEngineStore` / app shell layers.
 - The shared memory bands are `healthy`, `guarded`, and `critical`.
 - iPhone shell code reacts to memory and thermal pressure and can trim or unload proactively.
+- The iPhone App Group surface is intentionally limited to the shared app-support subtree rooted by `Sources/iOSSupport/Services/AppPaths.swift` for models, downloads, outputs, voices, and required cache state; no parallel shared-user-defaults channel is maintained.
 - The repo’s supported minimum-hardware path is “smooth and reliable on the default path,” not “every optional quality mode is guaranteed on floor hardware.”
 
 ## Distribution
@@ -108,11 +114,12 @@ Project and automation source of truth:
 - `project.yml`
 - `scripts/`
 - `.github/workflows/`
+- `config/apple-platform-capability-matrix.json`
 
 Active GitHub workflows:
 
 - `Project Inputs`
-- `Apple Platform Validation`
+- `Apple Platform Validation` for plan-backed source/runtime lanes, generic macOS/iPhone builds, unsigned release verification, and `.xcresult` artifact upload
 - `Vocello macOS Release`
 - `Vocello iOS TestFlight`
 
@@ -124,6 +131,7 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
+python3 scripts/harness.py test --layer ios
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
 python3 scripts/check_ios_catalog.py
@@ -134,6 +142,15 @@ python3 scripts/check_ios_catalog.py
 `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` still enables the opt-in macOS live smoke test against an installed model.
 
 Visual and interaction verification remains partly manual through local Computer Use passes after the cheap source gates are green.
+
+The maintained foundation paths now use:
+
+- committed Xcode test plans for source and runtime-oriented suites
+- explicit harness package-resolution roots under `build/harness/source-packages/`
+- explicit harness derived-data roots under `build/harness/derived-data/`
+- explicit `.xcresult` bundles under `build/harness/results/`
+- explicit release build roots under `build/foundation/`
+- explicit archive/release `.xcresult` bundles under `build/foundation/` for the maintained CI release paths
 
 ## Current Documentation Boundaries
 

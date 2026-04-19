@@ -124,9 +124,7 @@ extension QVoiceiOSApp {
         let engine = ExtensionBackedTTSEngine(
             modelRegistry: registry,
             documentIO: documentIO,
-            identityResolver: {
-                try await VocelloEngineIdentityResolver.resolveIdentity()
-            }
+            hostManager: VocelloEngineHostManager.shared
         )
         let engineStore = TTSEngineStore(
             backend: AnyTTSEngineBackend(

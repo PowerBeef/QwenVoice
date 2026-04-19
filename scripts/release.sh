@@ -7,6 +7,10 @@ PROJECT_FILE="$PROJECT_DIR/QwenVoice.xcodeproj"
 SCHEME="QwenVoice"
 CONFIGURATION="Release"
 BUILD_DIR="$PROJECT_DIR/build"
+FOUNDATION_BUILD_ROOT="$BUILD_DIR/foundation"
+SOURCE_PACKAGES_DIR="$FOUNDATION_BUILD_ROOT/source-packages"
+DERIVED_DATA_PATH="$FOUNDATION_BUILD_ROOT/macos-release-derived-data"
+BUILD_RESULT_BUNDLE_PATH="$FOUNDATION_BUILD_ROOT/macos-release-build.xcresult"
 DEFAULT_OUTPUT_NAME="Vocello-macos26"
 TOTAL_START="$(date +%s)"
 
@@ -151,25 +155,43 @@ fi
 echo ""
 
 mkdir -p "$BUILD_DIR"
+mkdir -p "$FOUNDATION_BUILD_ROOT" "$SOURCE_PACKAGES_DIR"
 SHOW_BUILD_SETTINGS_LOG="$BUILD_DIR/release-build-settings.log"
 
 STEP_START="$(date +%s)"
-echo "[1/6] Regenerating Xcode project..."
+echo "[1/7] Regenerating Xcode project..."
 "$SCRIPT_DIR/regenerate_project.sh"
-echo "[1/6] Regenerate project — done ($(step_time "$STEP_START"))"
+echo "[1/7] Regenerate project — done ($(step_time "$STEP_START"))"
+echo ""
+
+STEP_START="$(date +%s)"
+echo "[2/7] Resolving pinned Swift packages..."
+xcodebuild -project "$PROJECT_FILE" \
+    -scheme "$SCHEME" \
+    -destination "platform=macOS,arch=arm64" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -resolvePackageDependencies
+echo "[2/7] Resolve pinned Swift packages — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
 if $SKIP_BUILD; then
-    echo "[2/6] Build Release — skipped"
+    echo "[3/7] Build Release — skipped"
 else
-    echo "[2/6] Building macOS Release app..."
+    echo "[3/7] Building macOS Release app..."
     rm -f "$BUILD_DIR/xcodebuild-release.log"
+    rm -rf "$DERIVED_DATA_PATH"
+    rm -rf "$BUILD_RESULT_BUNDLE_PATH"
     set +e
     xcodebuild -project "$PROJECT_FILE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
         -destination "platform=macOS,arch=arm64" \
+        -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+        -disableAutomaticPackageResolution \
+        -derivedDataPath "$DERIVED_DATA_PATH" \
+        -resultBundlePath "$BUILD_RESULT_BUNDLE_PATH" \
+        -resultBundleVersion 3 \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         ONLY_ACTIVE_ARCH=YES \
@@ -181,15 +203,18 @@ else
         release_fail "xcodebuild failed (see $BUILD_DIR/xcodebuild-release.log)"
     fi
 fi
-echo "[2/6] Build Release — done ($(step_time "$STEP_START"))"
+echo "[3/7] Build Release — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[3/6] Resolving and copying built app..."
+echo "[4/7] Resolving and copying built app..."
 xcodebuild -project "$PROJECT_FILE" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination "platform=macOS,arch=arm64" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -disableAutomaticPackageResolution \
+    -derivedDataPath "$DERIVED_DATA_PATH" \
     -showBuildSettings > "$SHOW_BUILD_SETTINGS_LOG"
 resolve_build_metadata "$SHOW_BUILD_SETTINGS_LOG"
 
@@ -207,31 +232,31 @@ find "$APP_RESOURCES" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null 
 find "$APP_RESOURCES" -name "*.pyc" -delete 2>/dev/null || true
 find "$APP_RESOURCES" -name "*.whl" -delete 2>/dev/null || true
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$APP_PATH" >/dev/null
-echo "[3/6] App copied to $APP_PATH ($(step_time "$STEP_START"))"
+echo "[4/7] App copied to $APP_PATH ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[4/6] Signing and verifying the final app bundle..."
+echo "[5/7] Signing and verifying the final app bundle..."
 run_codesign "$APP_PATH" \
     --options runtime \
     --entitlements "$PROJECT_DIR/Sources/QwenVoice.entitlements"
 codesign --verify --deep --strict "$APP_PATH"
 "$SCRIPT_DIR/verify_release_bundle.sh" "$APP_PATH"
-echo "[4/6] Final app bundle verified ($(step_time "$STEP_START"))"
+echo "[5/7] Final app bundle verified ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[5/6] Creating and signing the DMG..."
+echo "[6/7] Creating and signing the DMG..."
 "$SCRIPT_DIR/create_dmg.sh" "$APP_PATH" "$OUTPUT_NAME"
 DMG_PATH="$BUILD_DIR/${OUTPUT_NAME}.dmg"
 [ -f "$DMG_PATH" ] || release_fail "Created DMG is missing: $DMG_PATH"
 run_codesign "$DMG_PATH"
 codesign --verify --verbose=4 "$DMG_PATH"
-echo "[5/6] DMG ready at $DMG_PATH ($(step_time "$STEP_START"))"
+echo "[6/7] DMG ready at $DMG_PATH ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[6/6] Writing release metadata..."
+echo "[7/7] Writing release metadata..."
 APP_BINARY="$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME"
 extract_otool_field() {
     local field="$1"
@@ -265,7 +290,7 @@ METADATA_PATH="$BUILD_DIR/release-metadata.txt"
     echo "app_executable_name=$EXECUTABLE_NAME"
     echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 } > "$METADATA_PATH"
-echo "[6/6] Release metadata written to $METADATA_PATH ($(step_time "$STEP_START"))"
+echo "[7/7] Release metadata written to $METADATA_PATH ($(step_time "$STEP_START"))"
 echo ""
 
 TOTAL_ELAPSED="$(( $(date +%s) - TOTAL_START ))"

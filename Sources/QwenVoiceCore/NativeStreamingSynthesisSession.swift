@@ -427,6 +427,7 @@ private struct StreamingExecutionContext: Sendable {
                     let chunkEvent = GenerationEvent.chunk(
                         GenerationChunk(
                             requestID: requestID,
+                            mode: request.modeIdentifier,
                             title: previewTitle,
                             chunkPath: chunkURL.path,
                             isFinal: false,

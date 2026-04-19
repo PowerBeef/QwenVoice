@@ -361,10 +361,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         chunkCancellable = GenerationChunkBroker.shared.publisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
-                guard let self, let chunkPath = event.chunkPath else { return }
+                guard let self,
+                      let requestID = event.requestID,
+                      let title = event.title,
+                      let chunkPath = event.chunkPath else { return }
                 let chunk = ChunkInfo(
-                    requestID: event.requestID,
-                    title: event.title,
+                    requestID: requestID,
+                    title: title,
                     chunkPath: chunkPath,
                     sessionDirectory: event.streamSessionDirectory,
                     cumulativeDuration: event.cumulativeDurationSeconds

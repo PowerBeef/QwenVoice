@@ -1,44 +1,13 @@
 import Foundation
+import QwenVoiceCore
 
 public let QwenVoiceEngineServiceBundleIdentifier = "com.qwenvoice.app.engine-service"
 
-public enum RemoteErrorCode: String, Codable, Equatable, Sendable {
-    case generic
-    case cancelled
-}
-
-public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, LocalizedError {
-    public let message: String
-    public let domain: String?
-    public let code: RemoteErrorCode
-
-    public init(
-        message: String,
-        domain: String? = nil,
-        code: RemoteErrorCode = .generic
-    ) {
-        self.message = message
-        self.domain = domain
-        self.code = code
-    }
-
-    public var errorDescription: String? {
-        message
-    }
-
-    public static func make(for error: Error) -> RemoteErrorPayload {
-        if let remoteError = error as? RemoteErrorPayload {
-            return remoteError
-        }
-        let nsError = error as NSError
-        let code: RemoteErrorCode = error is CancellationError ? .cancelled : .generic
-        return RemoteErrorPayload(
-            message: nsError.localizedDescription,
-            domain: nsError.domain,
-            code: code
-        )
-    }
-}
+public typealias RemoteErrorCode = QwenVoiceCore.RemoteErrorCode
+public typealias RemoteErrorPayload = QwenVoiceCore.RemoteErrorPayload
+public typealias EngineCapabilities = QwenVoiceCore.EngineCapabilities
+public typealias EngineLifecycleState = QwenVoiceCore.EngineLifecycleState
+public typealias EngineServiceCodec = QwenVoiceCore.QwenVoiceWireCodec
 
 public struct EngineRequestEnvelope: Codable, Equatable, Sendable {
     public let id: UUID
@@ -82,6 +51,7 @@ public struct EngineReplyEnvelope: Codable, Equatable, Sendable {
 public enum EngineReply: Codable, Equatable, Sendable {
     case void
     case bool(Bool)
+    case capabilities(EngineCapabilities)
     case generationResult(GenerationResult)
     case generationResults([GenerationResult])
     case preparedVoice(PreparedVoice)
@@ -94,19 +64,6 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
     case snapshot(TTSEngineSnapshot)
     case batchProgress(EngineBatchProgressUpdate)
     case generationChunk(GenerationEvent)
-}
-
-public enum EngineServiceCodec {
-    private static let encoder = JSONEncoder()
-    private static let decoder = JSONDecoder()
-
-    public static func encode<T: Encodable>(_ value: T) throws -> Data {
-        try encoder.encode(value)
-    }
-
-    public static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        try decoder.decode(T.self, from: data)
-    }
 }
 
 @objc public protocol QwenVoiceEngineClientEventXPCProtocol {

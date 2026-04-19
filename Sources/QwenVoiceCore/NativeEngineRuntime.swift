@@ -90,7 +90,7 @@ struct NativePreparedGeneration: Sendable {
     let wasPrimed: Bool
 }
 
-public struct InteractivePrefetchDiagnostics: Codable, Sendable {
+public struct InteractivePrefetchDiagnostics: Codable, Equatable, Sendable {
     public let timingsMS: [String: Int]
     public let booleanFlags: [String: Bool]
     public let requestKey: String?

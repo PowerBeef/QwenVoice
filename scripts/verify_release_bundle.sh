@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
 
 fail() {
@@ -25,6 +26,26 @@ codesign_has_runtime_metadata() {
     grep -q "Runtime Version" <<<"$codesign_output"
 }
 
+matrix_read() {
+    local selector="$1"
+    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
+value = data
+for part in os.environ["MATRIX_SELECTOR"].split("/"):
+    value = value[part]
+
+if isinstance(value, list):
+    for item in value:
+        print(item)
+else:
+    print(value)
+PY
+}
+
 if [ $# -ne 1 ]; then
     fail "Usage: $0 /path/to/QwenVoice.app|/path/to/Vocello.app"
 fi
@@ -35,14 +56,21 @@ APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 
 APP_INFO_PLIST="$APP_PATH/Contents/Info.plist"
 [ -f "$APP_INFO_PLIST" ] || fail "Missing app Info.plist: $APP_INFO_PLIST"
+EXPECTED_APP_BUNDLE_ID="$(matrix_read "macOS/app/bundleIdentifier")"
+EXPECTED_XPC_BUNDLE_ID="$(matrix_read "macOS/xpcService/bundleIdentifier")"
+mapfile -t REQUIRED_ABSENT_RESOURCE_PATHS < <(matrix_read "macOS/app/requiredAbsentResourcePaths")
 
 APP_EXECUTABLE_NAME="$(plist_read "$APP_INFO_PLIST" CFBundleExecutable)"
 [ -n "$APP_EXECUTABLE_NAME" ] || fail "Could not resolve app executable name from $APP_INFO_PLIST"
 APP_BINARY="$APP_PATH/Contents/MacOS/$APP_EXECUTABLE_NAME"
+APP_BUNDLE_ID="$(plist_read "$APP_INFO_PLIST" CFBundleIdentifier)"
+[ "$APP_BUNDLE_ID" = "$EXPECTED_APP_BUNDLE_ID" ] || fail "App bundle identifier mismatch: expected $EXPECTED_APP_BUNDLE_ID, got ${APP_BUNDLE_ID:-missing}"
 
 XPC_SERVICE_PATH="$(find "$APP_PATH/Contents/XPCServices" -maxdepth 1 -name '*.xpc' -type d | head -n1 || true)"
 [ -n "$XPC_SERVICE_PATH" ] || fail "Bundled XPC service missing inside $APP_PATH/Contents/XPCServices"
 XPC_INFO_PLIST="$XPC_SERVICE_PATH/Contents/Info.plist"
+XPC_BUNDLE_ID="$(plist_read "$XPC_INFO_PLIST" CFBundleIdentifier)"
+[ "$XPC_BUNDLE_ID" = "$EXPECTED_XPC_BUNDLE_ID" ] || fail "Bundled XPC service bundle identifier mismatch: expected $EXPECTED_XPC_BUNDLE_ID, got ${XPC_BUNDLE_ID:-missing}"
 XPC_EXECUTABLE_NAME="$(plist_read "$XPC_INFO_PLIST" CFBundleExecutable)"
 [ -n "$XPC_EXECUTABLE_NAME" ] || fail "Could not resolve XPC executable name from $XPC_INFO_PLIST"
 XPC_SERVICE_BINARY="$XPC_SERVICE_PATH/Contents/MacOS/$XPC_EXECUTABLE_NAME"
@@ -70,6 +98,11 @@ echo "[1/4] Checking native bundle contents..."
 [ -d "$XPC_SERVICE_PATH" ] || fail "Bundled XPC service missing: $XPC_SERVICE_PATH"
 [ -x "$XPC_SERVICE_BINARY" ] || fail "Bundled XPC service binary missing: $XPC_SERVICE_BINARY"
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --app-bundle "$APP_PATH" >/dev/null
+for required_absent_path in "${REQUIRED_ABSENT_RESOURCE_PATHS[@]}"; do
+    if [ -e "$APP_PATH/$required_absent_path" ]; then
+        fail "Forbidden packaged path is present: $required_absent_path"
+    fi
+done
 if find "$RESOURCES_DIR" -name "*.whl" -print -quit | grep -q .; then
     fail "Vendored wheel files must not be packaged into the native app bundle"
 fi

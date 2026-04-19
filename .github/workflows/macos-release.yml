@@ -188,6 +188,7 @@ jobs:
             build/Vocello-macos26.dmg.sha256
             build/release-metadata.txt
             build/notary-submit.json
+            build/foundation/macos-release-build.xcresult
 
       - name: Publish GitHub release assets
         if: ${{ inputs.release_tag != '' }}

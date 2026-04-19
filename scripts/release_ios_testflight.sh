@@ -4,7 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_FILE="$PROJECT_DIR/QwenVoice.xcodeproj"
+MATRIX_PATH="$PROJECT_DIR/config/apple-platform-capability-matrix.json"
 BUILD_DIR="$PROJECT_DIR/build"
+FOUNDATION_BUILD_ROOT="$BUILD_DIR/foundation"
+SOURCE_PACKAGES_DIR="$FOUNDATION_BUILD_ROOT/source-packages"
+DERIVED_DATA_PATH="$FOUNDATION_BUILD_ROOT/ios-testflight-derived-data"
+ARCHIVE_RESULT_BUNDLE_PATH="$FOUNDATION_BUILD_ROOT/ios-testflight-archive.xcresult"
 ARCHIVE_PATH="$BUILD_DIR/VocelloiOS-TestFlight.xcarchive"
 EXPORT_DIR="$BUILD_DIR/vocello_ios_testflight_export"
 EXPORT_OPTIONS_PLIST="$BUILD_DIR/vocello_ios_testflight_export_options.plist"
@@ -12,7 +17,6 @@ METADATA_PATH="$BUILD_DIR/vocello_ios_testflight_release_metadata.txt"
 SCHEME="VocelloiOS"
 CONFIGURATION="Release"
 TEAM_ID="${QVOICE_IOS_TEAM_ID:-FK2D8X36G2}"
-BUNDLE_ID="com.qvoice.ios"
 CATALOG_URL="${QVOICE_IOS_MODEL_CATALOG_URL:-https://downloads.qvoice.app/ios/catalog/v1/models.json}"
 VALIDATED_DEVICE_MODEL="${QVOICE_IOS_VALIDATED_DEVICE_MODEL:-unrecorded}"
 VALIDATED_DEVICE_OS="${QVOICE_IOS_VALIDATED_DEVICE_OS:-unrecorded}"
@@ -23,6 +27,23 @@ MINIMUM_DEVICE_PROOF_STATUS="${QVOICE_IOS_MINIMUM_DEVICE_PROOF_STATUS:-pending}"
 DESTINATION_MODE="export"
 SKIP_CATALOG_CHECK=false
 SKIP_ARCHIVE=false
+
+matrix_read() {
+    local selector="$1"
+    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
+value = data
+for part in os.environ["MATRIX_SELECTOR"].split("/"):
+    value = value[part]
+print(value)
+PY
+}
+
+BUNDLE_ID="$(matrix_read "iOS/app/bundleIdentifier")"
 
 usage() {
     cat <<EOF
@@ -79,7 +100,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-mkdir -p "$BUILD_DIR"
+mkdir -p "$BUILD_DIR" "$FOUNDATION_BUILD_ROOT" "$SOURCE_PACKAGES_DIR"
 
 step_time() {
     local start="$1"
@@ -152,19 +173,29 @@ echo "  validation target: $OWNED_DEVICE_VALIDATION_TARGET"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[1/6] Regenerating Xcode project..."
+echo "[1/8] Regenerating Xcode project..."
 "$SCRIPT_DIR/regenerate_project.sh"
-echo "[1/6] Regenerate project — done ($(step_time "$STEP_START"))"
+echo "[1/8] Regenerate project — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
 if $SKIP_CATALOG_CHECK; then
-    echo "[2/6] Hosted catalog check — skipped"
+    echo "[2/8] Hosted catalog check — skipped"
 else
-    echo "[2/6] Validating hosted iPhone catalog..."
+    echo "[2/8] Validating hosted iPhone catalog..."
     python3 "$SCRIPT_DIR/check_ios_catalog.py" --url "$CATALOG_URL"
-    echo "[2/6] Hosted catalog check — done ($(step_time "$STEP_START"))"
+    echo "[2/8] Hosted catalog check — done ($(step_time "$STEP_START"))"
 fi
+echo ""
+
+STEP_START="$(date +%s)"
+echo "[3/8] Resolving pinned Swift packages..."
+xcodebuild -project "$PROJECT_FILE" \
+    -scheme "$SCHEME" \
+    -destination "generic/platform=iOS" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -resolvePackageDependencies
+echo "[3/8] Resolve pinned Swift packages — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
@@ -173,34 +204,41 @@ if $SKIP_ARCHIVE; then
         echo "Error: --skip-archive requested, but no archive exists at $ARCHIVE_PATH" >&2
         exit 1
     fi
-    echo "[3/6] Archive Release iPhone build — skipped"
+    echo "[4/8] Archive Release iPhone build — skipped"
 else
-    echo "[3/6] Archiving Release iPhone build..."
+    echo "[4/8] Archiving Release iPhone build..."
     rm -rf "$ARCHIVE_PATH"
+    rm -rf "$DERIVED_DATA_PATH"
+    rm -rf "$ARCHIVE_RESULT_BUNDLE_PATH"
     xcodebuild -project "$PROJECT_FILE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
         -destination "generic/platform=iOS" \
+        -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+        -disableAutomaticPackageResolution \
+        -derivedDataPath "$DERIVED_DATA_PATH" \
+        -resultBundlePath "$ARCHIVE_RESULT_BUNDLE_PATH" \
+        -resultBundleVersion 3 \
         -archivePath "$ARCHIVE_PATH" \
         -allowProvisioningUpdates \
         "${AUTH_ARGS[@]}" \
         archive
-    echo "[3/6] Archive Release iPhone build — done ($(step_time "$STEP_START"))"
+    echo "[4/8] Archive Release iPhone build — done ($(step_time "$STEP_START"))"
 fi
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[4/6] Checking distribution signing prerequisites..."
+echo "[5/8] Checking distribution signing prerequisites..."
 if has_distribution_identity; then
-    echo "[4/6] Distribution signing preflight — found Apple Distribution identity ($(step_time "$STEP_START"))"
+    echo "[5/8] Distribution signing preflight — found Apple Distribution identity ($(step_time "$STEP_START"))"
 else
-    echo "[4/6] Distribution signing preflight — no Apple Distribution identity found ($(step_time "$STEP_START"))"
+    echo "[5/8] Distribution signing preflight — no Apple Distribution identity found ($(step_time "$STEP_START"))"
     print_signing_guidance
 fi
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[5/6] Exporting TestFlight package..."
+echo "[6/8] Exporting TestFlight package..."
 rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 write_export_options
@@ -217,12 +255,12 @@ xcodebuild -exportArchive \
         exit 1
     }
 
-echo "[5/6] Export TestFlight package — done ($(step_time "$STEP_START"))"
+echo "[6/8] Export TestFlight package — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[6/7] Writing release metadata..."
-SHOW_BUILD_SETTINGS="$(xcodebuild -project "$PROJECT_FILE" -scheme "$SCHEME" -configuration "$CONFIGURATION" -showBuildSettings 2>/dev/null)"
+echo "[7/8] Writing release metadata..."
+SHOW_BUILD_SETTINGS="$(xcodebuild -project "$PROJECT_FILE" -scheme "$SCHEME" -configuration "$CONFIGURATION" -destination 'generic/platform=iOS' -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" -disableAutomaticPackageResolution -derivedDataPath "$DERIVED_DATA_PATH" -showBuildSettings 2>/dev/null)"
 MARKETING_VERSION="$(printf '%s\n' "$SHOW_BUILD_SETTINGS" | awk -F' = ' '/MARKETING_VERSION/ {print $2; exit}')"
 CURRENT_PROJECT_VERSION="$(printf '%s\n' "$SHOW_BUILD_SETTINGS" | awk -F' = ' '/CURRENT_PROJECT_VERSION/ {print $2; exit}')"
 COMMIT_SHA="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
@@ -260,14 +298,14 @@ fi
     echo "testflight_internal_only=true"
 } > "$METADATA_PATH"
 
-echo "[6/7] Write release metadata — done ($(step_time "$STEP_START"))"
+echo "[7/8] Write release metadata — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
-echo "[7/7] Verifying archive/export structure..."
+echo "[8/8] Verifying archive/export structure..."
 "$SCRIPT_DIR/verify_ios_release_archive.sh" "$ARCHIVE_PATH" "$EXPORT_DIR" "$METADATA_PATH"
 echo "archive_verification_status=passed" >> "$METADATA_PATH"
-echo "[7/7] Archive/export verification — done ($(step_time "$STEP_START"))"
+echo "[8/8] Archive/export verification — done ($(step_time "$STEP_START"))"
 echo ""
 
 echo "Vocello iPhone release build complete."

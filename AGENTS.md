@@ -25,8 +25,9 @@ The main working surfaces are:
 - `Sources/iOSEngineExtension/` for the isolated iPhone engine extension target
 - `Sources/Resources/qwenvoice_contract.json` for shared model, variant, speaker, output, and required-file metadata
 - `scripts/` plus `.github/workflows/` for validation, release packaging, and CI behavior
+- `config/apple-platform-capability-matrix.json` for the maintained cross-platform capability, bundle-identity, and entitlement baseline used by release verification
 
-This checkout is native-only. Do not reintroduce a repo-owned Python backend, Python setup path, or standalone CLI surface.
+This checkout is a native Apple-platform codebase for macOS and iPhone. Do not reintroduce a repo-owned Python backend, Python setup path, or standalone CLI surface.
 
 ## Maintained Docs
 
@@ -40,7 +41,7 @@ The maintained repo docs are:
 - `docs/reference/release-readiness.md`
 - `docs/reference/vendoring-runtime.md`
 
-Do not point contributors at removed CLI docs, deleted backend references, or deleted repo-scoped QwenVoice skills.
+There are no repo-tracked local skills under `.agents/skills/` in this checkout right now. Do not point contributors at removed CLI docs, deleted backend references, or deleted repo-scoped QwenVoice skills.
 
 Public homepage freeze:
 
@@ -73,6 +74,7 @@ When repo facts disagree, trust sources in this order:
 - The macOS app target intentionally excludes `Sources/QwenVoiceEngineService/`, `Sources/QwenVoiceEngineSupport/`, and `Sources/QwenVoiceNativeRuntime/` as ordinary app sources while embedding the XPC service target through `project.yml`. Keep that split intact.
 - The iPhone app target and the iPhone engine-extension target both depend on `QwenVoiceCore`. Keep engine execution isolated from the iPhone UI process.
 - `third_party_patches/mlx-audio-swift/` is the repo-owned native backend source boundary for MLXAudioSwift. Keep its package manifest and pins aligned with `project.yml` and `Package.resolved`.
+- `config/apple-platform-capability-matrix.json` is the release-verification source of truth for bundle identifiers, expected application groups, opportunistic memory-limit entitlements, and packaged-resource exclusions.
 - If `Sources/Resources/ffmpeg/` or `Sources/Resources/vendor/` appear locally, treat them as generated or local-only leftovers, not as maintained tracked checkout surfaces.
 - App data under `~/Library/Application Support/QwenVoice/` or a `QWENVOICE_APP_SUPPORT_DIR` override is runtime state, not repo source.
 - Watch for accidental `__pycache__`, `.pyc`, `.DS_Store`, and `.profraw` paths when regenerating or reviewing changes.
@@ -87,9 +89,11 @@ When repo facts disagree, trust sources in this order:
 - `Sources/QwenVoiceEngineService/` owns the bundled macOS XPC helper entrypoint and session/host behavior.
 - `Sources/QwenVoiceCore/` is the cross-platform engine core and shared semantic boundary. Keep it free of app-process UI assumptions.
 - `Sources/iOSEngineExtension/` hosts the isolated iPhone engine process through ExtensionFoundation. Heavy generation and prewarm work belongs there, not in the iPhone UI app process.
+- `Sources/iOS/VocelloEngineExtensionPoint.swift` owns monitor-backed iPhone extension discovery and preferred-identity selection, while `Sources/QwenVoiceCore/ExtensionEngineHostManager.swift` owns active transport replacement and teardown.
 - `Sources/iOS/` and `Sources/iOSSupport/` own the iPhone SwiftUI shell, model delivery UX, library/history views, and memory-pressure coordination.
 - `Sources/SharedSupport/` owns shared playback and generation-persistence surfaces that now serve both the macOS and iPhone apps.
 - `Sources/Services/AppPaths.swift` and `Sources/iOSSupport/Services/AppPaths.swift` are the path boundaries for runtime data on each platform.
+- The iPhone App Group surface is intentionally file-based and rooted under `Sources/iOSSupport/Services/AppPaths.swift`; keep shared state constrained to the required app-support subtree for models, downloads, outputs, voices, and cache data.
 - `Sources/Models/TTSContract.swift`, `Sources/Models/TTSModel.swift`, and the `QwenVoiceCore` semantic types load `Sources/Resources/qwenvoice_contract.json`.
 
 ## Platform And Product Constraints
@@ -125,6 +129,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
+python3 scripts/harness.py test --layer ios
 python3 scripts/harness.py test --layer audio --artifact-dir <dir>
 python3 scripts/harness.py diagnose
 python3 scripts/harness.py bench --category latency
@@ -140,7 +145,11 @@ QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodep
 Notes:
 
 - `scripts/harness.py` remains the primary local test, diagnostic, and benchmark entrypoint.
-- The maintained harness layers are `swift`, `contract`, `native`, and `audio`.
+- The maintained harness layers are `swift`, `contract`, `native`, `ios`, and `audio`.
+- The harness now resolves pinned Swift packages into `build/harness/source-packages/`, uses explicit `build/harness/derived-data/` roots, and emits `.xcresult` bundles under `build/harness/results/`.
+- `QwenVoice Foundation` and `VocelloiOS Foundation` are the maintained plan-backed test schemes.
+- The committed test plans live under `tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, and `VocelloiOSFoundation`.
+- Prefer those plan-backed harness lanes over ad hoc `xcodebuild test` invocations.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes.
 - Do not jump to live native smoke, local packaging, or manual Computer Use until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate are already green.
 
@@ -160,6 +169,8 @@ Release facts:
 - `scripts/release.sh` is the maintained local macOS packaging entrypoint.
 - `scripts/release_ios_testflight.sh` is the maintained iPhone archive/export entrypoint.
 - `scripts/verify_ios_release_archive.sh` is the maintained structural verifier for the iPhone archive/export artifacts.
+- Both release scripts now use explicit derived-data and cloned-package roots under `build/foundation/` so resolve, build, archive, and export are separate phases.
+- `Apple Platform Validation` now uploads the maintained harness/build `.xcresult` bundles and runs the unsigned macOS release-verification path in CI.
 - Shipped macOS bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
 
 ## When Changing X, Also Update Y

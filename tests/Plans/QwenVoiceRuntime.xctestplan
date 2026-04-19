@@ -1,0 +1,29 @@
+{
+  "configurations" : [
+    {
+      "id" : "C0640188-1A1A-4E9D-8F33-5D1A5304EFA8",
+      "name" : "Defaults",
+      "options" : { }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:QwenVoice.xcodeproj",
+      "identifier" : "35AB9A9686024F8ED928C1BC",
+      "name" : "QwenVoiceTests"
+    },
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:QwenVoice.xcodeproj",
+        "identifier" : "35AB9A9686024F8ED928C1BC",
+        "name" : "QwenVoiceTests"
+      }
+    }
+  ],
+  "version" : 1
+}

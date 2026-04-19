@@ -86,6 +86,9 @@ private final class XPCServiceTransport: NSObject, XPCNativeEngineTransporting, 
         let sink = XPCNativeEngineClientEventSink(onEvent: handlers.onEventData)
         self.eventSink = sink
         let connection = NSXPCConnection(serviceName: QwenVoiceEngineServiceBundleIdentifier)
+        connection.setCodeSigningRequirement(
+            EngineServiceTrustPolicy.serviceRequirement()
+        )
         connection.remoteObjectInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
         connection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineClientEventXPCProtocol.self)
         connection.exportedObject = sink
@@ -491,10 +494,14 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
 
     public func ping() async throws -> Bool {
         let reply = try await coordinator.send(.ping)
-        guard case .bool(let value) = reply else {
+        switch reply {
+        case .bool(let value):
+            return value
+        case .capabilities:
+            return true
+        default:
             throw EngineTransportError.invalidReply
         }
-        return value
     }
 
     public func loadModel(id: String) async throws {

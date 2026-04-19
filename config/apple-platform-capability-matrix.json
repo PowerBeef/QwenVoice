@@ -1,0 +1,66 @@
+{
+  "macOS": {
+    "app": {
+      "bundleIdentifier": "com.qwenvoice.app",
+      "displayName": "Vocello",
+      "artifactName": "Vocello-macos26.dmg",
+      "requiredAbsentResourcePaths": [
+        "Contents/Resources/backend",
+        "Contents/Resources/python",
+        "Contents/Resources/ffmpeg"
+      ],
+      "engineCapabilities": {
+        "supportsBatchGeneration": false,
+        "supportsAudioPreparation": false,
+        "supportsInteractivePrefetch": false,
+        "supportsMemoryTrim": false,
+        "supportsPreparedVoiceManagement": true
+      }
+    },
+    "xpcService": {
+      "bundleIdentifier": "com.qwenvoice.app.engine-service",
+      "codeSigningRequirement": "identifier \"com.qwenvoice.app.engine-service\"",
+      "engineCapabilities": {
+        "supportsBatchGeneration": true,
+        "supportsAudioPreparation": false,
+        "supportsInteractivePrefetch": false,
+        "supportsMemoryTrim": false,
+        "supportsPreparedVoiceManagement": true
+      }
+    }
+  },
+  "iOS": {
+    "app": {
+      "bundleIdentifier": "com.qvoice.ios",
+      "applicationGroups": [
+        "group.com.qvoice.shared"
+      ],
+      "booleanEntitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true
+      },
+      "engineCapabilities": {
+        "supportsBatchGeneration": false,
+        "supportsAudioPreparation": false,
+        "supportsInteractivePrefetch": false,
+        "supportsMemoryTrim": false,
+        "supportsPreparedVoiceManagement": true
+      }
+    },
+    "extension": {
+      "bundleIdentifier": "com.qvoice.ios.engine-extension",
+      "applicationGroups": [
+        "group.com.qvoice.shared"
+      ],
+      "booleanEntitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true
+      },
+      "engineCapabilities": {
+        "supportsBatchGeneration": false,
+        "supportsAudioPreparation": true,
+        "supportsInteractivePrefetch": true,
+        "supportsMemoryTrim": true,
+        "supportsPreparedVoiceManagement": true
+      }
+    }
+  }
+}

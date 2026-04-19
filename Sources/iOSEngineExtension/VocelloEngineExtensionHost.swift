@@ -130,7 +130,8 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
             try await runtimeContext.engine.initialize(appSupportDirectory: appSupportDirectory)
             return .snapshot(Self.snapshot(for: runtimeContext.engine))
         case .ping:
-            return .bool(try await requireRuntimeContext().engine.ping())
+            _ = try await requireRuntimeContext().engine.ping()
+            return .capabilities(.iOSExtensionDefault)
         case .loadModel(let id):
             try await requireRuntimeContext().engine.loadModel(id: id)
             return .void
@@ -268,6 +269,8 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
         Task { @MainActor in
             await self.runtimeContext?.engine.cancelClonePreparationIfNeeded()
             self.runtimeContext?.engine.clearGenerationActivity()
+            try? await self.runtimeContext?.engine.unloadModel()
+            self.runtimeContext = nil
         }
     }
 

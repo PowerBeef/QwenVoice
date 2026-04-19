@@ -1,42 +1,8 @@
 import Foundation
 
-public enum ExtensionRemoteErrorCode: String, Codable, Equatable, Sendable {
-    case generic
-    case cancelled
-}
-
-public struct ExtensionRemoteErrorPayload: Error, Codable, Equatable, Sendable, LocalizedError {
-    public let message: String
-    public let domain: String?
-    public let code: ExtensionRemoteErrorCode
-
-    public init(
-        message: String,
-        domain: String? = nil,
-        code: ExtensionRemoteErrorCode = .generic
-    ) {
-        self.message = message
-        self.domain = domain
-        self.code = code
-    }
-
-    public var errorDescription: String? {
-        message
-    }
-
-    public static func make(for error: Error) -> ExtensionRemoteErrorPayload {
-        if let payload = error as? ExtensionRemoteErrorPayload {
-            return payload
-        }
-
-        let nsError = error as NSError
-        return ExtensionRemoteErrorPayload(
-            message: nsError.localizedDescription,
-            domain: nsError.domain,
-            code: error is CancellationError ? .cancelled : .generic
-        )
-    }
-}
+public typealias ExtensionRemoteErrorCode = RemoteErrorCode
+public typealias ExtensionRemoteErrorPayload = RemoteErrorPayload
+public typealias ExtensionEngineCodec = QwenVoiceWireCodec
 
 public struct ExtensionEngineRequestEnvelope: Codable, Equatable, Sendable {
     public let id: UUID
@@ -68,7 +34,7 @@ public enum ExtensionEngineCommand: Codable, Equatable, Sendable {
     case trimMemory(level: NativeMemoryTrimLevel, reason: String)
 }
 
-public struct ExtensionEngineReplyEnvelope: Codable, Sendable {
+public struct ExtensionEngineReplyEnvelope: Codable, Equatable, Sendable {
     public let id: UUID
     public let reply: ExtensionEngineReply
 
@@ -78,9 +44,10 @@ public struct ExtensionEngineReplyEnvelope: Codable, Sendable {
     }
 }
 
-public enum ExtensionEngineReply: Codable, Sendable {
+public enum ExtensionEngineReply: Codable, Equatable, Sendable {
     case void
     case bool(Bool)
+    case capabilities(EngineCapabilities)
     case audioNormalizationResult(AudioNormalizationResult)
     case interactivePrefetchDiagnostics(InteractivePrefetchDiagnostics)
     case generationResult(GenerationResult)
@@ -93,19 +60,6 @@ public enum ExtensionEngineReply: Codable, Sendable {
 public enum ExtensionEngineEventEnvelope: Codable, Equatable, Sendable {
     case snapshot(TTSEngineSnapshot)
     case generationChunk(GenerationEvent)
-}
-
-public enum ExtensionEngineCodec {
-    private static let encoder = JSONEncoder()
-    private static let decoder = JSONDecoder()
-
-    public static func encode<T: Encodable>(_ value: T) throws -> Data {
-        try encoder.encode(value)
-    }
-
-    public static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        try decoder.decode(T.self, from: data)
-    }
 }
 
 @objc public protocol VocelloEngineClientEventXPCProtocol {

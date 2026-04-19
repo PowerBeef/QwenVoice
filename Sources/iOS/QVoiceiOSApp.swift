@@ -74,7 +74,7 @@ struct QVoiceiOSApp: App {
                                 case .connected:
                                     executeDeferredMemoryPressureReliefIfNeeded()
                                     executeDeferredRuntimeReleaseIfNeeded()
-                                case .idle, .connecting, .recovering, .failed:
+                                case .idle, .launching, .recovering, .failed:
                                     break
                                 }
                             }

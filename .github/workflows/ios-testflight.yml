@@ -132,6 +132,7 @@ jobs:
             build/VocelloiOS-TestFlight.xcarchive
             build/vocello_ios_testflight_export
             build/vocello_ios_testflight_release_metadata.txt
+            build/foundation/ios-testflight-archive.xcresult
 
       - name: Clean up signing credentials
         if: always()

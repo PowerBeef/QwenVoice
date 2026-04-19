@@ -8,10 +8,13 @@ on:
 permissions:
   contents: read
 
+env:
+  CI_RESULT_ROOT: build/ci-results
+
 jobs:
   validate-apple-platforms:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +29,11 @@ jobs:
 
       - name: Regenerate project
         run: ./scripts/regenerate_project.sh
+
+      - name: Prepare CI result roots
+        run: |
+          rm -rf "$CI_RESULT_ROOT"
+          mkdir -p "$CI_RESULT_ROOT"
 
       - name: Validate checked-in project inputs
         run: ./scripts/check_project_inputs.sh
@@ -42,8 +50,54 @@ jobs:
       - name: Native tests
         run: python3 scripts/harness.py test --layer native
 
+      - name: iPhone foundation tests
+        run: python3 scripts/harness.py test --layer ios
+
       - name: Build macOS app
-        run: xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
+        run: |
+          xcodebuild \
+            -project QwenVoice.xcodeproj \
+            -scheme QwenVoice \
+            -destination 'platform=macOS' \
+            -resultBundlePath "$CI_RESULT_ROOT/qwenvoice-macos-build.xcresult" \
+            -resultBundleVersion 3 \
+            build
 
       - name: Build iPhone app and extension
-        run: xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
+        run: |
+          xcodebuild \
+            -project QwenVoice.xcodeproj \
+            -scheme VocelloiOS \
+            -destination 'generic/platform=iOS' \
+            -resultBundlePath "$CI_RESULT_ROOT/vocello-ios-generic-build.xcresult" \
+            -resultBundleVersion 3 \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=YES \
+            build
+
+      - name: Build and verify unsigned macOS release artifact
+        run: |
+          ./scripts/release.sh --output-name Vocello-macos26-ci
+          ./scripts/verify_packaged_dmg.sh build/Vocello-macos26-ci.dmg build/release-metadata.txt
+
+      - name: Upload foundation xcresult bundles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-platform-validation-xcresults
+          if-no-files-found: warn
+          path: |
+            build/harness/results
+            build/ci-results
+            build/foundation/*.xcresult
+
+      - name: Upload release verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-platform-validation-release-proof
+          if-no-files-found: warn
+          path: |
+            build/release-metadata.txt
+            build/release-build-settings.log
+            build/xcodebuild-release.log

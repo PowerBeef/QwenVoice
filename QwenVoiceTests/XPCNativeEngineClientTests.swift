@@ -165,6 +165,40 @@ final class XPCNativeEngineClientTests: XCTestCase {
         }
     }
 
+    func testClientAcceptsCapabilityReplyForPing() async throws {
+        let transport = ClientTestXPCTransport()
+        let client = XPCNativeEngineClient(
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            }
+        )
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        async let initialize: Void = client.initialize(appSupportDirectory: root)
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .void
+            )
+        )
+        try await initialize
+
+        async let ping: Bool = client.ping()
+        try await waitForPerformCallCount(2, transport: transport)
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .capabilities(.macOSXPCDefault)
+            )
+        )
+
+        let pingResult = try await ping
+        XCTAssertTrue(pingResult)
+    }
+
     private func waitForPerformCallCount(
         _ expectedCount: Int,
         transport: ClientTestXPCTransport,

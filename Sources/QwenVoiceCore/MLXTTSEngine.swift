@@ -260,15 +260,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func loadModel(id: String) async throws {
         try ensureInitialized()
         do {
-            loadState = .running(
-                EngineActivity(
-                    label: "Loading model…",
-                    fraction: nil,
-                    presentation: .standaloneCard
-                )
-            )
+            loadState = .starting
             _ = try await runtime.loadModel(id: id)
-            loadState = .idle
+            loadState = .loaded(modelID: id)
             clonePreparationState = .idle
             visibleErrorMessage = nil
         } catch {
@@ -291,7 +285,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func ensureModelLoadedIfNeeded(id: String) async {
         do {
             _ = try await runtime.loadModel(id: id)
-            loadState = .idle
+            loadState = .loaded(modelID: id)
         } catch {
             handle(error)
         }
@@ -302,15 +296,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         guard case .supported = supportDecision(for: request) else { return }
         do {
             try ensureInitialized()
-            loadState = .running(
-                EngineActivity(
-                    label: "Prewarming model…",
-                    fraction: nil,
-                    presentation: .standaloneCard
-                )
-            )
+            loadState = .starting
             _ = try await runtime.prepareInteractiveReadiness(for: request)
-            loadState = .idle
+            loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
         } catch {
             handle(error)
@@ -350,13 +338,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             phase: .preparing,
             identityKey: uiIdentityKey
         )
-        loadState = .running(
-            EngineActivity(
-                label: "Preparing clone…",
-                fraction: nil,
-                presentation: .standaloneCard
-            )
-        )
+        loadState = .running(modelID: modelID, label: "Preparing clone…", fraction: nil)
 
         do {
             let result = try await runtime.primeCloneReference(
@@ -367,11 +349,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                 phase: .primed,
                 identityKey: result.uiIdentityKey
             )
-            loadState = .idle
+            loadState = .loaded(modelID: modelID)
             visibleErrorMessage = nil
         } catch is CancellationError {
             clonePreparationState = .idle
-            loadState = .idle
+            loadState = .loaded(modelID: modelID)
             throw CancellationError()
         } catch {
             clonePreparationState = ClonePreparationState(
@@ -387,8 +369,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func cancelClonePreparationIfNeeded() async {
         await runtime.cancelClonePreparation()
         clonePreparationState = .idle
-        if case .running = loadState {
-            loadState = .idle
+        if case .running(let modelID, _, _) = loadState {
+            loadState = modelID.map { .loaded(modelID: $0) } ?? .idle
         }
     }
 
@@ -405,11 +387,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         do {
             await telemetryRecorder?.reset()
             loadState = .running(
-                EngineActivity(
-                    label: "Generating audio…",
-                    fraction: nil,
-                    presentation: .inlinePlayer
-                )
+                modelID: request.modelID,
+                label: request.streamingTitle ?? String(request.text.prefix(40)),
+                fraction: nil
             )
 
             let prepared = try await runtime.prepareGeneration(for: request)
@@ -429,7 +409,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             let result = try await session.run { [weak self] event in
                 self?.latestEvent = event
             }
-            loadState = .idle
+            loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
             return result
         } catch {
@@ -573,14 +553,14 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
     public func clearGenerationActivity() {
         latestEvent = nil
-        if case .running = loadState {
-            loadState = .idle
+        if case .running(let modelID, _, _) = loadState {
+            loadState = modelID.map { .loaded(modelID: $0) } ?? .idle
         }
     }
 
     public func clearVisibleError() {
         visibleErrorMessage = nil
-        if case .error = loadState {
+        if case .failed = loadState {
             loadState = .idle
         }
     }
@@ -588,8 +568,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func setVisibleError(_ message: String?) {
         visibleErrorMessage = message
         if let message {
-            loadState = .error(message)
-        } else if case .error = loadState {
+            loadState = .failed(message: message)
+        } else if case .failed = loadState {
             loadState = .idle
         }
     }
@@ -628,7 +608,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
     private func handle(_ error: Error) {
         visibleErrorMessage = error.localizedDescription
-        loadState = .error(error.localizedDescription)
+        loadState = .failed(message: error.localizedDescription)
     }
 
     private static func defaultStreamingSessionFactory(
