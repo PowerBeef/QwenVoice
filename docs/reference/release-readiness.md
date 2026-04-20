@@ -72,7 +72,7 @@ The current execution order is:
 
 ## CI Proof Surface
 
-- `Apple Platform Validation` is the maintained clean-state CI proof for project inputs, source/runtime test plans, generic builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
+- `Backend Freeze Gate` is the maintained clean-state CI proof for project inputs, source/runtime test plans, generic builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
 - `Vocello macOS Release` remains the CI-owned signed/notarized DMG proof path.
 - `Vocello iOS TestFlight` remains the CI-owned archive/export/upload-prep proof path.
 - Local release scripts remain deterministic unsigned/source-validation tools; they are not the repo’s signing or notarization source of truth.

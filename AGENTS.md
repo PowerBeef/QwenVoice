@@ -18,7 +18,7 @@ The main working surfaces are:
 - `Sources/QwenVoiceCore/` for shared Apple-platform runtime semantics, contract types, model variants, and iOS extension transport
 - `Sources/QwenVoiceNative/` for the macOS app-facing engine proxy/store/client layer
 - `Sources/QwenVoiceEngineSupport/` for shared macOS engine IPC and transport types
-- `Sources/QwenVoiceNativeRuntime/` for macOS service-only native execution
+- `Sources/QwenVoiceNativeRuntime/` for retained macOS compatibility and regression coverage
 - `Sources/QwenVoiceEngineService/` for the bundled macOS XPC helper
 - `Sources/iOS/` and `Sources/iOSSupport/` for the iPhone app shell and iPhone-only support layers
 - `Sources/SharedSupport/` for cross-platform playback, persistence, and other shared app-layer helpers
@@ -38,6 +38,8 @@ The maintained repo docs are:
 - `docs/README.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`
+- `docs/reference/backend-freeze-gate.md`
+- `docs/reference/frontend-backend-contract.md`
 - `docs/reference/release-readiness.md`
 - `docs/reference/vendoring-runtime.md`
 
@@ -85,7 +87,7 @@ When repo facts disagree, trust sources in this order:
 - `Sources/ContentView.swift` owns the macOS `NavigationSplitView`, toolbar/search chrome, sidebar selection, and persisted generation drafts.
 - `Sources/QwenVoiceNative/` is the macOS app-side engine layer: `TTSEngineStore`, `XPCNativeEngineClient`, chunk brokering, and the app-facing `MacTTSEngine` surface live there.
 - `Sources/QwenVoiceEngineSupport/` is the shared macOS engine transport boundary used by both the app and the helper.
-- `Sources/QwenVoiceNativeRuntime/` is the macOS service-only runtime boundary. Keep model load, prewarm, generation, cancellation, and clone preparation ownership there instead of in the app process.
+- `Sources/QwenVoiceEngineService/` now hosts the active macOS shared-core runtime through `QwenVoiceCore`. Treat `Sources/QwenVoiceNativeRuntime/` as a retained compatibility/test surface rather than the primary live policy owner.
 - `Sources/QwenVoiceEngineService/` owns the bundled macOS XPC helper entrypoint and session/host behavior.
 - `Sources/QwenVoiceCore/` is the cross-platform engine core and shared semantic boundary. Keep it free of app-process UI assumptions.
 - `Sources/iOSEngineExtension/` hosts the isolated iPhone engine process through ExtensionFoundation. Heavy generation and prewarm work belongs there, not in the iPhone UI app process.
@@ -126,6 +128,8 @@ Core local commands:
 ./scripts/regenerate_project.sh
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
+./scripts/build_foundation_targets.sh macos
+./scripts/build_foundation_targets.sh ios
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
@@ -150,6 +154,7 @@ Notes:
 - `QwenVoice Foundation` and `VocelloiOS Foundation` are the maintained plan-backed test schemes.
 - The committed test plans live under `tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, and `VocelloiOSFoundation`.
 - Prefer those plan-backed harness lanes over ad hoc `xcodebuild test` invocations.
+- For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The script uses isolated build roots and `.xcresult` bundles so stale hosted test-bundle output cannot poison app codesigning.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes.
 - Do not jump to live native smoke, local packaging, or manual Computer Use until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate are already green.
 
@@ -158,7 +163,7 @@ Notes:
 The active GitHub workflows are:
 
 - `Project Inputs`
-- `Apple Platform Validation`
+- `Backend Freeze Gate`
 - `Vocello macOS Release`
 - `Vocello iOS TestFlight`
 
@@ -170,7 +175,7 @@ Release facts:
 - `scripts/release_ios_testflight.sh` is the maintained iPhone archive/export entrypoint.
 - `scripts/verify_ios_release_archive.sh` is the maintained structural verifier for the iPhone archive/export artifacts.
 - Both release scripts now use explicit derived-data and cloned-package roots under `build/foundation/` so resolve, build, archive, and export are separate phases.
-- `Apple Platform Validation` now uploads the maintained harness/build `.xcresult` bundles and runs the unsigned macOS release-verification path in CI.
+- `Backend Freeze Gate` now uploads the maintained harness/build `.xcresult` bundles and runs the unsigned macOS release-verification path in CI.
 - Shipped macOS bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
 
 ## When Changing X, Also Update Y
@@ -194,7 +199,7 @@ Release facts:
 - iPhone archive/export/TestFlight behavior:
   keep `scripts/check_ios_catalog.py`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/release-readiness.md`.
+  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 

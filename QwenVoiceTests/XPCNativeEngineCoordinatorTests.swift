@@ -2,6 +2,18 @@ import XCTest
 @testable import QwenVoiceEngineSupport
 @testable import QwenVoiceNative
 
+private actor SnapshotRecorder {
+    private var snapshots: [TTSEngineSnapshot] = []
+
+    func append(_ snapshot: TTSEngineSnapshot) {
+        snapshots.append(snapshot)
+    }
+
+    func last() -> TTSEngineSnapshot? {
+        snapshots.last
+    }
+}
+
 final class XPCNativeEngineCoordinatorTests: XCTestCase {
     func testCoordinatorTimesOutPendingPingAndRemainsUsable() async throws {
         let transport = TestXPCTransport()
@@ -117,6 +129,47 @@ final class XPCNativeEngineCoordinatorTests: XCTestCase {
         XCTAssertTrue(result)
     }
 
+    func testCoordinatorFailsUnreadableReplyAndPublishesFailedSnapshot() async throws {
+        let transport = TestXPCTransport()
+        let snapshotRecorder = SnapshotRecorder()
+        let coordinator = XPCNativeEngineCoordinator(
+            onSnapshot: { snapshot in
+                Task {
+                    await snapshotRecorder.append(snapshot)
+                }
+            },
+            onChunk: { _ in },
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            },
+            timeoutResolver: { _ in nil }
+        )
+
+        async let pending = coordinator.send(.ping)
+        try await Task.sleep(for: .milliseconds(10))
+        transport.reply(withRawPayload: Data("not-json".utf8))
+
+        do {
+            _ = try await pending
+            XCTFail("Expected unreadable reply to fail the request.")
+        } catch let error as EngineTransportError {
+            XCTAssertEqual(error, .invalidReply)
+        }
+
+        try await Task.sleep(for: .milliseconds(10))
+        let lastSnapshot = await snapshotRecorder.last()
+        XCTAssertEqual(
+            lastSnapshot,
+            TTSEngineSnapshot(
+                isReady: false,
+                loadState: .failed(message: EngineTransportError.invalidReply.localizedDescription),
+                clonePreparationState: .idle,
+                visibleErrorMessage: EngineTransportError.invalidReply.localizedDescription
+            )
+        )
+    }
+
     func testFireAndForgetDoesNotHangWhenTransportNeverReplies() async {
         let transport = TestXPCTransport()
         let coordinator = XPCNativeEngineCoordinator(
@@ -219,6 +272,12 @@ private final class TestXPCTransport: XPCNativeEngineTransporting, @unchecked Se
         guard !replyHandlers.isEmpty else { return }
         let replyHandler = replyHandlers.removeFirst()
         let payload = try! EngineServiceCodec.encode(envelope)
+        replyHandler(payload)
+    }
+
+    func reply(withRawPayload payload: Data) {
+        guard !replyHandlers.isEmpty else { return }
+        let replyHandler = replyHandlers.removeFirst()
         replyHandler(payload)
     }
 }

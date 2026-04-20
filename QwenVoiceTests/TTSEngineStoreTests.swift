@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import XCTest
+import QwenVoiceCore
 import QwenVoiceNative
 
 private final class MockMacTTSEngine: MacTTSEngine, @unchecked Sendable {
@@ -112,6 +113,7 @@ final class TTSEngineStoreTests: XCTestCase {
         XCTAssertTrue(store.isReady)
         XCTAssertEqual(store.loadState, .loaded(modelID: "pro_custom"))
         XCTAssertEqual(store.clonePreparationState, .primed(key: "clone-key"))
+        XCTAssertEqual(store.frontendState.lifecycleState, .connected)
     }
 
     @MainActor
@@ -221,8 +223,30 @@ final class TTSEngineStoreTests: XCTestCase {
             )
         )
 
-        await Task.yield()
+        for _ in 0..<20 where store.latestEvent?.requestID != 1 {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
 
         XCTAssertEqual(store.snapshot, initialSnapshot)
+        XCTAssertEqual(store.latestEvent?.requestID, 1)
+        XCTAssertEqual(store.frontendState.latestEvent?.requestID, 1)
+        XCTAssertEqual(store.frontendState.loadState, initialSnapshot.loadState)
+        XCTAssertEqual(store.frontendState.lifecycleState, .connected)
+    }
+
+    @MainActor
+    func testTTSEngineStoreFrontendStateReportsFailedLifecycleWhenSnapshotCarriesVisibleError() async {
+        let engine = MockMacTTSEngine(
+            snapshot: TTSEngineSnapshot(
+                isReady: false,
+                loadState: .failed(message: "Connection failed"),
+                clonePreparationState: .idle,
+                visibleErrorMessage: "Connection failed"
+            )
+        )
+        let store = TTSEngineStore(engine: engine)
+
+        XCTAssertEqual(store.frontendState.lifecycleState, .failed)
+        XCTAssertEqual(store.frontendState.visibleErrorMessage, "Connection failed")
     }
 }

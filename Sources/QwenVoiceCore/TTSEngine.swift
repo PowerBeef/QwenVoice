@@ -1,6 +1,79 @@
 import Combine
 import Foundation
 
+public struct TTSEngineFrontendState: Equatable, Sendable {
+    public let isReady: Bool
+    public let lifecycleState: EngineLifecycleState
+    public let loadState: EngineLoadState
+    public let clonePreparationState: ClonePreparationState
+    public let latestEvent: GenerationEvent?
+    public let visibleErrorMessage: String?
+
+    public init(
+        isReady: Bool,
+        lifecycleState: EngineLifecycleState,
+        loadState: EngineLoadState,
+        clonePreparationState: ClonePreparationState,
+        latestEvent: GenerationEvent?,
+        visibleErrorMessage: String?
+    ) {
+        self.isReady = isReady
+        self.lifecycleState = lifecycleState
+        self.loadState = loadState
+        self.clonePreparationState = clonePreparationState
+        self.latestEvent = latestEvent
+        self.visibleErrorMessage = visibleErrorMessage
+    }
+
+    public init(
+        snapshot: TTSEngineSnapshot,
+        latestEvent: GenerationEvent? = nil,
+        lifecycleState: EngineLifecycleState? = nil
+    ) {
+        let resolvedLifecycleState = lifecycleState
+            ?? Self.defaultLifecycleState(
+                isReady: snapshot.isReady,
+                visibleErrorMessage: snapshot.visibleErrorMessage
+            )
+        self.init(
+            isReady: snapshot.isReady,
+            lifecycleState: resolvedLifecycleState,
+            loadState: snapshot.loadState,
+            clonePreparationState: snapshot.clonePreparationState,
+            latestEvent: latestEvent,
+            visibleErrorMessage: snapshot.visibleErrorMessage
+        )
+    }
+
+    public func updating(
+        latestEvent: GenerationEvent? = nil,
+        lifecycleState: EngineLifecycleState? = nil
+    ) -> TTSEngineFrontendState {
+        TTSEngineFrontendState(
+            isReady: isReady,
+            lifecycleState: lifecycleState ?? self.lifecycleState,
+            loadState: loadState,
+            clonePreparationState: clonePreparationState,
+            latestEvent: latestEvent ?? self.latestEvent,
+            visibleErrorMessage: visibleErrorMessage
+        )
+    }
+
+    private static func defaultLifecycleState(
+        isReady: Bool,
+        visibleErrorMessage: String?
+    ) -> EngineLifecycleState {
+        if isReady {
+            return .connected
+        }
+        if let visibleErrorMessage,
+           !visibleErrorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .failed
+        }
+        return .idle
+    }
+}
+
 @MainActor
 public protocol TTSEngine: ObservableObject {
     var modelRegistry: any ModelRegistry { get }

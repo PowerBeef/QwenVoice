@@ -259,6 +259,13 @@
 			remoteGlobalIDString = 8E4346491ECB9C6C678CD73F;
 			remoteInfo = VocelloiOS;
 		};
+		10E3634FB651C181FAA0586B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1AC811490BEB9ED2A301BD4E;
+			remoteInfo = QwenVoiceCore;
+		};
 		1484ECBCBD8C8D2F980151D1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
@@ -280,19 +287,19 @@
 			remoteGlobalIDString = 7A07A3AD93684A473AD5179F;
 			remoteInfo = QwenVoiceEngineSupport;
 		};
+		30375EF141787C4F8AF142D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1AC811490BEB9ED2A301BD4E;
+			remoteInfo = QwenVoiceCore;
+		};
 		5B934845D936E24F217F332E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 8E4346491ECB9C6C678CD73F;
 			remoteInfo = VocelloiOS;
-		};
-		5F41E262D8D2CE5D50CD6F43 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 4A19DB9A9B0528092DDFD275;
-			remoteInfo = QwenVoiceNativeRuntime;
 		};
 		60538E7A7CFFA4E98AEEE0C6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -1234,6 +1241,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				31DEE054B7C6F79D874AAB49 /* PBXTargetDependency */,
 				780E4FA3479811EE1DA11430 /* PBXTargetDependency */,
 			);
 			name = QwenVoiceNative;
@@ -1472,8 +1480,8 @@
 			buildRules = (
 			);
 			dependencies = (
+				75844D7F45E07E5C9F98AFBC /* PBXTargetDependency */,
 				BBB2305C4E21F930BE2774CE /* PBXTargetDependency */,
-				59C2DD79A8C1E4950CE11F87 /* PBXTargetDependency */,
 			);
 			name = QwenVoiceEngineService;
 			packageProductDependencies = (
@@ -1858,6 +1866,11 @@
 			target = 939725D6CC844653EA90F39E /* QwenVoice */;
 			targetProxy = 607312F861B239764BE84D22 /* PBXContainerItemProxy */;
 		};
+		31DEE054B7C6F79D874AAB49 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */;
+			targetProxy = 10E3634FB651C181FAA0586B /* PBXContainerItemProxy */;
+		};
 		410AFAA4154BD2B2388DEE69 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */;
@@ -1888,11 +1901,6 @@
 			target = 022F1B926E7576464FE78430 /* QwenVoiceNative */;
 			targetProxy = 6B6ADF12631F6B8A2A3A006D /* PBXContainerItemProxy */;
 		};
-		59C2DD79A8C1E4950CE11F87 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 4A19DB9A9B0528092DDFD275 /* QwenVoiceNativeRuntime */;
-			targetProxy = 5F41E262D8D2CE5D50CD6F43 /* PBXContainerItemProxy */;
-		};
 		5A7FC8A54A8958A8F868941B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 7A07A3AD93684A473AD5179F /* QwenVoiceEngineSupport */;
@@ -1902,6 +1910,11 @@
 			isa = PBXTargetDependency;
 			target = FDEEB4D6308B4114B0CD6002 /* QwenVoiceEngineService */;
 			targetProxy = 1484ECBCBD8C8D2F980151D1 /* PBXContainerItemProxy */;
+		};
+		75844D7F45E07E5C9F98AFBC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */;
+			targetProxy = 30375EF141787C4F8AF142D6 /* PBXContainerItemProxy */;
 		};
 		7604A7EE9010BA7B65E00A48 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

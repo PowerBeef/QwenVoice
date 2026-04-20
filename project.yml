@@ -158,6 +158,7 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
+      - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
       - package: MLXAudio
         product: MLXAudioCore
@@ -260,8 +261,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
+      - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
-      - target: QwenVoiceNativeRuntime
       - package: MLXAudio
         product: MLXAudioCore
       - package: MLXAudio

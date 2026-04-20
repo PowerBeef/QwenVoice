@@ -1,4 +1,4 @@
-name: Apple Platform Validation
+name: Backend Freeze Gate
 
 on:
   pull_request:
@@ -80,11 +80,23 @@ jobs:
           ./scripts/release.sh --output-name Vocello-macos26-ci
           ./scripts/verify_packaged_dmg.sh build/Vocello-macos26-ci.dmg build/release-metadata.txt
 
+      - name: Publish backend-freeze gate summary
+        if: always()
+        run: |
+          {
+            echo "## Backend Freeze Gate"
+            echo
+            echo "- Project inputs, harness validation, and maintained source/runtime lanes ran in this workflow."
+            echo "- Generic macOS and iPhone compile proof are attached as .xcresult bundles."
+            echo "- Unsigned macOS release verification remains part of the gate."
+            echo "- Signed release proof stays in the dedicated macOS and iPhone release workflows."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload foundation xcresult bundles
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apple-platform-validation-xcresults
+          name: backend-freeze-gate-xcresults
           if-no-files-found: warn
           path: |
             build/harness/results
@@ -95,7 +107,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apple-platform-validation-release-proof
+          name: backend-freeze-gate-release-proof
           if-no-files-found: warn
           path: |
             build/release-metadata.txt

@@ -640,9 +640,12 @@ actor NativePreparedCloneConditioningCache {
 enum NativeSavedVoiceNaming {
     static func normalizedName(_ rawName: String) -> String {
         rawName
-            .replacingOccurrences(of: #"[^\w\s-]"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(
+                of: #"[\\/:*?"<>|\p{Cc}]"#,
+                with: "",
+                options: .regularExpression
+            )
     }
 }
 

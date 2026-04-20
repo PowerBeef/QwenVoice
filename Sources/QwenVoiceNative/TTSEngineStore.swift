@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import QwenVoiceCore
 
 private final class BatchProgressRelay: @unchecked Sendable {
     private let handler: (Double?, String) -> Void
@@ -18,22 +19,37 @@ private final class BatchProgressRelay: @unchecked Sendable {
 @MainActor
 public final class TTSEngineStore: ObservableObject {
     @Published public private(set) var snapshot: TTSEngineSnapshot
+    @Published public private(set) var frontendState: TTSEngineFrontendState
+    @Published public private(set) var latestEvent: GenerationEvent?
 
     public var isReady: Bool { snapshot.isReady }
     public var loadState: EngineLoadState { snapshot.loadState }
     public var clonePreparationState: ClonePreparationState { snapshot.clonePreparationState }
     public var visibleErrorMessage: String? { snapshot.visibleErrorMessage }
+    public var lifecycleState: EngineLifecycleState { frontendState.lifecycleState }
 
     private let engine: any MacTTSEngine
     private var snapshotCancellable: AnyCancellable?
+    private var chunkCancellable: AnyCancellable?
 
     public init(engine: any MacTTSEngine) {
         self.engine = engine
         self.snapshot = engine.snapshot
+        self.frontendState = TTSEngineFrontendState(snapshot: engine.snapshot)
         snapshotCancellable = engine.snapshotPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] snapshot in
-                self?.snapshot = snapshot
+                self?.apply(snapshot: snapshot)
+            }
+        chunkCancellable = GenerationChunkBroker.shared.publisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] latestEvent in
+                guard let self else { return }
+                self.latestEvent = latestEvent
+                self.frontendState = TTSEngineFrontendState(
+                    snapshot: self.snapshot,
+                    latestEvent: latestEvent
+                )
             }
     }
 
@@ -108,5 +124,13 @@ public final class TTSEngineStore: ObservableObject {
 
     public func clearVisibleError() {
         engine.clearVisibleError()
+    }
+
+    private func apply(snapshot: TTSEngineSnapshot) {
+        self.snapshot = snapshot
+        frontendState = TTSEngineFrontendState(
+            snapshot: snapshot,
+            latestEvent: latestEvent
+        )
     }
 }

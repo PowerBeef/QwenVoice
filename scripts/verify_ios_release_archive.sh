@@ -66,8 +66,8 @@ from pathlib import Path
 
 data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
 value = data
-    for part in os.environ["MATRIX_SELECTOR"].split("/"):
-        value = value[part]
+for part in os.environ["MATRIX_SELECTOR"].split("/"):
+    value = value[part]
 
 if isinstance(value, bool):
     print("true" if value else "false")
@@ -99,7 +99,10 @@ verify_app_bundle() {
     bundle_id="$(plist_read "$info_plist" CFBundleIdentifier)"
     [ "$bundle_id" = "$IOS_APP_BUNDLE_ID" ] || fail "$label app bundle identifier mismatch: expected $IOS_APP_BUNDLE_ID, got ${bundle_id:-missing}"
 
-    mapfile -t extension_paths < <(find "$app_path" -type d -name '*.appex' | sort)
+    local extension_paths=()
+    while IFS= read -r extension_path; do
+        extension_paths+=("$extension_path")
+    done < <(find "$app_path" -type d -name '*.appex' | sort)
     [ "${#extension_paths[@]}" -eq 1 ] || fail "$label app must embed exactly one .appex bundle; found ${#extension_paths[@]}"
 
     local extension_path="${extension_paths[0]}"
@@ -157,7 +160,10 @@ METADATA_PATH="$(cd "$(dirname "$METADATA_PATH")" && pwd)/$(basename "$METADATA_
 
 IOS_APP_BUNDLE_ID="$(matrix_read "iOS/app/bundleIdentifier")"
 IOS_EXTENSION_BUNDLE_ID="$(matrix_read "iOS/extension/bundleIdentifier")"
-mapfile -t IOS_REQUIRED_APP_GROUPS < <(matrix_read "iOS/app/applicationGroups")
+IOS_REQUIRED_APP_GROUPS=()
+while IFS= read -r required_app_group; do
+    IOS_REQUIRED_APP_GROUPS+=("$required_app_group")
+done < <(matrix_read "iOS/app/applicationGroups")
 IOS_APP_EXPECTS_INCREASED_MEMORY_LIMIT="$(matrix_read "iOS/app/booleanEntitlements/com.apple.developer.kernel.increased-memory-limit")"
 IOS_EXTENSION_EXPECTS_INCREASED_MEMORY_LIMIT="$(matrix_read "iOS/extension/booleanEntitlements/com.apple.developer.kernel.increased-memory-limit")"
 

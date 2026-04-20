@@ -58,7 +58,10 @@ APP_INFO_PLIST="$APP_PATH/Contents/Info.plist"
 [ -f "$APP_INFO_PLIST" ] || fail "Missing app Info.plist: $APP_INFO_PLIST"
 EXPECTED_APP_BUNDLE_ID="$(matrix_read "macOS/app/bundleIdentifier")"
 EXPECTED_XPC_BUNDLE_ID="$(matrix_read "macOS/xpcService/bundleIdentifier")"
-mapfile -t REQUIRED_ABSENT_RESOURCE_PATHS < <(matrix_read "macOS/app/requiredAbsentResourcePaths")
+REQUIRED_ABSENT_RESOURCE_PATHS=()
+while IFS= read -r required_absent_path; do
+    REQUIRED_ABSENT_RESOURCE_PATHS+=("$required_absent_path")
+done < <(matrix_read "macOS/app/requiredAbsentResourcePaths")
 
 APP_EXECUTABLE_NAME="$(plist_read "$APP_INFO_PLIST" CFBundleExecutable)"
 [ -n "$APP_EXECUTABLE_NAME" ] || fail "Could not resolve app executable name from $APP_INFO_PLIST"

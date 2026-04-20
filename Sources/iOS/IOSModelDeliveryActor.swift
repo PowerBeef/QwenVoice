@@ -97,6 +97,103 @@ private struct IOSModelDownloadTaskDescription: Codable, Sendable {
     let relativePath: String
 }
 
+private struct IOSModelDeliveryStateMachine {
+    static func initialInstall(
+        model: ModelDescriptor,
+        entry: IOSModelCatalogEntry,
+        stagingRoot: URL,
+        totalBytes: Int64
+    ) -> IOSPersistedModelInstallState {
+        IOSPersistedModelInstallState(
+            modelID: model.id,
+            artifactVersion: model.artifactVersion,
+            stagingDirectoryPath: stagingRoot.path,
+            catalogEntry: entry,
+            pendingRelativePaths: entry.files.map(\.relativePath),
+            currentRelativePath: nil,
+            completedBytes: 0,
+            totalBytes: totalBytes,
+            currentFileRetryCount: 0,
+            currentResumeDataPath: nil,
+            currentPhase: .downloading
+        )
+    }
+
+    static func activeDownloadPhase(
+        hasResumeData: Bool,
+        isRetry: Bool
+    ) -> IOSModelDeliverySnapshot.Phase {
+        if hasResumeData {
+            return .resuming
+        }
+        return isRetry ? .restarting : .downloading
+    }
+
+    static func startingCurrentDownload(
+        from install: IOSPersistedModelInstallState,
+        currentRelativePath: String,
+        phase: IOSModelDeliverySnapshot.Phase
+    ) -> IOSPersistedModelInstallState {
+        let retryCount = install.currentRelativePath == nil ? 0 : install.currentFileRetryCount
+        return IOSPersistedModelInstallState(
+            modelID: install.modelID,
+            artifactVersion: install.artifactVersion,
+            stagingDirectoryPath: install.stagingDirectoryPath,
+            catalogEntry: install.catalogEntry,
+            pendingRelativePaths: install.pendingRelativePaths,
+            currentRelativePath: currentRelativePath,
+            completedBytes: install.completedBytes,
+            totalBytes: install.totalBytes,
+            currentFileRetryCount: retryCount,
+            currentResumeDataPath: nil,
+            currentPhase: phase
+        )
+    }
+
+    static func completedCurrentDownload(
+        from install: IOSPersistedModelInstallState,
+        currentRelativePath: String,
+        currentFile: IOSModelCatalogFile
+    ) -> IOSPersistedModelInstallState {
+        IOSPersistedModelInstallState(
+            modelID: install.modelID,
+            artifactVersion: install.artifactVersion,
+            stagingDirectoryPath: install.stagingDirectoryPath,
+            catalogEntry: install.catalogEntry,
+            pendingRelativePaths: install.pendingRelativePaths.filter { $0 != currentRelativePath },
+            currentRelativePath: nil,
+            completedBytes: install.completedBytes + currentFile.sizeBytes,
+            totalBytes: install.totalBytes,
+            currentFileRetryCount: 0,
+            currentResumeDataPath: nil,
+            currentPhase: .downloading
+        )
+    }
+
+    static func scheduledRetry(
+        from install: IOSPersistedModelInstallState,
+        retryCount: Int,
+        resumeDataPath: String?
+    ) -> IOSPersistedModelInstallState {
+        IOSPersistedModelInstallState(
+            modelID: install.modelID,
+            artifactVersion: install.artifactVersion,
+            stagingDirectoryPath: install.stagingDirectoryPath,
+            catalogEntry: install.catalogEntry,
+            pendingRelativePaths: install.pendingRelativePaths,
+            currentRelativePath: install.currentRelativePath,
+            completedBytes: install.completedBytes,
+            totalBytes: install.totalBytes,
+            currentFileRetryCount: retryCount,
+            currentResumeDataPath: resumeDataPath,
+            currentPhase: activeDownloadPhase(
+                hasResumeData: resumeDataPath != nil,
+                isRetry: true
+            )
+        )
+    }
+}
+
 // Closures are set once after URLSession init and never mutated afterwards.
 // Do not add mutation paths — if callbacks need changing, recreate the delegate.
 private final class IOSModelDeliveryDownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
@@ -301,18 +398,11 @@ actor IOSModelDeliveryActor {
         try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
         try IOSModelDeliverySupport.excludeFromBackup(stagingRoot)
 
-        let persisted = IOSPersistedModelInstallState(
-            modelID: model.id,
-            artifactVersion: model.artifactVersion,
-            stagingDirectoryPath: stagingRoot.path,
-            catalogEntry: entry,
-            pendingRelativePaths: entry.files.map(\.relativePath),
-            currentRelativePath: nil,
-            completedBytes: 0,
-            totalBytes: totalBytes,
-            currentFileRetryCount: 0,
-            currentResumeDataPath: nil,
-            currentPhase: .downloading
+        let persisted = IOSModelDeliveryStateMachine.initialInstall(
+            model: model,
+            entry: entry,
+            stagingRoot: stagingRoot,
+            totalBytes: totalBytes
         )
         activeInstall = persisted
         savePersistedState(persisted)
@@ -399,14 +489,12 @@ actor IOSModelDeliveryActor {
             relativePath: nextRelativePath
         )
         let isRetry = activeInstall.currentRelativePath != nil || activeInstall.currentFileRetryCount > 0
-        var phase: IOSModelDeliverySnapshot.Phase = .downloading
         var task: URLSessionDownloadTask
 
         if let currentResumeDataPath = activeInstall.currentResumeDataPath,
            let resumeData = try? Data(contentsOf: URL(fileURLWithPath: currentResumeDataPath)) {
             task = downloadSession.downloadTask(withResumeData: resumeData)
             cleanupResumeData(atPath: currentResumeDataPath)
-            phase = .resuming
         } else {
             if let currentResumeDataPath = activeInstall.currentResumeDataPath {
                 cleanupResumeData(atPath: currentResumeDataPath)
@@ -417,23 +505,17 @@ actor IOSModelDeliveryActor {
                 configuration: configuration
             )
             task = downloadSession.downloadTask(with: downloadURL)
-            phase = isRetry ? .restarting : .downloading
         }
         task.taskDescription = encodeTaskDescription(taskDescription)
 
-        let retryCount = activeInstall.currentRelativePath == nil ? 0 : activeInstall.currentFileRetryCount
-        activeInstall = IOSPersistedModelInstallState(
-            modelID: activeInstall.modelID,
-            artifactVersion: activeInstall.artifactVersion,
-            stagingDirectoryPath: activeInstall.stagingDirectoryPath,
-            catalogEntry: activeInstall.catalogEntry,
-            pendingRelativePaths: activeInstall.pendingRelativePaths,
+        let phase = IOSModelDeliveryStateMachine.activeDownloadPhase(
+            hasResumeData: activeInstall.currentResumeDataPath != nil,
+            isRetry: isRetry
+        )
+        activeInstall = IOSModelDeliveryStateMachine.startingCurrentDownload(
+            from: activeInstall,
             currentRelativePath: nextRelativePath,
-            completedBytes: activeInstall.completedBytes,
-            totalBytes: activeInstall.totalBytes,
-            currentFileRetryCount: retryCount,
-            currentResumeDataPath: nil,
-            currentPhase: phase
+            phase: phase
         )
         self.activeInstall = activeInstall
         savePersistedState(activeInstall)
@@ -580,18 +662,10 @@ actor IOSModelDeliveryActor {
             }
             try fileManager.moveItem(at: safeURL, to: destinationURL)
 
-            activeInstall = IOSPersistedModelInstallState(
-                modelID: activeInstall.modelID,
-                artifactVersion: activeInstall.artifactVersion,
-                stagingDirectoryPath: activeInstall.stagingDirectoryPath,
-                catalogEntry: activeInstall.catalogEntry,
-                pendingRelativePaths: activeInstall.pendingRelativePaths.filter { $0 != currentRelativePath },
-                currentRelativePath: nil,
-                completedBytes: activeInstall.completedBytes + currentFile.sizeBytes,
-                totalBytes: activeInstall.totalBytes,
-                currentFileRetryCount: 0,
-                currentResumeDataPath: nil,
-                currentPhase: .downloading
+            activeInstall = IOSModelDeliveryStateMachine.completedCurrentDownload(
+                from: activeInstall,
+                currentRelativePath: currentRelativePath,
+                currentFile: currentFile
             )
             self.activeInstall = activeInstall
             savePersistedState(activeInstall)
@@ -625,18 +699,10 @@ actor IOSModelDeliveryActor {
             #if DEBUG
             print("[IOSModelDeliveryActor] Retrying file download (attempt \(newRetryCount)/\(maxRetriesPerFile)) modelID=\(activeInstall.modelID) path=\(activeInstall.currentRelativePath ?? "unknown") error=\(error.localizedDescription)")
             #endif
-            let updatedInstall = IOSPersistedModelInstallState(
-                modelID: activeInstall.modelID,
-                artifactVersion: activeInstall.artifactVersion,
-                stagingDirectoryPath: activeInstall.stagingDirectoryPath,
-                catalogEntry: activeInstall.catalogEntry,
-                pendingRelativePaths: activeInstall.pendingRelativePaths,
-                currentRelativePath: activeInstall.currentRelativePath,
-                completedBytes: activeInstall.completedBytes,
-                totalBytes: activeInstall.totalBytes,
-                currentFileRetryCount: newRetryCount,
-                currentResumeDataPath: resumeDataPath,
-                currentPhase: resumeDataPath == nil ? .restarting : .resuming
+            let updatedInstall = IOSModelDeliveryStateMachine.scheduledRetry(
+                from: activeInstall,
+                retryCount: newRetryCount,
+                resumeDataPath: resumeDataPath
             )
             self.activeInstall = updatedInstall
             savePersistedState(updatedInstall)

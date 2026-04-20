@@ -217,21 +217,21 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         case .custom(let speakerID, let deliveryStyle):
             return model.generateCustomVoiceStream(
                 text: request.text,
-                language: GenerationSemantics.qwenLanguageHint(for: request),
+                language: QwenVoiceCore.GenerationSemantics.qwenLanguageHint(for: request),
                 speaker: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
-                instruct: GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle),
-                streamingInterval: GenerationSemantics.appStreamingInterval
+                instruct: QwenVoiceCore.GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle),
+                streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval
             )
         case .design(let voiceDescription, let deliveryStyle):
-            let resolvedVoiceDescription = GenerationSemantics.designInstruction(
+            let resolvedVoiceDescription = QwenVoiceCore.GenerationSemantics.designInstruction(
                 voiceDescription: voiceDescription,
                 emotion: deliveryStyle ?? ""
             )
             return model.generateVoiceDesignStream(
                 text: request.text,
-                language: GenerationSemantics.qwenLanguageHint(for: request),
+                language: QwenVoiceCore.GenerationSemantics.qwenLanguageHint(for: request),
                 voiceDescription: resolvedVoiceDescription,
-                streamingInterval: GenerationSemantics.appStreamingInterval
+                streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval
             )
         case .clone:
             guard let cloneConditioning else {
@@ -239,7 +239,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                     "Native Voice Cloning needs resolved native clone conditioning."
                 )
             }
-            let language = GenerationSemantics.qwenLanguageHint(
+            let language = QwenVoiceCore.GenerationSemantics.qwenLanguageHint(
                 for: request,
                 resolvedCloneTranscript: cloneConditioning.resolvedTranscript
             )
@@ -249,7 +249,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                     text: request.text,
                     language: language,
                     voiceClonePrompt: voiceClonePrompt,
-                    streamingInterval: GenerationSemantics.appStreamingInterval
+                    streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval
                 )
             }
             return model.generateStream(
@@ -258,7 +258,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 refAudio: cloneConditioning.referenceAudio,
                 refText: cloneConditioning.resolvedTranscript,
                 language: language,
-                streamingInterval: GenerationSemantics.appStreamingInterval
+                streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval
             )
         }
     }
@@ -309,7 +309,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         if firstChunkMS == nil {
             firstChunkMS = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000)
             await telemetryRecorder.mark(
-                stage: .firstChunk,
+                stage: "first_chunk",
                 metadata: ["chunk_index": "\(chunkIndex)"]
             )
         }

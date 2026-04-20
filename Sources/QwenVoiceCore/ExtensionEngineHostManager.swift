@@ -86,7 +86,7 @@ public actor ExtensionEngineHostManager<Identity: Sendable> {
         activeTransport != nil
     }
 
-    func handleAvailableCandidatesChanged(
+    public func handleAvailableCandidatesChanged(
         _ candidates: [ExtensionEngineHostCandidate<Identity>]
     ) {
         guard let current = activeTransport else { return }

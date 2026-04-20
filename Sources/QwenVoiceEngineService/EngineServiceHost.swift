@@ -1,14 +1,53 @@
 import Combine
 import Foundation
 import OSLog
+import QwenVoiceCore
 import QwenVoiceEngineSupport
-import QwenVoiceNativeRuntime
 
 private final class EngineReplyHandlerBox: @unchecked Sendable {
     let reply: (Data) -> Void
 
     init(reply: @escaping (Data) -> Void) {
         self.reply = reply
+    }
+}
+
+private actor ServiceActiveGenerationCoordinator {
+    private struct ActiveGeneration {
+        let id: UUID
+        let cancel: @Sendable () -> Void
+    }
+
+    private var activeGeneration: ActiveGeneration?
+
+    func register(cancel: @escaping @Sendable () -> Void) -> UUID {
+        let id = UUID()
+        activeGeneration = ActiveGeneration(id: id, cancel: cancel)
+        return id
+    }
+
+    func finish(id: UUID) {
+        guard activeGeneration?.id == id else { return }
+        activeGeneration = nil
+    }
+
+    func cancelCurrent() {
+        let cancel = activeGeneration?.cancel
+        activeGeneration = nil
+        cancel?()
+    }
+}
+
+@MainActor
+private final class RuntimeContext: @unchecked Sendable {
+    let appSupportDirectory: URL
+    let engine: MLXTTSEngine
+    var cancellables: Set<AnyCancellable> = []
+    var lastPublishedEvent: GenerationEvent?
+
+    init(appSupportDirectory: URL, engine: MLXTTSEngine) {
+        self.appSupportDirectory = appSupportDirectory
+        self.engine = engine
     }
 }
 
@@ -25,26 +64,10 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         category: "EngineServiceHost"
     )
 
-    private let engine = NativeMLXMacEngine()
     private let sessionLock = NSLock()
+    private let activeGenerationCoordinator = ServiceActiveGenerationCoordinator()
     private var activeSession: ActiveSession?
-    private var cancellables: Set<AnyCancellable> = []
-
-    private override init() {
-        super.init()
-
-        engine.snapshotPublisher
-            .sink { [weak self] snapshot in
-                self?.publish(.snapshot(snapshot))
-            }
-            .store(in: &cancellables)
-
-        engine.generationEventPublisher
-            .sink { [weak self] event in
-                self?.publish(.generationChunk(event))
-            }
-            .store(in: &cancellables)
-    }
+    private var runtimeContext: RuntimeContext?
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         let sessionID = UUID()
@@ -78,14 +101,18 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             )
         }
         newConnection.resume()
-        publish(.snapshot(engine.snapshot), toSessionID: sessionID)
+        Task { @MainActor [weak self] in
+            guard let self, let runtimeContext = self.runtimeContext else { return }
+            self.publish(.snapshot(Self.snapshot(for: runtimeContext.engine)), toSessionID: sessionID)
+        }
         return true
     }
 
     func perform(_ payload: Data, withReply reply: @escaping (Data) -> Void) {
         let replyHandler = EngineReplyHandlerBox(reply: reply)
-        Task { [payload, replyHandler] in
-            let response = await handleCommandPayload(payload)
+        Task { @MainActor [weak self, payload] in
+            guard let self else { return }
+            let response = await self.handleCommandPayload(payload)
             let encodedResponse = (try? EngineServiceCodec.encode(response))
                 ?? (try! EngineServiceCodec.encode(
                     EngineReplyEnvelope(
@@ -99,6 +126,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         }
     }
 
+    @MainActor
     private func handleCommandPayload(_ payload: Data) async -> EngineReplyEnvelope {
         do {
             let request = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: payload)
@@ -122,73 +150,159 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         }
     }
 
+    @MainActor
     private func perform(_ command: EngineCommand) async throws -> EngineReply {
         switch command {
         case .initialize(let appSupportDirectoryPath):
-            try await engine.initialize(appSupportDirectory: URL(fileURLWithPath: appSupportDirectoryPath))
-            return .snapshot(engine.snapshot)
+            let runtimeContext = try makeOrReuseRuntimeContext(
+                appSupportDirectory: URL(fileURLWithPath: appSupportDirectoryPath, isDirectory: true)
+            )
+            try await runtimeContext.engine.initialize(appSupportDirectory: runtimeContext.appSupportDirectory)
+            return .snapshot(Self.snapshot(for: runtimeContext.engine))
         case .ping:
-            _ = try await engine.ping()
+            _ = try await requireRuntimeContext().engine.ping()
             return .capabilities(.macOSXPCDefault)
         case .loadModel(let id):
-            try await engine.loadModel(id: id)
+            try await requireRuntimeContext().engine.loadModel(id: id)
             return .void
         case .unloadModel:
-            try await engine.unloadModel()
+            try await requireRuntimeContext().engine.unloadModel()
             return .void
         case .ensureModelLoadedIfNeeded(let id):
-            await engine.ensureModelLoadedIfNeeded(id: id)
+            try await requireRuntimeContext().engine.ensureModelLoadedIfNeeded(id: id)
             return .void
         case .prewarmModelIfNeeded(let request):
-            await engine.prewarmModelIfNeeded(for: request)
+            try await requireRuntimeContext().engine.prewarmModelIfNeeded(for: request)
             return .void
         case .ensureCloneReferencePrimed(let modelID, let reference):
-            try await engine.ensureCloneReferencePrimed(modelID: modelID, reference: reference)
+            try await requireRuntimeContext().engine.ensureCloneReferencePrimed(
+                modelID: modelID,
+                reference: reference
+            )
             return .void
         case .cancelClonePreparationIfNeeded:
-            await engine.cancelClonePreparationIfNeeded()
+            try await requireRuntimeContext().engine.cancelClonePreparationIfNeeded()
             return .void
         case .generate(let request):
-            return .generationResult(try await engine.generate(request))
+            let runtimeContext = try requireRuntimeContext()
+            let generationTask = Task { @MainActor in
+                try await runtimeContext.engine.generate(request)
+            }
+            let generationID = await activeGenerationCoordinator.register {
+                generationTask.cancel()
+            }
+            defer {
+                Task {
+                    await self.activeGenerationCoordinator.finish(id: generationID)
+                }
+            }
+            return .generationResult(try await generationTask.value)
         case .generateBatch(let commandID, let requests):
-            let results = try await engine.generateBatch(
-                requests,
-                progressHandler: { [weak self] fraction, message in
+            guard !requests.isEmpty else {
+                return .generationResults([])
+            }
+            let runtimeContext = try requireRuntimeContext()
+            let generationTask = Task { @MainActor [weak self] in
+                var results: [GenerationResult] = []
+                results.reserveCapacity(requests.count)
+                for (index, request) in requests.enumerated() {
+                    try Task.checkCancellation()
+                    let result = try await runtimeContext.engine.generate(
+                        Self.batchRequest(from: request)
+                    )
+                    results.append(Self.normalizedBatchResult(from: result))
                     self?.publish(
                         .batchProgress(
                             EngineBatchProgressUpdate(
                                 commandID: commandID,
-                                fraction: fraction,
-                                message: message
+                                fraction: Double(index + 1) / Double(requests.count),
+                                message: "Generated item \(index + 1)/\(requests.count)"
                             )
                         )
                     )
+                    runtimeContext.engine.clearGenerationActivity()
                 }
-            )
-            return .generationResults(results)
+                return results
+            }
+            let generationID = await activeGenerationCoordinator.register {
+                generationTask.cancel()
+            }
+            defer {
+                Task {
+                    await self.activeGenerationCoordinator.finish(id: generationID)
+                }
+            }
+            return .generationResults(try await generationTask.value)
         case .cancelActiveGeneration:
-            try await engine.cancelActiveGeneration()
+            await activeGenerationCoordinator.cancelCurrent()
+            try requireRuntimeContext().engine.clearGenerationActivity()
             return .void
         case .listPreparedVoices:
-            return .preparedVoices(try await engine.listPreparedVoices())
+            return .preparedVoices(try await requireRuntimeContext().engine.listPreparedVoices())
         case .enrollPreparedVoice(let name, let audioPath, let transcript):
             return .preparedVoice(
-                try await engine.enrollPreparedVoice(
+                try await requireRuntimeContext().engine.enrollPreparedVoice(
                     name: name,
                     audioPath: audioPath,
                     transcript: transcript
                 )
             )
         case .deletePreparedVoice(let id):
-            try await engine.deletePreparedVoice(id: id)
+            try await requireRuntimeContext().engine.deletePreparedVoice(id: id)
             return .void
         case .clearGenerationActivity:
-            engine.clearGenerationActivity()
+            try requireRuntimeContext().engine.clearGenerationActivity()
             return .void
         case .clearVisibleError:
-            engine.clearVisibleError()
+            try requireRuntimeContext().engine.clearVisibleError()
             return .void
         }
+    }
+
+    @MainActor
+    private func makeOrReuseRuntimeContext(appSupportDirectory: URL) throws -> RuntimeContext {
+        if let runtimeContext,
+           runtimeContext.appSupportDirectory.standardizedFileURL == appSupportDirectory.standardizedFileURL {
+            return runtimeContext
+        }
+
+        let manifestURL = try Self.locateManifestURL()
+        let registry = try ContractBackedModelRegistry(manifestURL: manifestURL)
+        let runtime = try NativeRuntimeFactory.make(
+            registry: registry,
+            paths: .rooted(at: appSupportDirectory),
+            storeVersionSeed: Self.storeVersionSeed()
+        )
+        let runtimeContext = RuntimeContext(
+            appSupportDirectory: appSupportDirectory,
+            engine: runtime.engine
+        )
+
+        runtime.engine.objectWillChange
+            .sink { [weak self, weak runtimeContext] _ in
+                Task { @MainActor [weak self, weak runtimeContext] in
+                    guard let self, let runtimeContext else { return }
+                    let snapshot = Self.snapshot(for: runtimeContext.engine)
+                    self.publish(.snapshot(snapshot))
+                    if runtimeContext.lastPublishedEvent != runtimeContext.engine.latestEvent,
+                       let latestEvent = runtimeContext.engine.latestEvent {
+                        runtimeContext.lastPublishedEvent = latestEvent
+                        self.publish(.generationChunk(latestEvent))
+                    }
+                }
+            }
+            .store(in: &runtimeContext.cancellables)
+
+        self.runtimeContext = runtimeContext
+        return runtimeContext
+    }
+
+    @MainActor
+    private func requireRuntimeContext() throws -> RuntimeContext {
+        guard let runtimeContext else {
+            throw MLXTTSEngineError.notInitialized
+        }
+        return runtimeContext
     }
 
     private func activateSession(id: UUID, eventSink: QwenVoiceEngineClientEventXPCProtocol) {
@@ -215,8 +329,13 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         }
 
         Self.logger.error("\(message, privacy: .public)")
-        Task {
-            try? await engine.cancelActiveGeneration()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.activeGenerationCoordinator.cancelCurrent()
+            await self.runtimeContext?.engine.cancelClonePreparationIfNeeded()
+            self.runtimeContext?.engine.clearGenerationActivity()
+            try? await self.runtimeContext?.engine.unloadModel()
+            self.runtimeContext = nil
         }
     }
 
@@ -241,7 +360,99 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         sessionLock.unlock()
 
         guard let eventSink else { return }
-        guard let payload = try? EngineServiceCodec.encode(event) else { return }
+        guard let payload = try? EngineServiceCodec.encode(event) else {
+            Self.logger.error("Failed to encode engine-service event payload.")
+            return
+        }
         eventSink.handleEvent(payload)
+    }
+
+    @MainActor
+    private static func snapshot(for engine: MLXTTSEngine) -> TTSEngineSnapshot {
+        TTSEngineSnapshot(
+            isReady: engine.isReady,
+            loadState: engine.loadState,
+            clonePreparationState: engine.clonePreparationState,
+            visibleErrorMessage: engine.visibleErrorMessage
+        )
+    }
+
+    private static func locateManifestURL() throws -> URL {
+        let bundles = [Bundle.main] + Bundle.allBundles + Bundle.allFrameworks
+        for bundle in bundles {
+            if let url = bundle.url(forResource: "qwenvoice_contract", withExtension: "json") {
+                return url
+            }
+        }
+        throw DocumentIOError.missingSource("qwenvoice_contract.json")
+    }
+
+    private static func storeVersionSeed(bundle: Bundle = .main) -> String {
+        let bundleIdentifier = bundle.bundleIdentifier ?? "com.qwenvoice.app.engine-service"
+        let marketingVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        let buildVersion = bundle.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String ?? "0"
+        return "\(bundleIdentifier)|\(marketingVersion)|\(buildVersion)"
+    }
+
+    private static func batchRequest(from request: GenerationRequest) -> GenerationRequest {
+        guard !request.shouldStream else { return request }
+        return GenerationRequest(
+            mode: request.mode,
+            modelID: request.modelID,
+            text: request.text,
+            outputPath: request.outputPath,
+            shouldStream: true,
+            streamingInterval: request.streamingInterval,
+            batchIndex: request.batchIndex,
+            batchTotal: request.batchTotal,
+            streamingTitle: request.streamingTitle,
+            payload: request.payload
+        )
+    }
+
+    private static func normalizedBatchResult(from result: GenerationResult) -> GenerationResult {
+        if let streamSessionDirectoryURL = result.streamSessionDirectoryURL {
+            try? FileManager.default.removeItem(at: streamSessionDirectoryURL)
+        }
+        return GenerationResult(
+            audioPath: result.audioPath,
+            durationSeconds: result.durationSeconds,
+            streamSessionDirectory: nil,
+            benchmarkSample: normalizedBatchBenchmarkSample(from: result.benchmarkSample)
+        )
+    }
+
+    private static func normalizedBatchBenchmarkSample(
+        from benchmarkSample: BenchmarkSample?
+    ) -> BenchmarkSample? {
+        guard let benchmarkSample else { return nil }
+        return BenchmarkSample(
+            engineKind: benchmarkSample.engineKind,
+            routingPolicy: benchmarkSample.routingPolicy,
+            warmState: benchmarkSample.warmState,
+            tokenCount: benchmarkSample.tokenCount,
+            processingTimeSeconds: benchmarkSample.processingTimeSeconds,
+            peakMemoryUsage: benchmarkSample.peakMemoryUsage,
+            streamingUsed: false,
+            preparedCloneUsed: benchmarkSample.preparedCloneUsed,
+            cloneCacheHit: benchmarkSample.cloneCacheHit,
+            firstChunkMs: nil,
+            peakResidentMB: benchmarkSample.peakResidentMB,
+            peakPhysFootprintMB: benchmarkSample.peakPhysFootprintMB,
+            residentStartMB: benchmarkSample.residentStartMB,
+            residentEndMB: benchmarkSample.residentEndMB,
+            compressedPeakMB: benchmarkSample.compressedPeakMB,
+            headroomStartMB: benchmarkSample.headroomStartMB,
+            headroomEndMB: benchmarkSample.headroomEndMB,
+            headroomMinMB: benchmarkSample.headroomMinMB,
+            gpuAllocatedPeakMB: benchmarkSample.gpuAllocatedPeakMB,
+            gpuRecommendedWorkingSetMB: benchmarkSample.gpuRecommendedWorkingSetMB,
+            telemetryEnabled: benchmarkSample.telemetryEnabled,
+            telemetrySamples: benchmarkSample.telemetrySamples,
+            telemetryStageMarks: benchmarkSample.telemetryStageMarks,
+            timingsMS: benchmarkSample.timingsMS,
+            booleanFlags: benchmarkSample.booleanFlags,
+            stringFlags: benchmarkSample.stringFlags
+        )
     }
 }

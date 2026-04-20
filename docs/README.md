@@ -7,6 +7,8 @@ This folder contains the current repo-authored documentation for QwenVoice.
 - [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
+- [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — measurable backend-freeze acceptance gate before frontend work
+- [`reference/frontend-backend-contract.md`](reference/frontend-backend-contract.md) — frozen app-facing backend state, delivery state, and backend-freeze gate
 - [`reference/release-readiness.md`](reference/release-readiness.md) — release-readiness matrix, proof status, and public-homepage freeze rules
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — runtime, vendoring, and packaging boundaries
 

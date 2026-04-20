@@ -35,9 +35,9 @@ macOS runtime split:
 
 - `Sources/` for the macOS app shell, views, services, and app-owned state
 - `Sources/QwenVoiceNative/` for the macOS app-facing engine proxy/store/client layer
-- `Sources/QwenVoiceEngineSupport/` for shared macOS engine IPC and transport types
-- `Sources/QwenVoiceNativeRuntime/` for service-only native execution and MLX runtime ownership
-- `Sources/QwenVoiceEngineService/` for the bundled XPC helper embedded into the Mac app
+- `Sources/QwenVoiceEngineSupport/` for shared macOS engine IPC, transport types, and trust policy
+- `Sources/QwenVoiceEngineService/` for the bundled XPC helper embedded into the Mac app and the active shared-core runtime host
+- `Sources/QwenVoiceNativeRuntime/` as a retained compatibility and regression surface rather than the primary macOS runtime-policy owner
 
 iPhone runtime split:
 
@@ -57,7 +57,7 @@ Vendored native backend boundary:
 
 Heavy generation, prewarm, and model-load work stays out of the UI process on both platforms:
 
-- macOS uses the bundled XPC helper
+- macOS uses the bundled XPC helper, which now hosts `MLXTTSEngine` from `QwenVoiceCore`
 - iPhone uses the engine extension process
 
 ## Models, Variants, And Contract Ownership
@@ -119,7 +119,7 @@ Project and automation source of truth:
 Active GitHub workflows:
 
 - `Project Inputs`
-- `Apple Platform Validation` for plan-backed source/runtime lanes, generic macOS/iPhone builds, unsigned release verification, and `.xcresult` artifact upload
+- `Backend Freeze Gate` for plan-backed source/runtime lanes, generic macOS/iPhone builds, unsigned release verification, and `.xcresult` artifact upload
 - `Vocello macOS Release`
 - `Vocello iOS TestFlight`
 
@@ -134,6 +134,8 @@ python3 scripts/harness.py test --layer native
 python3 scripts/harness.py test --layer ios
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
+./scripts/build_foundation_targets.sh macos
+./scripts/build_foundation_targets.sh ios
 python3 scripts/check_ios_catalog.py
 ./scripts/release.sh
 ./scripts/release_ios_testflight.sh
@@ -142,6 +144,8 @@ python3 scripts/check_ios_catalog.py
 `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` still enables the opt-in macOS live smoke test against an installed model.
 
 Visual and interaction verification remains partly manual through local Computer Use passes after the cheap source gates are green.
+
+For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The deterministic script uses isolated derived-data and `.xcresult` roots so stale hosted-test bundles cannot pollute app codesigning.
 
 The maintained foundation paths now use:
 
@@ -156,6 +160,6 @@ The maintained foundation paths now use:
 
 - `AGENTS.md` is the primary repo-operating guide for agents and maintainers.
 - `docs/README.md` is the index of the maintained documentation set.
-- `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
+- `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `README.md` is the public GitHub landing page.
 - `docs/qwen_tone.md` is a supplemental guidance doc, not a maintained reference doc.
