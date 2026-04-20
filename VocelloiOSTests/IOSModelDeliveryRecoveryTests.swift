@@ -243,7 +243,6 @@ private struct IOSModelDeliveryFixture {
             modelAssetStore: modelAssetStore,
             configuration: configuration,
             stateFileURL: stateFileURL,
-            fileManager: fileManager,
             snapshotSink: snapshotSink
         )
     }
