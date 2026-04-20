@@ -50,9 +50,6 @@ jobs:
       - name: Native tests
         run: python3 scripts/harness.py test --layer native
 
-      - name: iPhone foundation tests
-        run: python3 scripts/harness.py test --layer ios
-
       - name: Build macOS app
         run: |
           xcodebuild \
@@ -86,10 +83,11 @@ jobs:
           {
             echo "## Backend Freeze Gate"
             echo
-            echo "- Project inputs, harness validation, and maintained source/runtime lanes ran in this workflow."
-            echo "- Generic macOS and iPhone compile proof are attached as .xcresult bundles."
-            echo "- Unsigned macOS release verification remains part of the gate."
-            echo "- Signed release proof stays in the dedicated macOS and iPhone release workflows."
+            echo "- This workflow is the shared-core regression gate for the macOS-first release track."
+            echo "- Project inputs, harness validation, shared Swift/runtime lanes, and generic macOS/iPhone compile proof ran here."
+            echo "- Unsigned macOS release verification remains part of the blocking gate."
+            echo "- iPhone foundation tests and TestFlight release proof remain maintained, but they are deferred from the current public release milestone."
+            echo "- Signed public release proof is owned by the dedicated Vocello macOS Release workflow."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload foundation xcresult bundles

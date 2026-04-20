@@ -143,7 +143,6 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
-python3 scripts/harness.py test --layer ios
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 ./scripts/release.sh
@@ -151,12 +150,15 @@ python3 scripts/harness.py test --layer ios
 ./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt
 ```
 
+During the current `macOS-first release track`, `python3 scripts/harness.py test --layer ios` remains maintained but is conditional rather than part of the default required path. Use it for explicit iPhone-impacting backend work and for future iPhone release re-entry.
+
 Maintained CI proof also includes:
 
 - `Backend Freeze Gate`
 - `.xcresult` artifact upload for harness and platform build lanes
 - unsigned release verification in CI
-- signed macOS and iPhone release proof in their dedicated CI workflows
+- signed macOS release proof in its dedicated CI workflow
+- deferred iPhone release proof in its dedicated CI workflow
 
 The explicit backend-freeze acceptance checklist lives in:
 

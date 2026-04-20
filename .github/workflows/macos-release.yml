@@ -190,6 +190,17 @@ jobs:
             build/notary-submit.json
             build/foundation/macos-release-build.xcresult
 
+      - name: Publish macOS release summary
+        if: always()
+        run: |
+          {
+            echo "## Vocello macOS Release"
+            echo
+            echo "- This workflow is the signed/public release proof path for the current macOS-first release track."
+            echo "- The shipped public artifact for this milestone is the notarized Vocello-macos26.dmg."
+            echo "- iPhone TestFlight remains maintained separately and is not required for current release signoff."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish GitHub release assets
         if: ${{ inputs.release_tag != '' }}
         env:

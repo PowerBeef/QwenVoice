@@ -134,6 +134,17 @@ jobs:
             build/vocello_ios_testflight_release_metadata.txt
             build/foundation/ios-testflight-archive.xcresult
 
+      - name: Publish deferred iPhone release summary
+        if: always()
+        run: |
+          {
+            echo "## Vocello iOS TestFlight"
+            echo
+            echo "- This workflow remains maintained for the deferred iPhone release track."
+            echo "- It is not required for current macOS-first release signoff."
+            echo "- Keep using it for explicit iPhone release hardening, owned-device validation follow-through, and future re-entry work."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Clean up signing credentials
         if: always()
         run: |

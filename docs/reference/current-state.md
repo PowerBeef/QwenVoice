@@ -7,6 +7,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Repo identity: `QwenVoice`
 - Shipped product brand: `Vocello`
 - Platforms in this repo: macOS and iPhone
+- Active public release track: `macOS-first release track`
 - Deployment targets: `macOS 26.0+` and `iOS 26.0+`
 - Official minimum hardware floor:
   - `Mac mini M1, 8 GB RAM`
@@ -99,10 +100,12 @@ macOS:
 
 - supported hosted install path: signed and notarized DMG on GitHub Releases
 - intended release asset name: `Vocello-macos26.dmg`
+- current public release target: yes
 
 iPhone:
 
 - supported hosted install path: App Store / TestFlight
+- current public release target: deferred until the shared core is proven stable on macOS
 - GitHub Releases are not the supported iPhone install surface
 
 Source builds remain supported for both platforms.
@@ -119,9 +122,9 @@ Project and automation source of truth:
 Active GitHub workflows:
 
 - `Project Inputs`
-- `Backend Freeze Gate` for plan-backed source/runtime lanes, generic macOS/iPhone builds, unsigned release verification, and `.xcresult` artifact upload
-- `Vocello macOS Release`
-- `Vocello iOS TestFlight`
+- `Backend Freeze Gate` for shared-core regression proof, generic macOS/iPhone builds, unsigned macOS release verification, and `.xcresult` artifact upload
+- `Vocello macOS Release` as the only signed/public release workflow required for the current milestone
+- `Vocello iOS TestFlight` as the maintained but deferred iPhone release workflow
 
 Key local checks:
 
@@ -131,7 +134,6 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
-python3 scripts/harness.py test --layer ios
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
 ./scripts/build_foundation_targets.sh macos
@@ -140,6 +142,8 @@ python3 scripts/check_ios_catalog.py
 ./scripts/release.sh
 ./scripts/release_ios_testflight.sh
 ```
+
+`python3 scripts/harness.py test --layer ios` remains maintained, but it is no longer part of the default required path for the current public release milestone. Run it when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
 
 `QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` still enables the opt-in macOS live smoke test against an installed model.
 

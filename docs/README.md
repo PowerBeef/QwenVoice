@@ -9,7 +9,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
 - [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — measurable backend-freeze acceptance gate before frontend work
 - [`reference/frontend-backend-contract.md`](reference/frontend-backend-contract.md) — frozen app-facing backend state, delivery state, and backend-freeze gate
-- [`reference/release-readiness.md`](reference/release-readiness.md) — release-readiness matrix, proof status, and public-homepage freeze rules
+- [`reference/release-readiness.md`](reference/release-readiness.md) — macOS-first release-track policy, proof status, and public-homepage freeze rules
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — runtime, vendoring, and packaging boundaries
 
 These are the maintained source-of-truth docs for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and workflows first, then these reference docs.
@@ -34,5 +34,5 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 - Maintained contributor guidance in this checkout lives in the maintained reference docs listed above.
 - This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
-- Current automation surfaces live in `scripts/` and `.github/workflows/`, including macOS release packaging and iPhone TestFlight workflows.
+- Current automation surfaces live in `scripts/` and `.github/workflows/`, including the macOS-first release-track gate, macOS release packaging, and the deferred iPhone TestFlight workflow.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.

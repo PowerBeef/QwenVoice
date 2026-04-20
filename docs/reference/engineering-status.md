@@ -2,6 +2,8 @@
 
 QwenVoice is now a merged Apple-platform repository for Vocello. The repo carries a shared engine core, a macOS XPC-isolated runtime path, and an iPhone engine-extension path without reintroducing a secondary Python backend or standalone CLI surface.
 
+The current milestone is operating on a `macOS-first release track`: macOS is the only public release target for the next ship, while iPhone remains a maintained compile-safe and deferred release surface.
+
 ## Current Strengths
 
 - One shared Apple-platform codebase with explicit separation between UI orchestration and isolated engine execution
@@ -17,7 +19,7 @@ QwenVoice is now a merged Apple-platform repository for Vocello. The repo carrie
 - Restored repo workflows for project inputs, the backend-freeze gate, macOS release packaging/notarization, and iPhone TestFlight packaging
 - Maintained release scripts for signed/notarized macOS DMGs and iPhone archive/export flows
 - Deterministic local foundation paths now separate package resolution, build-for-testing, test execution, archive, and export work into explicit roots with `.xcresult` evidence
-- `Backend Freeze Gate` now treats `.xcresult` bundles as first-class artifacts for the maintained source/runtime and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
+- `Backend Freeze Gate` now treats `.xcresult` bundles as first-class artifacts for the maintained shared-core regression and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
 - An explicit public-homepage freeze that keeps GitHub landing-page messaging aligned with the currently shipped macOS product instead of the unshipped merged product
 
 ## Current Caveats
@@ -27,6 +29,7 @@ QwenVoice is now a merged Apple-platform repository for Vocello. The repo carrie
 - The repo compiles the iPhone app and engine extension, but official minimum-device proof still depends on real `iPhone 15 Pro` validation under load.
 - Owned-device iPhone validation currently centers on `iPhone 17 Pro`; that does not replace the separate `iPhone 15 Pro` proof obligation.
 - The restored iPhone TestFlight workflow still depends on real Apple signing materials, provisioning, and App Store Connect credentials when run outside local source-only validation.
+- The iPhone release/TestFlight path remains maintained, but it is intentionally deferred from signoff for the current macOS-first public release milestone.
 - The macOS and iPhone release verifiers now rely on the checked-in capability and entitlement matrix, but floor-device proof and live signed distribution proof are still separate evidence obligations.
 - The iPhone App Group remains intentionally narrow and file-based, but it is still a real cross-process dependency because model, output, voice, and cache state must be shared between the host app and the engine extension.
 - The legacy `QwenVoiceNativeRuntime` module is still present for compatibility and regression coverage, so the codebase has not finished its cleanup pass even though the active macOS helper path now runs through `QwenVoiceCore`.

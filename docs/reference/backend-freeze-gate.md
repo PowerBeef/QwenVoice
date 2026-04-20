@@ -14,6 +14,8 @@ The backend-freeze gate exists so frontend work does not quietly bind to:
 - unproven delivery or memory recovery paths
 - release claims that are only true on one platform
 
+During the current `macOS-first release track`, this gate remains the shared-core regression gate, not the full two-platform public ship gate.
+
 ## Gate Owner
 
 The canonical backend/runtime policy owner is `QwenVoiceCore`.
@@ -66,10 +68,17 @@ python3 scripts/harness.py validate
 python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
-python3 scripts/harness.py test --layer ios
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 ```
+
+`python3 scripts/harness.py test --layer ios` remains maintained, but it is conditional during the current release track. Run it when:
+
+- working directly in `Sources/iOS/`
+- working directly in `Sources/iOSSupport/`
+- working directly in `Sources/iOSEngineExtension/`
+- touching iPhone model-delivery, memory policy, or extension-host behavior
+- preparing to re-open the iPhone release track
 
 ### Local Unsigned Release Proof
 
@@ -83,13 +92,17 @@ python3 scripts/harness.py test --layer ios
 
 - `Backend Freeze Gate`
 - `Vocello macOS Release`
-- `Vocello iOS TestFlight`
 
 The maintained CI evidence includes:
 
 - uploaded `.xcresult` bundles for harness and platform build lanes
 - unsigned macOS release verification artifacts
 - dedicated signed macOS notarization proof
+- generic iPhone compile proof to protect shared-core integration
+
+Deferred but still maintained CI proof:
+
+- `Vocello iOS TestFlight`
 - dedicated iPhone archive/export/upload-prep proof
 
 ## Acceptance Checklist
@@ -112,6 +125,7 @@ These items remain important, but they do not block the frontend-safe backend ga
 
 - official `iPhone 15 Pro` minimum-device evidence is still pending while owned-device proof continues on `iPhone 17 Pro`
 - `Sources/QwenVoiceNativeRuntime/` still exists as a retained compatibility and regression surface
+- iPhone release/TestFlight proof is deferred from the current macOS-first public release milestone
 - upstream MLX and package warning noise may still appear in `.xcresult` bundles as long as the gate remains green and repo-owned targets stay warning-clean where expected
 
 ## Current Explicit Follow-Ons

@@ -11,6 +11,7 @@ Current product reality:
 - the repo stays `QwenVoice`
 - the shipped iPhone app is `Vocello`
 - macOS release assets are Vocello-branded, while several internal macOS targets, modules, and paths still keep `QwenVoice` names for continuity
+- the current public milestone uses a `macOS-first release track`, with iPhone retained as a compile-safe and deferred release surface
 
 The main working surfaces are:
 
@@ -51,6 +52,12 @@ Public homepage freeze:
 - The GitHub repo description must stay aligned with that conservative public README posture.
 - Leave the GitHub homepage URL blank unless the user explicitly asks to restore or change it.
 - Do not expand public README or repo-description messaging to the not-yet-shipped merged product until the user explicitly instructs otherwise.
+
+Current release-track policy:
+
+- The next public release target is macOS only.
+- Keep iPhone green at generic compile level on `main`, but do not treat iPhone release/TestFlight proof as blocking for the current milestone.
+- Re-open iPhone release proof only through an explicit milestone change after the shared core is proven stable on macOS.
 
 ## Source Of Truth
 
@@ -150,6 +157,8 @@ Notes:
 
 - `scripts/harness.py` remains the primary local test, diagnostic, and benchmark entrypoint.
 - The maintained harness layers are `swift`, `contract`, `native`, `ios`, and `audio`.
+- During the current `macOS-first release track`, the default required local release-readiness loop is `check_project_inputs`, `validate`, `swift`, `contract`, `native`, `build_foundation_targets.sh macos`, `build_foundation_targets.sh ios`, `release.sh`, `verify_release_bundle.sh`, and `verify_packaged_dmg.sh`.
+- Keep `python3 scripts/harness.py test --layer ios` available, but run it by default only when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
 - The harness now resolves pinned Swift packages into `build/harness/source-packages/`, uses explicit `build/harness/derived-data/` roots, and emits `.xcresult` bundles under `build/harness/results/`.
 - `QwenVoice Foundation` and `VocelloiOS Foundation` are the maintained plan-backed test schemes.
 - The committed test plans live under `tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, and `VocelloiOSFoundation`.
@@ -175,7 +184,9 @@ Release facts:
 - `scripts/release_ios_testflight.sh` is the maintained iPhone archive/export entrypoint.
 - `scripts/verify_ios_release_archive.sh` is the maintained structural verifier for the iPhone archive/export artifacts.
 - Both release scripts now use explicit derived-data and cloned-package roots under `build/foundation/` so resolve, build, archive, and export are separate phases.
-- `Backend Freeze Gate` now uploads the maintained harness/build `.xcresult` bundles and runs the unsigned macOS release-verification path in CI.
+- `Backend Freeze Gate` now acts as the shared-core regression gate for the current `macOS-first release track`, uploads the maintained harness/build `.xcresult` bundles, keeps generic iPhone compile proof, and runs the unsigned macOS release-verification path in CI.
+- `Vocello macOS Release` is the only signed/public release workflow required for the current milestone.
+- `Vocello iOS TestFlight` remains maintained but is deferred from current public release signoff.
 - Shipped macOS bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
 
 ## When Changing X, Also Update Y
