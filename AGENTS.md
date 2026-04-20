@@ -46,12 +46,13 @@ The maintained repo docs are:
 
 There are no repo-tracked local skills under `.agents/skills/` in this checkout right now. Do not point contributors at removed CLI docs, deleted backend references, or deleted repo-scoped QwenVoice skills.
 
-Public homepage freeze:
+Public homepage posture:
 
-- `README.md` is intentionally locked to the currently shipped macOS product reality.
-- The GitHub repo description must stay aligned with that conservative public README posture.
+- `README.md` intentionally leads with `Vocello` as the shipped product brand.
+- The GitHub repo description must stay aligned with that public Vocello-first README posture.
 - Leave the GitHub homepage URL blank unless the user explicitly asks to restore or change it.
-- Do not expand public README or repo-description messaging to the not-yet-shipped merged product until the user explicitly instructs otherwise.
+- Keep public messaging aligned with the currently shipped macOS product reality and the active `macOS-first release track`.
+- Do not present iPhone as a current public release surface until the release-track policy changes.
 
 Current release-track policy:
 
@@ -226,6 +227,6 @@ Release facts:
 - Keep accessibility identifiers stable when UI control types change.
 - If you changed engine architecture or runtime ownership, verify `AGENTS.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
 - If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
-- If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public-homepage freeze unless the user explicitly changed that policy.
+- If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public homepage posture and current release-track policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.
 - Run the most relevant harness layer plus `python3 scripts/harness.py validate` before calling work complete.

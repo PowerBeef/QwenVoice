@@ -18,7 +18,7 @@ These are the maintained source-of-truth docs for contributor and repository beh
 
 - [`../README.md`](../README.md) — public GitHub landing page and end-user overview
 
-The public landing page is intentionally conservative right now. It stays aligned with the currently shipped macOS product reality until the repo owner explicitly approves a broader homepage update.
+The public landing page now uses the current Vocello brand posture while staying aligned with the shipped macOS product reality and the active `macOS-first release track`.
 
 ## Supplemental Guides
 

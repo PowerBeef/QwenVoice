@@ -1,6 +1,6 @@
 # Release Readiness
 
-This document tracks the current release-readiness program and the intentional split between conservative public messaging and the actual merged repo state.
+This document tracks the current release-readiness program and the intentional split between the public macOS release posture and the broader merged repo state.
 
 ## Current Release Track
 
@@ -13,11 +13,11 @@ That means:
 - iPhone remains in active development and stays compile-safe on `main`
 - iPhone TestFlight and owned-device proof stay maintained, but they are deferred from public release signoff until the shared core is proven stable on macOS
 
-## Public Homepage Freeze
+## Public Homepage Posture
 
-The public GitHub landing-page surfaces are intentionally locked until the repo owner explicitly changes that instruction.
+The public GitHub landing-page surfaces have been refreshed to the current `Vocello` brand posture for this milestone.
 
-Locked public surfaces:
+Public surfaces:
 
 - `README.md`
 - GitHub repo description
@@ -25,11 +25,11 @@ Locked public surfaces:
 
 Public messaging rules:
 
-- Present the repo as the currently shipped macOS QwenVoice product.
-- Keep the message close to the `1.2.3` public release posture.
-- Add only a short note that a major internal refactor is underway.
-- Add only a small tease about what comes next.
-- Do not advertise the not-yet-shipped merged Apple-platform product as publicly available.
+- Lead with `Vocello` as the shipped product brand.
+- Keep public claims aligned with the current macOS product reality and the active `macOS-first release track`.
+- Do not imply that iPhone is already shipping publicly in this milestone.
+- Do not advertise a public website until one actually exists.
+- Do not present the full merged Apple-platform transition as already complete and publicly shipped.
 
 ## Proof Matrix
 
@@ -56,7 +56,7 @@ Two-track proof policy:
 
 ## Current Status
 
-- Public homepage freeze: active
+- Public homepage posture: refreshed and Vocello-first
 - macOS source and packaging surfaces: maintained in-repo
 - iPhone archive/export/TestFlight tooling: maintained in-repo
 - Current public release milestone: macOS only
@@ -96,7 +96,7 @@ Only tiers 1 and 2 block the current public release milestone.
 
 The current execution order is:
 
-1. keep public homepage messaging frozen to shipped-product reality
+1. keep public messaging polished, Vocello-first, and aligned with shipped macOS reality
 2. stabilize and optimize the shared core on macOS until the release candidate is deterministic
 3. keep iPhone compile proof green on `main` without treating iPhone release proof as blocking for this milestone
 4. maintain separate owned-device and official-minimum iPhone proof states for later re-entry
