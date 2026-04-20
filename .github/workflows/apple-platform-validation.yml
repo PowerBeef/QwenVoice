@@ -20,8 +20,8 @@ jobs:
 
       - name: Select Xcode
         run: |
-          LATEST_XCODE="$(python3 -c "from pathlib import Path; apps=sorted(Path('/Applications').glob('Xcode*.app')); print(apps[-1] if apps else Path('/Applications/Xcode.app'))")"
-          sudo xcode-select -s "$LATEST_XCODE"
+          SELECTED_XCODE="$(python3 -c "from pathlib import Path; apps=sorted(Path('/Applications').glob('Xcode*.app')); preferred=Path('/Applications/Xcode.app'); stable=[app for app in apps if 'beta' not in app.name.lower()]; print(preferred if preferred.exists() else (stable[-1] if stable else (apps[-1] if apps else preferred)))")"
+          sudo xcode-select -s "$SELECTED_XCODE"
           xcodebuild -version
 
       - name: Ensure XcodeGen
