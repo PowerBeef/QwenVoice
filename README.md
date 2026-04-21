@@ -12,6 +12,18 @@ QwenVoice is a native macOS app for Qwen3-TTS with custom voices, voice design, 
 
 It uses a SwiftUI frontend plus a long-lived Python backend that runs MLX inference locally. End users do not need to install Python or use the terminal when running the packaged app.
 
+## A Note on What's Changing
+
+A few things worth mentioning if you've been following the project.
+
+**QwenVoice is becoming Vocello.** The name is changing, but the app isn't. Same custom voices, same voice design, same voice cloning, same fully offline approach on Apple Silicon. QwenVoice started as a way to run Qwen3-TTS locally on a Mac, and over time it has grown into its own thing with its own design decisions. Giving it a proper name is more about committing to the project for the long term than pivoting away from what it is today. If you install it today and come back in six months, it'll still feel like the same app — just with a cleaner identity.
+
+**A leaner backend is on the way.** The build you can download right now still uses the SwiftUI frontend plus a long-lived Python process for MLX inference. The next release drops Python entirely and moves inference directly into Swift. For you that means smaller downloads, faster cold starts, no venv spin-up on first launch, and no Python prerequisite when building from source. Nothing about how you use the app changes.
+
+**An iPhone companion is coming.** Vocello for iPhone is in active development and will ship after the macOS rebrand lands. Same models, same offline-first posture, no cloud, no account, no subscription. It's aimed at iPhone 15 Pro and newer so the on-device models actually fit and run well.
+
+None of this changes what you install today. v1.2.3 is still the current release, and the rest of this README describes that build. I'll update this page when the Vocello release is ready.
+
 ## Shipped Modes
 
 ### Custom Voice
