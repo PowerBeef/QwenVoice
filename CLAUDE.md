@@ -37,12 +37,15 @@ The maintained repo docs are:
 - `CLAUDE.md`
 - `README.md`
 - `docs/README.md`
+- `docs/qwen_tone.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`
 - `docs/reference/backend-freeze-gate.md`
 - `docs/reference/frontend-backend-contract.md`
 - `docs/reference/release-readiness.md`
+- `docs/reference/live-testing.md`
 - `docs/reference/vendoring-runtime.md`
+- `docs/reference/mlx-audio-swift-patching.md`
 
 There are no repo-tracked local skills under `.agents/skills/` in this checkout right now. Do not point contributors at removed CLI docs, deleted backend references, or deleted repo-scoped QwenVoice skills.
 
