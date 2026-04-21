@@ -1,7 +1,3 @@
-<div align="center">
-  <img src="docs/social_preview.png" alt="QwenVoice — offline Qwen3-TTS for macOS with custom voices, voice design, and voice cloning">
-</div>
-
 ## Screenshots
 
 <img width="1868" height="1676" alt="QwenVoice screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
