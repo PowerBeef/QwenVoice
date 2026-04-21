@@ -105,6 +105,7 @@ When repo facts disagree, trust sources in this order:
 - `Sources/Services/AppPaths.swift` and `Sources/iOSSupport/Services/AppPaths.swift` are the path boundaries for runtime data on each platform.
 - The iPhone App Group surface is intentionally file-based and rooted under `Sources/iOSSupport/Services/AppPaths.swift`; keep shared state constrained to the required app-support subtree for models, downloads, outputs, voices, and cache data.
 - `Sources/Models/TTSContract.swift`, `Sources/Models/TTSModel.swift`, and the `QwenVoiceCore` semantic types load `Sources/Resources/qwenvoice_contract.json`.
+- `QwenVoiceTests` cases that construct `NativeMLXMacEngine` exercise the `Sources/QwenVoiceNativeRuntime/` copies of runtime types (notably `NativeStreamingSynthesisSession`), not the live `Sources/QwenVoiceCore/` copies. Behavior fixes surfaced by those tests often have to land in both copies until the retained-vs-live split is consolidated.
 
 ## Platform And Product Constraints
 
@@ -167,6 +168,17 @@ Notes:
 - For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The script uses isolated build roots and `.xcresult` bundles so stale hosted test-bundle output cannot poison app codesigning.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes.
 - Do not jump to live native smoke, local packaging, or manual Computer Use until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate are already green.
+- If a harness layer fails with `Existing file at -resultBundlePath` or `accessing build database "...": disk I/O error` right after running `./scripts/regenerate_project.sh`, clear `build/harness/derived-data/` and `build/harness/results/` before retrying — those errors are stale state from the previous run, not a code regression.
+- `python3 scripts/harness.py` prints `==> Running ...` log lines before the JSON envelope. When parsing, filter first: `awk '/^\{/,EOF' <file> | python3 -c "..."` (or capture from the last leading `{` onward).
+- When a harness layer fails, the authoritative error lives in the `.xcresult` bundle, not stdout/stderr. Use `xcrun xcresulttool get build-results --path build/harness/results/<layer>/build.xcresult` for build errors and `xcrun xcresulttool get test-results tests --path build/harness/results/<layer>/test.xcresult` for test failures. `details.stderr_tail` in the harness JSON only shows the outer `** TEST BUILD FAILED **`.
+- SourceKit diagnostics like `No such module 'MLX'` / `Cannot find type X in scope` after an edit are index staleness, not real errors. Trust only errors reported by the harness (xcresult bundles) and by `xcodebuild` / `./scripts/build_foundation_targets.sh`.
+
+## Swift Concurrency Gotchas
+
+- `Self` cannot be referenced inside a `static let` initializer on a class (covariant-Self rule). Use the concrete type name (e.g. `EngineServiceHost.logger`) instead of `Self.logger` in static member initializers.
+- `Task.detached { ... }` does not inherit cancellation from the parent. If you need cancellation to propagate, wrap the `try await task.value` in `withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }`.
+- `AsyncThrowingStream` iterators do not automatically observe the consuming task's cancellation when the producer runs in its own Task. Inside `for try await event in stream { ... }`, add `try Task.checkCancellation()` at the top of the loop body.
+- When promoting a helper out of a `@MainActor`-isolated class to module scope, mark the closure parameter `@MainActor` (e.g. `condition: @escaping @MainActor () -> Bool`) and invoke via `await MainActor.run(body: condition)`. Without this, Swift 6 flags call sites that capture actor-isolated state with "Sending risks data race".
 
 ## CI And Release Workflows
 
