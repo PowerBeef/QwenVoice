@@ -20,7 +20,7 @@ A few things worth mentioning if you've been following the project.
 
 **A leaner backend is on the way.** The build you can download right now still uses the SwiftUI frontend plus a long-lived Python process for MLX inference. The next release drops Python entirely and moves inference directly into Swift. For you that means smaller downloads, faster cold starts, no venv spin-up on first launch, and no Python prerequisite when building from source. Nothing about how you use the app changes.
 
-**An iPhone companion is coming.** Vocello for iPhone is in active development and will ship after the macOS rebrand lands. Same models, same offline-first posture, no cloud, no account, no subscription. It's aimed at iPhone 15 Pro and newer so the on-device models actually fit and run well.
+**An iPhone version is coming.** Vocello for iPhone is in active development and will ship after the macOS rebrand lands. It's a full standalone app, not a Mac companion — the same offline, on-device generation you get on macOS, running the 4-bit model variants so everything fits comfortably on iPhone 15 Pro and newer. The iPhone app will be open source alongside the macOS app in this repo, and a signed, ready-to-run build will be published on the App Store so you don't have to build and sign it yourself. No cloud, no subscription.
 
 None of this changes what you install today. v1.2.3 is still the current release, and the rest of this README describes that build. I'll update this page when the Vocello release is ready.
 
