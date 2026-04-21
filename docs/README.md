@@ -4,13 +4,15 @@ This folder contains the current repo-authored documentation for QwenVoice.
 
 ## Maintained Reference Docs
 
-- [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
+- [`../CLAUDE.md`](../CLAUDE.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
 - [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — measurable backend-freeze acceptance gate before frontend work
 - [`reference/frontend-backend-contract.md`](reference/frontend-backend-contract.md) — frozen app-facing backend state, delivery state, and backend-freeze gate
-- [`reference/release-readiness.md`](reference/release-readiness.md) — macOS-first release-track policy, proof status, and public-homepage freeze rules
+- [`reference/release-readiness.md`](reference/release-readiness.md) — macOS-first release-track policy, proof status, public-homepage freeze rules, and the tier→workflow mapping table
 - [`reference/vendoring-runtime.md`](reference/vendoring-runtime.md) — runtime, vendoring, and packaging boundaries
+- [`reference/mlx-audio-swift-patching.md`](reference/mlx-audio-swift-patching.md) — vendor delta under `third_party_patches/mlx-audio-swift/`, rebase procedure, and post-rebase test checklist
+- [`reference/live-testing.md`](reference/live-testing.md) — opt-in live native engine smoke tests (`QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1`), setup, and troubleshooting
 
 These are the maintained source-of-truth docs for contributor and repository behavior. When prose disagrees, trust the repo code, manifests, scripts, and workflows first, then these reference docs.
 

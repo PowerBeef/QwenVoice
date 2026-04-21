@@ -113,9 +113,22 @@ private final class XPCServiceTransport: NSObject, XPCNativeEngineTransporting, 
     }
 
     func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void) {
-        let proxy = connection.remoteObjectProxyWithErrorHandler { [handlers] error in
+        let rawProxy = connection.remoteObjectProxyWithErrorHandler { [handlers] error in
             handlers.onRemoteError(error)
-        } as! QwenVoiceEngineServiceXPCProtocol
+        }
+        guard let proxy = rawProxy as? QwenVoiceEngineServiceXPCProtocol else {
+            let mismatch = NSError(
+                domain: "com.qwenvoice.xpc",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Remote XPC proxy does not conform to QwenVoiceEngineServiceXPCProtocol",
+                ]
+            )
+            handlers.onRemoteError(mismatch)
+            reply(Data())
+            return
+        }
         proxy.perform(payload, withReply: reply)
     }
 }

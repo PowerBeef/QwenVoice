@@ -91,6 +91,25 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
         )
     }
 
+    /// Lists required model files that the manifest declares but cannot be
+    /// found under the supplied root. Callers use this to surface missing
+    /// assets at app launch instead of discovering the gap deep inside a
+    /// later model-load (Tier 6). Non-fatal: returns an empty list when all
+    /// required files resolve.
+    public func missingRequiredFiles(installedUnder root: URL) -> [String] {
+        var missing: [String] = []
+        for model in models {
+            let modelRoot = root.appendingPathComponent(model.folder, isDirectory: true)
+            for relativePath in model.requiredRelativePaths {
+                let candidate = modelRoot.appendingPathComponent(relativePath)
+                if !FileManager.default.fileExists(atPath: candidate.path) {
+                    missing.append("\(model.id)/\(relativePath)")
+                }
+            }
+        }
+        return missing
+    }
+
     private static func validate(_ manifest: ContractManifest) throws {
         guard !manifest.models.isEmpty else {
             throw Error.missingModels

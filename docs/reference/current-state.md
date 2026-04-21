@@ -162,7 +162,7 @@ The maintained foundation paths now use:
 
 ## Current Documentation Boundaries
 
-- `AGENTS.md` is the primary repo-operating guide for agents and maintainers.
+- `CLAUDE.md` is the primary repo-operating guide for agents and maintainers.
 - `docs/README.md` is the index of the maintained documentation set.
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `README.md` is the public GitHub landing page.

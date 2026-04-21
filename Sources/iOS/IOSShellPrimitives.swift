@@ -1148,16 +1148,16 @@ struct IOSScriptLengthStatusRow: View {
                 .font(.caption)
                 .foregroundStyle(state.isOverLimit ? .orange : IOSAppTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("textInput_limitMessage")
+                .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.limitMessage)
 
             Spacer(minLength: 8)
 
             Text(state.counterText)
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .foregroundStyle(state.isOverLimit ? .orange : tint)
-                .accessibilityIdentifier("textInput_lengthCount")
+                .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthCount)
         }
-        .accessibilityIdentifier("textInput_lengthStatus")
+        .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthStatus)
     }
 }
 

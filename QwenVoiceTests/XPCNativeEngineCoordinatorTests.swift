@@ -183,8 +183,11 @@ final class XPCNativeEngineCoordinatorTests: XCTestCase {
         )
 
         await coordinator.fireAndForget(.clearVisibleError)
-        for _ in 0..<20 where transport.performCallCount == 0 {
-            try? await Task.sleep(for: .milliseconds(10))
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "fireAndForget perform reaches transport"
+        ) {
+            transport.performCallCount >= 1
         }
         XCTAssertEqual(transport.performCallCount, 1)
     }

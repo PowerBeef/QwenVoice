@@ -65,16 +65,22 @@ final class XPCNativeEngineClientTests: XCTestCase {
 
         await client.debugInvalidateConnectionForTesting()
 
-        for _ in 0..<20 where client.snapshot.isReady {
-            try? await Task.sleep(nanoseconds: 10_000_000)
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "client becomes not-ready after invalidation"
+        ) {
+            !client.snapshot.isReady
         }
         XCTAssertFalse(client.snapshot.isReady)
         XCTAssertNotNil(client.snapshot.visibleErrorMessage)
 
         let reconnectPing = try await client.ping()
         XCTAssertTrue(reconnectPing)
-        for _ in 0..<20 where !client.snapshot.isReady {
-            try? await Task.sleep(nanoseconds: 10_000_000)
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "client becomes ready after reconnect"
+        ) {
+            client.snapshot.isReady
         }
         XCTAssertTrue(client.snapshot.isReady)
         XCTAssertEqual(client.snapshot.loadState, .idle)
@@ -100,8 +106,11 @@ final class XPCNativeEngineClientTests: XCTestCase {
 
         await firstClient.debugInvalidateConnectionForTesting()
 
-        for _ in 0..<20 where secondClient.snapshot.visibleErrorMessage != nil {
-            try? await Task.sleep(nanoseconds: 10_000_000)
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "second client clears any visible error"
+        ) {
+            secondClient.snapshot.visibleErrorMessage == nil
         }
 
         let secondPing = try await secondClient.ping()

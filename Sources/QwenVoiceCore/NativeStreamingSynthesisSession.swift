@@ -62,9 +62,19 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             wasPrimed: wasPrimed,
             telemetryRecorder: telemetryRecorder
         )
-        let result = try await Task.detached(priority: .userInitiated) {
+        // `Task.detached` does not inherit the parent's cancellation, so we
+        // explicitly forward cancellation through `withTaskCancellationHandler`.
+        // Without this, cancelling the outer generation task leaves the
+        // detached streaming task running and bypasses the retention-flag
+        // `defer` cleanup (Tier 1.5).
+        let task = Task.detached(priority: .userInitiated) {
             try await execution.run(eventSink: eventSink)
-        }.value
+        }
+        let result = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         await eventSink(.completed(result))
         return result
     }
@@ -347,6 +357,18 @@ private struct StreamingExecutionContext: Sendable {
             withIntermediateDirectories: true
         )
 
+        // Retention flag flipped to true only on the successful-return path.
+        // Any error or cancellation between directory creation and successful
+        // return cleans up the session directory and the partially-written
+        // output file so they cannot leak (Tier 1.5).
+        var shouldRetainSession = false
+        defer {
+            if !shouldRetainSession {
+                try? FileManager.default.removeItem(at: sessionDirectory)
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+        }
+
         var generationInfo: AudioGenerationInfo?
         var chunkIndex = 0
         var firstAudioReadyMS: Int?
@@ -376,6 +398,13 @@ private struct StreamingExecutionContext: Sendable {
 
         do {
             for try await event in stream {
+                // AsyncThrowingStream iterators do not automatically observe
+                // cancellation of the consuming task when the producer is
+                // running in its own independent Task. Check explicitly so
+                // the detached streaming task exits promptly when the outer
+                // generate() task is cancelled (Tier 1.5 / 4.3).
+                try Task.checkCancellation()
+
                 switch event {
                 case .token:
                     continue
@@ -486,6 +515,7 @@ private struct StreamingExecutionContext: Sendable {
         )
         await telemetryRecorder?.mark(stage: .streamCompleted)
 
+        shouldRetainSession = true
         return GenerationResult(
             audioPath: outputURL.path,
             durationSeconds: durationSeconds,

@@ -223,8 +223,11 @@ final class TTSEngineStoreTests: XCTestCase {
             )
         )
 
-        for _ in 0..<20 where store.latestEvent?.requestID != 1 {
-            try? await Task.sleep(for: .milliseconds(10))
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "store sees generation event with requestID 1"
+        ) {
+            store.latestEvent?.requestID == 1
         }
 
         XCTAssertEqual(store.snapshot, initialSnapshot)

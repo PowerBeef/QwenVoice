@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-This is the primary repo operating guide for coding agents working in QwenVoice.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. It is the primary repo operating guide for coding agents working in QwenVoice.
 
 ## Repo Overview
 
@@ -34,7 +34,7 @@ This checkout is a native Apple-platform codebase for macOS and iPhone. Do not r
 
 The maintained repo docs are:
 
-- `AGENTS.md`
+- `CLAUDE.md`
 - `README.md`
 - `docs/README.md`
 - `docs/reference/current-state.md`
@@ -211,7 +211,7 @@ Release facts:
 - iPhone archive/export/TestFlight behavior:
   keep `scripts/check_ios_catalog.py`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
+  update `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 
@@ -225,7 +225,7 @@ Release facts:
 
 - Prefer manifest-backed data over duplicated constants.
 - Keep accessibility identifiers stable when UI control types change.
-- If you changed engine architecture or runtime ownership, verify `AGENTS.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
+- If you changed engine architecture or runtime ownership, verify `CLAUDE.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
 - If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
 - If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public homepage posture and current release-track policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.

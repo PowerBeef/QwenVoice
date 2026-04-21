@@ -219,7 +219,7 @@ struct IOSStudioComposerCard<Accessory: View, Setup: View>: View {
                             .font(.caption)
                             .foregroundStyle(helperTone)
                             .lineLimit(2)
-                            .accessibilityIdentifier("textInput_limitMessage")
+                            .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.limitMessage)
                     }
 
                     Spacer(minLength: 8)
@@ -227,7 +227,7 @@ struct IOSStudioComposerCard<Accessory: View, Setup: View>: View {
                     Text(counterText)
                         .font(.caption2.monospacedDigit().weight(.semibold))
                         .foregroundStyle(counterTone)
-                        .accessibilityIdentifier("textInput_lengthCount")
+                        .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthCount)
                 }
             }
 
@@ -241,7 +241,7 @@ struct IOSStudioComposerCard<Accessory: View, Setup: View>: View {
         }
         .padding(contentPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier("textInput_lengthStatus")
+        .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthStatus)
     }
 }
 
@@ -283,7 +283,7 @@ struct IOSCompactPromptCard: View {
                 Text(counterText)
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .foregroundStyle(counterTone)
-                    .accessibilityIdentifier("textInput_lengthCount")
+                    .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthCount)
             }
 
             if let helper, !helper.isEmpty {
@@ -291,7 +291,7 @@ struct IOSCompactPromptCard: View {
                     .font(.caption)
                     .foregroundStyle(helperTone)
                     .lineLimit(2)
-                    .accessibilityIdentifier("textInput_limitMessage")
+                    .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.limitMessage)
             }
 
             IOSMultilineTextView(
@@ -305,7 +305,7 @@ struct IOSCompactPromptCard: View {
             .clipped()
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .accessibilityIdentifier("textInput_lengthStatus")
+        .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.lengthStatus)
     }
 }
 

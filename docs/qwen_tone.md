@@ -1,12 +1,14 @@
 # Tone and Emotion in QwenVoice
 
-This guide is a supplemental prompt-writing reference for the shipped macOS app.
+_Last reviewed: 2026-04-20._
+
+This guide is a supplemental prompt-writing reference for the shipped macOS app. It is supplemental and may lag shipped behavior — when in doubt, trust the sources listed below before this guide.
 
 For current repo truth about app structure, workflows, or supported behavior, trust:
 
 1. `README.md`
 2. `docs/reference/current-state.md`
-3. `AGENTS.md`
+3. `CLAUDE.md`
 
 ## What the App Exposes
 

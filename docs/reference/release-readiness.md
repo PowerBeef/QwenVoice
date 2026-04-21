@@ -92,6 +92,21 @@ The current `macOS-first release track` uses three proof tiers:
 
 Only tiers 1 and 2 block the current public release milestone.
 
+### Tier → Workflow Mapping
+
+Each tier is owned by concrete CI workflow files. Update this table whenever a
+workflow is renamed, split, or retired so prose and YAML do not drift.
+
+| Tier | Workflow file | Workflow display name | Primary validation step |
+|---|---|---|---|
+| 1. Shared-core regression | `.github/workflows/project-inputs.yml` | `Project Inputs` | `./scripts/check_project_inputs.sh` |
+| 1. Shared-core regression | `.github/workflows/apple-platform-validation.yml` | `Backend Freeze Gate` | `python3 scripts/harness.py test --layer swift` + `--layer native` + `--layer contract` + generic macOS and iPhone builds + unsigned release verification |
+| 2. macOS ship gate (local) | — | — | `./scripts/release.sh` + `./scripts/verify_release_bundle.sh` + `./scripts/verify_packaged_dmg.sh` |
+| 2. macOS ship gate (CI) | `.github/workflows/macos-release.yml` | `Vocello macOS Release` | signed + notarized `Vocello-macos26.dmg` build + `stapler validate` + post-notarization verify |
+| 3. Deferred iPhone release | `.github/workflows/ios-testflight.yml` | `Vocello iOS TestFlight` | `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` |
+
+Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met.
+
 ## Program Priorities
 
 The current execution order is:

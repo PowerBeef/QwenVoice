@@ -14,8 +14,14 @@ enum AppPaths {
             return fixtureRoot
         }
 
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("QwenVoice", isDirectory: true)
+        let baseDir = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(
+                fileURLWithPath: (NSHomeDirectory() as NSString)
+                    .appendingPathComponent("Library/Application Support"),
+                isDirectory: true
+            )
+        return baseDir.appendingPathComponent("QwenVoice", isDirectory: true)
     }
 
     static var modelsDir: URL {

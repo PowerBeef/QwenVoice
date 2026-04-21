@@ -161,8 +161,11 @@ final class NativeMLXMacEngineTests: XCTestCase {
             try await engine.loadModel(id: "pro_clone")
         }
         await Task.yield()
-        for _ in 0..<20 where engine.snapshot.loadState != .starting {
-            try? await Task.sleep(nanoseconds: 10_000_000)
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "engine load state reaches .starting"
+        ) {
+            engine.snapshot.loadState == .starting
         }
         XCTAssertEqual(engine.snapshot.loadState, .starting)
         try await loadTask.value
@@ -1246,7 +1249,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
             try await engine.generate(request)
         }
 
-        try await waitUntil(timeoutSeconds: 1.0) {
+        _ = await waitUntil(timeoutSeconds: 1.0, description: "first streaming event") {
             observedEvents.count == 1
         }
         try await engine.cancelActiveGeneration()
@@ -1264,6 +1267,111 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: outputPath))
         XCTAssertEqual(engine.snapshot.loadState, .loaded(modelID: "pro_custom"))
         XCTAssertNil(engine.snapshot.visibleErrorMessage)
+    }
+
+    /// Tier 4.3: after cancelling mid-stream, the session directory and any
+    /// partial chunk files it contains must be cleaned up alongside the output
+    /// file — the cleanup path is owned by `NativeStreamingSynthesisSession`'s
+    /// retention-flag `defer` (Tier 1.5).
+    func testNativeMLXMacEngineCancellationCleansUpStreamSessionArtifacts() async throws {
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = NativeRuntimeTestSupport.ModelEntry(
+            id: "pro_custom",
+            name: "Custom Voice",
+            folder: "Custom-Model",
+            mode: "custom"
+        )
+        let manifestURL = try NativeRuntimeTestSupport.writeManifest(at: root, models: [model])
+        let modelsDirectory = root.appendingPathComponent("models", isDirectory: true)
+        _ = try NativeRuntimeTestSupport.installModel(model, into: modelsDirectory)
+
+        let customModel = NativeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    Task {
+                        do {
+                            continuation.yield(.audio([0.0, 0.1, -0.1, 0.0]))
+                            try await Task.sleep(for: .milliseconds(50))
+                            continuation.yield(.audio([0.05, -0.05, 0.02, -0.02]))
+                            try await Task.sleep(for: .milliseconds(500))
+                            continuation.yield(.audio([0.1, 0.0, -0.05, 0.02]))
+                            continuation.finish()
+                        } catch is CancellationError {
+                            continuation.finish(throwing: CancellationError())
+                        } catch {
+                            continuation.finish(throwing: error)
+                        }
+                    }
+                }
+            }
+        )
+
+        let engine = NativeMLXMacEngine(
+            runtime: MacNativeRuntime(
+                manifestURL: manifestURL,
+                modelLoader: { _, _ in customModel }
+            )
+        )
+        try await engine.initialize(appSupportDirectory: root)
+
+        var observedEvents: [GenerationEvent] = []
+        engine.generationEventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { observedEvents.append($0) }
+            .store(in: &cancellables)
+
+        let outputPath = root.appendingPathComponent("cleanup-session.wav").path
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Session cleanup",
+            outputPath: outputPath,
+            shouldStream: true,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        let task = Task {
+            try await engine.generate(request)
+        }
+
+        _ = await waitUntil(
+            timeoutSeconds: 1.0,
+            description: "first streaming event (session directory created)"
+        ) {
+            observedEvents.count == 1
+        }
+
+        // Stream-session-directory should exist while generation is in flight.
+        let streamSessionsRoot = root.appendingPathComponent("cache/stream_sessions", isDirectory: true)
+        let sessionsBeforeCancel = (try? FileManager.default.contentsOfDirectory(atPath: streamSessionsRoot.path)) ?? []
+        XCTAssertFalse(sessionsBeforeCancel.isEmpty, "expected at least one session directory during streaming")
+
+        try await engine.cancelActiveGeneration()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected generation to be cancelled.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        // After cancellation: no output file, no leftover session directories,
+        // no partial chunk files.
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: outputPath),
+            "final output must not be left behind after cancellation"
+        )
+        let sessionsAfterCancel = (try? FileManager.default.contentsOfDirectory(atPath: streamSessionsRoot.path)) ?? []
+        XCTAssertTrue(
+            sessionsAfterCancel.isEmpty,
+            "stream_sessions directory must be empty after cancellation, found: \(sessionsAfterCancel)"
+        )
     }
 
     func testNativeMLXMacEngineBatchCancellationStopsBeforeLaterItemsStart() async throws {
@@ -1329,7 +1437,7 @@ final class NativeMLXMacEngineTests: XCTestCase {
             try await engine.generateBatch([first, second]) { _, _ in }
         }
 
-        try await waitUntil(timeoutSeconds: 1.0) {
+        _ = await waitUntil(timeoutSeconds: 1.0, description: "first batch stream call") {
             streamCalls.allValues == ["First item"]
         }
         try await engine.cancelActiveGeneration()
@@ -1347,19 +1455,6 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: second.outputPath))
     }
 
-    private func waitUntil(
-        timeoutSeconds: TimeInterval,
-        condition: @escaping () -> Bool
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
-            if condition() {
-                return
-            }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTFail("Timed out waiting for condition")
-    }
 }
 
 @MainActor

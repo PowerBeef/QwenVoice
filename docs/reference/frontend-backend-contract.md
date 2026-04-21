@@ -170,7 +170,7 @@ Any backend change that alters one of the stable state surfaces above is a contr
 
 When that happens, update:
 
-- `AGENTS.md`
+- `CLAUDE.md`
 - `docs/README.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`

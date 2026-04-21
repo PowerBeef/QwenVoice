@@ -4,16 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 
-fail() {
-    echo "Error: $*" >&2
-    exit 1
-}
-
-plist_read() {
-    local plist_path="$1"
-    local key="$2"
-    /usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null
-}
+# shellcheck source=./harness_lib/shared.sh
+. "$SCRIPT_DIR/harness_lib/shared.sh"
 
 entitlements_to_file() {
     local target="$1"
@@ -54,28 +46,6 @@ key = os.environ["PLIST_KEY"]
 data = plistlib.loads(plist_path.read_bytes())
 if data.get(key) is not True:
     raise SystemExit(1)
-PY
-}
-
-matrix_read() {
-    local selector="$1"
-    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
-value = data
-for part in os.environ["MATRIX_SELECTOR"].split("/"):
-    value = value[part]
-
-if isinstance(value, bool):
-    print("true" if value else "false")
-elif isinstance(value, list):
-    for item in value:
-        print(item)
-else:
-    print(value)
 PY
 }
 

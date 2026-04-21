@@ -45,11 +45,16 @@ public final class TTSEngineStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] latestEvent in
                 guard let self else { return }
-                self.latestEvent = latestEvent
-                self.frontendState = TTSEngineFrontendState(
+                // Consolidate the per-chunk state fan-out into a single
+                // `frontendState` assignment. SwiftUI now sees one
+                // invalidation per chunk instead of two, which keeps
+                // streaming playback smooth on older Macs (Tier 2.3).
+                let nextFrontendState = TTSEngineFrontendState(
                     snapshot: self.snapshot,
                     latestEvent: latestEvent
                 )
+                self.latestEvent = latestEvent
+                self.frontendState = nextFrontendState
             }
     }
 

@@ -53,13 +53,13 @@ struct QVoiceiOSApp: App {
                                 startEngineIfNeeded()
                             }
                             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
-                                handleMemoryPressure(reason: "memory_warning")
+                                handleMemoryPressure(reason: "memory_warning", severity: .critical)
                             }
                             .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
                                 let thermalState = ProcessInfo.processInfo.thermalState
                                 if thermalState == .serious || thermalState == .critical {
                                     let reason = "thermal_\(thermalState.rawValue)"
-                                    handleMemoryPressure(reason: reason)
+                                    handleMemoryPressure(reason: reason, severity: .warning)
                                 }
                             }
                             .onReceive(engine.$hasActiveGeneration) { hasActiveGeneration in
@@ -153,9 +153,13 @@ struct QVoiceiOSApp: App {
         performRuntimeRelease(reason: reason, wasDeferred: wasDeferred)
     }
 
-    private func handleMemoryPressure(reason: String) {
+    private func handleMemoryPressure(
+        reason: String,
+        severity: MemoryPressureSeverity = .warning
+    ) {
         let action = runtimeReleaseCoordinator.requestCacheRelief(
             reason: reason,
+            severity: severity,
             hasActiveGeneration: deps.engine?.hasActiveGeneration ?? false
         )
 
@@ -164,7 +168,11 @@ struct QVoiceiOSApp: App {
             break
         case .deferred:
             break
-        case .execute(let executeReason):
+        case .execute(let executeReason, let cancelActiveGeneration):
+            if cancelActiveGeneration {
+                audioPlayer.abortLivePreviewIfNeeded()
+                deps.engine?.clearGenerationActivity()
+            }
             performMemoryPressureRelief(reason: executeReason)
         }
     }
@@ -174,7 +182,7 @@ struct QVoiceiOSApp: App {
             hasActiveGeneration: deps.engine?.hasActiveGeneration ?? false
         )
 
-        guard case .execute(let reason) = action else {
+        guard case .execute(let reason, _) = action else {
             return
         }
 

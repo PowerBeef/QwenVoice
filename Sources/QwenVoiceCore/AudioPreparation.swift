@@ -96,6 +96,14 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
     public func normalizeAudio(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
         try await withCheckedThrowingContinuation { continuation in
             Self.normalizationQueue.async {
+                // Tier 6: skip the CPU-bound normalization pass if the caller
+                // was already cancelled while the dispatch-queue hop was in
+                // flight. The normalization work itself does not observe
+                // cancellation, so this up-front check prevents wasted work.
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
                 do {
                     continuation.resume(returning: try normalizeAudioSynchronously(request))
                 } catch {

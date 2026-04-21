@@ -28,20 +28,8 @@ DESTINATION_MODE="export"
 SKIP_CATALOG_CHECK=false
 SKIP_ARCHIVE=false
 
-matrix_read() {
-    local selector="$1"
-    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
-value = data
-for part in os.environ["MATRIX_SELECTOR"].split("/"):
-    value = value[part]
-print(value)
-PY
-}
+# shellcheck source=./harness_lib/shared.sh
+. "$SCRIPT_DIR/harness_lib/shared.sh"
 
 BUNDLE_ID="$(matrix_read "iOS/app/bundleIdentifier")"
 

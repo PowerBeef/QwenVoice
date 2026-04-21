@@ -3,6 +3,15 @@ import Foundation
 @preconcurrency import MLXAudioCore
 @preconcurrency import MLXAudioTTS
 
+/// Thin wrapper around an `MLXAudioTTS.SpeechGenerationModel` that lets us
+/// hand the model across actor boundaries inside the engine.
+///
+/// "Unsafe" here means the `@unchecked Sendable` suppression below — not raw
+/// memory manipulation. The wrapped closures and the backing model instance
+/// are single-owner by construction (the engine never shares them between
+/// concurrent generations), so bypassing the strict-concurrency checker is
+/// safe for the use sites inside this module. Do not extend this surface
+/// without preserving the single-owner contract (Tier 6).
 final class UnsafeSpeechGenerationModel: @unchecked Sendable {
     private let sampleRateProvider: @Sendable () -> Int
     private let prewarmHandler: @Sendable (String, String?, MLXArray?, String?) async throws -> Void

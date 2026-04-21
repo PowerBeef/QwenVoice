@@ -43,7 +43,10 @@ extension ExtensionEngineCommand {
     var transportTimeout: Duration? {
         switch self {
         case .generate:
-            nil
+            // Hard upper bound so a misbehaving or silent remote cannot leave
+            // the client hanging forever. Still far larger than any reasonable
+            // synthesis would take on supported hardware (Tier 3.1).
+            .seconds(600)
         case .initialize, .loadModel, .unloadModel, .prepareAudio,
              .ensureModelLoadedIfNeeded, .prewarmModelIfNeeded,
              .prefetchInteractiveReadinessIfNeeded, .ensureCloneReferencePrimed,

@@ -68,6 +68,19 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let sessionDirectory = try makeSessionDirectory()
         let outputURL = URL(fileURLWithPath: request.outputPath)
+
+        // Retention flag flipped to true only on the successful-return path.
+        // Any error or cancellation between directory creation and successful
+        // return cleans up the session directory and any partial output so
+        // they cannot leak (Tier 1.5 / 4.3).
+        var shouldRetainSession = false
+        defer {
+            if !shouldRetainSession {
+                try? FileManager.default.removeItem(at: sessionDirectory)
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+        }
+
         let telemetrySampler = NativeTelemetrySampler(
             startUptimeSeconds: startedAt,
             sampleIntervalMS: 50
@@ -190,6 +203,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             )
 
             _ = lastChunkPath
+            shouldRetainSession = true
             return GenerationResult(
                 audioPath: request.outputPath,
                 durationSeconds: cumulativeDuration,

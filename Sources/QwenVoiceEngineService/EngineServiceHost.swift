@@ -64,6 +64,24 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         category: "EngineServiceHost"
     )
 
+    private static let encodedFailureFallback: Data = {
+        do {
+            return try EngineServiceCodec.encode(
+                EngineReplyEnvelope(
+                    id: UUID(),
+                    reply: .failure(
+                        RemoteErrorPayload(message: "The engine service failed to encode its reply.")
+                    )
+                )
+            )
+        } catch {
+            EngineServiceHost.logger.fault(
+                "Failed to pre-encode engine-service failure fallback: \(error.localizedDescription, privacy: .public)"
+            )
+            return Data()
+        }
+    }()
+
     private let sessionLock = NSLock()
     private let activeGenerationCoordinator = ServiceActiveGenerationCoordinator()
     private var activeSession: ActiveSession?
@@ -114,14 +132,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             guard let self else { return }
             let response = await self.handleCommandPayload(payload)
             let encodedResponse = (try? EngineServiceCodec.encode(response))
-                ?? (try! EngineServiceCodec.encode(
-                    EngineReplyEnvelope(
-                        id: UUID(),
-                        reply: .failure(
-                            RemoteErrorPayload(message: "The engine service failed to encode its reply.")
-                        )
-                    )
-                ))
+                ?? Self.encodedFailureFallback
             replyHandler.reply(encodedResponse)
         }
     }

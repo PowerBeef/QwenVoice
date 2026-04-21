@@ -8,11 +8,20 @@ enum RuntimeReleaseAction: Equatable {
     case execute(reason: String, wasDeferred: Bool)
 }
 
+/// Severity signaled alongside a cache-relief request. `warning` may be
+/// deferred while a generation is active; `critical` must run immediately
+/// because the generation itself may be the source of the pressure.
+@MainActor
+enum MemoryPressureSeverity: Equatable {
+    case warning
+    case critical
+}
+
 @MainActor
 enum MemoryPressureReliefAction: Equatable {
     case none
     case deferred(reason: String)
-    case execute(reason: String)
+    case execute(reason: String, cancelActiveGeneration: Bool)
 }
 
 @MainActor
@@ -48,14 +57,27 @@ final class RuntimeReleaseCoordinator: ObservableObject {
 
     func requestCacheRelief(
         reason: String,
+        severity: MemoryPressureSeverity = .warning,
         hasActiveGeneration: Bool
     ) -> MemoryPressureReliefAction {
-        if hasActiveGeneration {
-            pendingCacheReliefReason = reason
-            return .deferred(reason: reason)
+        switch severity {
+        case .critical:
+            // Critical pressure cannot wait for generation to finish — the
+            // generation is frequently the cause. Clear any pending deferred
+            // relief and run the trim path immediately, requesting that the
+            // active generation be cancelled in the same step (Tier 1.6).
+            pendingCacheReliefReason = nil
+            return .execute(
+                reason: reason,
+                cancelActiveGeneration: hasActiveGeneration
+            )
+        case .warning:
+            if hasActiveGeneration {
+                pendingCacheReliefReason = reason
+                return .deferred(reason: reason)
+            }
+            return .execute(reason: reason, cancelActiveGeneration: false)
         }
-
-        return .execute(reason: reason)
     }
 
     func executeDeferredCacheReliefIfReady(
@@ -66,6 +88,6 @@ final class RuntimeReleaseCoordinator: ObservableObject {
         }
 
         self.pendingCacheReliefReason = nil
-        return .execute(reason: pendingCacheReliefReason)
+        return .execute(reason: pendingCacheReliefReason, cancelActiveGeneration: false)
     }
 }

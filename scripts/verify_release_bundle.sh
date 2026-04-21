@@ -5,16 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
 
-fail() {
-    echo "Error: $*" >&2
-    exit 1
-}
-
-plist_read() {
-    local plist_path="$1"
-    local key="$2"
-    /usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null
-}
+# shellcheck source=./harness_lib/shared.sh
+. "$SCRIPT_DIR/harness_lib/shared.sh"
 
 codesign_has_runtime_metadata() {
     local target="$1"
@@ -24,26 +16,6 @@ codesign_has_runtime_metadata() {
         return 1
     fi
     grep -q "Runtime Version" <<<"$codesign_output"
-}
-
-matrix_read() {
-    local selector="$1"
-    MATRIX_PATH="$MATRIX_PATH" MATRIX_SELECTOR="$selector" python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-data = json.loads(Path(os.environ["MATRIX_PATH"]).read_text())
-value = data
-for part in os.environ["MATRIX_SELECTOR"].split("/"):
-    value = value[part]
-
-if isinstance(value, list):
-    for item in value:
-        print(item)
-else:
-    print(value)
-PY
 }
 
 if [ $# -ne 1 ]; then

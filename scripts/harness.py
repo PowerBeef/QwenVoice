@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -15,16 +18,54 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from harness_lib.output import build_envelope
 
+# Tier 4.4: AGENTS.md forbids overlapping heavy harness/xcodebuild runs on
+# this machine. `swift`, `native`, `ios`, `audio`, and the whole `bench`
+# subcommand are considered heavy — we take an advisory flock so two
+# concurrent invocations fail fast instead of thrashing shared derived-data.
+_HEAVY_TEST_LAYERS = {"swift", "native", "ios", "audio", "all"}
+_HARNESS_LOCK_PATH = SCRIPTS_DIR.parent / "build" / "harness" / ".harness.lock"
+
+
+@contextlib.contextmanager
+def _heavy_run_lock(label: str):
+    """Acquire an advisory file lock for heavy runs; fail fast if contended."""
+    _HARNESS_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = open(_HARNESS_LOCK_PATH, "w")
+    try:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.stderr.write(
+                f"harness.py: another heavy run holds {_HARNESS_LOCK_PATH} — "
+                f"refusing to overlap with current request ({label}).\n"
+                "Wait for the other run or remove the lock file if stale.\n"
+            )
+            sys.exit(75)  # EX_TEMPFAIL — clear "retry later" signal
+        lock_file.write(f"pid={os.getpid()} label={label}\n")
+        lock_file.flush()
+        yield
+    finally:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock_file.close()
+
 
 def _run_test(args: argparse.Namespace) -> None:
     from harness_lib.test_runner import run_tests
 
-    start = time.perf_counter()
-    suites = run_tests(
-        layer=args.layer,
-        artifact_dir=getattr(args, "artifact_dir", None),
-    )
-    duration_ms = int((time.perf_counter() - start) * 1000)
+    layer = args.layer
+    lock_cm = _heavy_run_lock(f"test --layer {layer}") if layer in _HEAVY_TEST_LAYERS \
+        else contextlib.nullcontext()
+
+    with lock_cm:
+        start = time.perf_counter()
+        suites = run_tests(
+            layer=layer,
+            artifact_dir=getattr(args, "artifact_dir", None),
+        )
+        duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("test", suites, duration_ms)
     print(json.dumps(envelope, indent=2))
     if not envelope["overall_pass"]:
@@ -34,14 +75,15 @@ def _run_test(args: argparse.Namespace) -> None:
 def _run_bench(args: argparse.Namespace) -> None:
     from harness_lib.bench_runner import run_benchmarks
 
-    start = time.perf_counter()
-    suites = run_benchmarks(
-        category=args.category,
-        runs=args.runs,
-        output_dir=args.output_dir,
-        tier=getattr(args, "tier", "all"),
-    )
-    duration_ms = int((time.perf_counter() - start) * 1000)
+    with _heavy_run_lock(f"bench --category {args.category}"):
+        start = time.perf_counter()
+        suites = run_benchmarks(
+            category=args.category,
+            runs=args.runs,
+            output_dir=args.output_dir,
+            tier=getattr(args, "tier", "all"),
+        )
+        duration_ms = int((time.perf_counter() - start) * 1000)
     envelope = build_envelope("bench", suites, duration_ms)
     print(json.dumps(envelope, indent=2))
     if not envelope["overall_pass"]:

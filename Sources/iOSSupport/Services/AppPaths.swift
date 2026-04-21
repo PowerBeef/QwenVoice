@@ -5,8 +5,14 @@ enum AppPaths {
     static let sharedAppGroupIdentifier = "group.com.qvoice.shared"
 
     static var managedAppSupportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Q-Voice", isDirectory: true)
+        let baseDir = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(
+                fileURLWithPath: (NSHomeDirectory() as NSString)
+                    .appendingPathComponent("Library/Application Support"),
+                isDirectory: true
+            )
+        return baseDir.appendingPathComponent("Q-Voice", isDirectory: true)
     }
 
     static var sharedContainerDir: URL? {

@@ -84,9 +84,11 @@ final class SavedVoicesViewModelTests: XCTestCase {
 
         await viewModel.refresh(using: store)
 
-        for _ in 0..<20 where viewModel.voices.isEmpty {
-            try? await Task.sleep(nanoseconds: 10_000_000)
-            await Task.yield()
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "saved voices populate from store"
+        ) {
+            !viewModel.voices.isEmpty
         }
 
         XCTAssertEqual(engine.listPreparedVoicesCallCount, 1)

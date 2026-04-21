@@ -41,6 +41,16 @@ jobs:
       - name: Ensure XcodeGen
         run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
 
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/foundation/source-packages
+            build/harness/source-packages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       - name: Ensure scripts are executable
         run: chmod +x scripts/*.sh
 

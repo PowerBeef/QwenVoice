@@ -560,11 +560,15 @@ actor NativePreparedCloneConditioningCache {
     }
 
     private static func stableCloneReferenceFingerprint(for sourceURL: URL) -> String {
+        // Tier 3.7: Drop `modificationDate` from the fingerprint — a `cp` or
+        // `touch` of the source file would invalidate an otherwise-valid cache
+        // entry. Resolved symlink path + file size is enough for the clone
+        // cache's identity guarantees; the file system's own atomicity
+        // protects against real content changes (which also change size).
         let resolvedPath = sourceURL.resolvingSymlinksInPath().path
         let attributes = (try? FileManager.default.attributesOfItem(atPath: resolvedPath)) ?? [:]
         let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
-        let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        let digest = SHA256.hash(data: Data("\(resolvedPath)|\(size)|\(modified)".utf8))
+        let digest = SHA256.hash(data: Data("\(resolvedPath)|\(size)".utf8))
         return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -618,19 +622,24 @@ actor NativePreparedCloneConditioningCache {
         }
 
         try prompt.write(to: temporaryDirectory)
-        if fileManager.fileExists(atPath: directory.path) {
+        try fileManager.createDirectory(
+            at: directory.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // Tier 3.6: Close the fileExists→moveItem TOCTOU window. If a
+        // concurrent writer lands the destination between our check and our
+        // move, `moveItem` throws `NSFileWriteFileExistsError` — fall back to
+        // `replaceItemAt` which handles that case atomically.
+        do {
+            try fileManager.moveItem(at: temporaryDirectory, to: directory)
+        } catch let error as NSError where error.code == NSFileWriteFileExistsError ||
+                                          error.domain == NSPOSIXErrorDomain && error.code == Int(EEXIST) {
             _ = try fileManager.replaceItemAt(
                 directory,
                 withItemAt: temporaryDirectory,
                 backupItemName: nil,
                 options: []
             )
-        } else {
-            try fileManager.createDirectory(
-                at: directory.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try fileManager.moveItem(at: temporaryDirectory, to: directory)
         }
     }
 }

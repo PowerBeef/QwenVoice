@@ -23,6 +23,10 @@ actor ExtensionEngineCoordinator {
     private var initializedAppSupportDirectory: URL?
     private var pendingRequests: [UUID: PendingExtensionRequestBox] = [:]
     private var lastDisconnectState: ExtensionEngineLifecycleState?
+    /// Handles for outstanding `fireAndForget` tasks so `invalidate()` and
+    /// disconnect paths can cancel them instead of letting them race with a
+    /// replaced transport (Tier 2.6).
+    private var pendingFireAndForgetTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         onSnapshot: @escaping @Sendable (TTSEngineSnapshot) -> Void,
@@ -66,14 +70,32 @@ actor ExtensionEngineCoordinator {
     }
 
     func fireAndForget(_ command: ExtensionEngineCommand) {
-        Task {
+        let taskID = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
             do {
-                _ = try await send(command)
+                _ = try await self.send(command)
+            } catch is CancellationError {
+                // Parent transport was replaced or invalidated — drop silently.
             } catch {
                 Self.logger.error(
                     "Best-effort engine-extension command '\(command.transportName, privacy: .public)' failed: \(error.localizedDescription, privacy: .public)"
                 )
             }
+            await self.removeFireAndForgetTask(id: taskID)
+        }
+        pendingFireAndForgetTasks[taskID] = task
+    }
+
+    private func removeFireAndForgetTask(id: UUID) {
+        pendingFireAndForgetTasks.removeValue(forKey: id)
+    }
+
+    private func cancelAllFireAndForgetTasks() {
+        let tasks = pendingFireAndForgetTasks.values
+        pendingFireAndForgetTasks.removeAll()
+        for task in tasks {
+            task.cancel()
         }
     }
 
@@ -287,6 +309,10 @@ actor ExtensionEngineCoordinator {
             pendingRequest.timeoutTask?.cancel()
             pendingRequest.resume(.failure(transportError))
         }
+
+        // Tier 2.6: any best-effort commands still racing against the old
+        // transport get cancelled alongside the explicit pending requests.
+        cancelAllFireAndForgetTasks()
 
         let visibleMessage = message ?? transportError.localizedDescription
         onSnapshot(
