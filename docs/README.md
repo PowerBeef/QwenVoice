@@ -20,7 +20,7 @@ These are the maintained source-of-truth docs for contributor and repository beh
 
 - [`../README.md`](../README.md) — public GitHub landing page and end-user overview
 
-The public landing page now uses the current Vocello brand posture while staying aligned with the shipped macOS product reality and the active `macOS-first release track`.
+The public landing page describes the currently shipped `QwenVoice v1.2.3` build and frames `Vocello` as the forward rebrand that lands with the next macOS release. See [`reference/release-readiness.md`](reference/release-readiness.md) for the public-messaging rules.
 
 ## Supplemental Guides
 

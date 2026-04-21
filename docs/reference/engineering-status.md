@@ -1,6 +1,6 @@
 # Engineering Status
 
-QwenVoice is now a merged Apple-platform repository for Vocello. The repo carries a shared engine core, a macOS XPC-isolated runtime path, and an iPhone engine-extension path without reintroducing a secondary Python backend or standalone CLI surface.
+QwenVoice is the merged Apple-platform codebase that currently ships publicly as `QwenVoice v1.2.3` on macOS and will ship its next macOS release under the forward `Vocello` brand. The repo carries a shared engine core, a macOS XPC-isolated runtime path, and an iPhone engine-extension path without reintroducing a secondary Python backend or standalone CLI surface.
 
 The current milestone is operating on a `macOS-first release track`: macOS is the only public release target for the next ship, while iPhone remains a maintained compile-safe and deferred release surface.
 
@@ -20,7 +20,7 @@ The current milestone is operating on a `macOS-first release track`: macOS is th
 - Maintained release scripts for signed/notarized macOS DMGs and iPhone archive/export flows
 - Deterministic local foundation paths now separate package resolution, build-for-testing, test execution, archive, and export work into explicit roots with `.xcresult` evidence
 - `Backend Freeze Gate` now treats `.xcresult` bundles as first-class artifacts for the maintained shared-core regression and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
-- An explicit public-homepage freeze that keeps GitHub landing-page messaging aligned with the currently shipped macOS product instead of the unshipped merged product
+- An explicit public-homepage posture that keeps GitHub landing-page messaging aligned with the currently shipped `QwenVoice v1.2.3` build, with `Vocello` framed as the forward rebrand that lands with the next macOS release
 
 ## Current Caveats
 

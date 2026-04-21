@@ -9,13 +9,14 @@ The repo is currently operating on a `macOS-first release track`.
 That means:
 
 - the next public release target is macOS only
-- `Vocello-macos26.dmg` is the only public ship artifact for the current milestone
+- `Vocello-macos26.dmg` is the only public ship artifact for the current milestone and requires `macOS 26.0` as the minimum
+- `macOS 15` was supported only on the already-shipped `QwenVoice v1.2.3` and is retired going forward
 - iPhone remains in active development and stays compile-safe on `main`
 - iPhone TestFlight and owned-device proof stay maintained, but they are deferred from public release signoff until the shared core is proven stable on macOS
 
 ## Public Homepage Posture
 
-The public GitHub landing-page surfaces have been refreshed to the current `Vocello` brand posture for this milestone.
+The public GitHub landing page currently describes `QwenVoice v1.2.3` — the shipped public build — with `Vocello` framed as the forward rebrand that lands with the next macOS release. The formal flip to a Vocello-led landing page happens when the Vocello-branded macOS release actually ships.
 
 Public surfaces:
 
@@ -25,9 +26,9 @@ Public surfaces:
 
 Public messaging rules:
 
-- Lead with `Vocello` as the shipped product brand.
+- Lead with `QwenVoice` today because that is the currently shipped public brand. Frame `Vocello` as the forward rebrand, not as the current shipping name.
 - Keep public claims aligned with the current macOS product reality and the active `macOS-first release track`.
-- Do not imply that iPhone is already shipping publicly in this milestone.
+- Do not imply that iPhone is already shipping publicly in this milestone. Present the iPhone app publicly as the in-development "Vocello for iPhone" — standalone, 4-bit, open source in this repo, published via the App Store once ready.
 - Do not advertise a public website until one actually exists.
 - Do not present the full merged Apple-platform transition as already complete and publicly shipped.
 
@@ -56,7 +57,7 @@ Two-track proof policy:
 
 ## Current Status
 
-- Public homepage posture: refreshed and Vocello-first
+- Public homepage posture: QwenVoice-led for the currently shipped `v1.2.3` build; flip to Vocello-led happens when the Vocello-branded macOS release ships
 - macOS source and packaging surfaces: maintained in-repo
 - iPhone archive/export/TestFlight tooling: maintained in-repo
 - Current public release milestone: macOS only
@@ -111,7 +112,7 @@ Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintai
 
 The current execution order is:
 
-1. keep public messaging polished, Vocello-first, and aligned with shipped macOS reality
+1. keep public messaging polished and aligned with the currently shipped `QwenVoice v1.2.3` build, framing `Vocello` as the forward rebrand
 2. stabilize and optimize the shared core on macOS until the release candidate is deterministic
 3. keep iPhone compile proof green on `main` without treating iPhone release proof as blocking for this milestone
 4. maintain separate owned-device and official-minimum iPhone proof states for later re-entry

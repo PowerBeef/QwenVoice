@@ -5,7 +5,8 @@ This document is the shared factual reference for the current QwenVoice reposito
 ## Product Surface
 
 - Repo identity: `QwenVoice`
-- Shipped product brand: `Vocello`
+- Currently shipped public brand: `QwenVoice` (`v1.2.3`)
+- Forward rebrand target: `Vocello` — lands with the next macOS release
 - Platforms in this repo: macOS and iPhone
 - Active public release track: `macOS-first release track`
 - Deployment targets: `macOS 26.0+` and `iOS 26.0+`
@@ -15,13 +16,14 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Version source: `project.yml`
 - Current version/build: `1.2.3` / `15`
 
-The iPhone app target is already Vocello-branded. The macOS target graph still keeps several internal `QwenVoice` names for continuity, while the intended hosted macOS release asset is `Vocello-macos26.dmg`.
+The iPhone app target is already Vocello-branded internally. The macOS target graph still keeps several internal `QwenVoice` names for continuity, and the next macOS release asset will be `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum — completing the public rebrand on macOS.
 
 ## Public Homepage Posture
 
-- `README.md` and the GitHub repo description now intentionally lead with `Vocello` as the shipped product brand.
+- `README.md` leads with `QwenVoice` because that is the currently shipped public brand (`v1.2.3`). Its "A Note on What's Changing" section frames `Vocello` as the forward rebrand that lands with the next macOS release.
+- The GitHub repo description should stay consistent with the README — do not claim a Vocello-first public posture while the published release is still QwenVoice-branded.
 - Public copy should stay aligned with the currently shipped macOS reality and the active `macOS-first release track`.
-- Do not present iPhone as a current public release surface until the release-track policy changes.
+- Do not present iPhone as a current public release surface until the release-track policy changes. The public framing for iPhone is the in-development "Vocello for iPhone" — standalone, 4-bit, open source in this repo, published via the App Store once ready.
 - The GitHub homepage URL should stay blank unless the repo owner explicitly asks to set it again.
 
 ## Architecture

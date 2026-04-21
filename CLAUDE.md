@@ -51,15 +51,17 @@ There are no repo-tracked local skills under `.agents/skills/` in this checkout 
 
 Public homepage posture:
 
-- `README.md` intentionally leads with `Vocello` as the shipped product brand.
-- The GitHub repo description must stay aligned with that public Vocello-first README posture.
+- `README.md` leads with `QwenVoice` because that is the currently shipped public brand (`v1.2.3`). Its "A Note on What's Changing" section frames `Vocello` as the forward rebrand that lands with the next macOS release.
+- The GitHub repo description must stay consistent with the README — do not claim a Vocello-first public posture while the published release is still QwenVoice-branded.
 - Leave the GitHub homepage URL blank unless the user explicitly asks to restore or change it.
 - Keep public messaging aligned with the currently shipped macOS product reality and the active `macOS-first release track`.
-- Do not present iPhone as a current public release surface until the release-track policy changes.
+- Do not present iPhone as a current public release surface until the release-track policy changes. The iPhone app is framed publicly as the in-development "Vocello for iPhone" — standalone, 4-bit, open source in this repo, published via the App Store once ready.
 
 Current release-track policy:
 
 - The next public release target is macOS only.
+- The next macOS release ships under the `Vocello` brand as `Vocello-macos26.dmg` and requires `macOS 26.0` as the minimum. `macOS 15` was supported only on the already-shipped `QwenVoice v1.2.3` and is retired going forward.
+- Do not retroactively edit `QwenVoice v1.2.3` release notes or the shipped-state sections of `README.md` — they must stay accurate to what shipped.
 - Keep iPhone green at generic compile level on `main`, but do not treat iPhone release/TestFlight proof as blocking for the current milestone.
 - Re-open iPhone release proof only through an explicit milestone change after the shared core is proven stable on macOS.
 
