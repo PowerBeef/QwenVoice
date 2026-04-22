@@ -117,6 +117,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app
         PRODUCT_NAME: Vocello
         WRAPPER_NAME: Vocello.app
+        # Keep the Swift module name as QwenVoice so internal `@testable
+        # import QwenVoice` and sibling modules that assume the QwenVoice
+        # namespace still resolve after the on-disk rename to Vocello.app.
+        PRODUCT_MODULE_NAME: QwenVoice
         MARKETING_VERSION: "1.2.3"
         CURRENT_PROJECT_VERSION: "15"
         SWIFT_VERSION: "6"
@@ -283,6 +287,11 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
+        # XcodeGen derives TEST_HOST from the dependency target's identifier
+        # (QwenVoice), not its PRODUCT_NAME override (Vocello). Pin it here
+        # so renaming the macOS app bundle doesn't break the test host path.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Vocello.app/Contents/MacOS/Vocello"
+        BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: QwenVoice
       - target: QwenVoiceCore

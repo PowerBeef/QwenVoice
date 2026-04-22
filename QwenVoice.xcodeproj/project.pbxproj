@@ -147,6 +147,7 @@
 		98AF262A3789109DF8DDAD46 /* IOSSimulatorTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7201D32EDE24172A957BE8 /* IOSSimulatorTTSEngine.swift */; };
 		99A480BECDB6DABBD58BCA5F /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = D98F00F2FF60D6BE90A813A0 /* MLXAudioTTS */; };
 		9AD93240195D2474CD96EB6B /* SavedVoicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8A61CE5C27E5BDC4EE04BA /* SavedVoicesViewModel.swift */; };
+		9BA39200B030E81EDD24427E /* StreamingChunkFinalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA69FF9D2F8980B6EECA2831 /* StreamingChunkFinalizationTests.swift */; };
 		9C596C12FF2FAF4901655F51 /* GenerationDrafts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7220613AFFBB1E9C0C9AB52F /* GenerationDrafts.swift */; };
 		9C7F54D72E62B1918F56298B /* TTSContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56DB3F2A6729473A3816C4C /* TTSContract.swift */; };
 		9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */; };
@@ -590,6 +591,7 @@
 		C69234A301AA6DDDBFDFD7BD /* AppEngineSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEngineSelection.swift; sourceTree = "<group>"; };
 		C9CED27360BBBEA5D0A0A7AA /* NativeMLXMacEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMLXMacEngine.swift; sourceTree = "<group>"; };
 		C9DFF46140E21950EEDD4721 /* MLXModelLoadCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXModelLoadCoordinator.swift; sourceTree = "<group>"; };
+		CA69FF9D2F8980B6EECA2831 /* StreamingChunkFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingChunkFinalizationTests.swift; sourceTree = "<group>"; };
 		CBFD195E3C3F6CFC29D83EC1 /* Generation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Generation.swift; sourceTree = "<group>"; };
 		CD14EA7079C5160A638BE0D4 /* GenerationSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationSemantics.swift; sourceTree = "<group>"; };
 		CE621138D32607BE4CF4FDE5 /* NativeRuntimeTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeTestSupport.swift; sourceTree = "<group>"; };
@@ -884,6 +886,7 @@
 				CE621138D32607BE4CF4FDE5 /* NativeRuntimeTestSupport.swift */,
 				B842FA688FF4CEEB23507095 /* PlatformCapabilityMatrixTests.swift */,
 				7658FC7786FF12AFB1D10CB4 /* SavedVoicesViewModelTests.swift */,
+				CA69FF9D2F8980B6EECA2831 /* StreamingChunkFinalizationTests.swift */,
 				F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */,
 				98C65FFC6BA471E3A19EA0C2 /* TTSEngineStoreTests.swift */,
 				C638D9430AD706E6A2E1E74C /* VoiceCloningReferenceAudioSupportTests.swift */,
@@ -1850,6 +1853,7 @@
 				FD91BD747BB74FD43BF11625 /* NativeRuntimeTestSupport.swift in Sources */,
 				EA3CD1A5A33D68FCB2AD81FF /* PlatformCapabilityMatrixTests.swift in Sources */,
 				11CA91F6DBFE2022CE55E567 /* SavedVoicesViewModelTests.swift in Sources */,
+				9BA39200B030E81EDD24427E /* StreamingChunkFinalizationTests.swift in Sources */,
 				47047F5254483416802EA6E7 /* TTSContractTests.swift in Sources */,
 				5322D8472C691B7477367F3D /* TTSEngineStoreTests.swift in Sources */,
 				C04458039B9545EDB4B7D4B0 /* VoiceCloningReferenceAudioSupportTests.swift in Sources */,
@@ -2047,7 +2051,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.tests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QwenVoice.app/Contents/MacOS/QwenVoice";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vocello.app/Contents/MacOS/Vocello";
 			};
 			name = Release;
 		};
@@ -2349,7 +2353,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.tests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QwenVoice.app/Contents/MacOS/QwenVoice";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vocello.app/Contents/MacOS/Vocello";
 			};
 			name = Debug;
 		};
@@ -2427,6 +2431,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
+				PRODUCT_MODULE_NAME = QwenVoice;
 				PRODUCT_NAME = Vocello;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;
@@ -2530,6 +2535,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
+				PRODUCT_MODULE_NAME = QwenVoice;
 				PRODUCT_NAME = Vocello;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;

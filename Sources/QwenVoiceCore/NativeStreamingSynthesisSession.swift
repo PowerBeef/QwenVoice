@@ -286,13 +286,29 @@ private final class PCM16ChunkFileWriter {
             format: format,
             reusableBuffer: &reusableBuffer
         )
-        let file = try AVAudioFile(
-            forWriting: url,
-            settings: format.settings,
-            commonFormat: format.commonFormat,
-            interleaved: format.isInterleaved
-        )
-        try file.write(from: buffer)
+        // Hold AVAudioFile in a narrow scope so ARC guarantees its deinit
+        // fires at the closing brace. AVAudioFile writes the final WAV/RIFF
+        // `data`-chunk size field on deinit, not on write(from:), so this
+        // deterministic teardown is the first half of correct finalization.
+        do {
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: format.settings,
+                commonFormat: format.commonFormat,
+                interleaved: format.isInterleaved
+            )
+            try file.write(from: buffer)
+        }
+        // Force the kernel to commit the completed WAV so cross-process
+        // readers (the UI's AVAudioFile(forReading:) in
+        // AudioPlayerViewModel.loadPCMBuffer) observe a non-zero-length file.
+        // Without this, chunk consumers intermittently saw audioFile.length
+        // == 0 and the UI surfaced "Live audio preview could not decode the
+        // latest chunk." even though the file eventually finalized correctly.
+        if let handle = try? FileHandle(forWritingTo: url) {
+            try? handle.synchronize()
+            try? handle.close()
+        }
     }
 }
 

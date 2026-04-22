@@ -389,8 +389,19 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
-        try file.write(from: buffer)
+        // Companion to PCM16ChunkFileWriter.write in QwenVoiceCore: scope the
+        // AVAudioFile so ARC deinit writes the WAV header at the closing
+        // brace, then FileHandle.synchronize() forces kernel commit so
+        // cross-process readers observe a finalized file. Prevents the
+        // "Live audio preview could not decode the latest chunk." race.
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            try file.write(from: buffer)
+        }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            try? handle.synchronize()
+            try? handle.close()
+        }
     }
 
     private static func removeFileIfPresent(at url: URL) throws {
