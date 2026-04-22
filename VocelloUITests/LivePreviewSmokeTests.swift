@@ -53,6 +53,11 @@ final class LivePreviewSmokeTests: XCTestCase {
         app.launchEnvironment["QWENVOICE_UI_TEST_DEFAULTS_SUITE"]
             = "VocelloUITests.\(UUID().uuidString)"
         app.launch()
+        // On macOS, XCUIApplication.launch() starts the process but doesn't
+        // guarantee foreground focus — which in turn gates whether the
+        // SwiftUI WindowGroup's window shows up in the accessibility tree.
+        // Explicitly activate so the window registers for queries.
+        app.activate()
     }
 
     override func tearDownWithError() throws {
@@ -69,15 +74,34 @@ final class LivePreviewSmokeTests: XCTestCase {
     /// Drives the Custom Voice generate flow and asserts that chunks arrive,
     /// the player enters live-preview state, and no decode error surfaces.
     func testCustomVoiceGenerationEntersLivePreviewWithoutDecodeError() throws {
-        // The app should boot directly onto Custom Voice thanks to
-        // `--uitest-screen=customVoice`. Sanity-check one identifier from
-        // that screen before touching anything else, so a layout regression
-        // produces a clearer error than a missing text field.
-        let voiceSetup = app.otherElements["customVoice_voiceSetup"]
+        // Wait for the SwiftUI WindowGroup to materialize a window. App
+        // process running != window rendered; on macOS the window can take a
+        // few hundred ms after `launch()` returns.
         XCTAssertTrue(
-            voiceSetup.waitForExistence(timeout: 20),
-            "Custom Voice screen did not appear (customVoice_voiceSetup missing)."
+            app.wait(for: .runningForeground, timeout: 15),
+            "Vocello.app never reached runningForeground state."
         )
+        let mainWindow = app.windows.firstMatch
+        XCTAssertTrue(
+            mainWindow.waitForExistence(timeout: 15),
+            "Vocello.app has no windows after launch."
+        )
+
+        // The app should boot directly onto Custom Voice thanks to
+        // `--uitest-screen=customVoice`. Sanity-check the screen root
+        // identifier before touching anything else, so a layout regression
+        // produces a clearer error than a missing text field further down.
+        let customVoiceScreen = firstElement(matchingIdentifier: "screen_customVoice")
+        if !customVoiceScreen.waitForExistence(timeout: 20) {
+            // Attach the live accessibility hierarchy to the test result so
+            // we can see WHAT the app is showing when this assertion fires.
+            let attachment = XCTAttachment(string: app.debugDescription)
+            attachment.name = "app-accessibility-hierarchy"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("Custom Voice screen did not appear (screen_customVoice missing).")
+            return
+        }
 
         // Type into the script editor.
         let scriptEditor = firstElement(matchingIdentifier: "textInput_textEditor")
@@ -230,24 +254,11 @@ final class LivePreviewSmokeTests: XCTestCase {
 
     // MARK: - Query helpers
 
-    /// Look the identifier up across the common element types. SwiftUI emits
-    /// the same identifier on several XCUIElementType shells depending on the
-    /// underlying view, so this widens the net before failing the test.
+    /// Look the identifier up across ALL element types. `descendants(matching:
+    /// .any)` lets `waitForExistence` block until any element in the tree
+    /// with that identifier appears, regardless of whether SwiftUI maps the
+    /// underlying view to a text field, button, or generic container.
     private func firstElement(matchingIdentifier identifier: String) -> XCUIElement {
-        let candidates: [XCUIElementQuery] = [
-            app.textViews.matching(identifier: identifier),
-            app.textFields.matching(identifier: identifier),
-            app.buttons.matching(identifier: identifier),
-            app.staticTexts.matching(identifier: identifier),
-            app.otherElements.matching(identifier: identifier),
-        ]
-        for query in candidates {
-            let element = query.firstMatch
-            if element.exists { return element }
-        }
-        // Final fallback — return whichever gets us an assert-able object
-        // (the first candidate) so the subsequent waitForExistence produces
-        // a clear diagnostic with the identifier name.
-        return candidates[0].firstMatch
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 }
