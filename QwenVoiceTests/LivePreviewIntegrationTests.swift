@@ -165,6 +165,52 @@ final class LivePreviewIntegrationTests: XCTestCase {
         }
     }
 
+    /// Parallel to `testStubGenerationReachesLivePreviewViewModel` but uses
+    /// the `.design` payload (Voice Design mode). Proves the broker →
+    /// viewModel chain is mode-agnostic: every streaming mode that exists
+    /// in the `GenerationMode` enum routes through the same plumbing and
+    /// exercises the same live-preview path in the UI.
+    func testDesignModeStreamingReachesLivePreviewViewModel() async throws {
+        let request = GenerationRequest(
+            modelID: "pro_design",
+            text: "Design mode preview",
+            outputPath: fixtureRoot
+                .appendingPathComponent("outputs/VoiceDesign/design-integration.wav")
+                .path,
+            shouldStream: true,
+            streamingTitle: "Design mode preview",
+            payload: .design(
+                voiceDescription: "A calm narrator with warm, deliberate pacing.",
+                deliveryStyle: "Warm"
+            )
+        )
+
+        _ = try await engine.generate(request)
+
+        try await waitUntil(timeoutSeconds: 2.0) {
+            self.viewModel.isLiveStream
+                || self.viewModel.playbackError != nil
+                || self.viewModel.livePreviewQueueDepth > 0
+        }
+
+        let chunkReached =
+            viewModel.livePreviewQueueDepth > 0
+            || viewModel.isLiveStream
+            || viewModel.playbackError != nil
+        XCTAssertTrue(
+            chunkReached,
+            "No chunk event reached AudioPlayerViewModel for Voice Design mode."
+        )
+        XCTAssertTrue(
+            viewModel.isLiveStream,
+            "Live stream flag should have flipped for Voice Design streaming."
+        )
+        XCTAssertEqual(
+            viewModel.currentTitle, "Design mode preview",
+            "Live session title should have propagated from the Voice Design chunk event."
+        )
+    }
+
     /// Sanity: calling generate() without shouldStream must NOT trigger the
     /// live-preview path at all, so no chunks flow to the view model.
     func testNonStreamingGenerationDoesNotTouchLivePreview() async throws {

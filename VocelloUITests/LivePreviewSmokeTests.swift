@@ -41,7 +41,6 @@ final class LivePreviewSmokeTests: XCTestCase {
             "--uitest",
             "--uitest-disable-animations",
             "--uitest-fast-idle",
-            "--uitest-screen=customVoice",
         ]
         // Reuse the same env keys the Python harness (`ui_test_support.py`)
         // sets when launching the app directly — keeping one codified path.
@@ -52,6 +51,15 @@ final class LivePreviewSmokeTests: XCTestCase {
         app.launchEnvironment["QWENVOICE_UI_TEST_SETUP_DELAY_MS"] = "1"
         app.launchEnvironment["QWENVOICE_UI_TEST_DEFAULTS_SUITE"]
             = "VocelloUITests.\(UUID().uuidString)"
+        // NOTE: app.launch() is deliberately called by each test method so
+        // per-test launch args (e.g. --uitest-screen=<name>) can be appended
+        // before the process spawns.
+    }
+
+    /// Append a screen-specific launch flag, launch, and activate so the
+    /// SwiftUI window registers in the accessibility tree.
+    private func launchOnScreen(_ screenID: String) {
+        app.launchArguments.append("--uitest-screen=\(screenID)")
         app.launch()
         // On macOS, XCUIApplication.launch() starts the process but doesn't
         // guarantee foreground focus — which in turn gates whether the
@@ -74,34 +82,8 @@ final class LivePreviewSmokeTests: XCTestCase {
     /// Drives the Custom Voice generate flow and asserts that chunks arrive,
     /// the player enters live-preview state, and no decode error surfaces.
     func testCustomVoiceGenerationEntersLivePreviewWithoutDecodeError() throws {
-        // Wait for the SwiftUI WindowGroup to materialize a window. App
-        // process running != window rendered; on macOS the window can take a
-        // few hundred ms after `launch()` returns.
-        XCTAssertTrue(
-            app.wait(for: .runningForeground, timeout: 15),
-            "Vocello.app never reached runningForeground state."
-        )
-        let mainWindow = app.windows.firstMatch
-        XCTAssertTrue(
-            mainWindow.waitForExistence(timeout: 15),
-            "Vocello.app has no windows after launch."
-        )
-
-        // The app should boot directly onto Custom Voice thanks to
-        // `--uitest-screen=customVoice`. Sanity-check the screen root
-        // identifier before touching anything else, so a layout regression
-        // produces a clearer error than a missing text field further down.
-        let customVoiceScreen = firstElement(matchingIdentifier: "screen_customVoice")
-        if !customVoiceScreen.waitForExistence(timeout: 20) {
-            // Attach the live accessibility hierarchy to the test result so
-            // we can see WHAT the app is showing when this assertion fires.
-            let attachment = XCTAttachment(string: app.debugDescription)
-            attachment.name = "app-accessibility-hierarchy"
-            attachment.lifetime = .keepAlways
-            add(attachment)
-            XCTFail("Custom Voice screen did not appear (screen_customVoice missing).")
-            return
-        }
+        launchOnScreen("customVoice")
+        try waitForScreen(identifier: "screen_customVoice")
 
         // Type into the script editor.
         let scriptEditor = firstElement(matchingIdentifier: "textInput_textEditor")
@@ -153,6 +135,59 @@ final class LivePreviewSmokeTests: XCTestCase {
             XCTFail(
                 "Player surfaced a decode error: \(labels)"
             )
+        }
+    }
+
+    /// Proves the Voice Design screen boots under the stub backend with
+    /// zero decode errors visible. This covers the same UI plumbing but
+    /// on the `design` route — accessibility identifiers and nav wiring
+    /// must hold for every streaming mode, not just Custom Voice. The
+    /// positive generation assertion is deliberately NOT made here (the
+    /// Voice Design generate flow typically requires a voice description
+    /// set via a separate sheet, which is out of scope for a smoke test);
+    /// this catches screen-root / navigation regressions for the design
+    /// route without over-coupling to the description-entry UI.
+    func testVoiceDesignScreenLoadsWithoutDecodeError() throws {
+        launchOnScreen("voiceDesign")
+        try waitForScreen(identifier: "screen_voiceDesign")
+
+        // No generation triggered — just assert nothing is showing the
+        // decode-error text. If a stale chunk event from another session
+        // ever leaked into the player via a broker regression, this would
+        // catch it.
+        XCTAssertEqual(
+            app.staticTexts
+                .matching(NSPredicate(format: "label CONTAINS[c] %@", "could not decode"))
+                .count,
+            0,
+            "Player surfaced a decode error on a fresh Voice Design screen."
+        )
+    }
+
+    // MARK: - Shared helpers
+
+    /// Wait for the SwiftUI WindowGroup to register a window and then for
+    /// the requested screen's root identifier to appear. On failure
+    /// attaches the live accessibility hierarchy to the xcresult so a
+    /// layout regression produces diagnosable output.
+    private func waitForScreen(identifier: String) throws {
+        XCTAssertTrue(
+            app.wait(for: .runningForeground, timeout: 15),
+            "Vocello.app never reached runningForeground state."
+        )
+        let mainWindow = app.windows.firstMatch
+        XCTAssertTrue(
+            mainWindow.waitForExistence(timeout: 15),
+            "Vocello.app has no windows after launch."
+        )
+        let screenRoot = firstElement(matchingIdentifier: identifier)
+        if !screenRoot.waitForExistence(timeout: 20) {
+            let attachment = XCTAttachment(string: app.debugDescription)
+            attachment.name = "app-accessibility-hierarchy"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("Screen root \(identifier) never appeared.")
+            throw XCTSkip("Screen \(identifier) did not render.")
         }
     }
 
