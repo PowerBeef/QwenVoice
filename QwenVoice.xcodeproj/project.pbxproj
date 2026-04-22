@@ -2427,11 +2427,11 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
-				PRODUCT_NAME = QwenVoice;
+				PRODUCT_NAME = Vocello;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;
 				SWIFT_VERSION = 6;
-				WRAPPER_NAME = QwenVoice.app;
+				WRAPPER_NAME = Vocello.app;
 			};
 			name = Release;
 		};
@@ -2530,11 +2530,11 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
-				PRODUCT_NAME = QwenVoice;
+				PRODUCT_NAME = Vocello;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = QW_UI_LIQUID;
 				SWIFT_VERSION = 6;
-				WRAPPER_NAME = QwenVoice.app;
+				WRAPPER_NAME = Vocello.app;
 			};
 			name = Debug;
 		};

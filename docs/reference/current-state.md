@@ -16,7 +16,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Version source: `project.yml`
 - Current version/build: `1.2.3` / `15`
 
-The iPhone app target is already Vocello-branded internally. The macOS target graph still keeps several internal `QwenVoice` names for continuity, and the next macOS release asset will be `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum — completing the public rebrand on macOS.
+The iPhone app target is Vocello-branded. The next macOS release ships as `Vocello.app` inside `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum — completing the public rebrand on macOS. The supporting framework/service/runtime modules (`QwenVoiceCore`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`, `QwenVoiceNative`, `QwenVoiceNativeRuntime`) keep their `QwenVoice` names internally for continuity.
 
 ## Public Homepage Posture
 

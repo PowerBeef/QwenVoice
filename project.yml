@@ -115,8 +115,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app
-        PRODUCT_NAME: QwenVoice
-        WRAPPER_NAME: QwenVoice.app
+        PRODUCT_NAME: Vocello
+        WRAPPER_NAME: Vocello.app
         MARKETING_VERSION: "1.2.3"
         CURRENT_PROJECT_VERSION: "15"
         SWIFT_VERSION: "6"

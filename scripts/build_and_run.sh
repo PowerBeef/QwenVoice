@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="QwenVoice"
+APP_NAME="Vocello"
 PROJECT_NAME="QwenVoice"
 PROJECT_FILE="QwenVoice.xcodeproj"
 SCHEME_NAME="QwenVoice"

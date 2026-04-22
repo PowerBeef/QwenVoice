@@ -10,7 +10,7 @@ Current product reality:
 
 - the repo stays `QwenVoice`
 - the shipped iPhone app is `Vocello`
-- macOS release assets are Vocello-branded, while several internal macOS targets, modules, and paths still keep `QwenVoice` names for continuity
+- the next macOS release ships as `Vocello.app` inside `Vocello-macos26.dmg`; the supporting framework/service/runtime modules (`QwenVoiceCore`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`, `QwenVoiceNative`, `QwenVoiceNativeRuntime`) keep their `QwenVoice` names internally for continuity
 - the current public milestone uses a `macOS-first release track`, with iPhone retained as a compile-safe and deferred release surface
 
 The main working surfaces are:

@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-APP_PATH="${1:-$PROJECT_DIR/build/QwenVoice.app}"
+APP_PATH="${1:-$PROJECT_DIR/build/Vocello.app}"
 DMG_BASENAME="${2:-Vocello-macos26}"
 DISPLAY_NAME="${QWENVOICE_DMG_DISPLAY_NAME:-Vocello}"
 DMG_OUTPUT="$PROJECT_DIR/build/${DMG_BASENAME}.dmg"

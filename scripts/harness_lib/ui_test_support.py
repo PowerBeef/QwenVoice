@@ -175,7 +175,7 @@ def build_app_binary(timeout: int = 300) -> tuple[bool, str | None, dict[str, An
     if not app_dir:
         return False, None, {"error": "no_build_dir"}
 
-    app_binary = Path(app_dir) / "QwenVoice.app" / "Contents" / "MacOS" / "QwenVoice"
+    app_binary = Path(app_dir) / "Vocello.app" / "Contents" / "MacOS" / "Vocello"
     return app_binary.exists(), str(app_binary) if app_binary.exists() else None, {
         "app_binary": str(app_binary),
         "built_products_dir": app_dir,
