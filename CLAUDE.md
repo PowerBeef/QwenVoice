@@ -149,6 +149,7 @@ python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
 python3 scripts/harness.py test --layer ios
 python3 scripts/harness.py test --layer audio --artifact-dir <dir>
+python3 scripts/harness.py test --layer e2e
 python3 scripts/harness.py diagnose
 python3 scripts/harness.py bench --category latency
 python3 scripts/harness.py bench --category load
@@ -163,12 +164,13 @@ QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodep
 Notes:
 
 - `scripts/harness.py` remains the primary local test, diagnostic, and benchmark entrypoint.
-- The maintained harness layers are `swift`, `contract`, `native`, `ios`, and `audio`.
+- The maintained harness layers are `swift`, `contract`, `native`, `ios`, `audio`, and `e2e`.
+- `e2e` is the macOS end-to-end UI smoke layer: an XCUITest target (`VocelloUITests`, scheme `Vocello UI`, plan `Tests/Plans/VocelloUISmoke.xctestplan`) drives Vocello.app under the stub backend (`--uitest --uitest-screen=customVoice`, `UITestStubMacEngine`) and asserts the live-preview badge appears without any decode error surfacing. The first `e2e` run on a fresh machine will SKIP with the diagnostic `Timed out while enabling automation mode` until macOS Accessibility permission is granted to the test runner — grant once via System Settings > Privacy & Security > Accessibility (or by running the suite from Xcode so the OS prompt appears) and subsequent runs pass unattended.
 - During the current `macOS-first release track`, the default required local release-readiness loop is `check_project_inputs`, `validate`, `swift`, `contract`, `native`, `build_foundation_targets.sh macos`, `build_foundation_targets.sh ios`, `release.sh`, `verify_release_bundle.sh`, and `verify_packaged_dmg.sh`.
 - Keep `python3 scripts/harness.py test --layer ios` available, but run it by default only when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
 - The harness now resolves pinned Swift packages into `build/harness/source-packages/`, uses explicit `build/harness/derived-data/` roots, and emits `.xcresult` bundles under `build/harness/results/`.
-- `QwenVoice Foundation` and `VocelloiOS Foundation` are the maintained plan-backed test schemes.
-- The committed test plans live under `tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, and `VocelloiOSFoundation`.
+- `QwenVoice Foundation`, `VocelloiOS Foundation`, and `Vocello UI` are the maintained plan-backed test schemes.
+- The committed test plans live under `Tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, `VocelloiOSFoundation`, and `VocelloUISmoke`.
 - Prefer those plan-backed harness lanes over ad hoc `xcodebuild test` invocations.
 - For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The script uses isolated build roots and `.xcresult` bundles so stale hosted test-bundle output cannot poison app codesigning.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes.

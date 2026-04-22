@@ -75,7 +75,98 @@ def run_tests(
 
         suites.append(run_audio_tests(artifact_dir=artifact_dir))
 
+    if layer in ("all", "e2e"):
+        eprint("==> Running end-to-end UI smoke tests...")
+        suites.append(_run_e2e_tests())
+
     return suites
+
+
+def _run_e2e_tests() -> dict[str, Any]:
+    """Run the macOS end-to-end UI smoke suite under the stub backend.
+
+    Drives the full user-facing flow `button click → GenerationRequest →
+    chunk event → UI decoder → player` via XCUITest, so regressions in
+    accessibility identifiers, live-preview state transitions, or the
+    chunk-decode error path surface automatically instead of needing a
+    user to catch them by eye.
+
+    The test target is self-contained: it stages a disposable stub-model
+    fixture, launches Vocello.app with `--uitest --uitest-screen=customVoice`,
+    types a script, hits Generate, and asserts the live badge appears
+    without any decode error surfacing in the player.
+
+    macOS XCUITest requires the test runner to have Accessibility
+    permission (TCC). When the runner times out enabling automation mode
+    we convert the failure into a soft skip so this layer doesn't block CI
+    on a first-time system-permission bootstrap; the harness prints a clear
+    diagnostic telling the operator how to grant it.
+    """
+    result = _run_xcodebuild_test_suite(
+        suite_name="e2e_ui_smoke",
+        scheme="Vocello UI",
+        destination="platform=macOS",
+        test_plan="VocelloUISmoke",
+    )
+    return _demote_tcc_timeout_to_skip(result)
+
+
+def _demote_tcc_timeout_to_skip(suite: dict[str, Any]) -> dict[str, Any]:
+    """Convert a macOS automation-mode TCC timeout into a skip with guidance.
+
+    The test runner failing to initialize because of `Timed out while
+    enabling automation mode` is a macOS Accessibility-permission issue,
+    not a code regression. Treat it as a skip so the e2e layer is safe to
+    run in fresh environments before Accessibility has been granted.
+    """
+    results = suite.get("results") or []
+    if not results:
+        return suite
+    first = results[0]
+    if first.get("passed", True):
+        return suite
+
+    details = first.get("details") or {}
+    needle = "Timed out while enabling automation mode"
+    combined_tail: list[str] = []
+    for key in (
+        "test_stderr_tail",
+        "test_stdout_tail",
+        "build_stderr_tail",
+        "build_stdout_tail",
+        "stderr_tail",
+        "stdout_tail",
+    ):
+        value = details.get(key)
+        if isinstance(value, list):
+            combined_tail.extend(str(v) for v in value)
+        elif isinstance(value, str):
+            combined_tail.append(value)
+    if not any(needle in line for line in combined_tail):
+        return suite
+
+    skip_reason = (
+        "Skipped: VocelloUITests-Runner could not enable macOS automation "
+        "mode (TCC). Grant Accessibility permission to the test runner "
+        "via System Settings > Privacy & Security > Accessibility (or run "
+        "the suite once from Xcode so the prompt appears), then re-run "
+        "`python3 scripts/harness.py test --layer e2e`. This is a macOS "
+        "system-permission gate, not a code regression."
+    )
+    eprint(f"==> {skip_reason}")
+
+    skipped_result = build_test_result(
+        "e2e_ui_smoke",
+        passed=True,
+        skip_reason=skip_reason,
+        duration_ms=first.get("duration_ms", 0),
+        details=details,
+    )
+    return build_suite_result(
+        "e2e_ui_smoke",
+        [skipped_result],
+        first.get("duration_ms", 0),
+    )
 
 
 def _timed_test(name: str, fn: Any) -> dict[str, Any]:

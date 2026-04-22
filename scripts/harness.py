@@ -22,7 +22,7 @@ from harness_lib.output import build_envelope
 # this machine. `swift`, `native`, `ios`, `audio`, and the whole `bench`
 # subcommand are considered heavy — we take an advisory flock so two
 # concurrent invocations fail fast instead of thrashing shared derived-data.
-_HEAVY_TEST_LAYERS = {"swift", "native", "ios", "audio", "all"}
+_HEAVY_TEST_LAYERS = {"swift", "native", "ios", "audio", "e2e", "all"}
 _HARNESS_LOCK_PATH = SCRIPTS_DIR.parent / "build" / "harness" / ".harness.lock"
 
 
@@ -121,7 +121,7 @@ def main() -> None:
     p_test = sub.add_parser("test", help="Run test suites")
     p_test.add_argument(
         "--layer",
-        choices=["contract", "swift", "native", "ios", "audio", "all"],
+        choices=["contract", "swift", "native", "ios", "audio", "e2e", "all"],
         default="all",
     )
     p_test.add_argument(

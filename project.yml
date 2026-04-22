@@ -70,6 +70,20 @@ schemes:
     archive:
       config: Release
 
+  Vocello UI:
+    build:
+      targets:
+        QwenVoice: all
+        VocelloUITests: test
+    test:
+      config: Debug
+      gatherCoverageData: false
+      testPlans:
+        - path: Tests/Plans/VocelloUISmoke.xctestplan
+          defaultPlan: true
+    run:
+      config: Debug
+
 targets:
   QwenVoice:
     type: application
@@ -407,6 +421,27 @@ targets:
         TEST_TARGET_NAME: VocelloiOS
     dependencies:
       - target: VocelloiOS
+
+  VocelloUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: VocelloUITests
+    resources:
+      # Bundle the shared contract so the test can stage a stub-model fixture
+      # without relying on the repo-relative path (`#filePath` fallback still
+      # works for in-repo xcodebuild invocations).
+      - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.uitests
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: QwenVoice
+    dependencies:
+      - target: QwenVoice
 
   VocelloiOSTests:
     type: bundle.unit-test

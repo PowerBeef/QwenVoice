@@ -168,6 +168,7 @@
 		AA28D4C02B8584BC5B6A8D12 /* EngineHostPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F62310AABC856664C0A81B /* EngineHostPrimitives.swift */; };
 		AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */; };
 		AC64FF05E2D99163335D063E /* AppPerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EA9E34083906B2A7FF4DE4 /* AppPerformanceSignposts.swift */; };
+		AD47A5FDA923066C25CF00F4 /* LivePreviewSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C15A84833CBBA98512F16C5 /* LivePreviewSmokeTests.swift */; };
 		AD4BB14FA57891024AF706D2 /* CustomVoiceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F45C532854D962580423BF6 /* CustomVoiceCoordinator.swift */; };
 		B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3C6777F2ABFE603D026E0D /* VoicesView.swift */; };
 		B03552F3823AFAD7425C8F3D /* GenerationPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220CFD2739290441DB6C2732 /* GenerationPersistence.swift */; };
@@ -395,6 +396,13 @@
 			remoteGlobalIDString = 7A07A3AD93684A473AD5179F;
 			remoteInfo = QwenVoiceEngineSupport;
 		};
+		EDF103C4FA656C065266F6DF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 939725D6CC844653EA90F39E;
+			remoteInfo = QwenVoice;
+		};
 		F5699CD3334C7A8A24452480 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
@@ -545,6 +553,8 @@
 		874E704E40B3589D4AD3D45F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCNativeEngineCoordinatorTests.swift; sourceTree = "<group>"; };
+		8C15A84833CBBA98512F16C5 /* LivePreviewSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePreviewSmokeTests.swift; sourceTree = "<group>"; };
+		8C2C23800F44C1E0900C9F8D /* VocelloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VocelloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8C465AE879E2D9F601EC26DB /* DocumentIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIO.swift; sourceTree = "<group>"; };
 		8C51C60AA5F36A5B74A07FEC /* VoiceDesignCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignCoordinator.swift; sourceTree = "<group>"; };
 		8DEBDBA37B6B01D5C89EF110 /* QVoiceiOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QVoiceiOSRootView.swift; sourceTree = "<group>"; };
@@ -1018,6 +1028,7 @@
 				0EA939FD6306E55AA6F741A4 /* VocelloEngineExtension.appex */,
 				FDF2F30A1EC20FFE2584CB48 /* VocelloiOS.app */,
 				A6B73109FDA26E5BE216F042 /* VocelloiOSTests.xctest */,
+				8C2C23800F44C1E0900C9F8D /* VocelloUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1091,6 +1102,7 @@
 				3335A2C55708EA04625018B2 /* QwenVoiceTests */,
 				4F37CA228E18DE12CE0F1A43 /* Sources */,
 				E53306D1D81C80F45D62A377 /* VocelloiOSTests */,
+				905C30A9870C9032AFFA8897 /* VocelloUITests */,
 				75A09AA27103DA1825A1703A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1126,6 +1138,14 @@
 			);
 			name = iOS;
 			path = Sources/iOS;
+			sourceTree = "<group>";
+		};
+		905C30A9870C9032AFFA8897 /* VocelloUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8C15A84833CBBA98512F16C5 /* LivePreviewSmokeTests.swift */,
+			);
+			path = VocelloUITests;
 			sourceTree = "<group>";
 		};
 		91364D6E71C4F3F6A04F2594 /* SharedSupport */ = {
@@ -1486,6 +1506,24 @@
 			productReference = A6B73109FDA26E5BE216F042 /* VocelloiOSTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		FA670FC80E3BD49BCF8BF50F /* VocelloUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 12821E1E8F7F2DDE4A72FAED /* Build configuration list for PBXNativeTarget "VocelloUITests" */;
+			buildPhases = (
+				7D073BFD3554AC50A7197B60 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				35BA5BB95B54339ECD6B5C88 /* PBXTargetDependency */,
+			);
+			name = VocelloUITests;
+			packageProductDependencies = (
+			);
+			productName = VocelloUITests;
+			productReference = 8C2C23800F44C1E0900C9F8D /* VocelloUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		FDEEB4D6308B4114B0CD6002 /* QwenVoiceEngineService */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8953407C6DBB64854F3F49F7 /* Build configuration list for PBXNativeTarget "QwenVoiceEngineService" */;
@@ -1538,6 +1576,9 @@
 						ProvisioningStyle = Automatic;
 						TestTargetID = 8E4346491ECB9C6C678CD73F;
 					};
+					FA670FC80E3BD49BCF8BF50F = {
+						TestTargetID = 939725D6CC844653EA90F39E;
+					};
 				};
 			};
 			buildConfigurationList = A3D129E6D5A19BBE074BCC71 /* Build configuration list for PBXProject "QwenVoice" */;
@@ -1569,6 +1610,7 @@
 				4A19DB9A9B0528092DDFD275 /* QwenVoiceNativeRuntime */,
 				35AB9A9686024F8ED928C1BC /* QwenVoiceTests */,
 				14D8E9DA734C17D84496316B /* VocelloEngineExtension */,
+				FA670FC80E3BD49BCF8BF50F /* VocelloUITests */,
 				8E4346491ECB9C6C678CD73F /* VocelloiOS */,
 				D50197EA708942415FC6A891 /* VocelloiOSTests */,
 			);
@@ -1807,6 +1849,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7D073BFD3554AC50A7197B60 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AD47A5FDA923066C25CF00F4 /* LivePreviewSmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8D91CDE5C7D189496990BB12 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1890,6 +1940,11 @@
 			isa = PBXTargetDependency;
 			target = 1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */;
 			targetProxy = 10E3634FB651C181FAA0586B /* PBXContainerItemProxy */;
+		};
+		35BA5BB95B54339ECD6B5C88 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 939725D6CC844653EA90F39E /* QwenVoice */;
+			targetProxy = EDF103C4FA656C065266F6DF /* PBXContainerItemProxy */;
 		};
 		410AFAA4154BD2B2388DEE69 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -2139,6 +2194,25 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4908F8B6510BE86724256789 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6;
+				TEST_TARGET_NAME = QwenVoice;
 			};
 			name = Debug;
 		};
@@ -2516,6 +2590,25 @@
 			};
 			name = Release;
 		};
+		B14AF113F30CD9D1EC02C270 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.uitests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6;
+				TEST_TARGET_NAME = QwenVoice;
+			};
+			name = Release;
+		};
 		D1198E20882E12A9DDAFF9CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2668,6 +2761,15 @@
 			buildConfigurations = (
 				4C700C64E1867BF723EE1B43 /* Debug */,
 				0A7366F00039838673A7CFC7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		12821E1E8F7F2DDE4A72FAED /* Build configuration list for PBXNativeTarget "VocelloUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4908F8B6510BE86724256789 /* Debug */,
+				B14AF113F30CD9D1EC02C270 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
