@@ -148,6 +148,38 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     override init() {
         livePreviewConfiguration = .current()
         super.init()
+        // In a production launch, subscribe immediately so the shipping
+        // sidebar player wires up without any caller action.
+        //
+        // In an XCTest host process (detected via `XCTestBundlePath`), the
+        // app's own `@StateObject` viewModel would otherwise race with
+        // test-owned viewModels for chunk events from
+        // `GenerationChunkBroker.shared`. The first subscriber to process
+        // a chunk deletes the file at line 485, causing the second to
+        // fail `AVAudioFile(forReading:)` with a file-not-found error.
+        // Test-owned viewModels opt in explicitly via
+        // `startLivePreviewChunkSubscriptionForTesting()`.
+        if !Self.isRunningUnderXCTest {
+            bindGenerationEventSource()
+        }
+    }
+
+    /// True when this process was launched as an XCTest host (the test
+    /// bundle path env var is set by XCTest before the app's main runs).
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
+    }
+
+    /// Test-only entry point: explicitly subscribe a test-owned
+    /// `AudioPlayerViewModel` to the `GenerationChunkBroker`. Tests must
+    /// call this in `setUp` when they want the viewModel to actually
+    /// consume chunk events, since the test-host auto-subscribe is
+    /// suppressed to avoid a duplicate-subscriber race on the shared
+    /// broker. Idempotent — no-op if already subscribed.
+    func startLivePreviewChunkSubscriptionForTesting() {
+        guard chunkCancellable == nil, chunkObserver == nil else { return }
         bindGenerationEventSource()
     }
 
@@ -450,7 +482,17 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func appendLiveChunk(from url: URL, cumulativeDuration: TimeInterval?) {
+        LivePreviewDiagnostics.logChunkEvent(
+            "appendLiveChunk.enter",
+            viewModel: self,
+            url: url
+        )
         guard let (buffer, fileFormat) = loadPCMBuffer(from: url) else {
+            LivePreviewDiagnostics.logChunkEvent(
+                "appendLiveChunk.decode_failed",
+                viewModel: self,
+                url: url
+            )
             playbackError = "Live audio preview could not decode the latest chunk."
             return
         }
@@ -482,6 +524,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             livePreviewPhase = .buffering
         }
 
+        LivePreviewDiagnostics.logChunkEvent(
+            "appendLiveChunk.delete",
+            viewModel: self,
+            url: url
+        )
         try? FileManager.default.removeItem(at: url)
         cleanupLiveSessionDirectoryIfEmpty()
     }
@@ -644,10 +691,27 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func loadPCMBuffer(from url: URL) -> (AVAudioPCMBuffer, AVAudioFormat)? {
-        guard let audioFile = try? AVAudioFile(forReading: url) else { return nil }
+        let audioFile: AVAudioFile
+        do {
+            audioFile = try AVAudioFile(forReading: url)
+        } catch {
+            LivePreviewDiagnostics.logDecodeFailure(
+                "AVAudioFile(forReading:)",
+                viewModel: self,
+                url: url,
+                error: error
+            )
+            return nil
+        }
         let format = audioFile.processingFormat
         let frameCapacity = AVAudioFrameCount(audioFile.length)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
+            LivePreviewDiagnostics.logDecodeFailure(
+                "AVAudioPCMBuffer(frameCapacity: \(frameCapacity))",
+                viewModel: self,
+                url: url,
+                error: nil
+            )
             return nil
         }
 
@@ -655,6 +719,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             try audioFile.read(into: buffer)
             return (buffer, format)
         } catch {
+            LivePreviewDiagnostics.logDecodeFailure(
+                "audioFile.read(into:)",
+                viewModel: self,
+                url: url,
+                error: error
+            )
             return nil
         }
     }

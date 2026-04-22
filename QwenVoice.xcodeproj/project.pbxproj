@@ -64,10 +64,12 @@
 		3D80DC80959739793C35458D /* SemanticTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3391463774A620DD7488F8FB /* SemanticTypes.swift */; };
 		3D8813651CD03DBB73CF1029 /* MLXTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5480928772E9EF2D5AE57945 /* MLXTTSEngine.swift */; };
 		40361A78F41D4941A5CB602D /* AppCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3736EA57DD8B4B60EF1883 /* AppCommandRouter.swift */; };
+		40A94D5A75E9D1F5FB41023C /* LivePreviewDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89331D74C7D33B5E0DF54415 /* LivePreviewDiagnostics.swift */; };
 		40ECAF5555E4878A9C05071E /* ExtensionEngineHostManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DD165E302DDC23B54BAF4BB /* ExtensionEngineHostManager.swift */; };
 		41764DF5703C28EBF5105E5E /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E29A8F18ADF5E5C68E11E1 /* ModelManagerViewModel.swift */; };
 		42996C0B65F1C9A87A19101D /* VoiceDesignCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C51C60AA5F36A5B74A07FEC /* VoiceDesignCoordinator.swift */; };
 		440CB52252D4F7C992B1226B /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 9F6C672A4B0FEBA5A605A0A3 /* HuggingFace */; };
+		447FCAF92871DDEB0C8E164A /* LivePreviewDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89331D74C7D33B5E0DF54415 /* LivePreviewDiagnostics.swift */; };
 		44E67416118382B30463ECBF /* ExtensionBackedTTSEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB3835C8337D542719895FFA /* ExtensionBackedTTSEngineTests.swift */; };
 		450DA1B1FB4FBAEE6426D0E0 /* NativeSpeechGenerationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CD1C46D8B6C5E3FFD1C92E /* NativeSpeechGenerationModel.swift */; };
 		47047F5254483416802EA6E7 /* TTSContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */; };
@@ -553,6 +555,7 @@
 		84CD1C46D8B6C5E3FFD1C92E /* NativeSpeechGenerationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSpeechGenerationModel.swift; sourceTree = "<group>"; };
 		874E704E40B3589D4AD3D45F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		89331D74C7D33B5E0DF54415 /* LivePreviewDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePreviewDiagnostics.swift; sourceTree = "<group>"; };
 		895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCNativeEngineCoordinatorTests.swift; sourceTree = "<group>"; };
 		8C15A84833CBBA98512F16C5 /* LivePreviewSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePreviewSmokeTests.swift; sourceTree = "<group>"; };
 		8C2C23800F44C1E0900C9F8D /* VocelloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VocelloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -987,6 +990,7 @@
 			isa = PBXGroup;
 			children = (
 				2CE335D1E032508F0E9B7614 /* AudioPlayerViewModel.swift */,
+				89331D74C7D33B5E0DF54415 /* LivePreviewDiagnostics.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1727,6 +1731,7 @@
 				2652AA780375CA68D2A076C9 /* IOSShellPrimitives.swift in Sources */,
 				98AF262A3789109DF8DDAD46 /* IOSSimulatorTTSEngine.swift in Sources */,
 				E88C8734CDB1D90E10235D62 /* IOSStudioShellViews.swift in Sources */,
+				447FCAF92871DDEB0C8E164A /* LivePreviewDiagnostics.swift in Sources */,
 				41764DF5703C28EBF5105E5E /* ModelManagerViewModel.swift in Sources */,
 				2C76DCA86A8223765A4151FE /* QVoiceiOSApp.swift in Sources */,
 				A84B4C92E393933F752EB88F /* QVoiceiOSRootView.swift in Sources */,
@@ -1784,6 +1789,7 @@
 				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
 				102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */,
 				2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */,
+				40A94D5A75E9D1F5FB41023C /* LivePreviewDiagnostics.swift in Sources */,
 				0D54E198EE173129C4A2B771 /* ModelInfo.swift in Sources */,
 				0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */,
 				1895AE29DD2BA75E31D75F48 /* ModelsView.swift in Sources */,

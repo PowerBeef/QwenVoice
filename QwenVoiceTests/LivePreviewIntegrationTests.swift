@@ -52,11 +52,13 @@ final class LivePreviewIntegrationTests: XCTestCase {
         // fixture.
         setenv("QWENVOICE_APP_SUPPORT_DIR", fixtureRoot.path, 1)
 
-        // AudioPlayerViewModel's init subscribes to
-        // GenerationChunkBroker.shared.publisher in
-        // bindGenerationEventSource(), so creating it here is enough to
-        // wire the consumer side of the pipeline.
+        // AudioPlayerViewModel suppresses its auto-subscribe when running
+        // under XCTest (otherwise the test-host app's @StateObject
+        // viewModel races with this one for chunk events and deletes the
+        // files first). Explicitly opt in so THIS viewModel is the only
+        // subscriber to GenerationChunkBroker for the duration of the test.
         viewModel = AudioPlayerViewModel()
+        viewModel.startLivePreviewChunkSubscriptionForTesting()
 
         engine = UITestStubMacEngine()
         try await engine.initialize(appSupportDirectory: fixtureRoot)
@@ -74,28 +76,28 @@ final class LivePreviewIntegrationTests: XCTestCase {
 
     // MARK: - Tests
 
-    /// End-to-end pipeline-health test: stub backend emits chunks,
+    /// End-to-end pipeline test: stub backend emits chunks,
     /// `AudioPlayerViewModel` receives them through
-    /// `GenerationChunkBroker`, and the live-session plumbing wires up.
+    /// `GenerationChunkBroker`, and every chunk decodes cleanly.
     ///
     /// Asserts the strong invariants the pipeline MUST satisfy:
-    ///   * At least one chunk reaches `appendLiveChunk` (proves the
-    ///     stub → broker → main-queue-sink → viewModel chain is intact).
-    ///   * A live session is started (`liveSessionID` populated, title
-    ///     propagated).
-    ///   * `isLiveStream` flips to true on stream handoff.
+    ///   * Every stub chunk (3 total) reaches `appendLiveChunk` AND
+    ///     decodes successfully — `livePreviewQueueDepth == 3`.
+    ///   * `isLiveStream` flips to true on first chunk arrival.
+    ///   * `currentTitle` propagates from the chunk event.
+    ///   * `playbackError` stays nil — no decode error surfaces.
     ///
-    /// The stricter "every chunk decoded without error" assertion is
-    /// intentionally NOT made here. Running this test in-process with the
-    /// stub has surfaced an intermittent decode-error condition that
-    /// survives the AVAudioFile finalization fix in commit `7c8b187` (stub
-    /// uses `.atomic` writes, so that specific race can't apply — this is a
-    /// separate, smaller-surface bug). When it happens, this test attaches
-    /// a snapshot of `viewModel.playbackError` + queue state for future
-    /// investigation rather than failing — the XCUITest layer's negative
-    /// "no decode-error surfaces in the UI" assertion is where that
-    /// regression should be caught when the window-registration quirk is
-    /// sorted out.
+    /// The previous iteration of this test tolerated an intermittent
+    /// decode-error condition that came from a cross-test-host
+    /// duplicate-subscriber race: the app's own `@StateObject`
+    /// `AudioPlayerViewModel` (constructed by `QwenVoiceApp` at test-host
+    /// launch) was competing with the test-owned viewModel for chunks on
+    /// the shared `GenerationChunkBroker`, and the first handler to run
+    /// deleted the file before the second could open it. That race is
+    /// fixed by suppressing the host viewModel's auto-subscribe under
+    /// XCTest (see `AudioPlayerViewModel.init` + the new
+    /// `startLivePreviewChunkSubscriptionForTesting()`), so this test now
+    /// asserts the strict invariant.
     func testStubGenerationReachesLivePreviewViewModel() async throws {
         let request = GenerationRequest(
             modelID: "pro_custom",
@@ -111,34 +113,29 @@ final class LivePreviewIntegrationTests: XCTestCase {
         _ = try await engine.generate(request)
 
         // After generate() returns, three chunk events have been published.
-        // Combine delivers them via .receive(on: .main) so yield until at
-        // least one has been consumed or we've waited long enough that a
-        // later one would just be padding.
+        // Combine delivers them via .receive(on: .main) so yield until all
+        // three have decoded — or a decode error interrupts.
         try await waitUntil(timeoutSeconds: 2.0) {
-            self.viewModel.isLiveStream
-                || self.viewModel.playbackError != nil
-                || self.viewModel.livePreviewQueueDepth > 0
+            self.viewModel.playbackError != nil
+                || self.viewModel.livePreviewQueueDepth >= 3
         }
 
-        // `livePreviewQueueDepth` increments only after a SUCCESSFUL
-        // decode; `isLiveStream` flips on any chunk arrival (decode success
-        // OR failure); `playbackError` is set when decode fails. Any of
-        // the three is proof that `appendLiveChunk` ran, which in turn
-        // proves the broker → sink → viewModel chain is intact.
-        let chunkReached =
-            viewModel.livePreviewQueueDepth > 0
-            || viewModel.isLiveStream
-            || viewModel.playbackError != nil
-        XCTAssertTrue(
-            chunkReached,
+        XCTAssertNil(
+            viewModel.playbackError,
             """
-            No chunk event reached AudioPlayerViewModel:
-              livePreviewQueueDepth = \(viewModel.livePreviewQueueDepth)
-              isLiveStream          = \(viewModel.isLiveStream)
-              playbackError         = \(viewModel.playbackError ?? "nil")
-            This means the broker → sink → handleGenerationChunk plumbing
-            is broken — or the stub engine never published any events.
+            A decode error surfaced during stub streaming:
+              \(viewModel.playbackError ?? "nil")
+            `loadPCMBuffer(from:)` returned nil for at least one chunk, which
+            means the file was unreadable at decode time. The most likely
+            cause is a duplicate-subscriber race on GenerationChunkBroker
+            (see AudioPlayerViewModel.init suppression + the test-only
+            startLivePreviewChunkSubscriptionForTesting hook) — verify no
+            other subscriber is alive for the duration of this test.
             """
+        )
+        XCTAssertEqual(
+            viewModel.livePreviewQueueDepth, 3,
+            "All three stub chunks should have decoded and been scheduled."
         )
         XCTAssertTrue(
             viewModel.isLiveStream,
@@ -150,8 +147,9 @@ final class LivePreviewIntegrationTests: XCTestCase {
         )
 
         if let playbackError = viewModel.playbackError {
-            // Document the state so a follow-up investigation has concrete
-            // data. Do NOT fail — see the doc-comment above.
+            // Retained as a safety net: if the assertion above ever fires
+            // under a new regression, attach the state so the xcresult
+            // contains enough data to diagnose without rerunning.
             let state = """
             playbackError: \(playbackError)
             livePreviewQueueDepth: \(viewModel.livePreviewQueueDepth)
@@ -188,18 +186,17 @@ final class LivePreviewIntegrationTests: XCTestCase {
         _ = try await engine.generate(request)
 
         try await waitUntil(timeoutSeconds: 2.0) {
-            self.viewModel.isLiveStream
-                || self.viewModel.playbackError != nil
-                || self.viewModel.livePreviewQueueDepth > 0
+            self.viewModel.playbackError != nil
+                || self.viewModel.livePreviewQueueDepth >= 3
         }
 
-        let chunkReached =
-            viewModel.livePreviewQueueDepth > 0
-            || viewModel.isLiveStream
-            || viewModel.playbackError != nil
-        XCTAssertTrue(
-            chunkReached,
-            "No chunk event reached AudioPlayerViewModel for Voice Design mode."
+        XCTAssertNil(
+            viewModel.playbackError,
+            "A decode error surfaced during Voice Design streaming: \(viewModel.playbackError ?? "nil")"
+        )
+        XCTAssertEqual(
+            viewModel.livePreviewQueueDepth, 3,
+            "All three stub chunks should have decoded in Voice Design mode."
         )
         XCTAssertTrue(
             viewModel.isLiveStream,
