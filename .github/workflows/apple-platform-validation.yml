@@ -60,6 +60,19 @@ jobs:
       - name: Native tests
         run: python3 scripts/harness.py test --layer native
 
+      - name: End-to-end UI smoke (macOS)
+        # The e2e layer drives Vocello.app via XCUITest under the stub
+        # backend to prove the live-preview pipeline reaches the user UI
+        # (Custom Voice → Generate → live badge → no decode error). If the
+        # hosted runner's Accessibility permission or window activation
+        # blocks test-runner automation, the layer self-demotes to a skip
+        # with a clear diagnostic so the workflow doesn't block on a
+        # system-permission bootstrap. The programmatic integration tests
+        # under the `swift` layer (LivePreviewIntegrationTests) cover the
+        # same pipeline without requiring XCUITest, so core coverage is
+        # preserved regardless.
+        run: python3 scripts/harness.py test --layer e2e
+
       - name: Build macOS app
         run: |
           xcodebuild \
@@ -94,7 +107,7 @@ jobs:
             echo "## Backend Freeze Gate"
             echo
             echo "- This workflow is the shared-core regression gate for the macOS-first release track."
-            echo "- Project inputs, harness validation, shared Swift/runtime lanes, and generic macOS/iPhone compile proof ran here."
+            echo "- Project inputs, harness validation, shared Swift/runtime lanes, generic macOS/iPhone compile proof, and the macOS end-to-end UI smoke (\`harness test --layer e2e\`) ran here."
             echo "- Unsigned macOS release verification remains part of the blocking gate."
             echo "- iPhone foundation tests and TestFlight release proof remain maintained, but they are deferred from the current public release milestone."
             echo "- Signed public release proof is owned by the dedicated Vocello macOS Release workflow."
