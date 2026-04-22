@@ -208,6 +208,56 @@ final class LivePreviewIntegrationTests: XCTestCase {
         )
     }
 
+    /// Mirror of the Custom/Design streaming tests but exercising the
+    /// `.clone` payload. Proves every streaming mode routes chunks
+    /// through the same broker → viewModel chain — if a future change
+    /// accidentally diverges the clone path (e.g. by adding a separate
+    /// event type or a different broker subject), this test flags it.
+    func testCloneModeStreamingReachesLivePreviewViewModel() async throws {
+        // Stub backend's clone path doesn't actually open the reference
+        // audio file, so a synthetic path is fine here.
+        let reference = CloneReference(
+            audioPath: fixtureRoot
+                .appendingPathComponent("voices/test-reference.wav").path,
+            transcript: "reference transcript",
+            preparedVoiceID: nil
+        )
+        let request = GenerationRequest(
+            modelID: "pro_clone",
+            text: "Clone mode preview",
+            outputPath: fixtureRoot
+                .appendingPathComponent("outputs/Clones/clone-integration.wav")
+                .path,
+            shouldStream: true,
+            streamingTitle: "Clone mode preview",
+            payload: .clone(reference: reference)
+        )
+
+        _ = try await engine.generate(request)
+
+        try await waitUntil(timeoutSeconds: 2.0) {
+            self.viewModel.playbackError != nil
+                || self.viewModel.livePreviewQueueDepth >= 3
+        }
+
+        XCTAssertNil(
+            viewModel.playbackError,
+            "A decode error surfaced during clone-mode streaming: \(viewModel.playbackError ?? "nil")"
+        )
+        XCTAssertEqual(
+            viewModel.livePreviewQueueDepth, 3,
+            "All three stub chunks should have decoded in clone mode."
+        )
+        XCTAssertTrue(
+            viewModel.isLiveStream,
+            "Live stream flag should have flipped for clone-mode streaming."
+        )
+        XCTAssertEqual(
+            viewModel.currentTitle, "Clone mode preview",
+            "Live session title should have propagated from the clone-mode chunk event."
+        )
+    }
+
     /// Sanity: calling generate() without shouldStream must NOT trigger the
     /// live-preview path at all, so no chunks flow to the view model.
     func testNonStreamingGenerationDoesNotTouchLivePreview() async throws {
