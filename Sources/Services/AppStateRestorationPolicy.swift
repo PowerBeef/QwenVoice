@@ -24,4 +24,19 @@ final class QwenVoiceApplicationDelegate: NSObject, NSApplicationDelegate {
             isUITestLaunch: AppLaunchConfiguration.current.isUITest
         )
     }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard AppLaunchConfiguration.current.isUITest else { return }
+
+        // Force a .regular activation policy and bring the app to the
+        // foreground explicitly. Under XCUITest's test-runner activation
+        // model on macOS 26, the SwiftUI window otherwise fails to
+        // register in the accessibility tree because the app starts in an
+        // "inactive" process state and the runner snapshots the tree
+        // before any implicit activation happens. `ignoringOtherApps`
+        // makes sure we take focus even when the test runner is the
+        // current frontmost process.
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
 }

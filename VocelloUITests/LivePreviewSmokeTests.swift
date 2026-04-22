@@ -36,7 +36,12 @@ final class LivePreviewSmokeTests: XCTestCase {
         let fixtureURL = try resolveOrCreateFixtureRoot()
         fixtureRoot = fixtureURL
 
-        app = XCUIApplication()
+        // Use the explicit bundle identifier rather than the default (test-
+        // target-derived) resolution. Under macOS 26 + XCUITest the default
+        // init has been observed to connect to the app process but not see
+        // the SwiftUI view hierarchy. Explicit bundle ID matches the shipped
+        // Info.plist and skips the resolution round-trip.
+        app = XCUIApplication(bundleIdentifier: "com.qwenvoice.app")
         app.launchArguments = [
             "--uitest",
             "--uitest-disable-animations",
@@ -94,16 +99,32 @@ final class LivePreviewSmokeTests: XCTestCase {
         scriptEditor.click()
         scriptEditor.typeText("Hey there")
 
-        // Tap Generate.
+        // Tap Generate. SwiftUI's disabled-state recomputes on the next
+        // runloop tick after the text binding updates, so the button may
+        // still report isEnabled==false immediately after `typeText`
+        // returns — wait for it to flip.
         let generate = app.buttons["textInput_generateButton"]
         XCTAssertTrue(
             generate.waitForExistence(timeout: 5),
             "textInput_generateButton never appeared."
         )
-        XCTAssertTrue(
-            generate.isEnabled,
-            "textInput_generateButton is disabled after text entry."
+        let enabledPredicate = NSPredicate(format: "isEnabled == true")
+        let enabledExpectation = XCTNSPredicateExpectation(
+            predicate: enabledPredicate,
+            object: generate
         )
+        if XCTWaiter.wait(for: [enabledExpectation], timeout: 10) != .completed {
+            let dump = app.debugDescription
+            let editorValue = "\(scriptEditor.value ?? "(nil)")"
+            let attachment = XCTAttachment(
+                string: "editor.value=\(editorValue)\n\n\(dump)"
+            )
+            attachment.name = "generate-disabled-diagnostic"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("textInput_generateButton did not become enabled after text entry.")
+            return
+        }
         generate.click()
 
         // The live badge appears only after `appendLiveChunk` has consumed at
