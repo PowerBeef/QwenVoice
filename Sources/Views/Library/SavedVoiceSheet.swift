@@ -14,7 +14,7 @@ struct SavedVoiceSheetConfiguration: Identifiable {
 
     static let manualAdd = SavedVoiceSheetConfiguration(
         title: "Add Voice Sample",
-        subtitle: "Save a reference clip here, then use it in Voice Cloning.",
+        subtitle: "Save a reference clip you own or have permission to use, then use it in Voice Cloning.",
         confirmLabel: "Add Saved Voice",
         initialName: "",
         initialAudioPath: "",
@@ -28,7 +28,7 @@ struct SavedVoiceSheetConfiguration: Identifiable {
     ) -> SavedVoiceSheetConfiguration {
         SavedVoiceSheetConfiguration(
             title: "Save to Saved Voices",
-            subtitle: "Keep this clone as a reusable reference for Voice Cloning.",
+            subtitle: "Keep this clone as a reusable reference for Voice Cloning when you have permission to use it.",
             confirmLabel: "Save to Saved Voices",
             initialName: suggestedName,
             initialAudioPath: audioPath,
@@ -43,7 +43,7 @@ struct SavedVoiceSheetConfiguration: Identifiable {
     ) -> SavedVoiceSheetConfiguration {
         SavedVoiceSheetConfiguration(
             title: "Save Designed Voice",
-            subtitle: "Keep this designed voice as a reusable reference for Voice Cloning.",
+            subtitle: "Keep this designed voice as a reusable reference for Voice Cloning when you have permission to use it.",
             confirmLabel: "Save to Saved Voices",
             initialName: SavedVoiceNameSuggestion.designResultName(from: voiceDescription),
             initialAudioPath: audioPath,
@@ -284,12 +284,6 @@ struct SavedVoiceSheet: View {
     }
 
     private func browseForAudio() {
-        if UITestAutomationSupport.isStubBackendMode,
-           let url = UITestAutomationSupport.enrollAudioURL {
-            audioPath = url.path
-            return
-        }
-
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .wav, .mp3, .aiff]
         if panel.runModal() == .OK, let url = panel.url {

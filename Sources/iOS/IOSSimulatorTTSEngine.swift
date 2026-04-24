@@ -11,7 +11,7 @@ enum IOSSimulatorRuntimeSupport {
     }
 
     static let unsupportedMessage =
-        "Generation is unavailable in the iOS Simulator. Use a real iPhone for MLX generation, playback, and performance testing."
+        "Generation is unavailable in the iOS Simulator. Use a real iPhone for MLX generation, playback, and performance validation."
 }
 
 @MainActor

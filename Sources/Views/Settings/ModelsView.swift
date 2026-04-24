@@ -147,6 +147,16 @@ struct ModelRow: View {
         "Used by \(model.mode.displayName)"
     }
 
+    private var variantLabel: String {
+        if model.folder.localizedCaseInsensitiveContains("4bit") {
+            return "Speed variant"
+        }
+        if model.folder.localizedCaseInsensitiveContains("8bit") {
+            return "Quality variant"
+        }
+        return "Model variant"
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             modeIcon
@@ -158,6 +168,10 @@ struct ModelRow: View {
                         .foregroundStyle(.primary)
 
                     Text(usageLabel)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Text(variantLabel)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -206,6 +220,9 @@ struct ModelRow: View {
             }
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 4) {
+                Text(progress.phase.displayName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let totalBytes = progress.totalBytes, totalBytes > 0 {
                     ProgressView(value: Double(progress.downloadedBytes), total: Double(totalBytes))
                         .tint(AppTheme.statusProgressTint)
@@ -371,5 +388,22 @@ struct ModelRow: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(isHighlighted ? AppTheme.accent.opacity(0.18) : .clear, lineWidth: 1)
             }
+    }
+}
+
+private extension ModelManagerViewModel.DownloadProgress.Phase {
+    var displayName: String {
+        switch self {
+        case .downloading:
+            return "Downloading model..."
+        case .interrupted:
+            return "Download interrupted."
+        case .resuming:
+            return "Resuming download..."
+        case .verifying:
+            return "Verifying model files..."
+        case .installing:
+            return "Installing model..."
+        }
     }
 }

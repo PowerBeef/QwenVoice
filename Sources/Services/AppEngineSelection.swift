@@ -14,26 +14,45 @@ enum AppEngineSelection: Equatable {
         .native
     }
 
-    func effectiveSelection(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Self {
+    func effectiveSelection() -> Self {
         self
     }
 
-    func requiresManualInitialization(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Bool {
+#if QW_TEST_SUPPORT
+    func effectiveSelection(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Self {
+        self
+    }
+#endif
+
+    func requiresManualInitialization() -> Bool {
         true
     }
 
-    @MainActor
-    func makeEngine(
-        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
-    ) -> any MacTTSEngine {
-        isStubBackendMode ? UITestStubMacEngine() : XPCNativeEngineClient()
+#if QW_TEST_SUPPORT
+    func requiresManualInitialization(isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode) -> Bool {
+        true
     }
+#endif
+
+    @MainActor
+    func makeEngine() -> any MacTTSEngine {
+        return XPCNativeEngineClient()
+    }
+
+#if QW_TEST_SUPPORT
+    @MainActor
+    func makeEngine(isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode) -> any MacTTSEngine {
+        if isStubBackendMode {
+            return UITestStubMacEngine()
+        }
+        return XPCNativeEngineClient()
+    }
+#endif
 
     @MainActor
     func resolveSidebarStatus(
         ttsEngineSnapshot: TTSEngineSnapshot,
-        prefersInlinePresentation: Bool,
-        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
+        prefersInlinePresentation: Bool
     ) -> SidebarStatus {
         Self.nativeSidebarStatus(
             from: ttsEngineSnapshot,
@@ -43,11 +62,20 @@ enum AppEngineSelection: Equatable {
 
     @MainActor
     func clearSidebarError(
-        ttsEngineStore: TTSEngineStore,
-        isStubBackendMode: Bool = UITestAutomationSupport.isStubBackendMode
+        ttsEngineStore: TTSEngineStore
     ) {
         ttsEngineStore.clearVisibleError()
     }
+
+#if QW_TEST_SUPPORT
+    @MainActor
+    func clearSidebarError(
+        ttsEngineStore: TTSEngineStore,
+        isStubBackendMode _: Bool = UITestAutomationSupport.isStubBackendMode
+    ) {
+        ttsEngineStore.clearVisibleError()
+    }
+#endif
 
     private static func nativeSidebarStatus(
         from snapshot: TTSEngineSnapshot,

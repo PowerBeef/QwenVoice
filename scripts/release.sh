@@ -16,6 +16,7 @@ TOTAL_START="$(date +%s)"
 
 SKIP_BUILD=false
 OUTPUT_NAME="$DEFAULT_OUTPUT_NAME"
+PREFLIGHT="none"
 SIGNING_MODE="${QWENVOICE_SIGNING_MODE:-ad-hoc}"
 SIGNING_IDENTITY="${QWENVOICE_SIGNING_IDENTITY:-}"
 CODESIGN_KEYCHAIN="${QWENVOICE_CODESIGN_KEYCHAIN:-}"
@@ -27,7 +28,7 @@ release_fail() {
 
 usage() {
     cat >&2 <<EOF
-Usage: $0 [--skip-build] [--output-name <basename>] [--signing-mode ad-hoc|developer-id] [--signing-identity <identity>] [--codesign-keychain <path>]
+Usage: $0 [--skip-build] [--output-name <basename>] [--preflight none|full] [--signing-mode ad-hoc|developer-id] [--signing-identity <identity>] [--codesign-keychain <path>]
 
 Build the macOS Release app, sign it, package it into a DMG, and emit release metadata.
 EOF
@@ -50,6 +51,11 @@ while [ $# -gt 0 ]; do
         --output-name)
             [ $# -ge 2 ] || usage
             OUTPUT_NAME="$2"
+            shift 2
+            ;;
+        --preflight)
+            [ $# -ge 2 ] || usage
+            PREFLIGHT="$2"
             shift 2
             ;;
         --signing-mode)
@@ -90,6 +96,14 @@ case "$SIGNING_MODE" in
         ;;
     *)
         release_fail "Unsupported --signing-mode '$SIGNING_MODE' (expected ad-hoc or developer-id)"
+        ;;
+esac
+
+case "$PREFLIGHT" in
+    none|full)
+        ;;
+    *)
+        release_fail "Unsupported --preflight '$PREFLIGHT' (expected none or full)"
         ;;
 esac
 
@@ -148,6 +162,7 @@ echo "=== Vocello: macOS Release Build ==="
 echo ""
 echo "  scheme: $SCHEME"
 echo "  output DMG: $OUTPUT_NAME.dmg"
+echo "  preflight: $PREFLIGHT"
 echo "  signing: $SIGNING_MODE"
 if [ "$SIGNING_MODE" = "developer-id" ]; then
     echo "  signing identity: $SIGNING_IDENTITY"
@@ -163,6 +178,19 @@ echo "[1/7] Regenerating Xcode project..."
 "$SCRIPT_DIR/regenerate_project.sh"
 echo "[1/7] Regenerate project — done ($(step_time "$STEP_START"))"
 echo ""
+
+if [ "$PREFLIGHT" = "full" ]; then
+    STEP_START="$(date +%s)"
+    echo "[preflight] Running harness and build proof gates..."
+    python3 "$SCRIPT_DIR/harness.py" validate
+    python3 "$SCRIPT_DIR/harness.py" test --layer contract
+    python3 "$SCRIPT_DIR/harness.py" test --layer swift
+    python3 "$SCRIPT_DIR/harness.py" test --layer native
+    "$SCRIPT_DIR/build_foundation_targets.sh" macos
+    "$SCRIPT_DIR/build_foundation_targets.sh" ios
+    echo "[preflight] Full preflight — done ($(step_time "$STEP_START"))"
+    echo ""
+fi
 
 STEP_START="$(date +%s)"
 echo "[2/7] Resolving pinned Swift packages..."

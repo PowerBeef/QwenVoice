@@ -149,19 +149,3 @@ let ode = SAMAudioODEOptions(method: .midpoint, stepSize: 2.0 / 32.0)
 - Chunked methods do not currently support anchors (`chunkedAnchorsNotSupported`)
 - Output arrays are mono waveforms per sample (`(samples, 1)`)
 
-## Testing
-
-Local integration test (no network):
-
-```bash
-swift test --filter fromPretrainedLoadsLocalFixture
-```
-
-Network-enabled integration test:
-
-```bash
-MLXAUDIO_ENABLE_NETWORK_TESTS=1 \
-MLXAUDIO_SAMAUDIO_REPO=mlx-community/sam-audio-large \
-swift test --filter fromPretrainedLoadsRealWeightsNetwork
-```
-

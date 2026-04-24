@@ -171,16 +171,10 @@ struct IOSCustomVoiceView: View {
 
         Task {
             let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
-            let uiTestRequest = UITestGenerationRequest.uiDrivenIfConfigured(mode: .custom)
             do {
                 audioPlayer.prepareStreamingPreview(
                     title: String(promptText.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
-                )
-                await AppGenerationTelemetryCoordinator.shared.begin(
-                    mode: .custom,
-                    requestID: uiTestRequest?.requestID,
-                    telemetry: uiTestRequest?.telemetry
                 )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
@@ -214,22 +208,12 @@ struct IOSCustomVoiceView: View {
                     audioPlayer: audioPlayer,
                     caller: "IOSCustomVoiceView"
                 )
-                await AppGenerationTelemetryCoordinator.shared.publishSuccess(
-                    mode: .custom,
-                    requestID: uiTestRequest?.requestID,
-                    result: result
-                )
                 IOSHaptics.success()
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }
                 errorMessage = error.localizedDescription
-                await AppGenerationTelemetryCoordinator.shared.publishFailure(
-                    mode: .custom,
-                    requestID: uiTestRequest?.requestID,
-                    error: error
-                )
                 IOSHaptics.warning()
             }
 
@@ -487,16 +471,10 @@ struct IOSVoiceDesignView: View {
 
         Task {
             let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
-            let uiTestRequest = UITestGenerationRequest.uiDrivenIfConfigured(mode: .design)
             do {
                 audioPlayer.prepareStreamingPreview(
                     title: String(promptText.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
-                )
-                await AppGenerationTelemetryCoordinator.shared.begin(
-                    mode: .design,
-                    requestID: uiTestRequest?.requestID,
-                    telemetry: uiTestRequest?.telemetry
                 )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
@@ -531,22 +509,12 @@ struct IOSVoiceDesignView: View {
                     caller: "IOSVoiceDesignView"
                 )
                 saveSheetAudioPath = result.audioPath
-                await AppGenerationTelemetryCoordinator.shared.publishSuccess(
-                    mode: .design,
-                    requestID: uiTestRequest?.requestID,
-                    result: result
-                )
                 IOSHaptics.success()
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }
                 errorMessage = error.localizedDescription
-                await AppGenerationTelemetryCoordinator.shared.publishFailure(
-                    mode: .design,
-                    requestID: uiTestRequest?.requestID,
-                    error: error
-                )
                 IOSHaptics.warning()
             }
             isGenerating = false
@@ -857,7 +825,6 @@ struct IOSVoiceCloningView: View {
         errorMessage = nil
 
         Task {
-            let uiTestRequest = UITestGenerationRequest.uiDrivenIfConfigured(mode: .clone)
             do {
                 ensureSelectedSavedVoiceHydratedIfNeeded()
                 guard let refPath = draft.referenceAudioPath else {
@@ -882,11 +849,6 @@ struct IOSVoiceCloningView: View {
                 audioPlayer.prepareStreamingPreview(
                     title: String(promptText.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay
-                )
-                await AppGenerationTelemetryCoordinator.shared.begin(
-                    mode: .clone,
-                    requestID: uiTestRequest?.requestID,
-                    telemetry: uiTestRequest?.telemetry
                 )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
@@ -924,22 +886,12 @@ struct IOSVoiceCloningView: View {
                     audioPlayer: audioPlayer,
                     caller: "IOSVoiceCloningView"
                 )
-                await AppGenerationTelemetryCoordinator.shared.publishSuccess(
-                    mode: .clone,
-                    requestID: uiTestRequest?.requestID,
-                    result: result
-                )
                 IOSHaptics.success()
             } catch {
                 if (error as? GenerationPersistence.PersistenceError) == nil {
                     audioPlayer.abortLivePreviewIfNeeded()
                 }
                 errorMessage = error.localizedDescription
-                await AppGenerationTelemetryCoordinator.shared.publishFailure(
-                    mode: .clone,
-                    requestID: uiTestRequest?.requestID,
-                    error: error
-                )
                 IOSHaptics.warning()
             }
             isGenerating = false

@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Foundation
 import QwenVoiceNative
 
@@ -268,3 +269,4 @@ final class StubBackendTransport {
         return Data(bytes: &littleEndian, count: MemoryLayout<T>.size)
     }
 }
+#endif

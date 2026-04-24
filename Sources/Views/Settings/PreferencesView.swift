@@ -67,11 +67,6 @@ struct PreferencesView: View {
         .frame(minWidth: 580, minHeight: 420)
         .navigationTitle("Preferences")
         .accessibilityIdentifier("screen_preferences")
-        .overlay(alignment: .topLeading) {
-            if UITestAutomationSupport.isEnabled {
-                hiddenReadinessMarker
-            }
-        }
     }
 
     private var outputDirectorySummary: String {
@@ -82,12 +77,6 @@ struct PreferencesView: View {
     }
 
     private func browseForOutputDirectory() {
-        if UITestAutomationSupport.isStubBackendMode,
-           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
-            outputDirectory = outputDirectoryURL.path
-            return
-        }
-
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -100,15 +89,4 @@ struct PreferencesView: View {
         NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
     }
 
-    private var hiddenReadinessMarker: some View {
-        Text("ready")
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel("ready")
-            .accessibilityValue("ready")
-            .accessibilityIdentifier("settingsWindow_ready")
-    }
 }

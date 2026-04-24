@@ -4,8 +4,7 @@
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
-      buildImplicitDependencies = "YES"
-      runPostActionsOnFailure = "NO">
+      buildImplicitDependencies = "YES">
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
@@ -16,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "8E4346491ECB9C6C678CD73F"
-               BuildableName = "VocelloiOS.app"
+               BuildableName = "Vocello.app"
                BlueprintName = "VocelloiOS"
                ReferencedContainer = "container:QwenVoice.xcodeproj">
             </BuildableReference>
@@ -27,27 +26,22 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      onlyGenerateCoverageForSpecifiedTargets = "NO">
-      <TestPlans>
-         <TestPlanReference
-            default = "YES"
-            reference = "container:Tests/Plans/VocelloiOSFoundation.xctestplan">
-         </TestPlanReference>
-      </TestPlans>
+      shouldUseLaunchSchemeArgsEnv = "YES">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8E4346491ECB9C6C678CD73F"
-            BuildableName = "VocelloiOS.app"
+            BuildableName = "Vocello.app"
             BlueprintName = "VocelloiOS"
             ReferencedContainer = "container:QwenVoice.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
-      <Testables>
-      </Testables>
-      <CommandLineArguments>
-      </CommandLineArguments>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:tests/Plans/VocelloiOSFoundation.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -64,13 +58,11 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8E4346491ECB9C6C678CD73F"
-            BuildableName = "VocelloiOS.app"
+            BuildableName = "Vocello.app"
             BlueprintName = "VocelloiOS"
             ReferencedContainer = "container:QwenVoice.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -83,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8E4346491ECB9C6C678CD73F"
-            BuildableName = "VocelloiOS.app"
+            BuildableName = "Vocello.app"
             BlueprintName = "VocelloiOS"
             ReferencedContainer = "container:QwenVoice.xcodeproj">
          </BuildableReference>

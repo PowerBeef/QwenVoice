@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Foundation
 import QwenVoiceCore
 
@@ -252,3 +253,4 @@ private extension String {
         isEmpty ? nil : self
     }
 }
+#endif

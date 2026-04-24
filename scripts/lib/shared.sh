@@ -4,7 +4,7 @@
 #
 #   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 #   MATRIX_PATH="${MATRIX_PATH:-$SCRIPT_DIR/../config/apple-platform-capability-matrix.json}"
-#   . "$SCRIPT_DIR/harness_lib/shared.sh"
+#   . "$SCRIPT_DIR/lib/shared.sh"
 #
 # Callers must export or set `MATRIX_PATH` before sourcing this file. The
 # helpers use `python3` for JSON parsing so the rest of the script can stay

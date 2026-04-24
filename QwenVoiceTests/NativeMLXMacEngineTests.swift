@@ -406,25 +406,26 @@ final class NativeMLXMacEngineTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputPath))
 
         let sessionDirectory: String = try XCTUnwrap(result.streamSessionDirectory)
-        XCTAssertTrue(
+        let sessionURL = URL(fileURLWithPath: sessionDirectory)
+        XCTAssertFalse(
             FileManager.default.fileExists(
-                atPath: URL(fileURLWithPath: sessionDirectory)
-                    .appendingPathComponent("chunk_0000.wav")
-                    .path
-            )
+                atPath: sessionURL.appendingPathComponent("chunk_0000.wav").path
+            ),
+            "Default streaming preview should use PCM events instead of hot-path chunk WAV files."
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             FileManager.default.fileExists(
-                atPath: URL(fileURLWithPath: sessionDirectory)
-                    .appendingPathComponent("chunk_0001.wav")
-                    .path
-            )
+                atPath: sessionURL.appendingPathComponent("chunk_0001.wav").path
+            ),
+            "Chunk WAV files are reserved for explicit diagnostic/file-artifact streaming policy."
         )
 
         XCTAssertEqual(observedEvents.count, 2)
         XCTAssertEqual(observedEvents.first?.isFinal, false)
         XCTAssertTrue(observedEvents.dropFirst().allSatisfy { $0.isFinal == true })
         XCTAssertEqual(observedEvents.last?.isFinal, true)
+        XCTAssertTrue(observedEvents.allSatisfy { $0.previewAudio != nil })
+        XCTAssertTrue(observedEvents.allSatisfy { $0.chunkPath == nil })
         XCTAssertEqual(engine.snapshot.loadState.currentModelID, "pro_custom")
         XCTAssertNil(engine.snapshot.visibleErrorMessage)
 

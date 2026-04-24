@@ -443,6 +443,11 @@ private struct VoiceCloningReferenceSettings: View {
                 referenceAudioPath: referenceAudioPath
             )
 
+            Text("Only use voice clips you own or have permission to clone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("voiceCloning_consentNotice")
+
             CloneReferenceStatus(
                 referenceAudioPath: referenceAudioPath,
                 selectedVoice: selectedVoice,

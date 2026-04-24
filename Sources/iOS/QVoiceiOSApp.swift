@@ -98,11 +98,13 @@ struct QVoiceiOSApp: App {
             do {
                 try await engine.initialize(appSupportDirectory: AppPaths.appSupportDir)
                 _ = engine.refreshMemoryPolicy()
-                print("[QVoiceiOSApp] Engine initialized. BenchmarkRunner.isEnabled=\(BenchmarkRunner.isEnabled) args=\(CommandLine.arguments)")
+                print("[QVoiceiOSApp] Engine initialized.")
+#if QW_TEST_SUPPORT
                 if BenchmarkRunner.isEnabled {
                     let runner = BenchmarkRunner(engine: engine)
                     await runner.run()
                 }
+#endif
             } catch {
                 didInitializeEngine = false
                 engine.setVisibleError("Engine initialization failed: \(error.localizedDescription)")
@@ -202,9 +204,6 @@ struct QVoiceiOSApp: App {
         )
 
         Task { @MainActor in
-            await AppGenerationTelemetryCoordinator.shared.recordStage(
-                "pre_memory_trim_\(reason)"
-            )
             await engine.trimMemory(level: trimLevel, reason: reason)
             if trimLevel == .fullUnload {
                 audioPlayer.abortLivePreviewIfNeeded()
@@ -218,7 +217,13 @@ struct QVoiceiOSApp: App {
 
     private func configureNativeRuntimeMemoryCacheIfNeeded() {
         guard !IOSSimulatorRuntimeSupport.isSimulator else { return }
-        Memory.cacheLimit = 128 * 1024 * 1024
+        NativeMemoryPolicyResolver.apply(
+            NativeMemoryPolicyResolver.policy(
+                deviceClass: .iPhonePro,
+                mode: .custom,
+                isBatch: false
+            )
+        )
     }
 
     private func clearNativeRuntimeCacheIfAvailable() {
@@ -238,9 +243,6 @@ struct QVoiceiOSApp: App {
                 }
             }
 
-            await AppGenerationTelemetryCoordinator.shared.recordStage(
-                "pre_runtime_release_\(reason)"
-            )
             await engine.cancelClonePreparationIfNeeded()
             do {
                 try await engine.unloadModel()

@@ -214,26 +214,19 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             }
             let runtimeContext = try requireRuntimeContext()
             let generationTask = Task { @MainActor [weak self] in
-                var results: [GenerationResult] = []
-                results.reserveCapacity(requests.count)
-                for (index, request) in requests.enumerated() {
-                    try Task.checkCancellation()
-                    let result = try await runtimeContext.engine.generate(
-                        Self.batchRequest(from: request)
-                    )
-                    results.append(Self.normalizedBatchResult(from: result))
+                let batchRequests = requests.map { Self.batchRequest(from: $0) }
+                let results = try await runtimeContext.engine.generateBatch(batchRequests) { fraction, message in
                     self?.publish(
                         .batchProgress(
                             EngineBatchProgressUpdate(
                                 commandID: commandID,
-                                fraction: Double(index + 1) / Double(requests.count),
-                                message: "Generated item \(index + 1)/\(requests.count)"
+                                fraction: fraction,
+                                message: message
                             )
                         )
                     )
-                    runtimeContext.engine.clearGenerationActivity()
                 }
-                return results
+                return results.map(Self.normalizedBatchResult(from:))
             }
             let generationID = await activeGenerationCoordinator.register {
                 generationTask.cancel()
@@ -463,7 +456,8 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             telemetryStageMarks: benchmarkSample.telemetryStageMarks,
             timingsMS: benchmarkSample.timingsMS,
             booleanFlags: benchmarkSample.booleanFlags,
-            stringFlags: benchmarkSample.stringFlags
+            stringFlags: benchmarkSample.stringFlags,
+            backendPerformance: benchmarkSample.backendPerformance
         )
     }
 }

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
+import os
 import time
 from pathlib import Path
 from typing import Any
 
+from .command import run_command, tail_lines
 from .contract import load_contract, speaker_list
 from .output import build_suite_result, build_test_result, eprint
 from .paths import (
@@ -19,7 +19,9 @@ from .paths import (
     ensure_directory,
     reset_directory,
 )
+from .simulator import resolve_ios_simulator_destination
 from .ui_test_support import resolve_xcodebuild_timeout_seconds
+from .xcresult import summarize_xcresult
 
 
 def run_tests(
@@ -69,12 +71,6 @@ def run_tests(
         eprint("==> Running iPhone foundation tests...")
         suites.append(_run_ios_tests())
 
-    if layer in ("all", "audio"):
-        eprint("==> Running audio pipeline tests...")
-        from .audio_test_runner import run_audio_tests
-
-        suites.append(run_audio_tests(artifact_dir=artifact_dir))
-
     if layer in ("all", "e2e"):
         eprint("==> Running end-to-end UI smoke tests...")
         suites.append(_run_e2e_tests())
@@ -108,6 +104,8 @@ def _run_e2e_tests() -> dict[str, Any]:
         destination="platform=macOS",
         test_plan="VocelloUISmoke",
     )
+    if os.environ.get("QWENVOICE_E2E_STRICT", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return result
     return _demote_tcc_timeout_to_skip(result)
 
 
@@ -242,7 +240,7 @@ def _test_unique_model_modes() -> None:
 
 
 def _run_ios_tests() -> dict[str, Any]:
-    destination = _resolve_ios_simulator_destination()
+    destination = resolve_ios_simulator_destination()
     if destination is None:
         return build_suite_result(
             "ios_foundation_tests",
@@ -261,54 +259,6 @@ def _run_ios_tests() -> dict[str, Any]:
         scheme="VocelloiOS Foundation",
         destination=destination,
     )
-
-
-def _resolve_ios_simulator_destination() -> str | None:
-    proc = subprocess.run(
-        ["xcrun", "simctl", "list", "devices", "available", "-j"],
-        cwd=str(PROJECT_DIR),
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return None
-
-    try:
-        devices_by_runtime = json.loads(proc.stdout).get("devices", {})
-    except json.JSONDecodeError:
-        return None
-
-    candidates: list[dict[str, Any]] = []
-    for runtime, devices in devices_by_runtime.items():
-        if "iOS" not in runtime:
-            continue
-        for device in devices:
-            name = device.get("name", "")
-            if not name.startswith("iPhone"):
-                continue
-            if not device.get("isAvailable", True):
-                continue
-            candidates.append(device)
-
-    if not candidates:
-        return None
-
-    preferred_names = ("iPhone 17 Pro", "iPhone 17 Pro Max", "iPhone 17", "iPhone 16 Pro")
-    candidates.sort(
-        key=lambda device: (
-            0 if device.get("state") == "Booted" else 1,
-            next(
-                (
-                    index
-                    for index, preferred_name in enumerate(preferred_names)
-                    if device.get("name") == preferred_name
-                ),
-                len(preferred_names),
-            ),
-            device.get("name", ""),
-        )
-    )
-    return f"platform=iOS Simulator,id={candidates[0]['udid']}"
 
 
 def _run_xcodebuild_test_suite(
@@ -344,13 +294,23 @@ def _run_xcodebuild_test_suite(
         str(source_packages_path),
         "-resolvePackageDependencies",
     ]
-    resolve_proc = subprocess.run(
-        resolve_command,
-        cwd=str(PROJECT_DIR),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    resolve_proc, resolve_timeout = run_command(resolve_command, timeout=timeout)
+    if resolve_timeout is not None:
+        result = build_test_result(
+            suite_name,
+            passed=False,
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            error="xcodebuild -resolvePackageDependencies timed out",
+            details={
+                "stage": "resolve-package-dependencies",
+                "scheme": scheme,
+                "destination": destination,
+                "source_packages_path": str(source_packages_path),
+                "command": resolve_command,
+                **resolve_timeout,
+            },
+        )
+        return build_suite_result(suite_name, [result], result["duration_ms"])
     if resolve_proc.returncode != 0:
         details = {
             "stage": "resolve-package-dependencies",
@@ -358,8 +318,8 @@ def _run_xcodebuild_test_suite(
             "destination": destination,
             "source_packages_path": str(source_packages_path),
             "command": resolve_command,
-            "stdout_tail": resolve_proc.stdout.splitlines()[-20:],
-            "stderr_tail": resolve_proc.stderr.splitlines()[-20:],
+            "stdout_tail": tail_lines(resolve_proc.stdout),
+            "stderr_tail": tail_lines(resolve_proc.stderr),
         }
         result = build_test_result(
             suite_name,
@@ -391,13 +351,29 @@ def _run_xcodebuild_test_suite(
         *build_arguments,
         "build-for-testing",
     ]
-    build_proc = subprocess.run(
-        build_command,
-        cwd=str(PROJECT_DIR),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    build_proc, build_timeout = run_command(build_command, timeout=timeout)
+    if build_timeout is not None:
+        result = build_test_result(
+            suite_name,
+            passed=False,
+            error="xcodebuild build-for-testing timed out",
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            details={
+                "stage": "build-for-testing",
+                "scheme": scheme,
+                "destination": destination,
+                "source_packages_path": str(source_packages_path),
+                "derived_data_path": str(derived_data_path),
+                "result_bundle_path": str(build_result_bundle),
+                "resolve_command": resolve_command,
+                "command": build_command,
+                "resolve_stdout_tail": tail_lines(resolve_proc.stdout),
+                "resolve_stderr_tail": tail_lines(resolve_proc.stderr),
+                "xcresult_summary": summarize_xcresult(build_result_bundle, stage="build"),
+                **build_timeout,
+            },
+        )
+        return build_suite_result(suite_name, [result], result["duration_ms"])
     if build_proc.returncode != 0:
         details = {
             "stage": "build-for-testing",
@@ -408,11 +384,11 @@ def _run_xcodebuild_test_suite(
             "result_bundle_path": str(build_result_bundle),
             "resolve_command": resolve_command,
             "command": build_command,
-            "resolve_stdout_tail": resolve_proc.stdout.splitlines()[-20:],
-            "resolve_stderr_tail": resolve_proc.stderr.splitlines()[-20:],
-            "stdout_tail": build_proc.stdout.splitlines()[-20:],
-            "stderr_tail": build_proc.stderr.splitlines()[-20:],
-            "xcresult_summary": _xcresult_summary(build_result_bundle, stage="build"),
+            "resolve_stdout_tail": tail_lines(resolve_proc.stdout),
+            "resolve_stderr_tail": tail_lines(resolve_proc.stderr),
+            "stdout_tail": tail_lines(build_proc.stdout),
+            "stderr_tail": tail_lines(build_proc.stderr),
+            "xcresult_summary": summarize_xcresult(build_result_bundle, stage="build"),
         }
         result = build_test_result(
             suite_name,
@@ -444,33 +420,51 @@ def _run_xcodebuild_test_suite(
         *test_arguments,
         "test-without-building",
     ]
-    test_proc = subprocess.run(
-        test_command,
-        cwd=str(PROJECT_DIR),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    test_proc, test_timeout = run_command(test_command, timeout=timeout)
+    if test_timeout is not None:
+        result = build_test_result(
+            suite_name,
+            passed=False,
+            error="xcodebuild test-without-building timed out",
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            details={
+                "stage": "test-without-building",
+                "scheme": scheme,
+                "destination": destination,
+                "test_plan": test_plan,
+                "source_packages_path": str(source_packages_path),
+                "derived_data_path": str(derived_data_path),
+                "build_result_bundle_path": str(build_result_bundle),
+                "test_result_bundle_path": str(test_result_bundle),
+                "resolve_command": resolve_command,
+                "build_command": build_command,
+                "test_command": test_command,
+                "build_xcresult_summary": summarize_xcresult(build_result_bundle, stage="build"),
+                "test_xcresult_summary": summarize_xcresult(test_result_bundle, stage="test"),
+                **test_timeout,
+            },
+        )
+        return build_suite_result(suite_name, [result], result["duration_ms"])
     details = {
-            "stage": "test-without-building",
-            "scheme": scheme,
-            "destination": destination,
-            "test_plan": test_plan,
-            "source_packages_path": str(source_packages_path),
-            "derived_data_path": str(derived_data_path),
-            "build_result_bundle_path": str(build_result_bundle),
-            "test_result_bundle_path": str(test_result_bundle),
-            "resolve_command": resolve_command,
-            "build_command": build_command,
-            "test_command": test_command,
-            "resolve_stdout_tail": resolve_proc.stdout.splitlines()[-20:],
-            "resolve_stderr_tail": resolve_proc.stderr.splitlines()[-20:],
-            "build_stdout_tail": build_proc.stdout.splitlines()[-20:],
-            "build_stderr_tail": build_proc.stderr.splitlines()[-20:],
-            "test_stdout_tail": test_proc.stdout.splitlines()[-20:],
-        "test_stderr_tail": test_proc.stderr.splitlines()[-20:],
-        "build_xcresult_summary": _xcresult_summary(build_result_bundle, stage="build"),
-        "test_xcresult_summary": _xcresult_summary(test_result_bundle, stage="test"),
+        "stage": "test-without-building",
+        "scheme": scheme,
+        "destination": destination,
+        "test_plan": test_plan,
+        "source_packages_path": str(source_packages_path),
+        "derived_data_path": str(derived_data_path),
+        "build_result_bundle_path": str(build_result_bundle),
+        "test_result_bundle_path": str(test_result_bundle),
+        "resolve_command": resolve_command,
+        "build_command": build_command,
+        "test_command": test_command,
+        "resolve_stdout_tail": tail_lines(resolve_proc.stdout),
+        "resolve_stderr_tail": tail_lines(resolve_proc.stderr),
+        "build_stdout_tail": tail_lines(build_proc.stdout),
+        "build_stderr_tail": tail_lines(build_proc.stderr),
+        "test_stdout_tail": tail_lines(test_proc.stdout),
+        "test_stderr_tail": tail_lines(test_proc.stderr),
+        "build_xcresult_summary": summarize_xcresult(build_result_bundle, stage="build"),
+        "test_xcresult_summary": summarize_xcresult(test_result_bundle, stage="test"),
     }
     result = build_test_result(
         suite_name,
@@ -480,50 +474,3 @@ def _run_xcodebuild_test_suite(
         details=details,
     )
     return build_suite_result(suite_name, [result], result["duration_ms"])
-
-
-def _xcresult_summary(result_bundle_path: Path, *, stage: str) -> dict[str, Any] | None:
-    if not result_bundle_path.exists():
-        return None
-
-    if stage == "build":
-        command = [
-            "xcrun",
-            "xcresulttool",
-            "get",
-            "build-results",
-            "--path",
-            str(result_bundle_path),
-            "--compact",
-        ]
-    else:
-        command = [
-            "xcrun",
-            "xcresulttool",
-            "get",
-            "test-results",
-            "summary",
-            "--path",
-            str(result_bundle_path),
-            "--compact",
-        ]
-
-    proc = subprocess.run(
-        command,
-        cwd=str(PROJECT_DIR),
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return {
-            "error": f"xcresulttool exited with {proc.returncode}",
-            "stderr_tail": proc.stderr.splitlines()[-20:],
-        }
-
-    try:
-        return json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return {
-            "error": "xcresulttool produced unreadable JSON",
-            "stdout_tail": proc.stdout.splitlines()[-20:],
-        }

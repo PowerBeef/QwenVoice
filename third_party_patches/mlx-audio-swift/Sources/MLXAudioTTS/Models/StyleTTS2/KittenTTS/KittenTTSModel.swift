@@ -40,8 +40,8 @@ public final class KittenTTSModel: Module, SpeechGenerationModel, @unchecked Sen
         _decoder = ModuleInfo(wrappedValue: KittenDecoder(config: config))
     }
 
-    /// For testing: create model from config without loading weights
-    static func testInit(config: KittenTTSConfig) -> KittenTTSModel {
+    /// Create model from config without loading weights.
+    static func initForConfiguration(config: KittenTTSConfig) -> KittenTTSModel {
         KittenTTSModel(config: config)
     }
 

@@ -148,40 +148,27 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     override init() {
         livePreviewConfiguration = .current()
         super.init()
-        // In a production launch, subscribe immediately so the shipping
-        // sidebar player wires up without any caller action.
-        //
-        // In an XCTest host process (detected via `XCTestBundlePath`), the
-        // app's own `@StateObject` viewModel would otherwise race with
-        // test-owned viewModels for chunk events from
-        // `GenerationChunkBroker.shared`. The first subscriber to process
-        // a chunk deletes the file at line 485, causing the second to
-        // fail `AVAudioFile(forReading:)` with a file-not-found error.
-        // Test-owned viewModels opt in explicitly via
-        // `startLivePreviewChunkSubscriptionForTesting()`.
+#if QW_TEST_SUPPORT
         if !Self.isRunningUnderXCTest {
             bindGenerationEventSource()
         }
+#else
+        bindGenerationEventSource()
+#endif
     }
 
-    /// True when this process was launched as an XCTest host (the test
-    /// bundle path env var is set by XCTest before the app's main runs).
+#if QW_TEST_SUPPORT
     private static var isRunningUnderXCTest: Bool {
         ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
             || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
     }
 
-    /// Test-only entry point: explicitly subscribe a test-owned
-    /// `AudioPlayerViewModel` to the `GenerationChunkBroker`. Tests must
-    /// call this in `setUp` when they want the viewModel to actually
-    /// consume chunk events, since the test-host auto-subscribe is
-    /// suppressed to avoid a duplicate-subscriber race on the shared
-    /// broker. Idempotent — no-op if already subscribed.
     func startLivePreviewChunkSubscriptionForTesting() {
         guard chunkCancellable == nil, chunkObserver == nil else { return }
         bindGenerationEventSource()
     }
+#endif
 
     deinit {
         MainActor.assumeIsolated {
@@ -383,7 +370,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private struct ChunkInfo: Sendable {
         let requestID: Int
         let title: String
-        let chunkPath: String
+        let chunkPath: String?
+        let previewAudio: StreamingAudioChunk?
         let sessionDirectory: String?
         let cumulativeDuration: Double?
     }
@@ -396,11 +384,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 guard let self,
                       let requestID = event.requestID,
                       let title = event.title,
-                      let chunkPath = event.chunkPath else { return }
+                      event.chunkPath != nil || event.previewAudio != nil else { return }
                 let chunk = ChunkInfo(
                     requestID: requestID,
                     title: title,
-                    chunkPath: chunkPath,
+                    chunkPath: event.chunkPath,
+                    previewAudio: event.previewAudio,
                     sessionDirectory: event.streamSessionDirectory,
                     cumulativeDuration: event.cumulativeDurationSeconds
                 )
@@ -421,6 +410,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 requestID: requestID,
                 title: title,
                 chunkPath: chunkPath,
+                previewAudio: nil,
                 sessionDirectory: userInfo["streamSessionDirectory"] as? String,
                 cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
             )
@@ -445,10 +435,17 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             )
         }
 
-        appendLiveChunk(
-            from: URL(fileURLWithPath: chunk.chunkPath),
-            cumulativeDuration: cumulativeDuration
-        )
+        if let previewAudio = chunk.previewAudio {
+            appendLiveChunk(
+                previewAudio,
+                cumulativeDuration: cumulativeDuration
+            )
+        } else if let chunkPath = chunk.chunkPath {
+            appendLiveChunk(
+                from: URL(fileURLWithPath: chunkPath),
+                cumulativeDuration: cumulativeDuration
+            )
+        }
     }
 
     // MARK: - Live Playback
@@ -531,6 +528,40 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         )
         try? FileManager.default.removeItem(at: url)
         cleanupLiveSessionDirectoryIfEmpty()
+    }
+
+    private func appendLiveChunk(_ previewAudio: StreamingAudioChunk, cumulativeDuration: TimeInterval?) {
+        guard let (buffer, format) = makePCMBuffer(from: previewAudio) else {
+            playbackError = "Live audio preview could not decode the latest chunk."
+            return
+        }
+
+        if liveEngine == nil || livePlayerNode == nil {
+            configureLiveEngine(with: format)
+        }
+
+        liveScheduledCount += 1
+        livePreviewQueueDepth = liveScheduledCount
+        scheduleLiveBuffer(buffer)
+
+        duration = cumulativeDuration ?? (duration + TimeInterval(buffer.frameLength) / format.sampleRate)
+        markGeneratePreviewReadyIfNeeded()
+        if let pendingFirstChunkInterval {
+            AppPerformanceSignposts.end(pendingFirstChunkInterval)
+            AppPerformanceSignposts.emit("First Chunk Received")
+            self.pendingFirstChunkInterval = nil
+        }
+
+        let prebufferThreshold = livePlaybackStarted && liveUnderrunCount > 0
+            ? 1
+            : livePreviewConfiguration.prebufferThreshold
+
+        if liveAutoplayEnabled,
+           liveScheduledCount >= prebufferThreshold || liveFinalFilePath != nil {
+            attemptLivePlay()
+        } else {
+            livePreviewPhase = .buffering
+        }
     }
 
     private func attemptLivePlay() {
@@ -727,6 +758,31 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             )
             return nil
         }
+    }
+
+    private func makePCMBuffer(from previewAudio: StreamingAudioChunk) -> (AVAudioPCMBuffer, AVAudioFormat)? {
+        guard previewAudio.frameCount > 0,
+              previewAudio.pcm16LE.count >= previewAudio.frameCount * MemoryLayout<Int16>.stride,
+              let format = AVAudioFormat(
+                  commonFormat: .pcmFormatInt16,
+                  sampleRate: Double(previewAudio.sampleRate),
+                  channels: 1,
+                  interleaved: false
+              ),
+              let buffer = AVAudioPCMBuffer(
+                  pcmFormat: format,
+                  frameCapacity: AVAudioFrameCount(previewAudio.frameCount)
+              ),
+              let channelData = buffer.int16ChannelData?[0] else {
+            return nil
+        }
+
+        buffer.frameLength = AVAudioFrameCount(previewAudio.frameCount)
+        previewAudio.pcm16LE.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.bindMemory(to: Int16.self).baseAddress else { return }
+            channelData.update(from: baseAddress, count: previewAudio.frameCount)
+        }
+        return (buffer, format)
     }
 
     private func applyFilePlayback(

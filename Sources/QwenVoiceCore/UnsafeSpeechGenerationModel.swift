@@ -164,7 +164,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
             AsyncThrowingStream { continuation in
                 continuation.finish(
                     throwing: MLXTTSEngineError.generationFailed(
-                        "No test stream configured for UnsafeSpeechGenerationModel."
+                        "No stream configured for UnsafeSpeechGenerationModel."
                     )
                 )
             }

@@ -36,7 +36,7 @@ struct Generation: Identifiable, Codable, Hashable {
         FileManager.default.fileExists(atPath: audioPath)
     }
 
-    /// Shared accessibility/test identifier used by history UIs across platforms.
+    /// Shared accessibility identifier used by history UIs across platforms.
     var historyAccessibilityID: String {
         if let generationID = id {
             return "generation-\(generationID)"

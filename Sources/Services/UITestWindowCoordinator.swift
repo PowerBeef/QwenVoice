@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import AppKit
 import SwiftUI
 
@@ -59,3 +60,4 @@ struct UITestWindowSizeConfigurator: NSViewRepresentable {
         UITestWindowSizingState.configuredWindows.insert(key)
     }
 }
+#endif

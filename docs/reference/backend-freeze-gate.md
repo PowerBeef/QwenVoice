@@ -1,24 +1,23 @@
-# Backend Freeze Gate
+# Apple Platform QA Gate
 
-This document defines the measurable gate that must stay green before frontend work is treated as unblocked.
+This document defines the source, integration, build, and unsigned-release gate that must stay green before release-hardening work is treated as reviewable.
 
 ## Purpose
 
-Frontend work in this repo should start from a backend that is stable, shared across macOS and iPhone, and proven by maintained source, build, and release checks.
+The gate keeps the native Apple-platform codebase aligned with the current `macOS-first release track` using project-input validation, repo-owned harness layers, deterministic builds, and release-verification checks.
 
-The backend-freeze gate exists so frontend work does not quietly bind to:
+It protects against:
 
-- transport-specific behavior
-- process-hosting details
-- stale runtime ownership assumptions
-- unproven delivery or memory recovery paths
-- release claims that are only true on one platform
-
-During the current `macOS-first release track`, this gate remains the shared-core regression gate, not the full two-platform public ship gate.
+- stale project generation
+- accidental reintroduction of removed Python, CLI, vendored-test, screenshot, or benchmark-UI surfaces
+- source/runtime regression drift that should be caught before packaging
+- macOS or iPhone compile drift
+- release artifact drift around `Vocello.app` and `Vocello-macos26.dmg`
+- packaged-resource drift around prohibited `backend`, `python`, and `ffmpeg` resources
 
 ## Gate Owner
 
-The canonical backend/runtime policy owner is `QwenVoiceCore`.
+The canonical runtime policy owner remains `QwenVoiceCore`.
 
 The maintained process shells are:
 
@@ -29,7 +28,7 @@ Retained compatibility surface:
 
 - `Sources/QwenVoiceNativeRuntime/`
 
-`QwenVoiceNativeRuntime` may remain useful for regression coverage, but it is not the app-facing policy owner that frontend work should reason about.
+`QwenVoiceNativeRuntime` remains compatibility code, but it is not the app-facing policy owner that frontend work should reason about.
 
 ## Frontend-Safe Contract
 
@@ -58,44 +57,46 @@ See:
 
 ## Required Proof
 
-The backend-freeze gate is green only when all maintained proofs below are green for the current change.
+The gate is green only when the maintained checks below are green for the current change.
 
-### Local Source And Runtime Proof
+### Local Harness And Build Proof
 
 ```sh
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
-python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer native
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 ```
 
-`python3 scripts/harness.py test --layer ios` remains maintained, but it is conditional during the current release track. Run it when:
+The `ios` harness layer remains available but requires an installed iPhone simulator. A structured simulator-missing skip does not replace the generic iPhone compile proof from `build_foundation_targets.sh ios`.
 
-- working directly in `Sources/iOS/`
-- working directly in `Sources/iOSSupport/`
-- working directly in `Sources/iOSEngineExtension/`
-- touching iPhone model-delivery, memory policy, or extension-host behavior
-- preparing to re-open the iPhone release track
+Strict release-machine UI proof:
+
+```sh
+QWENVOICE_E2E_STRICT=1 python3 scripts/harness.py test --layer e2e
+```
 
 ### Local Unsigned Release Proof
 
 ```sh
 ./scripts/release.sh
-./scripts/verify_release_bundle.sh build/QwenVoice.app
+./scripts/verify_release_bundle.sh build/Vocello.app
 ./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt
 ```
 
 ### Maintained CI Proof
 
-- `Backend Freeze Gate`
+- `Project Inputs`
+- `Apple Platform QA Gate`
 - `Vocello macOS Release`
 
 The maintained CI evidence includes:
 
-- uploaded `.xcresult` bundles for harness and platform build lanes
+- uploaded `.xcresult` bundles for harness layers, platform builds, and release packaging
+- hosted macOS UI smoke that may soft-skip only known TCC/window-activation environment failures
 - unsigned macOS release verification artifacts
 - dedicated signed macOS notarization proof
 - generic iPhone compile proof to protect shared-core integration
@@ -113,20 +114,20 @@ Treat frontend work as unblocked only when these statements are true:
 - macOS and iPhone publish the same lifecycle vocabulary: `idle`, `launching`, `connected`, `interrupted`, `recovering`, `invalidated`, `failed`.
 - app-facing engine state is consumed through `TTSEngineFrontendState`, not transport-specific state.
 - app-facing delivery state is consumed through `IOSModelDeliverySnapshot`, not URLSession or staging internals.
-- capability and entitlement drift is caught by maintained tests against `config/apple-platform-capability-matrix.json`.
-- process-isolation behavior is covered by maintained transport and host-manager tests.
-- delivery restore, verification, and rollback behavior is covered by maintained iPhone recovery tests.
-- memory admission and trim policy is covered by maintained iPhone foundation tests.
+- capability, bundle identity, entitlement, and packaged-resource drift are caught by `scripts/check_project_inputs.sh` and `python3 scripts/harness.py validate`.
+- contract, macOS source, and native-runtime harness layers pass.
+- macOS and iPhone compile through the maintained foundation build script.
 - the maintained local and CI proof lanes above are green for the current change.
 
 ## Current Explicit Non-Blockers
 
-These items remain important, but they do not block the frontend-safe backend gate by themselves:
+These items remain important, but they do not block the current macOS-first QA gate by themselves:
 
-- official `iPhone 15 Pro` minimum-device evidence is still pending while owned-device proof continues on `iPhone 17 Pro`
-- `Sources/QwenVoiceNativeRuntime/` still exists as a retained compatibility and regression surface
+- official `iPhone 15 Pro` minimum-device evidence is still pending while owned-device proof continues on newer local hardware
+- `Sources/QwenVoiceNativeRuntime/` still exists as a retained compatibility surface
 - iPhone release/TestFlight proof is deferred from the current macOS-first public release milestone
-- upstream MLX and package warning noise may still appear in `.xcresult` bundles as long as the gate remains green and repo-owned targets stay warning-clean where expected
+- upstream MLX and package warning noise may still appear in `.xcresult` bundles as long as repo-owned targets compile
+- hosted CI e2e can soft-skip first-time TCC/window activation failures; controlled-machine strict e2e remains required for release signoff
 
 ## Current Explicit Follow-Ons
 
@@ -142,7 +143,7 @@ When one of these changes, treat it as a backend contract review:
 
 Update these docs together when the gate changes:
 
-- `CLAUDE.md`
+- `AGENTS.md`
 - `docs/README.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`

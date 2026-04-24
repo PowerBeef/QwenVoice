@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 
-# shellcheck source=./harness_lib/shared.sh
-. "$SCRIPT_DIR/harness_lib/shared.sh"
+# shellcheck source=./lib/shared.sh
+. "$SCRIPT_DIR/lib/shared.sh"
 
 entitlements_to_file() {
     local target="$1"

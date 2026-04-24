@@ -220,25 +220,5 @@ let package = Package(
             dependencies: ["MLXAudioCore", "MLXAudioLID"],
             path: "Sources/Tools/mlx-audio-swift-lid"
         ),
-
-        // MARK: - Tests
-        .testTarget(
-            name: "MLXAudioTests",
-            dependencies: [
-                "MLXAudioCore",
-                "MLXAudioCodecs",
-                "MLXAudioTTS",
-                "MLXAudioSTT",
-                "MLXAudioVAD",
-                "MLXAudioSTS",
-                "MLXAudioLID",
-                "mlx-audio-swift-lid",
-                "MLXAudioG2P",
-            ],
-            path: "Tests",
-            resources: [
-                .copy("media")
-            ]
-        ),
     ]
 )

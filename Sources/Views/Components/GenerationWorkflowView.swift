@@ -250,6 +250,7 @@ struct StudioSectionCard<Content: View>: View {
 
 struct CompactConfigurationSection<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.cardGlassTint) private var cardGlassTint
 
     let title: String
     var detail: String? = nil
@@ -309,8 +310,19 @@ struct CompactConfigurationSection<Content: View>: View {
                                     lineWidth: AppTheme.surfaceStrokeWidth(for: colorScheme)
                                 )
                         )
-                        .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 12))
-                        .glass3DDepth(radius: 12, intensity: colorScheme == .dark ? 1.0 : 0.72)
+                        .glassEffect(
+                            .regular.tint(
+                                cardGlassTint.map {
+                                    AppTheme.surfaceGlassTint($0, for: colorScheme)
+                                } ?? AppTheme.smokedGlassTint
+                            ),
+                            in: .rect(cornerRadius: 12)
+                        )
+                        .glass3DDepth(
+                            radius: 12,
+                            intensity: (colorScheme == .dark ? 1.0 : 0.72)
+                                * (cardGlassTint == nil ? 1.0 : 1.15)
+                        )
                 } else {
                     compactPanelLegacyBackground
                 }

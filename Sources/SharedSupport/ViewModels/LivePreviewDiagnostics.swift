@@ -6,14 +6,14 @@ import Foundation
 /// variable so production runs pay no cost. When enabled, emits one line
 /// per event with:
 ///   - timestamp
-///   - viewModel `ObjectIdentifier` hash (so cross-test / multi-subscriber
-///     leaks show up as different ids)
+///   - viewModel `ObjectIdentifier` hash (so duplicate subscribers show up
+///     as different ids)
 ///   - event name (e.g. `appendLiveChunk.enter`, `decode_fail.AVAudioFile(forReading:)`)
 ///   - chunk URL basename
 ///   - file existence + size at the moment of the event
 ///
-/// Enable in a test by `setenv("QWENVOICE_LIVE_PREVIEW_DIAGNOSTICS", "1", 1)`
-/// in `setUp`, then grep stdout for `[live-preview-diag]`.
+/// Enable by setting `QWENVOICE_LIVE_PREVIEW_DIAGNOSTICS=1`, then grep stdout
+/// for `[live-preview-diag]`.
 enum LivePreviewDiagnostics {
     private static let environmentKey = "QWENVOICE_LIVE_PREVIEW_DIAGNOSTICS"
 

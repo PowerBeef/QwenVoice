@@ -17,6 +17,26 @@ private struct SidebarSectionHeader: View {
     }
 }
 
+/// Compact Vocello brand lockup pinned to the top of the sidebar via
+/// `safeAreaInset(edge: .top)`. Reuses the bundled `VocelloHeaderMark`
+/// asset that the iPhone target already ships; the same asset carries the
+/// Vocello wordmark + V glyph so we don't need to ship a separate macOS
+/// lockup. Stays out of the List's scroll region so the brand anchor
+/// remains visible as the user scrolls through sections.
+private struct SidebarBrandHeader: View {
+    var body: some View {
+        Image("VocelloHeaderMark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            .accessibilityHidden(true)
+    }
+}
+
 private struct SidebarRow: View {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -39,7 +59,14 @@ private struct SidebarRow: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
-                                AppTheme.sidebarSelectionStroke.opacity(colorScheme == .dark ? 1.0 : 0.78),
+                                // Per-mode selection edge — golden for
+                                // Custom Voice / Library, lavender for
+                                // Voice Design, terracotta for Voice
+                                // Cloning. Matches the non-liquid
+                                // fallback in `borderColor`.
+                                AppTheme.sidebarColor(for: item).opacity(
+                                    colorScheme == .dark ? 0.55 : 0.42
+                                ),
                                 lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.9
                             )
                     )
@@ -99,7 +126,12 @@ private struct SidebarRow: View {
         }
 
         if isSelected {
-            return AppTheme.sidebarSelectionStroke
+            // Per-mode edge accent — the stroke picks up the item's
+            // Vocello palette color so selecting Voice Design shows a
+            // lavender edge, Voice Cloning terracotta, etc. Library
+            // and Settings rows still resolve to accent (golden) via
+            // AppTheme.sidebarColor(for:).
+            return AppTheme.sidebarColor(for: item).opacity(0.32)
         }
 
         if isHovered {
@@ -114,7 +146,7 @@ private struct SidebarRow: View {
             return Color.secondary.opacity(isSelected ? 0.8 : 0.65)
         }
 
-        return isSelected ? Color.accentColor : Color.primary
+        return isSelected ? AppTheme.sidebarColor(for: item) : Color.primary
     }
 
     private var textColor: Color {
@@ -130,7 +162,7 @@ private struct SidebarRow: View {
             return .clear
         }
 
-        return isDisabled ? Color.secondary.opacity(0.6) : Color.accentColor
+        return isDisabled ? Color.secondary.opacity(0.6) : AppTheme.sidebarColor(for: item)
     }
 
     private var accessibilityStateValue: String {
@@ -221,6 +253,9 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(AppTheme.railBackground)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            SidebarBrandHeader()
+        }
         .safeAreaInset(edge: .bottom) {
             SidebarFooterRegion()
                 .environmentObject(audioPlayer)

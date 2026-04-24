@@ -17,6 +17,7 @@ struct BatchGenerationSheet: View {
     var refText: String?
 
     @State private var batchText = ""
+    @State private var segmentationMode: BatchSegmentationMode = .lineSeparated
     @StateObject private var coordinator = BatchGenerationCoordinator()
 
     private var themeColor: Color {
@@ -69,6 +70,14 @@ struct BatchGenerationSheet: View {
         Text("Enter one line per generation, or drag a `.txt` file onto this sheet.")
             .font(.callout)
             .foregroundStyle(.secondary)
+
+        Picker("Segmentation", selection: $segmentationMode) {
+            Text("Line-by-line").tag(BatchSegmentationMode.lineSeparated)
+            Text("Long form").tag(BatchSegmentationMode.longForm)
+        }
+        .pickerStyle(.segmented)
+        .disabled(coordinator.isProcessing)
+        .accessibilityIdentifier("batch_segmentationMode")
 
         if !deliverySummary.isEmpty {
             GroupBox("Current delivery") {
@@ -335,6 +344,7 @@ struct BatchGenerationSheet: View {
     private func retryBatch(with lines: [String]) {
         guard !lines.isEmpty else { return }
         batchText = lines.joined(separator: "\n")
+        segmentationMode = .lineSeparated
         startBatch()
     }
 
@@ -354,12 +364,14 @@ struct BatchGenerationSheet: View {
     private func startBatch() {
         coordinator.startBatch(
             batchText: batchText,
+            segmentationMode: segmentationMode,
             requestBuilder: { lines in
                 guard let model = TTSModel.model(for: mode) else { return nil }
                 return BatchGenerationRequest(
                     mode: mode,
                     model: model,
                     lines: lines,
+                    segmentationMode: segmentationMode,
                     voice: voice,
                     emotion: emotion,
                     voiceDescription: voiceDescription,

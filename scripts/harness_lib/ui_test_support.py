@@ -5,19 +5,25 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tempfile
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contract import load_contract, model_ids, model_is_installed
-from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, PROJECT_DIR, ensure_directory
+from .contract import model_ids, model_is_installed
+from .fixtures import (
+    copy_optional_file,
+    copy_optional_tree,
+    create_fixture_root,
+    install_stub_models,
+    mirror_item,
+)
+from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR, PROJECT_DIR
 
 
 XCODEBUILD_TIMEOUT_ENV = "QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS"
-DEFAULT_XCODEBUILD_TIMEOUT_SECONDS = 300
+DEFAULT_XCODEBUILD_TIMEOUT_SECONDS = 1800
 
 
 @dataclass
@@ -62,9 +68,8 @@ def prepare_ui_launch_context(
     defaults_suite = f"QwenVoiceHarness.{uuid.uuid4()}"
 
     if backend_mode == "stub":
-        fixture_root = Path(tempfile.mkdtemp(prefix="qwenvoice_ui_stub_"))
-        _create_base_directories(fixture_root)
-        _install_stub_models(fixture_root)
+        fixture_root = create_fixture_root(prefix="qwenvoice_ui_stub_")
+        install_stub_models(fixture_root)
         return UILaunchContext(
             backend_mode=backend_mode,
             data_root="fixture",
@@ -84,11 +89,10 @@ def prepare_ui_launch_context(
             should_cleanup=False,
         )
 
-    fixture_root = Path(tempfile.mkdtemp(prefix="qwenvoice_ui_live_"))
-    _create_base_directories(fixture_root)
-    _mirror_item(APP_MODELS_DIR, fixture_root / "models")
-    _copy_optional_tree(APP_SUPPORT_DIR / "voices", fixture_root / "voices")
-    _copy_optional_file(APP_SUPPORT_DIR / "history.sqlite", fixture_root / "history.sqlite")
+    fixture_root = create_fixture_root(prefix="qwenvoice_ui_live_")
+    mirror_item(APP_MODELS_DIR, fixture_root / "models")
+    copy_optional_tree(APP_SUPPORT_DIR / "voices", fixture_root / "voices")
+    copy_optional_file(APP_SUPPORT_DIR / "history.sqlite", fixture_root / "history.sqlite")
 
     return UILaunchContext(
         backend_mode=backend_mode,
@@ -220,64 +224,3 @@ def describe_launch_context(context: UILaunchContext) -> dict[str, Any]:
         "defaults_suite": context.defaults_suite,
         "should_cleanup": context.should_cleanup,
     }
-
-
-def _create_base_directories(root: Path) -> None:
-    for relative in (
-        "models",
-        "python",
-        "outputs/CustomVoice",
-        "outputs/VoiceDesign",
-        "outputs/Clones",
-        "voices",
-        "cache/normalized_clone_refs",
-        "cache/stream_sessions",
-    ):
-        ensure_directory(root / relative)
-
-
-def _mirror_item(source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    if destination.exists() or destination.is_symlink():
-        if destination.is_dir() and not destination.is_symlink():
-            shutil.rmtree(destination, ignore_errors=True)
-        else:
-            destination.unlink(missing_ok=True)
-    try:
-        destination.symlink_to(source, target_is_directory=source.is_dir())
-    except OSError:
-        if source.is_dir():
-            shutil.copytree(source, destination, dirs_exist_ok=True)
-        else:
-            shutil.copy2(source, destination)
-
-
-def _copy_optional_tree(source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    if destination.exists():
-        shutil.rmtree(destination, ignore_errors=True)
-    shutil.copytree(source, destination, dirs_exist_ok=True)
-
-
-def _copy_optional_file(source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    ensure_directory(destination.parent)
-    shutil.copy2(source, destination)
-
-
-def _install_stub_models(root: Path) -> None:
-    contract = load_contract()
-    models_root = root / "models"
-    for model in contract.get("models", []):
-        folder = model.get("folder")
-        if not folder:
-            continue
-        model_root = models_root / folder
-        ensure_directory(model_root)
-        for relative_path in model.get("requiredRelativePaths", []):
-            file_path = model_root / relative_path
-            ensure_directory(file_path.parent)
-            file_path.touch(exist_ok=True)

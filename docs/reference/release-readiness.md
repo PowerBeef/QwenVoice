@@ -73,21 +73,20 @@ Release-facing metadata and docs should record:
 - whether minimum-device proof is `pending`, `recorded`, or `not_applicable`
 - whether the TestFlight path was exported locally or uploaded to App Store Connect
 - the current capability and entitlement baseline from `config/apple-platform-capability-matrix.json`
-- the `.xcresult` evidence paths for maintained source/runtime lanes and maintained archive/release lanes when relevant
+- the `.xcresult` evidence paths for maintained build and release lanes when relevant
 
 ## Current Signoff Tiers
 
 The current `macOS-first release track` uses three proof tiers:
 
-1. Shared-core regression proof
+1. QA and build proof
    - `Project Inputs`
-   - `Backend Freeze Gate`
-   - local `check_project_inputs`, `validate`, `swift`, `contract`, `native`, `build_foundation_targets.sh macos`, and `build_foundation_targets.sh ios`
+   - `Apple Platform QA Gate`
+   - local `check_project_inputs`, `harness validate`, `contract`, `swift`, `native`, `build_foundation_targets.sh macos`, and `build_foundation_targets.sh ios`
 2. macOS ship gate
    - local unsigned macOS packaging and verification
    - `Vocello macOS Release` for the signed/notarized public artifact
 3. Deferred iPhone release proof
-   - `python3 scripts/harness.py test --layer ios`
    - owned-device validation follow-through
    - `Vocello iOS TestFlight`
 
@@ -100,8 +99,8 @@ workflow is renamed, split, or retired so prose and YAML do not drift.
 
 | Tier | Workflow file | Workflow display name | Primary validation step |
 |---|---|---|---|
-| 1. Shared-core regression | `.github/workflows/project-inputs.yml` | `Project Inputs` | `./scripts/check_project_inputs.sh` |
-| 1. Shared-core regression | `.github/workflows/apple-platform-validation.yml` | `Backend Freeze Gate` | `python3 scripts/harness.py test --layer swift` + `--layer native` + `--layer contract` + generic macOS and iPhone builds + unsigned release verification |
+| 1. QA and build proof | `.github/workflows/project-inputs.yml` | `Project Inputs` | `python3 scripts/harness.py validate` |
+| 1. QA and build proof | `.github/workflows/apple-platform-validation.yml` | `Apple Platform QA Gate` | harness validate/contract/source/native/UI smoke + generic macOS and iPhone builds + unsigned release verification |
 | 2. macOS ship gate (local) | — | — | `./scripts/release.sh` + `./scripts/verify_release_bundle.sh` + `./scripts/verify_packaged_dmg.sh` |
 | 2. macOS ship gate (CI) | `.github/workflows/macos-release.yml` | `Vocello macOS Release` | signed + notarized `Vocello-macos26.dmg` build + `stapler validate` + post-notarization verify |
 | 3. Deferred iPhone release | `.github/workflows/ios-testflight.yml` | `Vocello iOS TestFlight` | `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` |
@@ -125,21 +124,25 @@ The default local release-readiness loop for the current milestone is:
 ```sh
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
-python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer native
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 ./scripts/release.sh
-./scripts/verify_release_bundle.sh build/QwenVoice.app
+./scripts/verify_release_bundle.sh build/Vocello.app
 ./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt
 ```
 
-Run `python3 scripts/harness.py test --layer ios` in addition to that loop when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
+Controlled-machine UI signoff:
+
+```sh
+QWENVOICE_E2E_STRICT=1 python3 scripts/harness.py test --layer e2e
+```
 
 ## CI Proof Surface
 
-- `Backend Freeze Gate` is the maintained shared-core regression gate for project inputs, shared Swift/runtime test plans, generic macOS/iPhone builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
+- `Apple Platform QA Gate` is the maintained gate for project inputs, harness validation, contract/source/native/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
 - `Vocello macOS Release` is the only CI-owned signed/public release proof path required for the current milestone.
 - `Vocello iOS TestFlight` remains maintained as the deferred iPhone archive/export/upload-prep proof path and is not required for current macOS release signoff.
 - Local release scripts remain deterministic unsigned/source-validation tools; they are not the repo’s signing or notarization source of truth.
@@ -150,8 +153,18 @@ Do not treat iPhone as a public release target again until all of the following 
 
 - the macOS-first milestone has shipped successfully
 - no critical shared-core macOS regressions remain open from the release cycle
-- the shared-core regression gate stays green after post-release fixes
-- `python3 scripts/harness.py test --layer ios` is restored to maintained blocking proof for the re-entry milestone
+- the QA/build gate stays green after post-release fixes
 - owned-device iPhone validation is current
 - official `iPhone 15 Pro` minimum-device proof is recorded before claiming full iPhone release readiness
 - `Vocello iOS TestFlight` succeeds from the intended release ref
+
+Minimum-device re-entry evidence should explicitly cover:
+
+- iPhone 15 Pro install and first launch
+- 4-bit Speed model catalog, download, resume, verification, and install
+- App Group persistence for models, downloads, staging, outputs, voices, and cache
+- engine-extension discovery, generation, cancellation, teardown, and replacement
+- memory-pressure admission, trim, and unload behavior
+- TestFlight archive/export verification and, when applicable, App Store Connect upload proof
+
+The iPhone track remains compile-safe during the current macOS milestone, but the checklist above is not a macOS release blocker.

@@ -2,9 +2,19 @@ import AppKit
 import Foundation
 
 enum AppStateRestorationPolicy {
+    static func allowsStateRestoration() -> Bool {
+#if QW_TEST_SUPPORT
+        allowsStateRestoration(isUITestLaunch: AppLaunchConfiguration.current.isUITest)
+#else
+        true
+#endif
+    }
+
+#if QW_TEST_SUPPORT
     static func allowsStateRestoration(isUITestLaunch: Bool) -> Bool {
         !isUITestLaunch
     }
+#endif
 }
 
 @MainActor
@@ -14,29 +24,19 @@ final class QwenVoiceApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ app: NSApplication, shouldRestoreApplicationState coder: NSCoder) -> Bool {
-        AppStateRestorationPolicy.allowsStateRestoration(
-            isUITestLaunch: AppLaunchConfiguration.current.isUITest
-        )
+        AppStateRestorationPolicy.allowsStateRestoration()
     }
 
     func application(_ app: NSApplication, shouldSaveApplicationState coder: NSCoder) -> Bool {
-        AppStateRestorationPolicy.allowsStateRestoration(
-            isUITestLaunch: AppLaunchConfiguration.current.isUITest
-        )
+        AppStateRestorationPolicy.allowsStateRestoration()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+#if QW_TEST_SUPPORT
         guard AppLaunchConfiguration.current.isUITest else { return }
 
-        // Force a .regular activation policy and bring the app to the
-        // foreground explicitly. Under XCUITest's test-runner activation
-        // model on macOS 26, the SwiftUI window otherwise fails to
-        // register in the accessibility tree because the app starts in an
-        // "inactive" process state and the runner snapshots the tree
-        // before any implicit activation happens. `ignoringOtherApps`
-        // makes sure we take focus even when the test runner is the
-        // current frontmost process.
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
+#endif
     }
 }

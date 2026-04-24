@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. It is the primary repo operating guide for coding agents working in QwenVoice.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository. It is the primary repo operating guide for coding agents working in QwenVoice.
 
 ## Repo Overview
 
@@ -34,7 +34,7 @@ This checkout is a native Apple-platform codebase for macOS and iPhone. Do not r
 
 The maintained repo docs are:
 
-- `CLAUDE.md`
+- `AGENTS.md`
 - `README.md`
 - `docs/README.md`
 - `docs/qwen_tone.md`
@@ -100,7 +100,7 @@ When repo facts disagree, trust sources in this order:
 - `Sources/ContentView.swift` owns the macOS `NavigationSplitView`, toolbar/search chrome, sidebar selection, and persisted generation drafts.
 - `Sources/QwenVoiceNative/` is the macOS app-side engine layer: `TTSEngineStore`, `XPCNativeEngineClient`, chunk brokering, and the app-facing `MacTTSEngine` surface live there.
 - `Sources/QwenVoiceEngineSupport/` is the shared macOS engine transport boundary used by both the app and the helper.
-- `Sources/QwenVoiceEngineService/` now hosts the active macOS shared-core runtime through `QwenVoiceCore`. Treat `Sources/QwenVoiceNativeRuntime/` as a retained compatibility/test surface rather than the primary live policy owner.
+- `Sources/QwenVoiceEngineService/` now hosts the active macOS shared-core runtime through `QwenVoiceCore`. Treat `Sources/QwenVoiceNativeRuntime/` as a retained compatibility surface rather than the primary live policy owner.
 - `Sources/QwenVoiceEngineService/` owns the bundled macOS XPC helper entrypoint and session/host behavior.
 - `Sources/QwenVoiceCore/` is the cross-platform engine core and shared semantic boundary. Keep it free of app-process UI assumptions.
 - `Sources/iOSEngineExtension/` hosts the isolated iPhone engine process through ExtensionFoundation. Heavy generation and prewarm work belongs there, not in the iPhone UI app process.
@@ -110,7 +110,7 @@ When repo facts disagree, trust sources in this order:
 - `Sources/Services/AppPaths.swift` and `Sources/iOSSupport/Services/AppPaths.swift` are the path boundaries for runtime data on each platform.
 - The iPhone App Group surface is intentionally file-based and rooted under `Sources/iOSSupport/Services/AppPaths.swift`; keep shared state constrained to the required app-support subtree for models, downloads, outputs, voices, and cache data.
 - `Sources/Models/TTSContract.swift`, `Sources/Models/TTSModel.swift`, and the `QwenVoiceCore` semantic types load `Sources/Resources/qwenvoice_contract.json`.
-- `QwenVoiceTests` cases that construct `NativeMLXMacEngine` exercise the `Sources/QwenVoiceNativeRuntime/` copies of runtime types (notably `NativeStreamingSynthesisSession`), not the live `Sources/QwenVoiceCore/` copies. Behavior fixes surfaced by those tests often have to land in both copies until the retained-vs-live split is consolidated.
+- `Sources/QwenVoiceNativeRuntime/` keeps retained copies of runtime types (notably `NativeStreamingSynthesisSession`) beside the live `Sources/QwenVoiceCore/` implementation. Behavior fixes in shared streaming/session semantics often have to land in both copies until the retained-vs-live split is consolidated.
 
 ## Platform And Product Constraints
 
@@ -148,8 +148,8 @@ python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
 python3 scripts/harness.py test --layer native
 python3 scripts/harness.py test --layer ios
-python3 scripts/harness.py test --layer audio --artifact-dir <dir>
 python3 scripts/harness.py test --layer e2e
+QWENVOICE_E2E_STRICT=1 python3 scripts/harness.py test --layer e2e
 python3 scripts/harness.py diagnose
 python3 scripts/harness.py bench --category latency
 python3 scripts/harness.py bench --category load
@@ -157,28 +157,26 @@ python3 scripts/harness.py bench --category quality
 python3 scripts/harness.py bench --category tts_roundtrip
 python3 scripts/check_ios_catalog.py
 ./scripts/release.sh
+./scripts/release.sh --preflight full
 ./scripts/release_ios_testflight.sh
-QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice -destination 'platform=macOS' -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test
 ```
 
 Notes:
 
-- `scripts/harness.py` remains the primary local test, diagnostic, and benchmark entrypoint.
-- The maintained harness layers are `swift`, `contract`, `native`, `ios`, `audio`, and `e2e`.
-- `e2e` is the macOS end-to-end UI smoke layer: an XCUITest target (`VocelloUITests`, scheme `Vocello UI`, plan `Tests/Plans/VocelloUISmoke.xctestplan`) drives Vocello.app under the stub backend (`--uitest --uitest-screen=customVoice`, `UITestStubMacEngine`) and asserts the live-preview badge appears without any decode error surfacing. The first `e2e` run on a fresh machine will SKIP with the diagnostic `Timed out while enabling automation mode` until macOS Accessibility permission is granted to the test runner — grant once via System Settings > Privacy & Security > Accessibility (or by running the suite from Xcode so the OS prompt appears) and subsequent runs pass unattended.
-- During the current `macOS-first release track`, the default required local release-readiness loop is `check_project_inputs`, `validate`, `swift`, `contract`, `native`, `build_foundation_targets.sh macos`, `build_foundation_targets.sh ios`, `release.sh`, `verify_release_bundle.sh`, and `verify_packaged_dmg.sh`.
-- Keep `python3 scripts/harness.py test --layer ios` available, but run it by default only when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
-- The harness now resolves pinned Swift packages into `build/harness/source-packages/`, uses explicit `build/harness/derived-data/` roots, and emits `.xcresult` bundles under `build/harness/results/`.
-- `QwenVoice Foundation`, `VocelloiOS Foundation`, and `Vocello UI` are the maintained plan-backed test schemes.
-- The committed test plans live under `Tests/Plans/` and currently include `QwenVoiceSource`, `QwenVoiceRuntime`, `VocelloiOSFoundation`, and `VocelloUISmoke`.
-- Prefer those plan-backed harness lanes over ad hoc `xcodebuild test` invocations.
-- For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The script uses isolated build roots and `.xcresult` bundles so stale hosted test-bundle output cannot poison app codesigning.
+- `scripts/harness.py` is the primary local test, diagnostic, and benchmark entrypoint.
+- The maintained harness layers are `contract`, `swift`, `native`, `ios`, and `e2e`.
+- `e2e` is the macOS XCUITest smoke layer. Hosted CI may soft-skip first-time macOS Accessibility/TCC or foreground-window activation failures; strict local release proof uses `QWENVOICE_E2E_STRICT=1`, where those issues fail instead of becoming skipped passes.
+- Benchmarks are opt-in release-investigation lanes, not default PR gates. Use `bench --category latency|load|quality|tts_roundtrip|all` explicitly.
+- The harness resolves pinned Swift packages into `build/harness/source-packages/`, uses isolated derived data under `build/harness/derived-data/`, emits `.xcresult` bundles under `build/harness/results/`, and serializes heavy lanes with `build/harness/.lock`.
+- `QwenVoice Foundation`, `VocelloiOS Foundation`, and `Vocello UI` are the maintained plan-backed test schemes. The committed plans live under `tests/Plans/`.
+- `QW_TEST_SUPPORT` is a Debug/test-only compilation condition for stub engines, UI launch configuration, fault injection, fixture helpers, and opt-in benchmark hooks. Release builds must not depend on that code path.
+- During the current `macOS-first release track`, the default required local release-readiness loop is `check_project_inputs`, `harness validate`, `contract`, `swift`, `native`, foundation builds for macOS and iOS, `release.sh`, `verify_release_bundle.sh`, and `verify_packaged_dmg.sh`. Add strict `e2e` on the controlled release machine before public signoff.
+- Keep `python3 scripts/harness.py test --layer ios` available, but expect a structured skip on machines without an installed iPhone simulator. Generic iPhone compile proof still comes from `./scripts/build_foundation_targets.sh ios`.
+- For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The script uses isolated build roots and `.xcresult` bundles.
 - On this machine, keep validation deliberately low-RAM and serialized: run the cheapest relevant gate first, and never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes.
-- Do not jump to live native smoke, local packaging, or manual Computer Use until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate are already green.
-- If a harness layer fails with `Existing file at -resultBundlePath` or `accessing build database "...": disk I/O error` right after running `./scripts/regenerate_project.sh`, clear `build/harness/derived-data/` and `build/harness/results/` before retrying — those errors are stale state from the previous run, not a code regression.
-- `python3 scripts/harness.py` prints `==> Running ...` log lines before the JSON envelope. When parsing, filter first: `awk '/^\{/,EOF' <file> | python3 -c "..."` (or capture from the last leading `{` onward).
-- When a harness layer fails, the authoritative error lives in the `.xcresult` bundle, not stdout/stderr. Use `xcrun xcresulttool get build-results --path build/harness/results/<layer>/build.xcresult` for build errors and `xcrun xcresulttool get test-results tests --path build/harness/results/<layer>/test.xcresult` for test failures. `details.stderr_tail` in the harness JSON only shows the outer `** TEST BUILD FAILED **`.
-- SourceKit diagnostics like `No such module 'MLX'` / `Cannot find type X in scope` after an edit are index staleness, not real errors. Trust only errors reported by the harness (xcresult bundles) and by `xcodebuild` / `./scripts/build_foundation_targets.sh`.
+- Do not jump to local packaging or manual Computer Use until `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and the smallest relevant source gate are already green.
+- If a harness layer fails, inspect the emitted `.xcresult` bundle under `build/harness/results/<layer>/` before changing code. For builds, use `xcrun xcresulttool get build-results --path <path>`; for tests, use `xcrun xcresulttool get test-results summary --path <path>`.
+- SourceKit diagnostics like `No such module 'MLX'` / `Cannot find type X in scope` after an edit are index staleness, not real errors. Trust only errors reported by the harness, `xcodebuild`, and `./scripts/build_foundation_targets.sh`.
 
 ## Swift Concurrency Gotchas
 
@@ -192,7 +190,7 @@ Notes:
 The active GitHub workflows are:
 
 - `Project Inputs`
-- `Backend Freeze Gate`
+- `Apple Platform QA Gate`
 - `Vocello macOS Release`
 - `Vocello iOS TestFlight`
 
@@ -204,7 +202,7 @@ Release facts:
 - `scripts/release_ios_testflight.sh` is the maintained iPhone archive/export entrypoint.
 - `scripts/verify_ios_release_archive.sh` is the maintained structural verifier for the iPhone archive/export artifacts.
 - Both release scripts now use explicit derived-data and cloned-package roots under `build/foundation/` so resolve, build, archive, and export are separate phases.
-- `Backend Freeze Gate` now acts as the shared-core regression gate for the current `macOS-first release track`, uploads the maintained harness/build `.xcresult` bundles, keeps generic iPhone compile proof, and runs the unsigned macOS release-verification path in CI.
+- `Apple Platform QA Gate` now acts as the shared-core regression gate for the current `macOS-first release track`, uploads harness/build `.xcresult` bundles, keeps generic iPhone compile proof, runs soft-skippable hosted UI smoke, and runs the unsigned macOS release-verification path in CI.
 - `Vocello macOS Release` is the only signed/public release workflow required for the current milestone.
 - `Vocello iOS TestFlight` remains maintained but is deferred from current public release signoff.
 - Shipped macOS bundles and notarized DMGs must not contain `Contents/Resources/backend`, `Contents/Resources/python`, or bundled `Contents/Resources/ffmpeg`.
@@ -212,25 +210,25 @@ Release facts:
 ## When Changing X, Also Update Y
 
 - Model registry, speakers, output folders, required model files, or platform-specific install variants:
-  update `Sources/Resources/qwenvoice_contract.json` first, then the contract loaders, platform delivery code, and contract-facing docs/tests.
+  update `Sources/Resources/qwenvoice_contract.json` first, then the contract loaders, platform delivery code, and contract-facing docs.
 - Adding or renaming source files:
   update `project.yml`, run `./scripts/regenerate_project.sh`, and confirm generated project files did not capture `__pycache__` or `.pyc` paths.
 - Shared engine semantics or model-variant resolution:
-  review `Sources/QwenVoiceCore/`, iPhone model delivery code, and affected tests together.
+  review `Sources/QwenVoiceCore/` and iPhone model delivery code together.
 - macOS engine/client behavior:
-  review `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, `Sources/QwenVoiceNativeRuntime/`, and the affected tests together.
+  review `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, and `Sources/QwenVoiceNativeRuntime/` together.
 - iPhone engine-extension transport or host behavior:
-  review `Sources/QwenVoiceCore/Extension*`, `Sources/iOSEngineExtension/`, `Sources/iOS/VocelloEngineExtensionPoint.swift`, and iPhone build/test coverage together.
+  review `Sources/QwenVoiceCore/Extension*`, `Sources/iOSEngineExtension/`, `Sources/iOS/VocelloEngineExtensionPoint.swift`, and iPhone build coverage together.
 - Memory-pressure, prewarm, or low-RAM admission behavior:
   review `Sources/QwenVoiceCore/IOSMemorySnapshot.swift`, `Sources/iOS/TTSEngineStore.swift`, `Sources/iOS/QVoiceiOSApp.swift`, and iPhone settings/status UI together.
 - Playback or generation-persistence behavior:
-  review `Sources/SharedSupport/`, affected macOS or iPhone feature views, and the relevant harness/tests together.
+  review `Sources/SharedSupport/` and affected macOS or iPhone feature views together.
 - macOS release packaging or notarization behavior:
   keep `scripts/release.sh`, `scripts/create_dmg.sh`, `scripts/verify_release_bundle.sh`, `scripts/verify_packaged_dmg.sh`, `.github/workflows/macos-release.yml`, and release-facing docs aligned.
 - iPhone archive/export/TestFlight behavior:
   keep `scripts/check_ios_catalog.py`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
+  update `AGENTS.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 
@@ -244,7 +242,7 @@ Release facts:
 
 - Prefer manifest-backed data over duplicated constants.
 - Keep accessibility identifiers stable when UI control types change.
-- If you changed engine architecture or runtime ownership, verify `CLAUDE.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
+- If you changed engine architecture or runtime ownership, verify `AGENTS.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
 - If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
 - If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public homepage posture and current release-track policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.

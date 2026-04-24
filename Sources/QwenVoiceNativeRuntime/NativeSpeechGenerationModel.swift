@@ -193,7 +193,7 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         fullGenericStreamHandler: @escaping @Sendable (String, String?, MLXArray?, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> = { _, _, _, _, _, _ in
             AsyncThrowingStream { continuation in
                 continuation.finish(throwing: NSError(domain: "QwenVoiceNative", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "No test stream configured for NativeSpeechGenerationModel."
+                    NSLocalizedDescriptionKey: "No stream configured for NativeSpeechGenerationModel."
                 ]))
             }
         },
@@ -228,7 +228,7 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
         genericStreamHandler: @escaping @Sendable (String, String?, String?, Double) -> AsyncThrowingStream<NativeSpeechGenerationEvent, Error> = { _, _, _, _ in
             AsyncThrowingStream { continuation in
                 continuation.finish(throwing: NSError(domain: "QwenVoiceNative", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "No test stream configured for NativeSpeechGenerationModel."
+                    NSLocalizedDescriptionKey: "No stream configured for NativeSpeechGenerationModel."
                 ]))
             }
         },

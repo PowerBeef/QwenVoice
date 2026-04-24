@@ -4,27 +4,26 @@
 
 ## Overview
 
-QwenVoice is a native macOS app for Qwen3-TTS with custom voices, voice design, and voice cloning, 100% offline on Apple Silicon.
+QwenVoice is the public repository for an offline Apple-platform Qwen3-TTS app with Custom Voice, Voice Design, and Voice Cloning.
 
-It uses a SwiftUI frontend plus a long-lived Python backend that runs MLX inference locally. End users do not need to install Python or use the terminal when running the packaged app.
+The currently shipped public release is **QwenVoice v1.2.3** for macOS. The next macOS release ships under the **Vocello** app name while this repository, shared core, and many internal modules keep the QwenVoice identity for continuity.
 
-## A Note on What's Changing
+## Version Matrix
 
-A few things worth mentioning if you've been following the project.
+| Surface | Public name | Artifact | Minimum OS / tools | Runtime | Status |
+|---|---|---|---|---|---|
+| Shipped release | QwenVoice v1.2.3 | Assets attached to the v1.2.3 GitHub Release | See the v1.2.3 release notes | SwiftUI app with the shipped legacy runtime | Current public download |
+| Current `main` | QwenVoice repo / Vocello app | Local builds produce `Vocello.app` | macOS 26.0+, iOS 26.0+, Xcode 26.0 | Native Swift/MLX shared core with macOS XPC isolation and iPhone extension isolation | Active development |
+| Next macOS release | Vocello | `Vocello-macos26.dmg` | macOS 26.0+ | Native Swift/MLX macOS runtime hosted out of process | Current release target |
+| iPhone track | Vocello for iPhone | App Store / TestFlight only | iOS 26.0+, iPhone 15 Pro minimum target | 4-bit Speed variants in an engine extension | Maintained but deferred |
 
-**QwenVoice is becoming Vocello.** The name is changing, but the app isn't. Same custom voices, same voice design, same voice cloning, same fully offline approach on Apple Silicon. QwenVoice started as a way to run Qwen3-TTS locally on a Mac, and over time it has grown into its own thing with its own design decisions. Giving it a proper name is more about committing to the project for the long term than pivoting away from what it is today. If you install it today and come back in six months, it'll still feel like the same app — just with a cleaner identity.
-
-**A leaner backend is on the way.** The build you can download right now still uses the SwiftUI frontend plus a long-lived Python process for MLX inference. The next release drops Python entirely and moves inference directly into Swift. For you that means smaller downloads, faster cold starts, no venv spin-up on first launch, and no Python prerequisite when building from source. Nothing about how you use the app changes.
-
-**An iPhone version is coming.** Vocello for iPhone is in active development and will ship after the macOS rebrand lands. It's a full standalone app, not a Mac companion — the same offline, on-device generation you get on macOS, running the 4-bit model variants so everything fits comfortably on iPhone 15 Pro and newer. The iPhone app will be open source alongside the macOS app in this repo, and a signed, ready-to-run build will be published on the App Store so you don't have to build and sign it yourself. No cloud, no subscription.
-
-None of this changes what you install today. v1.2.3 is still the current release, and the rest of this README describes that build. I'll update this page when the Vocello release is ready.
+The public landing page remains QwenVoice-led until the Vocello-branded macOS release ships. iPhone is in active development, but it is not a public release surface for the current macOS-first milestone.
 
 ## Shipped Modes
 
 ### Custom Voice
 
-Generate speech with the app’s built-in English speakers:
+Generate speech with the app's built-in English speakers:
 
 - Ryan
 - Aiden
@@ -37,18 +36,14 @@ Voice Design is a standalone destination. Describe the voice you want, then shap
 
 ### Voice Cloning
 
-Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, and OGG input and can also use an optional transcript for better cloning accuracy.
+Clone a voice from a short reference clip. The app accepts WAV, MP3, AIFF, M4A, FLAC, and OGG input and can also use an optional transcript for better cloning accuracy. Only clone voices you own or have permission to use.
 
 ## What the App Does Not Expose
 
 - no temperature or max-token controls
 - no streaming batch UI
 
-Single-generation flows in the shipping GUI use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based.
-
-The backend still supports additional benchmark/internal advanced sampling parameters beyond what the shipped GUI exposes.
-
-For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENVOICE_CACHE_POLICY=always` remains available as a conservative diagnostic override for backend benchmarking and regression checks.
+Single-generation flows use live streaming preview and sidebar playback. Batch generation remains sequential and final-file-based.
 
 ## Features
 
@@ -58,51 +53,58 @@ For normal app behavior, the backend cache policy defaults to `adaptive`. `QWENV
 - Batch generation for multi-line jobs
 - Sidebar waveform playback UI
 - Configurable output directory and autoplay preference
-- Standalone CLI companion in [`cli/`](cli/)
+- macOS XPC process isolation for native generation on current `main`
+- iPhone engine-extension isolation for the deferred iPhone track
 
 ## Requirements
 
+### Current `main`
+
 | Requirement | Detail |
 |---|---|
-| macOS | 15.0+ |
+| macOS | 26.0+ |
+| iOS | 26.0+ for the maintained iPhone targets |
 | Chip | Apple Silicon |
-| RAM | 8 GB+ recommended |
+| RAM | 8 GB+ on macOS; iPhone 15 Pro is the stated iPhone floor |
+| Tools | Xcode 26.0 and XcodeGen |
+
+### Shipped QwenVoice v1.2.3
+
+The shipped v1.2.3 build predates the current native `main` release track. Use the v1.2.3 GitHub Release notes and attached assets as the source of truth for that historical build.
 
 ## Install from GitHub Releases
 
-Download the appropriate DMG from [Releases](https://github.com/PowerBeef/QwenVoice/releases).
+Download the current public release from [Releases](https://github.com/PowerBeef/QwenVoice/releases).
 
-Current GitHub release builds are produced by the dual-release workflow and typically appear as:
+For the next macOS release, the public artifact is expected to be:
 
-- `QwenVoice-macos26.dmg` — modern liquid UI build
-- `QwenVoice-macos15.dmg` — legacy glass UI build
+- `Vocello-macos26.dmg`
 
 Then:
 
-1. Drag `QwenVoice.app` to `/Applications`
-2. Remove the quarantine attribute because the app is unsigned:
-   ```sh
-   xattr -cr "/Applications/QwenVoice.app"
-   ```
-3. Open the app, go to **Models**, download a model, and generate speech
+1. Open the DMG.
+2. Drag `Vocello.app` to `/Applications`.
+3. Open the app, go to **Models**, download a model, and generate speech.
 
 ## Models
 
 Static model metadata comes from [`Sources/Resources/qwenvoice_contract.json`](Sources/Resources/qwenvoice_contract.json).
 
-| Mode | Model Folder | Hugging Face Repo |
-|---|---|---|
-| Custom Voice | `Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit) |
-| Voice Design | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit) |
-| Voice Cloning | `Qwen3-TTS-12Hz-1.7B-Base-8bit` | [mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit) |
+| Mode | 8-bit Quality folder | 4-bit Speed folder | Hugging Face repos |
+|---|---|---|---|
+| Custom Voice | `Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` | `Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-*` |
+| Voice Design | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | `Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-*` |
+| Voice Cloning | `Qwen3-TTS-12Hz-1.7B-Base-8bit` | `Qwen3-TTS-12Hz-1.7B-Base-4bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-*` |
+
+macOS can expose 8-bit Quality where runtime admission allows it and uses 4-bit Speed for constrained hardware. iPhone uses the 4-bit Speed variants only.
 
 ## Building from Source
 
-Source-build prerequisites:
+Source-build prerequisites for current `main`:
 
-- macOS 15+
+- macOS 26.0+
 - Apple Silicon
-- Xcode 15+
+- Xcode 26.0
 - XcodeGen
 
 ```sh
@@ -122,50 +124,55 @@ Useful local checks:
 
 ```sh
 ./scripts/check_project_inputs.sh
-./scripts/run_tests.sh
-./scripts/run_backend_tests.sh
+python3 scripts/harness.py validate
+python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer swift
+python3 scripts/harness.py test --layer native
+./scripts/build_foundation_targets.sh macos
+./scripts/build_foundation_targets.sh ios
 ```
 
-### Development-mode Python behavior
+The harness stores isolated build products and `.xcresult` bundles under `build/harness/`. The macOS UI smoke lane is available with `python3 scripts/harness.py test --layer e2e`; for release signoff on a controlled Mac, run it strictly with `QWENVOICE_E2E_STRICT=1`.
 
-In a clean source checkout, `Sources/Resources/python/` is usually absent. The app then creates a venv under `~/Library/Application Support/QwenVoice/python/` on first launch and installs the backend dependencies from `Sources/Resources/requirements.txt`.
-
-Have a local Python 3.11-3.14 install available first. A typical setup is:
+Benchmarks are opt-in:
 
 ```sh
-brew install python@3.13
+python3 scripts/harness.py bench --category latency --runs 3
+python3 scripts/harness.py bench --category load --runs 3
 ```
 
-### Local release packaging
+## Local Release Packaging
 
-For a local release build and DMG:
+For a local unsigned macOS release build and DMG:
 
 ```sh
-./scripts/release.sh
+./scripts/release.sh --preflight full
+./scripts/verify_release_bundle.sh build/Vocello.app
+./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt
 ```
-
-That script bundles Python and ffmpeg, builds the Release app, verifies the bundle, and by default produces `build/QwenVoice.dmg`.
 
 ## Tone and Emotion Control
 
 Custom Voice and Voice Design are guided by natural-language instructions rather than SSML-style sliders or markup.
 
-See [`qwen_tone.md`](qwen_tone.md) for the current app-oriented guidance on:
-
-- what the shipped app exposes
-- what the standalone CLI exposes
-- what broader Qwen3-TTS ecosystem notes are informational only
+See [`docs/qwen_tone.md`](docs/qwen_tone.md) for app-oriented guidance on tone and prompt writing.
 
 ## Architecture
 
-QwenVoice uses a two-process architecture:
+Current `main` uses a native Apple-platform architecture:
 
-- **SwiftUI frontend** in `Sources/` for UI, downloads, persistence, and playback
-- **Python backend** in `Sources/Resources/backend/server.py` for MLX inference over newline-delimited JSON-RPC 2.0
+- `Sources/` contains the macOS app shell, shared app models/services/views, and the shipping Mac target.
+- `Sources/QwenVoiceCore/` contains shared Apple-platform runtime semantics, contract types, model variants, and iOS extension transport.
+- `Sources/QwenVoiceNative/` contains the macOS app-facing engine proxy/store/client layer.
+- `Sources/QwenVoiceEngineSupport/` contains shared macOS engine IPC and transport types.
+- `Sources/QwenVoiceEngineService/` contains the bundled macOS XPC helper.
+- `Sources/QwenVoiceNativeRuntime/` remains as retained compatibility and regression coverage.
+- `Sources/iOS/`, `Sources/iOSSupport/`, and `Sources/iOSEngineExtension/` contain the deferred iPhone app, support layer, and isolated engine extension.
+- `Sources/SharedSupport/` contains shared playback and generation-persistence surfaces.
 
-Static TTS contract data is shared by Swift and Python through `Sources/Resources/qwenvoice_contract.json`.
+The current codebase does not maintain a repo-owned Python backend, Python setup path, or standalone CLI surface.
 
-Default runtime output layout:
+Default macOS runtime data layout:
 
 ```text
 ~/Library/Application Support/QwenVoice/
@@ -178,20 +185,20 @@ Default runtime output layout:
   history.sqlite
 ```
 
-## CLI Companion
-
-A standalone Python CLI lives in [`cli/`](cli/) for headless or scripted workflows.
-
-Start here:
-
-- [`cli/README.md`](cli/README.md)
+See [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) for local storage, privacy, and deletion details.
 
 ## More Docs
 
-- [`docs/README.md`](docs/README.md) — documentation index
-- [`docs/reference/current-state.md`](docs/reference/current-state.md) — current repo facts
-- [`docs/reference/testing.md`](docs/reference/testing.md) — test inventory and commands
-- [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) — current strengths and caveats
+- [`docs/README.md`](docs/README.md) - documentation index
+- [`docs/reference/current-state.md`](docs/reference/current-state.md) - current repo facts
+- [`docs/reference/engineering-status.md`](docs/reference/engineering-status.md) - current strengths and caveats
+- [`docs/reference/release-readiness.md`](docs/reference/release-readiness.md) - macOS-first release policy and signoff gates
+- [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) - local storage, privacy, and deletion details
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) - contributor workflow
+
+## License
+
+QwenVoice is available under the [MIT License](LICENSE).
 
 ## Credits
 

@@ -5,14 +5,14 @@ CLI demo for `MLXAudioLID`.
 ## Usage
 
 ```bash
-swift run mlx-audio-swift-lid --audio Tests/media/intention.wav
+swift run mlx-audio-swift-lid --audio /path/to/audio.wav
 ```
 
 Use MMS-LID-256 instead of the default ECAPA model:
 
 ```bash
 swift run mlx-audio-swift-lid \
-  --audio Tests/media/intention.wav \
+  --audio /path/to/audio.wav \
   --model facebook/mms-lid-256 \
   --top-k 3
 ```
@@ -21,7 +21,7 @@ Save the result as JSON:
 
 ```bash
 swift run mlx-audio-swift-lid \
-  --audio Tests/media/intention.wav \
+  --audio /path/to/audio.wav \
   --output-path lid-output.json
 ```
 
@@ -32,7 +32,7 @@ If the CLI reports that the MLX runtime is not configured, either:
 
 ```bash
 export DYLD_FRAMEWORK_PATH="$(swift build --show-bin-path)"
-swift run mlx-audio-swift-lid --audio Tests/media/intention.wav
+swift run mlx-audio-swift-lid --audio /path/to/audio.wav
 ```
 
 or run the executable from Xcode, which sets the resource lookup path automatically.

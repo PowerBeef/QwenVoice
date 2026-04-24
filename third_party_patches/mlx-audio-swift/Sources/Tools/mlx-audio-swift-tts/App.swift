@@ -48,7 +48,6 @@ enum App {
                 temperature: args.temperature,
                 topP: args.topP,
                 timestamps: args.timestamps,
-                benchmark: args.benchmark,
                 rawIPA: args.rawIPA,
                 language: args.language
             )
@@ -70,7 +69,6 @@ enum App {
         temperature: Float?,
         topP: Float?,
         timestamps: Bool,
-        benchmark: Bool,
         rawIPA: Bool = false,
         language: String? = nil,
         hfToken: String? = nil
@@ -117,66 +115,14 @@ enum App {
             generationParameters.topP = topP
         }
 
-        let audioData: [Float]
-        var benchmarkMetrics: BenchmarkMetrics?
-        if benchmark {
-            let sampleRate = Double(loadedModel.sampleRate)
-            let stream = loadedModel.generateStream(
-                text: text,
-                voice: voice,
-                refAudio: refAudio,
-                refText: refText,
-                language: language,
-                generationParameters: generationParameters,
-                streamingInterval: 0.32
-            )
-
-            var collectedAudio = [Float]()
-            var totalSamples = 0
-            var firstChunkLatency: TimeInterval?
-            var generationInfo: AudioGenerationInfo?
-
-            for try await event in stream {
-                switch event {
-                case .token:
-                    break
-                case .info(let info):
-                    generationInfo = info
-                case .audio(let chunk):
-                    let chunkSamples = chunk.asArray(Float.self)
-                    guard !chunkSamples.isEmpty else { continue }
-
-                    let now = CFAbsoluteTimeGetCurrent()
-                    let chunkLatency = now - started
-                    if firstChunkLatency == nil {
-                        firstChunkLatency = chunkLatency
-                    }
-
-                    collectedAudio.append(contentsOf: chunkSamples)
-                    totalSamples += chunkSamples.count
-                }
-            }
-
-            audioData = collectedAudio
-            let elapsed = CFAbsoluteTimeGetCurrent() - started
-            let audioDuration = sampleRate > 0 ? Double(totalSamples) / sampleRate : 0
-            benchmarkMetrics = BenchmarkMetrics(
-                elapsed: elapsed,
-                audioDuration: audioDuration,
-                firstChunkLatency: firstChunkLatency,
-                sampleRate: sampleRate,
-                generationInfo: generationInfo
-            )
-        } else {
-            audioData = try await loadedModel.generate(
-                text: text,
-                voice: voice,
-                refAudio: refAudio,
-                refText: refText,
-                language: language,
-                generationParameters: generationParameters
-            ).asArray(Float.self)
-        }
+        let audioData = try await loadedModel.generate(
+            text: text,
+            voice: voice,
+            refAudio: refAudio,
+            refText: refText,
+            language: language,
+            generationParameters: generationParameters
+        ).asArray(Float.self)
 
         print(String(format: "Finished generation in %0.2fs", CFAbsoluteTimeGetCurrent() - started))
 
@@ -184,25 +130,6 @@ enum App {
         let sampleRate = Double(loadedModel.sampleRate)
         try writeWavFile(samples: audioData, sampleRate: sampleRate, outputURL: outputURL)
         print("Wrote WAV to \(outputURL.path)")
-
-        if let benchmarkMetrics {
-            print("Benchmark:")
-            print(String(format: "  Audio duration: %.2fs", benchmarkMetrics.audioDuration))
-            if let firstChunkLatency = benchmarkMetrics.firstChunkLatency {
-                print(String(format: "  TTFB: %.3fs", firstChunkLatency))
-            } else {
-                print("  TTFB: n/a")
-            }
-            if benchmarkMetrics.audioDuration > 0 {
-                let rtf = benchmarkMetrics.audioDuration / benchmarkMetrics.elapsed
-                print(String(format: "  RTFx: %.3f", rtf))
-            } else {
-                print("  RTFx: n/a")
-            }
-            if let info = benchmarkMetrics.generationInfo {
-                print(String(format: "  Tokens/s: %.2f", info.tokensPerSecond))
-            }
-        }
 
         if timestamps {
             print("Loading forced aligner (\(forcedAlignerRepo))")
@@ -231,14 +158,6 @@ enum App {
 
         let elapsed = CFAbsoluteTimeGetCurrent() - started
         print(String(format: "Done. Elapsed: %.2fs", elapsed))
-    }
-
-    private struct BenchmarkMetrics {
-        let elapsed: TimeInterval
-        let audioDuration: TimeInterval
-        let firstChunkLatency: TimeInterval?
-        let sampleRate: Double
-        let generationInfo: AudioGenerationInfo?
     }
 
     private static func makeOutputURL(outputPath: String?) -> URL {
@@ -308,7 +227,6 @@ struct CLI {
     let temperature: Float?
     let topP: Float?
     let timestamps: Bool
-    let benchmark: Bool
     let rawIPA: Bool
     let language: String?
 
@@ -323,7 +241,6 @@ struct CLI {
         var temperature: Float? = nil
         var topP: Float? = nil
         var timestamps = false
-        var benchmark = false
         var rawIPA = false
         var language: String? = nil
 
@@ -362,8 +279,6 @@ struct CLI {
                 topP = value
             case "--timestamps":
                 timestamps = true
-            case "--benchmark":
-                benchmark = true
             case "--raw-ipa":
                 rawIPA = true
             case "--language", "-l":
@@ -396,7 +311,6 @@ struct CLI {
             temperature: temperature,
             topP: topP,
             timestamps: timestamps,
-            benchmark: benchmark,
             rawIPA: rawIPA,
             language: language
         )
@@ -406,7 +320,7 @@ struct CLI {
         let exe = (CommandLine.arguments.first as NSString?)?.lastPathComponent ?? "marvis-tts-cli"
         print("""
         Usage:
-          \(exe) --text "Hello world" [--voice conversational_b] [--model <hf-repo>] [--output <path>] [--ref_audio <path>] [--ref_text <string>] [--max_tokens <int>] [--temperature <float>] [--top_p <float>] [--timestamps] [--benchmark]
+          \(exe) --text "Hello world" [--voice conversational_b] [--model <hf-repo>] [--output <path>] [--ref_audio <path>] [--ref_text <string>] [--max_tokens <int>] [--temperature <float>] [--top_p <float>] [--timestamps]
 
         Options:
           -t, --text <string>           Text to synthesize (required if not passed as trailing arg)
@@ -419,7 +333,6 @@ struct CLI {
               --temperature <float>    Sampling temperature (overrides model default)
               --top_p <float>          Top-p sampling (overrides model default)
               --timestamps             Emit word timestamps using mlx-community/Qwen3-ForcedAligner-0.6B-4bit
-              --benchmark              Run streaming benchmark and log TTFB/RTF metrics
               --raw-ipa                Skip text processing, pass IPA phonemes directly
           -l, --language <code>       Language code (e.g., es, fr, it, pt). Auto-detected from voice prefix if omitted
           -h, --help                    Show this help

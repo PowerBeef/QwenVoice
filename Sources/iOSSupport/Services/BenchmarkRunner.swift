@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Foundation
 import os
 import QwenVoiceCore
@@ -494,6 +495,7 @@ final class BenchmarkRunner {
         }
     }
 }
+#endif
 
 private extension ContinuousClock.Instant {
     var elapsedMs: Int {

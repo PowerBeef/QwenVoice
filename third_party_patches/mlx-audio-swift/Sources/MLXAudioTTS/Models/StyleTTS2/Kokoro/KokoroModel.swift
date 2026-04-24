@@ -48,8 +48,8 @@ public final class KokoroModel: Module, SpeechGenerationModel, @unchecked Sendab
         _decoder = ModuleInfo(wrappedValue: KokoroDecoder(config: config))
     }
 
-    /// For testing: create model from config without loading weights
-    static func testInit(config: KokoroConfig) -> KokoroModel {
+    /// Create model from config without loading weights.
+    static func initForConfiguration(config: KokoroConfig) -> KokoroModel {
         KokoroModel(config: config)
     }
 

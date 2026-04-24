@@ -223,11 +223,6 @@ actor XPCNativeEngineCoordinator {
         }
     }
 
-    func invalidateForTesting() {
-        guard let connectionID = activeConnection?.id else { return }
-        handleConnectionInvalidated(for: connectionID)
-    }
-
     func handleEventData(_ data: Data, from connectionID: UUID) {
         guard isCurrentConnection(connectionID) else {
             Self.logger.debug(
@@ -282,6 +277,13 @@ actor XPCNativeEngineCoordinator {
             message: EngineTransportError.invalidated.localizedDescription
         )
     }
+
+#if QW_TEST_SUPPORT
+    func invalidateForTesting() {
+        guard let connectionID = activeConnection?.id else { return }
+        handleConnectionInvalidated(for: connectionID)
+    }
+#endif
 
     private func ensureConnection() -> ActiveConnection {
         if let activeConnection {
@@ -628,11 +630,11 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
         }
     }
 
-    #if DEBUG
+#if QW_TEST_SUPPORT
     func debugInvalidateConnectionForTesting() async {
         await coordinator.invalidateForTesting()
     }
-    #endif
+#endif
 
     private static func remappedTransportError(_ error: Error) -> Error {
         guard let remoteError = error as? RemoteErrorPayload,

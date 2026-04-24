@@ -3,7 +3,11 @@ import Foundation
 /// Utility functions for audio file management.
 enum AudioService {
     private static var defaults: UserDefaults {
+#if QW_TEST_SUPPORT
         UITestAutomationSupport.appStorage
+#else
+        .standard
+#endif
     }
 
     static var shouldAutoPlay: Bool {

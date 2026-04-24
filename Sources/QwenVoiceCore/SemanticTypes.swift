@@ -261,6 +261,210 @@ public struct AudioPreparationRequest: Hashable, Codable, Sendable {
     }
 }
 
+public struct NativeMLXMemorySnapshot: Hashable, Codable, Sendable {
+    public let activeMB: Double?
+    public let cacheMB: Double?
+    public let peakMB: Double?
+
+    public init(activeMB: Double?, cacheMB: Double?, peakMB: Double?) {
+        self.activeMB = activeMB
+        self.cacheMB = cacheMB
+        self.peakMB = peakMB
+    }
+}
+
+public struct NativeBackendPerformanceSample: Hashable, Codable, Sendable {
+    public let coldLoadMS: Int?
+    public let warmGenerationMS: Int?
+    public let timeToFirstAudioMS: Int?
+    public let audioSecondsPerWallSecond: Double?
+    public let chunkWriteTotalMS: Int?
+    public let chunkWriteMaxMS: Int?
+    public let eventDispatchMS: Int?
+    public let finalWriteMS: Int?
+    public let mlxMemoryByStage: [String: NativeMLXMemorySnapshot]
+    public let loadCapabilityProfile: String?
+    public let memoryPolicyName: String?
+    public let streamingTransport: String?
+    public let telemetryMode: String?
+
+    public init(
+        coldLoadMS: Int? = nil,
+        warmGenerationMS: Int? = nil,
+        timeToFirstAudioMS: Int? = nil,
+        audioSecondsPerWallSecond: Double? = nil,
+        chunkWriteTotalMS: Int? = nil,
+        chunkWriteMaxMS: Int? = nil,
+        eventDispatchMS: Int? = nil,
+        finalWriteMS: Int? = nil,
+        mlxMemoryByStage: [String: NativeMLXMemorySnapshot] = [:],
+        loadCapabilityProfile: String? = nil,
+        memoryPolicyName: String? = nil,
+        streamingTransport: String? = nil,
+        telemetryMode: String? = nil
+    ) {
+        self.coldLoadMS = coldLoadMS
+        self.warmGenerationMS = warmGenerationMS
+        self.timeToFirstAudioMS = timeToFirstAudioMS
+        self.audioSecondsPerWallSecond = audioSecondsPerWallSecond
+        self.chunkWriteTotalMS = chunkWriteTotalMS
+        self.chunkWriteMaxMS = chunkWriteMaxMS
+        self.eventDispatchMS = eventDispatchMS
+        self.finalWriteMS = finalWriteMS
+        self.mlxMemoryByStage = mlxMemoryByStage
+        self.loadCapabilityProfile = loadCapabilityProfile
+        self.memoryPolicyName = memoryPolicyName
+        self.streamingTransport = streamingTransport
+        self.telemetryMode = telemetryMode
+    }
+}
+
+public enum NativeLoadCapabilityProfile: String, Hashable, Codable, Sendable {
+    case customOnly = "custom_only"
+    case designOnly = "design_only"
+    case cloneOnly = "clone_only"
+    case fullCapabilities = "full_capabilities"
+
+    public init(for request: GenerationRequest) {
+        switch request.payload {
+        case .custom:
+            self = .customOnly
+        case .design:
+            self = .designOnly
+        case .clone:
+            self = .cloneOnly
+        }
+    }
+
+    public func canServe(_ requested: NativeLoadCapabilityProfile) -> Bool {
+        self == requested || self == .fullCapabilities
+    }
+}
+
+public enum NativeDeviceMemoryClass: String, Hashable, Codable, Sendable {
+    case floor8GBMac = "floor_8gb_mac"
+    case mid16GBMac = "mid_16gb_mac"
+    case highMemoryMac = "high_memory_mac"
+    case iPhonePro = "iphone_pro"
+}
+
+public struct NativeMemoryPolicy: Hashable, Codable, Sendable {
+    public let name: String
+    public let deviceClass: NativeDeviceMemoryClass
+    public let cacheLimitBytes: Int
+    public let memoryLimitBytes: Int?
+    public let clearCacheAfterGeneration: Bool
+    public let unloadAfterIdleSeconds: Double?
+
+    public init(
+        name: String,
+        deviceClass: NativeDeviceMemoryClass,
+        cacheLimitBytes: Int,
+        memoryLimitBytes: Int? = nil,
+        clearCacheAfterGeneration: Bool,
+        unloadAfterIdleSeconds: Double?
+    ) {
+        self.name = name
+        self.deviceClass = deviceClass
+        self.cacheLimitBytes = cacheLimitBytes
+        self.memoryLimitBytes = memoryLimitBytes
+        self.clearCacheAfterGeneration = clearCacheAfterGeneration
+        self.unloadAfterIdleSeconds = unloadAfterIdleSeconds
+    }
+}
+
+public enum NativeTelemetryMode: String, Hashable, Codable, Sendable {
+    case off
+    case lightweight
+    case benchmarkFull = "benchmark_full"
+
+    public var sampleIntervalMS: Int? {
+        switch self {
+        case .off:
+            return nil
+        case .lightweight:
+            return 250
+        case .benchmarkFull:
+            return 50
+        }
+    }
+
+    public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeTelemetryMode {
+        switch environment["QWENVOICE_NATIVE_TELEMETRY_MODE"]?.lowercased() {
+        case "off", "disabled":
+            return .off
+        case "full", "benchmark", "benchmark_full":
+            return .benchmarkFull
+        default:
+            return .lightweight
+        }
+    }
+}
+
+public enum NativeStreamingOutputPolicy: String, Hashable, Codable, Sendable {
+    case pcmPreview = "pcm_preview"
+    case pcmPreviewAndFileArtifacts = "pcm_preview_and_file_artifacts"
+
+    public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeStreamingOutputPolicy {
+        switch environment["QWENVOICE_STREAMING_OUTPUT_POLICY"]?.lowercased() {
+        case "file", "files", "pcm_and_files", "pcm_preview_and_file_artifacts":
+            return .pcmPreviewAndFileArtifacts
+        default:
+            return .pcmPreview
+        }
+    }
+}
+
+public struct StreamingAudioChunk: Hashable, Codable, Sendable {
+    public let requestID: Int?
+    public let sampleRate: Int
+    public let frameOffset: Int64
+    public let frameCount: Int
+    public let pcm16LE: Data
+    public let isFinal: Bool
+
+    public init(
+        requestID: Int? = nil,
+        sampleRate: Int,
+        frameOffset: Int64,
+        frameCount: Int,
+        pcm16LE: Data,
+        isFinal: Bool
+    ) {
+        self.requestID = requestID
+        self.sampleRate = sampleRate
+        self.frameOffset = frameOffset
+        self.frameCount = frameCount
+        self.pcm16LE = pcm16LE
+        self.isFinal = isFinal
+    }
+}
+
+public struct GenerationSessionKey: Hashable, Codable, Sendable {
+    public let modelID: String
+    public let variantID: String?
+    public let mode: GenerationMode
+    public let language: String
+    public let speakerOrVoiceDescriptionHash: String?
+    public let cloneReferenceHash: String?
+
+    public init(
+        modelID: String,
+        variantID: String? = nil,
+        mode: GenerationMode,
+        language: String,
+        speakerOrVoiceDescriptionHash: String? = nil,
+        cloneReferenceHash: String? = nil
+    ) {
+        self.modelID = modelID
+        self.variantID = variantID
+        self.mode = mode
+        self.language = language
+        self.speakerOrVoiceDescriptionHash = speakerOrVoiceDescriptionHash
+        self.cloneReferenceHash = cloneReferenceHash
+    }
+}
+
 public struct BenchmarkSample: Hashable, Codable, Sendable {
     public let engineKind: EngineImplementationKind?
     public let routingPolicy: EngineRoutingPolicy?
@@ -288,6 +492,7 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
     public let timingsMS: [String: Int]
     public let booleanFlags: [String: Bool]
     public let stringFlags: [String: String]
+    public let backendPerformance: NativeBackendPerformanceSample?
 
     public init(
         engineKind: EngineImplementationKind? = nil,
@@ -315,7 +520,8 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
         telemetryStageMarks: [NativeTelemetryStageMark]? = nil,
         timingsMS: [String: Int] = [:],
         booleanFlags: [String: Bool] = [:],
-        stringFlags: [String: String] = [:]
+        stringFlags: [String: String] = [:],
+        backendPerformance: NativeBackendPerformanceSample? = nil
     ) {
         self.engineKind = engineKind
         self.routingPolicy = routingPolicy
@@ -343,6 +549,7 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
         self.timingsMS = timingsMS
         self.booleanFlags = booleanFlags
         self.stringFlags = stringFlags
+        self.backendPerformance = backendPerformance
     }
 }
 
@@ -586,6 +793,7 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
     public let chunkDurationSeconds: Double?
     public let cumulativeDurationSeconds: Double?
     public let streamSessionDirectory: String?
+    public let previewAudio: StreamingAudioChunk?
 
     public init(
         requestID: Int? = nil,
@@ -595,7 +803,8 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
         isFinal: Bool,
         chunkDurationSeconds: Double?,
         cumulativeDurationSeconds: Double?,
-        streamSessionDirectory: String?
+        streamSessionDirectory: String?,
+        previewAudio: StreamingAudioChunk? = nil
     ) {
         self.requestID = requestID
         self.mode = mode
@@ -605,6 +814,7 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
         self.chunkDurationSeconds = chunkDurationSeconds
         self.cumulativeDurationSeconds = cumulativeDurationSeconds
         self.streamSessionDirectory = streamSessionDirectory
+        self.previewAudio = previewAudio
     }
 }
 
@@ -630,7 +840,8 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
         isFinal: Bool,
         chunkDurationSeconds: Double? = nil,
         cumulativeDurationSeconds: Double? = nil,
-        streamSessionDirectory: String? = nil
+        streamSessionDirectory: String? = nil,
+        previewAudio: StreamingAudioChunk? = nil
     ) {
         precondition(kind == .streamChunk, "This initializer only supports chunk events.")
         self = .chunk(
@@ -642,7 +853,8 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
                 isFinal: isFinal,
                 chunkDurationSeconds: chunkDurationSeconds,
                 cumulativeDurationSeconds: cumulativeDurationSeconds,
-                streamSessionDirectory: streamSessionDirectory
+                streamSessionDirectory: streamSessionDirectory,
+                previewAudio: previewAudio
             )
         )
     }
@@ -678,6 +890,11 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
     public var chunkPath: String? {
         guard case .chunk(let chunk) = self else { return nil }
         return chunk.chunkPath
+    }
+
+    public var previewAudio: StreamingAudioChunk? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.previewAudio
     }
 
     public var isFinal: Bool? {

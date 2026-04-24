@@ -95,6 +95,8 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         var firstChunkMS: Int?
         var info: NativeSpeechGenerationInfo?
         var lastChunkPath: String?
+        let streamingOutputPolicy = QwenVoiceCore.NativeStreamingOutputPolicy.current()
+        let telemetryMode = QwenVoiceCore.NativeTelemetryMode.current()
 
         do {
             try Task.checkCancellation()
@@ -199,7 +201,21 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                 telemetryStageMarks: telemetryCapture.summary.stageMarks,
                 timingsMS: timingsMS,
                 booleanFlags: resolvedBooleanFlags,
-                stringFlags: resolvedStringFlags
+                stringFlags: resolvedStringFlags,
+                backendPerformance: NativeBackendPerformanceSample(
+                    warmGenerationMS: timingsMS["generation_total_ms"],
+                    timeToFirstAudioMS: firstChunkMS,
+                    audioSecondsPerWallSecond: cumulativeDuration > 0
+                        ? cumulativeDuration / max(
+                            Double(timingsMS["generation_total_ms"] ?? 0) / 1_000,
+                            0.001
+                        )
+                        : nil,
+                    loadCapabilityProfile: nil,
+                    memoryPolicyName: nil,
+                    streamingTransport: streamingOutputPolicy.rawValue,
+                    telemetryMode: telemetryMode.rawValue
+                )
             )
 
             _ = lastChunkPath
@@ -307,15 +323,23 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         allSamples: inout [Float],
         firstChunkMS: inout Int?,
         eventSink: @escaping @Sendable (GenerationEvent) -> Void
-    ) async throws -> (path: String, duration: Double) {
+    ) async throws -> (path: String?, duration: Double) {
         try Task.checkCancellation()
+        let streamingOutputPolicy = QwenVoiceCore.NativeStreamingOutputPolicy.current()
         let chunkURL = Self.chunkURL(in: sessionDirectory, chunkIndex: chunkIndex)
-        try Self.writeWAV(
-            samples: samples,
-            sampleRate: model.sampleRate,
-            to: chunkURL
-        )
+        let chunkPath: String?
+        if streamingOutputPolicy == .pcmPreviewAndFileArtifacts {
+            try Self.writeWAV(
+                samples: samples,
+                sampleRate: model.sampleRate,
+                to: chunkURL
+            )
+            chunkPath = chunkURL.path
+        } else {
+            chunkPath = nil
+        }
 
+        let frameOffset = Int64(allSamples.count)
         allSamples.append(contentsOf: samples)
         let chunkDuration = Double(samples.count) / Double(model.sampleRate)
         cumulativeDuration += chunkDuration
@@ -336,16 +360,24 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
                     requestID: requestID,
                     mode: request.modeIdentifier,
                     title: request.streamingTitle ?? String(request.text.prefix(40)),
-                    chunkPath: chunkURL.path,
+                    chunkPath: chunkPath,
                     isFinal: isFinal,
                     chunkDurationSeconds: chunkDuration,
                     cumulativeDurationSeconds: cumulativeDuration,
-                    streamSessionDirectory: sessionDirectory.path
+                    streamSessionDirectory: sessionDirectory.path,
+                    previewAudio: StreamingAudioChunk(
+                        requestID: requestID,
+                        sampleRate: model.sampleRate,
+                        frameOffset: frameOffset,
+                        frameCount: samples.count,
+                        pcm16LE: Self.pcm16LittleEndianData(from: samples),
+                        isFinal: isFinal
+                    )
                 )
             )
         }
 
-        return (chunkURL.path, chunkDuration)
+        return (chunkPath, chunkDuration)
     }
 
     nonisolated static func sessionDirectoryURL(in rootDirectory: URL, requestID: Int) -> URL {
@@ -386,21 +418,63 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             channelData[index] = sample
         }
 
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+        let temporaryURL = temporaryChunkURL(for: url)
+        try? FileManager.default.removeItem(at: temporaryURL)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
         }
+
         // Companion to PCM16ChunkFileWriter.write in QwenVoiceCore: scope the
         // AVAudioFile so ARC deinit writes the WAV header at the closing
         // brace, then FileHandle.synchronize() forces kernel commit so
-        // cross-process readers observe a finalized file. Prevents the
-        // "Live audio preview could not decode the latest chunk." race.
+        // cross-process readers observe a finalized file. The finalized
+        // temporary file is then atomically published to the path sent to
+        // consumers so they never observe an in-progress WAV.
         do {
-            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            let file = try AVAudioFile(forWriting: temporaryURL, settings: format.settings)
             try file.write(from: buffer)
         }
-        if let handle = try? FileHandle(forWritingTo: url) {
+        if let handle = try? FileHandle(forWritingTo: temporaryURL) {
             try? handle.synchronize()
             try? handle.close()
+        }
+        try publishAtomically(temporaryURL: temporaryURL, finalURL: url)
+    }
+
+    private static func pcm16LittleEndianData(from samples: [Float]) -> Data {
+        var pcmSamples: [Int16] = []
+        pcmSamples.reserveCapacity(samples.count)
+        for sample in samples {
+            let clamped = max(-1.0, min(1.0, sample))
+            pcmSamples.append(Int16((clamped * Float(Int16.max)).rounded()))
+        }
+        return pcmSamples.withUnsafeBufferPointer { pointer in
+            guard let baseAddress = pointer.baseAddress else { return Data() }
+            return Data(
+                bytes: UnsafeRawPointer(baseAddress),
+                count: pointer.count * MemoryLayout<Int16>.stride
+            )
+        }
+    }
+
+    private static func temporaryChunkURL(for finalURL: URL) -> URL {
+        let filename = finalURL.lastPathComponent
+        return finalURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
+    }
+
+    private static func publishAtomically(temporaryURL: URL, finalURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: finalURL.path) {
+            _ = try fileManager.replaceItemAt(
+                finalURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: []
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: finalURL)
         }
     }
 

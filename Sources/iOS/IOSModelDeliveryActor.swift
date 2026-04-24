@@ -491,8 +491,16 @@ actor IOSModelDeliveryActor {
         let isRetry = activeInstall.currentRelativePath != nil || activeInstall.currentFileRetryCount > 0
         var task: URLSessionDownloadTask
 
+        let loadedResumeData: Data?
+        if let currentResumeDataPath = activeInstall.currentResumeDataPath {
+            loadedResumeData = try? Data(contentsOf: URL(fileURLWithPath: currentResumeDataPath))
+        } else {
+            loadedResumeData = nil
+        }
+        let didLoadResumeData = loadedResumeData != nil
+
         if let currentResumeDataPath = activeInstall.currentResumeDataPath,
-           let resumeData = try? Data(contentsOf: URL(fileURLWithPath: currentResumeDataPath)) {
+           let resumeData = loadedResumeData {
             task = downloadSession.downloadTask(withResumeData: resumeData)
             cleanupResumeData(atPath: currentResumeDataPath)
         } else {
@@ -509,7 +517,7 @@ actor IOSModelDeliveryActor {
         task.taskDescription = encodeTaskDescription(taskDescription)
 
         let phase = IOSModelDeliveryStateMachine.activeDownloadPhase(
-            hasResumeData: activeInstall.currentResumeDataPath != nil,
+            hasResumeData: didLoadResumeData,
             isRetry: isRetry
         )
         activeInstall = IOSModelDeliveryStateMachine.startingCurrentDownload(

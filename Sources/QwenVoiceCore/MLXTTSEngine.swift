@@ -39,7 +39,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         [String: String],
         ResolvedCloneConditioning?,
         Bool,
-        NativeTelemetryRecorder?
+        NativeTelemetryRecorder?,
+        NativeLoadCapabilityProfile,
+        NativeMemoryPolicy,
+        [String: NativeMLXMemorySnapshot]
     ) -> any NativeStreamingSessionRunning
 
     public let modelRegistry: any ModelRegistry
@@ -86,7 +89,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         let loadCoordinator = MLXModelLoadCoordinator(
             modelAssetStore: modelAssetStore,
             hubCacheDirectory: hubCacheDirectory,
-            modelLoader: { descriptor, preparedMetadata in
+            modelLoader: { descriptor, preparedMetadata, capabilityProfile in
+                let resolvedProfile = Self.resolvedPreparedLoadProfile(
+                    requestedCapabilityProfile: capabilityProfile,
+                    explicitProfile: qwenPreparedLoadProfile
+                )
                 await Self.recordDiagnosticEvent(
                     "engine-loader-before-tts-load-model",
                     details: [
@@ -95,7 +102,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                         "preparedDirectory": preparedMetadata.preparedDirectory.path,
                         "sourceDirectory": preparedMetadata.sourceDirectory?.path ?? "",
                         "modelRepo": descriptor.model.huggingFaceRepo,
-                        "qwenPreparedLoadProfile": Self.diagnosticLabel(for: qwenPreparedLoadProfile),
+                        "nativeLoadCapabilityProfile": capabilityProfile.rawValue,
+                        "qwenPreparedLoadProfile": Self.diagnosticLabel(for: resolvedProfile),
                         "trustedPreparedCheckpoint": preparedMetadata.trustedPreparedCheckpoint ? "true" : "false",
                     ],
                     appSupportDirectoryURL: diagnosticAppSupportBox.url
@@ -106,7 +114,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                         modelType: preparedMetadata.modelType,
                         trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
                         qwenPreparedLoadBehavior: Self.qwenPreparedLoadBehavior(
-                            for: qwenPreparedLoadProfile,
+                            for: resolvedProfile,
                             trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
                         ),
                         diagnosticEventSink: { action, details in
@@ -124,7 +132,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                         "modelType": preparedMetadata.modelType ?? "",
                         "preparedDirectory": preparedMetadata.preparedDirectory.path,
                         "modelRepo": descriptor.model.huggingFaceRepo,
-                        "qwenPreparedLoadProfile": Self.diagnosticLabel(for: qwenPreparedLoadProfile),
+                        "nativeLoadCapabilityProfile": capabilityProfile.rawValue,
+                        "qwenPreparedLoadProfile": Self.diagnosticLabel(for: resolvedProfile),
                         "trustedPreparedCheckpoint": preparedMetadata.trustedPreparedCheckpoint ? "true" : "false",
                     ],
                     appSupportDirectoryURL: diagnosticAppSupportBox.url
@@ -375,13 +384,60 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        try await generate(request, allowsBatchRequest: false)
+    }
+
+    public func generateBatch(
+        _ requests: [GenerationRequest],
+        progressHandler: (@MainActor (Double?, String) -> Void)? = nil
+    ) async throws -> [GenerationResult] {
         try ensureInitialized()
-        let supportDecision = supportDecision(for: request)
-        guard case .supported = supportDecision else {
+        guard !requests.isEmpty else { return [] }
+        let firstKey = Self.generationSessionKey(for: requests[0])
+        guard requests.allSatisfy({ Self.generationSessionKey(for: $0) == firstKey }) else {
             throw MLXTTSEngineError.unsupportedRequest(
-                supportDecision.unsupportedReason
-                    ?? "The requested generation path is not supported by the native MLX engine."
+                "Batch generation requires one model, mode, language, speaker/design, and clone reference session."
             )
+        }
+
+        var results: [GenerationResult] = []
+        results.reserveCapacity(requests.count)
+        for (index, request) in requests.enumerated() {
+            try Task.checkCancellation()
+            progressHandler?(
+                Double(index) / Double(max(requests.count, 1)),
+                "Generating item \(index + 1)/\(requests.count)"
+            )
+            let batchRequest = request.shouldStream ? request : GenerationRequest(
+                mode: request.mode,
+                modelID: request.modelID,
+                text: request.text,
+                outputPath: request.outputPath,
+                shouldStream: true,
+                streamingInterval: request.streamingInterval,
+                batchIndex: request.batchIndex,
+                batchTotal: request.batchTotal,
+                streamingTitle: request.streamingTitle,
+                payload: request.payload
+            )
+            let result = try await generate(batchRequest, allowsBatchRequest: true)
+            results.append(result)
+            clearGenerationActivity()
+        }
+        progressHandler?(1.0, "Done")
+        return results
+    }
+
+    private func generate(_ request: GenerationRequest, allowsBatchRequest: Bool) async throws -> GenerationResult {
+        try ensureInitialized()
+        if !allowsBatchRequest {
+            let supportDecision = supportDecision(for: request)
+            guard case .supported = supportDecision else {
+                throw MLXTTSEngineError.unsupportedRequest(
+                    supportDecision.unsupportedReason
+                        ?? "The requested generation path is not supported by the native MLX engine."
+                )
+            }
         }
 
         do {
@@ -404,7 +460,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                 prepared.stringFlags,
                 prepared.cloneConditioning,
                 prepared.wasPrimed,
-                telemetryRecorder
+                telemetryRecorder,
+                prepared.loadCapabilityProfile,
+                prepared.memoryPolicy,
+                prepared.mlxMemorySnapshots
             )
             let result = try await session.run { [weak self] event in
                 self?.latestEvent = event
@@ -422,6 +481,48 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             latestEvent = .failed(surfacedError.localizedDescription)
             throw surfacedError
         }
+    }
+
+    private static func generationSessionKey(for request: GenerationRequest) -> GenerationSessionKey {
+        let language = GenerationSemantics.qwenLanguageHint(for: request)
+        switch request.payload {
+        case .custom(let speakerID, let deliveryStyle):
+            return GenerationSessionKey(
+                modelID: request.modelID,
+                mode: request.mode,
+                language: language,
+                speakerOrVoiceDescriptionHash: stableSessionHash(
+                    "\(speakerID)|\(deliveryStyle ?? "")"
+                )
+            )
+        case .design(let voiceDescription, let deliveryStyle):
+            return GenerationSessionKey(
+                modelID: request.modelID,
+                mode: request.mode,
+                language: language,
+                speakerOrVoiceDescriptionHash: stableSessionHash(
+                    "\(voiceDescription)|\(deliveryStyle ?? "")"
+                )
+            )
+        case .clone(let reference):
+            return GenerationSessionKey(
+                modelID: request.modelID,
+                mode: request.mode,
+                language: language,
+                cloneReferenceHash: stableSessionHash(
+                    "\(reference.audioPath)|\(reference.transcript ?? "")|\(reference.preparedVoiceID ?? "")"
+                )
+            )
+        }
+    }
+
+    private static func stableSessionHash(_ value: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
     }
 
     public func listPreparedVoices() async throws -> [PreparedVoice] {
@@ -622,7 +723,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         stringFlags: [String: String],
         cloneConditioning: ResolvedCloneConditioning?,
         wasPrimed: Bool,
-        telemetryRecorder: NativeTelemetryRecorder?
+        telemetryRecorder: NativeTelemetryRecorder?,
+        loadCapabilityProfile: NativeLoadCapabilityProfile,
+        memoryPolicy: NativeMemoryPolicy,
+        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot]
     ) -> any NativeStreamingSessionRunning {
         NativeStreamingSynthesisSession(
             requestID: requestID,
@@ -635,7 +739,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             stringFlags: stringFlags,
             cloneConditioning: cloneConditioning,
             wasPrimed: wasPrimed,
-            telemetryRecorder: telemetryRecorder
+            telemetryRecorder: telemetryRecorder,
+            loadCapabilityProfile: loadCapabilityProfile,
+            memoryPolicy: memoryPolicy,
+            mlxMemorySnapshots: mlxMemorySnapshots
         )
     }
 
@@ -657,6 +764,18 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             return "full_capabilities"
         case .streamingOnly:
             return "streaming_only"
+        }
+    }
+
+    nonisolated private static func resolvedPreparedLoadProfile(
+        requestedCapabilityProfile: NativeLoadCapabilityProfile,
+        explicitProfile: NativeQwenPreparedLoadProfile
+    ) -> NativeQwenPreparedLoadProfile {
+        switch explicitProfile {
+        case .streamingOnly:
+            return .streamingOnly
+        case .fullCapabilities:
+            return NativeQwenPreparedLoadProfile(capabilityProfile: requestedCapabilityProfile)
         }
     }
 
@@ -684,7 +803,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         details: [String: String],
         appSupportDirectoryURL: URL?
     ) async {
-        // Diagnostic event recording removed — previously used for UI test automation.
+        // Diagnostic event recording has been retired.
     }
 }
 

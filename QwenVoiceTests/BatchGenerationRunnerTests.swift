@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import XCTest
 @testable import QwenVoice
@@ -95,6 +96,47 @@ private final class MockGenerationStore: GenerationPersisting {
 }
 
 final class BatchGenerationRunnerTests: XCTestCase {
+    func testLongFormManifestIncludesAudioStatsAndSummary() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("long_form_manifest_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let audioURL = root.appendingPathComponent("segment_0001.wav")
+        try Self.writeTinyPCM16WAV(to: audioURL)
+
+        let model = try XCTUnwrap(TTSModel.model(for: .custom))
+        let request = BatchGenerationRequest(
+            mode: .custom,
+            model: model,
+            lines: ["First paragraph.", "Second paragraph."],
+            segmentationMode: .longForm,
+            voice: "vivian",
+            emotion: "Normal tone",
+            voiceDescription: nil,
+            refAudio: nil,
+            refText: nil
+        )
+
+        let manifest = try XCTUnwrap(
+            request.makeLongFormManifest(
+                generatedAtUTC: "2026-04-24T00:00:00Z",
+                audioPaths: [audioURL.path, nil]
+            )
+        )
+
+        XCTAssertEqual(manifest.schemaVersion, 2)
+        XCTAssertEqual(manifest.performanceSummary.totalSegments, 2)
+        XCTAssertEqual(manifest.performanceSummary.generatedSegments, 1)
+        XCTAssertEqual(manifest.performanceSummary.failedSegments, 1)
+        XCTAssertGreaterThan(manifest.performanceSummary.totalAudioDurationSeconds, 0)
+        XCTAssertEqual(manifest.segments[0].audioPath, audioURL.path)
+        XCTAssertFalse(manifest.segments[0].failed)
+        XCTAssertGreaterThan(manifest.segments[0].audioStats?.durationSeconds ?? 0, 0)
+        XCTAssertNotNil(manifest.segments[0].audioStats?.rmsAmplitude)
+        XCTAssertTrue(manifest.segments[1].failed)
+        XCTAssertNil(manifest.segments[1].audioStats)
+    }
+
     @MainActor
     func testCustomBatchUsesEngineBatchPath() async throws {
         let engine = MockBatchEngine()
@@ -401,5 +443,33 @@ final class BatchGenerationRunnerTests: XCTestCase {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTFail("Timed out waiting for condition")
+    }
+
+    private static func writeTinyPCM16WAV(to url: URL) throws {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 24_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let frameCount: AVAudioFrameCount = 4
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+        )
+        buffer.frameLength = frameCount
+        let samples = try XCTUnwrap(buffer.int16ChannelData?[0])
+        samples[0] = 0
+        samples[1] = 4_000
+        samples[2] = -4_000
+        samples[3] = 0
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: format.settings,
+            commonFormat: format.commonFormat,
+            interleaved: format.isInterleaved
+        )
+        try file.write(from: buffer)
     }
 }

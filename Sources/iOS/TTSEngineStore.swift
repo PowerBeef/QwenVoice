@@ -287,15 +287,6 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
                 object: self,
                 userInfo: ["chunk": chunk]
             )
-            guard let chunkPath = chunk.chunkPath else {
-                return
-            }
-            let chunkIndex = Self.chunkIndex(from: chunkPath)
-            Task { @MainActor in
-                await AppGenerationTelemetryCoordinator.shared.recordPreviewChunk(
-                    chunkIndex: chunkIndex
-                )
-            }
         }
     }
 
@@ -335,14 +326,6 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         return band
     }
 
-    private static func chunkIndex(from chunkPath: String) -> Int {
-        let fileName = URL(fileURLWithPath: chunkPath).deletingPathExtension().lastPathComponent
-        let digits = fileName.compactMap(\.wholeNumberValue)
-        guard !digits.isEmpty else { return 0 }
-        return digits.reduce(into: 0) { partialResult, digit in
-            partialResult = partialResult * 10 + digit
-        }
-    }
 }
 
 @MainActor

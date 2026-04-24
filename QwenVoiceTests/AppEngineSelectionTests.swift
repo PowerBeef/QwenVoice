@@ -15,6 +15,37 @@ final class AppEngineSelectionTests: XCTestCase {
         XCTAssertTrue(selection.requiresManualInitialization(isStubBackendMode: true))
     }
 
+    func testXCTestHostSuppressesAppEngineAutoStartOutsideUITestLaunches() {
+        let xctestEnvironment = [
+            "XCTestConfigurationFilePath": "/tmp/QwenVoiceTests.xctestconfiguration",
+        ]
+
+        XCTAssertTrue(
+            UITestAutomationSupport.shouldSuppressAppEngineAutoStart(
+                environment: xctestEnvironment,
+                arguments: []
+            )
+        )
+        XCTAssertFalse(
+            UITestAutomationSupport.shouldSuppressAppEngineAutoStart(
+                environment: xctestEnvironment.merging(["QWENVOICE_UI_TEST": "1"]) { _, new in new },
+                arguments: []
+            )
+        )
+        XCTAssertFalse(
+            UITestAutomationSupport.shouldSuppressAppEngineAutoStart(
+                environment: xctestEnvironment,
+                arguments: ["--uitest"]
+            )
+        )
+        XCTAssertFalse(
+            UITestAutomationSupport.shouldSuppressAppEngineAutoStart(
+                environment: [:],
+                arguments: []
+            )
+        )
+    }
+
     @MainActor
     func testAppEngineSelectionResolvesNativeRunningSidebarStatusForLivePreview() {
         let status = AppEngineSelection.current().resolveSidebarStatus(

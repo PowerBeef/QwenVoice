@@ -88,6 +88,9 @@ struct NativePreparedGeneration: Sendable {
     let stringFlags: [String: String]
     let cloneConditioning: ResolvedCloneConditioning?
     let wasPrimed: Bool
+    let loadCapabilityProfile: NativeLoadCapabilityProfile
+    let memoryPolicy: NativeMemoryPolicy
+    let mlxMemorySnapshots: [String: NativeMLXMemorySnapshot]
 }
 
 public struct InteractivePrefetchDiagnostics: Codable, Equatable, Sendable {
@@ -208,7 +211,11 @@ actor NativeEngineRuntime {
     func prepareInteractiveReadiness(for request: GenerationRequest) async throws -> InteractivePrefetchDiagnostics {
         let prefetchStartedAt = ContinuousClock.now
         let identityKey = prewarmIdentityKey(for: request)
-        let loadResult = try await loadModel(id: request.modelID, preserveActiveClonePrimeToken: false)
+        let loadResult = try await loadModel(
+            id: request.modelID,
+            capabilityProfile: NativeLoadCapabilityProfile(for: request),
+            preserveActiveClonePrimeToken: false
+        )
         loadResult.model.resetPreparationDiagnostics()
         var booleanFlags = loadResult.booleanFlags
         var timingsMS: [String: Int] = [
@@ -274,12 +281,29 @@ actor NativeEngineRuntime {
             request: request
         )
         let loadStartedAt = ContinuousClock.now
-        let loadResult = try await loadModel(id: request.modelID, preserveActiveClonePrimeToken: false)
+        let loadCapabilityProfile = NativeLoadCapabilityProfile(for: request)
+        let memoryPolicy = NativeMemoryPolicyResolver.policy(
+            mode: request.mode,
+            isBatch: request.batchTotal != nil
+        )
+        NativeMemoryPolicyResolver.apply(memoryPolicy)
+        NativeMemoryPolicyResolver.resetPeakMemory()
+        var mlxMemorySnapshots: [String: NativeMLXMemorySnapshot] = [
+            "before_load": NativeMemoryPolicyResolver.snapshot()
+        ]
+        let loadResult = try await loadModel(
+            id: request.modelID,
+            capabilityProfile: loadCapabilityProfile,
+            preserveActiveClonePrimeToken: false
+        )
+        mlxMemorySnapshots["after_load"] = NativeMemoryPolicyResolver.snapshot()
         await recordDiagnosticEvent(
             "runtime-prepare-after-load-model",
             request: request,
             extra: [
                 "didLoad": loadResult.didLoad ? "true" : "false",
+                "nativeLoadCapabilityProfile": loadCapabilityProfile.rawValue,
+                "memoryPolicy": memoryPolicy.name,
             ]
         )
         let model = loadResult.model
@@ -312,6 +336,7 @@ actor NativeEngineRuntime {
                 voicesDirectory: voicesDirectory
             )
             cloneConditioning = conditioning
+            mlxMemorySnapshots["after_clone_conditioning"] = NativeMemoryPolicyResolver.snapshot()
             wasPrimed = primedCloneReferenceKeys.contains(conditioning.internalIdentityKey)
             timingOverridesMS.merge(conditioning.timingsMS) { current, _ in current }
             let cloneConditioningReused = conditioning.cloneConditioningReused
@@ -330,6 +355,7 @@ actor NativeEngineRuntime {
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
                 booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
             }
+            mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
         case .custom:
             await recordDiagnosticEvent(
                 "runtime-prepare-custom-entered",
@@ -355,6 +381,7 @@ actor NativeEngineRuntime {
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
                 booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
             }
+            mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
             booleanFlags["custom_dedicated_handler_used"] = model.supportsDedicatedCustomVoice
         case .design:
             cloneConditioning = nil
@@ -376,6 +403,7 @@ actor NativeEngineRuntime {
             booleanFlags["design_warm_bucket_short"] = warmBucket == .short
             booleanFlags["design_warm_bucket_long"] = warmBucket == .long
             stringFlags["design_conditioning_request_key"] = warmState.requestKey
+            mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
         }
 
         if cloneConditioning?.cloneCacheHit != nil {
@@ -399,7 +427,10 @@ actor NativeEngineRuntime {
             booleanFlags: booleanFlags,
             stringFlags: stringFlags,
             cloneConditioning: cloneConditioning,
-            wasPrimed: wasPrimed
+            wasPrimed: wasPrimed,
+            loadCapabilityProfile: loadResult.capabilityProfile,
+            memoryPolicy: memoryPolicy,
+            mlxMemorySnapshots: mlxMemorySnapshots
         )
     }
 
@@ -416,7 +447,11 @@ actor NativeEngineRuntime {
         }
 
         let loadStartedAt = ContinuousClock.now
-        let loadResult = try await loadModel(id: modelID, preserveActiveClonePrimeToken: true)
+        let loadResult = try await loadModel(
+            id: modelID,
+            capabilityProfile: .cloneOnly,
+            preserveActiveClonePrimeToken: true
+        )
         let model = loadResult.model
         try ensureActiveClonePrimeToken(token)
 
@@ -489,7 +524,11 @@ actor NativeEngineRuntime {
         }
 
         do {
-            let loadResult = try await loadModel(id: modelID, preserveActiveClonePrimeToken: true)
+            let loadResult = try await loadModel(
+                id: modelID,
+                capabilityProfile: .cloneOnly,
+                preserveActiveClonePrimeToken: true
+            )
             let conditioning = try await resolveCloneConditioning(
                 modelID: modelID,
                 reference: reference,
@@ -508,10 +547,14 @@ actor NativeEngineRuntime {
 
     private func loadModel(
         id: String,
+        capabilityProfile: NativeLoadCapabilityProfile = .fullCapabilities,
         preserveActiveClonePrimeToken: Bool
     ) async throws -> NativeModelLoadResult {
         do {
-            let loadResult = try await loadCoordinator.loadModel(id: id)
+            let loadResult = try await loadCoordinator.loadModel(
+                id: id,
+                capabilityProfile: capabilityProfile
+            )
             if loadResult.didLoad {
                 activeModelID = id
                 await clearCloneState(preserveActiveClonePrimeToken: preserveActiveClonePrimeToken)

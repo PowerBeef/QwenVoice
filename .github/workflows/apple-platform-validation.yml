@@ -1,4 +1,4 @@
-name: Backend Freeze Gate
+name: Apple Platform QA Gate
 
 on:
   pull_request:
@@ -31,8 +31,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            build/harness/source-packages
             build/foundation/source-packages
+            build/harness/source-packages
           key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-
@@ -46,31 +46,18 @@ jobs:
           mkdir -p "$CI_RESULT_ROOT"
 
       - name: Validate checked-in project inputs
-        run: ./scripts/check_project_inputs.sh
-
-      - name: Harness validate
         run: python3 scripts/harness.py validate
 
-      - name: Swift tests
-        run: python3 scripts/harness.py test --layer swift
-
-      - name: Contract tests
+      - name: Run contract harness layer
         run: python3 scripts/harness.py test --layer contract
 
-      - name: Native tests
+      - name: Run macOS Swift foundation harness layer
+        run: python3 scripts/harness.py test --layer swift
+
+      - name: Run native runtime harness layer
         run: python3 scripts/harness.py test --layer native
 
-      - name: End-to-end UI smoke (macOS)
-        # The e2e layer drives Vocello.app via XCUITest under the stub
-        # backend to prove the live-preview pipeline reaches the user UI
-        # (Custom Voice → Generate → live badge → no decode error). If the
-        # hosted runner's Accessibility permission or window activation
-        # blocks test-runner automation, the layer self-demotes to a skip
-        # with a clear diagnostic so the workflow doesn't block on a
-        # system-permission bootstrap. The programmatic integration tests
-        # under the `swift` layer (LivePreviewIntegrationTests) cover the
-        # same pipeline without requiring XCUITest, so core coverage is
-        # preserved regardless.
+      - name: Run macOS UI smoke harness layer
         run: python3 scripts/harness.py test --layer e2e
 
       - name: Build macOS app
@@ -100,35 +87,33 @@ jobs:
           ./scripts/release.sh --output-name Vocello-macos26-ci
           ./scripts/verify_packaged_dmg.sh build/Vocello-macos26-ci.dmg build/release-metadata.txt
 
-      - name: Publish backend-freeze gate summary
+      - name: Publish QA gate summary
         if: always()
         run: |
           {
-            echo "## Backend Freeze Gate"
+            echo "## Apple Platform QA Gate"
             echo
-            echo "- This workflow is the shared-core regression gate for the macOS-first release track."
-            echo "- Project inputs, harness validation, shared Swift/runtime lanes, generic macOS/iPhone compile proof, and the macOS end-to-end UI smoke (\`harness test --layer e2e\`) ran here."
-            echo "- Unsigned macOS release verification remains part of the blocking gate."
-            echo "- iPhone foundation tests and TestFlight release proof remain maintained, but they are deferred from the current public release milestone."
+            echo "- Harness validation, contract/source/native/UI smoke test layers, generic macOS/iPhone compile proof, and unsigned macOS release verification ran here."
+            echo "- The current public milestone remains macOS-first; iPhone distribution proof stays in the dedicated TestFlight workflow."
             echo "- Signed public release proof is owned by the dedicated Vocello macOS Release workflow."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload foundation xcresult bundles
+      - name: Upload build result bundles
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-freeze-gate-xcresults
+          name: apple-platform-build-xcresults
           if-no-files-found: warn
           path: |
-            build/harness/results
             build/ci-results
+            build/harness/results
             build/foundation/*.xcresult
 
       - name: Upload release verification artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-freeze-gate-release-proof
+          name: apple-platform-release-proof
           if-no-files-found: warn
           path: |
             build/release-metadata.txt

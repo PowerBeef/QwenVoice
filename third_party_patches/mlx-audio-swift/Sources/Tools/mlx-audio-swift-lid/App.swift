@@ -116,9 +116,9 @@ struct CLI {
               --help, -h                   Show this help
 
             Examples:
-              \(executable) --audio Tests/media/intention.wav
-              \(executable) --audio Tests/media/intention.wav --model facebook/mms-lid-256 --top-k 3
-              \(executable) --audio Tests/media/intention.wav --output-path lid-output.json
+              \(executable) --audio /path/to/audio.wav
+              \(executable) --audio /path/to/audio.wav --model facebook/mms-lid-256 --top-k 3
+              \(executable) --audio /path/to/audio.wav --output-path lid-output.json
             """
         )
     }

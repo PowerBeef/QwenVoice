@@ -25,7 +25,4 @@ jobs:
         run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
 
       - name: Validate checked-in project inputs
-        run: ./scripts/check_project_inputs.sh
-
-      - name: Validate shared repo contracts
         run: python3 scripts/harness.py validate

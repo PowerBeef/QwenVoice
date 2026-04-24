@@ -5,12 +5,21 @@ import Foundation
 final class ModelManagerViewModel: ObservableObject {
 
     struct DownloadProgress: Equatable, Sendable {
+        enum Phase: String, Equatable, Sendable {
+            case downloading
+            case interrupted
+            case resuming
+            case verifying
+            case installing
+        }
+
         let downloadedBytes: Int64
         let totalBytes: Int64?
         let completedFiles: Int
         let totalFiles: Int?
         let bytesPerSecond: Int64?
         let isStalled: Bool
+        let phase: Phase
 
         static let initial = DownloadProgress(
             downloadedBytes: 0,
@@ -18,7 +27,8 @@ final class ModelManagerViewModel: ObservableObject {
             completedFiles: 0,
             totalFiles: nil,
             bytesPerSecond: nil,
-            isStalled: false
+            isStalled: false,
+            phase: .downloading
         )
     }
 
@@ -67,7 +77,6 @@ final class ModelManagerViewModel: ObservableObject {
     private var lastProgressPublishTimes: [String: ContinuousClock.Instant] = [:]
     private var refreshTask: Task<Void, Never>?
     private var lastFailureMessages: [String: String] = [:]
-    private var stubDownloadTasks: [String: Task<Void, Never>] = [:]
 
     init(
         fileManager: FileManager = .default,
@@ -140,16 +149,6 @@ final class ModelManagerViewModel: ObservableObject {
             return
         }
 
-        if let existingTask = stubDownloadTasks[model.id] {
-            await existingTask.value
-            return
-        }
-
-        if UITestAutomationSupport.isStubBackendMode {
-            await downloadStub(model)
-            return
-        }
-
         let epoch = beginEpoch(for: model.id)
         lastFailureMessages.removeValue(forKey: model.id)
         statuses[model.id] = .downloading(progress: .initial)
@@ -162,8 +161,6 @@ final class ModelManagerViewModel: ObservableObject {
         downloadTasks[model.id]?.cancel()
         downloadTasks.removeValue(forKey: model.id)
 
-        // Repair and re-download always start from a clean directory.
-        try? fileManager.removeItem(at: targetDir)
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
         removeInstallMetadata(for: model)
 
@@ -214,15 +211,6 @@ final class ModelManagerViewModel: ObservableObject {
     func cancelDownload(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
 
-        if UITestAutomationSupport.isStubBackendMode {
-            stubDownloadTasks[model.id]?.cancel()
-            stubDownloadTasks.removeValue(forKey: model.id)
-            Task {
-                await handleMutationCompletion(for: model.id)
-            }
-            return
-        }
-
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
         downloadTasks[model.id]?.cancel()
@@ -235,17 +223,6 @@ final class ModelManagerViewModel: ObservableObject {
 
     func delete(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
-
-        if UITestAutomationSupport.isStubBackendMode {
-            stubDownloadTasks[model.id]?.cancel()
-            stubDownloadTasks.removeValue(forKey: model.id)
-            let modelDir = model.installDirectory(in: modelsDirectory)
-            try? fileManager.removeItem(at: modelDir)
-            lastFailureMessages.removeValue(forKey: model.id)
-            modelInfoByID[model.id] = localModelInfo(for: model)
-            statuses[model.id] = .notDownloaded(message: nil)
-            return
-        }
 
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
@@ -307,7 +284,6 @@ final class ModelManagerViewModel: ObservableObject {
     private func handleMutationCompletion(for modelID: String) async {
         downloaders.removeValue(forKey: modelID)
         downloadTasks.removeValue(forKey: modelID)
-        stubDownloadTasks.removeValue(forKey: modelID)
         lastProgressPublishTimes.removeValue(forKey: modelID)
         if let model = TTSModel.model(id: modelID) {
             applyLocalSnapshot(for: model)
@@ -447,79 +423,6 @@ final class ModelManagerViewModel: ObservableObject {
         return total
     }
 
-    private func downloadStub(_ model: TTSModel) async {
-        let epoch = beginEpoch(for: model.id)
-        let targetDir = model.installDirectory(in: modelsDirectory)
-
-        stubDownloadTasks[model.id]?.cancel()
-        stubDownloadTasks.removeValue(forKey: model.id)
-        try? fileManager.removeItem(at: targetDir)
-        lastFailureMessages.removeValue(forKey: model.id)
-        statuses[model.id] = .downloading(
-            progress: DownloadProgress(
-                downloadedBytes: 0,
-                totalBytes: 3,
-                completedFiles: 0,
-                totalFiles: 3,
-                bytesPerSecond: nil,
-                isStalled: false
-            )
-        )
-
-        let shouldFailOnce = UITestAutomationSupport.modelDownloadFailOnceIDs.contains(model.id)
-        let task = Task { [weak self] in
-            guard let self else { return }
-
-            for step in 1...3 {
-                try? await Task.sleep(nanoseconds: 180_000_000)
-                guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
-                self.statuses[model.id] = .downloading(
-                    progress: DownloadProgress(
-                        downloadedBytes: Int64(step),
-                        totalBytes: 3,
-                        completedFiles: step,
-                        totalFiles: 3,
-                        bytesPerSecond: nil,
-                        isStalled: false
-                    )
-                )
-            }
-
-            if shouldFailOnce,
-               UITestAutomationSupport.consumeFailOnceFlag(
-                    namespace: "model-download-fail",
-                    identifier: model.id,
-                    appSupportDir: QwenVoiceApp.appSupportDir
-               ) {
-                let partialPath = targetDir.appendingPathComponent(model.requiredRelativePaths.first ?? "partial.bin")
-                try? self.fileManager.createDirectory(
-                    at: partialPath.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                self.fileManager.createFile(atPath: partialPath.path, contents: Data())
-                guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
-                self.lastFailureMessages[model.id] = "Simulated model download failure."
-                await self.handleMutationCompletion(for: model.id)
-                return
-            }
-
-            for relativePath in model.requiredRelativePaths {
-                let fileURL = targetDir.appendingPathComponent(relativePath)
-                try? self.fileManager.createDirectory(
-                    at: fileURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                self.fileManager.createFile(atPath: fileURL.path, contents: Data())
-            }
-
-            guard !Task.isCancelled, self.isCurrentEpoch(epoch, for: model.id) else { return }
-            let snapshot = self.localModelInfo(for: model)
-            self.persistInstallMetadata(for: model, snapshot: snapshot)
-            await self.handleMutationCompletion(for: model.id)
-        }
-        stubDownloadTasks[model.id] = task
-    }
-
     private func publishDownloadProgressIfCurrent(
         epoch: Int,
         modelID: String,
@@ -542,8 +445,26 @@ final class ModelManagerViewModel: ObservableObject {
                 completedFiles: progress.completedFiles,
                 totalFiles: progress.totalFiles > 0 ? progress.totalFiles : nil,
                 bytesPerSecond: progress.bytesPerSecond,
-                isStalled: progress.isStalled
+                isStalled: progress.isStalled,
+                phase: DownloadProgress.Phase(progress.phase)
             )
         )
+    }
+}
+
+private extension ModelManagerViewModel.DownloadProgress.Phase {
+    init(_ phase: HuggingFaceDownloader.DownloadPhase) {
+        switch phase {
+        case .downloading:
+            self = .downloading
+        case .interrupted:
+            self = .interrupted
+        case .resuming:
+            self = .resuming
+        case .verifying:
+            self = .verifying
+        case .installing:
+            self = .installing
+        }
     }
 }

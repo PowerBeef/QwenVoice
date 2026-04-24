@@ -309,12 +309,6 @@ final class VoiceCloningCoordinator: ObservableObject {
     }
 
     func browseForAudio(draft: Binding<VoiceCloningDraft>) {
-        if UITestAutomationSupport.isStubBackendMode,
-           let url = UITestAutomationSupport.importAudioURL {
-            replaceReference(with: url.path, draft: draft)
-            return
-        }
-
         let panel = NSOpenPanel()
         panel.allowedContentTypes = VoiceCloningReferenceAudioSupport.openPanelContentTypes
         panel.allowsMultipleSelection = false

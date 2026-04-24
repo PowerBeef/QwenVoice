@@ -20,7 +20,7 @@ The iPhone app target is Vocello-branded. The next macOS release ships as `Vocel
 
 ## Public Homepage Posture
 
-- `README.md` leads with `QwenVoice` because that is the currently shipped public brand (`v1.2.3`). Its "A Note on What's Changing" section frames `Vocello` as the forward rebrand that lands with the next macOS release.
+- `README.md` leads with `QwenVoice` because that is the currently shipped public brand (`v1.2.3`). Its version matrix separates the shipped `QwenVoice v1.2.3` release, current `main`, the next macOS `Vocello` release, and the deferred iPhone track.
 - The GitHub repo description should stay consistent with the README — do not claim a Vocello-first public posture while the published release is still QwenVoice-branded.
 - Public copy should stay aligned with the currently shipped macOS reality and the active `macOS-first release track`.
 - Do not present iPhone as a current public release surface until the release-track policy changes. The public framing for iPhone is the in-development "Vocello for iPhone" — standalone, 4-bit, open source in this repo, published via the App Store once ready.
@@ -124,7 +124,7 @@ Project and automation source of truth:
 Active GitHub workflows:
 
 - `Project Inputs`
-- `Backend Freeze Gate` for shared-core regression proof, generic macOS/iPhone builds, unsigned macOS release verification, and `.xcresult` artifact upload
+- `Apple Platform QA Gate` for harness validation, contract/source/native/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification, and `.xcresult` artifact upload
 - `Vocello macOS Release` as the only signed/public release workflow required for the current milestone
 - `Vocello iOS TestFlight` as the maintained but deferred iPhone release workflow
 
@@ -133,9 +133,11 @@ Key local checks:
 ```sh
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
-python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer swift
 python3 scripts/harness.py test --layer native
+python3 scripts/harness.py test --layer ios
+python3 scripts/harness.py test --layer e2e
 xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build
 xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build
 ./scripts/build_foundation_targets.sh macos
@@ -145,27 +147,21 @@ python3 scripts/check_ios_catalog.py
 ./scripts/release_ios_testflight.sh
 ```
 
-`python3 scripts/harness.py test --layer ios` remains maintained, but it is no longer part of the default required path for the current public release milestone. Run it when the change directly touches iPhone app, extension, model-delivery, or memory-policy behavior, or when preparing to re-open the iPhone release track.
-
-`QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` still enables the opt-in macOS live smoke test against an installed model.
-
-Visual and interaction verification remains partly manual through local Computer Use passes after the cheap source gates are green.
+Visual and interaction verification is covered first by the `e2e` harness smoke lane. Manual local app launches and Computer Use passes remain useful after project-input checks, harness layers, and builds are green.
 
 For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The deterministic script uses isolated derived-data and `.xcresult` roots so stale hosted-test bundles cannot pollute app codesigning.
 
-The maintained foundation paths now use:
+The maintained harness and foundation paths now use:
 
-- committed Xcode test plans for source and runtime-oriented suites
-- explicit harness package-resolution roots under `build/harness/source-packages/`
-- explicit harness derived-data roots under `build/harness/derived-data/`
-- explicit `.xcresult` bundles under `build/harness/results/`
+- explicit harness roots under `build/harness/{derived-data,results,source-packages,artifacts}`
 - explicit release build roots under `build/foundation/`
 - explicit archive/release `.xcresult` bundles under `build/foundation/` for the maintained CI release paths
 
 ## Current Documentation Boundaries
 
-- `CLAUDE.md` is the primary repo-operating guide for agents and maintainers.
+- `AGENTS.md` is the primary repo-operating guide for agents and maintainers.
 - `docs/README.md` is the index of the maintained documentation set.
-- `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
+- `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, `docs/reference/live-testing.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
+- `docs/reference/privacy-storage.md` records local storage, deletion paths, and voice-cloning consent posture.
 - `README.md` is the public GitHub landing page.
 - `docs/qwen_tone.md` is a supplemental guidance doc, not a maintained reference doc.

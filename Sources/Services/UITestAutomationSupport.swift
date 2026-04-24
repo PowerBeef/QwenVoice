@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Foundation
 import AppKit
 
@@ -53,6 +54,20 @@ enum UITestAutomationSupport {
 
     static var isStubBackendMode: Bool {
         backendMode == .stub
+    }
+
+    static var isRunningUnderXCTest: Bool {
+        isRunningUnderXCTest(
+            environment: environment,
+            arguments: ProcessInfo.processInfo.arguments
+        )
+    }
+
+    static var shouldSuppressAppEngineAutoStart: Bool {
+        shouldSuppressAppEngineAutoStart(
+            environment: environment,
+            arguments: ProcessInfo.processInfo.arguments
+        )
     }
 
     static var fixtureRoot: URL? {
@@ -163,6 +178,28 @@ enum UITestAutomationSupport {
         return mode
     }
 
+    static func isRunningUnderXCTest(
+        environment: [String: String],
+        arguments: [String]
+    ) -> Bool {
+        environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+            || arguments.contains { argument in
+                argument.hasSuffix(".xctest")
+                    || argument.contains(".xctest/")
+            }
+    }
+
+    static func shouldSuppressAppEngineAutoStart(
+        environment: [String: String],
+        arguments: [String]
+    ) -> Bool {
+        let isUITestLaunch = isTruthy(environment[uiTestEnvironmentKey])
+            || arguments.contains("--uitest")
+        return isRunningUnderXCTest(environment: environment, arguments: arguments)
+            && !isUITestLaunch
+    }
+
     private static func pathURL(for key: String) -> URL? {
         guard let raw = environment[key]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -181,3 +218,4 @@ enum UITestAutomationSupport {
         return Set(values)
     }
 }
+#endif

@@ -38,9 +38,9 @@ schemes:
       config: Debug
       gatherCoverageData: false
       testPlans:
-        - path: Tests/Plans/QwenVoiceSource.xctestplan
+        - path: tests/Plans/QwenVoiceSource.xctestplan
           defaultPlan: true
-        - path: Tests/Plans/QwenVoiceRuntime.xctestplan
+        - path: tests/Plans/QwenVoiceRuntime.xctestplan
     run:
       config: Debug
     archive:
@@ -63,7 +63,7 @@ schemes:
       config: Debug
       gatherCoverageData: false
       testPlans:
-        - path: Tests/Plans/VocelloiOSFoundation.xctestplan
+        - path: tests/Plans/VocelloiOSFoundation.xctestplan
           defaultPlan: true
     run:
       config: Debug
@@ -79,7 +79,7 @@ schemes:
       config: Debug
       gatherCoverageData: false
       testPlans:
-        - path: Tests/Plans/VocelloUISmoke.xctestplan
+        - path: tests/Plans/VocelloUISmoke.xctestplan
           defaultPlan: true
     run:
       config: Debug
@@ -131,14 +131,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app
         PRODUCT_NAME: Vocello
         WRAPPER_NAME: Vocello.app
-        # Keep the Swift module name as QwenVoice so internal `@testable
-        # import QwenVoice` and sibling modules that assume the QwenVoice
-        # namespace still resolve after the on-disk rename to Vocello.app.
+        # Keep the Swift module name as QwenVoice so sibling modules that assume
+        # the QwenVoice namespace still resolve after the on-disk rename to Vocello.app.
         PRODUCT_MODULE_NAME: QwenVoice
         MARKETING_VERSION: "1.2.3"
         CURRENT_PROJECT_VERSION: "15"
         SWIFT_VERSION: "6"
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         INFOPLIST_FILE: Sources/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Vocello
@@ -148,6 +146,11 @@ targets:
         COMBINE_HIDPI_IMAGES: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) QW_UI_LIQUID QW_TEST_SUPPORT"
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID
     dependencies:
       - package: GRDB
       - target: QwenVoiceCore
@@ -175,6 +178,9 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) QW_TEST_SUPPORT"
     dependencies:
       - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
@@ -200,6 +206,9 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) QW_TEST_SUPPORT"
     dependencies:
       - target: QwenVoiceCore
       - package: MLXAudio
@@ -301,9 +310,6 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
-        # XcodeGen derives TEST_HOST from the dependency target's identifier
-        # (QwenVoice), not its PRODUCT_NAME override (Vocello). Pin it here
-        # so renaming the macOS app bundle doesn't break the test host path.
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Vocello.app/Contents/MacOS/Vocello"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
@@ -391,6 +397,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: NO
         TARGETED_DEVICE_FAMILY: "1"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) QW_TEST_SUPPORT"
     dependencies:
       - package: GRDB
       - target: QwenVoiceCore
@@ -405,32 +414,12 @@ targets:
       - package: SwiftHuggingFace
         product: HuggingFace
 
-  QVoiceBenchmarkUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - path: QVoiceBenchmarkUITests
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.ios.benchmarks
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: $(QWENVOICE_DEVELOPMENT_TEAM)
-        SWIFT_VERSION: "6"
-        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
-        GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: VocelloiOS
-    dependencies:
-      - target: VocelloiOS
-
   VocelloUITests:
     type: bundle.ui-testing
     platform: macOS
     sources:
       - path: VocelloUITests
     resources:
-      # Bundle the shared contract so the test can stage a stub-model fixture
-      # without relying on the repo-relative path (`#filePath` fallback still
-      # works for in-repo xcodebuild invocations).
       - path: Sources/Resources/qwenvoice_contract.json
         buildPhase: resources
     settings:

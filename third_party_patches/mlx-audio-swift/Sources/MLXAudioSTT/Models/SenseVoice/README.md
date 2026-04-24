@@ -25,7 +25,7 @@ print(output.language ?? "unknown")
 ```bash
 .build/debug/mlx-audio-swift-stt \
   --model mlx-community/SenseVoiceSmall \
-  --audio Tests/media/conversational_a.wav \
+  --audio /path/to/audio.wav \
   --output-path /tmp/sensevoice \
   --format txt
 ```

@@ -3,6 +3,7 @@ import AppKit
 import CoreGraphics
 
 struct AppLaunchConfiguration {
+#if QW_TEST_SUPPORT
     let isUITest: Bool
     let disableAnimations: Bool
     let fastIdle: Bool
@@ -48,6 +49,23 @@ struct AppLaunchConfiguration {
     var animationsEnabled: Bool {
         !disableAnimations
     }
+#else
+    let animationsEnabled: Bool
+
+    static let current = AppLaunchConfiguration()
+
+    init(animationsEnabled: Bool = true) {
+        self.animationsEnabled = animationsEnabled
+    }
+
+    var initialSidebarItem: SidebarItem? {
+        nil
+    }
+
+    var shouldOpenSettingsOnLaunch: Bool {
+        false
+    }
+#endif
 
     func animation(_ animation: Animation?) -> Animation? {
         animationsEnabled ? animation : nil
@@ -58,13 +76,16 @@ struct AppLaunchConfiguration {
     }
 
     @MainActor static func openSettingsWindowIfNeeded() {
+#if QW_TEST_SUPPORT
         guard current.shouldOpenSettingsOnLaunch, !openedInitialSettingsWindow else { return }
         openedInitialSettingsWindow = true
         DispatchQueue.main.async {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         }
+#endif
     }
 
+#if QW_TEST_SUPPORT
     private static func parseWindowSize(_ rawValue: String?) -> CGSize? {
         guard let rawValue else { return nil }
 
@@ -82,4 +103,5 @@ struct AppLaunchConfiguration {
 
         return CGSize(width: width, height: height)
     }
+#endif
 }

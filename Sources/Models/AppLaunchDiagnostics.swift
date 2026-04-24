@@ -32,12 +32,32 @@ struct AppLaunchDiagnosticsSnapshot: Equatable, Sendable {
 
 enum AppLaunchPreflight {
     static var shouldShowDiagnostics: Bool {
+#if QW_TEST_SUPPORT
         shouldShowDiagnostics(
             isUITest: UITestAutomationSupport.isEnabled,
             bundlePath: Bundle.main.bundlePath
         )
+#else
+        shouldShowDiagnostics(
+            bundlePath: Bundle.main.bundlePath
+        )
+#endif
     }
 
+    static func shouldShowDiagnostics(bundlePath: String) -> Bool {
+#if QW_TEST_SUPPORT
+        shouldShowDiagnostics(isUITest: false, bundlePath: bundlePath)
+#else
+        guard !bundlePath.contains("/DerivedData/") else { return false }
+        #if DEBUG
+        return false
+        #else
+        return true
+        #endif
+#endif
+    }
+
+#if QW_TEST_SUPPORT
     static func shouldShowDiagnostics(isUITest: Bool, bundlePath: String) -> Bool {
         guard !isUITest else { return false }
         guard !bundlePath.contains("/DerivedData/") else { return false }
@@ -47,6 +67,7 @@ enum AppLaunchPreflight {
         return true
         #endif
     }
+#endif
 
     static func run() -> AppLaunchDiagnosticsSnapshot? {
         guard shouldShowDiagnostics else { return nil }

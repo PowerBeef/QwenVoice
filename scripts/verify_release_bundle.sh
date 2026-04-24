@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
 
-# shellcheck source=./harness_lib/shared.sh
-. "$SCRIPT_DIR/harness_lib/shared.sh"
+# shellcheck source=./lib/shared.sh
+. "$SCRIPT_DIR/lib/shared.sh"
 
 codesign_has_runtime_metadata() {
     local target="$1"
@@ -117,15 +117,8 @@ pkill -x "$APP_EXECUTABLE_NAME" 2>/dev/null || true
 HOME="$TMP_UI_HOME" \
 USER="${USER:-$(id -un)}" \
 LOGNAME="${LOGNAME:-${USER:-$(id -un)}}" \
-QWENVOICE_UI_TEST="1" \
-QWENVOICE_UI_TEST_BACKEND_MODE="live" \
-QWENVOICE_UI_TEST_SETUP_DELAY_MS="1" \
-QWENVOICE_UI_TEST_DEFAULTS_SUITE="VocelloReleaseSmoke.$RANDOM.$RANDOM" \
 QWENVOICE_APP_SUPPORT_DIR="$TMP_UI_FIXTURE" \
-/usr/bin/open -n "$APP_PATH" --args \
---uitest \
---uitest-disable-animations \
---uitest-fast-idle \
+/usr/bin/open -n "$APP_PATH" \
 >"$TMP_UI_STDOUT" 2>"$TMP_UI_STDERR"
 
 if ! APP_EXECUTABLE_NAME="$APP_EXECUTABLE_NAME" python3 - <<'PY'

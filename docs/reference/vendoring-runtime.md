@@ -10,9 +10,8 @@ QwenVoice now has three maintained runtime stories:
 
 Treat tracked surfaces in this repo as five classes:
 
-- **Repo-owned source**: `Sources/`, `QwenVoiceTests/`, maintained docs, and active scripts under `scripts/`
+- **Repo-owned source**: `Sources/`, maintained docs, and active scripts under `scripts/`
 - **Product assets**: `Sources/Assets.xcassets/` and public docs images under `docs/`
-- **Test fixtures**: `tests/fixtures/` plus screenshot baselines under `tests/screenshots/baselines/`
 - **Historical records**: `docs/releases/`
 - **Repo-owned vendored source**: `third_party_patches/`, where QwenVoice intentionally carries patched upstream code as maintained source
 
@@ -71,14 +70,12 @@ Maintained CI/release workflow surfaces:
 
 - `scripts/check_project_inputs.sh`
 - `scripts/regenerate_project.sh`
-- `python3 scripts/harness.py validate`
-- `python3 scripts/harness.py test --layer swift`
-- `python3 scripts/harness.py test --layer contract`
-- `python3 scripts/harness.py test --layer native`
+- `./scripts/build_foundation_targets.sh macos`
+- `./scripts/build_foundation_targets.sh ios`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice build`
 - `xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build`
 - `python3 scripts/check_ios_catalog.py`
 - `./scripts/release.sh`
 - `./scripts/release_ios_testflight.sh`
 
-Visual and interaction verification still includes manual local passes after the cheap source gates are green.
+Visual and interaction verification still includes manual local passes after project-input checks and builds are green.

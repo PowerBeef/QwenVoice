@@ -11,7 +11,6 @@ struct Voice: Identifiable, Hashable {
     func loadTranscript(fileManager: FileManager = .default) throws -> String? {
         let txtURL = URL(fileURLWithPath: wavPath).deletingPathExtension().appendingPathExtension("txt")
         guard fileManager.fileExists(atPath: txtURL.path) else { return nil }
-        try UITestFaultInjection.throwIfEnabled(.voiceTranscriptRead)
         return try String(contentsOfFile: txtURL.path, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

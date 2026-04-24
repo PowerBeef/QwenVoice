@@ -106,11 +106,11 @@ final class SavedVoicesViewModel: ObservableObject {
     static var voices: [Voice] = []
 }
 
+#if QW_TEST_SUPPORT
 @MainActor
 extension SavedVoicesViewModel {
-    // Tests need an explicit escape hatch because this view model seeds
-    // itself from a session cache that otherwise survives across cases.
     static func resetSessionCacheForTesting() {
         SavedVoicesSessionCache.voices = []
     }
 }
+#endif

@@ -17,38 +17,26 @@ struct QVoiceiOSRootView: View {
 
     init(modelRegistry: ContractBackedModelRegistry) {
         self.modelRegistry = modelRegistry
-        let uiTestOverrides = IOSUITestGenerationOverrides.current
         let previewInitialState = IOSPreviewRuntime.current?.definition.initialState
 
         var customDraft = CustomVoiceDraft(selectedSpeaker: modelRegistry.defaultSpeaker.id)
         if let previewCustomDraft = previewInitialState?.customDraft {
             customDraft = previewCustomDraft
-        } else if uiTestOverrides.selectedSection == .custom, let scriptText = uiTestOverrides.scriptText {
-            customDraft.text = IOSGenerationTextLimitPolicy.clamped(scriptText, mode: .custom)
         }
 
         var designDraft = VoiceDesignDraft()
         if let previewDesignDraft = previewInitialState?.designDraft {
             designDraft = previewDesignDraft
-        } else if uiTestOverrides.selectedSection == .design {
-            if let scriptText = uiTestOverrides.scriptText {
-                designDraft.text = IOSGenerationTextLimitPolicy.clamped(scriptText, mode: .design)
-            }
-            if let voiceDesignBrief = uiTestOverrides.voiceDesignBrief {
-                designDraft.voiceDescription = voiceDesignBrief
-            }
         }
 
         var cloneDraft = VoiceCloningDraft()
         if let previewCloneDraft = previewInitialState?.cloneDraft {
             cloneDraft = previewCloneDraft
-        } else if uiTestOverrides.selectedSection == .clone, let scriptText = uiTestOverrides.scriptText {
-            cloneDraft.text = IOSGenerationTextLimitPolicy.clamped(scriptText, mode: .clone)
         }
 
         _selectedTab = State(initialValue: previewInitialState?.selectedTab ?? .generate)
         _selectedGenerationSection = State(
-            initialValue: previewInitialState?.selectedGenerationSection ?? uiTestOverrides.selectedSection ?? .custom
+            initialValue: previewInitialState?.selectedGenerationSection ?? .custom
         )
         _customVoiceDraft = State(initialValue: customDraft)
         _voiceDesignDraft = State(initialValue: designDraft)

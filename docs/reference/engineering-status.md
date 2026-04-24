@@ -16,10 +16,11 @@ The current milestone is operating on a `macOS-first release track`: macOS is th
 - The iPhone host/runtime contract now runs through a monitor-backed extension manager that selects a preferred identity, replaces stale transports, and invalidates on teardown instead of leaving that lifecycle implicit in the UI shell
 - Explicit low-RAM policy surfaces for the iPhone path, including guarded and critical memory bands
 - The shared frontend-safe engine state surface now exists as `TTSEngineFrontendState`, with matching macOS and iPhone store adapters
-- Restored repo workflows for project inputs, the backend-freeze gate, macOS release packaging/notarization, and iPhone TestFlight packaging
+- Restored repo workflows for project inputs, the Apple-platform QA gate, macOS release packaging/notarization, and iPhone TestFlight packaging
+- Rebuilt `scripts/harness.py` as the repo-owned QA orchestrator for validation, contract/source/native/iOS/UI test layers, diagnostics, and opt-in benchmarks
 - Maintained release scripts for signed/notarized macOS DMGs and iPhone archive/export flows
-- Deterministic local foundation paths now separate package resolution, build-for-testing, test execution, archive, and export work into explicit roots with `.xcresult` evidence
-- `Backend Freeze Gate` now treats `.xcresult` bundles as first-class artifacts for the maintained shared-core regression and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
+- Deterministic local foundation paths now separate package resolution, build, archive, and export work into explicit roots with `.xcresult` evidence
+- `Apple Platform QA Gate` now treats `.xcresult` bundles as first-class artifacts for maintained harness, build, and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
 - An explicit public-homepage posture that keeps GitHub landing-page messaging aligned with the currently shipped `QwenVoice v1.2.3` build, with `Vocello` framed as the forward rebrand that lands with the next macOS release
 
 ## Current Caveats
@@ -32,9 +33,10 @@ The current milestone is operating on a `macOS-first release track`: macOS is th
 - The iPhone release/TestFlight path remains maintained, but it is intentionally deferred from signoff for the current macOS-first public release milestone.
 - The macOS and iPhone release verifiers now rely on the checked-in capability and entitlement matrix, but floor-device proof and live signed distribution proof are still separate evidence obligations.
 - The iPhone App Group remains intentionally narrow and file-based, but it is still a real cross-process dependency because model, output, voice, and cache state must be shared between the host app and the engine extension.
-- The legacy `QwenVoiceNativeRuntime` module is still present for compatibility and regression coverage, so the codebase has not finished its cleanup pass even though the active macOS helper path now runs through `QwenVoiceCore`.
-- A plain signed `xcodebuild -scheme QwenVoice build` on shared local DerivedData can still be polluted by stale hosted test-bundle output; the maintained deterministic compile-proof path is the isolated `./scripts/build_foundation_targets.sh` flow.
-- Visual and interaction verification remains intentionally partly manual through local Computer Use rather than full maintained XCUI parity across both platforms.
+- The legacy `QwenVoiceNativeRuntime` module is still present for compatibility coverage, so the codebase has not finished its cleanup pass even though the active macOS helper path now runs through `QwenVoiceCore`.
+- A plain signed `xcodebuild -scheme QwenVoice build` on shared local DerivedData can still be polluted by stale build output; the maintained deterministic compile-proof path is the isolated `./scripts/build_foundation_targets.sh` flow.
+- Hosted UI smoke can still soft-skip macOS Accessibility/TCC or foreground-window issues; controlled release signoff must use `QWENVOICE_E2E_STRICT=1`.
+- Manual local app launches and Computer Use remain useful after the harness/build gates, especially for visual polish and real model-load checks.
 - The public README is intentionally conservative during the refactor period, so public GitHub messaging is narrower than the internal repo architecture docs by design.
 - Preview, debug, and manual-verification helper surfaces still need a keep/refactor/delete pass so the cleanup tracker can close with explicit ownership.
 

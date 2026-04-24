@@ -8,7 +8,7 @@ For current repo truth about app structure, workflows, or supported behavior, tr
 
 1. `README.md`
 2. `docs/reference/current-state.md`
-3. `CLAUDE.md`
+3. `AGENTS.md`
 
 ## What the App Exposes
 

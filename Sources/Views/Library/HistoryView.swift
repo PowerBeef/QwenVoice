@@ -306,9 +306,6 @@ private extension HistoryView {
             }
 
             do {
-                if hasExistingItems {
-                    try UITestFaultInjection.throwIfEnabled(.historyFetch)
-                }
                 let generations = try DatabaseService.shared.fetchAllGenerations()
                 let loadedItems = generations.map(HistoryListItem.init)
 
@@ -364,22 +361,6 @@ private extension HistoryView {
     }
 
     func exportGeneration(_ item: HistoryListItem) {
-        if UITestAutomationSupport.isStubBackendMode,
-           let outputDirectoryURL = UITestAutomationSupport.outputDirectoryURL {
-            do {
-                try FileManager.default.createDirectory(at: outputDirectoryURL, withIntermediateDirectories: true)
-                let destination = outputDirectoryURL.appendingPathComponent(URL(fileURLWithPath: item.generation.audioPath).lastPathComponent)
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.copyItem(at: URL(fileURLWithPath: item.generation.audioPath), to: destination)
-            } catch {
-                presentActionAlert(
-                    title: "Export Error",
-                    message: "Export failed: \(error.localizedDescription)"
-                )
-            }
-            return
-        }
-
         let panel = NSSavePanel()
         panel.nameFieldStringValue = URL(fileURLWithPath: item.generation.audioPath).lastPathComponent
         panel.allowedContentTypes = [.wav]
@@ -430,7 +411,6 @@ private extension HistoryView {
         }
 
         do {
-            try UITestFaultInjection.throwIfEnabled(.historyDeleteDatabase)
             try DatabaseService.shared.deleteGeneration(id: id)
         } catch {
             return .databaseFailure(error.localizedDescription)
@@ -450,7 +430,6 @@ private extension HistoryView {
         }
 
         do {
-            try UITestFaultInjection.throwIfEnabled(.historyDeleteAudio)
             try FileManager.default.removeItem(atPath: item.generation.audioPath)
             return .deleted
         } catch {

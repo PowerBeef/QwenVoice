@@ -8,6 +8,15 @@ public enum NativeCustomPrewarmPolicy: Sendable {
 public enum NativeQwenPreparedLoadProfile: Sendable {
     case fullCapabilities
     case streamingOnly
+
+    public init(capabilityProfile: NativeLoadCapabilityProfile) {
+        switch capabilityProfile {
+        case .cloneOnly, .fullCapabilities:
+            self = .fullCapabilities
+        case .customOnly, .designOnly:
+            self = .streamingOnly
+        }
+    }
 }
 
 public struct NativeRuntimePaths: Sendable {

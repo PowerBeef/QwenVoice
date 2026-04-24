@@ -20,6 +20,9 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
     private let cloneConditioning: ResolvedCloneConditioning?
     private let wasPrimed: Bool
     private let telemetryRecorder: NativeTelemetryRecorder?
+    private let loadCapabilityProfile: NativeLoadCapabilityProfile
+    private let memoryPolicy: NativeMemoryPolicy
+    private let initialMLXMemorySnapshots: [String: NativeMLXMemorySnapshot]
 
     init(
         requestID: Int,
@@ -32,7 +35,10 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         stringFlags: [String: String] = [:],
         cloneConditioning: ResolvedCloneConditioning? = nil,
         wasPrimed: Bool = false,
-        telemetryRecorder: NativeTelemetryRecorder? = nil
+        telemetryRecorder: NativeTelemetryRecorder? = nil,
+        loadCapabilityProfile: NativeLoadCapabilityProfile,
+        memoryPolicy: NativeMemoryPolicy,
+        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot]
     ) {
         self.requestID = requestID
         self.request = request
@@ -45,6 +51,9 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
         self.cloneConditioning = cloneConditioning
         self.wasPrimed = wasPrimed
         self.telemetryRecorder = telemetryRecorder
+        self.loadCapabilityProfile = loadCapabilityProfile
+        self.memoryPolicy = memoryPolicy
+        self.initialMLXMemorySnapshots = mlxMemorySnapshots
     }
 
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
@@ -60,7 +69,10 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning {
             stringFlags: stringFlags,
             cloneConditioning: cloneConditioning,
             wasPrimed: wasPrimed,
-            telemetryRecorder: telemetryRecorder
+            telemetryRecorder: telemetryRecorder,
+            loadCapabilityProfile: loadCapabilityProfile,
+            memoryPolicy: memoryPolicy,
+            initialMLXMemorySnapshots: initialMLXMemorySnapshots
         )
         // `Task.detached` does not inherit the parent's cancellation, so we
         // explicitly forward cancellation through `withTaskCancellationHandler`.
@@ -272,6 +284,30 @@ private enum PCM16WAVWriter {
     }
 }
 
+private final class PCM16ScratchBuffer {
+    private var storage: [Int16] = []
+
+    func convertClamped(_ samples: [Float]) -> [Int16] {
+        storage.removeAll(keepingCapacity: true)
+        storage.reserveCapacity(samples.count)
+        for sample in samples {
+            let clamped = max(-1.0, min(1.0, sample))
+            storage.append(Int16((clamped * Float(Int16.max)).rounded()))
+        }
+        return storage
+    }
+
+    func pcm16LittleEndianData(from pcmSamples: [Int16]) -> Data {
+        pcmSamples.withUnsafeBufferPointer { pointer in
+            guard let baseAddress = pointer.baseAddress else { return Data() }
+            return Data(
+                bytes: UnsafeRawPointer(baseAddress),
+                count: pointer.count * MemoryLayout<Int16>.stride
+            )
+        }
+    }
+}
+
 private final class PCM16ChunkFileWriter {
     private let format: AVAudioFormat
     private var reusableBuffer: AVAudioPCMBuffer?
@@ -286,13 +322,19 @@ private final class PCM16ChunkFileWriter {
             format: format,
             reusableBuffer: &reusableBuffer
         )
+        let temporaryURL = Self.temporaryURL(for: url)
+        try? FileManager.default.removeItem(at: temporaryURL)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+
         // Hold AVAudioFile in a narrow scope so ARC guarantees its deinit
         // fires at the closing brace. AVAudioFile writes the final WAV/RIFF
         // `data`-chunk size field on deinit, not on write(from:), so this
         // deterministic teardown is the first half of correct finalization.
         do {
             let file = try AVAudioFile(
-                forWriting: url,
+                forWriting: temporaryURL,
                 settings: format.settings,
                 commonFormat: format.commonFormat,
                 interleaved: format.isInterleaved
@@ -305,9 +347,31 @@ private final class PCM16ChunkFileWriter {
         // Without this, chunk consumers intermittently saw audioFile.length
         // == 0 and the UI surfaced "Live audio preview could not decode the
         // latest chunk." even though the file eventually finalized correctly.
-        if let handle = try? FileHandle(forWritingTo: url) {
+        if let handle = try? FileHandle(forWritingTo: temporaryURL) {
             try? handle.synchronize()
             try? handle.close()
+        }
+        try Self.publishAtomically(temporaryURL: temporaryURL, finalURL: url)
+    }
+
+    private static func temporaryURL(for finalURL: URL) -> URL {
+        let filename = finalURL.lastPathComponent
+        return finalURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
+    }
+
+    private static func publishAtomically(temporaryURL: URL, finalURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: finalURL.path) {
+            _ = try fileManager.replaceItemAt(
+                finalURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: []
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: finalURL)
         }
     }
 }
@@ -353,6 +417,9 @@ private struct StreamingExecutionContext: Sendable {
     let cloneConditioning: ResolvedCloneConditioning?
     let wasPrimed: Bool
     let telemetryRecorder: NativeTelemetryRecorder?
+    let loadCapabilityProfile: NativeLoadCapabilityProfile
+    let memoryPolicy: NativeMemoryPolicy
+    let initialMLXMemorySnapshots: [String: NativeMLXMemorySnapshot]
 
     var previewTitle: String {
         String(request.text.prefix(40))
@@ -362,11 +429,14 @@ private struct StreamingExecutionContext: Sendable {
         let startedAt = ContinuousClock.now
         let outputURL = URL(fileURLWithPath: request.outputPath)
         let sampleRate = model.sampleRate
-        let telemetrySampler = NativeTelemetrySampler(
-            startUptimeSeconds: ProcessInfo.processInfo.systemUptime,
-            sampleIntervalMS: 50
-        )
-        await telemetrySampler.start()
+        let telemetryMode = NativeTelemetryMode.current()
+        let telemetrySampler = telemetryMode.sampleIntervalMS.map {
+            NativeTelemetrySampler(
+                startUptimeSeconds: ProcessInfo.processInfo.systemUptime,
+                sampleIntervalMS: $0
+            )
+        }
+        await telemetrySampler?.start()
         await telemetryRecorder?.mark(stage: .streamStartup)
         try FileManager.default.createDirectory(
             at: outputURL.deletingLastPathComponent(),
@@ -395,7 +465,13 @@ private struct StreamingExecutionContext: Sendable {
         var chunkWriteMaxMS = 0
         var finalWriteMS = 0
         var eventDispatchMS = 0
-        let chunkWriter = try PCM16ChunkFileWriter(sampleRate: sampleRate)
+        var mlxMemorySnapshots = initialMLXMemorySnapshots
+        mlxMemorySnapshots["before_stream"] = NativeMemoryPolicyResolver.snapshot()
+        let streamingOutputPolicy = NativeStreamingOutputPolicy.current()
+        let chunkWriter = streamingOutputPolicy == .pcmPreviewAndFileArtifacts
+            ? try PCM16ChunkFileWriter(sampleRate: sampleRate)
+            : nil
+        let scratchBuffer = PCM16ScratchBuffer()
         let finalWriter = try IncrementalPCM16WAVFileWriter(
             sampleRate: sampleRate,
             outputURL: outputURL
@@ -404,7 +480,10 @@ private struct StreamingExecutionContext: Sendable {
             finalWriter.finish()
         }
 
-        let streamingInterval = request.streamingInterval ?? GenerationSemantics.appStreamingInterval
+        let streamingInterval = request.streamingInterval ?? Self.adaptiveStreamingInterval(
+            for: request,
+            memoryPolicy: memoryPolicy
+        )
         let stream = try NativeStreamingSynthesisSession.buildStream(
             request: request,
             model: model,
@@ -436,24 +515,31 @@ private struct StreamingExecutionContext: Sendable {
                             stage: .firstChunk,
                             metadata: ["chunk_index": String(chunkIndex)]
                         )
+                        mlxMemorySnapshots["first_chunk"] = NativeMemoryPolicyResolver.snapshot()
                     }
 
-                    let pcmSamples = PCM16WAVWriter.pcmSamples(from: chunkSamples)
-                    let chunkURL = NativeStreamingSynthesisSession.chunkURL(
-                        in: sessionDirectory,
-                        chunkIndex: chunkIndex
-                    )
+                    let pcmSamples = scratchBuffer.convertClamped(chunkSamples)
+                    let frameOffset = totalFramesWritten
+                    let previewData = scratchBuffer.pcm16LittleEndianData(from: pcmSamples)
+                    var chunkPath: String?
 
-                    let chunkWriteMS = try autoreleasepool { () throws -> Int in
-                        let chunkWriteStartedAt = ContinuousClock.now
-                        try chunkWriter.write(
-                            pcmSamples: pcmSamples,
-                            to: chunkURL
+                    if let chunkWriter {
+                        let chunkURL = NativeStreamingSynthesisSession.chunkURL(
+                            in: sessionDirectory,
+                            chunkIndex: chunkIndex
                         )
-                        return chunkWriteStartedAt.elapsedMilliseconds
+                        let chunkWriteMS = try autoreleasepool { () throws -> Int in
+                            let chunkWriteStartedAt = ContinuousClock.now
+                            try chunkWriter.write(
+                                pcmSamples: pcmSamples,
+                                to: chunkURL
+                            )
+                            return chunkWriteStartedAt.elapsedMilliseconds
+                        }
+                        chunkPath = chunkURL.path
+                        chunkWriteTotalMS += chunkWriteMS
+                        chunkWriteMaxMS = max(chunkWriteMaxMS, chunkWriteMS)
                     }
-                    chunkWriteTotalMS += chunkWriteMS
-                    chunkWriteMaxMS = max(chunkWriteMaxMS, chunkWriteMS)
 
                     let appendMS = try autoreleasepool { () throws -> Int in
                         let finalAppendStartedAt = ContinuousClock.now
@@ -474,11 +560,19 @@ private struct StreamingExecutionContext: Sendable {
                             requestID: requestID,
                             mode: request.modeIdentifier,
                             title: previewTitle,
-                            chunkPath: chunkURL.path,
+                            chunkPath: chunkPath,
                             isFinal: false,
                             chunkDurationSeconds: chunkDurationSeconds,
                             cumulativeDurationSeconds: cumulativeDurationSeconds,
-                            streamSessionDirectory: sessionDirectory.path
+                            streamSessionDirectory: sessionDirectory.path,
+                            previewAudio: StreamingAudioChunk(
+                                requestID: requestID,
+                                sampleRate: sampleRate,
+                                frameOffset: frameOffset,
+                                frameCount: pcmSamples.count,
+                                pcm16LE: previewData,
+                                isFinal: false
+                            )
                         )
                     )
 
@@ -492,7 +586,8 @@ private struct StreamingExecutionContext: Sendable {
                 stage: .streamFailed,
                 metadata: ["message": error.localizedDescription]
             )
-            _ = await telemetrySampler.stop(
+            _ = await Self.stopTelemetrySampler(
+                telemetrySampler,
                 stageMarks: await telemetryRecorder?.snapshot() ?? []
             )
             finalWriter.finish()
@@ -508,12 +603,21 @@ private struct StreamingExecutionContext: Sendable {
         let finalizeStartedAt = ContinuousClock.now
         finalWriter.finish()
         finalWriteMS += finalizeStartedAt.elapsedMilliseconds
+        mlxMemorySnapshots["after_final_write"] = NativeMemoryPolicyResolver.snapshot()
 
         let generationMS = startedAt.duration(to: .now).roundedMilliseconds
         let durationSeconds = Double(totalFramesWritten) / Double(sampleRate)
         let stageMarks = await telemetryRecorder?.snapshot() ?? []
-        let telemetryCapture = await telemetrySampler.stop(stageMarks: stageMarks)
+        let telemetryCapture = await Self.stopTelemetrySampler(
+            telemetrySampler,
+            stageMarks: stageMarks
+        )
         let telemetrySummary = telemetryCapture.summary
+        mlxMemorySnapshots["after_stream"] = NativeMemoryPolicyResolver.snapshot()
+        if memoryPolicy.clearCacheAfterGeneration {
+            Memory.clearCache()
+            mlxMemorySnapshots["after_generation_trim"] = NativeMemoryPolicyResolver.snapshot()
+        }
         let benchmarkSample = makeBenchmarkSample(
             generationInfo: generationInfo,
             firstAudioReadyMS: firstAudioReadyMS,
@@ -527,7 +631,11 @@ private struct StreamingExecutionContext: Sendable {
             maxChunkFrames: maxChunkFrames,
             telemetrySummary: telemetrySummary,
             telemetrySamples: telemetryCapture.samples,
-            telemetryStageMarks: stageMarks
+            telemetryStageMarks: stageMarks,
+            mlxMemorySnapshots: mlxMemorySnapshots,
+            telemetryMode: telemetryMode,
+            streamingOutputPolicy: streamingOutputPolicy,
+            durationSeconds: durationSeconds
         )
         await telemetryRecorder?.mark(stage: .streamCompleted)
 
@@ -553,7 +661,11 @@ private struct StreamingExecutionContext: Sendable {
         maxChunkFrames: Int,
         telemetrySummary: TelemetrySummary,
         telemetrySamples: [TelemetrySample],
-        telemetryStageMarks: [NativeTelemetryStageMark]
+        telemetryStageMarks: [NativeTelemetryStageMark],
+        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot],
+        telemetryMode: NativeTelemetryMode,
+        streamingOutputPolicy: NativeStreamingOutputPolicy,
+        durationSeconds: Double
     ) -> BenchmarkSample {
         var timingsMS = timingOverridesMS
         for (key, value) in model.latestPreparationTimingsMS {
@@ -574,6 +686,9 @@ private struct StreamingExecutionContext: Sendable {
 
         let tokenCount = generationInfo.map { $0.promptTokenCount + $0.generationTokenCount }
         let processingTimeSeconds = generationInfo.map { $0.prefillTime + $0.generateTime }
+        let audioSecondsPerWallSecond = generationMS > 0
+            ? durationSeconds / (Double(generationMS) / 1_000)
+            : nil
 
         return BenchmarkSample(
             engineKind: .nativeMLX,
@@ -595,12 +710,30 @@ private struct StreamingExecutionContext: Sendable {
             headroomMinMB: telemetrySummary.headroomMinMB,
             gpuAllocatedPeakMB: telemetrySummary.gpuAllocatedPeakMB,
             gpuRecommendedWorkingSetMB: telemetrySummary.gpuRecommendedWorkingSetMB,
-            telemetryEnabled: true,
+            telemetryEnabled: telemetryMode != .off,
             telemetrySamples: telemetrySamples,
             telemetryStageMarks: telemetryStageMarks,
             timingsMS: timingsMS,
             booleanFlags: mergedBooleanFlags(),
-            stringFlags: mergedStringFlags()
+            stringFlags: mergedStringFlags(
+                telemetryMode: telemetryMode,
+                streamingOutputPolicy: streamingOutputPolicy
+            ),
+            backendPerformance: NativeBackendPerformanceSample(
+                coldLoadMS: timingsMS["load_model"],
+                warmGenerationMS: generationMS,
+                timeToFirstAudioMS: firstAudioReadyMS,
+                audioSecondsPerWallSecond: audioSecondsPerWallSecond,
+                chunkWriteTotalMS: chunkWriteTotalMS,
+                chunkWriteMaxMS: chunkWriteMaxMS,
+                eventDispatchMS: eventDispatchMS,
+                finalWriteMS: finalWriteMS,
+                mlxMemoryByStage: mlxMemorySnapshots,
+                loadCapabilityProfile: loadCapabilityProfile.rawValue,
+                memoryPolicyName: memoryPolicy.name,
+                streamingTransport: streamingOutputPolicy.rawValue,
+                telemetryMode: telemetryMode.rawValue
+            )
         )
     }
 
@@ -632,11 +765,60 @@ private struct StreamingExecutionContext: Sendable {
         return merged
     }
 
-    private func mergedStringFlags() -> [String: String] {
+    private func mergedStringFlags(
+        telemetryMode: NativeTelemetryMode,
+        streamingOutputPolicy: NativeStreamingOutputPolicy
+    ) -> [String: String] {
         var merged = stringFlags
+        merged["native_load_capability_profile"] = loadCapabilityProfile.rawValue
+        merged["memory_policy"] = memoryPolicy.name
+        merged["streaming_transport"] = streamingOutputPolicy.rawValue
+        merged["telemetry_mode"] = telemetryMode.rawValue
         if let cloneConditioning {
             merged["resolved_transcript_mode"] = cloneConditioning.transcriptMode.rawValue
         }
         return merged
+    }
+
+    private static func adaptiveStreamingInterval(
+        for request: GenerationRequest,
+        memoryPolicy: NativeMemoryPolicy
+    ) -> Double {
+        if request.batchTotal != nil {
+            return 0.8
+        }
+        switch memoryPolicy.deviceClass {
+        case .floor8GBMac, .iPhonePro:
+            return 0.6
+        case .mid16GBMac, .highMemoryMac:
+            return 0.4
+        }
+    }
+
+    private static func stopTelemetrySampler(
+        _ telemetrySampler: NativeTelemetrySampler?,
+        stageMarks: [NativeTelemetryStageMark]
+    ) async -> (summary: TelemetrySummary, samples: [TelemetrySample]) {
+        guard let telemetrySampler else {
+            return (
+                TelemetrySummary(
+                    residentStartMB: nil,
+                    residentEndMB: nil,
+                    residentPeakMB: nil,
+                    physFootprintPeakMB: nil,
+                    compressedPeakMB: nil,
+                    headroomStartMB: nil,
+                    headroomEndMB: nil,
+                    headroomMinMB: nil,
+                    gpuAllocatedPeakMB: nil,
+                    gpuRecommendedWorkingSetMB: nil,
+                    timeToPeakMS: nil,
+                    sampleCount: 0,
+                    stageMarks: stageMarks
+                ),
+                []
+            )
+        }
+        return await telemetrySampler.stop(stageMarks: stageMarks)
     }
 }

@@ -8,12 +8,13 @@ import CryptoKit
 struct NativeModelLoadResult: Sendable {
     let model: UnsafeSpeechGenerationModel
     let didLoad: Bool
+    let capabilityProfile: NativeLoadCapabilityProfile
     let timingsMS: [String: Int]
     let booleanFlags: [String: Bool]
 }
 
 protocol MLXModelCoordinating: AnyObject, Sendable {
-    func loadModel(id: String) async throws -> NativeModelLoadResult
+    func loadModel(id: String, capabilityProfile: NativeLoadCapabilityProfile) async throws -> NativeModelLoadResult
     func unloadModel() async
     func isPrewarmed(identityKey: String) async -> Bool
     func markPrewarmed(identityKey: String) async
@@ -21,7 +22,11 @@ protocol MLXModelCoordinating: AnyObject, Sendable {
 }
 
 actor MLXModelLoadCoordinator: MLXModelCoordinating {
-    typealias NativeModelLoader = @Sendable (ModelAssetDescriptor, PreparedModelMetadata) async throws -> UnsafeSpeechGenerationModel
+    typealias NativeModelLoader = @Sendable (
+        ModelAssetDescriptor,
+        PreparedModelMetadata,
+        NativeLoadCapabilityProfile
+    ) async throws -> UnsafeSpeechGenerationModel
     fileprivate struct PreparedCacheMarker: Codable, Equatable, Sendable {
         let schemaVersion: Int
         let descriptorVersion: String
@@ -177,6 +182,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
     private static let prewarmKeysFileName = ".qvoice_prewarm_keys.json"
 
     private(set) var loadedDescriptor: ModelAssetDescriptor?
+    private(set) var loadedCapabilityProfile: NativeLoadCapabilityProfile?
     private(set) var loadedModel: UnsafeSpeechGenerationModel?
     private(set) var prewarmedIdentityKeys: Set<String> = []
 
@@ -198,13 +204,19 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         self.diagnosticEventSink = diagnosticEventSink
     }
 
-    func loadModel(id: String) async throws -> NativeModelLoadResult {
+    func loadModel(
+        id: String,
+        capabilityProfile: NativeLoadCapabilityProfile = .fullCapabilities
+    ) async throws -> NativeModelLoadResult {
         if let loadedDescriptor,
            loadedDescriptor.id == id,
+           let loadedCapabilityProfile,
+           loadedCapabilityProfile.canServe(capabilityProfile),
            let loadedModel {
             return NativeModelLoadResult(
                 model: loadedModel,
                 didLoad: false,
+                capabilityProfile: loadedCapabilityProfile,
                 timingsMS: [:],
                 booleanFlags: [:]
             )
@@ -279,7 +291,11 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
                 )
             )
             await telemetryRecorder?.mark(stage: .upstreamModelLoad)
-            model = try await modelLoader(descriptor, preparedCacheResult.metadata)
+            model = try await modelLoader(
+                descriptor,
+                preparedCacheResult.metadata,
+                capabilityProfile
+            )
             await emitDiagnostic(
                 "coordinator-load-after-model-loader",
                 details: diagnosticDetails(
@@ -305,6 +321,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         timingsMS["mlx_model_load"] = modelLoadMS
 
         loadedDescriptor = descriptor
+        loadedCapabilityProfile = capabilityProfile
         loadedModel = model
         prewarmedIdentityKeys.removeAll()
         restorePrewarmKeys(for: descriptor)
@@ -349,6 +366,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         return NativeModelLoadResult(
             model: model,
             didLoad: true,
+            capabilityProfile: capabilityProfile,
             timingsMS: timingsMS,
             booleanFlags: booleanFlags
         )
@@ -398,6 +416,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
 
     private func resetLoadedState() {
         loadedDescriptor = nil
+        loadedCapabilityProfile = nil
         loadedModel = nil
         prewarmedIdentityKeys.removeAll()
         Memory.clearCache()
@@ -564,14 +583,19 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
 
     private static func defaultModelLoader(
         descriptor: ModelAssetDescriptor,
-        preparedMetadata: PreparedModelMetadata
+        preparedMetadata: PreparedModelMetadata,
+        capabilityProfile: NativeLoadCapabilityProfile
     ) async throws -> UnsafeSpeechGenerationModel {
         UnsafeSpeechGenerationModel(
             base: try await TTS.loadModel(
                 fromPreparedDirectory: preparedMetadata.preparedDirectory,
                 modelRepo: descriptor.model.huggingFaceRepo,
                 modelType: preparedMetadata.modelType,
-                trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
+                trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
+                qwenPreparedLoadBehavior: MLXTTSEngine.qwenPreparedLoadBehavior(
+                    for: NativeQwenPreparedLoadProfile(capabilityProfile: capabilityProfile),
+                    trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
+                )
             )
         )
     }

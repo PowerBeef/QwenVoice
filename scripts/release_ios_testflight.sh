@@ -28,8 +28,8 @@ DESTINATION_MODE="export"
 SKIP_CATALOG_CHECK=false
 SKIP_ARCHIVE=false
 
-# shellcheck source=./harness_lib/shared.sh
-. "$SCRIPT_DIR/harness_lib/shared.sh"
+# shellcheck source=./lib/shared.sh
+. "$SCRIPT_DIR/lib/shared.sh"
 
 BUNDLE_ID="$(matrix_read "iOS/app/bundleIdentifier")"
 

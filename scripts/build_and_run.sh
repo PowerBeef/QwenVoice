@@ -37,7 +37,8 @@ build_app() {
     -configuration "$CONFIGURATION" \
     -destination "$DESTINATION" \
     -derivedDataPath "$DERIVED_DATA_PATH" \
-    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
     build
 
   if [[ ! -d "$APP_BUNDLE" ]]; then

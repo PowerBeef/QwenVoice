@@ -46,7 +46,6 @@ jobs:
         with:
           path: |
             build/foundation/source-packages
-            build/harness/source-packages
           key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-

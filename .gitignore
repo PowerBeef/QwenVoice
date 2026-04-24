@@ -42,6 +42,3 @@ build_log*.txt
 
 # Code coverage artifacts
 *.profraw
-
-# Screenshot diffs (generated, not committed)
-tests/screenshots/diffs/

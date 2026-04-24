@@ -1,77 +1,89 @@
-# Live Native Engine Testing
+# Live Testing
 
-This doc covers the opt-in live smoke tests that exercise the real MLX-backed macOS engine against an installed Qwen3 model. They are intentionally gated — the default harness layers run against mocked engine surfaces so CI stays deterministic and cheap.
+This document describes the rebuilt repo-owned QA harness for local and CI validation.
 
-Use live testing when:
+## Entrypoint
 
-- You just rebased `third_party_patches/mlx-audio-swift/` or bumped an MLX pin.
-- You changed `NativeMLXMacEngine`, `MLXTTSEngine`, `MLXModelLoadCoordinator`, `NativeStreamingSynthesisSession`, or the engine-service host.
-- You want to verify end-to-end clone-prompt handling against a real voice reference before shipping a release.
+Use `scripts/harness.py` as the portable orchestrator. Xcode remains the build and test authority; the Python harness supplies deterministic roots, fixture setup, locking, `.xcresult` parsing, and JSON envelopes.
 
-## The Env Flag
-
-```bash
-QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1
+```sh
+python3 scripts/harness.py validate
+python3 scripts/harness.py test --layer contract
+python3 scripts/harness.py test --layer swift
+python3 scripts/harness.py test --layer native
+python3 scripts/harness.py test --layer ios
+python3 scripts/harness.py test --layer e2e
+python3 scripts/harness.py diagnose
+python3 scripts/harness.py bench --category latency --runs 3
 ```
 
-When this env var is unset or `0`, the live tests under `QwenVoiceTests/NativeMLXMacEngineLiveTests.swift` are skipped via `XCTSkipUnless`. When it's `1`, they run against whatever model is installed at the paths below.
+Harness output roots:
 
-## Prerequisites
+- `build/harness/derived-data/`
+- `build/harness/results/`
+- `build/harness/source-packages/`
+- `build/harness/artifacts/`
+- `build/harness/.lock`
 
-1. **Apple Silicon Mac**, macOS 26+, running on the development machine (not in CI).
-2. **Installed Qwen3 TTS model.** Vocello's normal first-run model installer is the easiest path — launch the app, let it download the default model, then quit. The model lives under:
-   ```
-   ~/Library/Application Support/QwenVoice/models/<model-folder>
-   ```
-   Or, if you set `QWENVOICE_APP_SUPPORT_DIR`, under that override root.
-3. **Package resolution already done.** Run a regular `./scripts/build_foundation_targets.sh macos` once first so the SwiftPM dependencies are cached. Without this the first live-test run will take 10–15 extra minutes just resolving packages.
-4. **No overlapping harness / xcodebuild / packaging runs.** The harness now holds an advisory `build/harness/.harness.lock` to enforce this; the live tests share the same machine resources and should be serialized too.
+## Layers
 
-## Running Them
+| Layer | Purpose | Backing tool |
+|---|---|---|
+| `validate` | static guards, project-input checks, contract sanity, stale-reference checks | shell + Python |
+| `contract` | fast contract schema and metadata checks | Python |
+| `swift` | macOS unit/integration foundation tests | `xcodebuild` + `QwenVoice Foundation` |
+| `native` | macOS runtime/XPC/native compatibility subset | `xcodebuild` + `QwenVoiceRuntime` plan |
+| `ios` | iPhone foundation tests when an iPhone simulator is available | `xcodebuild` + `VocelloiOS Foundation` |
+| `e2e` | macOS XCUITest smoke over the stub engine/live-preview flow | `xcodebuild` + `Vocello UI` |
 
-Primary entry point:
+The iOS lane returns a structured skip when no iPhone simulator destination is installed. Generic iPhone compile proof is still maintained by `./scripts/build_foundation_targets.sh ios`.
 
-```bash
-QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1 \
-  xcodebuild -project QwenVoice.xcodeproj -scheme QwenVoice \
-  -destination 'platform=macOS' \
-  -only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests test
+## Strict E2E
+
+Hosted macOS runners can fail first-time UI automation because Accessibility/TCC permission has not been granted or because the app window is not frontmost in the accessibility tree. By default, the harness demotes those two environment failures into clear skipped results.
+
+Release signoff on a controlled machine must use strict mode:
+
+```sh
+QWENVOICE_E2E_STRICT=1 python3 scripts/harness.py test --layer e2e
 ```
 
-To run an individual test case, append its name:
+In strict mode, TCC and window-registration failures fail the lane instead of being treated as skipped passes.
 
-```bash
--only-testing:QwenVoiceTests/NativeMLXMacEngineLiveTests/testNativeCustomSmokeWithInstalledModel
+## Test Support Code
+
+`QW_TEST_SUPPORT` is defined only for Debug/test builds. It gates:
+
+- stub engine selection
+- UI launch arguments and isolated defaults/app-support fixtures
+- fault injection
+- test-only XPC invalidation hooks
+- opt-in benchmark runners
+
+Release builds must not rely on `QW_TEST_SUPPORT` behavior.
+
+## Result Triage
+
+Every Xcode-backed harness lane writes build and test result bundles under `build/harness/results/<lane>/`.
+
+Useful commands:
+
+```sh
+xcrun xcresulttool get build-results --path build/harness/results/swift_source_tests/build.xcresult
+xcrun xcresulttool get test-results summary --path build/harness/results/swift_source_tests/test.xcresult
 ```
 
-## What Gets Exercised
+Treat the `.xcresult` bundle as authoritative when stdout only reports a generic `** TEST BUILD FAILED **`.
 
-The live test suite covers the unhappy-path-adjacent shapes the mocked tests can't hit:
+## Benchmarks
 
-- **Cold model load** against a real on-disk Qwen3 manifest and required files.
-- **Custom voice streaming** end-to-end: stream build → chunk file writes → final WAV assembly.
-- **Clone preparation** against a real reference audio file (provided under `tests/fixtures/`).
-- **Memory/telemetry sampling** producing a non-empty `BenchmarkSample` with real `firstChunkMs`, `residentPeakMB`, and `timingsMS` values.
-- **Cancellation cleanup** against the real streaming session — session directory + output file must not leak on cancel.
+Benchmarks are opt-in release-investigation tools, not default PR gates:
 
-Expect runtimes in the tens of seconds per test on a Mac mini M1; faster on Pro/Max hardware. A full live-test pass is typically 2–5 minutes.
+```sh
+python3 scripts/harness.py bench --category latency --runs 3
+python3 scripts/harness.py bench --category load --runs 3
+python3 scripts/harness.py bench --category quality --runs 3
+python3 scripts/harness.py bench --category tts_roundtrip --runs 3
+```
 
-## CI Status
-
-The live tests are **not** run in any `.github/workflows/*.yml`. They require an installed model, which CI runners do not carry. The backend-freeze gate does build live-test symbols (they must compile), but does not execute them.
-
-Re-enabling live tests in CI would require staging a model under the runner's app-support directory — tracked as out-of-scope until the iPhone release track re-opens.
-
-## Troubleshooting
-
-- **`XCTSkipUnless` hit without running anything** → the env var isn't exported. `export QWENVOICE_ENABLE_NATIVE_ENGINE_LIVE_TESTS=1` in the same shell and retry.
-- **`Model 'pro_custom' is unavailable or incomplete`** → the manifest's required files aren't present under `~/Library/Application Support/QwenVoice/models/`. Launch Vocello, wait for first-run model installation, quit, and re-run.
-- **Swift package resolution errors** → run `./scripts/build_foundation_targets.sh macos` first so packages are resolved under `build/foundation/source-packages/`.
-- **Hang or very long runtime** → the live tests will time out if the model cannot finish generation. Look in Console.app for `OSLog` messages under the `com.qwenvoice.app` subsystem.
-- **"another heavy run holds … lock"** → the harness flock is preventing an overlap. Wait for the other run to finish, or remove `build/harness/.harness.lock` if it's stale.
-
-See also:
-
-- `AGENTS.md` — "Never overlap heavy `xcodebuild`, `scripts/harness.py`, release packaging, live app validation, or native smoke processes."
-- [`mlx-audio-swift-patching.md`](mlx-audio-swift-patching.md) — live-test checklist after a vendor rebase.
-- [`release-readiness.md`](release-readiness.md) — how live tests fit into the signoff tiers.
+`latency` and `load` currently use portable command-backed measurements. `quality` and `tts_roundtrip` are preserved as explicit lanes but skip until native model/audio evaluation is wired without the retired Python backend path.

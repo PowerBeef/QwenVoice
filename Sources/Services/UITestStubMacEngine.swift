@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Combine
 import Foundation
 import QwenVoiceNative
@@ -285,3 +286,4 @@ final class UITestStubMacEngine: MacTTSEngine, @unchecked Sendable {
         )
     }
 }
+#endif

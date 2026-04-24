@@ -65,22 +65,6 @@ enum IOSGenerationSection: String, CaseIterable, Identifiable {
     }
 }
 
-struct IOSUITestGenerationOverrides {
-    let selectedSection: IOSGenerationSection?
-    let scriptText: String?
-    let voiceDesignBrief: String?
-
-    static var current: IOSUITestGenerationOverrides {
-        let environment = ProcessInfo.processInfo.environment
-        return IOSUITestGenerationOverrides(
-            selectedSection: environment["QVOICE_UI_TEST_SECTION"]
-                .flatMap(IOSGenerationSection.init(rawValue:)),
-            scriptText: environment["QVOICE_UI_TEST_SCRIPT_TEXT"],
-            voiceDesignBrief: environment["QVOICE_UI_TEST_VOICE_BRIEF"]
-        )
-    }
-}
-
 enum IOSSimulatorPreviewPolicy {
     static var isSimulatorPreview: Bool {
         IOSSimulatorRuntimeSupport.isSimulator

@@ -1,6 +1,0 @@
-{
-  "stub_mode": {
-    "app_launch_to_ready_ms": 5000,
-    "sidebar_navigation_ms": 2000
-  }
-}

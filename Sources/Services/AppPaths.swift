@@ -10,9 +10,11 @@ enum AppPaths {
             return URL(fileURLWithPath: overridePath, isDirectory: true)
         }
 
+#if QW_TEST_SUPPORT
         if let fixtureRoot = UITestAutomationSupport.fixtureRoot {
             return fixtureRoot
         }
+#endif
 
         let baseDir = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first

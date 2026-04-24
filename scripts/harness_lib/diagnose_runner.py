@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import time
 from typing import Any
 
 from .contract import load_contract, model_is_installed
 from .output import build_suite_result, build_test_result, eprint
-from .paths import APP_MODELS_DIR, APP_SUPPORT_DIR
+from .paths import (
+    APP_MODELS_DIR,
+    APP_SUPPORT_DIR,
+    HARNESS_DERIVED_DATA_ROOT,
+    HARNESS_RESULT_BUNDLES_ROOT,
+    HARNESS_SOURCE_PACKAGES_ROOT,
+    PROJECT_DIR,
+)
 
 
 def run_diagnose() -> list[dict[str, Any]]:
@@ -24,8 +32,33 @@ def run_diagnose() -> list[dict[str, Any]]:
             "details": {
                 "app_support_dir": str(APP_SUPPORT_DIR),
                 "models_dir": str(APP_MODELS_DIR),
+                "project_dir": str(PROJECT_DIR),
                 "arch": platform.machine(),
                 "is_apple_silicon": platform.machine() == "arm64",
+            }
+        }
+
+    def test_xcode_environment() -> dict[str, Any]:
+        xcodebuild = subprocess.run(
+            ["xcodebuild", "-version"],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        xcode_select = subprocess.run(
+            ["xcode-select", "-p"],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        return {
+            "details": {
+                "xcodebuild_version": xcodebuild.stdout.splitlines(),
+                "xcodebuild_status": xcodebuild.returncode,
+                "developer_dir": xcode_select.stdout.strip(),
+                "xcode_select_status": xcode_select.returncode,
             }
         }
 
@@ -91,6 +124,9 @@ def run_diagnose() -> list[dict[str, Any]]:
             "outputs": APP_SUPPORT_DIR / "outputs",
             "voices": APP_SUPPORT_DIR / "voices",
             "cache": APP_SUPPORT_DIR / "cache",
+            "harness_derived_data": HARNESS_DERIVED_DATA_ROOT,
+            "harness_results": HARNESS_RESULT_BUNDLES_ROOT,
+            "harness_source_packages": HARNESS_SOURCE_PACKAGES_ROOT,
         }
         usage: dict[str, float] = {}
         for label, path in dirs.items():
@@ -105,12 +141,67 @@ def run_diagnose() -> list[dict[str, Any]]:
             usage[label] = round(size_bytes / (1024 * 1024), 1)
         return {"details": {"size_mb": usage}}
 
+    def test_package_inventory() -> dict[str, Any]:
+        resolved = PROJECT_DIR / "QwenVoice.xcodeproj" / "project.xcworkspace" / "xcshareddata" / "swiftpm" / "Package.resolved"
+        local_mlx_audio = PROJECT_DIR / "third_party_patches" / "mlx-audio-swift" / "Package.swift"
+        return {
+            "details": {
+                "package_resolved_exists": resolved.exists(),
+                "package_resolved_path": str(resolved),
+                "local_mlx_audio_package_exists": local_mlx_audio.exists(),
+                "local_mlx_audio_package_path": str(local_mlx_audio),
+                "harness_source_packages_root": str(HARNESS_SOURCE_PACKAGES_ROOT),
+            }
+        }
+
+    def test_packaged_app_signing() -> dict[str, Any]:
+        app_path = PROJECT_DIR / "build" / "Vocello.app"
+        if not app_path.exists():
+            return {
+                "details": {
+                    "app_exists": False,
+                    "app_path": str(app_path),
+                    "note": "Run ./scripts/release.sh to generate the packaged app.",
+                }
+            }
+
+        codesign = subprocess.run(
+            ["codesign", "-dv", "--verbose=4", str(app_path)],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        xpc_path = app_path / "Contents" / "XPCServices" / "QwenVoiceEngineService.xpc"
+        xpc_codesign = subprocess.run(
+            ["codesign", "-dv", "--verbose=4", str(xpc_path)],
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ) if xpc_path.exists() else None
+        return {
+            "details": {
+                "app_exists": True,
+                "app_path": str(app_path),
+                "app_codesign_status": codesign.returncode,
+                "app_codesign_tail": codesign.stderr.splitlines()[-20:],
+                "xpc_exists": xpc_path.exists(),
+                "xpc_path": str(xpc_path),
+                "xpc_codesign_status": xpc_codesign.returncode if xpc_codesign else None,
+                "xpc_codesign_tail": xpc_codesign.stderr.splitlines()[-20:] if xpc_codesign else [],
+            }
+        }
+
     tests = [
         ("runtime_environment", test_runtime_environment),
+        ("xcode_environment", test_xcode_environment),
         ("model_inventory", test_model_inventory),
         ("voice_inventory", test_voice_inventory),
         ("history_database", test_history_db),
         ("disk_usage", test_disk_usage),
+        ("package_inventory", test_package_inventory),
+        ("packaged_app_signing", test_packaged_app_signing),
     ]
 
     for name, fn in tests:

@@ -1,3 +1,4 @@
+#if QW_TEST_SUPPORT
 import Foundation
 
 enum UITestFault: String {
@@ -51,3 +52,4 @@ enum UITestFaultInjection {
         }
     }
 }
+#endif

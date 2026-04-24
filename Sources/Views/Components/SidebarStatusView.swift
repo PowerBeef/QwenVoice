@@ -199,10 +199,14 @@ struct SidebarStatusView: View {
                         )
                 )
                 .glassEffect(
-                    .regular.tint(colorScheme == .dark ? color : color.opacity(0.18)),
+                    // Dark-mode tint used to be full `color` which left the
+                    // banner reading as a solid red/amber brick; dropping
+                    // to 0.38 lets the glass refract the canvas behind
+                    // while still keeping the error identity colour.
+                    .regular.tint(colorScheme == .dark ? color.opacity(0.38) : color.opacity(0.18)),
                     in: .rect(cornerRadius: 8)
                 )
-                .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.35 : 0.16)
+                .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.55 : 0.22)
         } else {
             statusBackgroundLegacy(color: color, fillOpacity: fillOpacity, strokeOpacity: strokeOpacity)
         }
