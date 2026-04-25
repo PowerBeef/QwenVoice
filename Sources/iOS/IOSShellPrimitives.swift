@@ -99,7 +99,7 @@ enum IOSBrandTheme {
     static let productName = "Vocello"
     static let headerMarkAssetName = "VocelloHeaderMark"
 
-    static let deepNav = Color(dark: UIColor(red: 0.06, green: 0.07, blue: 0.08, alpha: 1))
+    static let deepNav = Color(dark: UIColor(red: 0.055, green: 0.063, blue: 0.078, alpha: 1))
     static let accent = Color(dark: UIColor(red: 0.93, green: 0.80, blue: 0.54, alpha: 1))
     static let purple = Color(dark: UIColor(red: 0.73, green: 0.66, blue: 0.84, alpha: 1))
     static let lavender = Color(dark: UIColor(red: 0.87, green: 0.82, blue: 0.93, alpha: 1))
@@ -111,13 +111,13 @@ enum IOSBrandTheme {
     static let library = Color(dark: UIColor(red: 0.75, green: 0.74, blue: 0.71, alpha: 1))
     static let settings = silver
 
-    static let canvasTop = Color(dark: UIColor.black)
-    static let canvasBottom = Color(dark: UIColor.black)
-    static let surface = Color(dark: UIColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 0.86))
-    static let surfaceMuted = Color(dark: UIColor(red: 0.18, green: 0.19, blue: 0.22, alpha: 0.74))
+    static let canvasTop = Color(dark: UIColor(red: 0.055, green: 0.063, blue: 0.078, alpha: 1))
+    static let canvasBottom = Color(dark: UIColor(red: 0.038, green: 0.044, blue: 0.056, alpha: 1))
+    static let surface = Color(dark: UIColor(red: 0.105, green: 0.112, blue: 0.132, alpha: 0.86))
+    static let surfaceMuted = Color(dark: UIColor(red: 0.145, green: 0.152, blue: 0.174, alpha: 0.74))
     static let surfaceStroke = Color(dark: UIColor(red: 0.97, green: 0.92, blue: 0.82, alpha: 0.10))
-    static let inputFill = Color(dark: UIColor(red: 0.11, green: 0.12, blue: 0.15, alpha: 1))
-    static let inputFillUIColor = UIColor(red: 0.11, green: 0.12, blue: 0.15, alpha: 1)
+    static let inputFill = Color(dark: UIColor(red: 0.120, green: 0.126, blue: 0.148, alpha: 1))
+    static let inputFillUIColor = UIColor(red: 0.120, green: 0.126, blue: 0.148, alpha: 1)
     static let primaryTextUIColor = UIColor(red: 0.95, green: 0.94, blue: 0.92, alpha: 1)
     static let placeholderUIColor = UIColor(red: 0.50, green: 0.53, blue: 0.58, alpha: 1)
     static let primaryText = Color(uiColor: primaryTextUIColor)
@@ -125,10 +125,10 @@ enum IOSBrandTheme {
     static let mutedText = Color(dark: UIColor(red: 0.55, green: 0.58, blue: 0.63, alpha: 1))
     static let inputStroke = Color(dark: UIColor(red: 0.96, green: 0.92, blue: 0.82, alpha: 0.12))
     static let bannerFill = Color(dark: UIColor(red: 0.18, green: 0.19, blue: 0.22, alpha: 0.92))
-    static let tabBarBackground = Color(dark: UIColor(red: 0.08, green: 0.09, blue: 0.11, alpha: 0.93))
-    static let dockSmoke = Color(dark: UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 0.62))
-    static let dockSmokeFallback = Color(dark: UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 0.98))
-    static let modeSwitcherFill = Color(dark: UIColor(red: 0.16, green: 0.17, blue: 0.20, alpha: 0.82))
+    static let tabBarBackground = Color(dark: UIColor(red: 0.075, green: 0.083, blue: 0.102, alpha: 0.93))
+    static let dockSmoke = Color(dark: UIColor(red: 0.075, green: 0.083, blue: 0.102, alpha: 0.62))
+    static let dockSmokeFallback = Color(dark: UIColor(red: 0.075, green: 0.083, blue: 0.102, alpha: 0.98))
+    static let modeSwitcherFill = Color(dark: UIColor(red: 0.135, green: 0.142, blue: 0.164, alpha: 0.82))
     static let modeSwitcherStroke = Color(dark: UIColor(red: 0.97, green: 0.92, blue: 0.82, alpha: 0.08))
     static let brandChipFill = Color(dark: UIColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 0.94))
     static let actionGlow = Color(dark: UIColor(red: 0.93, green: 0.80, blue: 0.54, alpha: 0.12))
@@ -138,7 +138,7 @@ enum IOSBrandTheme {
     static let memoryGuarded = Color(dark: UIColor(red: 0.85, green: 0.70, blue: 0.45, alpha: 1))
     static let memoryCritical = Color(dark: UIColor(red: 0.85, green: 0.50, blue: 0.50, alpha: 1))
     static let primaryActionGradient = LinearGradient(
-        colors: [accent, design],
+        colors: [accent, accent.opacity(0.78)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -155,7 +155,7 @@ enum IOSBrandTheme {
 
     static func softGradient(for tint: Color) -> LinearGradient {
         LinearGradient(
-            colors: [tint.opacity(0.92), IOSBrandTheme.lavender.opacity(0.84)],
+            colors: [tint.opacity(0.92), tint.opacity(0.62)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -204,8 +204,8 @@ enum IOSAppTheme {
     static let cardShadowOffset: CGFloat = 3
 
     // Foreground ink for text sitting on top of accent-tinted fills.
-    static let accentForeground = Color.black.opacity(0.78)
-    static let accentForegroundPressed = Color.black.opacity(0.72)
+    static let accentForeground = Color(dark: UIColor(red: 0.10, green: 0.085, blue: 0.055, alpha: 0.82))
+    static let accentForegroundPressed = Color(dark: UIColor(red: 0.10, green: 0.085, blue: 0.055, alpha: 0.74))
     // Subtle separator between rows on dark surfaces.
     static let hairlineDivider = Color.white.opacity(0.08)
 
@@ -296,7 +296,7 @@ extension View {
 
 struct IOSScreenBackdrop: View {
     var body: some View {
-        Color.black
+        IOSBrandTheme.canvasBottom
         .ignoresSafeArea()
     }
 }

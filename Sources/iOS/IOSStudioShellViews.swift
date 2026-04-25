@@ -196,9 +196,9 @@ private struct IOSStudioRootDock: View {
         .background(
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0),
-                    Color.black.opacity(0.88),
-                    Color.black
+                    IOSBrandTheme.canvasBottom.opacity(0),
+                    IOSBrandTheme.canvasBottom.opacity(0.88),
+                    IOSBrandTheme.canvasBottom
                 ],
                 startPoint: .top,
                 endPoint: .bottom

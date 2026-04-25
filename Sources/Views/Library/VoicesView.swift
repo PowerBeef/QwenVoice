@@ -43,7 +43,23 @@ struct VoicesView: View {
     }
 
     var body: some View {
-        content
+        VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+            StudioCollectionHeader(
+                eyebrow: "Library",
+                title: "Saved voices",
+                subtitle: "Curate reusable references for permitted clone and design workflows.",
+                iconName: "person.2.wave.2",
+                accentColor: AppTheme.voices,
+                trailing: "\(voices.count) voice\(voices.count == 1 ? "" : "s")"
+            )
+
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .profileBackground(AppTheme.canvasBackground)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_voices")
             .task(id: loadTaskID) {
@@ -150,9 +166,14 @@ struct VoicesView: View {
                             }
                         )
                         .id(voice.id)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
                 .onChange(of: voices) { _, newVoices in
                     guard let pendingRevealVoiceID else { return }
                     guard newVoices.contains(where: { $0.id == pendingRevealVoiceID }) else { return }
@@ -299,31 +320,15 @@ private struct VoiceRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 6)
-        #if QW_UI_LIQUID
-        .background {
-            if #available(macOS 26, *), isHighlighted {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.clear)
-                    .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(highlightFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(highlightStroke, lineWidth: isHighlighted ? 1 : 0)
-                    )
-            }
-        }
-        #else
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(highlightFill)
+        .vocelloGlassSurface(
+            padding: 0,
+            radius: 16,
+            fill: isHighlighted ? AppTheme.accent.opacity(0.12) : AppTheme.inlineFill
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(highlightStroke, lineWidth: isHighlighted ? 1 : 0)
         )
-        #endif
     }
 
     private var wideRowLayout: some View {

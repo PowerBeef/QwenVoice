@@ -8,7 +8,7 @@ private struct SidebarSectionHeader: View {
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppTheme.textSecondary)
             .textCase(nil)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
@@ -25,15 +25,23 @@ private struct SidebarSectionHeader: View {
 /// remains visible as the user scrolls through sections.
 private struct SidebarBrandHeader: View {
     var body: some View {
-        Image("VocelloHeaderMark")
-            .resizable()
-            .scaledToFit()
-            .frame(height: 22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
-            .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 6) {
+            Image("VocelloHeaderMark")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 30)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Local voice studio")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+                .textCase(.uppercase)
+                .tracking(1.1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .accessibilityHidden(true)
     }
 }
 
@@ -70,7 +78,7 @@ private struct SidebarRow: View {
                                 lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.9
                             )
                     )
-                    .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
+                    .glassEffect(.regular.tint(AppTheme.sidebarColor(for: item).opacity(colorScheme == .dark ? 0.16 : 0.10)).interactive(), in: .rect(cornerRadius: 8))
                     .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.5 : 0.28)
             } else if isHovered {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -146,7 +154,7 @@ private struct SidebarRow: View {
             return Color.secondary.opacity(isSelected ? 0.8 : 0.65)
         }
 
-        return isSelected ? AppTheme.sidebarColor(for: item) : Color.primary
+        return isSelected ? AppTheme.sidebarColor(for: item) : AppTheme.textPrimary
     }
 
     private var textColor: Color {
@@ -154,7 +162,7 @@ private struct SidebarRow: View {
             return Color.secondary.opacity(isSelected ? 0.88 : 0.72)
         }
 
-        return Color.primary
+        return AppTheme.textPrimary
     }
 
     private var selectionIndicatorColor: Color {
@@ -252,7 +260,7 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(AppTheme.railBackground)
+        .vocelloGlassRail()
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarBrandHeader()
         }
@@ -340,6 +348,11 @@ private struct SidebarFooterRegion: View {
             .padding(.bottom, LayoutConstants.shellPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 1.0 : 0.985))
+        .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 0.92 : 0.985))
+        .vocelloGlassSurface(
+            padding: 0,
+            radius: 0,
+            fill: AppTheme.railBackground.opacity(colorScheme == .dark ? 0.76 : 0.90)
+        )
     }
 }

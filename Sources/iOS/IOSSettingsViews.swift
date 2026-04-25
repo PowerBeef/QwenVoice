@@ -209,7 +209,7 @@ private struct IOSSettingsProminentActionButtonStyle: ButtonStyle {
 
         configuration.label
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(Color.black.opacity(configuration.isPressed ? 0.72 : 0.78))
+            .foregroundStyle(configuration.isPressed ? IOSAppTheme.accentForegroundPressed : IOSAppTheme.accentForeground)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .iosSubtleGlassSurface(

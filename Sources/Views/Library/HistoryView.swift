@@ -89,7 +89,23 @@ struct HistoryView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
 
     var body: some View {
-        content
+        VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
+            StudioCollectionHeader(
+                eyebrow: "Library",
+                title: "Generation history",
+                subtitle: "Replay, export, and promote finished takes into reusable studio voices.",
+                iconName: "clock.arrow.circlepath",
+                accentColor: AppTheme.history,
+                trailing: "\(filteredItems.count) take\(filteredItems.count == 1 ? "" : "s")"
+            )
+
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .profileBackground(AppTheme.canvasBackground)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_history")
             .onAppear(perform: handleAppear)
@@ -191,8 +207,12 @@ struct HistoryView: View {
                     .disabled(!item.audioFileExists)
                 }
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
         }
     }
 }
@@ -563,7 +583,7 @@ private struct HistoryRow: View {
 
             Text(durationText)
                 .font(.footnote.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
 
             HistoryRowActions(
                 audioFileExists: item.audioFileExists,
@@ -573,7 +593,12 @@ private struct HistoryRow: View {
                 itemID: item.id
             )
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
+        .vocelloGlassSurface(
+            padding: 12,
+            radius: 16,
+            fill: AppTheme.inlineFill
+        )
         .accessibilityIdentifier("historyRow_\(item.id)")
         .accessibilityElement(children: .contain)
     }
