@@ -45,6 +45,8 @@ struct WindowChromeConfigurator: NSViewRepresentable {
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.toolbarStyle = .unified
+            window.isMovableByWindowBackground = true
+            window.minSize = NSSize(width: 1100, height: 720)
             window.identifier = WindowChromeState.configuredWindowIdentifier
         }
 

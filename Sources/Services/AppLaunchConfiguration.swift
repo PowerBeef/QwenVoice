@@ -42,6 +42,19 @@ struct AppLaunchConfiguration {
         return SidebarItem(testScreenID: initialScreenID)
     }
 
+    /// `--uitest-screen=home` lands directly on the Home section, which has
+    /// no `SidebarItem` mapping (it lives one level above the per-screen
+    /// `SidebarItem` cases). Returns `nil` for any other screen ID so the
+    /// regular `initialSidebarItem` path keeps owning Generate/Library/Settings.
+    var initialSidebarSectionOverride: SidebarSection? {
+        guard let initialScreenID,
+              initialScreenID.replacingOccurrences(of: "screen_", with: "") == "home"
+        else {
+            return nil
+        }
+        return .home
+    }
+
     var shouldOpenSettingsOnLaunch: Bool {
         initialScreenID == "preferences"
     }
@@ -59,6 +72,10 @@ struct AppLaunchConfiguration {
     }
 
     var initialSidebarItem: SidebarItem? {
+        nil
+    }
+
+    var initialSidebarSectionOverride: SidebarSection? {
         nil
     }
 

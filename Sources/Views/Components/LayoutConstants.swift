@@ -33,6 +33,55 @@ enum LayoutConstants {
     static let stageRadius: CGFloat = 22
     static let cardBorderWidth: CGFloat = 0.75
     static let controlHeight: CGFloat = 41
+
+    // MARK: - Vocello brand-refresh constants
+    //
+    // Added during the macOS UI ground-up refactor (spec at
+    // docs/superpowers/specs/2026-04-24-vocello-macos-redesign-design.md).
+    // Lives alongside the legacy constants above so existing call sites stay
+    // green; new chrome wires through these instead. Old names are migrated
+    // off in later steps of the refactor.
+
+    /// Card radius matching the iOS reference (replaces the legacy 12pt
+    /// cardRadius once all callers have been switched).
+    static let brandCardRadius: CGFloat = 22
+    /// Recessed in-card sub-surface radius (e.g., editor inside a stage card).
+    static let brandInlinePanelRadius: CGFloat = 16
+    /// Solid editor surface radius (text editors, file drops).
+    static let brandEditorRadius: CGFloat = 18
+    /// Primary-CTA radius (Generate button).
+    static let brandPrimaryCTARadius: CGFloat = 32
+
+    /// Hidden-titlebar glass top bar that holds traffic-light inset +
+    /// contextual toolbar items.
+    static let topGlassBarHeight: CGFloat = 44
+    /// Default-height window-footer player.
+    static let footerPlayerHeight: CGFloat = 76
+    /// Compact-height footer player below 900pt window height.
+    static let footerPlayerCompactHeight: CGFloat = 64
+    /// Maximum width of the footer player's center waveform region (caps it
+    /// at 4K windows so it doesn't stretch into a thin line).
+    static let footerPlayerCenterMaxWidth: CGFloat = 1200
+
+    /// Sidebar brand-header height (V mark + Cormorant wordmark).
+    static let sidebarBrandHeaderHeight: CGFloat = 64
+
+    /// Comfortable centered-form column width — used for text editors and
+    /// other form-shaped content so they don't stretch at 4K. Grids and
+    /// galleries continue to fill available width.
+    static let formContentMaxWidth: CGFloat = 720
+
+    // MARK: - Responsive breakpoints
+
+    /// Below this width the sidebar collapses out of view (toolbar toggle).
+    static let sidebarHideBreakpoint: CGFloat = 900
+    /// Below this width the sidebar uses a compact-rail presentation.
+    static let sidebarCompactBreakpoint: CGFloat = 1100
+    /// Below this width the sidebar uses its `min` column width.
+    static let sidebarIdealBreakpoint: CGFloat = 1400
+    /// Below this width the sidebar uses its `ideal` column width;
+    /// above it, the `max` column width.
+    static let sidebarMaxBreakpoint: CGFloat = 1920
     static let composerDefaultMinHeight: CGFloat = 252
     static let composerEmbeddedMinHeight: CGFloat = 268
     static let composerEmbeddedSpacing: CGFloat = 14

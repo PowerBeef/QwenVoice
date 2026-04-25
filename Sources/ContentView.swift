@@ -136,7 +136,11 @@ struct ContentView: View {
 
     private let launchSidebarOverride: SidebarItem?
 
-    @State private var selectedItem: SidebarItem?
+    @State private var selectedSection: SidebarSection?
+    @State private var generateMode: GenerationMode = .custom
+    @State private var libraryTab: LibraryTab = .history
+    @State private var settingsTab: SettingsTab = .models
+
     @State private var protectedLaunchOverride: SidebarItem?
     @State private var pendingHighlightedModelID: String?
     @State private var historySearchText = ""
@@ -151,16 +155,53 @@ struct ContentView: View {
     @State private var voiceDesignActivationID: Int
     @State private var voiceCloningActivationID: Int
 
+    private var derivedSidebarItem: SidebarItem? {
+        switch selectedSection {
+        case .home, .none:
+            return nil
+        case .generate:
+            switch generateMode {
+            case .custom: return .customVoice
+            case .design: return .voiceDesign
+            case .clone:  return .voiceCloning
+            }
+        case .library:
+            return libraryTab.sidebarItem
+        case .settings:
+            return settingsTab.sidebarItem
+        }
+    }
+
     private var currentWindowTitle: String {
-        selectedItem?.rawValue ?? "Vocello"
+        derivedSidebarItem?.rawValue ?? selectedSection?.rawValue ?? "Vocello"
     }
 
     private var currentActiveScreenID: String {
-        selectedItem?.screenAccessibilityID ?? "screen_customVoice"
+        if let derivedSidebarItem {
+            return derivedSidebarItem.screenAccessibilityID
+        }
+        switch selectedSection {
+        case .home: return "screen_home"
+        case .generate: return "screen_generate"
+        case .library: return "screen_library"
+        case .settings: return "screen_settings"
+        case .none: return "screen_home"
+        }
     }
 
-    private var disabledSidebarItems: Set<SidebarItem> {
+    private var disabledGenerationItems: Set<SidebarItem> {
         Set(SidebarItem.generationItems.filter { !$0.isAvailable(using: modelManager) })
+    }
+
+    private var disabledSidebarSections: Set<SidebarSection> {
+        var disabled: Set<SidebarSection> = []
+        let allModesDisabled = SidebarItem.generationItems.allSatisfy {
+            disabledGenerationItems.contains($0)
+        }
+        if allModesDisabled {
+            disabled.insert(.generate)
+        }
+        return disabled
     }
 
     private var canUseSavedVoicesInVoiceCloning: Bool {
@@ -169,21 +210,21 @@ struct ContentView: View {
     }
 
     private var currentDisabledSidebarIdentifiers: String {
-        let identifiers = disabledSidebarItems.map(\.accessibilityID).sorted()
+        let identifiers = disabledGenerationItems.map(\.accessibilityID).sorted()
         return identifiers.isEmpty ? "none" : identifiers.joined(separator: ",")
     }
 
     private var isPreservingLaunchOverrideSelection: Bool {
         guard let protectedLaunchOverride else { return false }
-        return selectedItem == protectedLaunchOverride
+        return derivedSidebarItem == protectedLaunchOverride
     }
 
-    private var sidebarSelectionBinding: Binding<SidebarItem?> {
+    private var sidebarSelectionBinding: Binding<SidebarSection?> {
         Binding(
-            get: { selectedItem },
+            get: { selectedSection },
             set: { newValue in
                 guard let newValue else { return }
-                selectSidebarItemIfEnabled(newValue)
+                selectSectionIfEnabled(newValue)
             }
         )
     }
@@ -195,11 +236,33 @@ struct ContentView: View {
         let initialSelection = SidebarItem.defaultInitialSelection(
             launchOverride: launchSidebarOverride
         )
-        _selectedItem = State(initialValue: initialSelection)
+
+        let sectionFromItem = ContentView.section(for: initialSelection)
+        let initialSection = AppLaunchConfiguration.current.initialSidebarSectionOverride ?? sectionFromItem
+        _selectedSection = State(initialValue: initialSection)
+
+        if let mode = initialSelection.generationMode {
+            _generateMode = State(initialValue: mode)
+        }
+        if let libraryTab = initialSelection.libraryTab {
+            _libraryTab = State(initialValue: libraryTab)
+        }
+        if let settingsTab = initialSelection.settingsTab {
+            _settingsTab = State(initialValue: settingsTab)
+        }
+
         _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
         _customVoiceActivationID = State(initialValue: initialSelection == .customVoice ? 1 : 0)
         _voiceDesignActivationID = State(initialValue: initialSelection == .voiceDesign ? 1 : 0)
         _voiceCloningActivationID = State(initialValue: initialSelection == .voiceCloning ? 1 : 0)
+    }
+
+    static func section(for item: SidebarItem) -> SidebarSection {
+        switch item {
+        case .customVoice, .voiceDesign, .voiceCloning: return .generate
+        case .history, .voices: return .library
+        case .models: return .settings
+        }
     }
 
     static func savedVoiceCloneHandoffPlan(
@@ -233,44 +296,56 @@ struct ContentView: View {
         )
     }
 
+    private var activePlayerTint: Color {
+        switch selectedSection ?? .home {
+        case .home:     return AppTheme.accent
+        case .generate: return AppTheme.modeColor(for: generateMode)
+        case .library:  return AppTheme.library
+        case .settings: return AppTheme.settings
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(
-                selection: sidebarSelectionBinding,
-                disabledItems: disabledSidebarItems
+                selectedSection: sidebarSelectionBinding,
+                disabledSections: disabledSidebarSections
             )
-                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 320)
         } detail: {
             detailContent
         }
         .navigationTitle(currentWindowTitle)
         .toolbar {
             MainWindowToolbar(
-                selectedItem: selectedItem,
+                derivedSidebarItem: derivedSidebarItem,
                 historySortOrder: $historySortOrder,
                 historySearchText: $historySearchText,
                 voicesEnrollRequestID: $voicesEnrollRequestID
             )
         }
         .navigationSplitViewStyle(.balanced)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            WindowFooterPlayer(modeTint: activePlayerTint)
+                .environmentObject(audioPlayer)
+        }
         .onAppear(perform: handleAppear)
         .task { await handleInitialLoad() }
-        .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
+        .onChange(of: selectedSection) { _, _ in handleSelectionChange() }
+        .onChange(of: generateMode) { _, _ in handleSelectionChange() }
+        .onChange(of: libraryTab) { _, _ in handleSelectionChange() }
+        .onChange(of: settingsTab) { _, _ in handleSelectionChange() }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
         .onReceive(appCommandRouter.sidebarSelection) { item in
-            selectSidebarItemIfEnabled(item)
+            navigateToSidebarItem(item)
         }
     }
 
     @ViewBuilder
     private var detailContent: some View {
         Group {
-            if let selectedItem {
-                screenView(for: selectedItem)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                Color.clear
-            }
+            sectionHostView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .profileBackground(Color(nsColor: .windowBackgroundColor))
@@ -284,47 +359,35 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func screenView(for item: SidebarItem) -> some View {
-        switch item {
-        case .customVoice:
-            CustomVoiceView(
-                draft: $customVoiceDraft,
-                activationID: customVoiceActivationID,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager,
-                appCommandRouter: appCommandRouter
-            )
-        case .voiceDesign:
-            VoiceDesignView(
-                draft: $voiceDesignDraft,
-                activationID: voiceDesignActivationID,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager,
-                savedVoicesViewModel: savedVoicesViewModel,
-                appCommandRouter: appCommandRouter
-            )
-        case .voiceCloning:
-            VoiceCloningView(
-                draft: $voiceCloningDraft,
-                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff,
-                activationID: voiceCloningActivationID,
+    private var sectionHostView: some View {
+        switch selectedSection ?? .home {
+        case .home:
+            HomeView { mode in
+                navigateToSidebarItem(SidebarItem.item(for: mode))
+            }
+        case .generate:
+            GenerateView(
+                mode: $generateMode,
+                customVoiceDraft: $customVoiceDraft,
+                voiceDesignDraft: $voiceDesignDraft,
+                voiceCloningDraft: $voiceCloningDraft,
+                pendingVoiceCloningHandoff: $pendingVoiceCloningHandoff,
+                customVoiceActivationID: customVoiceActivationID,
+                voiceDesignActivationID: voiceDesignActivationID,
+                voiceCloningActivationID: voiceCloningActivationID,
                 ttsEngineStore: ttsEngineStore,
                 audioPlayer: audioPlayer,
                 modelManager: modelManager,
                 savedVoicesViewModel: savedVoicesViewModel,
                 appCommandRouter: appCommandRouter
             )
-        case .history:
-            HistoryView(
-                searchText: $historySearchText,
-                sortOrder: $historySortOrder
-            )
-        case .voices:
-            VoicesView(
-                enrollRequestID: voicesEnrollRequestID,
-                canUseInVoiceCloning: canUseSavedVoicesInVoiceCloning,
+        case .library:
+            LibraryView(
+                tab: $libraryTab,
+                historySearchText: $historySearchText,
+                historySortOrder: $historySortOrder,
+                voicesEnrollRequestID: voicesEnrollRequestID,
+                canUseSavedVoicesInVoiceCloning: canUseSavedVoicesInVoiceCloning,
                 onUseInVoiceCloning: { voice in
                     let plan = Self.savedVoiceCloneHandoffPlan(
                         for: voice,
@@ -333,8 +396,11 @@ struct ContentView: View {
                     startSavedVoiceCloningHandoff(plan)
                 }
             )
-        case .models:
-            ModelsView(highlightedModelID: $pendingHighlightedModelID)
+        case .settings:
+            SettingsView(
+                tab: $settingsTab,
+                pendingHighlightedModelID: $pendingHighlightedModelID
+            )
         }
     }
 
@@ -351,10 +417,7 @@ struct ContentView: View {
                 engineStore: ttsEngineStore
             )
         }
-        selectSidebarItemIfEnabled(
-            .voiceCloning,
-            bypassDisabledCheck: true
-        )
+        navigateToSidebarItem(.voiceCloning, bypassDisabledCheck: true)
     }
 
     static func beginSavedVoiceClonePreloadIfPossible(
@@ -377,11 +440,13 @@ struct ContentView: View {
         }
     }
 
-    private func handleSelectionChange(_ newValue: SidebarItem?) {
-        if let protectedLaunchOverride, newValue != protectedLaunchOverride {
+    private func handleSelectionChange() {
+        if let protectedLaunchOverride, derivedSidebarItem != protectedLaunchOverride {
             self.protectedLaunchOverride = nil
         }
-        bumpGenerationActivationCounter(for: newValue)
+        if selectedSection == .generate {
+            bumpGenerationActivationCounter(for: generateMode)
+        }
     }
 
     private func handleStatusesChange() {
@@ -392,37 +457,61 @@ struct ContentView: View {
 
     // MARK: - Helper methods
 
-    private func selectSidebarItemIfEnabled(_ item: SidebarItem, bypassDisabledCheck: Bool = false) {
-        guard bypassDisabledCheck || !disabledSidebarItems.contains(item) else { return }
+    private func selectSectionIfEnabled(_ section: SidebarSection) {
+        guard !disabledSidebarSections.contains(section) else { return }
         AppPerformanceSignposts.emit("Sidebar Selection")
-        if selectedItem == item {
+        if selectedSection == section {
             return
         }
-        selectedItem = item
+        selectedSection = section
+    }
+
+    private func navigateToSidebarItem(_ item: SidebarItem, bypassDisabledCheck: Bool = false) {
+        if !bypassDisabledCheck, disabledGenerationItems.contains(item) {
+            return
+        }
+        let targetSection = ContentView.section(for: item)
+        if let mode = item.generationMode {
+            generateMode = mode
+        }
+        if let libraryTab = item.libraryTab {
+            self.libraryTab = libraryTab
+        }
+        if let settingsTab = item.settingsTab {
+            self.settingsTab = settingsTab
+        }
+        if selectedSection != targetSection {
+            selectedSection = targetSection
+        }
     }
 
     private func reconcileSelectionWithAvailability() {
-        guard let selectedItem, disabledSidebarItems.contains(selectedItem) else {
-            return
-        }
+        guard selectedSection == .generate else { return }
+        let currentItem = derivedSidebarItem
+        guard let currentItem, disabledGenerationItems.contains(currentItem) else { return }
 
-        if let modelID = selectedItem.requiredModel?.id {
+        if let modelID = currentItem.requiredModel?.id {
             pendingHighlightedModelID = modelID
         }
 
-        self.selectedItem = .models
+        // Find an available mode; fall back to Settings/Models if none.
+        if let firstAvailable = SidebarItem.generationItems.first(where: { !disabledGenerationItems.contains($0) }),
+           let availableMode = firstAvailable.generationMode {
+            generateMode = availableMode
+        } else {
+            settingsTab = .models
+            selectedSection = .settings
+        }
     }
 
-    private func bumpGenerationActivationCounter(for item: SidebarItem?) {
-        switch item {
-        case .customVoice:
+    private func bumpGenerationActivationCounter(for mode: GenerationMode) {
+        switch mode {
+        case .custom:
             customVoiceActivationID += 1
-        case .voiceDesign:
+        case .design:
             voiceDesignActivationID += 1
-        case .voiceCloning:
+        case .clone:
             voiceCloningActivationID += 1
-        case .history, .voices, .models, .none:
-            break
         }
     }
 }
@@ -472,13 +561,13 @@ private struct HiddenWindowMarkers: View {
 // MARK: - MainWindowToolbar
 
 private struct MainWindowToolbar: ToolbarContent {
-    let selectedItem: SidebarItem?
+    let derivedSidebarItem: SidebarItem?
     @Binding var historySortOrder: HistorySortOrder
     @Binding var historySearchText: String
     @Binding var voicesEnrollRequestID: UUID?
 
     var body: some ToolbarContent {
-        if selectedItem == .history {
+        if derivedSidebarItem == .history {
             ToolbarItem {
                 HStack(spacing: 10) {
                     Menu {
@@ -503,7 +592,7 @@ private struct MainWindowToolbar: ToolbarContent {
             }
         }
 
-        if selectedItem == .voices {
+        if derivedSidebarItem == .voices {
             ToolbarItem {
                 Button("Add Voice Sample") {
                     voicesEnrollRequestID = UUID()

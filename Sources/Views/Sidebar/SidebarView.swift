@@ -1,358 +1,183 @@
 import SwiftUI
 import QwenVoiceNative
 
-private struct SidebarSectionHeader: View {
-    let title: String
-    let accessibilityID: String
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.textSecondary)
-            .textCase(nil)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(title)
-            .accessibilityIdentifier(accessibilityID)
-    }
-}
-
-/// Compact Vocello brand lockup pinned to the top of the sidebar via
-/// `safeAreaInset(edge: .top)`. Reuses the bundled `VocelloHeaderMark`
-/// asset that the iPhone target already ships; the same asset carries the
-/// Vocello wordmark + V glyph so we don't need to ship a separate macOS
-/// lockup. Stays out of the List's scroll region so the brand anchor
-/// remains visible as the user scrolls through sections.
+/// Compact Vocello brand lockup pinned to the top of the sidebar.
+/// Pairs the V monogram (drawn in `VocelloVMark`) with the Cormorant
+/// wordmark + small AI-TTS micro-tag, matching the iOS reference's
+/// `VHeader`. Lives in `safeAreaInset(edge: .top)` so it stays anchored.
 private struct SidebarBrandHeader: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image("VocelloHeaderMark")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 30)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VocelloVMark(size: 24)
+                .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 3 }
 
-            Text("Local voice studio")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.textSecondary)
-                .textCase(.uppercase)
-                .tracking(1.1)
+            Text("Vocello")
+                .vocelloWordmark()
+
+            Text("AI-TTS")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(AppTheme.textSecondary.opacity(0.55))
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.top, 16)
+        .padding(.top, 18)
         .padding(.bottom, 12)
+        .frame(height: LayoutConstants.sidebarBrandHeaderHeight, alignment: .leading)
         .accessibilityHidden(true)
     }
 }
 
-private struct SidebarRow: View {
+private struct SidebarSectionRow: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    let item: SidebarItem
-    @Binding var selection: SidebarItem?
+    let section: SidebarSection
+    @Binding var selection: SidebarSection?
     let isDisabled: Bool
     @State private var isHovered = false
 
-    private var isSelected: Bool {
-        selection == item
+    private var isSelected: Bool { selection == section }
+
+    private var iconColor: Color {
+        if isDisabled { return Color.secondary.opacity(isSelected ? 0.8 : 0.6) }
+        return isSelected ? section.sidebarTint : AppTheme.textPrimary
+    }
+
+    private var textColor: Color {
+        if isDisabled { return Color.secondary.opacity(isSelected ? 0.88 : 0.72) }
+        return AppTheme.textPrimary
     }
 
     @ViewBuilder
     private var rowBackground: some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppTheme.sidebarSelectionFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                // Per-mode selection edge — golden for
-                                // Custom Voice / Library, lavender for
-                                // Voice Design, terracotta for Voice
-                                // Cloning. Matches the non-liquid
-                                // fallback in `borderColor`.
-                                AppTheme.sidebarColor(for: item).opacity(
-                                    colorScheme == .dark ? 0.55 : 0.42
-                                ),
-                                lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.9
-                            )
-                    )
-                    .glassEffect(.regular.tint(AppTheme.sidebarColor(for: item).opacity(colorScheme == .dark ? 0.16 : 0.10)).interactive(), in: .rect(cornerRadius: 8))
-                    .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.5 : 0.28)
-            } else if isHovered {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppTheme.sidebarHoverFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                AppTheme.sidebarHoverStroke.opacity(colorScheme == .dark ? 1.0 : 0.72),
-                                lineWidth: colorScheme == .dark ? AppTheme.surfaceStrokeWidth(for: colorScheme) : 0.85
-                            )
-                    )
-                    .glassEffect(.regular.tint(AppTheme.smokedGlassTint).interactive(), in: .rect(cornerRadius: 8))
-                    .glass3DDepth(radius: 8, intensity: colorScheme == .dark ? 0.25 : 0.16)
-            } else {
-                Color.clear
-            }
+        if isSelected {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(section.sidebarTint.opacity(colorScheme == .dark ? 0.16 : 0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            section.sidebarTint.opacity(colorScheme == .dark ? 0.55 : 0.42),
+                            lineWidth: 0.75
+                        )
+                )
+        } else if isHovered {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppTheme.sidebarHoverFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            AppTheme.sidebarHoverStroke.opacity(colorScheme == .dark ? 0.85 : 0.50),
+                            lineWidth: 0.5
+                        )
+                )
         } else {
-            legacyRowBackground
+            Color.clear
         }
-        #else
-        legacyRowBackground
-        #endif
-    }
-
-    private var legacyRowBackground: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(backgroundColor)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(borderColor, lineWidth: isSelected || isHovered ? 1 : 0)
-            }
-    }
-
-    private var backgroundColor: Color {
-        if isDisabled {
-            return isSelected ? Color.secondary.opacity(0.06) : .clear
-        }
-
-        if isSelected {
-            return AppTheme.sidebarSelectionFill
-        }
-
-        if isHovered {
-            return AppTheme.sidebarHoverFill
-        }
-
-        return .clear
-    }
-
-    private var borderColor: Color {
-        if isDisabled {
-            return isSelected ? Color.secondary.opacity(0.16) : .clear
-        }
-
-        if isSelected {
-            // Per-mode edge accent — the stroke picks up the item's
-            // Vocello palette color so selecting Voice Design shows a
-            // lavender edge, Voice Cloning terracotta, etc. Library
-            // and Settings rows still resolve to accent (golden) via
-            // AppTheme.sidebarColor(for:).
-            return AppTheme.sidebarColor(for: item).opacity(0.32)
-        }
-
-        if isHovered {
-            return AppTheme.sidebarHoverStroke
-        }
-
-        return .clear
-    }
-
-    private var iconColor: Color {
-        if isDisabled {
-            return Color.secondary.opacity(isSelected ? 0.8 : 0.65)
-        }
-
-        return isSelected ? AppTheme.sidebarColor(for: item) : AppTheme.textPrimary
-    }
-
-    private var textColor: Color {
-        if isDisabled {
-            return Color.secondary.opacity(isSelected ? 0.88 : 0.72)
-        }
-
-        return AppTheme.textPrimary
-    }
-
-    private var selectionIndicatorColor: Color {
-        if !isSelected {
-            return .clear
-        }
-
-        return isDisabled ? Color.secondary.opacity(0.6) : AppTheme.sidebarColor(for: item)
-    }
-
-    private var accessibilityStateValue: String {
-        var states: [String] = []
-
-        if isSelected {
-            states.append("selected")
-        } else {
-            states.append("not selected")
-        }
-
-        if isDisabled {
-            states.append("disabled")
-        }
-
-        return states.joined(separator: ", ")
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Capsule()
-                .fill(selectionIndicatorColor)
-                .frame(width: 3, height: 16)
-
-            Image(systemName: item.iconName)
+        HStack(spacing: 10) {
+            Image(systemName: section.iconName)
                 .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(iconColor)
                 .frame(width: 22, alignment: .center)
 
-            Text(item.rawValue)
+            Text(section.rawValue)
                 .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(textColor)
                 .lineLimit(1)
 
             Spacer(minLength: 0)
         }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 34)
-            .background(rowBackground)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onTapGesture {
-                guard !isDisabled else { return }
-                selection = item
-            }
-            .onHover { hovering in
-                isHovered = isDisabled ? false : hovering
-            }
-            .onChange(of: isDisabled) { _, disabled in
-                if disabled {
-                    isHovered = false
-                }
-            }
-            .animation(.easeOut(duration: 0.14), value: isHovered)
-            .animation(.easeOut(duration: 0.14), value: isSelected)
-            .disabled(isDisabled)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(item.rawValue)
-            .accessibilityValue(accessibilityStateValue)
-            .accessibilityIdentifier(item.accessibilityID)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 36)
+        .background(rowBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            guard !isDisabled else { return }
+            selection = section
+        }
+        .onHover { hovering in
+            isHovered = isDisabled ? false : hovering
+        }
+        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .animation(.easeOut(duration: 0.14), value: isSelected)
+        .disabled(isDisabled)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(section.rawValue)
+        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityIdentifier(section.accessibilityID)
     }
 }
 
 struct SidebarView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
 
-    @Binding var selection: SidebarItem?
-    let disabledItems: Set<SidebarItem>
-
-    private var usesNativeListSelection: Bool {
-        guard let selection else { return true }
-        return !disabledItems.contains(selection)
-    }
+    @Binding var selectedSection: SidebarSection?
+    let disabledSections: Set<SidebarSection>
 
     var body: some View {
-        Group {
-            if usesNativeListSelection {
-                List(selection: $selection) {
-                    sidebarListContent
-                }
-            } else {
-                List {
-                    sidebarListContent
+        VStack(spacing: 0) {
+            List(selection: $selectedSection) {
+                ForEach(SidebarSection.allCases) { section in
+                    SidebarSectionRow(
+                        section: section,
+                        selection: $selectedSection,
+                        isDisabled: disabledSections.contains(section)
+                    )
+                    .tag(section as SidebarSection?)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                    .listRowBackground(Color.clear)
                 }
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
         .vocelloGlassRail()
         .safeAreaInset(edge: .top, spacing: 0) {
             SidebarBrandHeader()
         }
-        .safeAreaInset(edge: .bottom) {
-            SidebarFooterRegion()
-                .environmentObject(audioPlayer)
-        }
-    }
-
-    @ViewBuilder
-    private var sidebarListContent: some View {
-        ForEach(SidebarItem.Section.allCases, id: \.self) { section in
-            Section {
-                ForEach(section.items) { item in
-                    SidebarRow(
-                        item: item,
-                        selection: $selection,
-                        isDisabled: disabledItems.contains(item)
-                    )
-                        .tag(item as SidebarItem?)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                        .listRowBackground(Color.clear)
-                }
-            } header: {
-                SidebarSectionHeader(
-                    title: section.rawValue,
-                    accessibilityID: section.accessibilityID
-                )
-            }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SidebarFooterStatus()
         }
     }
 }
 
-private struct SidebarFooterRegion: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+/// Memory/health status pill at the bottom of the sidebar — the
+/// take-player chrome moved to the global window-footer player so this
+/// region only carries runtime telemetry now.
+private struct SidebarFooterStatus: View {
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+    @Environment(\.colorScheme) private var colorScheme
 
     private let appEngineSelection = AppEngineSelection.current()
 
     private var resolvedSidebarStatus: SidebarStatus {
         appEngineSelection.resolveSidebarStatus(
             ttsEngineSnapshot: ttsEngineStore.snapshot,
-            prefersInlinePresentation: audioPlayer.isLiveStream
-        )
-    }
-
-    private var footerPresentation: SidebarFooterPresentation {
-        SidebarFooterPresentation.resolve(
-            sidebarStatus: resolvedSidebarStatus,
-            isLiveStream: audioPlayer.isLiveStream
+            prefersInlinePresentation: false
         )
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Rectangle()
-                .fill(AppTheme.railStroke.opacity(colorScheme == .dark ? 0.9 : 0.34))
-                .frame(height: 1)
+                .fill(AppTheme.railStroke.opacity(colorScheme == .dark ? 0.85 : 0.30))
+                .frame(height: 0.5)
 
-            VStack(alignment: .leading, spacing: 10) {
-                if audioPlayer.hasAudio {
-                    SidebarPlayerView(inlinePlayerActivity: footerPresentation.inlinePlayerActivity)
-
-                    if footerPresentation.showsStandaloneStatus {
-                        Rectangle()
-                            .fill(AppTheme.railStroke.opacity(colorScheme == .dark ? 0.65 : 0.22))
-                            .frame(height: 1)
-                    }
+            SidebarStatusView(
+                sidebarStatus: resolvedSidebarStatus,
+                clearError: {
+                    appEngineSelection.clearSidebarError(ttsEngineStore: ttsEngineStore)
                 }
-
-                if footerPresentation.showsStandaloneStatus {
-                    SidebarStatusView(
-                        sidebarStatus: resolvedSidebarStatus,
-                        clearError: {
-                            appEngineSelection.clearSidebarError(
-                                ttsEngineStore: ttsEngineStore
-                            )
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal, LayoutConstants.shellPadding)
-            .padding(.top, LayoutConstants.generationSectionSpacing)
-            .padding(.bottom, LayoutConstants.shellPadding)
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AppTheme.railBackground.opacity(colorScheme == .dark ? 0.92 : 0.985))
-        .vocelloGlassSurface(
-            padding: 0,
-            radius: 0,
-            fill: AppTheme.railBackground.opacity(colorScheme == .dark ? 0.76 : 0.90)
-        )
     }
 }

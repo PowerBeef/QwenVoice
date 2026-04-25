@@ -80,12 +80,49 @@ enum AppTheme {
         light: Color(red: 0.70, green: 0.43, blue: 0.24),  // deeper terracotta
         dark:  Color(red: 0.86, green: 0.66, blue: 0.53)   // warm terracotta
     )
-    // Library + Settings continue to resolve to the primary accent (golden) so
-    // non-generation surfaces read as one coherent app chrome.
-    static let history = accent
-    static let voices = accent
-    static let models = accent
-    static let preferences = accent
+    // Per-section tints (silver-gold for Library, silver for Settings) — the
+    // non-generation halves of the app each get their own muted brand color so
+    // chrome stops reading as a single uniform gold while still feeling Vocello.
+    // Dark values match Sources/iOS/IOSShellPrimitives.swift:IOSBrandTheme; light
+    // values are darkened variants for usable WCAG contrast.
+    static let library = Color(
+        light: Color(red: 0.45, green: 0.43, blue: 0.36),
+        dark:  Color(red: 0.75, green: 0.74, blue: 0.71)   // silver-gold
+    )
+    static let settings = Color(
+        light: Color(red: 0.36, green: 0.40, blue: 0.46),
+        dark:  Color(red: 0.68, green: 0.71, blue: 0.76)   // silver
+    )
+    static let history = library
+    static let voices = library
+    static let models = settings
+    static let preferences = settings
+
+    // V mark / wordmark gradient stops.
+    static let brandPurple = Color(
+        light: Color(red: 0.45, green: 0.38, blue: 0.62),
+        dark:  Color(red: 0.73, green: 0.66, blue: 0.84)
+    )
+    static let brandLavender = Color(
+        light: Color(red: 0.62, green: 0.55, blue: 0.74),
+        dark:  Color(red: 0.87, green: 0.82, blue: 0.93)
+    )
+
+    // Status chip dot colors (memory/healthy indicator). Match the iOS
+    // IOSBrandTheme memory* tokens exactly so cross-platform telemetry chips
+    // read identical.
+    static let statusHealthy = Color(
+        light: Color(red: 0.34, green: 0.49, blue: 0.34),
+        dark:  Color(red: 0.55, green: 0.70, blue: 0.55)
+    )
+    static let statusGuarded = Color(
+        light: Color(red: 0.62, green: 0.46, blue: 0.20),
+        dark:  Color(red: 0.85, green: 0.70, blue: 0.45)
+    )
+    static let statusCritical = Color(
+        light: Color(red: 0.62, green: 0.28, blue: 0.28),
+        dark:  Color(red: 0.85, green: 0.50, blue: 0.50)
+    )
 
     static let canvasBackground = Color(
         light: Color(red: 0.952, green: 0.943, blue: 0.920),

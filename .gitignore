@@ -32,6 +32,9 @@ build/
 # Git worktrees
 .worktrees/
 
+# Brainstorming/visual-companion session state
+.superpowers/
+
 # CLI user data
 cli/models/
 cli/outputs/
