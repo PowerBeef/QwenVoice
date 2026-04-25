@@ -82,23 +82,9 @@ struct VoiceDesignView: View {
             topPadding: LayoutConstants.generationPageTopPadding,
             bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            GenerationStudioLayout(
-                mode: activeMode,
-                title: "Describe a voice",
-                subtitle: "Write the line on the studio stage, then tune the voice brief and delivery from the inspector.",
-                statusTitle: canGenerate ? "Ready" : readinessTitle,
-                statusDetail: readinessDetail,
-                isReady: canGenerate,
-                modelName: modelDisplayName,
-                characterCount: draft.text.count,
-                characterLimit: 150,
-                onModeSelect: navigateToMode
-            ) {
-                composerPanel
-                    .layoutPriority(1)
-            } inspector: {
-                configurationPanel
-            }
+            configurationPanel
+            composerPanel
+                .layoutPriority(1)
         }
         .sheet(item: $coordinator.presentedSheet) { presentedSheet in
             switch presentedSheet {
@@ -222,10 +208,6 @@ private extension VoiceDesignView {
 
     var briefSettings: some View {
         VoiceDesignBriefSettings(voiceDescription: $draft.voiceDescription)
-    }
-
-    func navigateToMode(_ mode: GenerationMode) {
-        appCommandRouter.navigate(to: SidebarItem.item(for: mode))
     }
 
     var deliverySettings: some View {
@@ -368,25 +350,6 @@ private struct VoiceDesignBriefSettings: View {
             Text("Describe timbre, accent, or delivery style in one tight sentence.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-            FlowLayout(spacing: 6) {
-                ForEach(Self.promptChips, id: \.self) { chip in
-                    let isActive = voiceDescription.localizedCaseInsensitiveContains(chip)
-                    Button {
-                        toggleChip(chip)
-                    } label: {
-                        Text(chip)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(isActive ? AppTheme.voiceDesign : AppTheme.textSecondary)
-                    .vocelloGlassBadge(tint: isActive ? AppTheme.voiceDesign.opacity(0.26) : nil)
-                    .focusEffectDisabled()
-                }
-            }
-            .accessibilityIdentifier("voiceDesign_promptChips")
         }
         .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .overlay(alignment: .topLeading) {
@@ -407,28 +370,5 @@ private struct VoiceDesignBriefSettings: View {
             .accessibilityLabel(voiceDescription)
             .accessibilityValue(voiceDescription)
             .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
-    }
-
-    private static let promptChips = [
-        "Narrator",
-        "Soft",
-        "Energetic",
-        "British",
-        "Character",
-        "Documentary",
-    ]
-
-    private func toggleChip(_ chip: String) {
-        if voiceDescription.localizedCaseInsensitiveContains(chip) {
-            voiceDescription = voiceDescription
-                .replacingOccurrences(of: chip, with: "", options: [.caseInsensitive])
-                .replacingOccurrences(of: "  ", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: ","))
-        } else if voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            voiceDescription = chip.lowercased()
-        } else {
-            voiceDescription += ", \(chip.lowercased())"
-        }
     }
 }

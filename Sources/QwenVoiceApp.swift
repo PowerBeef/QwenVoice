@@ -60,8 +60,6 @@ struct QwenVoiceApp: App {
                         .frame(minWidth: 720, minHeight: 560)
                 }
             }
-            .tint(AppTheme.accent)
-            .accentColor(AppTheme.accent)
 #if QW_TEST_SUPPORT
             .defaultAppStorage(UITestAutomationSupport.appStorage)
             .background(

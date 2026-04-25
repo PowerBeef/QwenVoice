@@ -9,17 +9,15 @@ struct SidebarPlayerView: View {
     var body: some View {
         if audioPlayer.hasAudio {
             VStack(alignment: .leading, spacing: 7) {
-                Text(audioPlayer.isLiveStream ? "Live take" : "Player")
+                Text("Player")
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
 
                 HStack {
                     Text(audioPlayer.currentTitle)
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
-                        .foregroundStyle(AppTheme.textPrimary)
+                        .foregroundStyle(.primary)
 
                     if audioPlayer.isLiveStream {
                         Text("Live")
@@ -112,12 +110,6 @@ struct SidebarPlayerView: View {
                 AppLaunchConfiguration.current.animationsEnabled
                 ? .move(edge: .bottom).combined(with: .opacity)
                 : .identity
-            )
-            .padding(10)
-            .vocelloGlassSurface(
-                padding: 0,
-                radius: 14,
-                fill: AppTheme.inlineFill
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("sidebarPlayer_bar")

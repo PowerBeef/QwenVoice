@@ -73,23 +73,9 @@ struct CustomVoiceView: View {
             topPadding: LayoutConstants.generationPageTopPadding,
             bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            GenerationStudioLayout(
-                mode: activeMode,
-                title: "Choose a studio voice",
-                subtitle: "Select a built-in speaker, shape the delivery, then render a polished local take.",
-                statusTitle: canGenerate ? "Ready" : readinessTitle,
-                statusDetail: readinessDetail,
-                isReady: canGenerate,
-                modelName: modelDisplayName,
-                characterCount: draft.text.count,
-                characterLimit: 500,
-                onModeSelect: navigateToMode
-            ) {
-                composerPanel
-                    .layoutPriority(1)
-            } inspector: {
-                configurationPanel
-            }
+            configurationPanel
+            composerPanel
+                .layoutPriority(1)
         }
         .sheet(item: $coordinator.presentedSheet) { presentedSheet in
             switch presentedSheet {
@@ -139,7 +125,10 @@ private extension CustomVoiceView {
             contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
             accessibilityIdentifier: "customVoice_configuration"
         ) {
-            configurationContent
+            VStack(alignment: .leading, spacing: 0) {
+                speakerSettings
+                deliverySettings
+            }
         }
         .overlay(alignment: .topLeading) {
             HiddenAccessibilityMarker(
@@ -149,13 +138,6 @@ private extension CustomVoiceView {
         }
         .animation(.none, value: draft.selectedSpeaker)
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    var configurationContent: some View {
-        VStack(alignment: .leading, spacing: LayoutConstants.generationConfigurationRowSpacing) {
-            speakerSettings
-            deliverySettings
-        }
     }
 
     var composerPanel: some View {
@@ -200,10 +182,6 @@ private extension CustomVoiceView {
 
     var speakerSettings: some View {
         SpeakerPickerRow(selectedSpeaker: $draft.selectedSpeaker)
-    }
-
-    func navigateToMode(_ mode: GenerationMode) {
-        appCommandRouter.navigate(to: SidebarItem.item(for: mode))
     }
 
     var deliverySettings: some View {
@@ -308,90 +286,21 @@ private struct SpeakerPickerRow: View {
             Text("Speaker")
                 .font(.subheadline.weight(.semibold))
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(minimum: 118), spacing: 8, alignment: .top),
-                    GridItem(.flexible(minimum: 118), spacing: 8, alignment: .top)
-                ],
-                alignment: .leading,
-                spacing: 8
-            ) {
+            Picker("Speaker", selection: $selectedSpeaker) {
                 ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                    let speakerDetails = Self.details(for: speaker)
-                    let isSelected = selectedSpeaker == speaker
-
-                    Button {
-                        selectedSpeaker = speaker
-                    } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Text(String(speakerDetails.name.prefix(1)))
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(isSelected ? AppTheme.warmIvory : AppTheme.customVoice)
-                                    .frame(width: 26, height: 26)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(AppTheme.customVoice.opacity(isSelected ? 0.42 : 0.18))
-                                    )
-
-                                Spacer(minLength: 0)
-
-                                Image(systemName: isSelected ? "checkmark.circle.fill" : "waveform")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(isSelected ? AppTheme.customVoice : AppTheme.textSecondary)
-                            }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(speakerDetails.name)
-                                    .font(.callout.weight(.semibold))
-                                    .foregroundStyle(AppTheme.textPrimary)
-                                    .lineLimit(1)
-
-                                Text(speakerDetails.description)
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(AppTheme.textSecondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(
-                                    isSelected
-                                        ? AppTheme.customVoice.opacity(0.36)
-                                        : AppTheme.inlineFill
-                                )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(
-                                    isSelected
-                                        ? AppTheme.customVoice.opacity(0.82)
-                                        : AppTheme.inlineStroke.opacity(0.38),
-                                    lineWidth: isSelected ? 1.2 : 0.8
-                                )
-                        )
-                        .vocelloGlassSurface(
-                            padding: 0,
-                            radius: 14,
-                            fill: isSelected ? AppTheme.customVoice.opacity(0.16) : AppTheme.inlineFill
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .focusEffectDisabled()
-                    .accessibilityLabel(speakerDetails.name)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    Text(speaker.capitalized).tag(speaker)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityLabel("Speaker")
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .focusEffectDisabled()
+            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
             .accessibilityValue(selectedSpeaker.capitalized)
             .accessibilityIdentifier("customVoice_speakerPicker")
 
             Text("Choose the built-in speaker that should deliver this line.")
                 .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, LayoutConstants.generationConfigurationRowVerticalPadding)
         .overlay(alignment: .topLeading) {
@@ -407,20 +316,5 @@ private struct SpeakerPickerRow: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("customVoice_voiceSetup")
-    }
-
-    private static func details(for speaker: String) -> (name: String, description: String) {
-        switch speaker.lowercased() {
-        case "ryan":
-            return ("Ryan", "Clear · confident")
-        case "aiden":
-            return ("Aiden", "Warm · grounded")
-        case "serena":
-            return ("Serena", "Bright · articulate")
-        case "vivian":
-            return ("Vivian", "Smooth · premium")
-        default:
-            return (speaker.capitalized, "Built-in speaker")
-        }
     }
 }

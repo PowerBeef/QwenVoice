@@ -27,43 +27,18 @@ enum AppTheme {
         light: Color(red: 0.71, green: 0.51, blue: 0.18),
         dark: Color(red: 0.93, green: 0.80, blue: 0.54)
     )
-    static let vocelloGoldDeep = Color(
-        light: Color(red: 0.52, green: 0.35, blue: 0.10),
-        dark: Color(red: 0.74, green: 0.55, blue: 0.25)
-    )
-    static let vocelloLavender = Color(
-        light: Color(red: 0.52, green: 0.42, blue: 0.72),
-        dark: Color(red: 0.75, green: 0.67, blue: 0.86)
-    )
-    static let vocelloTerracotta = Color(
-        light: Color(red: 0.70, green: 0.43, blue: 0.24),
-        dark: Color(red: 0.86, green: 0.66, blue: 0.53)
-    )
-    static let warmIvory = Color(
-        light: Color(red: 0.13, green: 0.12, blue: 0.10),
-        dark: Color(red: 0.95, green: 0.93, blue: 0.88)
-    )
-    static let mutedSilver = Color(
-        light: Color(red: 0.42, green: 0.43, blue: 0.45),
-        dark: Color(red: 0.70, green: 0.72, blue: 0.76)
-    )
-    static let charcoalShadow = Color(
-        light: Color(red: 0.25, green: 0.22, blue: 0.18),
-        dark: Color(red: 0.020, green: 0.024, blue: 0.032)
-    )
-    static let warmEdgeHighlight = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74)
-    )
-
     static let accent = vocelloGold
-    static let inlinePreviewProgressTint = vocelloGold
-    static let statusProgressTint = vocelloGold
-    static let textPrimary = warmIvory
-    static let textSecondary = mutedSilver
+    static let inlinePreviewProgressTint = Color(
+        light: Color(red: 0.71, green: 0.51, blue: 0.18),
+        dark: Color(red: 0.93, green: 0.80, blue: 0.54)
+    )
+    static let statusProgressTint = Color(
+        light: Color(red: 0.71, green: 0.51, blue: 0.18),
+        dark: Color(red: 0.93, green: 0.80, blue: 0.54)
+    )
     static let smokedGlassTint = Color(
-        light: Color(red: 0.96, green: 0.91, blue: 0.80).opacity(0.46),
-        dark: Color(red: 0.16, green: 0.15, blue: 0.13).opacity(0.62)
+        light: Color(red: 0.84, green: 0.90, blue: 0.98).opacity(0.60),
+        dark: Color(white: 0.15, opacity: 0.6)
     )
     // Vocello mode palette (mirrors Sources/iOS/IOSShellPrimitives.swift:IOSBrandTheme).
     // Dark values match the iOS brand exactly; light values are darkened variants
@@ -88,68 +63,72 @@ enum AppTheme {
     static let preferences = accent
 
     static let canvasBackground = Color(
-        light: Color(red: 0.952, green: 0.943, blue: 0.920),
-        dark: Color(red: 0.055, green: 0.062, blue: 0.077)
+        light: Color(red: 0.960, green: 0.968, blue: 0.982),
+        dark: Color(red: 0.086, green: 0.094, blue: 0.118)
     )
     static let stageFill = Color(
-        light: Color(red: 0.944, green: 0.934, blue: 0.908).opacity(0.72),
-        dark: Color(red: 0.075, green: 0.083, blue: 0.102).opacity(0.74)
+        light: Color(red: 0.946, green: 0.954, blue: 0.973),
+        dark: Color(red: 0.110, green: 0.118, blue: 0.150)
     )
     static let stageStroke = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.42),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.13)
+        light: Color(red: 0.772, green: 0.804, blue: 0.868).opacity(0.66),
+        dark: Color.white.opacity(0.10)
     )
+    // Dark-glass panel fills: panels are VISIBLY darker than the canvas
+    // background in dark mode so glass refraction + 3D depth carry the
+    // "looking through smoked glass into a recess" look. Light mode keeps
+    // the previous warm-white for legibility.
     static let cardFill = Color(
-        light: Color(red: 0.970, green: 0.960, blue: 0.934).opacity(0.80),
-        dark: Color(red: 0.092, green: 0.098, blue: 0.116).opacity(0.70)
+        light: Color(red: 0.978, green: 0.983, blue: 0.993),
+        dark: Color(red: 0.050, green: 0.055, blue: 0.072)
     )
     static let cardStroke = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.48),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.16)
+        light: Color(red: 0.744, green: 0.776, blue: 0.844).opacity(0.64),
+        dark: Color.white.opacity(0.15)
     )
     static let inlineFill = Color(
-        light: Color(red: 0.956, green: 0.946, blue: 0.922).opacity(0.74),
-        dark: Color(red: 0.115, green: 0.120, blue: 0.140).opacity(0.66)
+        light: Color(red: 0.966, green: 0.972, blue: 0.986),
+        dark: Color(red: 0.068, green: 0.075, blue: 0.095)
     )
     static let inlineStroke = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.42),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.12)
+        light: Color(red: 0.736, green: 0.768, blue: 0.838).opacity(0.60),
+        dark: Color.white.opacity(0.12)
     )
     static let fieldFill = Color(
-        light: Color(red: 0.978, green: 0.968, blue: 0.944).opacity(0.88),
-        dark: Color(red: 0.145, green: 0.150, blue: 0.172).opacity(0.88)
+        light: Color(red: 0.984, green: 0.988, blue: 0.996),
+        dark: Color(red: 0.165, green: 0.172, blue: 0.214)
     )
     static let fieldStroke = Color(
-        light: Color(red: 0.71, green: 0.51, blue: 0.18).opacity(0.18),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.12)
+        light: Color(red: 0.724, green: 0.756, blue: 0.828).opacity(0.58),
+        dark: Color.white.opacity(0.10)
     )
     static let railBackground = Color(
-        light: Color(red: 0.940, green: 0.928, blue: 0.900).opacity(0.78),
-        dark: Color(red: 0.070, green: 0.076, blue: 0.092).opacity(0.72)
+        light: Color(red: 0.968, green: 0.974, blue: 0.986),
+        dark: Color(red: 0.090, green: 0.098, blue: 0.122)
     )
     static let railStroke = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.34),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.10)
+        light: Color(red: 0.780, green: 0.810, blue: 0.872).opacity(0.42),
+        dark: Color.white.opacity(0.08)
     )
     static let stageGlow = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.38),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.08)
+        light: Color.white.opacity(0.65),
+        dark: Color.white.opacity(0.05)
     )
     static let sidebarSelectionFill = Color(
-        light: Color(red: 0.71, green: 0.51, blue: 0.18).opacity(0.12),
-        dark: Color(red: 0.93, green: 0.80, blue: 0.54).opacity(0.08)
+        light: Color(red: 0.918, green: 0.944, blue: 0.988),
+        dark: Color.white.opacity(0.05)
     )
     static let sidebarSelectionStroke = Color(
-        light: Color(red: 0.71, green: 0.51, blue: 0.18).opacity(0.32),
-        dark: Color(red: 0.93, green: 0.80, blue: 0.54).opacity(0.28)
+        light: Color(red: 0.336, green: 0.540, blue: 0.918).opacity(0.24),
+        dark: accent.opacity(0.26)
     )
     static let sidebarHoverFill = Color(
-        light: Color(red: 1.0, green: 0.97, blue: 0.88).opacity(0.22),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.04)
+        light: Color(red: 0.952, green: 0.962, blue: 0.984),
+        dark: Color.white.opacity(0.03)
     )
     static let sidebarHoverStroke = Color(
-        light: Color(red: 0.71, green: 0.51, blue: 0.18).opacity(0.16),
-        dark: Color(red: 1.0, green: 0.91, blue: 0.74).opacity(0.08)
+        light: Color(red: 0.708, green: 0.748, blue: 0.844).opacity(0.24),
+        dark: Color.white.opacity(0.08)
     )
 
     static var windowTitlebarSeparatorStyle: NSTitlebarSeparatorStyle {
@@ -167,19 +146,23 @@ enum AppTheme {
     static func emotionColor(for emotionID: String) -> Color {
         switch emotionID {
         case "neutral":
-            return mutedSilver
-        case "happy", "excited":
-            return vocelloGold
-        case "sad", "whisper":
-            return mutedSilver.opacity(0.88)
+            return .secondary
+        case "happy":
+            return .yellow
+        case "sad":
+            return .blue
         case "angry":
-            return Color(red: 0.84, green: 0.35, blue: 0.30)
+            return .red
         case "fearful":
-            return vocelloLavender
+            return .purple
+        case "whisper":
+            return .gray
         case "dramatic":
-            return vocelloTerracotta
+            return .pink
         case "calm":
-            return Color(red: 0.58, green: 0.67, blue: 0.56)
+            return .green
+        case "excited":
+            return .orange
         default:
             return accent
         }
@@ -253,7 +236,7 @@ enum AppTheme {
     }
 }
 
-private struct VocelloGlassSurface: ViewModifier {
+private struct NativeSurfaceStyle: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.cardGlassTint) private var cardGlassTint
 
@@ -324,7 +307,7 @@ private struct StudioChipStyle: ViewModifier {
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .foregroundStyle(isSelected ? color : AppTheme.textPrimary)
+                .foregroundStyle(isSelected ? color : .primary)
                 .background(
                     Capsule()
                         .fill(isSelected ? AppTheme.accentWash(color, for: colorScheme) : AppTheme.inlineFill)
@@ -373,19 +356,11 @@ private struct StudioChipStyle: ViewModifier {
 }
 
 extension View {
-    func vocelloGlassSurface(
-        padding: CGFloat = LayoutConstants.cardPadding,
-        radius: CGFloat = LayoutConstants.cardRadius,
-        fill: Color = AppTheme.cardFill
-    ) -> some View {
-        modifier(VocelloGlassSurface(padding: padding, radius: radius, fill: fill))
-    }
-
     func studioCard(
         padding: CGFloat = LayoutConstants.cardPadding,
         radius: CGFloat = LayoutConstants.cardRadius
     ) -> some View {
-        vocelloGlassSurface(padding: padding, radius: radius, fill: AppTheme.cardFill)
+        modifier(NativeSurfaceStyle(padding: padding, radius: radius, fill: AppTheme.cardFill))
     }
 
     func glassCard() -> some View {
@@ -393,11 +368,11 @@ extension View {
     }
 
     func stageCard() -> some View {
-        vocelloGlassSurface(padding: 0, radius: LayoutConstants.stageRadius, fill: AppTheme.stageFill)
+        modifier(NativeSurfaceStyle(padding: 0, radius: LayoutConstants.stageRadius, fill: AppTheme.stageFill))
     }
 
     func inlinePanel(padding: CGFloat = 14, radius: CGFloat = 16) -> some View {
-        vocelloGlassSurface(padding: padding, radius: radius, fill: AppTheme.inlineFill)
+        modifier(NativeSurfaceStyle(padding: padding, radius: radius, fill: AppTheme.inlineFill))
     }
 
     func appAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
@@ -424,14 +399,14 @@ private struct ToolbarRowStyle: ViewModifier {
         HStack(alignment: .center, spacing: 10) {
             Text(label.uppercased())
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .leading)
             content
         }
     }
 }
 
-private struct VocelloGlassBadge: ViewModifier {
+private struct GlassBadgeStyle: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     let tint: Color?
@@ -462,7 +437,7 @@ private struct VocelloGlassBadge: ViewModifier {
     }
 }
 
-private struct VocelloGlassField: ViewModifier {
+private struct GlassTextFieldStyle: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     let radius: CGFloat
@@ -507,35 +482,6 @@ private struct VocelloGlassField: ViewModifier {
     }
 }
 
-private struct VocelloGlassRail: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            content
-                .background(
-                    Rectangle()
-                        .fill(AppTheme.railBackground)
-                        .overlay(alignment: .trailing) {
-                            Rectangle()
-                                .fill(AppTheme.railStroke)
-                                .frame(width: 1)
-                        }
-                )
-                .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 0))
-                .glass3DDepth(radius: 0, intensity: colorScheme == .dark ? 0.35 : 0.22)
-        } else {
-            content
-                .background(AppTheme.railBackground)
-        }
-        #else
-        content
-            .background(AppTheme.railBackground)
-        #endif
-    }
-}
-
 private struct Glass3DDepthStyle: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -557,8 +503,8 @@ private struct Glass3DDepthStyle: ViewModifier {
                         .strokeBorder(
                             LinearGradient(
                                 colors: [
-                                    AppTheme.warmEdgeHighlight.opacity(topOpacity),
-                                    AppTheme.warmEdgeHighlight.opacity(midOpacity),
+                                    .white.opacity(topOpacity),
+                                    .white.opacity(midOpacity),
                                     .clear,
                                 ],
                                 startPoint: .top,
@@ -567,7 +513,7 @@ private struct Glass3DDepthStyle: ViewModifier {
                             lineWidth: colorScheme == .dark ? 0.75 : 1
                         )
                 }
-                .shadow(color: AppTheme.charcoalShadow.opacity(shadowOpacity), radius: shadowRadius, y: shadowOffset)
+                .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius, y: shadowOffset)
         } else {
             content
         }
@@ -581,11 +527,11 @@ struct SectionHeaderStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(AppTheme.textSecondary)
+            .foregroundStyle(.secondary)
     }
 }
 
-struct VocelloGlassButton: ButtonStyle {
+struct GlowingGradientButtonStyle: ButtonStyle {
     let baseColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
@@ -593,13 +539,11 @@ struct VocelloGlassButton: ButtonStyle {
         if #available(macOS 26, *) {
             configuration.label
                 .font(.body.weight(.semibold))
-                .foregroundStyle(AppTheme.warmIvory)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .glassEffect(.regular.tint(baseColor), in: .rect(cornerRadius: 8))
-                .opacity(configuration.isPressed ? 0.86 : 1.0)
-                .scaleEffect(configuration.isPressed ? 0.985 : 1)
-                .offset(y: configuration.isPressed ? 1 : 0)
+                .opacity(configuration.isPressed ? 0.75 : 1.0)
                 .appAnimation(.easeInOut(duration: 0.15), value: configuration.isPressed)
         } else {
             legacyBody(configuration: configuration)
@@ -612,7 +556,7 @@ struct VocelloGlassButton: ButtonStyle {
     private func legacyBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundStyle(AppTheme.warmIvory)
+            .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
@@ -630,12 +574,10 @@ struct CompactGenerateButtonStyle: ButtonStyle {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
             configuration.label
-                .foregroundStyle(AppTheme.warmIvory)
+                .foregroundStyle(.white)
                 .padding(12)
                 .glassEffect(.regular.tint(baseColor), in: .circle)
-                .opacity(configuration.isPressed ? 0.86 : 1.0)
-                .scaleEffect(configuration.isPressed ? 0.96 : 1)
-                .offset(y: configuration.isPressed ? 1 : 0)
+                .opacity(configuration.isPressed ? 0.75 : 1.0)
                 .appAnimation(.easeInOut(duration: 0.15), value: configuration.isPressed)
         } else {
             legacyBody(configuration: configuration)
@@ -647,7 +589,7 @@ struct CompactGenerateButtonStyle: ButtonStyle {
 
     private func legacyBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(AppTheme.warmIvory)
+            .foregroundStyle(.white)
             .padding(12)
             .background(
                 Circle()
@@ -657,19 +599,19 @@ struct CompactGenerateButtonStyle: ButtonStyle {
     }
 }
 
-struct VocelloStudioBackground: View {
+struct AuroraBackground: View {
     var body: some View {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
             LinearGradient(
                 colors: [
                     Color(
-                        light: Color(red: 0.962, green: 0.950, blue: 0.922),
-                        dark: Color(red: 0.060, green: 0.067, blue: 0.083)
+                        light: Color(red: 0.984, green: 0.989, blue: 0.998),
+                        dark: Color(red: 0.06, green: 0.07, blue: 0.09)
                     ),
                     Color(
-                        light: Color(red: 0.930, green: 0.914, blue: 0.884),
-                        dark: Color(red: 0.090, green: 0.096, blue: 0.116)
+                        light: Color(red: 0.946, green: 0.956, blue: 0.978),
+                        dark: Color(red: 0.10, green: 0.11, blue: 0.13)
                     ),
                 ],
                 startPoint: .top,
@@ -686,7 +628,7 @@ struct VocelloStudioBackground: View {
 
 struct EmptyStateStyle: ViewModifier {
     func body(content: Content) -> some View {
-        content.foregroundStyle(AppTheme.textSecondary)
+        content.foregroundStyle(.secondary)
     }
 }
 
@@ -716,11 +658,11 @@ struct StudioGroupBoxStyle: GroupBoxStyle {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: LayoutConstants.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AppTheme.cardFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LayoutConstants.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
                     AppTheme.cardStroke.opacity(colorScheme == .dark ? 0.20 : AppTheme.surfaceStrokeOpacity(for: colorScheme)),
                     lineWidth: colorScheme == .dark ? 0.5 : 1
@@ -751,18 +693,18 @@ struct GlassGroupBoxStyle: GroupBoxStyle {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: LayoutConstants.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AppTheme.cardFill)
                 .overlay(
-                    RoundedRectangle(cornerRadius: LayoutConstants.cardRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(
                             resolvedStroke,
                             lineWidth: AppTheme.surfaceStrokeWidth(for: colorScheme)
                         )
                 )
         )
-        .glassEffect(.regular.tint(resolvedTint), in: .rect(cornerRadius: LayoutConstants.cardRadius))
-        .glass3DDepth(radius: LayoutConstants.cardRadius, intensity: depthIntensity)
+        .glassEffect(.regular.tint(resolvedTint), in: .rect(cornerRadius: 16))
+        .glass3DDepth(radius: 16, intensity: depthIntensity)
     }
 }
 #endif
@@ -785,7 +727,7 @@ extension View {
     func profileBackground(_ legacyColor: Color) -> some View {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
-            self.background(VocelloStudioBackground())
+            self.background(AppTheme.canvasBackground)
         } else {
             self.background(legacyColor)
         }
@@ -811,12 +753,7 @@ extension View {
     /// Profile-aware glass capsule badge background.
     @ViewBuilder
     func glassBadge(tint: Color? = nil) -> some View {
-        modifier(VocelloGlassBadge(tint: tint))
-    }
-
-    @ViewBuilder
-    func vocelloGlassBadge(tint: Color? = nil) -> some View {
-        modifier(VocelloGlassBadge(tint: tint))
+        modifier(GlassBadgeStyle(tint: tint))
     }
 
     /// Profile-aware glass text field background with 3D depth.
@@ -826,21 +763,7 @@ extension View {
         strokeColor: Color? = nil,
         strokeWidth: CGFloat = 1
     ) -> some View {
-        modifier(VocelloGlassField(radius: radius, strokeColor: strokeColor, strokeWidth: strokeWidth))
-    }
-
-    @ViewBuilder
-    func vocelloGlassField(
-        radius: CGFloat = 8,
-        strokeColor: Color? = nil,
-        strokeWidth: CGFloat = 1
-    ) -> some View {
-        modifier(VocelloGlassField(radius: radius, strokeColor: strokeColor, strokeWidth: strokeWidth))
-    }
-
-    @ViewBuilder
-    func vocelloGlassRail() -> some View {
-        modifier(VocelloGlassRail())
+        modifier(GlassTextFieldStyle(radius: radius, strokeColor: strokeColor, strokeWidth: strokeWidth))
     }
 
     /// Adds 3D depth to glass surfaces: top-edge highlight gradient + drop shadow.
@@ -880,8 +803,10 @@ extension View {
         environment(\.cardGlassTint, color)
     }
 
-    /// Layers a subtle top wash of the mode color behind the content canvas
-    /// so Liquid Glass above it has something warm to refract.
+    /// Layers a subtle radial wash of the mode color at the top of the
+    /// content canvas so Liquid Glass above it has something to refract —
+    /// otherwise glass panels sit on a flat charcoal and the glass effect
+    /// reads as a flat tint rather than a material.
     func modeCanvasBackdrop(_ color: Color?) -> some View {
         background(ModeCanvasBackdrop(color: color))
     }
@@ -896,16 +821,19 @@ private struct ModeCanvasBackdrop: View {
             ZStack {
                 AppTheme.canvasBackground
                 if let color {
-                    LinearGradient(
+                    // Top-center radial glow in mode color — strong enough
+                    // to give Liquid Glass a gradient to refract, subtle
+                    // enough not to fight the content.
+                    RadialGradient(
                         colors: [
-                            color.opacity(colorScheme == .dark ? 0.13 : 0.07),
+                            color.opacity(colorScheme == .dark ? 0.18 : 0.10),
                             color.opacity(0)
                         ],
-                        startPoint: .top,
-                        endPoint: .center
+                        center: .init(x: 0.5, y: -0.05),
+                        startRadius: 0,
+                        endRadius: max(geo.size.width, geo.size.height) * 0.75
                     )
-                    .frame(width: geo.size.width, height: max(geo.size.height * 0.55, 240))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .blendMode(.plusLighter)
                     .allowsHitTesting(false)
                 }
             }

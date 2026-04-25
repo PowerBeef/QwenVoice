@@ -50,57 +50,41 @@ struct TextInputView: View {
 
     private var actionRow: some View {
         HStack(alignment: .center, spacing: isEmbedded ? 10 : 12) {
-            if let batchAction {
-                Button {
-                    batchAction()
-                } label: {
-                    Label("Batch", systemImage: "square.stack.3d.up")
-                        .labelStyle(.titleAndIcon)
+            ControlGroup {
+                if let batchAction {
+                    Button("Batch") {
+                        batchAction()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(batchDisabled)
+                    .accessibilityIdentifier("textInput_batchButton")
                 }
-                .buttonStyle(VocelloGlassButton(baseColor: AppTheme.inlineFill))
-                .foregroundStyle(batchDisabled ? AppTheme.textSecondary.opacity(0.55) : AppTheme.textPrimary)
-                .disabled(batchDisabled)
-                .accessibilityIdentifier("textInput_batchButton")
+
+                Button {
+                    onGenerate()
+                } label: {
+                    if isGenerating {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(minWidth: 88)
+                    } else {
+                        Label("Generate", systemImage: "sparkles")
+                            .frame(minWidth: 88)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(buttonColor)
+                .disabled(text.isEmpty || isGenerating || generateDisabled)
+                .accessibilityIdentifier("textInput_generateButton")
             }
 
             Spacer(minLength: 0)
 
             Text("\(text.count) characters")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(text.count > 500 ? AppTheme.vocelloTerracotta : AppTheme.textSecondary)
-                .monospacedDigit()
+                .font(.callout)
+                .foregroundStyle(text.count > 500 ? .orange : .secondary)
                 .accessibilityIdentifier("textInput_charCount")
-
-            Button {
-                onGenerate()
-            } label: {
-                HStack(spacing: 8) {
-                    if isGenerating {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "sparkles")
-                    }
-                    Text(isGenerating ? "Creating" : "Create")
-                }
-                .frame(minWidth: 112)
-            }
-            .buttonStyle(VocelloGlassButton(baseColor: buttonColor.opacity(generateButtonDisabled ? 0.38 : 0.92)))
-            .disabled(generateButtonDisabled)
-            .accessibilityIdentifier("textInput_generateButton")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(minHeight: LayoutConstants.studioTransportHeight)
-        .vocelloGlassSurface(
-            padding: 0,
-            radius: 18,
-            fill: AppTheme.inlineFill
-        )
-    }
-
-    private var generateButtonDisabled: Bool {
-        text.isEmpty || isGenerating || generateDisabled
     }
 
     private var shortcutBridge: some View {

@@ -19,40 +19,10 @@ struct ModelsView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            VStack(alignment: .leading, spacing: LayoutConstants.sectionSpacing) {
-                StudioCollectionHeader(
-                    eyebrow: "Settings",
-                    title: "Model library",
-                    subtitle: "Install, repair, and verify the local Qwen3-TTS variants Vocello can use.",
-                    iconName: "square.stack.3d.up",
-                    accentColor: AppTheme.models,
-                    trailing: "\(installedModels.count)/\(TTSModel.all.count) installed"
-                )
-
-                List {
-                    if !installedModels.isEmpty {
-                        Section("Installed") {
-                            ForEach(installedModels) { model in
-                                ModelRow(
-                                    model: model,
-                                    viewModel: viewModel,
-                                    isHighlighted: flashedModelID == model.id,
-                                    onDelete: {
-                                        modelToDelete = model
-                                        showDeleteConfirmation = true
-                                    }
-                                )
-                                .id(model.id)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                            }
-                        }
-                        .listSectionSeparator(.hidden)
-                    }
-
-                    Section("Available To Download") {
-                        ForEach(otherModels) { model in
+            List {
+                if !installedModels.isEmpty {
+                    Section("Installed") {
+                        ForEach(installedModels) { model in
                             ModelRow(
                                 model: model,
                                 viewModel: viewModel,
@@ -70,14 +40,27 @@ struct ModelsView: View {
                     }
                     .listSectionSeparator(.hidden)
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
+
+                Section("Available To Download") {
+                    ForEach(otherModels) { model in
+                        ModelRow(
+                            model: model,
+                            viewModel: viewModel,
+                            isHighlighted: flashedModelID == model.id,
+                            onDelete: {
+                                modelToDelete = model
+                                showDeleteConfirmation = true
+                            }
+                        )
+                        .id(model.id)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                }
+                .listSectionSeparator(.hidden)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
-            .profileBackground(AppTheme.canvasBackground)
+            .listStyle(.inset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(alignment: .topLeading) {
                 Text("Models")
@@ -182,20 +165,20 @@ struct ModelRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(model.name)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.textPrimary)
+                        .foregroundStyle(.primary)
 
                     Text(usageLabel)
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .foregroundStyle(.secondary)
 
                     Text(variantLabel)
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 Text(model.folder)
                     .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
@@ -209,12 +192,9 @@ struct ModelRow: View {
             }
             .frame(minWidth: 92, alignment: .trailing)
         }
-        .vocelloGlassSurface(
-            padding: 12,
-            radius: 16,
-            fill: AppTheme.inlineFill
-        )
-        .overlay(rowHighlight)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(rowHighlight)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("models_card_\(model.id)")
     }

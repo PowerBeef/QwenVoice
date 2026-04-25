@@ -220,23 +220,9 @@ struct VoiceCloningView: View {
             topPadding: LayoutConstants.generationPageTopPadding,
             bottomPadding: LayoutConstants.generationPageBottomPadding
         ) {
-            GenerationStudioLayout(
-                mode: .clone,
-                title: "Clone from reference",
-                subtitle: "Pin a permitted reference voice, keep context visible, and generate from a focused desktop stage.",
-                statusTitle: readinessDescriptor.title,
-                statusDetail: readinessDescriptor.detail,
-                isReady: readinessDescriptor.noteIsReady,
-                modelName: modelDisplayName,
-                characterCount: draft.text.count,
-                characterLimit: 150,
-                onModeSelect: navigateToMode
-            ) {
-                composerPanel
-                    .layoutPriority(1)
-            } inspector: {
-                configurationPanel
-            }
+            configurationPanel
+            composerPanel
+                .layoutPriority(1)
         }
         .onDrop(of: [.fileURL], isTargeted: isDragOverBinding) { providers in
             coordinator.handleDrop(providers, draft: $draft)
@@ -397,10 +383,6 @@ private extension VoiceCloningView {
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
-    }
-
-    func navigateToMode(_ mode: GenerationMode) {
-        appCommandRouter.navigate(to: SidebarItem.item(for: mode))
     }
 }
 
@@ -627,47 +609,14 @@ private struct CloneSourceRow: View {
     let referenceAudioPath: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                browseForAudio()
-            } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(AppTheme.voiceCloning.opacity(0.20))
-                        Image(systemName: referenceAudioPath == nil ? "waveform.badge.plus" : "checkmark")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(AppTheme.voiceCloning)
-                    }
-                    .frame(width: 40, height: 40)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(referenceAudioPath == nil ? "Add reference audio" : "Replace reference audio")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(AppTheme.textPrimary)
-                        Text(VoiceCloningReferenceAudioSupport.supportedFormatDescription)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .vocelloGlassSurface(
-                padding: 0,
-                radius: 14,
-                fill: AppTheme.voiceCloning.opacity(0.10)
-            )
-            .focusEffectDisabled()
-            .accessibilityIdentifier("voiceCloning_importButton")
-
+        HStack(alignment: .center, spacing: 8) {
             if !savedVoices.isEmpty {
                 savedVoicePicker
             }
+
+            importButton
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -686,10 +635,23 @@ private struct CloneSourceRow: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .focusEffectDisabled()
-            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 180, alignment: .leading)
             .accessibilityValue(savedVoices.first(where: { $0.id == selectedSavedVoiceID })?.name ?? "")
             .accessibilityIdentifier("voiceCloning_savedVoicePicker")
         }
+    }
+
+    private var importButton: some View {
+        Button {
+            browseForAudio()
+        } label: {
+            Label(referenceAudioPath == nil ? "Import reference audio..." : "Replace reference audio...", systemImage: "waveform.badge.plus")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(AppTheme.voiceCloning)
+        .controlSize(.small)
+        .accessibilityIdentifier("voiceCloning_importButton")
     }
 }
 
