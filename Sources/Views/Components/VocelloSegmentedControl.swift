@@ -77,14 +77,17 @@ private struct SegmentLabel: View {
     let tint: Color
     let isActive: Bool
 
+    @ScaledMetric private var verticalPadding: CGFloat = 10
+    @ScaledMetric private var horizontalPadding: CGFloat = 14
+
     var body: some View {
         Text(text)
-            .font(.system(size: 14, weight: .semibold))
+            .font(.vocelloFooterTitle)
             .tracking(-0.1)
             .foregroundStyle(isActive ? AppTheme.warmIvory : AppTheme.textSecondary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
+            .padding(.vertical, verticalPadding)
+            .padding(.horizontal, horizontalPadding)
             .background(activeFillBackground)
     }
 

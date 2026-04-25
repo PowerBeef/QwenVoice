@@ -26,6 +26,9 @@ struct GenerateView: View {
     let savedVoicesViewModel: SavedVoicesViewModel
     let appCommandRouter: AppCommandRouter
 
+    @ScaledMetric private var horizontalInset: CGFloat = 28
+    @ScaledMetric private var topInset: CGFloat = 24
+
     private var modeSegments: [VocelloSegmentedControl<GenerationMode>.Segment] {
         [
             .init(value: .custom, label: "Custom", tint: AppTheme.customVoice, accessibilityIdentifier: "generate_tab_custom"),
@@ -44,11 +47,11 @@ struct GenerateView: View {
                     segments: modeSegments,
                     selection: $mode
                 )
-                .frame(maxWidth: 540, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("generate_modeSegmented")
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
+            .padding(.horizontal, horizontalInset)
+            .padding(.top, topInset)
 
             modeContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

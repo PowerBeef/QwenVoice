@@ -23,17 +23,16 @@ struct WindowFooterPlayer: View {
     var modeTint: Color = AppTheme.accent
 
     @Environment(\.colorScheme) private var colorScheme
-
-    private var resolvedHeight: CGFloat {
-        LayoutConstants.footerPlayerHeight
-    }
+    @ScaledMetric private var scaledHeight: CGFloat = LayoutConstants.footerPlayerHeight
+    @ScaledMetric private var scaledCompactHeight: CGFloat = LayoutConstants.footerPlayerCompactHeight
+    @ScaledMetric private var horizontalPadding: CGFloat = 18
 
     var body: some View {
         GeometryReader { geo in
             let isCompact = geo.size.width < LayoutConstants.sidebarHideBreakpoint
             HStack(spacing: 16) {
                 leftRegion
-                    .frame(width: isCompact ? nil : 240, alignment: .leading)
+                    .frame(minWidth: isCompact ? 0 : 240, alignment: .leading)
                     .layoutPriority(2)
 
                 centerRegion
@@ -42,14 +41,14 @@ struct WindowFooterPlayer: View {
 
                 if !isCompact {
                     rightRegion
-                        .frame(width: 180, alignment: .trailing)
+                        .frame(minWidth: 160, alignment: .trailing)
                 }
             }
-            .padding(.horizontal, 18)
-            .frame(width: geo.size.width, height: isCompact ? LayoutConstants.footerPlayerCompactHeight : LayoutConstants.footerPlayerHeight)
+            .padding(.horizontal, horizontalPadding)
+            .frame(width: geo.size.width, height: isCompact ? scaledCompactHeight : scaledHeight)
             .background(footerMaterial)
         }
-        .frame(height: resolvedHeight)
+        .frame(height: scaledHeight)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("windowFooterPlayer")
     }
@@ -74,12 +73,12 @@ struct WindowFooterPlayer: View {
             playDisc
             VStack(alignment: .leading, spacing: 2) {
                 Text(titleText)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.vocelloFooterTitle)
                     .foregroundStyle(audioPlayer.hasAudio ? AppTheme.textPrimary : AppTheme.textSecondary)
                     .tracking(-0.1)
                     .lineLimit(1)
                 Text(subtitleText)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.vocelloCaption)
                     .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
                     .lineLimit(1)
             }
@@ -127,7 +126,7 @@ struct WindowFooterPlayer: View {
             Spacer(minLength: 0)
             if audioPlayer.hasAudio {
                 Text(timeReadout)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.vocelloMonoTime)
                     .foregroundStyle(AppTheme.textSecondary)
                     .accessibilityIdentifier("windowFooterPlayer_time")
 
@@ -135,9 +134,9 @@ struct WindowFooterPlayer: View {
                     audioPlayer.dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: dismissButtonSize, height: dismissButtonSize)
                         .background(
                             Circle().fill(AppTheme.inlineFill.opacity(0.6))
                         )
@@ -150,6 +149,9 @@ struct WindowFooterPlayer: View {
     }
 
     // MARK: - Play disc
+
+    @ScaledMetric private var playDiscSize: CGFloat = 44
+    @ScaledMetric private var dismissButtonSize: CGFloat = 28
 
     @ViewBuilder
     private var playDisc: some View {
@@ -174,7 +176,7 @@ struct WindowFooterPlayer: View {
                                 endPoint: .bottom
                             )
                     )
-                    .frame(width: 44, height: 44)
+                    .frame(width: playDiscSize, height: playDiscSize)
                     .shadow(
                         color: audioPlayer.hasAudio ? modeTint.opacity(0.32) : .clear,
                         radius: 8, y: 4
@@ -187,7 +189,7 @@ struct WindowFooterPlayer: View {
                         .tint(Color.black.opacity(0.78))
                 } else {
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.body.weight(.bold))
                         .foregroundStyle(audioPlayer.hasAudio ? Color.black.opacity(0.78) : AppTheme.textSecondary)
                 }
             }

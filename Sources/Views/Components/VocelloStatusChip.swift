@@ -25,40 +25,50 @@ struct VocelloStatusChip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(state.color)
-                .frame(width: 6, height: 6)
-
-            if let memoryMB {
-                Text(memoryFormatted(memoryMB))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .monospacedDigit()
-            }
-
-            if memoryMB != nil {
-                Text("·")
-                    .font(.system(size: 9))
-                    .foregroundStyle(AppTheme.textSecondary.opacity(0.65))
-            }
-
-            Text(state.rawValue)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(state.color)
+            statusDot
+            memoryGroup
+            stateLabel
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background {
-            Capsule(style: .continuous)
-                .fill(AppTheme.inlineFill.opacity(colorScheme == .dark ? 0.74 : 0.85))
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(AppTheme.inlineStroke.opacity(colorScheme == .dark ? 0.22 : 0.45), lineWidth: 0.5)
-                )
-        }
+        .background(chipBackground)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Runtime status \(state.rawValue)")
         .accessibilityValue(memoryMB.map { "\(Int($0)) megabytes" } ?? "")
+    }
+
+    private var statusDot: some View {
+        Circle()
+            .fill(state.color)
+            .frame(width: 6, height: 6)
+    }
+
+    @ViewBuilder
+    private var memoryGroup: some View {
+        if let memoryMB {
+            Text(memoryFormatted(memoryMB))
+                .font(.vocelloCaption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .monospacedDigit()
+            Text("·")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.textSecondary.opacity(0.65))
+        }
+    }
+
+    private var stateLabel: some View {
+        Text(state.rawValue)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(state.color)
+    }
+
+    private var chipBackground: some View {
+        Capsule(style: .continuous)
+            .fill(AppTheme.inlineFill.opacity(colorScheme == .dark ? 0.74 : 0.85))
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(AppTheme.inlineStroke.opacity(colorScheme == .dark ? 0.22 : 0.45), lineWidth: 0.5)
+            )
     }
 
     private func memoryFormatted(_ mb: Double) -> String {

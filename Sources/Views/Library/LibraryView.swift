@@ -12,6 +12,9 @@ struct LibraryView: View {
     let canUseSavedVoicesInVoiceCloning: Bool
     let onUseInVoiceCloning: (Voice) -> Void
 
+    @ScaledMetric private var horizontalInset: CGFloat = 28
+    @ScaledMetric private var topInset: CGFloat = 24
+
     private var tabSegments: [VocelloSegmentedControl<LibraryTab>.Segment] {
         [
             .init(value: .history, label: "History", tint: AppTheme.library, accessibilityIdentifier: "library_tab_history"),
@@ -29,11 +32,11 @@ struct LibraryView: View {
                     segments: tabSegments,
                     selection: $tab
                 )
-                .frame(maxWidth: 360, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("library_tabSegmented")
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
+            .padding(.horizontal, horizontalInset)
+            .padding(.top, topInset)
 
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

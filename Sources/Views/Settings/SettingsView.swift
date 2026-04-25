@@ -9,12 +9,15 @@ struct SettingsView: View {
     @Binding var tab: SettingsTab
     @Binding var pendingHighlightedModelID: String?
 
+    @ScaledMetric private var horizontalInset: CGFloat = 28
+    @ScaledMetric private var topInset: CGFloat = 24
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Settings")
                 .vocelloH1()
-                .padding(.horizontal, 28)
-                .padding(.top, 24)
+                .padding(.horizontal, horizontalInset)
+                .padding(.top, topInset)
 
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

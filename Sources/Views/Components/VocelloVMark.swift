@@ -4,10 +4,19 @@ import SwiftUI
 /// (`refs/vocello_mark.png`, traced from `lib/vocello-chrome.jsx:VMark`).
 /// Two overlapping V shapes with a back/front gradient pair.
 ///
-/// Default size renders at 28pt × ~24.6pt to match the iOS chrome's wordmark
-/// pairing. Pass an explicit `size` to scale.
+/// Default size renders at ~28pt × ~24.6pt to match the iOS chrome's wordmark
+/// pairing, scaled via `@ScaledMetric(relativeTo: .title)` so the mark grows
+/// in lockstep with the Cormorant wordmark when Dynamic Type is enlarged.
+/// Pass an explicit `size` to override and lock the size.
 struct VocelloVMark: View {
-    var size: CGFloat = 28
+    @ScaledMetric(relativeTo: .title) private var scaledSize: CGFloat = 28
+    private let overrideSize: CGFloat?
+
+    init(size: CGFloat? = nil) {
+        self.overrideSize = size
+    }
+
+    private var resolvedSize: CGFloat { overrideSize ?? scaledSize }
 
     var body: some View {
         Canvas { context, canvasSize in
@@ -51,7 +60,7 @@ struct VocelloVMark: View {
             )
             context.fill(frontPath, with: frontGradient)
         }
-        .frame(width: size, height: size * 0.875)
+        .frame(width: resolvedSize, height: resolvedSize * 0.875)
         .accessibilityHidden(true)
     }
 }

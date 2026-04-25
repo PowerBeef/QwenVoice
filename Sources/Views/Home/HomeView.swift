@@ -7,16 +7,20 @@ import SwiftUI
 struct HomeView: View {
     let onSelectMode: (GenerationMode) -> Void
 
+    @ScaledMetric private var horizontalPadding: CGFloat = 32
+    @ScaledMetric private var topPadding: CGFloat = 32
+    @ScaledMetric private var verticalSpacing: CGFloat = 28
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: verticalSpacing) {
                 heroBlock
                 launchersGrid
                 recentTakesPlaceholder
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.top, topPadding)
             .padding(.bottom, 24)
             .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -27,11 +31,11 @@ struct HomeView: View {
 
     private var heroBlock: some View {
         HStack(alignment: .center, spacing: 22) {
-            VoiceOrb(size: 96)
+            VoiceOrb()
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(greeting)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.textSecondary)
                     .tracking(0.2)
 
@@ -57,25 +61,25 @@ struct HomeView: View {
     private var recentTakesPlaceholder: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("RECENT TAKES")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.vocelloMicroLabel)
                 .tracking(1.4)
                 .foregroundStyle(AppTheme.textSecondary)
 
             HStack(spacing: 12) {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(AppTheme.library)
-                    .frame(width: 36, height: 36)
+                    .frame(width: placeholderIconSize, height: placeholderIconSize)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(AppTheme.library.opacity(0.18))
                     )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Your recent takes will appear here")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.vocelloFooterTitle)
                         .foregroundStyle(AppTheme.textPrimary)
                     Text("Generate something to start your library.")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.vocelloCaption)
                         .foregroundStyle(AppTheme.textSecondary)
                 }
                 Spacer()
@@ -85,6 +89,8 @@ struct HomeView: View {
             .background(placeholderBackground)
         }
     }
+
+    @ScaledMetric private var placeholderIconSize: CGFloat = 36
 
     private var placeholderBackground: some View {
         let shape = RoundedRectangle(cornerRadius: LayoutConstants.brandCardRadius, style: .continuous)
@@ -158,6 +164,8 @@ private struct HomeModeLauncherCard: View {
     let label: String
     let sublabel: String
 
+    @ScaledMetric private var iconBadgeSize: CGFloat = 40
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             iconBadge
@@ -165,7 +173,7 @@ private struct HomeModeLauncherCard: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(cardBackground)
     }
 
@@ -173,9 +181,9 @@ private struct HomeModeLauncherCard: View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(tint.opacity(0.20))
-                .frame(width: 40, height: 40)
+                .frame(width: iconBadgeSize, height: iconBadgeSize)
             Image(systemName: iconName)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(tint)
         }
     }
@@ -183,10 +191,10 @@ private struct HomeModeLauncherCard: View {
     private var textBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.vocelloLauncherTitle)
                 .foregroundStyle(AppTheme.textPrimary)
             Text(sublabel)
-                .font(.system(size: 12, weight: .medium))
+                .font(.vocelloCaption)
                 .foregroundStyle(AppTheme.textSecondary)
         }
     }

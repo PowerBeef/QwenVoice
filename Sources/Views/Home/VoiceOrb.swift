@@ -7,7 +7,14 @@ import SwiftUI
 /// Honors `Reduce Motion`: when on, the rotation is suppressed and the
 /// orb renders as a static gradient.
 struct VoiceOrb: View {
-    var size: CGFloat = 96
+    @ScaledMetric(relativeTo: .largeTitle) private var scaledSize: CGFloat = 96
+    private let overrideSize: CGFloat?
+
+    init(size: CGFloat? = nil) {
+        self.overrideSize = size
+    }
+
+    private var size: CGFloat { overrideSize ?? scaledSize }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Angle = .degrees(0)

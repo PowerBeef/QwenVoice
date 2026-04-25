@@ -15,7 +15,7 @@ private struct SidebarBrandHeader: View {
                 .vocelloWordmark()
 
             Text("AI-TTS")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.vocelloMicroLabel)
                 .tracking(0.6)
                 .foregroundStyle(AppTheme.textSecondary.opacity(0.55))
 
@@ -24,7 +24,7 @@ private struct SidebarBrandHeader: View {
         .padding(.horizontal, 14)
         .padding(.top, 18)
         .padding(.bottom, 12)
-        .frame(height: LayoutConstants.sidebarBrandHeaderHeight, alignment: .leading)
+        .frame(minHeight: LayoutConstants.sidebarBrandHeaderHeight, alignment: .leading)
         .accessibilityHidden(true)
     }
 }
@@ -79,12 +79,13 @@ private struct SidebarSectionRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: section.iconName)
-                .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                .font(.body.weight(isSelected ? .semibold : .regular))
+                .imageScale(.large)
                 .foregroundStyle(iconColor)
                 .frame(width: 22, alignment: .center)
 
             Text(section.rawValue)
-                .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
+                .font(.vocelloSidebarRow(active: isSelected))
                 .foregroundStyle(textColor)
                 .lineLimit(1)
 
@@ -93,7 +94,7 @@ private struct SidebarSectionRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 36)
+        .frame(minHeight: 36)
         .background(rowBackground)
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onTapGesture {
