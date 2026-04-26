@@ -5,7 +5,6 @@ struct CustomVoiceView: View {
     @Binding private var draft: CustomVoiceDraft
     @StateObject private var coordinator = CustomVoiceCoordinator()
 
-    private let activationID: Int
     private let ttsEngineStore: TTSEngineStore
     private let audioPlayer: AudioPlayerViewModel
     private let modelManager: ModelManagerViewModel
@@ -39,25 +38,14 @@ struct CustomVoiceView: View {
             && isModelAvailable
     }
 
-    private var idlePrewarmTaskID: String {
-        let debounceKey = draft.idlePrewarmDebounceKey ?? "none"
-        return "\(ttsEngineStore.isReady)|\(isModelAvailable)|\(debounceKey)"
-    }
-
-    private var screenActivationTaskID: String {
-        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
-    }
-
     init(
         draft: Binding<CustomVoiceDraft>,
-        activationID: Int,
         ttsEngineStore: TTSEngineStore,
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel,
         appCommandRouter: AppCommandRouter
     ) {
         _draft = draft
-        self.activationID = activationID
         self.ttsEngineStore = ttsEngineStore
         self.audioPlayer = audioPlayer
         self.modelManager = modelManager
@@ -91,22 +79,6 @@ struct CustomVoiceView: View {
                 .environmentObject(ttsEngineStore)
                 .environmentObject(audioPlayer)
             }
-        }
-        .task(id: screenActivationTaskID) {
-            await coordinator.handleScreenActivation(
-                activationID: activationID,
-                model: activeModel,
-                isModelAvailable: isModelAvailable,
-                ttsEngineStore: ttsEngineStore
-            )
-        }
-        .task(id: idlePrewarmTaskID) {
-            await coordinator.scheduleIdlePrewarmIfNeeded(
-                draft: draft,
-                model: activeModel,
-                isModelAvailable: isModelAvailable,
-                ttsEngineStore: ttsEngineStore
-            )
         }
     }
 }

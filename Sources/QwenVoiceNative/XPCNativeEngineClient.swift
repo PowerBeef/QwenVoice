@@ -154,6 +154,7 @@ actor XPCNativeEngineCoordinator {
     private var initializedAppSupportDirectory: URL?
     private var batchProgressHandlers: [UUID: BatchProgressHandlerBox] = [:]
     private var pendingRequests: [UUID: PendingRequestBox] = [:]
+    private var inFlightBestEffortKeys: Set<String> = []
 
     init(
         onSnapshot: @escaping @Sendable (TTSEngineSnapshot) -> Void,
@@ -212,14 +213,36 @@ actor XPCNativeEngineCoordinator {
     }
 
     func fireAndForget(_ command: EngineCommand) {
-        Task {
-            do {
-                _ = try await send(command)
-            } catch {
-                Self.logger.error(
-                    "Best-effort command '\(command.transportName, privacy: .public)' failed: \(error.localizedDescription, privacy: .public)"
+        let deduplicationKey = bestEffortDeduplicationKey(for: command)
+        if let deduplicationKey {
+            guard inFlightBestEffortKeys.insert(deduplicationKey).inserted else {
+                Self.logger.debug(
+                    "Skipping duplicate best-effort command '\(command.transportName, privacy: .public)' with key \(deduplicationKey, privacy: .public)."
                 )
+                return
             }
+        }
+
+        Task { [command, deduplicationKey] in
+            await performBestEffort(command, deduplicationKey: deduplicationKey)
+        }
+    }
+
+    private func performBestEffort(
+        _ command: EngineCommand,
+        deduplicationKey: String?
+    ) async {
+        defer {
+            if let deduplicationKey {
+                inFlightBestEffortKeys.remove(deduplicationKey)
+            }
+        }
+        do {
+            _ = try await send(command)
+        } catch {
+            Self.logger.error(
+                "Best-effort command '\(command.transportName, privacy: .public)' failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
@@ -420,6 +443,7 @@ actor XPCNativeEngineCoordinator {
         connectionToInvalidate.invalidate()
         didInitializeCurrentConnection = false
         batchProgressHandlers.removeAll()
+        inFlightBestEffortKeys.removeAll()
 
         let pendingRequestBoxes = pendingRequests.values
         pendingRequests.removeAll()
@@ -448,6 +472,17 @@ actor XPCNativeEngineCoordinator {
         let transport = activeConnection?.transport
         activeConnection = nil
         return transport
+    }
+
+    private func bestEffortDeduplicationKey(for command: EngineCommand) -> String? {
+        switch command {
+        case .ensureModelLoadedIfNeeded(let id):
+            "ensureModelLoadedIfNeeded|\(id)"
+        case .prewarmModelIfNeeded(let request):
+            "prewarmModelIfNeeded|\(GenerationSemantics.prewarmIdentityKey(for: request))"
+        default:
+            nil
+        }
     }
 }
 

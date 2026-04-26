@@ -53,6 +53,9 @@ public final class TTSEngineStore: ObservableObject {
                     snapshot: self.snapshot,
                     latestEvent: latestEvent
                 )
+                guard self.latestEvent != latestEvent || self.frontendState != nextFrontendState else {
+                    return
+                }
                 self.latestEvent = latestEvent
                 self.frontendState = nextFrontendState
             }
@@ -132,10 +135,14 @@ public final class TTSEngineStore: ObservableObject {
     }
 
     private func apply(snapshot: TTSEngineSnapshot) {
-        self.snapshot = snapshot
-        frontendState = TTSEngineFrontendState(
+        let nextFrontendState = TTSEngineFrontendState(
             snapshot: snapshot,
             latestEvent: latestEvent
         )
+        guard self.snapshot != snapshot || frontendState != nextFrontendState else {
+            return
+        }
+        self.snapshot = snapshot
+        frontendState = nextFrontendState
     }
 }

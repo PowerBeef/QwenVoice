@@ -117,6 +117,44 @@ final class TTSEngineStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTTSEngineStoreDoesNotPublishDuplicateSnapshots() async throws {
+        let initial = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .idle,
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        let engine = MockMacTTSEngine(snapshot: initial)
+        let store = TTSEngineStore(engine: engine)
+        var publishCount = 0
+        let cancellable = store.objectWillChange.sink {
+            publishCount += 1
+        }
+
+        engine.pushSnapshot(initial)
+        try await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(publishCount, 0)
+
+        let updated = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: "pro_custom"),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        engine.pushSnapshot(updated)
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "distinct snapshot publishes"
+        ) {
+            publishCount > 0
+        }
+
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @MainActor
     func testTTSEngineStoreForwardsGenerateRequests() async throws {
         let engine = MockMacTTSEngine(
             snapshot: TTSEngineSnapshot(
@@ -235,6 +273,50 @@ final class TTSEngineStoreTests: XCTestCase {
         XCTAssertEqual(store.frontendState.latestEvent?.requestID, 1)
         XCTAssertEqual(store.frontendState.loadState, initialSnapshot.loadState)
         XCTAssertEqual(store.frontendState.lifecycleState, .connected)
+    }
+
+    @MainActor
+    func testTTSEngineStoreDoesNotPublishDuplicateChunkEvents() async throws {
+        let initialSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: "pro_custom"),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        let engine = MockMacTTSEngine(snapshot: initialSnapshot)
+        let store = TTSEngineStore(engine: engine)
+        var publishCount = 0
+        let cancellable = store.objectWillChange.sink {
+            publishCount += 1
+        }
+        let event = GenerationEvent(
+            kind: .streamChunk,
+            requestID: 10,
+            mode: "custom",
+            title: "Preview",
+            chunkPath: "/tmp/chunk.wav",
+            isFinal: false,
+            chunkDurationSeconds: 0.25,
+            cumulativeDurationSeconds: 0.25,
+            streamSessionDirectory: "/tmp/session"
+        )
+
+        GenerationChunkBroker.publish(event)
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "first chunk event publishes"
+        ) {
+            store.latestEvent == event
+        }
+        let firstPublishCount = publishCount
+        XCTAssertGreaterThan(firstPublishCount, 0)
+
+        GenerationChunkBroker.publish(event)
+        try await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(publishCount, firstPublishCount)
+
+        withExtendedLifetime(cancellable) {}
     }
 
     @MainActor

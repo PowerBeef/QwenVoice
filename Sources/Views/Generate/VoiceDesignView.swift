@@ -5,7 +5,6 @@ struct VoiceDesignView: View {
     @Binding private var draft: VoiceDesignDraft
     @StateObject private var coordinator = VoiceDesignCoordinator()
 
-    private let activationID: Int
     private let ttsEngineStore: TTSEngineStore
     private let audioPlayer: AudioPlayerViewModel
     private let modelManager: ModelManagerViewModel
@@ -42,22 +41,12 @@ struct VoiceDesignView: View {
             && !draft.voiceDescription.isEmpty
     }
 
-    private var idlePrewarmTaskID: String {
-        let debounceKey = draft.idlePrewarmDebounceKey ?? "none"
-        return "\(ttsEngineStore.isReady)-\(isModelAvailable)-\(debounceKey)"
-    }
-
-    private var screenActivationTaskID: String {
-        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
-    }
-
     private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
         coordinator.currentSavedVoiceCandidate(for: draft)
     }
 
     init(
         draft: Binding<VoiceDesignDraft>,
-        activationID: Int,
         ttsEngineStore: TTSEngineStore,
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel,
@@ -65,7 +54,6 @@ struct VoiceDesignView: View {
         appCommandRouter: AppCommandRouter
     ) {
         _draft = draft
-        self.activationID = activationID
         self.ttsEngineStore = ttsEngineStore
         self.audioPlayer = audioPlayer
         self.modelManager = modelManager
@@ -116,22 +104,6 @@ struct VoiceDesignView: View {
                 title: Text(alert.title),
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
-            )
-        }
-        .task(id: screenActivationTaskID) {
-            await coordinator.handleScreenActivation(
-                activationID: activationID,
-                model: activeModel,
-                isModelAvailable: isModelAvailable,
-                ttsEngineStore: ttsEngineStore
-            )
-        }
-        .task(id: idlePrewarmTaskID) {
-            await coordinator.scheduleIdlePrewarmIfNeeded(
-                draft: draft,
-                model: activeModel,
-                isModelAvailable: isModelAvailable,
-                ttsEngineStore: ttsEngineStore
             )
         }
     }

@@ -40,22 +40,6 @@ final class VoiceDesignCoordinator: ObservableObject {
     @Published var actionAlert: VoiceDesignActionAlert?
     @Published var latestSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate?
 
-    private var lastModelWarmupActivationID: Int?
-
-    func handleScreenActivation(
-        activationID: Int,
-        model: TTSModel?,
-        isModelAvailable: Bool,
-        ttsEngineStore: TTSEngineStore
-    ) async {
-        guard activationID > 0 else { return }
-        guard lastModelWarmupActivationID != activationID else { return }
-        guard let model, ttsEngineStore.isReady, isModelAvailable else { return }
-
-        lastModelWarmupActivationID = activationID
-        await ttsEngineStore.ensureModelLoadedIfNeeded(id: model.id)
-    }
-
     func currentSavedVoiceCandidate(for draft: VoiceDesignDraft) -> VoiceDesignSavedVoiceCandidate? {
         guard let latestSavedVoiceCandidate,
               latestSavedVoiceCandidate.matches(draft: draft) else {
@@ -94,27 +78,6 @@ final class VoiceDesignCoordinator: ObservableObject {
         actionAlert = VoiceDesignActionAlert(
             title: "Saved Voice Added",
             message: "\"\(voice.name)\" is ready in Saved Voices."
-        )
-    }
-
-    func scheduleIdlePrewarmIfNeeded(
-        draft: VoiceDesignDraft,
-        model: TTSModel?,
-        isModelAvailable: Bool,
-        ttsEngineStore: TTSEngineStore
-    ) async {
-        guard draft.idlePrewarmDebounceKey != nil else { return }
-        do {
-            try await Task.sleep(nanoseconds: 350_000_000)
-        } catch {
-            return
-        }
-        guard !Task.isCancelled else { return }
-        await prewarmSelectedModelIfNeeded(
-            draft: draft,
-            model: model,
-            isModelAvailable: isModelAvailable,
-            ttsEngineStore: ttsEngineStore
         )
     }
 
@@ -225,35 +188,4 @@ final class VoiceDesignCoordinator: ObservableObject {
         )
     }
 
-    nonisolated static func makeIdlePrewarmRequest(
-        draft: VoiceDesignDraft,
-        model: TTSModel
-    ) -> GenerationRequest? {
-        guard draft.shouldIdlePrewarm else { return nil }
-        return GenerationRequest(
-            modelID: model.id,
-            text: draft.text,
-            outputPath: "",
-            payload: .design(
-                voiceDescription: draft.voiceDescription,
-                deliveryStyle: draft.emotion
-            )
-        )
-    }
-
-    private func prewarmSelectedModelIfNeeded(
-        draft: VoiceDesignDraft,
-        model: TTSModel?,
-        isModelAvailable: Bool,
-        ttsEngineStore: TTSEngineStore
-    ) async {
-        guard let model,
-              let idlePrewarmRequest = Self.makeIdlePrewarmRequest(draft: draft, model: model),
-              ttsEngineStore.isReady,
-              isModelAvailable,
-              !isGenerating else {
-            return
-        }
-        await ttsEngineStore.prewarmModelIfNeeded(for: idlePrewarmRequest)
-    }
 }

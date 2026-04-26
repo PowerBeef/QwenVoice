@@ -24,6 +24,10 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
         subject.eraseToAnyPublisher()
     }
 
+    func pushSnapshot(_ snapshot: TTSEngineSnapshot) {
+        subject.send(snapshot)
+    }
+
     func initialize(appSupportDirectory: URL) async throws {}
     func ping() async throws -> Bool { true }
     func loadModel(id: String) async throws {}
@@ -89,58 +93,60 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testCustomVoiceCoordinatorWarmupLoadsModelOncePerActivation() async {
+    func testMacGenerationWarmupCoordinatorDebouncesToFinalSelectedMode() async {
         let (store, engine) = makeReadyStore()
-        let coordinator = CustomVoiceCoordinator()
-        let model = TTSModel.model(for: .custom)
+        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let customModel = TTSModel.model(for: .custom)!
+        let designModel = TTSModel.model(for: .design)!
 
-        await coordinator.handleScreenActivation(
-            activationID: 1,
-            model: model,
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
             isModelAvailable: true,
+            snapshot: store.snapshot,
             ttsEngineStore: store
         )
-        await coordinator.handleScreenActivation(
-            activationID: 1,
-            model: model,
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .design,
+            modelID: designModel.id,
             isModelAvailable: true,
-            ttsEngineStore: store
-        )
-        await coordinator.handleScreenActivation(
-            activationID: 2,
-            model: model,
-            isModelAvailable: true,
+            snapshot: store.snapshot,
             ttsEngineStore: store
         )
 
-        XCTAssertEqual(engine.ensureModelLoadedIDs, [model?.id, model?.id].compactMap { $0 })
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "root warmup sends only final mode"
+        ) {
+            engine.ensureModelLoadedIDs == [designModel.id]
+        }
     }
 
-    func testCustomVoiceCoordinatorIdlePrewarmRequestRequiresScript() {
-        let model = TTSModel.model(for: .custom)!
-
-        XCTAssertNil(
-            CustomVoiceCoordinator.makeIdlePrewarmRequest(
-                draft: CustomVoiceDraft(
-                    selectedSpeaker: "Vivian",
-                    emotion: "Normal tone",
-                    text: "   "
-                ),
-                model: model
-            )
+    @MainActor
+    func testMacGenerationWarmupCoordinatorSkipsWhenAnyModelIsLoaded() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let customModel = TTSModel.model(for: .custom)!
+        let designModel = TTSModel.model(for: .design)!
+        let loadedSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: customModel.id),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
         )
+        engine.pushSnapshot(loadedSnapshot)
+        await Task.yield()
 
-        XCTAssertEqual(
-            CustomVoiceCoordinator.makeIdlePrewarmRequest(
-                draft: CustomVoiceDraft(
-                    selectedSpeaker: "Vivian",
-                    emotion: "Normal tone",
-                    text: "Hello there"
-                ),
-                model: model
-            )?.modelID,
-            model.id
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .design,
+            modelID: designModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
         )
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
     }
 
     @MainActor
@@ -201,23 +207,6 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testVoiceCloningCoordinatorWarmupLoadsModelWithoutPrimingReference() async {
-        let (store, engine) = makeReadyStore()
-        let coordinator = VoiceCloningCoordinator()
-        let model = TTSModel.model(for: .clone)
-
-        await coordinator.handleScreenActivation(
-            activationID: 1,
-            cloneModel: model,
-            isModelAvailable: true,
-            ttsEngineStore: store
-        )
-
-        XCTAssertEqual(engine.ensureModelLoadedIDs, [model?.id].compactMap { $0 })
-        XCTAssertTrue(engine.primedReferences.isEmpty)
-    }
-
-    @MainActor
     func testVoiceCloningCoordinatorPresentBatchCapturesReferenceContext() {
         let coordinator = VoiceCloningCoordinator()
         let draft = VoiceCloningDraft(
@@ -257,7 +246,10 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
             modelManager: ModelManagerViewModel()
         )
 
-        try await waitUntil(timeoutSeconds: 1.0) {
+        await waitUntil(
+            timeoutSeconds: 1.0,
+            description: "custom voice cancellation finishes"
+        ) {
             coordinator.isGenerating == false
         }
 
@@ -285,7 +277,10 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
             modelManager: ModelManagerViewModel()
         )
 
-        try await waitUntil(timeoutSeconds: 1.0) {
+        await waitUntil(
+            timeoutSeconds: 1.0,
+            description: "voice design cancellation finishes"
+        ) {
             coordinator.isGenerating == false
         }
 
@@ -322,26 +317,14 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
             modelManager: ModelManagerViewModel()
         )
 
-        try await waitUntil(timeoutSeconds: 1.0) {
+        await waitUntil(
+            timeoutSeconds: 1.0,
+            description: "voice cloning cancellation finishes"
+        ) {
             coordinator.isGenerating == false
         }
 
         XCTAssertNil(coordinator.errorMessage)
         XCTAssertFalse(audioPlayer.isLiveStream)
-    }
-
-    @MainActor
-    private func waitUntil(
-        timeoutSeconds: TimeInterval,
-        condition: @escaping () -> Bool
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
-            if condition() {
-                return
-            }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTFail("Timed out waiting for condition")
     }
 }

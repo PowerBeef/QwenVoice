@@ -44,7 +44,6 @@ struct VoiceCloningView: View {
     @Binding private var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
     @StateObject private var coordinator = VoiceCloningCoordinator()
 
-    private let activationID: Int
     private let ttsEngineStore: TTSEngineStore
     private let audioPlayer: AudioPlayerViewModel
     private let modelManager: ModelManagerViewModel
@@ -92,10 +91,6 @@ struct VoiceCloningView: View {
 
     private var clonePrimingTaskID: String {
         clonePrimingRequestKey ?? "clone-priming-idle"
-    }
-
-    private var screenActivationTaskID: String {
-        "\(activationID)|\(ttsEngineStore.isReady)|\(isModelAvailable)"
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
@@ -184,7 +179,6 @@ struct VoiceCloningView: View {
     init(
         draft: Binding<VoiceCloningDraft>,
         pendingSavedVoiceHandoff: Binding<PendingVoiceCloningHandoff?>,
-        activationID: Int,
         ttsEngineStore: TTSEngineStore,
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel,
@@ -193,7 +187,6 @@ struct VoiceCloningView: View {
     ) {
         _draft = draft
         _pendingSavedVoiceHandoff = pendingSavedVoiceHandoff
-        self.activationID = activationID
         self.ttsEngineStore = ttsEngineStore
         self.audioPlayer = audioPlayer
         self.modelManager = modelManager
@@ -247,14 +240,6 @@ struct VoiceCloningView: View {
                 draft: $draft,
                 selectedVoice: selectedVoice,
                 savedVoicesViewModel: savedVoicesViewModel
-            )
-        }
-        .task(id: screenActivationTaskID) {
-            await coordinator.handleScreenActivation(
-                activationID: activationID,
-                cloneModel: cloneModel,
-                isModelAvailable: isModelAvailable,
-                ttsEngineStore: ttsEngineStore
             )
         }
         .onChange(of: savedVoicesViewModel.voices) { _, _ in

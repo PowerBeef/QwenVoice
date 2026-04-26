@@ -192,6 +192,82 @@ final class XPCNativeEngineCoordinatorTests: XCTestCase {
         XCTAssertEqual(transport.performCallCount, 1)
     }
 
+    func testFireAndForgetDeduplicatesInFlightEnsureModelCommands() async throws {
+        let transport = TestXPCTransport()
+        let coordinator = XPCNativeEngineCoordinator(
+            onSnapshot: { _ in },
+            onChunk: { _ in },
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            },
+            timeoutResolver: { _ in nil }
+        )
+
+        await coordinator.fireAndForget(.ensureModelLoadedIfNeeded(id: "pro_custom"))
+        await coordinator.fireAndForget(.ensureModelLoadedIfNeeded(id: "pro_custom"))
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "first ensure reaches transport"
+        ) {
+            transport.performCallCount == 1
+        }
+        XCTAssertEqual(transport.performedCommands, [.ensureModelLoadedIfNeeded(id: "pro_custom")])
+
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .void
+            )
+        )
+        try await Task.sleep(for: .milliseconds(20))
+
+        await coordinator.fireAndForget(.ensureModelLoadedIfNeeded(id: "pro_custom"))
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "ensure can run again after reply"
+        ) {
+            transport.performCallCount == 2
+        }
+    }
+
+    func testFireAndForgetDeduplicatesSemanticPrewarmIdentity() async {
+        let transport = TestXPCTransport()
+        let coordinator = XPCNativeEngineCoordinator(
+            onSnapshot: { _ in },
+            onChunk: { _ in },
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            },
+            timeoutResolver: { _ in nil }
+        )
+        let firstRequest = GenerationRequest(
+            modelID: "pro_design",
+            text: "Short line",
+            outputPath: "/tmp/one.wav",
+            payload: .design(voiceDescription: "Warm narrator", deliveryStyle: "Calm")
+        )
+        let equivalentWarmRequest = GenerationRequest(
+            modelID: "pro_design",
+            text: "Different draft text that should not create a new prewarm",
+            outputPath: "/tmp/two.wav",
+            payload: .design(voiceDescription: "Another brief", deliveryStyle: "Dramatic")
+        )
+
+        await coordinator.fireAndForget(.prewarmModelIfNeeded(request: firstRequest))
+        await coordinator.fireAndForget(.prewarmModelIfNeeded(request: equivalentWarmRequest))
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "semantic prewarm reaches transport once"
+        ) {
+            transport.performCallCount == 1
+        }
+        XCTAssertEqual(transport.performedCommands, [.prewarmModelIfNeeded(request: firstRequest)])
+    }
+
     func testCoordinatorIgnoresLateInvalidationFromReplacedConnection() async throws {
         let firstTransport = TestXPCTransport()
         let secondTransport = TestXPCTransport()
@@ -251,6 +327,7 @@ private final class TestXPCTransport: XPCNativeEngineTransporting, @unchecked Se
     var handlers: XPCNativeEngineTransportHandlers?
     private(set) var performCallCount = 0
     private(set) var lastRequestID: UUID?
+    private(set) var performedCommands: [EngineCommand] = []
     private var replyHandlers: [(@Sendable (Data) -> Void)] = []
 
     func install(handlers: XPCNativeEngineTransportHandlers) {
@@ -263,7 +340,10 @@ private final class TestXPCTransport: XPCNativeEngineTransporting, @unchecked Se
 
     func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void) {
         performCallCount += 1
-        lastRequestID = try? EngineServiceCodec.decode(EngineRequestEnvelope.self, from: payload).id
+        if let envelope = try? EngineServiceCodec.decode(EngineRequestEnvelope.self, from: payload) {
+            lastRequestID = envelope.id
+            performedCommands.append(envelope.command)
+        }
         replyHandlers.append(reply)
     }
 

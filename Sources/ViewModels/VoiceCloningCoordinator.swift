@@ -13,22 +13,6 @@ final class VoiceCloningCoordinator: ObservableObject {
     @Published var isDragOver = false
     @Published var presentedSheet: VoiceCloningPresentedSheet?
 
-    private var lastModelWarmupActivationID: Int?
-
-    func handleScreenActivation(
-        activationID: Int,
-        cloneModel: TTSModel?,
-        isModelAvailable: Bool,
-        ttsEngineStore: TTSEngineStore
-    ) async {
-        guard activationID > 0 else { return }
-        guard lastModelWarmupActivationID != activationID else { return }
-        guard let model = cloneModel, ttsEngineStore.isReady, isModelAvailable else { return }
-
-        lastModelWarmupActivationID = activationID
-        await ttsEngineStore.ensureModelLoadedIfNeeded(id: model.id)
-    }
-
     func presentBatch(draft: VoiceCloningDraft) {
         presentedSheet = .batch(.clone(draft: draft))
     }
