@@ -122,6 +122,13 @@ When repo facts disagree, trust sources in this order:
 - macOS defaults to 4-bit `Speed` on minimum hardware and can also expose 8-bit `Quality` when runtime admission allows it.
 - Keep shared styling centralized in `Sources/Views/Components/AppTheme.swift` on macOS and in the iPhone shell primitives/theme layer on iOS.
 
+## Native SwiftUI Discipline
+
+- Keep UI work conservative, native, and stability-led. Prefer standard SwiftUI navigation, forms, lists, toolbars, sheets, controls, and system materials over theme-first redesigns.
+- Do not reintroduce the removed desktop-studio shell, generated-reference redesign workflow, oversized hero chrome, inspector layout, full-window footer player, or decorative glass/card systems.
+- Treat UI polish as small refinements to the existing app structure. Any broad layout change needs an explicit product decision and must not happen while runtime responsiveness or memory behavior is unstable.
+- Keep generation screens responsive under backend activity: avoid speculative mode-switch work, broad environment-object invalidation, and visual effects that rebuild large view subtrees during prewarm or generation.
+
 ## Required Workflows
 
 Start with repo truth first:
