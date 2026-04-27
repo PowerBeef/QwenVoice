@@ -6,15 +6,13 @@ The current milestone is operating on a `macOS-first release track`: macOS is th
 
 ## Rescue Checkpoint
 
-As of `main` commit `c6beacd` (`Narrow macOS UI state invalidation`), the repo is back on a green rescue baseline:
+As of `main` commit `63a5e02` (`Guard macOS UI observation boundaries`), the repo is back on a green rescue baseline:
 
 - local `main` and `origin/main` are aligned at the same commit
-- GitHub `Project Inputs` passed for `c6beacd`
-- GitHub `Apple Platform QA Gate` passed for `c6beacd` in run `24972904646`
-- local `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and `git diff --check` are green
-- local `python3 scripts/harness.py test --layer contract`, `swift`, and `native` are green
-- local `./scripts/build_foundation_targets.sh macos` and `./scripts/build_foundation_targets.sh ios` are green
-- local unsigned macOS packaging and verification passed with `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`
+- GitHub `Project Inputs` passed for `63a5e02` in run `24973916220`
+- GitHub `Apple Platform QA Gate` passed for `63a5e02` in run `24973916195`, including contract, Swift, native runtime, hosted UI smoke, macOS build, iPhone build, and unsigned macOS release-artifact verification
+- local pre-push proof for `63a5e02` passed `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, `git diff --check`, `python3 scripts/harness.py test --layer swift`, and `./scripts/build_foundation_targets.sh macos`
+- prior local full release proof passed from `c6beacd` with `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`; the hosted QA gate re-proved the unsigned release-artifact lane for `63a5e02`
 - controlled local macOS acceptance on April 26, 2026 launched `build/Vocello.app`, switched Custom Voice / Voice Design / Voice Cloning, typed a Custom Voice script, generated a 2-second preview, played it through the sidebar player, and persisted the output under `~/Library/Application Support/QwenVoice/outputs/CustomVoice/`
 
 The next recovery work should keep this baseline stable: native SwiftUI only, no broad visual redesign, no speculative model work from screen mount, and no overlapping heavy build/test commands on the 8 GB local development machine. Manual app acceptance does not replace Instruments or signed-release proof, but it confirms the rescued app can complete the primary Custom Voice path locally.
