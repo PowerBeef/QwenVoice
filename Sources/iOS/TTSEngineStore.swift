@@ -56,6 +56,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     private let memorySnapshotProvider: @Sendable () -> IOSMemorySnapshot
     private var changeObserver: AnyCancellable?
     private var activeGenerationDepth = 0
+    private var lastForwardedChunkIdentity: GenerationChunkDeliveryIdentity?
 
     init(
         backend: AnyTTSEngineBackend,
@@ -69,8 +70,9 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         self.supportsSavedVoiceMutation = backend.supportsSavedVoiceMutation
         self.supportsModelManagementMutation = backend.supportsModelManagementMutation
         self.supportedModes = backend.supportedModes
-        self.frontendState = backend.snapshot()
-        syncFromSnapshot(frontendState)
+        let initialSnapshot = backend.snapshot()
+        self.frontendState = initialSnapshot.withoutPreviewAudioPayload()
+        syncFromSnapshot(initialSnapshot)
         applyMemoryPolicyContext(for: memorySnapshotProvider())
         changeObserver = backend.stateDidChange
             .sink { [weak self] in
@@ -264,22 +266,37 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
 
     private func syncFromBackend() {
         let snapshot = backend.snapshot()
-        frontendState = snapshot
         syncFromSnapshot(snapshot)
     }
 
     private func syncFromSnapshot(_ snapshot: TTSEngineFrontendState) {
-        let previousLatestEvent = latestEvent
-        loadState = snapshot.loadState
-        clonePreparationState = snapshot.clonePreparationState
-        latestEvent = snapshot.latestEvent
-        extensionLifecycleState = snapshot.lifecycleState
+        let retainedSnapshot = snapshot.withoutPreviewAudioPayload()
+        let retainedLatestEvent = retainedSnapshot.latestEvent
+        let rawLatestEvent = snapshot.latestEvent
+
+        if frontendState != retainedSnapshot {
+            frontendState = retainedSnapshot
+        }
+        if loadState != retainedSnapshot.loadState {
+            loadState = retainedSnapshot.loadState
+        }
+        if clonePreparationState != retainedSnapshot.clonePreparationState {
+            clonePreparationState = retainedSnapshot.clonePreparationState
+        }
+        if latestEvent != retainedLatestEvent {
+            latestEvent = retainedLatestEvent
+        }
+        if extensionLifecycleState != retainedSnapshot.lifecycleState {
+            extensionLifecycleState = retainedSnapshot.lifecycleState
+        }
         applyMemoryPolicyContext(for: currentMemorySnapshot())
 
-        guard previousLatestEvent != snapshot.latestEvent,
-              let latestEvent = snapshot.latestEvent else {
+        guard let latestEvent = rawLatestEvent,
+              let chunkIdentity = latestEvent.chunkDeliveryIdentity,
+              lastForwardedChunkIdentity != chunkIdentity else {
             return
         }
+        lastForwardedChunkIdentity = chunkIdentity
 
         if case .chunk(let chunk) = latestEvent {
             NotificationCenter.default.post(

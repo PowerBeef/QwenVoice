@@ -816,6 +816,54 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
         self.streamSessionDirectory = streamSessionDirectory
         self.previewAudio = previewAudio
     }
+
+    public func withoutPreviewAudioPayload() -> GenerationChunk {
+        GenerationChunk(
+            requestID: requestID,
+            mode: mode,
+            title: title,
+            chunkPath: chunkPath,
+            isFinal: isFinal,
+            chunkDurationSeconds: chunkDurationSeconds,
+            cumulativeDurationSeconds: cumulativeDurationSeconds,
+            streamSessionDirectory: streamSessionDirectory,
+            previewAudio: nil
+        )
+    }
+
+    public var deliveryIdentity: GenerationChunkDeliveryIdentity {
+        GenerationChunkDeliveryIdentity(
+            requestID: requestID,
+            mode: mode,
+            title: title,
+            chunkPath: chunkPath,
+            isFinal: isFinal,
+            chunkDurationSeconds: chunkDurationSeconds,
+            cumulativeDurationSeconds: cumulativeDurationSeconds,
+            streamSessionDirectory: streamSessionDirectory,
+            previewAudioRequestID: previewAudio?.requestID,
+            previewAudioSampleRate: previewAudio?.sampleRate,
+            previewAudioFrameOffset: previewAudio?.frameOffset,
+            previewAudioFrameCount: previewAudio?.frameCount,
+            previewAudioIsFinal: previewAudio?.isFinal
+        )
+    }
+}
+
+public struct GenerationChunkDeliveryIdentity: Hashable, Sendable {
+    public let requestID: Int?
+    public let mode: String
+    public let title: String
+    public let chunkPath: String?
+    public let isFinal: Bool
+    public let chunkDurationSeconds: Double?
+    public let cumulativeDurationSeconds: Double?
+    public let streamSessionDirectory: String?
+    public let previewAudioRequestID: Int?
+    public let previewAudioSampleRate: Int?
+    public let previewAudioFrameOffset: Int64?
+    public let previewAudioFrameCount: Int?
+    public let previewAudioIsFinal: Bool?
 }
 
 public enum GenerationEvent: Hashable, Codable, Sendable {
@@ -915,6 +963,20 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
     public var streamSessionDirectory: String? {
         guard case .chunk(let chunk) = self else { return nil }
         return chunk.streamSessionDirectory
+    }
+
+    public func withoutPreviewAudioPayload() -> GenerationEvent {
+        switch self {
+        case .chunk(let chunk):
+            return .chunk(chunk.withoutPreviewAudioPayload())
+        case .progress, .completed, .failed:
+            return self
+        }
+    }
+
+    public var chunkDeliveryIdentity: GenerationChunkDeliveryIdentity? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.deliveryIdentity
     }
 }
 

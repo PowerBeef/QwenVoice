@@ -59,6 +59,17 @@ public struct TTSEngineFrontendState: Equatable, Sendable {
         )
     }
 
+    public func withoutPreviewAudioPayload() -> TTSEngineFrontendState {
+        TTSEngineFrontendState(
+            isReady: isReady,
+            lifecycleState: lifecycleState,
+            loadState: loadState,
+            clonePreparationState: clonePreparationState,
+            latestEvent: latestEvent?.withoutPreviewAudioPayload(),
+            visibleErrorMessage: visibleErrorMessage
+        )
+    }
+
     private static func defaultLifecycleState(
         isReady: Bool,
         visibleErrorMessage: String?

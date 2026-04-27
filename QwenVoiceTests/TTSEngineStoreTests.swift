@@ -276,6 +276,52 @@ final class TTSEngineStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTTSEngineStoreDoesNotRetainLivePreviewAudioPayloads() async {
+        let initialSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: "pro_custom"),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        let engine = MockMacTTSEngine(snapshot: initialSnapshot)
+        let store = TTSEngineStore(engine: engine)
+        let previewAudio = StreamingAudioChunk(
+            requestID: 42,
+            sampleRate: 24_000,
+            frameOffset: 12_000,
+            frameCount: 4,
+            pcm16LE: Data([0, 0, 1, 0, 2, 0, 3, 0]),
+            isFinal: false
+        )
+        let event = GenerationEvent(
+            kind: .streamChunk,
+            requestID: 42,
+            mode: "custom",
+            title: "Preview",
+            chunkPath: nil,
+            isFinal: false,
+            chunkDurationSeconds: 0.25,
+            cumulativeDurationSeconds: 0.25,
+            streamSessionDirectory: "/tmp/session",
+            previewAudio: previewAudio
+        )
+
+        GenerationChunkBroker.publish(event)
+
+        _ = await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "store sees sanitized generation event with requestID 42"
+        ) {
+            store.latestEvent?.requestID == 42
+        }
+
+        XCTAssertNil(store.latestEvent?.previewAudio)
+        XCTAssertNil(store.frontendState.latestEvent?.previewAudio)
+        XCTAssertEqual(store.latestEvent?.chunkDurationSeconds, 0.25)
+        XCTAssertEqual(store.frontendState.latestEvent?.cumulativeDurationSeconds, 0.25)
+    }
+
+    @MainActor
     func testTTSEngineStoreDoesNotPublishDuplicateChunkEvents() async throws {
         let initialSnapshot = TTSEngineSnapshot(
             isReady: true,
