@@ -111,6 +111,34 @@ if [ -d "$GENERATION_PREWARM_PATH" ]; then
     rm -f /tmp/qwenvoice_generation_prewarm_grep
 fi
 
+CONTENT_VIEW_PATH="$PROJECT_DIR/Sources/ContentView.swift"
+if [ -f "$CONTENT_VIEW_PATH" ]; then
+    sed -n '/struct ContentView: View/,/private struct CustomVoiceScreenHost/p' "$CONTENT_VIEW_PATH" \
+        >/tmp/qwenvoice_content_router_region
+    if grep -n -e "@EnvironmentObject.*AudioPlayerViewModel" /tmp/qwenvoice_content_router_region \
+        >/tmp/qwenvoice_content_router_audio_grep 2>/dev/null; then
+        echo "error: ContentView routing must not observe AudioPlayerViewModel directly:" >&2
+        cat /tmp/qwenvoice_content_router_audio_grep >&2
+        rm -f /tmp/qwenvoice_content_router_region /tmp/qwenvoice_content_router_audio_grep
+        exit 1
+    fi
+    rm -f /tmp/qwenvoice_content_router_region /tmp/qwenvoice_content_router_audio_grep
+fi
+
+SIDEBAR_VIEW_PATH="$PROJECT_DIR/Sources/Views/Sidebar/SidebarView.swift"
+if [ -f "$SIDEBAR_VIEW_PATH" ]; then
+    sed -n '/struct SidebarView: View/,/private struct SidebarFooterRegion/p' "$SIDEBAR_VIEW_PATH" \
+        >/tmp/qwenvoice_sidebar_list_region
+    if grep -n -e "@EnvironmentObject.*AudioPlayerViewModel" /tmp/qwenvoice_sidebar_list_region \
+        >/tmp/qwenvoice_sidebar_list_audio_grep 2>/dev/null; then
+        echo "error: SidebarView list routing must not observe AudioPlayerViewModel directly:" >&2
+        cat /tmp/qwenvoice_sidebar_list_audio_grep >&2
+        rm -f /tmp/qwenvoice_sidebar_list_region /tmp/qwenvoice_sidebar_list_audio_grep
+        exit 1
+    fi
+    rm -f /tmp/qwenvoice_sidebar_list_region /tmp/qwenvoice_sidebar_list_audio_grep
+fi
+
 if grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" | grep -n "Release" >/dev/null 2>&1; then
     echo "error: QW_TEST_SUPPORT must not be configured for Release builds." >&2
     grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" >&2 || true
