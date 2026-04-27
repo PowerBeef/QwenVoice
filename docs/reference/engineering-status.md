@@ -6,14 +6,18 @@ The current milestone is operating on a `macOS-first release track`: macOS is th
 
 ## Rescue Checkpoint
 
-As of `main` commit `90e1f33` (`Stabilize macOS generation mode switching`), the repo is back on a clean salvage baseline:
+As of `main` commit `c6beacd` (`Narrow macOS UI state invalidation`), the repo is back on a green rescue baseline:
 
 - local `main` and `origin/main` are aligned at the same commit
-- `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and `git diff --check` are green
-- `python3 scripts/harness.py test --layer swift` is green
-- `./scripts/build_foundation_targets.sh macos` and `./scripts/build_foundation_targets.sh ios` are green
+- GitHub `Project Inputs` passed for `c6beacd`
+- GitHub `Apple Platform QA Gate` passed for `c6beacd` in run `24972904646`
+- local `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and `git diff --check` are green
+- local `python3 scripts/harness.py test --layer contract`, `swift`, and `native` are green
+- local `./scripts/build_foundation_targets.sh macos` and `./scripts/build_foundation_targets.sh ios` are green
+- local unsigned macOS packaging and verification passed with `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`
+- controlled local macOS acceptance on April 26, 2026 launched `build/Vocello.app`, switched Custom Voice / Voice Design / Voice Cloning, typed a Custom Voice script, generated a 2-second preview, played it through the sidebar player, and persisted the output under `~/Library/Application Support/QwenVoice/outputs/CustomVoice/`
 
-The next recovery work should keep this baseline stable: native SwiftUI only, no broad visual redesign, no speculative model work from screen mount, and no overlapping heavy build/test commands on the 8 GB local development machine.
+The next recovery work should keep this baseline stable: native SwiftUI only, no broad visual redesign, no speculative model work from screen mount, and no overlapping heavy build/test commands on the 8 GB local development machine. Manual app acceptance does not replace Instruments or signed-release proof, but it confirms the rescued app can complete the primary Custom Voice path locally.
 
 ## Current Strengths
 

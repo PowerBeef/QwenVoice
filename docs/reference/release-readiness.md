@@ -63,6 +63,9 @@ Two-track proof policy:
 - Current public release milestone: macOS only
 - iPhone owned-device proof: `iPhone 17 Pro` path is the active validation target
 - iPhone official minimum-device proof: pending until `iPhone 15 Pro` evidence is recorded
+- Rescue baseline: `main` commit `c6beacd` passed GitHub `Project Inputs` and `Apple Platform QA Gate` on April 26, 2026 local time
+- Latest local release proof: unsigned `Vocello.app` and `Vocello-macos26.dmg` built and verified from `c6beacd`
+- Latest local manual macOS smoke: launched `build/Vocello.app`, switched generation modes, generated and played a short Custom Voice preview, and confirmed the output was written to the app-support outputs folder
 
 ## Release Evidence Expectations
 
@@ -146,6 +149,12 @@ QWENVOICE_E2E_STRICT=1 python3 scripts/harness.py test --layer e2e
 - `Vocello macOS Release` is the only CI-owned signed/public release proof path required for the current milestone.
 - `Vocello iOS TestFlight` remains maintained as the deferred iPhone archive/export/upload-prep proof path and is not required for current macOS release signoff.
 - Local release scripts remain deterministic unsigned/source-validation tools; they are not the repo’s signing or notarization source of truth.
+
+Current automated rescue evidence:
+
+- GitHub `Project Inputs`: passed for `c6beacd`
+- GitHub `Apple Platform QA Gate`: passed for `c6beacd`, run `24972904646`
+- Local unsigned release proof: `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`
 
 ## iPhone Re-entry Conditions
 
