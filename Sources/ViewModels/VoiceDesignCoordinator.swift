@@ -89,7 +89,8 @@ final class VoiceDesignCoordinator: ObservableObject {
         audioPlayer: AudioPlayerViewModel,
         modelManager: ModelManagerViewModel
     ) {
-        guard !draft.text.isEmpty, !draft.voiceDescription.isEmpty, ttsEngineStore.isReady else { return }
+        guard !isGenerating else { return }
+        guard draft.hasText, draft.hasVoiceDescription, ttsEngineStore.isReady else { return }
 
         if let model = activeModel, !isModelAvailable {
             errorMessage = modelManager.recoveryDetail(for: model)

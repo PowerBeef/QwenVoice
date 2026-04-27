@@ -31,14 +31,14 @@ struct VoiceDesignView: View {
     private var canGenerate: Bool {
         ttsEngineStore.isReady
             && isModelAvailable
-            && !draft.text.isEmpty
-            && !draft.voiceDescription.isEmpty
+            && draft.hasText
+            && draft.hasVoiceDescription
     }
 
     private var canRunBatch: Bool {
         ttsEngineStore.isReady
             && isModelAvailable
-            && !draft.voiceDescription.isEmpty
+            && draft.hasVoiceDescription
     }
 
     private var currentSavedVoiceCandidate: VoiceDesignSavedVoiceCandidate? {
@@ -155,7 +155,7 @@ private extension VoiceDesignView {
                     buttonColor: AppTheme.voiceDesign,
                     batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
-                    generateDisabled: !ttsEngineStore.isReady || !isModelAvailable || draft.voiceDescription.isEmpty,
+                    generateDisabled: !ttsEngineStore.isReady || !isModelAvailable || !draft.hasVoiceDescription,
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: {
@@ -217,10 +217,10 @@ private extension VoiceDesignView {
         if !isModelAvailable {
             return "Install the active model"
         }
-        if draft.voiceDescription.isEmpty {
+        if !draft.hasVoiceDescription {
             return "Add a voice brief"
         }
-        if draft.text.isEmpty {
+        if !draft.hasText {
             return "Add a script"
         }
         return "Review the take"
@@ -233,10 +233,10 @@ private extension VoiceDesignView {
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."
         }
-        if draft.voiceDescription.isEmpty {
+        if !draft.hasVoiceDescription {
             return "Describe the voice you want before writing the final line."
         }
-        if draft.text.isEmpty {
+        if !draft.hasText {
             return "Once the line is written, the generated voice will use this brief and delivery."
         }
         return "Everything is in place for a live preview and a saved generation."

@@ -280,6 +280,72 @@ final class LivePreviewIntegrationTests: XCTestCase {
         XCTAssertFalse(viewModel.isLiveStream)
     }
 
+    func testDefaultLivePreviewPrebufferThresholdFavorsSmoothness() {
+        XCTAssertEqual(
+            AudioPlayerViewModel.livePreviewPrebufferThresholdForTesting(),
+            3,
+            "Live preview should wait for three queued chunks by default to reduce audible underruns."
+        )
+    }
+
+    func testLivePreviewDoesNotStartBeforePrebufferThreshold() {
+        let threshold = 3
+
+        XCTAssertFalse(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 1,
+                prebufferThreshold: threshold
+            )
+        )
+        XCTAssertFalse(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 2,
+                prebufferThreshold: threshold
+            )
+        )
+        XCTAssertTrue(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 3,
+                prebufferThreshold: threshold
+            )
+        )
+    }
+
+    func testLivePreviewRequiresFullPrebufferAfterUnderrun() {
+        let threshold = 3
+
+        XCTAssertFalse(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 1,
+                prebufferThreshold: threshold
+            ),
+            "A single new chunk after an underrun should keep buffering instead of restarting with another audible cut."
+        )
+        XCTAssertFalse(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 2,
+                prebufferThreshold: threshold
+            )
+        )
+        XCTAssertTrue(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 3,
+                prebufferThreshold: threshold
+            )
+        )
+    }
+
+    func testLivePreviewCanHandoffToFinalFileBelowPrebufferThreshold() {
+        XCTAssertTrue(
+            AudioPlayerViewModel.shouldStartLivePlaybackForTesting(
+                queuedChunks: 1,
+                prebufferThreshold: 3,
+                finalFileAvailable: true
+            ),
+            "Final-file availability should still trigger the existing authoritative handoff path."
+        )
+    }
+
     func testFinalPlaybackHandoffContinuesFromPartialLivePreview() {
         let handoff = AudioPlayerViewModel.finalPlaybackHandoff(
             heardLivePreview: true,

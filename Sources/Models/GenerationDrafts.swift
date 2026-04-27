@@ -24,9 +24,16 @@ struct VoiceDesignDraft: Equatable {
     var emotion = "Normal tone"
     var text = ""
 
-    var shouldIdlePrewarm: Bool {
+    var hasVoiceDescription: Bool {
         !voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var shouldIdlePrewarm: Bool {
+        hasVoiceDescription && hasText
     }
 
     var idlePrewarmDebounceKey: String? {

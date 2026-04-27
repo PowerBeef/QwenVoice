@@ -16,6 +16,10 @@ struct TextInputView: View {
 
     @State private var isEditorFocused = false
 
+    private var isTextEmptyForGeneration: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: isEmbedded ? LayoutConstants.composerEmbeddedSpacing : 12) {
             editor
@@ -68,7 +72,7 @@ struct TextInputView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(buttonColor)
-                .disabled(text.isEmpty || isGenerating || generateDisabled)
+                .disabled(isTextEmptyForGeneration || isGenerating || generateDisabled)
                 .accessibilityIdentifier("textInput_generateButton")
             }
 
@@ -85,7 +89,7 @@ struct TextInputView: View {
         Button("", action: onGenerate)
             .keyboardShortcut(.return, modifiers: .command)
             .opacity(0.001)
-            .disabled(text.isEmpty || isGenerating || generateDisabled)
+            .disabled(isTextEmptyForGeneration || isGenerating || generateDisabled)
             .accessibilityHidden(true)
     }
 }

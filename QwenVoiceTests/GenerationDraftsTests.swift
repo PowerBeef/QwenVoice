@@ -113,6 +113,30 @@ final class GenerationDraftsTests: XCTestCase {
         )
     }
 
+    func testVoiceDesignDraftTreatsWhitespaceOnlyBriefAndScriptAsEmpty() {
+        XCTAssertFalse(
+            VoiceDesignDraft(
+                voiceDescription: " \n\t",
+                emotion: "Normal tone",
+                text: "Hello there"
+            ).hasVoiceDescription
+        )
+        XCTAssertFalse(
+            VoiceDesignDraft(
+                voiceDescription: "Warm narrator",
+                emotion: "Normal tone",
+                text: " \n\t"
+            ).hasText
+        )
+        XCTAssertFalse(
+            VoiceDesignDraft(
+                voiceDescription: " \n\t",
+                emotion: "Normal tone",
+                text: " \n\t"
+            ).shouldIdlePrewarm
+        )
+    }
+
     func testVoiceDesignDraftIdlePrewarmDebounceKeyRequiresBriefAndScriptAndTracksTyping() {
         XCTAssertNil(VoiceDesignDraft().idlePrewarmDebounceKey)
 

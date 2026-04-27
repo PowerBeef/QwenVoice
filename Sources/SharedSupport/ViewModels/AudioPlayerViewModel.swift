@@ -92,8 +92,18 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         ) -> LivePreviewConfiguration {
             let rawThreshold = environment["QWENVOICE_LIVE_PREVIEW_PREBUFFER_CHUNKS"]
             let parsedThreshold = rawThreshold.flatMap(Int.init).map { min(max($0, 1), 8) }
-            return LivePreviewConfiguration(prebufferThreshold: parsedThreshold ?? 2)
+            return LivePreviewConfiguration(prebufferThreshold: parsedThreshold ?? 3)
         }
+    }
+
+    private static func shouldStartLivePlayback(
+        autoplayEnabled: Bool,
+        queuedChunks: Int,
+        prebufferThreshold: Int,
+        finalFileAvailable: Bool
+    ) -> Bool {
+        guard autoplayEnabled else { return false }
+        return queuedChunks >= prebufferThreshold || finalFileAvailable
     }
 
     private var playbackMode: PlaybackMode = .none
@@ -175,6 +185,26 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     func startLivePreviewChunkSubscriptionForTesting() {
         guard chunkCancellable == nil, chunkObserver == nil else { return }
         bindGenerationEventSource()
+    }
+
+    static func livePreviewPrebufferThresholdForTesting(
+        environment: [String: String] = [:]
+    ) -> Int {
+        LivePreviewConfiguration.current(environment: environment).prebufferThreshold
+    }
+
+    static func shouldStartLivePlaybackForTesting(
+        autoplayEnabled: Bool = true,
+        queuedChunks: Int,
+        prebufferThreshold: Int,
+        finalFileAvailable: Bool = false
+    ) -> Bool {
+        shouldStartLivePlayback(
+            autoplayEnabled: autoplayEnabled,
+            queuedChunks: queuedChunks,
+            prebufferThreshold: prebufferThreshold,
+            finalFileAvailable: finalFileAvailable
+        )
     }
 #endif
 
@@ -544,12 +574,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             self.pendingFirstChunkInterval = nil
         }
 
-        let prebufferThreshold = livePlaybackStarted && liveUnderrunCount > 0
-            ? 1
-            : livePreviewConfiguration.prebufferThreshold
-
-        if liveAutoplayEnabled,
-           liveScheduledCount >= prebufferThreshold || liveFinalFilePath != nil {
+        if Self.shouldStartLivePlayback(
+            autoplayEnabled: liveAutoplayEnabled,
+            queuedChunks: liveScheduledCount,
+            prebufferThreshold: livePreviewConfiguration.prebufferThreshold,
+            finalFileAvailable: liveFinalFilePath != nil
+        ) {
             attemptLivePlay()
         } else {
             livePreviewPhase = .buffering
@@ -588,12 +618,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             self.pendingFirstChunkInterval = nil
         }
 
-        let prebufferThreshold = livePlaybackStarted && liveUnderrunCount > 0
-            ? 1
-            : livePreviewConfiguration.prebufferThreshold
-
-        if liveAutoplayEnabled,
-           liveScheduledCount >= prebufferThreshold || liveFinalFilePath != nil {
+        if Self.shouldStartLivePlayback(
+            autoplayEnabled: liveAutoplayEnabled,
+            queuedChunks: liveScheduledCount,
+            prebufferThreshold: livePreviewConfiguration.prebufferThreshold,
+            finalFileAvailable: liveFinalFilePath != nil
+        ) {
             attemptLivePlay()
         } else {
             livePreviewPhase = .buffering
