@@ -151,7 +151,7 @@ Serialized local rescue loop:
 ./scripts/rescue_gate.sh
 ```
 
-Use the fast lane for documentation and static cleanup. Use the full lane only when the current change justifies Swift tests and foundation builds; it prints swap usage before heavy work and stops early when local memory pressure is too high.
+Use the fast lane for documentation and static cleanup. Use the full lane only when the current change justifies Swift tests and foundation builds; it prints swap usage before heavy work and stops early when local memory pressure is too high. Override the default 4 GB swap limit with `QW_RESCUE_SWAP_LIMIT_MB` only when you have deliberately accepted the local memory risk.
 
 Core local commands:
 
