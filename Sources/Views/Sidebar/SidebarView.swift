@@ -228,8 +228,6 @@ private struct SidebarRow: View {
 }
 
 struct SidebarView: View {
-    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-
     @Binding var selection: SidebarItem?
     let disabledItems: Set<SidebarItem>
 
@@ -258,7 +256,6 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .bottom) {
             SidebarFooterRegion()
-                .environmentObject(audioPlayer)
         }
     }
 

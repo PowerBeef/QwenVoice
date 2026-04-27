@@ -130,7 +130,6 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var modelManager: ModelManagerViewModel
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
-    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
@@ -285,31 +284,13 @@ struct ContentView: View {
     private func screenView(for item: SidebarItem) -> some View {
         switch item {
         case .customVoice:
-            CustomVoiceView(
-                draft: $customVoiceDraft,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager,
-                appCommandRouter: appCommandRouter
-            )
+            CustomVoiceScreenHost(draft: $customVoiceDraft)
         case .voiceDesign:
-            VoiceDesignView(
-                draft: $voiceDesignDraft,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager,
-                savedVoicesViewModel: savedVoicesViewModel,
-                appCommandRouter: appCommandRouter
-            )
+            VoiceDesignScreenHost(draft: $voiceDesignDraft)
         case .voiceCloning:
-            VoiceCloningView(
+            VoiceCloningScreenHost(
                 draft: $voiceCloningDraft,
-                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff,
-                ttsEngineStore: ttsEngineStore,
-                audioPlayer: audioPlayer,
-                modelManager: modelManager,
-                savedVoicesViewModel: savedVoicesViewModel,
-                appCommandRouter: appCommandRouter
+                pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff
             )
         case .history:
             HistoryView(
@@ -422,6 +403,69 @@ struct ContentView: View {
             isModelAvailable: modelManager.isAvailable(model),
             snapshot: ttsEngineStore.snapshot,
             ttsEngineStore: ttsEngineStore
+        )
+    }
+}
+
+private struct CustomVoiceScreenHost: View {
+    @Binding var draft: CustomVoiceDraft
+
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @EnvironmentObject private var appCommandRouter: AppCommandRouter
+
+    var body: some View {
+        CustomVoiceView(
+            draft: $draft,
+            ttsEngineStore: ttsEngineStore,
+            audioPlayer: audioPlayer,
+            modelManager: modelManager,
+            appCommandRouter: appCommandRouter
+        )
+    }
+}
+
+private struct VoiceDesignScreenHost: View {
+    @Binding var draft: VoiceDesignDraft
+
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
+    @EnvironmentObject private var appCommandRouter: AppCommandRouter
+
+    var body: some View {
+        VoiceDesignView(
+            draft: $draft,
+            ttsEngineStore: ttsEngineStore,
+            audioPlayer: audioPlayer,
+            modelManager: modelManager,
+            savedVoicesViewModel: savedVoicesViewModel,
+            appCommandRouter: appCommandRouter
+        )
+    }
+}
+
+private struct VoiceCloningScreenHost: View {
+    @Binding var draft: VoiceCloningDraft
+    @Binding var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
+
+    @EnvironmentObject private var ttsEngineStore: TTSEngineStore
+    @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
+    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
+    @EnvironmentObject private var appCommandRouter: AppCommandRouter
+
+    var body: some View {
+        VoiceCloningView(
+            draft: $draft,
+            pendingSavedVoiceHandoff: $pendingSavedVoiceHandoff,
+            ttsEngineStore: ttsEngineStore,
+            audioPlayer: audioPlayer,
+            modelManager: modelManager,
+            savedVoicesViewModel: savedVoicesViewModel,
+            appCommandRouter: appCommandRouter
         )
     }
 }
