@@ -150,6 +150,43 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testMacGenerationWarmupCoordinatorCancelsStalePendingWarmup() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(25))
+        let customModel = TTSModel.model(for: .custom)!
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+        coordinator.cancelPendingWarmup()
+        try? await Task.sleep(for: .milliseconds(60))
+
+        XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+    }
+
+    @MainActor
+    func testMacGenerationWarmupCoordinatorSkipsUnavailableModel() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let customModel = TTSModel.model(for: .custom)!
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: false,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+    }
+
+    @MainActor
     func testVoiceDesignCoordinatorPresentsSavedVoiceSheetForMatchingCandidate() {
         let coordinator = VoiceDesignCoordinator()
         coordinator.latestSavedVoiceCandidate = VoiceDesignSavedVoiceCandidate(

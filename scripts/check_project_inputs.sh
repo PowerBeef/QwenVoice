@@ -90,6 +90,27 @@ for removed_pattern in "${PROHIBITED_REFERENCE_PATTERNS[@]}"; do
     rm -f /tmp/qwenvoice_removed_reference_grep
 done
 
+GENERATION_PREWARM_PATH="$PROJECT_DIR/Sources/Views/Generate"
+if [ -d "$GENERATION_PREWARM_PATH" ]; then
+    if command -v rg >/dev/null 2>&1; then
+        if rg -n -e "prewarmModelIfNeeded" "$GENERATION_PREWARM_PATH" \
+            --glob '*.swift' \
+            >/tmp/qwenvoice_generation_prewarm_grep 2>/dev/null; then
+            echo "error: generation views must not start model prewarm directly:" >&2
+            cat /tmp/qwenvoice_generation_prewarm_grep >&2
+            rm -f /tmp/qwenvoice_generation_prewarm_grep
+            exit 1
+        fi
+    elif git -C "$PROJECT_DIR" grep -n "prewarmModelIfNeeded" -- Sources/Views/Generate \
+        >/tmp/qwenvoice_generation_prewarm_grep 2>/dev/null; then
+        echo "error: generation views must not start model prewarm directly:" >&2
+        cat /tmp/qwenvoice_generation_prewarm_grep >&2
+        rm -f /tmp/qwenvoice_generation_prewarm_grep
+        exit 1
+    fi
+    rm -f /tmp/qwenvoice_generation_prewarm_grep
+fi
+
 if grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" | grep -n "Release" >/dev/null 2>&1; then
     echo "error: QW_TEST_SUPPORT must not be configured for Release builds." >&2
     grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" >&2 || true
