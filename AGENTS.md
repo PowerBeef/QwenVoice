@@ -128,6 +128,7 @@ When repo facts disagree, trust sources in this order:
 - Do not reintroduce the removed desktop-studio shell, generated-reference redesign workflow, oversized hero chrome, inspector layout, full-window footer player, or decorative glass/card systems.
 - Treat UI polish as small refinements to the existing app structure. Any broad layout change needs an explicit product decision and must not happen while runtime responsiveness or memory behavior is unstable.
 - Keep generation screens responsive under backend activity: avoid speculative mode-switch work, broad environment-object invalidation, and visual effects that rebuild large view subtrees during prewarm or generation.
+- Keep rescue work boring: no generated UI redesigns, no large Liquid Glass shell work, no screen-mount model warmup, and no overlapping heavy validation commands on this 8 GB development machine.
 
 ## Required Workflows
 
@@ -142,6 +143,15 @@ Fast gates:
 ./scripts/check_project_inputs.sh
 python3 scripts/harness.py validate
 ```
+
+Serialized local rescue loop:
+
+```bash
+./scripts/rescue_gate.sh --fast
+./scripts/rescue_gate.sh
+```
+
+Use the fast lane for documentation and static cleanup. Use the full lane only when the current change justifies Swift tests and foundation builds; it prints swap usage before heavy work and stops early when local memory pressure is too high.
 
 Core local commands:
 

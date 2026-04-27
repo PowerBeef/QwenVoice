@@ -4,6 +4,17 @@ QwenVoice is the merged Apple-platform codebase that currently ships publicly as
 
 The current milestone is operating on a `macOS-first release track`: macOS is the only public release target for the next ship, while iPhone remains a maintained compile-safe and deferred release surface.
 
+## Rescue Checkpoint
+
+As of `main` commit `90e1f33` (`Stabilize macOS generation mode switching`), the repo is back on a clean salvage baseline:
+
+- local `main` and `origin/main` are aligned at the same commit
+- `./scripts/check_project_inputs.sh`, `python3 scripts/harness.py validate`, and `git diff --check` are green
+- `python3 scripts/harness.py test --layer swift` is green
+- `./scripts/build_foundation_targets.sh macos` and `./scripts/build_foundation_targets.sh ios` are green
+
+The next recovery work should keep this baseline stable: native SwiftUI only, no broad visual redesign, no speculative model work from screen mount, and no overlapping heavy build/test commands on the 8 GB local development machine.
+
 ## Current Strengths
 
 - One shared Apple-platform codebase with explicit separation between UI orchestration and isolated engine execution
