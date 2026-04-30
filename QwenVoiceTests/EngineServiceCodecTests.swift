@@ -79,6 +79,28 @@ final class EngineServiceCodecTests: XCTestCase {
         XCTAssertEqual(decoded, request)
     }
 
+    func testRequestEnvelopeRoundTripsInteractivePrefetchCommand() throws {
+        let request = EngineRequestEnvelope(
+            id: UUID(uuidString: "12345678-1234-1234-1234-123456789abc")!,
+            command: .prefetchInteractiveReadinessIfNeeded(
+                request: GenerationRequest(
+                    modelID: "pro_custom",
+                    text: "Hi.",
+                    outputPath: "",
+                    shouldStream: true,
+                    streamingInterval: 0.32,
+                    payload: .custom(speakerID: "vivian", deliveryStyle: "Normal tone")
+                ),
+                customPrewarmDepth: "skip-stream-step"
+            )
+        )
+
+        let encoded = try EngineServiceCodec.encode(request)
+        let decoded = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: encoded)
+
+        XCTAssertEqual(decoded, request)
+    }
+
     func testReplyEnvelopeRoundTripsGenerationResult() throws {
         let reply = EngineReplyEnvelope(
             id: UUID(uuidString: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")!,
@@ -110,6 +132,30 @@ final class EngineServiceCodecTests: XCTestCase {
         let reply = EngineReplyEnvelope(
             id: UUID(uuidString: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")!,
             reply: .capabilities(.macOSXPCDefault)
+        )
+
+        let encoded = try EngineServiceCodec.encode(reply)
+        let decoded = try EngineServiceCodec.decode(EngineReplyEnvelope.self, from: encoded)
+
+        XCTAssertEqual(decoded, reply)
+    }
+
+    func testReplyEnvelopeRoundTripsInteractivePrefetchDiagnostics() throws {
+        let reply = EngineReplyEnvelope(
+            id: UUID(uuidString: "bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee")!,
+            reply: .interactivePrefetchDiagnostics(
+                InteractivePrefetchDiagnostics(
+                    timingsMS: [
+                        "custom_prewarm_eval_ms": 42,
+                        "custom_stream_step_warm_ms": 7,
+                    ],
+                    booleanFlags: [
+                        "custom_prefix_cache_hit": true,
+                        "decoder_bucket_cache_hit": false,
+                    ],
+                    requestKey: "custom|vivian|normal"
+                )
+            )
         )
 
         let encoded = try EngineServiceCodec.encode(reply)

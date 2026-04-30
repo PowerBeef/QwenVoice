@@ -156,7 +156,12 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
     ) async -> InteractivePrefetchDiagnostics? {
         guard allowsProactiveWarmOperations else { return nil }
         do {
-            let reply = try await coordinator.send(.prefetchInteractiveReadinessIfNeeded(request: request))
+            let reply = try await coordinator.send(
+                .prefetchInteractiveReadinessIfNeeded(
+                    request: request,
+                    customPrewarmDepth: nil
+                )
+            )
             guard case .interactivePrefetchDiagnostics(let diagnostics) = reply else {
                 return nil
             }

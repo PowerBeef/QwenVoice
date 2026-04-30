@@ -1,5 +1,122 @@
+import QwenVoiceCore
 import QwenVoiceNative
 import SwiftUI
+
+struct CustomVoiceReadinessPresentation: Equatable {
+    let isReady: Bool
+    let title: String
+    let detail: String
+    let trailingText: String?
+    let isBusy: Bool
+
+    static func resolve(
+        snapshot: TTSEngineSnapshot,
+        activeModelID: String?,
+        isModelAvailable: Bool,
+        hasText: Bool,
+        isGenerating: Bool,
+        modelDisplayName: String
+    ) -> CustomVoiceReadinessPresentation {
+        if isGenerating {
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Generating live preview",
+                detail: "Vocello is streaming audio now. The final file will load into the player as soon as it is ready.",
+                trailingText: "Generating",
+                isBusy: true
+            )
+        }
+
+        guard snapshot.isReady else {
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Engine starting",
+                detail: "Vocello is still preparing the generation engine.",
+                trailingText: nil,
+                isBusy: snapshot.loadState == .starting
+            )
+        }
+
+        guard isModelAvailable else {
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Install the active model",
+                detail: "Install \(modelDisplayName) in Models to enable generation.",
+                trailingText: nil,
+                isBusy: false
+            )
+        }
+
+        guard hasText else {
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Add a script",
+                detail: "The selected speaker and delivery settings are ready as soon as the line is written.",
+                trailingText: nil,
+                isBusy: false
+            )
+        }
+
+        switch snapshot.loadState {
+        case .loaded(let modelID) where modelID == activeModelID:
+            return CustomVoiceReadinessPresentation(
+                isReady: true,
+                title: "Ready to generate",
+                detail: "Everything is in place for a live preview and a saved generation.",
+                trailingText: "Ready",
+                isBusy: false
+            )
+        case .starting:
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Preparing Custom Voice",
+                detail: "Vocello is loading and warming the Custom Voice path. You can generate now; the engine will finish preparation if needed.",
+                trailingText: "Preparing",
+                isBusy: true
+            )
+        case .idle:
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Preparing Custom Voice",
+                detail: "Vocello will warm the Custom Voice path in the background, or finish preparation when you generate.",
+                trailingText: "Preparing",
+                isBusy: true
+            )
+        case .running(let modelID, _, _) where modelID == activeModelID:
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Preparing Custom Voice",
+                detail: "Vocello is warming the Custom Voice path before generation.",
+                trailingText: "Preparing",
+                isBusy: true
+            )
+        case .running:
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Engine busy",
+                detail: "Vocello is finishing another engine task before Custom Voice can be ready.",
+                trailingText: nil,
+                isBusy: true
+            )
+        case .loaded:
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Custom Voice will prepare on generate",
+                detail: "A different model is loaded. Vocello will switch to Custom Voice when you generate.",
+                trailingText: nil,
+                isBusy: false
+            )
+        case .failed(let message):
+            return CustomVoiceReadinessPresentation(
+                isReady: false,
+                title: "Engine needs attention",
+                detail: message,
+                trailingText: nil,
+                isBusy: false
+            )
+        }
+    }
+}
 
 struct CustomVoiceView: View {
     @Binding private var draft: CustomVoiceDraft
@@ -27,10 +144,21 @@ struct CustomVoiceView: View {
         activeModel?.name ?? "Unknown"
     }
 
+    private var readinessPresentation: CustomVoiceReadinessPresentation {
+        CustomVoiceReadinessPresentation.resolve(
+            snapshot: ttsEngineStore.snapshot,
+            activeModelID: activeModel?.id,
+            isModelAvailable: isModelAvailable,
+            hasText: draft.hasText,
+            isGenerating: coordinator.isGenerating,
+            modelDisplayName: modelDisplayName
+        )
+    }
+
     private var canGenerate: Bool {
         ttsEngineStore.isReady
             && isModelAvailable
-            && !draft.text.isEmpty
+            && draft.hasText
     }
 
     private var canRunBatch: Bool {
@@ -119,7 +247,7 @@ private extension CustomVoiceView {
             title: "Script",
             iconName: "text.alignleft",
             accentColor: AppTheme.customVoice,
-            trailingText: coordinator.isGenerating ? "Generating" : (canGenerate ? "Ready" : nil),
+            trailingText: readinessPresentation.trailingText,
             fillsAvailableHeight: true,
             accessibilityIdentifier: "customVoice_script"
         ) {
@@ -179,39 +307,13 @@ private extension CustomVoiceView {
 
     var generationReadiness: some View {
         WorkflowReadinessNote(
-            isReady: canGenerate && !coordinator.isGenerating,
-            title: coordinator.isGenerating ? "Generating live preview" : (canGenerate ? "Ready to generate" : readinessTitle),
-            detail: coordinator.isGenerating ? "Vocello is streaming audio now. The final file will load into the player as soon as it is ready." : readinessDetail,
+            isReady: readinessPresentation.isReady,
+            title: readinessPresentation.title,
+            detail: readinessPresentation.detail,
             accentColor: AppTheme.customVoice,
-            isBusy: coordinator.isGenerating,
+            isBusy: readinessPresentation.isBusy,
             accessibilityIdentifier: "customVoice_readiness"
         )
-    }
-
-    var readinessTitle: String {
-        if !ttsEngineStore.isReady {
-            return "Engine starting"
-        }
-        if !isModelAvailable {
-            return "Install the active model"
-        }
-        if draft.text.isEmpty {
-            return "Add a script"
-        }
-        return "Review the take"
-    }
-
-    var readinessDetail: String {
-        if !ttsEngineStore.isReady {
-            return "Vocello is still preparing the generation engine."
-        }
-        if !isModelAvailable {
-            return "Install \(modelDisplayName) in Models to enable generation."
-        }
-        if draft.text.isEmpty {
-            return "The selected speaker and delivery settings are ready as soon as the line is written."
-        }
-        return "Everything is in place for a live preview and a saved generation."
     }
 
     // selectedSpeakerValueAnchor moved to SpeakerPickerRow struct

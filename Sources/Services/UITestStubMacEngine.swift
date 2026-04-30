@@ -87,6 +87,17 @@ final class UITestStubMacEngine: MacTTSEngine, @unchecked Sendable {
         await ensureModelLoadedIfNeeded(id: request.modelID)
     }
 
+    func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? {
+        await ensureModelLoadedIfNeeded(id: request.modelID)
+        return InteractivePrefetchDiagnostics(
+            timingsMS: [:],
+            booleanFlags: [:],
+            requestKey: request.modelID
+        )
+    }
+
     func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
         try await loadModel(id: modelID)
         let key = GenerationSemantics.clonePreparationKey(modelID: modelID, reference: reference)

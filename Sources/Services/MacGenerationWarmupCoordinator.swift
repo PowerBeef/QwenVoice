@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import QwenVoiceCore
 import QwenVoiceNative
 
 @MainActor
@@ -10,13 +11,16 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
     }
 
     private let debounce: Duration
+    private let customVoiceDebounce: Duration
     private var pendingTask: Task<Void, Never>?
     private var pendingRequest: WarmupRequest?
     private var dispatchedRequest: WarmupRequest?
+    private var completedRequest: WarmupRequest?
     private var revision: UInt64 = 0
 
-    init(debounce: Duration = .milliseconds(300)) {
+    init(debounce: Duration = .milliseconds(300), customVoiceDebounce: Duration = .milliseconds(100)) {
         self.debounce = debounce
+        self.customVoiceDebounce = customVoiceDebounce
     }
 
     func scheduleWarmupIfNeeded(
@@ -29,13 +33,20 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
         guard let mode,
               let modelID,
               isModelAvailable,
-              snapshot.isReady,
-              shouldAllowNavigationWarmup(snapshot: snapshot) else {
+              snapshot.isReady else {
             cancelPendingWarmup()
             return
         }
 
         let request = WarmupRequest(mode: mode, modelID: modelID)
+        guard shouldAllowNavigationWarmup(snapshot: snapshot, request: request) else {
+            cancelPendingWarmup()
+            return
+        }
+        guard completedRequest != request else {
+            cancelPendingWarmup()
+            return
+        }
         guard dispatchedRequest == nil else {
             cancelPendingWarmup()
             return
@@ -44,7 +55,7 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
 
         revision += 1
         let scheduledRevision = revision
-        let debounce = self.debounce
+        let debounce = request.mode == .custom ? customVoiceDebounce : self.debounce
         pendingRequest = request
         pendingTask?.cancel()
         pendingTask = Task { @MainActor [weak self, weak ttsEngineStore] in
@@ -60,13 +71,24 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
                   self.pendingRequest == request,
                   self.dispatchedRequest == nil,
                   ttsEngineStore.snapshot.isReady,
-                  self.shouldAllowNavigationWarmup(snapshot: ttsEngineStore.snapshot) else {
+                  self.shouldAllowNavigationWarmup(
+                    snapshot: ttsEngineStore.snapshot,
+                    request: request
+                  ) else {
                 return
             }
 
             self.pendingRequest = nil
             self.dispatchedRequest = request
-            await ttsEngineStore.ensureModelLoadedIfNeeded(id: request.modelID)
+            if let prewarmRequest = self.interactivePrewarmRequest(for: request) {
+                _ = await ttsEngineStore.prefetchInteractiveReadinessIfNeeded(for: prewarmRequest)
+            } else {
+                await ttsEngineStore.ensureModelLoadedIfNeeded(id: request.modelID)
+            }
+            if case .loaded(let loadedModelID) = ttsEngineStore.snapshot.loadState,
+               loadedModelID == request.modelID {
+                self.completedRequest = request
+            }
         }
     }
 
@@ -78,22 +100,63 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
     }
 
     func observe(snapshot: TTSEngineSnapshot) {
-        if !shouldAllowNavigationWarmup(snapshot: snapshot) {
+        if !shouldAllowAnyNavigationWarmup(snapshot: snapshot) {
             cancelPendingWarmup()
         }
 
         switch snapshot.loadState {
-        case .loaded, .failed:
+        case .idle:
             dispatchedRequest = nil
-        case .idle, .starting, .running:
+            completedRequest = nil
+        case .loaded(let modelID):
+            dispatchedRequest = nil
+            if completedRequest?.modelID != modelID {
+                completedRequest = nil
+            }
+        case .failed:
+            dispatchedRequest = nil
+            completedRequest = nil
+        case .starting, .running:
+            completedRequest = nil
             break
         }
     }
 
-    private func shouldAllowNavigationWarmup(snapshot: TTSEngineSnapshot) -> Bool {
-        if case .idle = snapshot.loadState {
+    private func shouldAllowNavigationWarmup(
+        snapshot: TTSEngineSnapshot,
+        request: WarmupRequest
+    ) -> Bool {
+        switch snapshot.loadState {
+        case .idle:
             return true
+        case .loaded(let modelID):
+            return request.mode == .custom && modelID == request.modelID
+        case .failed, .running, .starting:
+            return false
         }
-        return false
+    }
+
+    private func shouldAllowAnyNavigationWarmup(snapshot: TTSEngineSnapshot) -> Bool {
+        switch snapshot.loadState {
+        case .idle, .loaded:
+            return true
+        case .failed, .running, .starting:
+            return false
+        }
+    }
+
+    private func interactivePrewarmRequest(for request: WarmupRequest) -> GenerationRequest? {
+        guard request.mode == .custom else { return nil }
+        return GenerationRequest(
+            modelID: request.modelID,
+            text: QwenVoiceCore.GenerationSemantics.canonicalCustomWarmText,
+            outputPath: "",
+            shouldStream: true,
+            streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval,
+            payload: .custom(
+                speakerID: QwenVoiceCore.GenerationSemantics.canonicalCustomWarmSpeaker,
+                deliveryStyle: QwenVoiceCore.GenerationSemantics.canonicalCustomWarmInstruction()
+            )
+        )
     }
 }

@@ -394,6 +394,46 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(benchmarkParameters.topP, 0.8)
     }
 
+    func testCustomVoiceGenerationParametersUseConservativeProductSampling() {
+        let defaults = GenerateParameters(
+            maxTokens: 16,
+            temperature: 0.9,
+            topP: 1.0,
+            repetitionPenalty: 1.05
+        )
+
+        let productParameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
+            defaultParameters: defaults,
+            environment: [:]
+        )
+
+        XCTAssertEqual(productParameters.maxTokens, defaults.maxTokens)
+        XCTAssertEqual(productParameters.temperature, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(productParameters.topP, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(productParameters.repetitionPenalty, defaults.repetitionPenalty)
+    }
+
+    func testCustomVoiceBenchmarkOverridesCanStillReplaceProductSampling() {
+        let defaults = GenerateParameters(
+            maxTokens: 16,
+            temperature: 0.9,
+            topP: 1.0,
+            repetitionPenalty: 1.05
+        )
+
+        let benchmarkParameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
+            defaultParameters: defaults,
+            environment: [
+                "QWENVOICE_AUDIO_QC_LIVE": "1",
+                "QWENVOICE_QWEN3_BENCHMARK_TEMPERATURE": "0.6",
+                "QWENVOICE_QWEN3_BENCHMARK_TOP_P": "0.85",
+            ]
+        )
+
+        XCTAssertEqual(benchmarkParameters.temperature, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(benchmarkParameters.topP, 0.85, accuracy: 0.0001)
+    }
+
     func testQwenPromptContractRejectsVoiceImitationPrompts() {
         let request = GenerationRequest(
             modelID: "pro_design",

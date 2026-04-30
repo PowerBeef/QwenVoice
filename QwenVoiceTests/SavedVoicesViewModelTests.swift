@@ -25,6 +25,9 @@ private final class SavedVoicesMockEngine: MacTTSEngine, @unchecked Sendable {
     func unloadModel() async throws {}
     func ensureModelLoadedIfNeeded(id: String) async {}
     func prewarmModelIfNeeded(for request: GenerationRequest) async {}
+    func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? { nil }
     func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {}
     func cancelClonePreparationIfNeeded() async {}
 

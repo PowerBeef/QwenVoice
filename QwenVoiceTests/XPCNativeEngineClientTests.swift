@@ -147,6 +147,79 @@ final class XPCNativeEngineClientTests: XCTestCase {
         await invalidateAndDrain(client)
     }
 
+    func testClientPrefetchInteractiveReadinessReturnsDiagnostics() async throws {
+        let transport = ClientTestXPCTransport()
+        let client = XPCNativeEngineClient(
+            transportFactory: { handlers in
+                transport.install(handlers: handlers)
+                return transport
+            }
+        )
+        let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        async let initialize: Void = client.initialize(appSupportDirectory: root)
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .snapshot(
+                    TTSEngineSnapshot(
+                        isReady: true,
+                        loadState: .idle,
+                        clonePreparationState: .idle,
+                        visibleErrorMessage: nil
+                    )
+                )
+            )
+        )
+        try await initialize
+
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "Hi.",
+            outputPath: "",
+            shouldStream: true,
+            streamingInterval: 0.32,
+            payload: .custom(speakerID: "vivian", deliveryStyle: "Normal tone")
+        )
+        let expected = InteractivePrefetchDiagnostics(
+            timingsMS: [
+                "custom_prewarm_eval_ms": 24,
+                "custom_stream_step_warm_ms": 6,
+            ],
+            booleanFlags: [
+                "custom_prefix_cache_hit": true,
+                "decoder_bucket_cache_hit": true,
+            ],
+            requestKey: "pro_custom|vivian"
+        )
+
+        async let diagnostics = client.prefetchInteractiveReadinessIfNeeded(
+            for: request,
+            customPrewarmDepth: "skip-stream-step"
+        )
+        try await waitForPerformCallCount(2, transport: transport)
+        XCTAssertEqual(
+            transport.performedCommands.last,
+            .prefetchInteractiveReadinessIfNeeded(
+                request: request,
+                customPrewarmDepth: "skip-stream-step"
+            )
+        )
+        transport.reply(
+            with: EngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .interactivePrefetchDiagnostics(expected)
+            )
+        )
+
+        let returned = await diagnostics
+        XCTAssertEqual(returned, expected)
+
+        await invalidateAndDrain(client)
+    }
+
     func testSecondClientRemainsActiveWhenFirstConnectionInvalidates() async throws {
         let root = try NativeRuntimeTestSupport.makeTemporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

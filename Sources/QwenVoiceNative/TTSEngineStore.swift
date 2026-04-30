@@ -86,6 +86,12 @@ public final class TTSEngineStore: ObservableObject {
         await engine.prewarmModelIfNeeded(for: request)
     }
 
+    public func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? {
+        await engine.prefetchInteractiveReadinessIfNeeded(for: request)
+    }
+
     public func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
         try await engine.ensureCloneReferencePrimed(modelID: modelID, reference: reference)
     }

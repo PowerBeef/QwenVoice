@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 import QwenVoiceNative
 import SwiftUI
 
@@ -110,7 +111,8 @@ final class CustomVoiceCoordinator: ObservableObject {
             text: draft.text,
             outputPath: outputPath,
             shouldStream: true,
-            streamingTitle: String(draft.text.prefix(40)),
+            streamingInterval: QwenVoiceCore.GenerationSemantics.appStreamingInterval,
+            streamingTitle: Swift.String(draft.text.prefix(40)),
             payload: .custom(
                 speakerID: draft.selectedSpeaker,
                 deliveryStyle: draft.emotion

@@ -673,6 +673,7 @@ private struct StreamingExecutionContext: Sendable {
             streamChunkCount: chunkIndex,
             averageChunkFrames: chunkIndex > 0 ? (totalChunkFrames / chunkIndex) : 0,
             maxChunkFrames: maxChunkFrames,
+            streamingInterval: streamingInterval,
             telemetrySummary: telemetrySummary,
             telemetrySamples: telemetryCapture.samples,
             telemetryStageMarks: stageMarks,
@@ -704,6 +705,7 @@ private struct StreamingExecutionContext: Sendable {
         streamChunkCount: Int,
         averageChunkFrames: Int,
         maxChunkFrames: Int,
+        streamingInterval: Double,
         telemetrySummary: TelemetrySummary,
         telemetrySamples: [TelemetrySample],
         telemetryStageMarks: [NativeTelemetryStageMark],
@@ -728,6 +730,7 @@ private struct StreamingExecutionContext: Sendable {
         timingsMS["stream_chunk_count"] = streamChunkCount
         timingsMS["avg_chunk_frames"] = averageChunkFrames
         timingsMS["max_chunk_frames"] = maxChunkFrames
+        timingsMS["streaming_interval_ms"] = Int((streamingInterval * 1_000).rounded())
         if let firstAudioReadyMS {
             timingsMS["first_audio_ready"] = firstAudioReadyMS
             timingsMS["first_stream_chunk"] = firstAudioReadyMS

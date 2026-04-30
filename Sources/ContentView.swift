@@ -252,7 +252,7 @@ struct ContentView: View {
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }
         .onChange(of: modelManager.statuses) { _, _ in handleStatusesChange() }
         .onChange(of: ttsEngineStore.snapshot) { _, newSnapshot in
-            generationWarmupCoordinator.observe(snapshot: newSnapshot)
+            handleEngineSnapshotChange(newSnapshot)
         }
         .onReceive(appCommandRouter.sidebarSelection) { item in
             selectSidebarItemIfEnabled(item)
@@ -365,6 +365,11 @@ struct ContentView: View {
         guard didCompleteInitialAvailabilityRefresh else { return }
         guard !isPreservingLaunchOverrideSelection else { return }
         reconcileSelectionWithAvailability()
+        scheduleGenerationWarmupIfNeeded(for: selectedItem)
+    }
+
+    private func handleEngineSnapshotChange(_ newSnapshot: TTSEngineSnapshot) {
+        generationWarmupCoordinator.observe(snapshot: newSnapshot)
         scheduleGenerationWarmupIfNeeded(for: selectedItem)
     }
 

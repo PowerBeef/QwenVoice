@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 import XCTest
+import QwenVoiceCore
 import QwenVoiceNative
 @testable import QwenVoice
 
@@ -9,6 +10,7 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
     private let subject: CurrentValueSubject<TTSEngineSnapshot, Never>
     private(set) var ensureModelLoadedIDs: [String] = []
     private(set) var prewarmRequests: [GenerationRequest] = []
+    private(set) var prefetchRequests: [GenerationRequest] = []
     private(set) var primedReferences: [(String, CloneReference)] = []
     private(set) var cancelClonePreparationCount = 0
     private(set) var generationRequests: [GenerationRequest] = []
@@ -16,6 +18,15 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
     var generateResult: GenerationResult?
     var suspendGenerate = false
     private var generateContinuation: CheckedContinuation<Void, Never>?
+    var suspendPrewarm = false
+    private var prewarmContinuation: CheckedContinuation<Void, Never>?
+    var suspendPrefetch = false
+    var prefetchDiagnostics = InteractivePrefetchDiagnostics(
+        timingsMS: ["custom_prewarm_eval_ms": 12],
+        booleanFlags: ["custom_stream_step_prewarmed": true],
+        requestKey: "custom-test"
+    )
+    private var prefetchContinuation: CheckedContinuation<Void, Never>?
 
     init(snapshot: TTSEngineSnapshot) {
         subject = CurrentValueSubject(snapshot)
@@ -44,6 +55,23 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
 
     func prewarmModelIfNeeded(for request: GenerationRequest) async {
         prewarmRequests.append(request)
+        if suspendPrewarm {
+            await withCheckedContinuation { continuation in
+                prewarmContinuation = continuation
+            }
+        }
+    }
+
+    func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? {
+        prefetchRequests.append(request)
+        if suspendPrefetch {
+            await withCheckedContinuation { continuation in
+                prefetchContinuation = continuation
+            }
+        }
+        return prefetchDiagnostics
     }
 
     func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
@@ -95,6 +123,18 @@ private final class GenerationScreenMockMacTTSEngine: MacTTSEngine, @unchecked S
         generateContinuation?.resume()
         generateContinuation = nil
     }
+
+    func resumeSuspendedPrefetch() {
+        suspendPrefetch = false
+        prefetchContinuation?.resume()
+        prefetchContinuation = nil
+    }
+
+    func resumeSuspendedPrewarm() {
+        suspendPrewarm = false
+        prewarmContinuation?.resume()
+        prewarmContinuation = nil
+    }
 }
 
 final class GenerationScreenCoordinatorTests: XCTestCase {
@@ -114,7 +154,10 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     @MainActor
     func testMacGenerationWarmupCoordinatorDebouncesToFinalSelectedMode() async {
         let (store, engine) = makeReadyStore()
-        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
         let customModel = TTSModel.model(for: .custom)!
         let designModel = TTSModel.model(for: .design)!
 
@@ -139,12 +182,141 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         ) {
             engine.ensureModelLoadedIDs == [designModel.id]
         }
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        XCTAssertTrue(engine.prefetchRequests.isEmpty)
+    }
+
+    @MainActor
+    func testMacGenerationWarmupCoordinatorUsesFullInteractiveCustomVoicePrewarm() async throws {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
+        let customModel = TTSModel.model(for: .custom)!
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "custom voice warmup sends full interactive prefetch"
+        ) {
+            engine.prefetchRequests.count == 1
+        }
+
+        XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        let request = try XCTUnwrap(engine.prefetchRequests.first)
+        XCTAssertEqual(request.modelID, customModel.id)
+        XCTAssertEqual(request.text, QwenVoiceCore.GenerationSemantics.canonicalCustomWarmText)
+        XCTAssertEqual(request.streamingInterval, QwenVoiceCore.GenerationSemantics.appStreamingInterval)
+        guard case .custom(let speakerID, let deliveryStyle) = request.payload else {
+            return XCTFail("Expected Custom Voice prewarm request")
+        }
+        XCTAssertEqual(speakerID, QwenVoiceCore.GenerationSemantics.canonicalCustomWarmSpeaker)
+        XCTAssertEqual(deliveryStyle, QwenVoiceCore.GenerationSemantics.canonicalCustomWarmInstruction())
+    }
+
+    @MainActor
+    func testMacGenerationWarmupCoordinatorRetriesAfterReconnectReturnsIdle() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
+        let customModel = TTSModel.model(for: .custom)!
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "initial custom voice warmup sends prefetch"
+        ) {
+            engine.prefetchRequests.count == 1
+        }
+
+        coordinator.observe(
+            snapshot: TTSEngineSnapshot(
+                isReady: true,
+                loadState: .idle,
+                clonePreparationState: .idle,
+                visibleErrorMessage: nil
+            )
+        )
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "reconnected idle custom voice warmup retries prefetch"
+        ) {
+            engine.prefetchRequests.count == 2
+        }
+    }
+
+    @MainActor
+    func testMacGenerationWarmupCoordinatorDedupesDuplicateCustomVoicePrewarmWhileInFlight() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
+        let customModel = TTSModel.model(for: .custom)!
+        engine.suspendPrefetch = true
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "custom voice prefetch starts"
+        ) {
+            engine.prefetchRequests.count == 1
+        }
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(engine.prefetchRequests.count, 1)
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        engine.resumeSuspendedPrefetch()
     }
 
     @MainActor
     func testMacGenerationWarmupCoordinatorSkipsWhenAnyModelIsLoaded() async {
         let (store, engine) = makeReadyStore()
-        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
         let customModel = TTSModel.model(for: .custom)!
         let designModel = TTSModel.model(for: .design)!
         let loadedSnapshot = TTSEngineSnapshot(
@@ -169,9 +341,115 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testMacGenerationWarmupCoordinatorRefreshesCustomVoiceWhenSelectedModelIsLoaded() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
+        let customModel = TTSModel.model(for: .custom)!
+        let loadedSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: customModel.id),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        engine.pushSnapshot(loadedSnapshot)
+        await Task.yield()
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "custom voice loaded-state warmup refreshes readiness"
+        ) {
+            engine.prefetchRequests.count == 1
+        }
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(engine.prefetchRequests.count, 1)
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+    }
+
+    @MainActor
+    func testMacGenerationWarmupCoordinatorRefreshesCustomVoiceAgainAfterGenerationRuns() async {
+        let (store, engine) = makeReadyStore()
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
+        let customModel = TTSModel.model(for: .custom)!
+        let loadedSnapshot = TTSEngineSnapshot(
+            isReady: true,
+            loadState: .loaded(modelID: customModel.id),
+            clonePreparationState: .idle,
+            visibleErrorMessage: nil
+        )
+        engine.pushSnapshot(loadedSnapshot)
+        await Task.yield()
+
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "initial loaded custom voice refresh starts"
+        ) {
+            engine.prefetchRequests.count == 1
+        }
+
+        coordinator.observe(
+            snapshot: TTSEngineSnapshot(
+                isReady: true,
+                loadState: .running(modelID: customModel.id, label: nil, fraction: nil),
+                clonePreparationState: .idle,
+                visibleErrorMessage: nil
+            )
+        )
+        coordinator.observe(snapshot: loadedSnapshot)
+        coordinator.scheduleWarmupIfNeeded(
+            mode: .custom,
+            modelID: customModel.id,
+            isModelAvailable: true,
+            snapshot: store.snapshot,
+            ttsEngineStore: store
+        )
+
+        await waitUntil(
+            timeoutSeconds: 0.5,
+            description: "post-generation custom voice refresh starts"
+        ) {
+            engine.prefetchRequests.count == 2
+        }
+    }
+
+    @MainActor
     func testMacGenerationWarmupCoordinatorCancelsStalePendingWarmup() async {
         let (store, engine) = makeReadyStore()
-        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(25))
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(25),
+            customVoiceDebounce: .milliseconds(25)
+        )
         let customModel = TTSModel.model(for: .custom)!
 
         coordinator.scheduleWarmupIfNeeded(
@@ -185,12 +463,17 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(60))
 
         XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        XCTAssertTrue(engine.prefetchRequests.isEmpty)
     }
 
     @MainActor
     func testMacGenerationWarmupCoordinatorSkipsUnavailableModel() async {
         let (store, engine) = makeReadyStore()
-        let coordinator = MacGenerationWarmupCoordinator(debounce: .milliseconds(5))
+        let coordinator = MacGenerationWarmupCoordinator(
+            debounce: .milliseconds(5),
+            customVoiceDebounce: .milliseconds(5)
+        )
         let customModel = TTSModel.model(for: .custom)!
 
         coordinator.scheduleWarmupIfNeeded(
@@ -203,6 +486,70 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(30))
 
         XCTAssertTrue(engine.ensureModelLoadedIDs.isEmpty)
+        XCTAssertTrue(engine.prewarmRequests.isEmpty)
+        XCTAssertTrue(engine.prefetchRequests.isEmpty)
+    }
+
+    func testCustomVoiceReadinessDoesNotClaimReadyForInitializedIdleEngine() {
+        let presentation = CustomVoiceReadinessPresentation.resolve(
+            snapshot: TTSEngineSnapshot(
+                isReady: true,
+                loadState: .idle,
+                clonePreparationState: .idle,
+                visibleErrorMessage: nil
+            ),
+            activeModelID: "pro_custom",
+            isModelAvailable: true,
+            hasText: true,
+            isGenerating: false,
+            modelDisplayName: "Custom Voice"
+        )
+
+        XCTAssertFalse(presentation.isReady)
+        XCTAssertEqual(presentation.title, "Preparing Custom Voice")
+        XCTAssertEqual(presentation.trailingText, "Preparing")
+        XCTAssertTrue(presentation.isBusy)
+    }
+
+    func testCustomVoiceReadinessOnlyClaimsReadyWhenActiveModelLoaded() {
+        let presentation = CustomVoiceReadinessPresentation.resolve(
+            snapshot: TTSEngineSnapshot(
+                isReady: true,
+                loadState: .loaded(modelID: "pro_custom"),
+                clonePreparationState: .idle,
+                visibleErrorMessage: nil
+            ),
+            activeModelID: "pro_custom",
+            isModelAvailable: true,
+            hasText: true,
+            isGenerating: false,
+            modelDisplayName: "Custom Voice"
+        )
+
+        XCTAssertTrue(presentation.isReady)
+        XCTAssertEqual(presentation.title, "Ready to generate")
+        XCTAssertEqual(presentation.trailingText, "Ready")
+        XCTAssertFalse(presentation.isBusy)
+    }
+
+    func testCustomVoiceReadinessDoesNotClaimReadyForDifferentLoadedModel() {
+        let presentation = CustomVoiceReadinessPresentation.resolve(
+            snapshot: TTSEngineSnapshot(
+                isReady: true,
+                loadState: .loaded(modelID: "pro_design"),
+                clonePreparationState: .idle,
+                visibleErrorMessage: nil
+            ),
+            activeModelID: "pro_custom",
+            isModelAvailable: true,
+            hasText: true,
+            isGenerating: false,
+            modelDisplayName: "Custom Voice"
+        )
+
+        XCTAssertFalse(presentation.isReady)
+        XCTAssertEqual(presentation.title, "Custom Voice will prepare on generate")
+        XCTAssertNil(presentation.trailingText)
     }
 
     @MainActor
@@ -363,6 +710,22 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
     func testLongTextGenerationRouterUsesNineHundredCharacterLimit() {
         XCTAssertFalse(LongTextGenerationRouter.shouldRouteToLongFormBatch(String(repeating: "a", count: 900)))
         XCTAssertTrue(LongTextGenerationRouter.shouldRouteToLongFormBatch(String(repeating: "a", count: 901)))
+    }
+
+    @MainActor
+    func testCustomVoiceCoordinatorUsesAppStreamingIntervalForUIRequests() throws {
+        let model = try XCTUnwrap(TTSModel.model(for: .custom))
+        let request = CustomVoiceCoordinator.makeGenerationRequest(
+            draft: CustomVoiceDraft(
+                selectedSpeaker: "Vivian",
+                emotion: "Normal tone",
+                text: "Hello there"
+            ),
+            model: model,
+            outputPath: "/tmp/custom.wav"
+        )
+
+        XCTAssertEqual(request.streamingInterval, QwenVoiceCore.GenerationSemantics.appStreamingInterval)
     }
 
     @MainActor

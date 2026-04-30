@@ -48,6 +48,28 @@ enum Qwen3BenchmarkGenerationParameterOverrides {
     }
 }
 
+enum Qwen3CustomVoiceGenerationParameterPolicy {
+    static let temperature: Float = 0.7
+    static let topP: Float = 0.9
+
+    static func productParameters(defaultParameters: GenerateParameters) -> GenerateParameters {
+        var parameters = defaultParameters
+        parameters.temperature = temperature
+        parameters.topP = topP
+        return parameters
+    }
+
+    static func resolve(
+        defaultParameters: GenerateParameters,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> GenerateParameters {
+        Qwen3BenchmarkGenerationParameterOverrides.resolve(
+            defaultParameters: productParameters(defaultParameters: defaultParameters),
+            environment: environment
+        )
+    }
+}
+
 /// Thin wrapper around an `MLXAudioTTS.SpeechGenerationModel` that lets us
 /// hand the model across actor boundaries inside the engine.
 ///
@@ -138,7 +160,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         if let optimizedBase = base as? any Qwen3OptimizedSpeechGenerationModel {
             let optimizedBox = OptimizedModelBox(base: optimizedBase)
             self.customPrewarmHandler = { text, language, speaker, instruct in
-                let parameters = Qwen3BenchmarkGenerationParameterOverrides.resolve(
+                let parameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
                     defaultParameters: box.base.defaultGenerationParameters
                 )
                 try await optimizedBox.base.prepareCustomVoice(
@@ -150,7 +172,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
                 )
             }
             self.customStreamHandler = { text, language, speaker, instruct, streamingInterval in
-                let parameters = Qwen3BenchmarkGenerationParameterOverrides.resolve(
+                let parameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
                     defaultParameters: box.base.defaultGenerationParameters
                 )
                 return optimizedBox.base.generateCustomVoiceStream(

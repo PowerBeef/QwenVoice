@@ -610,6 +610,8 @@ actor XPCNativeEngineCoordinator {
             "ensureModelLoadedIfNeeded|\(id)"
         case .prewarmModelIfNeeded(let request):
             "prewarmModelIfNeeded|\(GenerationSemantics.prewarmIdentityKey(for: request))"
+        case .prefetchInteractiveReadinessIfNeeded(let request, let customPrewarmDepth):
+            "prefetchInteractiveReadinessIfNeeded|\(GenerationSemantics.prewarmIdentityKey(for: request))|depth=\(customPrewarmDepth ?? "default")"
         default:
             nil
         }
@@ -704,6 +706,32 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
 
     public func prewarmModelIfNeeded(for request: GenerationRequest) async {
         await coordinator.fireAndForget(.prewarmModelIfNeeded(request: request))
+    }
+
+    public func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? {
+        await prefetchInteractiveReadinessIfNeeded(for: request, customPrewarmDepth: nil)
+    }
+
+    public func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest,
+        customPrewarmDepth: String?
+    ) async -> InteractivePrefetchDiagnostics? {
+        do {
+            let reply = try await coordinator.send(
+                .prefetchInteractiveReadinessIfNeeded(
+                    request: request,
+                    customPrewarmDepth: customPrewarmDepth
+                )
+            )
+            guard case .interactivePrefetchDiagnostics(let diagnostics) = reply else {
+                throw EngineTransportError.invalidReply
+            }
+            return diagnostics
+        } catch {
+            return nil
+        }
     }
 
     public func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
@@ -831,6 +859,8 @@ private extension EngineCommand {
             "ensureModelLoadedIfNeeded"
         case .prewarmModelIfNeeded:
             "prewarmModelIfNeeded"
+        case .prefetchInteractiveReadinessIfNeeded:
+            "prefetchInteractiveReadinessIfNeeded"
         case .ensureCloneReferencePrimed:
             "ensureCloneReferencePrimed"
         case .cancelClonePreparationIfNeeded:
@@ -859,7 +889,7 @@ private extension EngineCommand {
         case .generate, .generateBatch:
             nil
         case .initialize, .loadModel, .unloadModel, .ensureModelLoadedIfNeeded,
-             .prewarmModelIfNeeded, .ensureCloneReferencePrimed:
+             .prewarmModelIfNeeded, .prefetchInteractiveReadinessIfNeeded, .ensureCloneReferencePrimed:
             .seconds(180)
         case .ping, .cancelClonePreparationIfNeeded, .cancelActiveGeneration,
              .listPreparedVoices, .enrollPreparedVoice, .deletePreparedVoice,

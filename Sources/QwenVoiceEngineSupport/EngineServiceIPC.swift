@@ -7,6 +7,7 @@ public typealias RemoteErrorCode = QwenVoiceCore.RemoteErrorCode
 public typealias RemoteErrorPayload = QwenVoiceCore.RemoteErrorPayload
 public typealias EngineCapabilities = QwenVoiceCore.EngineCapabilities
 public typealias EngineLifecycleState = QwenVoiceCore.EngineLifecycleState
+public typealias InteractivePrefetchDiagnostics = QwenVoiceCore.InteractivePrefetchDiagnostics
 public typealias EngineServiceCodec = QwenVoiceCore.QwenVoiceWireCodec
 
 public struct EngineRequestEnvelope: Codable, Equatable, Sendable {
@@ -26,6 +27,10 @@ public enum EngineCommand: Codable, Equatable, Sendable {
     case unloadModel
     case ensureModelLoadedIfNeeded(id: String)
     case prewarmModelIfNeeded(request: GenerationRequest)
+    case prefetchInteractiveReadinessIfNeeded(
+        request: GenerationRequest,
+        customPrewarmDepth: String?
+    )
     case ensureCloneReferencePrimed(modelID: String, reference: CloneReference)
     case cancelClonePreparationIfNeeded
     case generate(request: GenerationRequest)
@@ -56,6 +61,7 @@ public enum EngineReply: Codable, Equatable, Sendable {
     case generationResults([GenerationResult])
     case preparedVoice(PreparedVoice)
     case preparedVoices([PreparedVoice])
+    case interactivePrefetchDiagnostics(InteractivePrefetchDiagnostics)
     case snapshot(TTSEngineSnapshot)
     case failure(RemoteErrorPayload)
 }

@@ -38,6 +38,12 @@ private final class MockMacTTSEngine: MacTTSEngine, @unchecked Sendable {
         prewarmRequests.append(request)
     }
 
+    func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest
+    ) async -> InteractivePrefetchDiagnostics? {
+        nil
+    }
+
     func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
         primedReferences.append((modelID, reference))
     }

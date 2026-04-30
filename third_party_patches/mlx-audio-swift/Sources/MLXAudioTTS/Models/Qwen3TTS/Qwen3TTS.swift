@@ -58,6 +58,42 @@ private struct QwenPreparedLoadOptions: Sendable {
     let skipSpeechTokenizerEval: Bool
 }
 
+private enum Qwen3CustomVoicePrewarmDepth: String, Sendable {
+    case full
+    case skipDecoderBucket = "skip-decoder-bucket"
+    case skipStreamStep = "skip-stream-step"
+
+    static func resolve(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Qwen3CustomVoicePrewarmDepth {
+        guard environment["QWENVOICE_AUDIO_QC_LIVE"] == "1",
+              let rawValue = environment["QWENVOICE_QWEN3_CUSTOM_PREWARM_DEPTH"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+              !rawValue.isEmpty else {
+            return .full
+        }
+
+        return Qwen3CustomVoicePrewarmDepth(rawValue: rawValue) ?? .full
+    }
+
+    var precompileDecoderBuckets: Bool {
+        self != .skipDecoderBucket
+    }
+
+    var warmsStreamStep: Bool {
+        self != .skipStreamStep
+    }
+
+    var booleanFlags: [String: Bool] {
+        [
+            "custom_prewarm_depth_full": self == .full,
+            "custom_prewarm_depth_skip_decoder_bucket": self == .skipDecoderBucket,
+            "custom_prewarm_depth_skip_stream_step": self == .skipStreamStep,
+        ]
+    }
+}
+
 private let talkerEvalLayerBatchSize = 4
 private let speechTokenizerEvalBatchSize = 8
 
@@ -700,7 +736,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         additionalTimingsMS: [String: Int] = [:],
         preparationEvalTimingKey: String? = nil,
         streamStepEvalTimingKey: String? = nil,
-        streamStepWarmBooleanFlag: String? = nil
+        streamStepWarmBooleanFlag: String? = nil,
+        precompileDecoderBuckets: Bool = true
     ) async throws {
         guard let speechTokenizer else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
@@ -760,8 +797,16 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let firstDecoderStepMS = decoderStartedAt.elapsedMilliseconds
         var preparationBooleanFlags = booleanFlags
         let decoderBucketWarmStartedAt = ContinuousClock.now
-        let decoderBucketCacheHit = try precompileStreamingDecoderBuckets(with: codesForDecoder)
-        let decoderBucketWarmMS = decoderBucketCacheHit ? 0 : decoderBucketWarmStartedAt.elapsedMilliseconds
+        let decoderBucketCacheHit: Bool
+        let decoderBucketWarmMS: Int
+        if precompileDecoderBuckets {
+            decoderBucketCacheHit = try precompileStreamingDecoderBuckets(with: codesForDecoder)
+            decoderBucketWarmMS = decoderBucketCacheHit ? 0 : decoderBucketWarmStartedAt.elapsedMilliseconds
+        } else {
+            decoderBucketCacheHit = self.decoderBucketCacheHit()
+            decoderBucketWarmMS = 0
+            preparationBooleanFlags["decoder_bucket_precompile_skipped"] = true
+        }
         preparationBooleanFlags["decoder_bucket_cache_hit"] = decoderBucketCacheHit
         speechTokenizer.decoder.resetStreamingState()
         let preparationEvalStartedAt = ContinuousClock.now
@@ -851,6 +896,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             speaker: speaker,
             instruct: instruct
         )
+        let prewarmDepth = Qwen3CustomVoicePrewarmDepth.resolve()
         try await warmPreparedInputs(
             inputEmbedsInit,
             trailingTextHidden: trailingTextHidden,
@@ -860,11 +906,12 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 "prefix_cache_hit": prefixCacheHit,
                 "custom_prefix_cache_hit": prefixCacheHit,
                 "custom_speaker_conditioning_used": true,
-            ],
+            ].merging(prewarmDepth.booleanFlags) { _, rhs in rhs },
             additionalTimingsMS: customPrefixPrepareMS,
             preparationEvalTimingKey: "custom_prewarm_eval_ms",
-            streamStepEvalTimingKey: "custom_stream_step_warm_ms",
-            streamStepWarmBooleanFlag: "custom_stream_step_prewarmed"
+            streamStepEvalTimingKey: prewarmDepth.warmsStreamStep ? "custom_stream_step_warm_ms" : nil,
+            streamStepWarmBooleanFlag: "custom_stream_step_prewarmed",
+            precompileDecoderBuckets: prewarmDepth.precompileDecoderBuckets
         )
     }
 
@@ -1443,6 +1490,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var designAudioChunkEvalTotalMS = 0
         var designGenerationStepsBeforeFirstChunk: Int?
         var designFirstChunkDecoderTokens: Int?
+        var customStreamStepEvalTotalMS = 0
+        var customAudioChunkEvalTotalMS = 0
+        var customGenerationStepsBeforeFirstChunk: Int?
+        var customFirstChunkDecoderTokens: Int?
 
         var trailingIdx = 0
         var inputEmbeds = inputEmbedsInit
@@ -1534,6 +1585,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             eval(inputEmbeds, isEOS)
             if isPureVoiceDesign {
                 designStreamStepEvalTotalMS += streamStepEvalStartedAt.elapsedMilliseconds
+            } else if speaker != nil {
+                customStreamStepEvalTotalMS += streamStepEvalStartedAt.elapsedMilliseconds
             }
 
             let tokenId = Int(nextToken[0, 0].item(Int32.self))
@@ -1557,6 +1610,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     if isPureVoiceDesign, designGenerationStepsBeforeFirstChunk == nil {
                         designGenerationStepsBeforeFirstChunk = generatedCodeCount
                         designFirstChunkDecoderTokens = codesForDecoder.dim(2)
+                    } else if speaker != nil, customGenerationStepsBeforeFirstChunk == nil {
+                        customGenerationStepsBeforeFirstChunk = generatedCodeCount
+                        customFirstChunkDecoderTokens = codesForDecoder.dim(2)
                     }
                     let streamDecoderStartedAt = ContinuousClock.now
                     let decoded = speechTokenizer.decoder.streamingStep(codesForDecoder).squeezed(axis: 1)
@@ -1567,6 +1623,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     eval(audioChunk)
                     if isPureVoiceDesign {
                         designAudioChunkEvalTotalMS += audioChunkEvalStartedAt.elapsedMilliseconds
+                    } else if speaker != nil {
+                        customAudioChunkEvalTotalMS += audioChunkEvalStartedAt.elapsedMilliseconds
                     }
 
                     pendingStreamCodes.removeAll(keepingCapacity: true)
@@ -1611,11 +1669,16 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 if isPureVoiceDesign, designGenerationStepsBeforeFirstChunk == nil {
                     designGenerationStepsBeforeFirstChunk = generatedCodeCount
                     designFirstChunkDecoderTokens = codesForDecoder.dim(2)
+                } else if speaker != nil, customGenerationStepsBeforeFirstChunk == nil {
+                    customGenerationStepsBeforeFirstChunk = generatedCodeCount
+                    customFirstChunkDecoderTokens = codesForDecoder.dim(2)
                 }
                 let audioChunkEvalStartedAt = ContinuousClock.now
                 eval(audioChunk)
                 if isPureVoiceDesign {
                     designAudioChunkEvalTotalMS += audioChunkEvalStartedAt.elapsedMilliseconds
+                } else if speaker != nil {
+                    customAudioChunkEvalTotalMS += audioChunkEvalStartedAt.elapsedMilliseconds
                 }
                 onAudioChunk(audioChunk)
                 Memory.clearCache()
@@ -1635,6 +1698,15 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 }
                 if let designFirstChunkDecoderTokens {
                     mergedTimingsMS["design_first_chunk_decoder_tokens"] = designFirstChunkDecoderTokens
+                }
+            } else if speaker != nil {
+                mergedTimingsMS["custom_stream_step_eval_total_ms"] = customStreamStepEvalTotalMS
+                mergedTimingsMS["custom_audio_chunk_eval_total_ms"] = customAudioChunkEvalTotalMS
+                if let customGenerationStepsBeforeFirstChunk {
+                    mergedTimingsMS["custom_generation_steps_before_first_chunk"] = customGenerationStepsBeforeFirstChunk
+                }
+                if let customFirstChunkDecoderTokens {
+                    mergedTimingsMS["custom_first_chunk_decoder_tokens"] = customFirstChunkDecoderTokens
                 }
             }
             mergePreparationTimingsMS(mergedTimingsMS)

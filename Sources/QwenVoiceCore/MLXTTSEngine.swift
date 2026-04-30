@@ -319,15 +319,33 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func prefetchInteractiveReadinessIfNeeded(
         for request: GenerationRequest
     ) async -> InteractivePrefetchDiagnostics? {
+        await prefetchInteractiveReadinessIfNeeded(for: request, customPrewarmDepth: nil)
+    }
+
+    @discardableResult
+    public func prefetchInteractiveReadinessIfNeeded(
+        for request: GenerationRequest,
+        customPrewarmDepth: String?
+    ) async -> InteractivePrefetchDiagnostics? {
         guard allowsProactiveWarmOperations else { return nil }
         guard case .supported = supportDecision(for: request) else { return nil }
         do {
             try ensureInitialized()
-            return try await runtime.prepareInteractiveReadiness(for: request)
+            loadState = .starting
+            let diagnostics = try await runtime.prepareInteractiveReadiness(
+                for: request,
+                customPrewarmDepth: customPrewarmDepth
+            )
+            loadState = .loaded(modelID: request.modelID)
+            visibleErrorMessage = nil
+            return diagnostics
         } catch {
             // Background prefetch should not interrupt the active UI with an
             // eager surfaced error. The regular generate path will still
             // report actionable failures if the model cannot be used.
+            if case .starting = loadState {
+                loadState = .idle
+            }
             return nil
         }
     }

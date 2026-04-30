@@ -22,7 +22,10 @@ public enum ExtensionEngineCommand: Codable, Equatable, Sendable {
     case prepareAudio(request: AudioPreparationRequest)
     case ensureModelLoadedIfNeeded(id: String)
     case prewarmModelIfNeeded(request: GenerationRequest)
-    case prefetchInteractiveReadinessIfNeeded(request: GenerationRequest)
+    case prefetchInteractiveReadinessIfNeeded(
+        request: GenerationRequest,
+        customPrewarmDepth: String?
+    )
     case ensureCloneReferencePrimed(modelID: String, reference: CloneReference)
     case cancelClonePreparationIfNeeded
     case generate(request: GenerationRequest)

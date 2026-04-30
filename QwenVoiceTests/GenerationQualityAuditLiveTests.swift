@@ -38,6 +38,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         case standard = "repeat"
         case coldWarm = "cold-warm"
         case warmFocus = "warm-focus"
+        case customUICold = "custom-ui-cold"
         case exhaustive
     }
 
@@ -86,6 +87,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let streamingUsed: Bool
         let timingsMS: [String: Int]
         let booleanFlags: [String: Bool]
+    }
+
+    private struct SelectedPrefetchDiagnostics {
+        var timingsMS: [String: Int]
+        var booleanFlags: [String: Bool]
     }
 
     private struct LongTextManifest: Codable {
@@ -147,6 +153,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let benchmarkProfile: String?
         let coldRuns: Int?
         let warmRuns: Int?
+        let streamingIntervalOverride: Double?
+        let customPrewarmDepth: String?
         let expiresAt: String?
     }
 
@@ -160,6 +168,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let benchmarkProfile: BenchmarkProfile
         let coldRuns: Int
         let warmRuns: Int
+        let streamingIntervalOverride: Double?
+        let customPrewarmDepth: String?
     }
 
     func testWarmFocusBenchmarkProfileUsesWarmRunLayout() throws {
@@ -177,7 +187,9 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             repeatCount: 1,
             benchmarkProfile: .warmFocus,
             coldRuns: 2,
-            warmRuns: 10
+            warmRuns: 10,
+            streamingIntervalOverride: nil,
+            customPrewarmDepth: nil
         )
 
         let runRoot = outputRootForRun(
@@ -210,7 +222,9 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             repeatCount: 1,
             benchmarkProfile: .exhaustive,
             coldRuns: 3,
-            warmRuns: 5
+            warmRuns: 5,
+            streamingIntervalOverride: nil,
+            customPrewarmDepth: nil
         )
 
         let runRoot = outputRootForRun(
@@ -225,6 +239,50 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         XCTAssertTrue(
             runRoot.path.hasSuffix("/generated/direct-2700/CustomVoice/run_001"),
             "Unexpected exhaustive direct-run root: \(runRoot.path)"
+        )
+    }
+
+    func testCustomUIColdBenchmarkProfileUsesCustomVoiceColdWarmLayout() throws {
+        XCTAssertEqual(try parseBenchmarkProfile("custom-ui-cold"), .customUICold)
+
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("qwenvoice-custom-ui-cold-test", isDirectory: true)
+        let generatedRoot = root.appendingPathComponent("generated", isDirectory: true)
+        let configuration = LiveAuditConfiguration(
+            outputRoot: root,
+            modelsRoot: root.appendingPathComponent("models", isDirectory: true),
+            modes: [.customVoice],
+            cloneReference: nil,
+            cloneTranscript: nil,
+            repeatCount: 1,
+            benchmarkProfile: .customUICold,
+            coldRuns: 5,
+            warmRuns: 5,
+            streamingIntervalOverride: 0.4,
+            customPrewarmDepth: "skip-stream-step"
+        )
+
+        let request = try makeRequest(
+            mode: .customVoice,
+            iteration: 1,
+            phase: .cold,
+            runIndex: 1,
+            outputRoot: generatedRoot,
+            configuration: configuration
+        )
+        let runRoot = outputRootForRun(
+            mode: .customVoice,
+            iteration: 1,
+            phase: .cold,
+            runIndex: 1,
+            outputRoot: generatedRoot,
+            configuration: configuration
+        )
+
+        XCTAssertEqual(request.streamingInterval, 0.4)
+        XCTAssertTrue(
+            runRoot.path.hasSuffix("/generated/cold/CustomVoice/run_001"),
+            "Unexpected custom-ui-cold run root: \(runRoot.path)"
         )
     }
 
@@ -283,6 +341,17 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 ),
                 longText: nil
             )
+        case .customUICold:
+            runResult = AuditRunResult(
+                artifacts: try await runCustomUIColdBenchmark(
+                    configuration: configuration,
+                    modes: modes,
+                    modelsRoot: modelsRoot,
+                    appSupportBase: appSupportRoot,
+                    generatedRoot: generatedRoot
+                ),
+                longText: nil
+            )
         case .warmFocus:
             runResult = AuditRunResult(
                 artifacts: try await runWarmFocusBenchmark(
@@ -307,7 +376,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let manifest = AuditManifest(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
             benchmarkProfile: configuration.benchmarkProfile.rawValue,
-            coldRuns: [.coldWarm, .exhaustive].contains(configuration.benchmarkProfile) ? configuration.coldRuns : nil,
+            coldRuns: [.coldWarm, .customUICold, .exhaustive].contains(configuration.benchmarkProfile) ? configuration.coldRuns : nil,
             warmRuns: configuration.benchmarkProfile == .standard ? nil : configuration.warmRuns,
             appSupportDirectory: appSupportRoot.path,
             modelsRoot: modelsRoot.path,
@@ -458,6 +527,143 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         }
 
         return artifacts
+    }
+
+    private func runCustomUIColdBenchmark(
+        configuration: LiveAuditConfiguration,
+        modes: [AuditMode],
+        modelsRoot: URL,
+        appSupportBase: URL,
+        generatedRoot: URL
+    ) async throws -> [AuditArtifact] {
+        guard modes == [.customVoice] else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 11,
+                userInfo: [NSLocalizedDescriptionKey: "custom-ui-cold benchmark supports CustomVoice only."]
+            )
+        }
+
+        let mode = AuditMode.customVoice
+        var artifacts: [AuditArtifact] = []
+
+        for runIndex in 1...configuration.coldRuns {
+            let coldAppSupportRoot = appSupportBase
+                .appendingPathComponent("custom-ui-cold", isDirectory: true)
+                .appendingPathComponent("cold", isDirectory: true)
+                .appendingPathComponent(String(format: "run_%03d", runIndex), isDirectory: true)
+            let initialized = try await makeInitializedClient(
+                modes: [mode],
+                modelsRoot: modelsRoot,
+                appSupportRoot: coldAppSupportRoot
+            )
+            let client = initialized.client
+            do {
+                let prewarmTimings = try await prewarmSelectedCustomVoiceReadiness(
+                    client: client,
+                    mode: mode,
+                    iteration: runIndex,
+                    phase: .cold,
+                    runIndex: runIndex,
+                    appSupportRoot: coldAppSupportRoot,
+                    generatedRoot: generatedRoot,
+                    configuration: configuration
+                )
+                artifacts.append(
+                    try await generateArtifact(
+                        client: client,
+                        mode: mode,
+                        iteration: runIndex,
+                        phase: .cold,
+                        runIndex: runIndex,
+                        measured: true,
+                        qcEligible: true,
+                        appSupportRoot: coldAppSupportRoot,
+                        generatedRoot: generatedRoot,
+                        configuration: configuration,
+                        extraTimingsMS: initialized.timingsMS
+                            .merging(prewarmTimings.timingsMS) { _, rhs in rhs },
+                        extraBooleanFlags: prewarmTimings.booleanFlags
+                    )
+                )
+                await shutdownBenchmarkClient(client)
+            } catch {
+                await shutdownBenchmarkClient(client)
+                throw error
+            }
+        }
+
+        let warmAppSupportRoot = appSupportBase
+            .appendingPathComponent("custom-ui-cold", isDirectory: true)
+            .appendingPathComponent("warm", isDirectory: true)
+        let warmClient = try await makeInitializedClient(
+            modes: [mode],
+            modelsRoot: modelsRoot,
+            appSupportRoot: warmAppSupportRoot
+        )
+        let client = warmClient.client
+        do {
+            let prewarmTimings = try await prewarmSelectedCustomVoiceReadiness(
+                client: client,
+                mode: mode,
+                iteration: 0,
+                phase: .primer,
+                runIndex: 0,
+                appSupportRoot: warmAppSupportRoot,
+                generatedRoot: generatedRoot,
+                configuration: configuration
+            )
+            artifacts.append(
+                try await generateArtifact(
+                    client: client,
+                    mode: mode,
+                    iteration: 0,
+                    phase: .primer,
+                    runIndex: 0,
+                    measured: false,
+                    qcEligible: false,
+                    appSupportRoot: warmAppSupportRoot,
+                    generatedRoot: generatedRoot,
+                    configuration: configuration,
+                    extraTimingsMS: warmClient.timingsMS
+                        .merging(prewarmTimings.timingsMS) { _, rhs in rhs },
+                    extraBooleanFlags: prewarmTimings.booleanFlags
+                )
+            )
+            for runIndex in 1...configuration.warmRuns {
+                let warmReadinessTimings = try await prewarmSelectedCustomVoiceReadiness(
+                    client: client,
+                    mode: mode,
+                    iteration: runIndex,
+                    phase: .warm,
+                    runIndex: runIndex,
+                    appSupportRoot: warmAppSupportRoot,
+                    generatedRoot: generatedRoot,
+                    configuration: configuration
+                )
+                artifacts.append(
+                    try await generateArtifact(
+                        client: client,
+                        mode: mode,
+                        iteration: runIndex,
+                        phase: .warm,
+                        runIndex: runIndex,
+                        measured: true,
+                        qcEligible: true,
+                        appSupportRoot: warmAppSupportRoot,
+                        generatedRoot: generatedRoot,
+                        configuration: configuration,
+                        extraTimingsMS: warmReadinessTimings.timingsMS,
+                        extraBooleanFlags: warmReadinessTimings.booleanFlags
+                    )
+                )
+            }
+            await shutdownBenchmarkClient(client)
+            return artifacts
+        } catch {
+            await shutdownBenchmarkClient(client)
+            throw error
+        }
     }
 
     private func runWarmFocusBenchmark(
@@ -859,6 +1065,109 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         }
     }
 
+    private func prewarmSelectedCustomVoiceReadiness(
+        client: XPCNativeEngineClient,
+        mode: AuditMode,
+        iteration: Int,
+        phase: AuditPhase,
+        runIndex: Int,
+        appSupportRoot: URL,
+        generatedRoot: URL,
+        configuration: LiveAuditConfiguration
+    ) async throws -> SelectedPrefetchDiagnostics {
+        precondition(mode == .customVoice)
+        let request = try makeRequest(
+            mode: mode,
+            iteration: iteration,
+            phase: phase,
+            runIndex: runIndex,
+            outputRoot: generatedRoot,
+            configuration: configuration
+        )
+        let started = DispatchTime.now().uptimeNanoseconds
+        let maxAttempts = 2
+        for attempt in 1...maxAttempts {
+            let diagnostics = await client.prefetchInteractiveReadinessIfNeeded(
+                for: request,
+                customPrewarmDepth: configuration.customPrewarmDepth?.nonEmpty
+            )
+            let outcome = try await waitForLoadedModel(
+                client,
+                modelID: request.modelID,
+                timeoutSeconds: 180
+            )
+            switch outcome {
+            case .loaded:
+                let elapsedMS = elapsedMilliseconds(since: started)
+                let baselineTimings = [
+                    "custom_ui_selected_prewarm_ms": elapsedMS,
+                    "custom_ui_ready_ms": elapsedMS,
+                    "custom_ui_selected_prewarm_attempts": attempt,
+                ]
+                return SelectedPrefetchDiagnostics(
+                    timingsMS: (diagnostics?.timingsMS ?? [:])
+                        .merging(baselineTimings) { current, _ in current },
+                    booleanFlags: diagnostics?.booleanFlags ?? [:]
+                )
+            case .needsRetry:
+                guard attempt < maxAttempts else {
+                    throw NSError(
+                        domain: "GenerationQualityAuditLiveTests",
+                        code: 14,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Custom Voice selected-mode prewarm recovered to idle but did not become loaded."
+                        ]
+                    )
+                }
+            }
+        }
+
+        throw NSError(
+            domain: "GenerationQualityAuditLiveTests",
+            code: 15,
+            userInfo: [NSLocalizedDescriptionKey: "Custom Voice selected-mode prewarm did not complete."]
+        )
+    }
+
+    private enum LoadedModelWaitOutcome {
+        case loaded
+        case needsRetry
+    }
+
+    private func waitForLoadedModel(
+        _ client: XPCNativeEngineClient,
+        modelID: String,
+        timeoutSeconds: TimeInterval
+    ) async throws -> LoadedModelWaitOutcome {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        var sawInProgressState = false
+        while Date() < deadline {
+            switch client.snapshot.loadState {
+            case .loaded(let loadedModelID) where loadedModelID == modelID:
+                return .loaded
+            case .failed(let message):
+                throw NSError(
+                    domain: "GenerationQualityAuditLiveTests",
+                    code: 12,
+                    userInfo: [NSLocalizedDescriptionKey: "Selected-mode Custom Voice prewarm failed: \(message)"]
+                )
+            case .starting, .running:
+                sawInProgressState = true
+            case .idle where sawInProgressState && client.snapshot.isReady:
+                return .needsRetry
+            default:
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw NSError(
+            domain: "GenerationQualityAuditLiveTests",
+            code: 13,
+            userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for Custom Voice selected-mode prewarm."]
+        )
+    }
+
     private func generateArtifact(
         client: XPCNativeEngineClient,
         mode: AuditMode,
@@ -871,6 +1180,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         generatedRoot: URL,
         configuration: LiveAuditConfiguration,
         extraTimingsMS: [String: Int] = [:],
+        extraBooleanFlags: [String: Bool] = [:],
         textOverride: String? = nil
     ) async throws -> AuditArtifact {
         let request = try makeRequest(
@@ -897,7 +1207,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             qcEligible: qcEligible,
             appSupportRoot: appSupportRoot,
             wallClockMS: wallClockMS,
-            extraTimingsMS: extraTimingsMS
+            extraTimingsMS: extraTimingsMS,
+            extraBooleanFlags: extraBooleanFlags
         )
     }
 
@@ -913,6 +1224,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         appSupportRoot: URL,
         wallClockMS: Int,
         extraTimingsMS: [String: Int] = [:],
+        extraBooleanFlags: [String: Bool] = [:],
         segmentCount: Int? = nil,
         segmentIndex: Int? = nil,
         batchTotal: Int? = nil
@@ -957,7 +1269,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             timingsMS: (result.benchmarkSample?.timingsMS ?? [:])
                 .merging(extraTimingsMS) { current, _ in current }
                 .merging(["request_wall_ms": wallClockMS]) { current, _ in current },
-            booleanFlags: result.benchmarkSample?.booleanFlags ?? [:]
+            booleanFlags: (result.benchmarkSample?.booleanFlags ?? [:])
+                .merging(extraBooleanFlags) { current, _ in current }
         )
     }
 
@@ -992,7 +1305,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 warmRuns: try parseBenchmarkRunCount(
                     environment["QWENVOICE_AUDIO_QC_WARM_RUNS"],
                     name: "warm"
-                )
+                ),
+                streamingIntervalOverride: try parseStreamingIntervalOverride(
+                    environment["QWENVOICE_AUDIO_QC_STREAMING_INTERVAL"]
+                ),
+                customPrewarmDepth: environment["QWENVOICE_AUDIO_QC_CUSTOM_PREWARM_DEPTH"]?.nonEmpty
             )
         }
 
@@ -1022,7 +1339,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             repeatCount: try parseRepeatCount(request.repeatCount.map { String($0) }),
             benchmarkProfile: try parseBenchmarkProfile(request.benchmarkProfile),
             coldRuns: try parseBenchmarkRunCount(request.coldRuns.map { String($0) }, name: "cold"),
-            warmRuns: try parseBenchmarkRunCount(request.warmRuns.map { String($0) }, name: "warm")
+            warmRuns: try parseBenchmarkRunCount(request.warmRuns.map { String($0) }, name: "warm"),
+            streamingIntervalOverride: try parseStreamingIntervalOverride(
+                request.streamingIntervalOverride.map { String($0) }
+            ),
+            customPrewarmDepth: request.customPrewarmDepth?.nonEmpty
         )
     }
 
@@ -1097,6 +1418,19 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             )
         }
         return runCount
+    }
+
+    private func parseStreamingIntervalOverride(_ rawValue: String?) throws -> Double? {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        guard let value = Double(trimmed), (0.1...1.5).contains(value) else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 14,
+                userInfo: [NSLocalizedDescriptionKey: "Audio QC streaming interval override must be between 0.1 and 1.5 seconds."]
+            )
+        }
+        return value
     }
 
     private func mirrorRequiredModels(
@@ -1216,12 +1550,14 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         switch mode {
         case .customVoice:
             let text = textOverride ?? "Hello from the Vocello audio quality audit with a clear complete short phrase for smooth playback"
+            let streamingInterval = configuration.streamingIntervalOverride
+                ?? GenerationSemantics.appStreamingInterval
             return GenerationRequest(
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
                 shouldStream: true,
-                streamingInterval: GenerationSemantics.appStreamingInterval,
+                streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 streamingTitle: "Audio QC Custom Voice",
@@ -1232,12 +1568,14 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             )
         case .voiceDesign:
             let text = textOverride ?? "Welcome to the Vocello generation quality audit with steady continuous speech and smooth playback throughout"
+            let streamingInterval = configuration.streamingIntervalOverride
+                ?? GenerationSemantics.appStreamingInterval
             return GenerationRequest(
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
                 shouldStream: true,
-                streamingInterval: GenerationSemantics.appStreamingInterval,
+                streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 streamingTitle: "Audio QC Voice Design",
@@ -1249,12 +1587,14 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         case .clones:
             let referencePath = try requireCloneReference(configuration)
             let text = textOverride ?? "This is a short cloned voice quality audit for smooth playback and complete final audio."
+            let streamingInterval = configuration.streamingIntervalOverride
+                ?? GenerationSemantics.appStreamingInterval
             return GenerationRequest(
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
                 shouldStream: true,
-                streamingInterval: GenerationSemantics.appStreamingInterval,
+                streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 streamingTitle: "Audio QC Voice Clone",
@@ -1283,7 +1623,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 ? outputRoot.appendingPathComponent(String(format: "run_%03d", iteration), isDirectory: true)
                 : outputRoot
             return runRoot.appendingPathComponent(mode.rawValue, isDirectory: true)
-        case .coldWarm, .warmFocus, .exhaustive:
+        case .coldWarm, .customUICold, .warmFocus, .exhaustive:
             return outputRoot
                 .appendingPathComponent(phase.rawValue, isDirectory: true)
                 .appendingPathComponent(mode.rawValue, isDirectory: true)

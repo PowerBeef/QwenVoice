@@ -185,6 +185,17 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         case .prewarmModelIfNeeded(let request):
             try await requireRuntimeContext().engine.prewarmModelIfNeeded(for: request)
             return .void
+        case .prefetchInteractiveReadinessIfNeeded(let request, let customPrewarmDepth):
+            let diagnostics = try await requireRuntimeContext().engine.prefetchInteractiveReadinessIfNeeded(
+                for: request,
+                customPrewarmDepth: customPrewarmDepth
+            )
+                ?? InteractivePrefetchDiagnostics(
+                    timingsMS: [:],
+                    booleanFlags: [:],
+                    requestKey: nil
+                )
+            return .interactivePrefetchDiagnostics(diagnostics)
         case .ensureCloneReferencePrimed(let modelID, let reference):
             try await requireRuntimeContext().engine.ensureCloneReferencePrimed(
                 modelID: modelID,

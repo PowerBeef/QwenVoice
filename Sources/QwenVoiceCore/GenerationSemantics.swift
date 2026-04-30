@@ -7,6 +7,7 @@ public enum GenerationSemantics {
     }
 
     public static let appStreamingInterval = 0.32
+    public static let canonicalCustomWarmText = "Hi."
     public static let canonicalCustomWarmSpeaker = "vivian"
     public static let canonicalCustomWarmLanguage = "english"
     public static let canonicalDesignWarmLanguage = "english"

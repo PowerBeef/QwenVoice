@@ -78,11 +78,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--benchmark-profile",
-        choices=["repeat", "cold-warm", "warm-focus", "exhaustive"],
+        choices=["repeat", "cold-warm", "warm-focus", "custom-ui-cold", "exhaustive"],
         default="repeat",
         help=(
             "Live XPC benchmark profile. cold-warm measures all modes; "
-            "warm-focus measures repeated Voice Design warm runs; exhaustive adds "
+            "warm-focus measures repeated Voice Design warm runs; custom-ui-cold "
+            "measures selected Custom Voice warmup plus generation; exhaustive adds "
             "endurance, direct long-text, and product long-form batch coverage."
         ),
     )
@@ -103,6 +104,21 @@ def main() -> None:
         default=None,
         help="Optional previous summary.json to compare timing medians against this run.",
     )
+    parser.add_argument(
+        "--streaming-interval",
+        type=float,
+        default=None,
+        help="Optional live benchmark streaming interval override in seconds.",
+    )
+    parser.add_argument(
+        "--custom-prewarm-depth",
+        choices=["full", "skip-decoder-bucket", "skip-stream-step"],
+        default=None,
+        help=(
+            "Benchmark-only Custom Voice prewarm depth override. Defaults to the product "
+            "full prewarm path."
+        ),
+    )
 
     args = parser.parse_args()
     output_dir = (Path(args.output_dir) if args.output_dir else default_output_dir(args.source)).resolve()
@@ -114,9 +130,15 @@ def main() -> None:
         cold_runs = parse_benchmark_run_count(args.cold_runs, "--cold-runs")
         warm_runs = parse_benchmark_run_count(args.warm_runs, "--warm-runs")
         if args.benchmark_profile != "repeat" and args.source != "live-xpc":
-            raise UsageError("--benchmark-profile cold-warm/warm-focus/exhaustive is only supported with --source live-xpc.")
+            raise UsageError("--benchmark-profile cold-warm/warm-focus/custom-ui-cold/exhaustive is only supported with --source live-xpc.")
         if args.benchmark_profile == "warm-focus" and modes != ["VoiceDesign"]:
             raise UsageError("--benchmark-profile warm-focus requires --modes VoiceDesign.")
+        if args.benchmark_profile == "custom-ui-cold" and modes != ["CustomVoice"]:
+            raise UsageError("--benchmark-profile custom-ui-cold requires --modes CustomVoice.")
+        if args.streaming_interval is not None and not (0.1 <= args.streaming_interval <= 1.5):
+            raise UsageError("--streaming-interval must be between 0.1 and 1.5 seconds.")
+        if args.custom_prewarm_depth is not None and args.source != "live-xpc":
+            raise UsageError("--custom-prewarm-depth is only supported with --source live-xpc.")
         if args.source == "self-test":
             summary = run_self_test(output_dir, repeat_count)
         elif args.source == "latest":
@@ -253,10 +275,14 @@ def run_live_xpc_analysis(
         modes,
         repeat_count=repeat_count,
         benchmark_profile=args.benchmark_profile,
-        cold_runs=cold_runs if args.benchmark_profile in {"cold-warm", "exhaustive"} else None,
-        warm_runs=warm_runs if args.benchmark_profile in {"cold-warm", "warm-focus", "exhaustive"} else None,
+        cold_runs=cold_runs if args.benchmark_profile in {"cold-warm", "custom-ui-cold", "exhaustive"} else None,
+        warm_runs=warm_runs if args.benchmark_profile in {"cold-warm", "warm-focus", "custom-ui-cold", "exhaustive"} else None,
     )
     summary["models_root"] = str(models_root)
+    if args.streaming_interval is not None:
+        summary["streaming_interval_override"] = args.streaming_interval
+    if args.custom_prewarm_depth is not None:
+        summary["custom_prewarm_depth"] = args.custom_prewarm_depth
     xcode_result = run_live_xcode_test(output_dir, modes, repeat_count, cold_runs, warm_runs, models_root, args)
     summary["xcodebuild"] = xcode_result
     if xcode_result["exit_code"] != 0:
@@ -491,6 +517,10 @@ def run_live_xcode_test(
             "QWENVOICE_AUDIO_QC_WARM_RUNS": str(warm_runs),
         }
     )
+    if args.streaming_interval is not None:
+        environment["QWENVOICE_AUDIO_QC_STREAMING_INTERVAL"] = str(args.streaming_interval)
+    if args.custom_prewarm_depth is not None:
+        environment["QWENVOICE_AUDIO_QC_CUSTOM_PREWARM_DEPTH"] = args.custom_prewarm_depth
     if args.clone_reference:
         environment["QWENVOICE_AUDIO_QC_CLONE_REFERENCE"] = str(Path(args.clone_reference).resolve())
     if args.clone_transcript:
@@ -509,6 +539,8 @@ def run_live_xcode_test(
         "benchmarkProfile": args.benchmark_profile,
         "coldRuns": cold_runs,
         "warmRuns": warm_runs,
+        "streamingIntervalOverride": args.streaming_interval,
+        "customPrewarmDepth": args.custom_prewarm_depth,
         "cloneReference": str(Path(args.clone_reference).resolve()) if args.clone_reference else None,
         "cloneTranscript": args.clone_transcript,
         "expiresAt": expires_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -759,9 +791,60 @@ def summarize_qc_report(report: dict[str, Any]) -> dict[str, Any]:
             "failed_required_checks": data.get("failed_required_checks") or [],
             "warning_checks": data.get("warning_checks") or [],
             "selected_metrics": selected_qc_metrics(data.get("checks") or {}),
+            "audio_issue_details": audio_issue_details(data.get("checks") or {}),
         }
     )
     return summary
+
+
+def audio_issue_details(checks: dict[str, Any]) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    for name, check in sorted(checks.items()):
+        if not isinstance(check, dict):
+            continue
+        if check.get("passed") is True:
+            continue
+        lowered = name.lower()
+        is_dropout = "dropout" in lowered
+        is_silence_gap = lowered == "silence_gap_detection" or "silence_gap" in lowered
+        if not is_dropout and not is_silence_gap:
+            continue
+
+        metric = check.get("metric") if isinstance(check.get("metric"), dict) else {}
+        dropouts = check.get("dropouts") if isinstance(check.get("dropouts"), list) else []
+        gaps = check.get("gaps") if isinstance(check.get("gaps"), list) else None
+        if gaps is None:
+            gaps = metric.get("gaps") if isinstance(metric.get("gaps"), list) else []
+
+        detail: dict[str, Any] = {
+            "check": name,
+            "error": check.get("error") or check.get("warning"),
+        }
+        if dropouts:
+            detail["dropouts"] = [
+                {
+                    "start_seconds": dropout.get("start_seconds"),
+                    "duration_seconds": dropout.get("duration_seconds"),
+                }
+                for dropout in dropouts
+                if isinstance(dropout, dict)
+            ][:5]
+        if gaps:
+            detail["gaps"] = [
+                {
+                    "start_sample": gap.get("start_sample"),
+                    "duration_samples": gap.get("duration_samples"),
+                    "duration_seconds": gap.get("duration_seconds"),
+                }
+                for gap in gaps
+                if isinstance(gap, dict)
+            ][:5]
+        if metric.get("longest_dropout_seconds") is not None:
+            detail["longest_dropout_seconds"] = metric.get("longest_dropout_seconds")
+        if check.get("threshold") is not None:
+            detail["threshold"] = check.get("threshold")
+        details.append(detail)
+    return details
 
 
 def selected_qc_metrics(checks: dict[str, Any]) -> dict[str, Any]:
@@ -772,6 +855,7 @@ def selected_qc_metrics(checks: dict[str, Any]) -> dict[str, Any]:
         "final_abrupt_discontinuities",
         "final_dropouts",
         "final_cutoff_ending",
+        "silence_gap_detection",
         "clipping_detection",
         "chunk_sample_fidelity",
         "chunk_duration_consistency",
@@ -794,11 +878,16 @@ def selected_qc_metrics(checks: dict[str, Any]) -> dict[str, Any]:
 CORE_TIMING_KEYS = (
     "model_mirror_ms",
     "client_initialize_ms",
+    "custom_ui_selected_prewarm_ms",
+    "custom_ui_ready_ms",
+    "custom_ui_selected_prewarm_attempts",
     "request_wall_ms",
     "cache_prepare",
     "mlx_model_load",
     "load_model",
     "conditioning_prepare",
+    "interactive_prefetch_total_ms",
+    "interactive_prefetch_load_model_ms",
     "interactive_prefetch_conditioning_prepare_ms",
     "generation",
     "first_audio_ready",
@@ -811,6 +900,7 @@ CORE_TIMING_KEYS = (
     "stream_chunk_count",
     "avg_chunk_frames",
     "max_chunk_frames",
+    "streaming_interval_ms",
     "reference_normalize",
     "reference_decode",
     "clone_prompt_artifact_load",
@@ -840,6 +930,8 @@ QWEN3_TIMING_KEYS = (
     "custom_text_prepare_ms",
     "custom_prewarm_eval_ms",
     "custom_stream_step_warm_ms",
+    "custom_stream_step_eval_total_ms",
+    "custom_audio_chunk_eval_total_ms",
     "design_prefix_prepare",
     "design_prefix_tokenize_ms",
     "design_prefix_embed_build_ms",
@@ -855,6 +947,8 @@ QWEN3_TIMING_KEYS = (
     "qwen_stream_decoder_total",
     "qwen_stream_decoder_calls",
     "qwen_generated_code_count",
+    "custom_generation_steps_before_first_chunk",
+    "custom_first_chunk_decoder_tokens",
     "design_generation_steps_before_first_chunk",
     "design_first_chunk_decoder_tokens",
 )
@@ -877,7 +971,11 @@ QWEN3_FLAG_KEYS = (
     "custom_prefix_cache_hit",
     "design_prefix_cache_hit",
     "decoder_bucket_cache_hit",
+    "decoder_bucket_precompile_skipped",
     "custom_stream_step_prewarmed",
+    "custom_prewarm_depth_full",
+    "custom_prewarm_depth_skip_decoder_bucket",
+    "custom_prewarm_depth_skip_stream_step",
     "design_conditioning_reused",
     "design_conditioning_prefetch_hit",
     "interactive_design_prefetch_hit",
@@ -1012,12 +1110,18 @@ def summarize_timings(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
     for (mode, phase), items in sorted(grouped.items(), key=lambda pair: (pair[0][0], pair[0][1])):
         timings_by_key: dict[str, list[float]] = {}
+        flags_by_key: dict[str, list[bool]] = {}
         for item in items:
             timings = item.get("timingsMS") or {}
             for key in TIMING_KEYS:
                 value = numeric(timings.get(key))
                 if value is not None:
                     timings_by_key.setdefault(key, []).append(value)
+            flags = item.get("booleanFlags") or {}
+            for key in QWEN3_FLAG_KEYS:
+                value = flags.get(key)
+                if isinstance(value, bool):
+                    flags_by_key.setdefault(key, []).append(value)
 
         summaries.append(
             {
@@ -1036,6 +1140,13 @@ def summarize_timings(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "timings_ms": {
                     key: describe_values(values)
                     for key, values in sorted(timings_by_key.items())
+                },
+                "flags": {
+                    key: {
+                        "true": sum(1 for value in values if value),
+                        "false": sum(1 for value in values if not value),
+                    }
+                    for key, values in sorted(flags_by_key.items())
                 },
             }
         )
@@ -1189,11 +1300,15 @@ def render_summary_markdown(summary: dict[str, Any]) -> str:
         "",
     ]
     benchmark_profile = summary.get("benchmark_profile")
-    if benchmark_profile in {"cold-warm", "warm-focus", "exhaustive"}:
+    if benchmark_profile in {"cold-warm", "warm-focus", "custom-ui-cold", "exhaustive"}:
         benchmark_lines = []
-        if benchmark_profile in {"cold-warm", "exhaustive"}:
+        if benchmark_profile in {"cold-warm", "custom-ui-cold", "exhaustive"}:
             benchmark_lines.append(f"- Cold runs per mode: `{summary.get('cold_runs')}`")
         benchmark_lines.append(f"- Warm runs per mode: `{summary.get('warm_runs')}`")
+        if benchmark_profile == "custom-ui-cold":
+            benchmark_lines.append("- Selected-mode prewarm: `Custom Voice interactive readiness before measured generate`")
+        if summary.get("custom_prewarm_depth"):
+            benchmark_lines.append(f"- Custom Voice prewarm depth: `{summary.get('custom_prewarm_depth')}`")
         if benchmark_profile == "exhaustive":
             benchmark_lines.append("- Endurance warm samples per mode: `10`")
             benchmark_lines.append("- Direct long-text samples: `900` and `2700` characters per mode")
@@ -1262,20 +1377,59 @@ def render_summary_markdown(summary: dict[str, Any]) -> str:
                 f"wall median `{wall.get('median')} ms`, mean `{wall.get('mean')} ms`, "
                 f"RTF median `{rtf.get('median')}`, generation median `{generation.get('median')} ms`"
             )
+            setup_highlights = []
+            for label, key in (
+                ("mirror", "model_mirror_ms"),
+                ("client init", "client_initialize_ms"),
+                ("selected prewarm", "custom_ui_selected_prewarm_ms"),
+                ("prefetch total", "interactive_prefetch_total_ms"),
+                ("prefetch load", "interactive_prefetch_load_model_ms"),
+                ("cache prepare", "cache_prepare"),
+                ("MLX load", "mlx_model_load"),
+                ("load model", "load_model"),
+            ):
+                metric = timings.get(key) or {}
+                if metric.get("median") is not None:
+                    setup_highlights.append(f"{label} `{metric.get('median')} ms`")
+            if setup_highlights:
+                lines.append(f"  - Setup/cache: {', '.join(setup_highlights)}")
             qwen_highlights = []
             for label, key in (
                 ("tokenizer", "tokenizer_load"),
                 ("speech tokenizer", "speech_tokenizer_load"),
+                ("custom prewarm", "custom_prewarm_eval_ms"),
+                ("stream-step warm", "custom_stream_step_warm_ms"),
+                ("custom step eval", "custom_stream_step_eval_total_ms"),
+                ("custom chunk eval", "custom_audio_chunk_eval_total_ms"),
                 ("first decoder", "first_decoder_step"),
                 ("stream decode", "qwen_stream_decoder_total"),
                 ("generated codes", "qwen_generated_code_count"),
+                ("first chunk steps", "custom_generation_steps_before_first_chunk"),
             ):
                 metric = timings.get(key) or {}
                 if metric.get("median") is not None:
-                    suffix = "" if key == "qwen_generated_code_count" else " ms"
+                    suffix = "" if key in ("qwen_generated_code_count", "custom_generation_steps_before_first_chunk") else " ms"
                     qwen_highlights.append(f"{label} `{metric.get('median')}{suffix}`")
             if qwen_highlights:
                 lines.append(f"  - Qwen3: {', '.join(qwen_highlights)}")
+            flag_highlights = []
+            for label, key in (
+                ("prepared overlay hit", "prepared_overlay_cache_hit"),
+                ("prepared overlay rebuilt", "prepared_overlay_rebuilt"),
+                ("validated prepared dir", "prepared_directory_already_validated"),
+                ("trusted prepared checkpoint", "trusted_prepared_checkpoint"),
+                ("tokenizer hit", "tokenizer_cache_hit"),
+                ("speech tokenizer hit", "speech_tokenizer_cache_hit"),
+                ("prefix hit", "custom_prefix_cache_hit"),
+                ("decoder bucket hit", "decoder_bucket_cache_hit"),
+                ("stream-step prewarmed", "custom_stream_step_prewarmed"),
+            ):
+                counts = (item.get("flags") or {}).get(key) or {}
+                total = (counts.get("true") or 0) + (counts.get("false") or 0)
+                if total:
+                    flag_highlights.append(f"{label} `{counts.get('true', 0)}/{total}`")
+            if flag_highlights:
+                lines.append(f"  - Cache flags: {', '.join(flag_highlights)}")
         if summary.get("timing_csv"):
             lines.append(f"- CSV: `{summary.get('timing_csv')}`")
         lines.append("")
@@ -1349,6 +1503,9 @@ def render_summary_markdown(summary: dict[str, Any]) -> str:
             )
             if failed:
                 lines.append(f"  Failed checks: `{', '.join(failed)}`")
+                for report in item.get("reports", []):
+                    for detail in report.get("audio_issue_details") or []:
+                        lines.append(f"  - {format_audio_issue_detail(report, detail)}")
         lines.append("")
     lines.extend(["## QC Reports", ""])
     if not summary.get("reports"):
@@ -1362,6 +1519,45 @@ def render_summary_markdown(summary: dict[str, Any]) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def format_audio_issue_detail(report: dict[str, Any], detail: dict[str, Any]) -> str:
+    check_name = detail.get("check") or "audio issue"
+    source_name = report.get("name") or "report"
+    pieces = [f"`{source_name}` `{check_name}`"]
+    error = detail.get("error")
+    if error:
+        pieces.append(str(error))
+
+    dropouts = detail.get("dropouts") or []
+    if dropouts:
+        formatted = []
+        for dropout in dropouts[:3]:
+            start = numeric(dropout.get("start_seconds"))
+            duration = numeric(dropout.get("duration_seconds"))
+            if start is None or duration is None:
+                continue
+            formatted.append(f"start {start:.3f}s for {duration:.3f}s")
+        if formatted:
+            pieces.append("; ".join(formatted))
+
+    gaps = detail.get("gaps") or []
+    if gaps:
+        formatted = []
+        for gap in gaps[:3]:
+            start_sample = gap.get("start_sample")
+            duration_samples = gap.get("duration_samples")
+            duration_seconds = numeric(gap.get("duration_seconds"))
+            if duration_seconds is not None:
+                formatted.append(
+                    f"sample {start_sample} for {duration_samples} samples ({duration_seconds:.3f}s)"
+                )
+            else:
+                formatted.append(f"sample {start_sample} for {duration_samples} samples")
+        if formatted:
+            pieces.append("; ".join(formatted))
+
+    return " - ".join(pieces)
 
 
 def format_delta_percent(metric: dict[str, Any]) -> str:

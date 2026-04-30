@@ -159,7 +159,7 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
         case .prewarmModelIfNeeded(let request):
             try await requireRuntimeContext().engine.prewarmModelIfNeeded(for: request)
             return .void
-        case .prefetchInteractiveReadinessIfNeeded(let request):
+        case .prefetchInteractiveReadinessIfNeeded(let request, _):
             return .interactivePrefetchDiagnostics(
                 try await requireRuntimeContext().engine.prefetchInteractiveReadinessIfNeeded(for: request)
                     ?? InteractivePrefetchDiagnostics(
