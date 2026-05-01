@@ -4,7 +4,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 
 ## Maintained Reference Docs
 
-- [`../AGENTS.md`](../AGENTS.md) — primary repository operating guide for coding agents and maintainers
+- [`../CLAUDE.md`](../CLAUDE.md) — primary repository operating guide for coding agents and maintainers
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
 - [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — rebuilt QA gate for static validation, source/native/UI harness layers, builds, and unsigned release proof

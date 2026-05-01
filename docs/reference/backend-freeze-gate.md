@@ -143,7 +143,7 @@ When one of these changes, treat it as a backend contract review:
 
 Update these docs together when the gate changes:
 
-- `AGENTS.md`
+- `CLAUDE.md`
 - `docs/README.md`
 - `docs/reference/current-state.md`
 - `docs/reference/engineering-status.md`
