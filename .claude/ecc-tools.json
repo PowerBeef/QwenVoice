@@ -1,0 +1,217 @@
+{
+  "version": "1.3",
+  "schemaVersion": "1.0",
+  "generatedBy": "ecc-tools",
+  "generatedAt": "2026-05-01T14:30:37.831Z",
+  "repo": "https://github.com/PowerBeef/QwenVoice",
+  "profiles": {
+    "requested": "developer",
+    "recommended": "developer",
+    "effective": "developer",
+    "requestedAlias": "developer",
+    "recommendedAlias": "developer",
+    "effectiveAlias": "developer"
+  },
+  "requestedProfile": "developer",
+  "profile": "developer",
+  "recommendedProfile": "developer",
+  "effectiveProfile": "developer",
+  "tier": "free",
+  "requestedComponents": [
+    "repo-baseline",
+    "workflow-automation"
+  ],
+  "selectedComponents": [
+    "repo-baseline",
+    "workflow-automation"
+  ],
+  "requestedAddComponents": [],
+  "requestedRemoveComponents": [],
+  "blockedRemovalComponents": [],
+  "tierFilteredComponents": [],
+  "requestedRootPackages": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "selectedRootPackages": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "requestedPackages": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "requestedAddPackages": [],
+  "requestedRemovePackages": [],
+  "selectedPackages": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "packages": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "blockedRemovalPackages": [],
+  "tierFilteredRootPackages": [],
+  "tierFilteredPackages": [],
+  "conflictingPackages": [],
+  "dependencyGraph": {
+    "runtime-core": [],
+    "workflow-pack": [
+      "runtime-core"
+    ]
+  },
+  "resolutionOrder": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "requestedModules": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "selectedModules": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "modules": [
+    "runtime-core",
+    "workflow-pack"
+  ],
+  "managedFiles": [
+    ".claude/skills/QwenVoice/SKILL.md",
+    ".agents/skills/QwenVoice/SKILL.md",
+    ".agents/skills/QwenVoice/agents/openai.yaml",
+    ".claude/identity.json",
+    ".codex/config.toml",
+    ".codex/AGENTS.md",
+    ".codex/agents/explorer.toml",
+    ".codex/agents/reviewer.toml",
+    ".codex/agents/docs-researcher.toml",
+    ".claude/homunculus/instincts/inherited/QwenVoice-instincts.yaml",
+    ".claude/commands/operating-guide-replacement-update.md",
+    ".claude/commands/enforcement-script-reference-update.md"
+  ],
+  "packageFiles": {
+    "runtime-core": [
+      ".claude/skills/QwenVoice/SKILL.md",
+      ".agents/skills/QwenVoice/SKILL.md",
+      ".agents/skills/QwenVoice/agents/openai.yaml",
+      ".claude/identity.json",
+      ".codex/config.toml",
+      ".codex/AGENTS.md",
+      ".codex/agents/explorer.toml",
+      ".codex/agents/reviewer.toml",
+      ".codex/agents/docs-researcher.toml",
+      ".claude/homunculus/instincts/inherited/QwenVoice-instincts.yaml"
+    ],
+    "workflow-pack": [
+      ".claude/commands/operating-guide-replacement-update.md",
+      ".claude/commands/enforcement-script-reference-update.md"
+    ]
+  },
+  "moduleFiles": {
+    "runtime-core": [
+      ".claude/skills/QwenVoice/SKILL.md",
+      ".agents/skills/QwenVoice/SKILL.md",
+      ".agents/skills/QwenVoice/agents/openai.yaml",
+      ".claude/identity.json",
+      ".codex/config.toml",
+      ".codex/AGENTS.md",
+      ".codex/agents/explorer.toml",
+      ".codex/agents/reviewer.toml",
+      ".codex/agents/docs-researcher.toml",
+      ".claude/homunculus/instincts/inherited/QwenVoice-instincts.yaml"
+    ],
+    "workflow-pack": [
+      ".claude/commands/operating-guide-replacement-update.md",
+      ".claude/commands/enforcement-script-reference-update.md"
+    ]
+  },
+  "files": [
+    {
+      "moduleId": "runtime-core",
+      "path": ".claude/skills/QwenVoice/SKILL.md",
+      "description": "Repository-specific Claude Code skill generated from git history."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".agents/skills/QwenVoice/SKILL.md",
+      "description": "Codex-facing copy of the generated repository skill."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".agents/skills/QwenVoice/agents/openai.yaml",
+      "description": "Codex skill metadata so the repo skill appears cleanly in the skill interface."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".claude/identity.json",
+      "description": "Suggested identity.json baseline derived from repository conventions."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".codex/config.toml",
+      "description": "Repo-local Codex MCP and multi-agent baseline aligned with ECC defaults."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".codex/AGENTS.md",
+      "description": "Codex usage guide that points at the generated repo skill and workflow bundle."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".codex/agents/explorer.toml",
+      "description": "Read-only explorer role config for Codex multi-agent work."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".codex/agents/reviewer.toml",
+      "description": "Read-only reviewer role config focused on correctness and security."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".codex/agents/docs-researcher.toml",
+      "description": "Read-only docs researcher role config for API verification."
+    },
+    {
+      "moduleId": "runtime-core",
+      "path": ".claude/homunculus/instincts/inherited/QwenVoice-instincts.yaml",
+      "description": "Continuous-learning instincts derived from repository patterns."
+    },
+    {
+      "moduleId": "workflow-pack",
+      "path": ".claude/commands/operating-guide-replacement-update.md",
+      "description": "Workflow command scaffold for operating-guide-replacement-update."
+    },
+    {
+      "moduleId": "workflow-pack",
+      "path": ".claude/commands/enforcement-script-reference-update.md",
+      "description": "Workflow command scaffold for enforcement-script-reference-update."
+    }
+  ],
+  "workflows": [
+    {
+      "command": "operating-guide-replacement-update",
+      "path": ".claude/commands/operating-guide-replacement-update.md"
+    },
+    {
+      "command": "enforcement-script-reference-update",
+      "path": ".claude/commands/enforcement-script-reference-update.md"
+    }
+  ],
+  "adapters": {
+    "claudeCode": {
+      "skillPath": ".claude/skills/QwenVoice/SKILL.md",
+      "identityPath": ".claude/identity.json",
+      "commandPaths": [
+        ".claude/commands/operating-guide-replacement-update.md",
+        ".claude/commands/enforcement-script-reference-update.md"
+      ]
+    },
+    "codex": {
+      "configPath": ".codex/config.toml",
+      "agentsGuidePath": ".codex/AGENTS.md",
+      "skillPath": ".agents/skills/QwenVoice/SKILL.md"
+    }
+  }
+}
