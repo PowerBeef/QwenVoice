@@ -5,6 +5,30 @@ import MLXAudioCore
 @preconcurrency import MLXAudioTTS
 import OSLog
 
+// MARK: - Divergence with QwenVoiceNativeRuntime
+//
+// This is the LIVE copy of `NativeStreamingSynthesisSession` used by the
+// active macOS engine path through `QwenVoiceCore`. A retained
+// compatibility copy lives at
+// `Sources/QwenVoiceNativeRuntime/NativeStreamingSynthesisSession.swift`
+// (~486 lines; this one is ~961). The compatibility copy lacks several
+// pieces present here:
+//
+//   - `NativeBenchmarkPostRequestCachePolicy` resolution (cache-clear
+//     policy driven by `GenerationRequest.BenchmarkOptions`)
+//   - Memory-telemetry merging into `BenchmarkSample` for perf-lane runs
+//   - Allocation-retry annotation propagation
+//   - The `Task.detached(priority: .userInitiated)` cancellation wrapper
+//
+// Until the retained-vs-live split is consolidated (full
+// `QwenVoiceNativeRuntime` retirement), behavior fixes that affect chunk
+// emission, streaming completion, allocation retry, or telemetry MUST
+// be mirrored in BOTH files. CI does not catch the divergence
+// automatically — `NativeMLXMacEngineTests` exercises the runtime copy,
+// but live-XPC perf coverage exercises only the Core copy. See
+// `CLAUDE.md` "When Changing X, Also Update Y" for the engine-semantics
+// pairing rule.
+
 protocol NativeStreamingSessionRunning {
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult
 }

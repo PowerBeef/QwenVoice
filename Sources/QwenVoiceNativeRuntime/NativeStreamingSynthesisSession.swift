@@ -3,6 +3,25 @@ import Foundation
 import QwenVoiceCore
 import QwenVoiceEngineSupport
 
+// MARK: - Divergence with QwenVoiceCore
+//
+// This is the RETAINED compatibility copy of
+// `NativeStreamingSynthesisSession`. The live implementation that the
+// active macOS engine path actually uses lives at
+// `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift` (~961
+// lines; this file is ~486). Core is authoritative; this copy is kept
+// solely so the legacy `NativeMLXMacEngineTests` regression suite
+// continues to compile until the full `QwenVoiceNativeRuntime`
+// retirement lands.
+//
+// **Do not add new behavior to this file.** New cache-policy, memory
+// telemetry, allocation-retry, or chunk-emission logic belongs in the
+// Core copy. When you fix a bug in Core that affects shared streaming
+// semantics, mirror the fix here only to the extent needed to keep the
+// retained tests honest. Avoid wiring new env vars or
+// `BenchmarkOptions` fields here — they should not be observable from
+// the legacy path.
+
 protocol NativeStreamingSessionRunning {
     func run(
         eventSink: @escaping @Sendable (GenerationEvent) -> Void
