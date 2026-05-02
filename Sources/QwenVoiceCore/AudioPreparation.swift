@@ -3,6 +3,32 @@ import CoreMedia
 import CryptoKit
 import Foundation
 
+// MARK: - Divergence with QwenVoiceNativeRuntime
+//
+// This is the LIVE, public-API copy of audio normalization. A retained
+// compatibility copy lives at
+// `Sources/QwenVoiceNativeRuntime/AudioPreparation.swift` (~445 lines).
+// The retained copy keeps internal-visibility duplicates of every type
+// declared here (`AudioPreparationError`, `AudioPreparationRequest`,
+// `AudioNormalizationResult`, `AudioPreparationService`,
+// `NativeAudioPreparationService`) so that NativeRuntime's
+// `NativeCloneSupport` and `MacNativeRuntime` plus the legacy
+// `NativeAudioPreparationTests` continue to compile inside the
+// QwenVoiceNativeRuntime module.
+//
+// `AudioPreparationRequest` itself is defined publicly in
+// `Sources/QwenVoiceCore/SemanticTypes.swift`; this file extends it (see
+// the bottom of the file). The NativeRuntime copy redeclares its own
+// internal struct.
+//
+// Until the retained-vs-live split is consolidated (full
+// `QwenVoiceNativeRuntime` retirement), behavior fixes that affect
+// canonicalization, fingerprinting, or normalized-output reuse MUST be
+// mirrored in BOTH files. Notable existing differences (intentional,
+// not bugs): the `DispatchQueue` label here is
+// `com.qvoice.core.audio-preparation`, while the NativeRuntime copy uses
+// `com.qwenvoice.native.audio-preparation`.
+
 public enum AudioPreparationError: LocalizedError, Equatable {
     case missingInputFile(String)
     case unsupportedInput(String)

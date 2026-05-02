@@ -3,6 +3,25 @@ import CoreMedia
 import CryptoKit
 import Foundation
 
+// MARK: - Divergence with QwenVoiceCore
+//
+// This is the RETAINED compatibility copy of audio-normalization types.
+// The live, public-API implementation lives at
+// `Sources/QwenVoiceCore/AudioPreparation.swift` (~497 lines). Core is
+// authoritative; this copy is kept solely so the legacy
+// `NativeAudioPreparationTests` regression suite plus NativeRuntime's
+// own `NativeCloneSupport` and `MacNativeRuntime` consumers continue to
+// compile until the full `QwenVoiceNativeRuntime` retirement lands.
+//
+// **Do not add new behavior to this file.** New canonical-format rules,
+// fingerprint logic, or reuse heuristics belong in the Core copy. When
+// you fix a bug in Core that affects normalization semantics, mirror
+// the fix here only to the extent needed to keep the retained tests and
+// NativeRuntime callers honest. The internal `AudioPreparationRequest`
+// here is intentionally a name-collision-safe local struct: NativeRuntime
+// callers see this one, Core callers see the public extension on
+// `QwenVoiceCore.AudioPreparationRequest` defined in SemanticTypes.swift.
+
 enum AudioPreparationError: LocalizedError, Equatable {
     case missingInputFile(String)
     case unsupportedInput(String)
