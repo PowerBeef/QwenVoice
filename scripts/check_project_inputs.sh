@@ -63,6 +63,7 @@ PROHIBITED_REFERENCE_PATTERNS=(
     "scripts/run_custom_voice_ui_perf_audit\.py"
     "scripts/audit_generated_audio\.py"
     "scripts/check_qwen3_backend_only\.py"
+    "scripts/check_ios_catalog\.py"
     "scripts/refresh_readme_screenshots\.py"
 )
 
