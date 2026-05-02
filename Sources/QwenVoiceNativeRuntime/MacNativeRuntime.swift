@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import MLXAudioTTS
+import QwenVoiceCore
 import QwenVoiceEngineSupport
 
 // MARK: - Divergence with QwenVoiceCore
@@ -90,7 +91,7 @@ public actor MacNativeRuntime {
     }
 
     private struct DesignConditioningWarmState: Sendable {
-        let bucket: GenerationSemantics.DesignWarmBucket
+        let bucket: QwenVoiceEngineSupport.GenerationSemantics.DesignWarmBucket
         let requestKey: String
         let reused: Bool
         let prefetchHit: Bool
@@ -201,7 +202,7 @@ public actor MacNativeRuntime {
     public func prewarmModelIfNeeded(for request: GenerationRequest) async throws {
         try await ensureModelLoadedIfNeeded(id: request.modelID)
 
-        let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
+        let identityKey = QwenVoiceEngineSupport.GenerationSemantics.prewarmIdentityKey(for: request)
         let model = try await requireLoadedModel(expectedModelID: request.modelID)
         switch request.payload {
         case .design:
@@ -221,7 +222,7 @@ public actor MacNativeRuntime {
                 reference: reference,
                 sampleRate: model.sampleRate
             )
-            let cloneLanguage = GenerationSemantics.qwenLanguageHint(
+            let cloneLanguage = QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(
                 for: request,
                 resolvedCloneTranscript: conditioning.resolvedTranscript
             )
@@ -267,7 +268,7 @@ public actor MacNativeRuntime {
 
         switch request.payload {
         case .design:
-            let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
+            let identityKey = QwenVoiceEngineSupport.GenerationSemantics.prewarmIdentityKey(for: request)
             let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
             let designWarmState = try await ensureDesignConditioningWarmStateIfNeeded(
                 for: request,
@@ -289,7 +290,7 @@ public actor MacNativeRuntime {
             booleanFlags["design_optimized_handler_used"] = model.supportsOptimizedVoiceDesign
             stringFlags["design_conditioning_request_key"] = designWarmState.requestKey
         case .custom:
-            let identityKey = GenerationSemantics.prewarmIdentityKey(for: request)
+            let identityKey = QwenVoiceEngineSupport.GenerationSemantics.prewarmIdentityKey(for: request)
             let wasPrewarmed = await loadCoordinator.isPrewarmed(identityKey: identityKey)
             if wasPrewarmed {
                 warmState = .warm
@@ -306,7 +307,7 @@ public actor MacNativeRuntime {
                 reference: reference,
                 sampleRate: model.sampleRate
             )
-            let cloneLanguage = GenerationSemantics.qwenLanguageHint(
+            let cloneLanguage = QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(
                 for: request,
                 resolvedCloneTranscript: resolvedConditioning.resolvedTranscript
             )
@@ -517,9 +518,9 @@ public actor MacNativeRuntime {
         case .custom(let speakerID, let deliveryStyle):
             try await model.prepareCustomVoice(
                 text: request.text,
-                language: GenerationSemantics.qwenLanguageHint(for: request),
+                language: QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(for: request),
                 speaker: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
-                instruct: GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle)
+                instruct: QwenVoiceEngineSupport.GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle)
             )
         case .design, .clone:
             return
@@ -540,7 +541,7 @@ public actor MacNativeRuntime {
             reference: reference,
             sampleRate: model.sampleRate
         )
-        let cloneLanguage = GenerationSemantics.qwenLanguageHint(
+        let cloneLanguage = QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(
             for: GenerationRequest(
                 mode: .clone,
                 modelID: modelID,
@@ -599,7 +600,7 @@ public actor MacNativeRuntime {
         model: NativeSpeechGenerationModel
     ) async throws -> [String: Int] {
         let startedAt = ContinuousClock.now
-        let warmText = GenerationSemantics.canonicalDesignWarmShortText
+        let warmText = QwenVoiceEngineSupport.GenerationSemantics.canonicalDesignWarmShortText
         let warmRequest = GenerationRequest(
             modelID: modelID,
             text: warmText,
@@ -607,7 +608,7 @@ public actor MacNativeRuntime {
             shouldStream: false,
             payload: .clone(reference: reference)
         )
-        let language = GenerationSemantics.qwenLanguageHint(
+        let language = QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(
             for: warmRequest,
             resolvedCloneTranscript: conditioning.resolvedTranscript
         )
@@ -656,10 +657,10 @@ public actor MacNativeRuntime {
             )
         }
 
-        let warmBucket = GenerationSemantics.designWarmBucket(for: request.text)
+        let warmBucket = QwenVoiceEngineSupport.GenerationSemantics.designWarmBucket(for: request.text)
         let trimmedVoiceDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedVoiceDescription.isEmpty,
-              let conditioningWarmKey = GenerationSemantics.designConditioningWarmKey(for: request) else {
+              let conditioningWarmKey = QwenVoiceEngineSupport.GenerationSemantics.designConditioningWarmKey(for: request) else {
             return DesignConditioningWarmState(
                 bucket: warmBucket,
                 requestKey: "",
@@ -682,12 +683,12 @@ public actor MacNativeRuntime {
             )
         }
 
-        let language = GenerationSemantics.qwenLanguageHint(for: request)
-        let warmInstruction = GenerationSemantics.designInstruction(
+        let language = QwenVoiceEngineSupport.GenerationSemantics.qwenLanguageHint(for: request)
+        let warmInstruction = QwenVoiceEngineSupport.GenerationSemantics.designInstruction(
             voiceDescription: voiceDescription,
             emotion: deliveryStyle ?? ""
         )
-        let warmText = GenerationSemantics.canonicalDesignWarmText(for: warmBucket)
+        let warmText = QwenVoiceEngineSupport.GenerationSemantics.canonicalDesignWarmText(for: warmBucket)
         try await model.prepareVoiceDesign(
             text: warmText,
             language: language,

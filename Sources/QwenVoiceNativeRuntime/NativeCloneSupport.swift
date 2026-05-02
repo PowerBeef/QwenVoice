@@ -3,6 +3,7 @@ import Foundation
 @preconcurrency import MLX
 import MLXAudioCore
 @preconcurrency import MLXAudioTTS
+import QwenVoiceCore
 import QwenVoiceEngineSupport
 
 // MARK: - Divergence with QwenVoiceCore
@@ -150,12 +151,12 @@ actor NativePreparedCloneConditioningCache {
             requestedTranscript: requestedTranscript,
             normalizedAudioURL: normalizedReference.normalizedURL
         )
-        let uiIdentityKey = GenerationSemantics.cloneReferenceIdentityKey(
+        let uiIdentityKey = QwenVoiceEngineSupport.GenerationSemantics.cloneReferenceIdentityKey(
             modelID: modelID,
             refAudio: reference.audioPath,
             refText: requestedTranscript
         )
-        let internalIdentityKey = GenerationSemantics.cloneReferenceIdentityKey(
+        let internalIdentityKey = QwenVoiceEngineSupport.GenerationSemantics.cloneReferenceIdentityKey(
             modelID: modelID,
             refAudio: normalizedReference.normalizedPath,
             refText: transcriptResolution.transcript

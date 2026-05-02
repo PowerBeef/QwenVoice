@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @preconcurrency import MLX
 @preconcurrency import MLXAudioTTS
+import QwenVoiceCore
 @testable import QwenVoiceNativeRuntime
 
 final class NativeCloneSupportTests: XCTestCase {

@@ -154,7 +154,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         }
     }
 
-    static func canReuseExistingNormalizedOutput(at outputURL: URL, fingerprint: String) -> Bool {
+    public static func canReuseExistingNormalizedOutput(at outputURL: URL, fingerprint: String) -> Bool {
         guard FileManager.default.fileExists(atPath: outputURL.path) else {
             return false
         }

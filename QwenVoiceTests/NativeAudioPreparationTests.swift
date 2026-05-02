@@ -1,6 +1,6 @@
 @preconcurrency import AVFoundation
 import XCTest
-@testable import QwenVoiceNativeRuntime
+import QwenVoiceCore
 
 final class NativeAudioPreparationTests: XCTestCase {
     func testNormalizeAudioConvertsToCanonicalMono24kWAV() async throws {
