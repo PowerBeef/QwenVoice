@@ -28,10 +28,23 @@ qa.sh — QwenVoice native QA orchestrator
 Usage:
   qa.sh validate
   qa.sh test --layer {contract|swift|native|ios|e2e|all}
+  qa.sh test --layer perf       # opt-in audio-QC live performance lane
 
 Environment:
   QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS  override per-xcodebuild timeout (default ${DEFAULT_TIMEOUT_SECONDS}s)
   QWENVOICE_E2E_STRICT                  treat e2e TCC/window timeouts as failures (default: skip)
+  QWENVOICE_PERF_SWAP_HARD_STOP_MB      perf-lane preflight swap-used hard stop (default 8000)
+  QWENVOICE_PERF_SWAP_MIN_FREE_MB       perf-lane preflight swap-free minimum (default 512)
+  QWENVOICE_AUDIO_QC_OUTPUT_DIR         perf-lane artifact root (default build/audio-qc/qa-perf)
+  QWENVOICE_AUDIO_QC_MODELS_ROOT        perf-lane models root (default ~/Library/Application Support/QwenVoice/models)
+  QWENVOICE_AUDIO_QC_MODES              perf-lane modes (default CustomVoice,VoiceDesign)
+  QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE  perf-lane profile (default repeat)
+  QWENVOICE_AUDIO_QC_REPEAT_COUNT       perf-lane repeats (default 1)
+  QWENVOICE_AUDIO_QC_COLD_RUNS          perf-lane cold runs per mode (default 2)
+  QWENVOICE_AUDIO_QC_WARM_RUNS          perf-lane warm runs per mode (default 3)
+  QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE  current|legacy123-memory|adaptive-failure-only|balanced-all-modes
+  QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE      0+ (per-step MLX cache clear cadence; 0 disables)
+  QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY current|always|failure-only|never
 USAGE
 }
 
@@ -219,6 +232,86 @@ run_ios_layer() {
   run_xcodebuild_suite "ios_foundation_tests" "VocelloiOS Foundation" "$destination"
 }
 
+# Refuse to start a perf run when system swap is already exhausted.
+# Reads vm.swapusage; aborts with exit 125 (matching the prior Python
+# orchestration's contract) before any heavy xcodebuild stage starts.
+swap_preflight() {
+  local hard_stop="${QWENVOICE_PERF_SWAP_HARD_STOP_MB:-8000}"
+  local min_free="${QWENVOICE_PERF_SWAP_MIN_FREE_MB:-512}"
+  local parsed
+  parsed="$(sysctl -n vm.swapusage 2>/dev/null | python3 - <<'PY'
+import re
+import sys
+
+line = sys.stdin.read().strip()
+m = re.search(r"used = ([\d.]+)M.*free = ([\d.]+)M", line)
+if not m:
+    sys.exit(0)
+print(f"{int(float(m.group(1)))} {int(float(m.group(2)))}")
+PY
+  )"
+  if [[ -z "$parsed" ]]; then
+    echo "==> swap preflight: vm.swapusage unparseable; skipping check."
+    return 0
+  fi
+  local used_mb free_mb
+  read -r used_mb free_mb <<<"$parsed"
+  if (( used_mb >= hard_stop )); then
+    echo "qa.sh perf: refusing to start — swap in use is ${used_mb} MB (>= ${hard_stop} MB hard stop)." >&2
+    echo "Quit memory-heavy apps or reboot, then re-run." >&2
+    exit 125
+  fi
+  if (( free_mb <= min_free )); then
+    echo "qa.sh perf: refusing to start — swap free is ${free_mb} MB (<= ${min_free} MB minimum)." >&2
+    echo "Quit memory-heavy apps or reboot, then re-run." >&2
+    exit 125
+  fi
+  echo "==> swap preflight: ${used_mb} MB used, ${free_mb} MB free (OK)"
+}
+
+# Opt-in audio-QC live performance lane. Replaces the retired Python
+# run_generation_quality_audit.py orchestration. The Swift test
+# (GenerationQualityAuditLiveTests) consumes every QWENVOICE_AUDIO_QC_*
+# and QWENVOICE_QWEN3_* env var directly and manages the cold/warm matrix
+# internally; this lane just sets sensible defaults, gates with a swap
+# preflight, and invokes the test through xcodebuild.
+run_perf_layer() {
+  echo "==> Running performance / audio-QC live tests..."
+
+  : "${QWENVOICE_AUDIO_QC_OUTPUT_DIR:=$PROJECT_DIR/build/audio-qc/qa-perf}"
+  : "${QWENVOICE_AUDIO_QC_MODELS_ROOT:=$HOME/Library/Application Support/QwenVoice/models}"
+  : "${QWENVOICE_AUDIO_QC_MODES:=CustomVoice,VoiceDesign}"
+  : "${QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE:=repeat}"
+  : "${QWENVOICE_AUDIO_QC_REPEAT_COUNT:=1}"
+  : "${QWENVOICE_AUDIO_QC_COLD_RUNS:=2}"
+  : "${QWENVOICE_AUDIO_QC_WARM_RUNS:=3}"
+
+  export QWENVOICE_AUDIO_QC_LIVE=1
+  export QWENVOICE_AUDIO_QC_ALLOW_MODEL_LOAD=1
+  export QWENVOICE_AUDIO_QC_HEADLESS_APP_HOST=1
+  export QWENVOICE_AUDIO_QC_OUTPUT_DIR QWENVOICE_AUDIO_QC_MODELS_ROOT \
+    QWENVOICE_AUDIO_QC_MODES QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE \
+    QWENVOICE_AUDIO_QC_REPEAT_COUNT QWENVOICE_AUDIO_QC_COLD_RUNS \
+    QWENVOICE_AUDIO_QC_WARM_RUNS
+
+  if [[ ! -d "$QWENVOICE_AUDIO_QC_MODELS_ROOT" ]]; then
+    echo "qa.sh perf: models root '$QWENVOICE_AUDIO_QC_MODELS_ROOT' does not exist." >&2
+    echo "Install required models or override QWENVOICE_AUDIO_QC_MODELS_ROOT before re-running." >&2
+    exit 78
+  fi
+
+  mkdir -p "$QWENVOICE_AUDIO_QC_OUTPUT_DIR"
+  echo "==> Output dir:    $QWENVOICE_AUDIO_QC_OUTPUT_DIR"
+  echo "==> Models root:   $QWENVOICE_AUDIO_QC_MODELS_ROOT"
+  echo "==> Modes:         $QWENVOICE_AUDIO_QC_MODES"
+  echo "==> Profile:       $QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE (repeat=${QWENVOICE_AUDIO_QC_REPEAT_COUNT}, cold=${QWENVOICE_AUDIO_QC_COLD_RUNS}, warm=${QWENVOICE_AUDIO_QC_WARM_RUNS})"
+
+  swap_preflight
+
+  run_xcodebuild_suite "perf_audio_qc" "QwenVoice Foundation" "platform=macOS" \
+    -only-testing:QwenVoiceTests/GenerationQualityAuditLiveTests
+}
+
 run_e2e_layer() {
   echo "==> Running end-to-end UI smoke tests..."
   local result_root="$HARNESS_ROOT/results/e2e_ui_smoke"
@@ -274,7 +367,7 @@ cmd_test() {
   done
 
   case "$layer" in
-    contract|swift|native|ios|e2e|all) ;;
+    contract|swift|native|ios|e2e|perf|all) ;;
     *)
       echo "qa.sh test: unknown layer '$layer'" >&2
       usage >&2
@@ -292,7 +385,10 @@ cmd_test() {
     native)   run_native_layer ;;
     ios)      run_ios_layer ;;
     e2e)      run_e2e_layer ;;
+    perf)     run_perf_layer ;;
     all)
+      # `all` is the routine PR/release gate; the perf layer is opt-in
+      # because it requires installed models and runs much longer.
       run_contract_layer
       run_swift_layer
       run_native_layer
