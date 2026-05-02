@@ -57,6 +57,9 @@ jobs:
       - name: Run native runtime QA layer
         run: ./scripts/qa.sh test --layer native
 
+      - name: Run perf-lane static QA layer
+        run: ./scripts/qa.sh test --layer perf-static
+
       - name: Run macOS UI smoke QA layer
         run: ./scripts/qa.sh test --layer e2e
 

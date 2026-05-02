@@ -27,8 +27,8 @@ qa.sh — QwenVoice native QA orchestrator
 
 Usage:
   qa.sh validate
-  qa.sh test --layer {contract|swift|native|ios|e2e|all}
-  qa.sh test --layer perf       # opt-in audio-QC live performance lane
+  qa.sh test --layer {contract|swift|native|ios|e2e|perf-static|all}
+  qa.sh test --layer perf       # opt-in audio-QC live performance lane (needs models)
 
 Environment:
   QWENVOICE_XCODEBUILD_TIMEOUT_SECONDS  override per-xcodebuild timeout (default ${DEFAULT_TIMEOUT_SECONDS}s)
@@ -227,6 +227,20 @@ run_native_layer() {
     -only-testing:QwenVoiceTests/TTSEngineStoreTests \
     -only-testing:QwenVoiceTests/VoiceCloningReferenceAudioSupportTests \
     -only-testing:QwenVoiceTests/XPCNativeEngineClientTests
+}
+
+# Cheap regression gate for the perf-lane orchestration logic. Runs only the
+# static unit tests in GenerationQualityAuditLiveTests that DO NOT load
+# models or write artifacts — safe on hosted CI without the multi-GB
+# Qwen3-TTS bundle. The model-loading test (testLiveXPCGenerationQualityAuditArtifacts)
+# stays exclusive to `qa.sh test --layer perf`.
+run_perf_static_layer() {
+  echo "==> Running perf-lane static regression tests..."
+  run_xcodebuild_suite "perf_static_tests" "QwenVoice Foundation" "platform=macOS" \
+    -only-testing:QwenVoiceTests/GenerationQualityAuditLiveTests/testWarmFocusBenchmarkProfileUsesWarmRunLayout \
+    -only-testing:QwenVoiceTests/GenerationQualityAuditLiveTests/testExhaustiveBenchmarkProfileUsesLongTextRunLayout \
+    -only-testing:QwenVoiceTests/GenerationQualityAuditLiveTests/testCustomUIColdBenchmarkProfileUsesCustomVoiceColdWarmLayout \
+    -only-testing:QwenVoiceTests/GenerationQualityAuditLiveTests/testLongTextFixturesAndBatchSegmentationUseNineHundredCharacterBudget
 }
 
 run_ios_layer() {
@@ -435,7 +449,7 @@ cmd_test() {
   done
 
   case "$layer" in
-    contract|swift|native|ios|e2e|perf|all) ;;
+    contract|swift|native|ios|e2e|perf|perf-static|all) ;;
     *)
       echo "qa.sh test: unknown layer '$layer'" >&2
       usage >&2
@@ -448,18 +462,22 @@ cmd_test() {
   fi
 
   case "$layer" in
-    contract) run_contract_layer ;;
-    swift)    run_swift_layer ;;
-    native)   run_native_layer ;;
-    ios)      run_ios_layer ;;
-    e2e)      run_e2e_layer ;;
-    perf)     run_perf_layer ;;
+    contract)    run_contract_layer ;;
+    swift)       run_swift_layer ;;
+    native)      run_native_layer ;;
+    ios)         run_ios_layer ;;
+    e2e)         run_e2e_layer ;;
+    perf)        run_perf_layer ;;
+    perf-static) run_perf_static_layer ;;
     all)
-      # `all` is the routine PR/release gate; the perf layer is opt-in
-      # because it requires installed models and runs much longer.
+      # `all` is the routine PR/release gate; the perf layer (live audio QC
+      # with installed models) is opt-in. perf-static is included in `all`
+      # because it's a cheap (~10 s) regression gate over the perf
+      # orchestration's static logic and needs no models.
       run_contract_layer
       run_swift_layer
       run_native_layer
+      run_perf_static_layer
       run_ios_layer
       run_e2e_layer
       ;;
