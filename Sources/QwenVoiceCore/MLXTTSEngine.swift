@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+@preconcurrency import MLX
 @preconcurrency import MLXAudioTTS
 
 public enum MLXTTSEngineError: LocalizedError, Equatable {
@@ -461,37 +462,45 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         }
 
         do {
-            await telemetryRecorder?.reset()
-            loadState = .running(
-                modelID: request.modelID,
-                label: request.streamingTitle ?? String(request.text.prefix(40)),
-                fraction: nil
-            )
-
-            let prepared = try await runtime.prepareGeneration(for: request)
-            let session = streamingSessionFactory(
-                prepared.requestID,
-                request,
-                prepared.model,
-                streamSessionsDirectory,
-                prepared.warmState,
-                prepared.timingOverridesMS,
-                prepared.booleanFlags,
-                prepared.stringFlags,
-                prepared.cloneConditioning,
-                prepared.wasPrimed,
-                telemetryRecorder,
-                prepared.loadCapabilityProfile,
-                prepared.memoryPolicy,
-                prepared.mlxMemorySnapshots
-            )
-            let result = try await session.run { [weak self] event in
-                self?.latestEvent = event
-            }
+            let result = try await runGenerationAttempt(request)
             loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
-            return result
+            return Self.annotatingAllocationRetry(
+                result,
+                streamingUsed: request.shouldStream,
+                attempted: false,
+                succeeded: false,
+                cleanupMS: nil
+            )
         } catch {
+            if Self.isRetryableAllocationFailure(error) {
+                let cleanupStartedAt = ContinuousClock.now
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: request.outputPath))
+                Memory.clearCache()
+                await runtime.unloadModel()
+                let cleanupMS = cleanupStartedAt.elapsedMilliseconds
+                do {
+                    let retryResult = try await runGenerationAttempt(request)
+                    loadState = .loaded(modelID: request.modelID)
+                    visibleErrorMessage = nil
+                    return Self.annotatingAllocationRetry(
+                        retryResult,
+                        streamingUsed: request.shouldStream,
+                        attempted: true,
+                        succeeded: true,
+                        cleanupMS: cleanupMS
+                    )
+                } catch {
+                    let surfacedError = NativeRuntimeError.wrapping(
+                        error,
+                        stage: .streamStartup,
+                        message: "The native runtime could not start audio generation after one allocation retry."
+                    )
+                    handle(surfacedError)
+                    latestEvent = .failed(surfacedError.localizedDescription)
+                    throw surfacedError
+                }
+            }
             let surfacedError = NativeRuntimeError.wrapping(
                 error,
                 stage: .streamStartup,
@@ -501,6 +510,92 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             latestEvent = .failed(surfacedError.localizedDescription)
             throw surfacedError
         }
+    }
+
+    private func runGenerationAttempt(_ request: GenerationRequest) async throws -> GenerationResult {
+        await telemetryRecorder?.reset()
+        loadState = .running(
+            modelID: request.modelID,
+            label: request.streamingTitle ?? String(request.text.prefix(40)),
+            fraction: nil
+        )
+
+        let prepared = try await runtime.prepareGeneration(for: request)
+        let session = streamingSessionFactory(
+            prepared.requestID,
+            request,
+            prepared.model,
+            streamSessionsDirectory,
+            prepared.warmState,
+            prepared.timingOverridesMS,
+            prepared.booleanFlags,
+            prepared.stringFlags,
+            prepared.cloneConditioning,
+            prepared.wasPrimed,
+            telemetryRecorder,
+            prepared.loadCapabilityProfile,
+            prepared.memoryPolicy,
+            prepared.mlxMemorySnapshots
+        )
+        return try await session.run { [weak self] event in
+            self?.latestEvent = event
+        }
+    }
+
+    private static func annotatingAllocationRetry(
+        _ result: GenerationResult,
+        streamingUsed: Bool,
+        attempted: Bool,
+        succeeded: Bool,
+        cleanupMS: Int?
+    ) -> GenerationResult {
+        var timings: [String: Int] = [:]
+        if let cleanupMS {
+            timings["allocation_retry_cleanup_ms"] = cleanupMS
+        }
+        let flags = [
+            "allocation_retry_attempted": attempted,
+            "allocation_retry_succeeded": succeeded,
+        ]
+        let strings = attempted ? ["allocation_retry_reason": "mlx_allocation_failure"] : [:]
+        let sample = result.benchmarkSample?.mergingBenchmarkFields(
+            timingsMS: timings,
+            booleanFlags: flags,
+            stringFlags: strings
+        ) ?? BenchmarkSample(
+            streamingUsed: streamingUsed,
+            timingsMS: timings,
+            booleanFlags: flags,
+            stringFlags: strings
+        )
+        return result.withBenchmarkSample(sample)
+    }
+
+    nonisolated private static func isRetryableAllocationFailure(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return false
+        }
+        let lowercased = [
+            error.localizedDescription,
+            String(reflecting: error),
+        ]
+            .joined(separator: "\n")
+            .lowercased()
+
+        if lowercased.contains("out of memory")
+            || lowercased.contains("resource exhausted")
+            || lowercased.contains("failed to allocate") {
+            return true
+        }
+
+        let allocationLike = lowercased.contains("allocation")
+            || lowercased.contains("allocate")
+            || lowercased.contains("memory")
+        let mlxOrMetal = lowercased.contains("mlx")
+            || lowercased.contains("metal")
+            || lowercased.contains("mps")
+            || lowercased.contains("gpu")
+        return allocationLike && mlxOrMetal
     }
 
     private static func generationSessionKey(for request: GenerationRequest) -> GenerationSessionKey {

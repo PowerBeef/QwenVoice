@@ -176,6 +176,103 @@ private enum Qwen3CustomVoiceBenchmarkProfile: String, Sendable {
     }
 }
 
+private struct Qwen3TokenBudgetPolicy: Sendable {
+    let name: String
+    let maxTokenMultiplier: Int
+    let minimumGeneratedCodes: Int
+
+    func effectiveMaxTokens(defaultMaxTokens: Int, targetTokenCount: Int) -> Int {
+        min(
+            defaultMaxTokens,
+            max(minimumGeneratedCodes, targetTokenCount * maxTokenMultiplier)
+        )
+    }
+}
+
+private enum Qwen3GenerationSpeedProfile: String, Sendable {
+    case current
+    case legacy123Memory = "legacy123-memory"
+    case adaptiveFailureOnly = "adaptive-failure-only"
+    case balancedAllModes = "balanced-all-modes"
+
+    static func resolve(
+        explicitProfile: String? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Qwen3GenerationSpeedProfile {
+        if let explicitProfile = explicitProfile?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+           !explicitProfile.isEmpty {
+            return Qwen3GenerationSpeedProfile(rawValue: explicitProfile) ?? .current
+        }
+
+        guard environment["QWENVOICE_AUDIO_QC_LIVE"] == "1",
+              let rawValue = environment["QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+              !rawValue.isEmpty else {
+            return .current
+        }
+
+        return Qwen3GenerationSpeedProfile(rawValue: rawValue) ?? .current
+    }
+
+    func memoryClearCadence(explicitCadence: Int?) -> Int {
+        if let explicitCadence {
+            return max(0, explicitCadence)
+        }
+        switch self {
+        case .current:
+            return 8
+        case .legacy123Memory, .adaptiveFailureOnly, .balancedAllModes:
+            return 50
+        }
+    }
+
+    func tokenBudgetPolicy(
+        mode: Qwen3StreamingGenerationMode,
+        customVoiceProfile: Qwen3CustomVoiceBenchmarkProfile
+    ) -> Qwen3TokenBudgetPolicy {
+        switch self {
+        case .current, .legacy123Memory, .adaptiveFailureOnly:
+            if mode == .custom {
+                return Qwen3TokenBudgetPolicy(
+                    name: "custom-\(customVoiceProfile.rawValue)",
+                    maxTokenMultiplier: customVoiceProfile.maxTokenMultiplier,
+                    minimumGeneratedCodes: customVoiceProfile.minimumGeneratedCodes
+                )
+            }
+            return Qwen3TokenBudgetPolicy(
+                name: "baseline",
+                maxTokenMultiplier: 6,
+                minimumGeneratedCodes: 75
+            )
+        case .balancedAllModes:
+            if mode == .custom {
+                return Qwen3TokenBudgetPolicy(
+                    name: "balanced-all-modes-custom",
+                    maxTokenMultiplier: Qwen3CustomVoiceBenchmarkProfile.balancedShort.maxTokenMultiplier,
+                    minimumGeneratedCodes: Qwen3CustomVoiceBenchmarkProfile.balancedShort.minimumGeneratedCodes
+                )
+            }
+            return Qwen3TokenBudgetPolicy(
+                name: "balanced-all-modes-\(mode.rawValue)",
+                maxTokenMultiplier: 5,
+                minimumGeneratedCodes: 60
+            )
+        }
+    }
+
+    var booleanFlags: [String: Bool] {
+        [
+            "generation_speed_profile_current": self == .current,
+            "generation_speed_profile_legacy123_memory": self == .legacy123Memory,
+            "generation_speed_profile_adaptive_failure_only": self == .adaptiveFailureOnly,
+            "generation_speed_profile_balanced_all_modes": self == .balancedAllModes,
+        ]
+    }
+}
+
 private enum Qwen3StreamingGenerationMode: String, Sendable {
     case custom
     case design
@@ -1374,6 +1471,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     maxTokens: maxTokens,
                     streamingInterval: streamingInterval,
                     streamStepEvalPolicy: nil,
+                    generationSpeedProfile: nil,
+                    memoryClearCadence: nil,
                     onToken: { tokenId in
                         continuation.yield(.token(tokenId))
                     },
@@ -1400,7 +1499,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         generationParameters: GenerateParameters,
         streamingInterval: Double,
         customVoiceProfile: String?,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error> {
         let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
         Task { @Sendable [weak self] in
@@ -1422,6 +1523,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     streamingInterval: streamingInterval,
                     customVoiceProfile: customVoiceProfile,
                     streamStepEvalPolicy: streamStepEvalPolicy,
+                    generationSpeedProfile: generationSpeedProfile,
+                    memoryClearCadence: memoryClearCadence,
                     onToken: { continuation.yield(.token($0)) },
                     onInfo: { continuation.yield(.info($0)) },
                     onAudioChunk: { continuation.yield(.audio($0)) }
@@ -1440,7 +1543,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceDescription: String,
         generationParameters: GenerateParameters,
         streamingInterval: Double,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error> {
         let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
         Task { @Sendable [weak self] in
@@ -1460,6 +1565,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     maxTokens: generationParameters.maxTokens ?? 4096,
                     streamingInterval: streamingInterval,
                     streamStepEvalPolicy: streamStepEvalPolicy,
+                    generationSpeedProfile: generationSpeedProfile,
+                    memoryClearCadence: memoryClearCadence,
                     onToken: { continuation.yield(.token($0)) },
                     onInfo: { continuation.yield(.info($0)) },
                     onAudioChunk: { continuation.yield(.audio($0)) }
@@ -1478,7 +1585,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
         generationParameters: GenerateParameters,
         streamingInterval: Double,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error> {
         let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
         Task { @Sendable [weak self] in
@@ -1500,6 +1609,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     maxTokens: generationParameters.maxTokens ?? 4096,
                     streamingInterval: streamingInterval,
                     streamStepEvalPolicy: streamStepEvalPolicy,
+                    generationSpeedProfile: generationSpeedProfile,
+                    memoryClearCadence: memoryClearCadence,
                     onToken: { continuation.yield(.token($0)) },
                     onInfo: { continuation.yield(.info($0)) },
                     onAudioChunk: { continuation.yield(.audio($0)) }
@@ -1557,6 +1668,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         streamingInterval: Double = 2.0,
         customVoiceProfile explicitCustomVoiceProfile: String? = nil,
         streamStepEvalPolicy explicitStreamStepEvalPolicy: String? = nil,
+        generationSpeedProfile explicitGenerationSpeedProfile: String? = nil,
+        memoryClearCadence explicitMemoryClearCadence: Int? = nil,
         onToken: ((Int) -> Void)? = nil,
         onInfo: ((AudioGenerationInfo) -> Void)? = nil,
         onAudioChunk: ((MLXArray) -> Void)? = nil
@@ -1668,23 +1781,45 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let customVoiceProfile = isDedicatedCustomVoice
             ? Qwen3CustomVoiceBenchmarkProfile.resolve(explicitProfile: explicitCustomVoiceProfile)
             : .baseline
-        let effectiveMaxTokens = customVoiceProfile.effectiveMaxTokens(
+        let generationSpeedProfile = Qwen3GenerationSpeedProfile.resolve(
+            explicitProfile: explicitGenerationSpeedProfile
+        )
+        let tokenBudgetPolicy = generationSpeedProfile.tokenBudgetPolicy(
+            mode: streamingGenerationMode,
+            customVoiceProfile: customVoiceProfile
+        )
+        let effectiveMaxTokens = tokenBudgetPolicy.effectiveMaxTokens(
             defaultMaxTokens: maxTokens,
             targetTokenCount: preparedTargetTokenCount
+        )
+        let memoryClearCadence = generationSpeedProfile.memoryClearCadence(
+            explicitCadence: explicitMemoryClearCadence
         )
         let streamStepEvalPolicy = Qwen3StreamStepEvalPolicy.resolve(
             explicitPolicy: explicitStreamStepEvalPolicy
         )
         mergePreparationBooleanFlags(streamStepEvalPolicy.booleanFlags)
+        mergePreparationBooleanFlags(generationSpeedProfile.booleanFlags)
         mergePreparationStringFlags([
+            "generation_speed_profile": generationSpeedProfile.rawValue,
             "stream_step_eval_policy": streamStepEvalPolicy.rawValue,
+            "token_budget_policy": tokenBudgetPolicy.name,
         ])
+        if let timingPrefix = streamingGenerationMode.timingPrefix {
+            mergePreparationTimingsMS([
+                "\(timingPrefix)_target_token_count": preparedTargetTokenCount,
+                "\(timingPrefix)_effective_max_tokens": effectiveMaxTokens,
+                "\(timingPrefix)_generation_profile_multiplier": tokenBudgetPolicy.maxTokenMultiplier,
+                "\(timingPrefix)_generation_profile_min_tokens": tokenBudgetPolicy.minimumGeneratedCodes,
+                "memory_clear_cadence": memoryClearCadence,
+            ])
+        } else {
+            mergePreparationTimingsMS([
+                "memory_clear_cadence": memoryClearCadence,
+            ])
+        }
         if isDedicatedCustomVoice {
             mergePreparationTimingsMS([
-                "custom_target_token_count": preparedTargetTokenCount,
-                "custom_effective_max_tokens": effectiveMaxTokens,
-                "custom_generation_profile_multiplier": customVoiceProfile.maxTokenMultiplier,
-                "custom_generation_profile_min_tokens": customVoiceProfile.minimumGeneratedCodes,
                 "custom_post_first_stream_chunk_multiplier": customVoiceProfile.postFirstStreamChunkMultiplier,
             ])
             mergePreparationBooleanFlags(customVoiceProfile.booleanFlags)
@@ -1742,6 +1877,11 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var cloneFirstChunkDecoderTokens: Int?
         var generationEndReason = "token_cap"
         var emittedStreamChunk = false
+        var cacheClearCount = 0
+        func clearGenerationCache() {
+            Memory.clearCache()
+            cacheClearCount += 1
+        }
         if let timingPrefix = streamingGenerationMode.timingPrefix {
             let postFirstMultiplier = streamingGenerationMode.postFirstStreamChunkMultiplier(
                 customVoiceProfile: customVoiceProfile
@@ -1918,12 +2058,14 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     pendingStreamCodes.removeAll(keepingCapacity: true)
                     onAudioChunk(audioChunk)
                     emittedStreamChunk = true
-                    Memory.clearCache()
+                    clearGenerationCache()
                 }
             }
 
-            if generatedCodeCount > 0, generatedCodeCount.isMultiple(of: 8) {
-                Memory.clearCache()
+            if memoryClearCadence > 0,
+               generatedCodeCount > 0,
+               generatedCodeCount.isMultiple(of: memoryClearCadence) {
+                clearGenerationCache()
             }
 
         }
@@ -1976,7 +2118,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 }
                 onAudioChunk(audioChunk)
                 emittedStreamChunk = true
-                Memory.clearCache()
+                clearGenerationCache()
             }
             var mergedTimingsMS = [
                 "qwen_talker_forward_total": talkerForwardTotalMS,
@@ -1984,6 +2126,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 "qwen_stream_decoder_total": streamingDecoderTotalMS,
                 "qwen_stream_decoder_calls": streamingDecoderCallCount,
                 "qwen_generated_code_count": generatedCodeCount,
+                "cache_clear_count": cacheClearCount,
+                "memory_clear_cadence": memoryClearCadence,
             ].merging(preparationTimingsMS) { _, rhs in rhs }
             if isPureVoiceDesign {
                 mergedTimingsMS["design_stream_step_eval_total_ms"] = designStreamStepEvalTotalMS
@@ -2052,13 +2196,15 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
 
         let finalDecodeEvalStartedAt = ContinuousClock.now
         eval(audio)
-        Memory.clearCache()
+        clearGenerationCache()
         var mergedTimingsMS = [
             "qwen_talker_forward_total": talkerForwardTotalMS,
             "qwen_code_predictor_total": codePredictorTotalMS,
             "qwen_stream_decoder_total": streamingDecoderTotalMS,
             "qwen_stream_decoder_calls": streamingDecoderCallCount,
             "qwen_generated_code_count": generatedCodeCount,
+            "cache_clear_count": cacheClearCount,
+            "memory_clear_cadence": memoryClearCadence,
         ].merging(preparationTimingsMS) { _, rhs in rhs }
         if isPureVoiceDesign {
             mergedTimingsMS["design_stream_step_eval_total_ms"] = designStreamStepEvalTotalMS

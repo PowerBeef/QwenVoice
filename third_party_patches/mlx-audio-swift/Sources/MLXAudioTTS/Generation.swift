@@ -64,7 +64,9 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         generationParameters: GenerateParameters,
         streamingInterval: Double,
         customVoiceProfile: String?,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 
     func prepareVoiceDesign(
@@ -80,7 +82,9 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         voiceDescription: String,
         generationParameters: GenerateParameters,
         streamingInterval: Double,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 
     func createVoiceClonePrompt(
@@ -102,7 +106,9 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
         generationParameters: GenerateParameters,
         streamingInterval: Double,
-        streamStepEvalPolicy: String?
+        streamStepEvalPolicy: String?,
+        generationSpeedProfile: String?,
+        memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 }
 

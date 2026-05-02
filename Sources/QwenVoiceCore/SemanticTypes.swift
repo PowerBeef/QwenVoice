@@ -551,6 +551,42 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
         self.stringFlags = stringFlags
         self.backendPerformance = backendPerformance
     }
+
+    public func mergingBenchmarkFields(
+        timingsMS additionalTimingsMS: [String: Int] = [:],
+        booleanFlags additionalBooleanFlags: [String: Bool] = [:],
+        stringFlags additionalStringFlags: [String: String] = [:]
+    ) -> BenchmarkSample {
+        BenchmarkSample(
+            engineKind: engineKind,
+            routingPolicy: routingPolicy,
+            warmState: warmState,
+            tokenCount: tokenCount,
+            processingTimeSeconds: processingTimeSeconds,
+            peakMemoryUsage: peakMemoryUsage,
+            streamingUsed: streamingUsed,
+            preparedCloneUsed: preparedCloneUsed,
+            cloneCacheHit: cloneCacheHit,
+            firstChunkMs: firstChunkMs,
+            peakResidentMB: peakResidentMB,
+            peakPhysFootprintMB: peakPhysFootprintMB,
+            residentStartMB: residentStartMB,
+            residentEndMB: residentEndMB,
+            compressedPeakMB: compressedPeakMB,
+            headroomStartMB: headroomStartMB,
+            headroomEndMB: headroomEndMB,
+            headroomMinMB: headroomMinMB,
+            gpuAllocatedPeakMB: gpuAllocatedPeakMB,
+            gpuRecommendedWorkingSetMB: gpuRecommendedWorkingSetMB,
+            telemetryEnabled: telemetryEnabled,
+            telemetrySamples: telemetrySamples,
+            telemetryStageMarks: telemetryStageMarks,
+            timingsMS: timingsMS.merging(additionalTimingsMS) { _, rhs in rhs },
+            booleanFlags: booleanFlags.merging(additionalBooleanFlags) { _, rhs in rhs },
+            stringFlags: stringFlags.merging(additionalStringFlags) { _, rhs in rhs },
+            backendPerformance: backendPerformance
+        )
+    }
 }
 
 public struct GenerationResult: Hashable, Codable, Sendable {
@@ -702,17 +738,26 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
     public struct BenchmarkOptions: Hashable, Codable, Sendable {
         public let customVoiceProfile: String?
         public let streamStepEvalPolicy: String?
+        public let generationSpeedProfile: String?
+        public let memoryClearCadence: Int?
+        public let postRequestCachePolicy: String?
         public let temperature: Double?
         public let topP: Double?
 
         public init(
             customVoiceProfile: String? = nil,
             streamStepEvalPolicy: String? = nil,
+            generationSpeedProfile: String? = nil,
+            memoryClearCadence: Int? = nil,
+            postRequestCachePolicy: String? = nil,
             temperature: Double? = nil,
             topP: Double? = nil
         ) {
             self.customVoiceProfile = customVoiceProfile
             self.streamStepEvalPolicy = streamStepEvalPolicy
+            self.generationSpeedProfile = generationSpeedProfile
+            self.memoryClearCadence = memoryClearCadence
+            self.postRequestCachePolicy = postRequestCachePolicy
             self.temperature = temperature
             self.topP = topP
         }

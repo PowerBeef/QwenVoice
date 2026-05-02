@@ -129,7 +129,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
                         generationParameters: baseBox.base.defaultGenerationParameters,
                         streamingInterval: streamingInterval,
                         customVoiceProfile: nil,
-                        streamStepEvalPolicy: nil
+                        streamStepEvalPolicy: nil,
+                        generationSpeedProfile: nil,
+                        memoryClearCadence: nil
                     )
                 )
             }
@@ -149,7 +151,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
                         voiceDescription: voiceDescription,
                         generationParameters: baseBox.base.defaultGenerationParameters,
                         streamingInterval: streamingInterval,
-                        streamStepEvalPolicy: nil
+                        streamStepEvalPolicy: nil,
+                        generationSpeedProfile: nil,
+                        memoryClearCadence: nil
                     )
                 )
             }
@@ -176,7 +180,9 @@ final class NativeSpeechGenerationModel: @unchecked Sendable {
                         voiceClonePrompt: voiceClonePrompt,
                         generationParameters: baseBox.base.defaultGenerationParameters,
                         streamingInterval: streamingInterval,
-                        streamStepEvalPolicy: nil
+                        streamStepEvalPolicy: nil,
+                        generationSpeedProfile: nil,
+                        memoryClearCadence: nil
                     )
                 )
             }

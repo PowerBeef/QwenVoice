@@ -197,7 +197,9 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
                     generationParameters: parameters,
                     streamingInterval: streamingInterval,
                     customVoiceProfile: benchmarkOptions?.customVoiceProfile,
-                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy
+                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy,
+                    generationSpeedProfile: benchmarkOptions?.generationSpeedProfile,
+                    memoryClearCadence: benchmarkOptions?.memoryClearCadence
                 )
             }
             self.designPrewarmHandler = { text, language, voiceDescription in
@@ -221,7 +223,9 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
                     voiceDescription: voiceDescription,
                     generationParameters: parameters,
                     streamingInterval: streamingInterval,
-                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy
+                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy,
+                    generationSpeedProfile: benchmarkOptions?.generationSpeedProfile,
+                    memoryClearCadence: benchmarkOptions?.memoryClearCadence
                 )
             }
             self.clonePromptCreator = { refAudio, refText, xVectorOnlyMode in
@@ -252,7 +256,9 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
                     voiceClonePrompt: voiceClonePrompt,
                     generationParameters: parameters,
                     streamingInterval: streamingInterval,
-                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy
+                    streamStepEvalPolicy: benchmarkOptions?.streamStepEvalPolicy,
+                    generationSpeedProfile: benchmarkOptions?.generationSpeedProfile,
+                    memoryClearCadence: benchmarkOptions?.memoryClearCadence
                 )
             }
         } else {

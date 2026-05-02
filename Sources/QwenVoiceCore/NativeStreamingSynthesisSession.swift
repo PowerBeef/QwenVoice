@@ -444,6 +444,64 @@ private final class IncrementalPCM16WAVFileWriter {
     }
 }
 
+private enum NativeBenchmarkPostRequestCachePolicy: String {
+    case current
+    case always
+    case failureOnly = "failure-only"
+    case never
+
+    private enum GenerationSpeedProfile: String {
+        case current
+        case legacy123Memory = "legacy123-memory"
+        case adaptiveFailureOnly = "adaptive-failure-only"
+        case balancedAllModes = "balanced-all-modes"
+    }
+
+    static func resolve(_ options: GenerationRequest.BenchmarkOptions?) -> NativeBenchmarkPostRequestCachePolicy {
+        if let rawValue = options?.postRequestCachePolicy?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+           !rawValue.isEmpty,
+           let policy = NativeBenchmarkPostRequestCachePolicy(rawValue: rawValue) {
+            return policy
+        }
+
+        guard let rawProfile = options?.generationSpeedProfile?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              let profile = GenerationSpeedProfile(rawValue: rawProfile) else {
+            return .current
+        }
+
+        switch profile {
+        case .current:
+            return .current
+        case .legacy123Memory, .adaptiveFailureOnly, .balancedAllModes:
+            return .failureOnly
+        }
+    }
+
+    func clearsAfterSuccess(memoryPolicy: NativeMemoryPolicy) -> Bool {
+        switch self {
+        case .current:
+            return memoryPolicy.clearCacheAfterGeneration
+        case .always:
+            return true
+        case .failureOnly, .never:
+            return false
+        }
+    }
+
+    var clearsAfterFailure: Bool {
+        switch self {
+        case .current, .always, .failureOnly:
+            return true
+        case .never:
+            return false
+        }
+    }
+}
+
 private struct StreamingExecutionContext: Sendable {
     let requestID: Int
     let request: GenerationRequest
@@ -470,6 +528,7 @@ private struct StreamingExecutionContext: Sendable {
             NativeStreamingSignposts.signposter.endInterval("Native Generation Stream", generationSignpost)
         }
         let startedAt = ContinuousClock.now
+        let postRequestCachePolicy = NativeBenchmarkPostRequestCachePolicy.resolve(request.benchmarkOptions)
         let outputURL = URL(fileURLWithPath: request.outputPath)
         let sampleRate = model.sampleRate
         let telemetryMode = NativeTelemetryMode.current()
@@ -637,6 +696,9 @@ private struct StreamingExecutionContext: Sendable {
             finalWriter.finish()
             try? FileManager.default.removeItem(at: outputURL)
             try? FileManager.default.removeItem(at: sessionDirectory)
+            if postRequestCachePolicy.clearsAfterFailure {
+                Memory.clearCache()
+            }
             throw error
         }
 
@@ -660,7 +722,8 @@ private struct StreamingExecutionContext: Sendable {
         )
         let telemetrySummary = telemetryCapture.summary
         mlxMemorySnapshots["after_stream"] = NativeMemoryPolicyResolver.snapshot()
-        if memoryPolicy.clearCacheAfterGeneration {
+        let postRequestCacheClearApplied = postRequestCachePolicy.clearsAfterSuccess(memoryPolicy: memoryPolicy)
+        if postRequestCacheClearApplied {
             Memory.clearCache()
             mlxMemorySnapshots["after_generation_trim"] = NativeMemoryPolicyResolver.snapshot()
         }
@@ -684,7 +747,9 @@ private struct StreamingExecutionContext: Sendable {
             telemetryMode: telemetryMode,
             streamingOutputPolicy: streamingOutputPolicy,
             durationSeconds: durationSeconds,
-            limiterMetrics: limiterMetrics
+            limiterMetrics: limiterMetrics,
+            postRequestCachePolicy: postRequestCachePolicy.rawValue,
+            postRequestCacheClearApplied: postRequestCacheClearApplied
         )
         await telemetryRecorder?.mark(stage: .streamCompleted)
 
@@ -716,7 +781,9 @@ private struct StreamingExecutionContext: Sendable {
         telemetryMode: NativeTelemetryMode,
         streamingOutputPolicy: NativeStreamingOutputPolicy,
         durationSeconds: Double,
-        limiterMetrics: PCM16StreamLimiter.Metrics
+        limiterMetrics: PCM16StreamLimiter.Metrics,
+        postRequestCachePolicy: String,
+        postRequestCacheClearApplied: Bool
     ) -> BenchmarkSample {
         var timingsMS = timingOverridesMS
         for (key, value) in model.latestPreparationTimingsMS {
@@ -734,6 +801,7 @@ private struct StreamingExecutionContext: Sendable {
         timingsMS["avg_chunk_frames"] = averageChunkFrames
         timingsMS["max_chunk_frames"] = maxChunkFrames
         timingsMS["streaming_interval_ms"] = Int((streamingInterval * 1_000).rounded())
+        timingsMS["post_request_cache_clear_applied"] = postRequestCacheClearApplied ? 1 : 0
         if let firstAudioReadyMS {
             timingsMS["first_audio_ready"] = firstAudioReadyMS
             timingsMS["first_stream_chunk"] = firstAudioReadyMS
@@ -772,7 +840,8 @@ private struct StreamingExecutionContext: Sendable {
             booleanFlags: mergedBooleanFlags(),
             stringFlags: mergedStringFlags(
                 telemetryMode: telemetryMode,
-                streamingOutputPolicy: streamingOutputPolicy
+                streamingOutputPolicy: streamingOutputPolicy,
+                postRequestCachePolicy: postRequestCachePolicy
             ),
             backendPerformance: NativeBackendPerformanceSample(
                 coldLoadMS: timingsMS["load_model"],
@@ -817,23 +886,33 @@ private struct StreamingExecutionContext: Sendable {
                 merged["clone_prompt_used"] = true
             }
         }
+        if request.mode == .clone {
+            merged["clone_batch_has_batch_sampling"] = false
+            merged["clone_batch_has_batch_decode"] = false
+            merged["clone_batch_fast_path_available"] = false
+        }
         return merged
     }
 
     private func mergedStringFlags(
         telemetryMode: NativeTelemetryMode,
-        streamingOutputPolicy: NativeStreamingOutputPolicy
+        streamingOutputPolicy: NativeStreamingOutputPolicy,
+        postRequestCachePolicy: String
     ) -> [String: String] {
         var merged = stringFlags
         merged["native_load_capability_profile"] = loadCapabilityProfile.rawValue
         merged["memory_policy"] = memoryPolicy.name
         merged["streaming_transport"] = streamingOutputPolicy.rawValue
         merged["telemetry_mode"] = telemetryMode.rawValue
+        merged["post_request_cache_policy"] = postRequestCachePolicy
         for (key, value) in model.latestPreparationStringFlags {
             merged[key] = value
         }
         if let cloneConditioning {
             merged["resolved_transcript_mode"] = cloneConditioning.transcriptMode.rawValue
+        }
+        if request.mode == .clone {
+            merged["clone_batch_fast_path_status"] = "sequential_only_missing_swift_batch_primitives"
         }
         return merged
     }
