@@ -232,16 +232,14 @@ public enum GenerationSemantics {
         )
     }
 
-    /// Compatibility overload: build a prewarm identity key directly from
-    /// a `GenerationRequest`. Mirrors the (now-retired)
-    /// QwenVoiceEngineSupport.GenerationSemantics.prewarmIdentityKey(for:)
-    /// semantics — for `.custom`, the key INCLUDES the speaker and
-    /// (normalized) delivery instruction, so that voice/delivery changes
-    /// invalidate the prewarm cache. The parameterized
+    /// Request-form prewarm identity key. For `.custom`, the key INCLUDES
+    /// the speaker and (normalized) delivery instruction, so that voice/
+    /// delivery changes invalidate the prewarm cache. The parameterized
     /// `prewarmIdentityKey(modelID:mode:...)` above intentionally omits
-    /// those for the new "stable model-level readiness" code paths;
-    /// legacy callers (MacNativeRuntime, GenerationSemanticsTests,
-    /// NativeModelLoadCoordinatorTests) keep this richer form.
+    /// those for the "stable model-level readiness" code paths — both
+    /// forms coexist by design with intentionally different semantics.
+    /// Live callers: NativeEngineRuntime, XPCNativeEngineClient,
+    /// GenerationSemanticsTests.
     public static func prewarmIdentityKey(for request: GenerationRequest) -> String {
         switch request.payload {
         case .custom(let speakerID, let deliveryStyle):

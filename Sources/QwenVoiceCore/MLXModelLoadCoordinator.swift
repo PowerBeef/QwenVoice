@@ -403,31 +403,10 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
     }
 
     /// Returns the id of the currently loaded asset, or `nil` when no model
-    /// has been loaded since init / the last `unloadModel()`. API-parity
-    /// surface for the legacy
-    /// `QwenVoiceNativeRuntime.NativeModelLoadCoordinator.currentLoadedModelID()`
-    /// shape so MacNativeRuntime call sites can be ported in Session 5
-    /// without restructuring readiness checks.
+    /// has been loaded since init / the last `unloadModel()`. Used by the
+    /// mock-backed engine test suite for readiness-state assertions.
     func currentLoadedModelID() async -> String? {
         loadedDescriptor?.id
-    }
-
-    /// Loads the requested model if needed, then records `identityKey` as
-    /// prewarmed. Idempotent: a second call with the same identity key after
-    /// a successful load is a no-op. Mirrors the legacy
-    /// `QwenVoiceNativeRuntime.NativeModelLoadCoordinator.prewarmIfNeeded(...)`
-    /// shape, with the closure-based load replaced by Core's loader-as-init
-    /// model so the existing dedup, capability-profile, and prepared-cache
-    /// pipeline owns the actual load.
-    @discardableResult
-    func prewarmIfNeeded(
-        identityKey: String,
-        modelID: String,
-        capabilityProfile: NativeLoadCapabilityProfile = .fullCapabilities
-    ) async throws -> NativeModelLoadResult {
-        let result = try await loadModel(id: modelID, capabilityProfile: capabilityProfile)
-        prewarmedIdentityKeys.insert(identityKey)
-        return result
     }
 
     private func resetLoadedState() {

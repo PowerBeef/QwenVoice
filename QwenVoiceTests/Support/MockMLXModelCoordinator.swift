@@ -66,14 +66,6 @@ final class MockMLXModelCoordinator: MLXModelCoordinating, @unchecked Sendable {
         state.withLock { $0.unloadCallCount }
     }
 
-    var clearPrewarmCallCount: Int {
-        state.withLock { $0.clearPrewarmCallCount }
-    }
-
-    var allPrewarmedKeys: Set<String> {
-        state.withLock { $0.prewarmedKeys }
-    }
-
     func loadModel(
         id: String,
         capabilityProfile: NativeLoadCapabilityProfile

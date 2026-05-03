@@ -96,28 +96,17 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
         models.first { $0.id == id }
     }
 
-    /// API-parity alias for `model(id:)`. Matches the legacy
-    /// `QwenVoiceNativeRuntime.NativeModelRegistry.descriptor(id:)` shape so
-    /// MacNativeRuntime call sites can be ported in Session 5 without
-    /// renaming.
+    /// Idiomatic alias for `model(id:)`. Used by iOS model-delivery and
+    /// model-management call sites that prefer `descriptor(id:)` naming
+    /// over `model(id:)`.
     public func descriptor(id: String) -> ModelDescriptor? {
         model(id: id)
-    }
-
-    /// Registry-level convenience that delegates to
-    /// `ModelDescriptor.installDirectory(in:)`. Mirrors the legacy
-    /// `QwenVoiceNativeRuntime.NativeModelRegistry.installDirectory(for:in:)`
-    /// shape so Session 5 can swap registry types without touching
-    /// caller-side path resolution.
-    public func installDirectory(for descriptor: ModelDescriptor, in modelsDirectory: URL) -> URL {
-        descriptor.installDirectory(in: modelsDirectory)
     }
 
     /// Three-state availability summary: returns `.unknown` when the model
     /// id isn't in the manifest, `.unavailable(descriptor, missing)` when one
     /// or more required relative paths are missing under the install
-    /// directory, otherwise `.available(descriptor)`. Mirrors the legacy
-    /// `QwenVoiceNativeRuntime.NativeModelRegistry.availability(...)` shape.
+    /// directory, otherwise `.available(descriptor)`.
     public func availability(
         forModelID modelID: String,
         in modelsDirectory: URL,
