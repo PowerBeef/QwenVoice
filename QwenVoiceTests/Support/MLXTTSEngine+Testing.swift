@@ -1,5 +1,7 @@
 import Foundation
+@preconcurrency import MLX
 @preconcurrency import MLXAudioCore
+@preconcurrency import MLXAudioTTS
 @testable import QwenVoiceCore
 
 extension UnsafeSpeechGenerationModel {
@@ -30,7 +32,15 @@ extension UnsafeSpeechGenerationModel {
             customStreamHandler: { _, _, _, _, _ in emptyStream() },
             designPrewarmHandler: { _, _, _ in },
             designStreamHandler: { _, _, _, _ in emptyStream() },
-            clonePromptCreator: nil,
+            clonePromptCreator: { _, refText, xVectorOnlyMode in
+                Qwen3TTSVoiceClonePrompt(
+                    refCodes: MLXArray([Int32(1), Int32(2), Int32(3)]),
+                    speakerEmbedding: MLXArray([Float32(0.25), Float32(0.5)]),
+                    refText: refText,
+                    xVectorOnlyMode: xVectorOnlyMode,
+                    iclMode: false
+                )
+            },
             clonePrewarmHandler: { _, _, _ in },
             cloneStreamHandler: { _, _, _, _ in emptyStream() }
         )
