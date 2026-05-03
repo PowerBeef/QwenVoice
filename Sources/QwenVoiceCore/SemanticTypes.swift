@@ -238,16 +238,74 @@ public struct PreparedVoice: Identifiable, Hashable, Codable, Sendable {
     public let name: String
     public let audioPath: String
     public let hasTranscript: Bool
+    /// Quality observations about the underlying reference audio. Tokens
+    /// match the existing `clone_reference_warnings` schema in
+    /// `NativeCloneSupport.referenceQualityWarnings(for:)` —
+    /// e.g. `reference_duration_short`, `reference_duration_long`,
+    /// `reference_quality_unreadable`. Empty when the reference is
+    /// within the recommended window (currently 10–20 s).
+    /// UI surfaces these as soft warnings during enrollment + as inline
+    /// badges in the saved-voices list.
+    public let qualityWarnings: [String]
 
-    public init(id: String, name: String, audioPath: String, hasTranscript: Bool) {
+    public init(
+        id: String,
+        name: String,
+        audioPath: String,
+        hasTranscript: Bool,
+        qualityWarnings: [String] = []
+    ) {
         self.id = id
         self.name = name
         self.audioPath = audioPath
         self.hasTranscript = hasTranscript
+        self.qualityWarnings = qualityWarnings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.audioPath = try container.decode(String.self, forKey: .audioPath)
+        self.hasTranscript = try container.decode(Bool.self, forKey: .hasTranscript)
+        // Backward-compat: older encoded forms (pre-May 2026) lacked
+        // `qualityWarnings`; missing key decodes as empty.
+        self.qualityWarnings = try container
+            .decodeIfPresent([String].self, forKey: .qualityWarnings) ?? []
     }
 
     public var audioURL: URL {
         URL(fileURLWithPath: audioPath)
+    }
+}
+
+/// Human-readable summaries of `PreparedVoice.qualityWarnings` tokens.
+/// Used by enrollment dialogs and library badges across macOS + iOS.
+/// Unknown tokens fall through to `nil` so callers can choose whether to
+/// display a generic warning line or drop it.
+public enum PreparedVoiceQualityWarning {
+    public static func headline(for token: String) -> String? {
+        switch token {
+        case "reference_duration_short":
+            return "Reference is shorter than recommended (under 10 seconds)."
+        case "reference_duration_long":
+            return "Reference is longer than recommended (over 20 seconds)."
+        case "reference_quality_unreadable":
+            return "Reference audio could not be read."
+        default:
+            return nil
+        }
+    }
+
+    /// Multi-line summary suitable for a warning dialog body.
+    public static func summary(for tokens: [String]) -> String {
+        let lines = tokens.compactMap { headline(for: $0) }
+        if lines.isEmpty {
+            return "Voice cloning works best with 10–20 seconds of clean speech."
+        }
+        return "Voice cloning works best with 10–20 seconds of clean speech.\n\n" +
+            lines.map { "• \($0)" }.joined(separator: "\n") +
+            "\n\nKeeping this voice may produce lower-quality clones."
     }
 }
 

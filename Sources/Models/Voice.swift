@@ -7,6 +7,13 @@ struct Voice: Identifiable, Hashable {
     let name: String
     let wavPath: String
     let hasTranscript: Bool
+    /// Forwarded from `PreparedVoice.qualityWarnings`. Tokens come from
+    /// `MLXTTSEngine.savedReferenceQualityWarnings(forAudioAt:)` —
+    /// e.g. `reference_duration_short`, `reference_duration_long`,
+    /// `reference_quality_unreadable`. UI surfaces these via warning
+    /// dialogs at enrollment + indicator badges in the saved-voices
+    /// list.
+    let qualityWarnings: [String]
 
     func loadTranscript(fileManager: FileManager = .default) throws -> String? {
         let txtURL = URL(fileURLWithPath: wavPath).deletingPathExtension().appendingPathExtension("txt")
@@ -15,11 +22,17 @@ struct Voice: Identifiable, Hashable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    init(name: String, wavPath: String, hasTranscript: Bool) {
+    init(
+        name: String,
+        wavPath: String,
+        hasTranscript: Bool,
+        qualityWarnings: [String] = []
+    ) {
         self.id = name
         self.name = name
         self.wavPath = wavPath
         self.hasTranscript = hasTranscript
+        self.qualityWarnings = qualityWarnings
     }
 
     init(preparedVoice: PreparedVoice) {
@@ -27,5 +40,7 @@ struct Voice: Identifiable, Hashable {
         self.name = preparedVoice.name
         self.wavPath = preparedVoice.audioPath
         self.hasTranscript = preparedVoice.hasTranscript
+        self.qualityWarnings = preparedVoice.qualityWarnings
     }
 }
+

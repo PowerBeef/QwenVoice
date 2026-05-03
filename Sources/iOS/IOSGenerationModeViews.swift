@@ -239,6 +239,10 @@ struct IOSVoiceDesignView: View {
     @State private var saveSheetSuggestedName = ""
     @State private var saveSheetTranscript = ""
     @State private var saveError: String?
+    /// Voice that was just enrolled but has quality warnings; user is
+    /// being asked whether to keep or discard. Mirrors the macOS
+    /// SavedVoiceSheet flow.
+    @State private var pendingVoiceForReview: PreparedVoice?
 
     private var activeModel: TTSModel? {
         TTSModel.model(for: .design)
@@ -350,13 +354,21 @@ struct IOSVoiceDesignView: View {
                                         transcript: saveSheetTranscript.isEmpty ? nil : saveSheetTranscript
                                     )
                                     await MainActor.run {
-                                        savedVoicesViewModel.insertOrReplace(voice)
-                                        isSaveSheetPresented = false
-                                        saveSheetSuggestedName = ""
-                                        saveSheetTranscript = ""
-                                        saveError = nil
+                                        if voice.qualityWarnings.isEmpty {
+                                            savedVoicesViewModel.insertOrReplace(voice)
+                                            isSaveSheetPresented = false
+                                            saveSheetSuggestedName = ""
+                                            saveSheetTranscript = ""
+                                            saveError = nil
+                                        } else {
+                                            // Soft warning: voice is on disk
+                                            // but pending user confirmation.
+                                            pendingVoiceForReview = voice
+                                        }
                                     }
-                                    await savedVoicesViewModel.refresh(using: ttsEngine)
+                                    if voice.qualityWarnings.isEmpty {
+                                        await savedVoicesViewModel.refresh(using: ttsEngine)
+                                    }
                                 } catch {
                                     await MainActor.run {
                                         saveError = error.localizedDescription
@@ -366,6 +378,39 @@ struct IOSVoiceDesignView: View {
                         }
                     )
                 }
+            }
+            .alert(
+                "Reference quality may be poor",
+                isPresented: Binding(
+                    get: { pendingVoiceForReview != nil },
+                    set: { if !$0 { pendingVoiceForReview = nil } }
+                ),
+                presenting: pendingVoiceForReview
+            ) { voice in
+                Button("Keep voice") {
+                    pendingVoiceForReview = nil
+                    savedVoicesViewModel.insertOrReplace(voice)
+                    isSaveSheetPresented = false
+                    saveSheetSuggestedName = ""
+                    saveSheetTranscript = ""
+                    saveError = nil
+                    Task { await savedVoicesViewModel.refresh(using: ttsEngine) }
+                }
+                .accessibilityIdentifier("voicesEnroll_keepDespiteWarning")
+                Button("Discard and re-record", role: .destructive) {
+                    let voiceID = voice.id
+                    pendingVoiceForReview = nil
+                    Task {
+                        try? await ttsEngine.deletePreparedVoice(id: voiceID)
+                    }
+                }
+                .accessibilityIdentifier("voicesEnroll_discardOnWarning")
+                Button("Cancel", role: .cancel) {
+                    pendingVoiceForReview = nil
+                }
+                .accessibilityIdentifier("voicesEnroll_cancelOnWarning")
+            } message: { voice in
+                Text(PreparedVoiceQualityWarning.summary(for: voice.qualityWarnings))
             }
     }
 

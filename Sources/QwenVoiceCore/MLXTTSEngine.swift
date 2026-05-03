@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 @preconcurrency import MLX
@@ -670,7 +671,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                     id: fileURL.deletingPathExtension().lastPathComponent,
                     name: fileURL.deletingPathExtension().lastPathComponent,
                     audioPath: fileURL.path,
-                    hasTranscript: fileManager.fileExists(atPath: transcriptURL.path)
+                    hasTranscript: fileManager.fileExists(atPath: transcriptURL.path),
+                    qualityWarnings: Self.savedReferenceQualityWarnings(forAudioAt: fileURL.path)
                 )
             )
         }
@@ -678,6 +680,39 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         return voices.sorted { lhs, rhs in
             lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    /// Cheap duration-only probe of a saved-voice reference WAV used at
+    /// enrollment + list time. Tokens match the
+    /// `NativeCloneSupport.referenceQualityWarnings(for:)` schema, but
+    /// this path skips the full audio-normalization (resample, trim,
+    /// peak/RMS analysis) — those finer warnings come back via
+    /// `clone_reference_warnings` at generation time. Thresholds match
+    /// NativeCloneSupport: <10 s = short, >20 s = long.
+    nonisolated static func savedReferenceQualityWarnings(forAudioAt path: String) -> [String] {
+        var warnings: [String] = []
+        guard let durationSeconds = referenceAudioDurationSeconds(at: path) else {
+            warnings.append("reference_quality_unreadable")
+            return warnings
+        }
+        if durationSeconds < 10 {
+            warnings.append("reference_duration_short")
+        } else if durationSeconds > 20 {
+            warnings.append("reference_duration_long")
+        }
+        return warnings
+    }
+
+    /// Reads the WAV header via `AVAudioFile` (no PCM decode). Returns
+    /// `nil` for unreadable files; the caller treats that as a
+    /// `reference_quality_unreadable` warning.
+    nonisolated static func referenceAudioDurationSeconds(at path: String) -> Double? {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        let sampleRate = file.processingFormat.sampleRate
+        guard sampleRate > 0 else { return nil }
+        return Double(file.length) / sampleRate
     }
 
     public func enrollPreparedVoice(
@@ -741,7 +776,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             id: safeName,
             name: safeName,
             audioPath: audioDestinationURL.path,
-            hasTranscript: normalizedTranscript != nil
+            hasTranscript: normalizedTranscript != nil,
+            qualityWarnings: Self.savedReferenceQualityWarnings(forAudioAt: audioDestinationURL.path)
         )
     }
 

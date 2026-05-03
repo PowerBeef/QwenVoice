@@ -110,6 +110,11 @@ struct SavedVoiceSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var existingNormalizedNames: Set<String> = []
+    /// When non-nil, the just-enrolled voice has quality warnings and the
+    /// user is being asked whether to keep it or delete + re-record.
+    /// Driven by `MLXTTSEngine.savedReferenceQualityWarnings(forAudioAt:)`
+    /// at enrollment time.
+    @State private var pendingVoiceForReview: Voice?
 
     init(
         configuration: SavedVoiceSheetConfiguration,
@@ -268,6 +273,29 @@ struct SavedVoiceSheet: View {
         .onChange(of: name) { _, _ in
             errorMessage = nil
         }
+        .alert(
+            "Reference quality may be poor",
+            isPresented: Binding(
+                get: { pendingVoiceForReview != nil },
+                set: { if !$0 { pendingVoiceForReview = nil } }
+            ),
+            presenting: pendingVoiceForReview
+        ) { voice in
+            Button("Keep voice") {
+                acceptPendingVoice()
+            }
+            .accessibilityIdentifier("voicesEnroll_keepDespiteWarning")
+            Button("Discard and re-record", role: .destructive) {
+                discardPendingVoice()
+            }
+            .accessibilityIdentifier("voicesEnroll_discardOnWarning")
+            Button("Cancel", role: .cancel) {
+                pendingVoiceForReview = nil
+            }
+            .accessibilityIdentifier("voicesEnroll_cancelOnWarning")
+        } message: { voice in
+            Text(PreparedVoiceQualityWarning.summary(for: voice.qualityWarnings))
+        }
     }
 
     private func loadExistingVoiceNames() async {
@@ -306,9 +334,19 @@ struct SavedVoiceSheet: View {
                         ? nil
                         : transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
+                let voice = Voice(preparedVoice: savedVoice)
                 await MainActor.run {
-                    onComplete(Voice(preparedVoice: savedVoice))
-                    dismiss()
+                    if voice.qualityWarnings.isEmpty {
+                        onComplete(voice)
+                        dismiss()
+                    } else {
+                        // Soft warning: keep the voice on disk, but ask the
+                        // user before adding it to the active selection.
+                        // "Discard" deletes the just-enrolled voice; the
+                        // sheet stays open so they can pick a different
+                        // reference.
+                        pendingVoiceForReview = voice
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -318,6 +356,21 @@ struct SavedVoiceSheet: View {
             await MainActor.run {
                 isSaving = false
             }
+        }
+    }
+
+    private func acceptPendingVoice() {
+        guard let voice = pendingVoiceForReview else { return }
+        pendingVoiceForReview = nil
+        onComplete(voice)
+        dismiss()
+    }
+
+    private func discardPendingVoice() {
+        guard let voice = pendingVoiceForReview else { return }
+        pendingVoiceForReview = nil
+        Task {
+            try? await ttsEngineStore.deletePreparedVoice(id: voice.id)
         }
     }
 }

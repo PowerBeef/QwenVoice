@@ -332,7 +332,8 @@ private struct VoiceRow: View {
                 voiceName: voice.name,
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
-                detailCopy: detailCopy
+                detailCopy: detailCopy,
+                qualityWarnings: voice.qualityWarnings
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -352,7 +353,8 @@ private struct VoiceRow: View {
                 voiceName: voice.name,
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
-                detailCopy: detailCopy
+                detailCopy: detailCopy,
+                qualityWarnings: voice.qualityWarnings
             )
             VoiceRowActions(
                 voiceID: voice.id,
@@ -370,6 +372,12 @@ private struct VoiceRowMetadata: View {
     let voiceID: String
     let transcriptStatus: String
     let detailCopy: String
+    let qualityWarnings: [String]
+
+    private var qualityHeadline: String? {
+        guard let firstToken = qualityWarnings.first else { return nil }
+        return PreparedVoiceQualityWarning.headline(for: firstToken)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -392,6 +400,16 @@ private struct VoiceRowMetadata: View {
                             .fill(Color.secondary.opacity(0.12))
                     )
                     #endif
+
+                if let qualityHeadline {
+                    Label("Reference may be poor", systemImage: "exclamationmark.triangle.fill")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.orange)
+                        .help(qualityHeadline)
+                        .accessibilityLabel("Reference quality warning")
+                        .accessibilityHint(qualityHeadline)
+                        .accessibilityIdentifier("voicesRow_\(voiceID)_qualityWarning")
+                }
             }
 
             Text(detailCopy)
