@@ -209,6 +209,93 @@ final class MLXTTSEngineMockBackedTests: XCTestCase {
     /// (NativeMLXMacEngine reset it to `.idle` via its
     /// `publishRuntimeFailure` snapshot), so the assertion shape differs
     /// from the legacy test by design.
+    /// Ported (in shape) from
+    /// `NativeMLXMacEngineTests.testNativeMLXMacEngineGeneratesCustomAudioAndPublishesChunkEvents`.
+    /// Validates the full `MLXTTSEngine.generate(_:)` path via the
+    /// streaming-session seam: the engine prepares generation, builds a
+    /// streaming session through the test factory (which returns a
+    /// `MockNativeStreamingSession`), and surfaces canned events to
+    /// `latestEvent`.
+    ///
+    /// Differs from the legacy test by design: the legacy test exercised
+    /// a real `NativeStreamingSynthesisSession` driven by a closure-based
+    /// `NativeSpeechGenerationModel`, which actually wrote audio to disk.
+    /// Here we mock the entire streaming session, so no audio file is
+    /// written — the assertion shape verifies the orchestration (prepare
+    /// → factory → session.run) rather than file artifacts. File-artifact
+    /// coverage will land via integration tests that exercise a richer
+    /// model mock in a later batch.
+    func testEngineGenerateRoutesThroughStreamingSessionFactoryAndSurfacesLatestEvent() async throws {
+        let registry = try ContractBackedModelRegistry(
+            manifestURL: try Self.bundledManifestURL()
+        )
+        let coordinator = MockMLXModelCoordinator(loadHandler: { _, capabilityProfile in
+            return await NativeModelLoadResult.makeForTesting(
+                model: UnsafeSpeechGenerationModel.makeFullySupportingForTesting(),
+                capabilityProfile: capabilityProfile
+            )
+        })
+
+        let chunk1 = GenerationEvent(
+            kind: .streamChunk,
+            requestID: 1,
+            mode: "custom",
+            title: "Mock Custom Preview",
+            isFinal: false,
+            chunkDurationSeconds: 0.05,
+            cumulativeDurationSeconds: 0.05
+        )
+        let chunk2Final = GenerationEvent(
+            kind: .streamChunk,
+            requestID: 1,
+            mode: "custom",
+            title: "Mock Custom Preview",
+            isFinal: true,
+            chunkDurationSeconds: 0.05,
+            cumulativeDurationSeconds: 0.10
+        )
+        let cannedOutputPath = temporaryRoot.appendingPathComponent("mock-custom.wav").path
+        let cannedResult = GenerationResult(
+            audioPath: cannedOutputPath,
+            durationSeconds: 0.10,
+            streamSessionDirectory: temporaryRoot.appendingPathComponent("cache/stream_sessions/mock").path,
+            benchmarkSample: nil
+        )
+        let mockSession = MockNativeStreamingSession(
+            events: [chunk1, chunk2Final],
+            result: cannedResult
+        )
+
+        let engine = MLXTTSEngine.makeForTesting(
+            modelRegistry: registry,
+            rootDirectory: temporaryRoot,
+            loadCoordinator: coordinator,
+            streamingSessionFactory: { _, _, _, _, _, _, _, _, _, _, _, _, _, _ in
+                mockSession
+            }
+        )
+        try await engine.initialize(appSupportDirectory: temporaryRoot)
+        try await engine.loadModel(id: "qwen3_custom_voice")
+
+        let request = GenerationRequest(
+            modelID: "qwen3_custom_voice",
+            text: "Hello from the mock-backed engine.",
+            outputPath: cannedOutputPath,
+            shouldStream: true,
+            streamingTitle: "Mock Custom Preview",
+            payload: .custom(speakerID: "vivian", deliveryStyle: "Conversational")
+        )
+        let result = try await engine.generate(request)
+
+        XCTAssertEqual(mockSession.runCallCount, 1)
+        XCTAssertEqual(result.audioPath, cannedResult.audioPath)
+        XCTAssertEqual(result.durationSeconds, cannedResult.durationSeconds)
+        XCTAssertEqual(result.streamSessionDirectory, cannedResult.streamSessionDirectory)
+        XCTAssertEqual(engine.latestEvent, chunk2Final)
+        XCTAssertEqual(engine.loadState, .loaded(modelID: "qwen3_custom_voice"))
+        XCTAssertNil(engine.visibleErrorMessage)
+    }
+
     func testEngineClonePrimingSurfacesLoadFailureWhenCoordinatorCannotLoadModel() async throws {
         let registry = try ContractBackedModelRegistry(
             manifestURL: try Self.bundledManifestURL()

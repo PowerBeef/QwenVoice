@@ -1,5 +1,41 @@
 import Foundation
+@preconcurrency import MLXAudioCore
 @testable import QwenVoiceCore
+
+extension UnsafeSpeechGenerationModel {
+    /// Builds an `UnsafeSpeechGenerationModel` whose handlers all succeed
+    /// as no-ops and whose stream handlers return an immediately-empty
+    /// `AsyncThrowingStream`. Reports `supportsDedicatedCustomVoice` /
+    /// `supportsOptimizedVoiceDesign` / `supportsOptimizedVoiceClone` as
+    /// `true` so the runtime's prepare paths take the optimized branches
+    /// without throwing "the active native model does not support …".
+    ///
+    /// Suitable for tests that mock the streaming session via
+    /// `streamingSessionFactory`: the prewarm and stream handlers below
+    /// satisfy the runtime's pre-streaming calls but their stream output
+    /// is never consumed (the mock session takes over).
+    ///
+    /// Built for Session 5c of the QwenVoiceNativeRuntime retirement.
+    static func makeFullySupportingForTesting(sampleRate: Int = 24_000) -> UnsafeSpeechGenerationModel {
+        let emptyStream: @Sendable () -> AsyncThrowingStream<AudioGeneration, Error> = {
+            AsyncThrowingStream { continuation in
+                continuation.finish()
+            }
+        }
+        return UnsafeSpeechGenerationModel(
+            sampleRate: sampleRate,
+            prewarmHandler: { _, _ in },
+            streamHandler: { _, _, _ in emptyStream() },
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in emptyStream() },
+            designPrewarmHandler: { _, _, _ in },
+            designStreamHandler: { _, _, _, _ in emptyStream() },
+            clonePromptCreator: nil,
+            clonePrewarmHandler: { _, _, _ in },
+            cloneStreamHandler: { _, _, _, _ in emptyStream() }
+        )
+    }
+}
 
 extension NativeModelLoadResult {
     /// Builds a `NativeModelLoadResult` whose model is a default closure-
