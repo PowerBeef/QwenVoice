@@ -13,6 +13,19 @@ enum AudioService {
         return defaults.bool(forKey: "autoPlay")
     }
 
+    /// When ON: live-preview playback waits for enough buffered audio
+    /// to play through long scripts without underrun pauses (predictive
+    /// prebuffer based on text length × per-mode engine RTF). Adds a
+    /// few seconds before the first audio plays. Default OFF preserves
+    /// the existing fast-start-with-stutter behavior.
+    /// See `LivePreviewEstimator` and
+    /// `AudioPlayerViewModel.shouldStartLivePlayback`.
+    static let smoothPlaybackKey = "QwenVoice.SmoothLivePreviewPlayback"
+    static var smoothPlaybackEnabled: Bool {
+        get { defaults.bool(forKey: smoothPlaybackKey) }
+        set { defaults.set(newValue, forKey: smoothPlaybackKey) }
+    }
+
     private static var configuredOutputsRoot: URL {
         let configuredPath = (defaults.string(forKey: "outputDirectory") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)

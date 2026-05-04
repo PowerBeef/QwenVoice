@@ -103,17 +103,29 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     /// Decides whether the live-preview player has enough buffered
-    /// audio to begin (or resume) playback. The `underrunCount`
-    /// parameter scales the requirement after each buffer underrun so
-    /// medium-to-long generations (where engine RTF > 1) don't keep
-    /// re-buffering at the same shallow threshold and producing
-    /// periodic interruptions. See May 2026 benchmark + plan in
-    /// `~/.claude/plans/pull-the-latest-changes-vivid-biscuit.md`
-    /// (the "stop live-preview underruns" entry).
+    /// audio to begin (or resume) playback.
     ///
-    /// Multiplier: each underrun adds +75 % to the threshold, capped at
-    /// 4× the base. Sequence: 1×, 1.75×, 2.5×, 3.25×, 4× (then 4× from
-    /// then on).
+    /// Two policies, picked per-call:
+    ///
+    /// 1. **Predictive (smooth playback ON, has session estimate)** —
+    ///    Computes the production deficit `expectedAudio × (RTF − 1)`
+    ///    and requires the queue to hold at least that much buffered
+    ///    audio before starting. Once playback begins, the queue
+    ///    monotonically drains to zero exactly at generation end —
+    ///    no underruns. TTFA grows with text length. Cap the buffer
+    ///    at `expectedAudio` so unrealistic deficits (e.g. 5-min
+    ///    scripts) effectively wait for completion rather than
+    ///    overshooting.
+    ///
+    /// 2. **Adaptive (default, fallback)** — Each underrun multiplies
+    ///    the prebuffer requirement by +75 % up to a 4× cap. Trades
+    ///    fast first-audio for periodic mid-playback pauses that
+    ///    grow further apart on subsequent resumes.
+    ///
+    /// The `expectedAudioDuration`/`estimatedRTF` parameters arrive
+    /// via `setLivePreviewEstimate` from the generation coordinator;
+    /// `smoothPlaybackEnabled` is the user's `Preferences` toggle
+    /// (`AudioService.smoothPlaybackEnabled`, default OFF).
     private static func shouldStartLivePlayback(
         autoplayEnabled: Bool,
         queuedChunks: Int,
@@ -121,11 +133,27 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         prebufferThreshold: Int,
         minimumBufferedDuration: TimeInterval,
         finalFileAvailable: Bool,
-        underrunCount: Int = 0
+        underrunCount: Int = 0,
+        expectedAudioDuration: TimeInterval? = nil,
+        estimatedRTF: Double? = nil,
+        smoothPlaybackEnabled: Bool = false
     ) -> Bool {
         guard autoplayEnabled else { return false }
         guard !finalFileAvailable else { return true }
 
+        // Policy 1: predictive prebuffer
+        if smoothPlaybackEnabled,
+           let expected = expectedAudioDuration,
+           expected > 0,
+           let rtf = estimatedRTF,
+           rtf > 1.0 {
+            let safetyMargin: TimeInterval = 1.0
+            let deficit = expected * (rtf - 1.0) + safetyMargin
+            let requiredBuffer = min(deficit, expected)
+            return queuedDuration >= requiredBuffer
+        }
+
+        // Policy 2: adaptive scaling
         let multiplier = min(1.0 + 0.75 * Double(max(underrunCount, 0)), 4.0)
         let scaledChunks = max(
             prebufferThreshold,
@@ -154,6 +182,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var liveMaxChunkGapMS: Int = 0
     private var liveDecodeFailureCount: Int = 0
     private var liveStreamErrorCount: Int = 0
+    // Predictive prebuffer state — set by setLivePreviewEstimate
+    // before generation starts, picked up by startLiveSession,
+    // cleared at session end. See `shouldStartLivePlayback` policy 1.
+    private var pendingExpectedAudioDuration: TimeInterval?
+    private var pendingEstimatedRTF: Double?
+    private var liveExpectedAudioDuration: TimeInterval?
+    private var liveEstimatedRTF: Double?
     private var liveSessionID: String?
     private var liveSessionDirectory: String?
     private var liveFinalFilePath: String?
@@ -258,7 +293,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         prebufferThreshold: Int,
         minimumBufferedDuration: TimeInterval = 2.25,
         finalFileAvailable: Bool = false,
-        underrunCount: Int = 0
+        underrunCount: Int = 0,
+        expectedAudioDuration: TimeInterval? = nil,
+        estimatedRTF: Double? = nil,
+        smoothPlaybackEnabled: Bool = false
     ) -> Bool {
         shouldStartLivePlayback(
             autoplayEnabled: autoplayEnabled,
@@ -267,7 +305,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             prebufferThreshold: prebufferThreshold,
             minimumBufferedDuration: minimumBufferedDuration,
             finalFileAvailable: finalFileAvailable,
-            underrunCount: underrunCount
+            underrunCount: underrunCount,
+            expectedAudioDuration: expectedAudioDuration,
+            estimatedRTF: estimatedRTF,
+            smoothPlaybackEnabled: smoothPlaybackEnabled
         )
     }
 #endif
@@ -396,6 +437,19 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
         guard player != nil else { return }
         play()
+    }
+
+    /// Sets a forecast for the upcoming live-preview session — used by
+    /// the smooth-playback policy in `shouldStartLivePlayback` to size
+    /// the prebuffer so playback runs through to completion without
+    /// underruns. Call from the generation coordinator just before
+    /// triggering generation; the values are picked up by
+    /// `startLiveSession` when the first chunk arrives, then cleared.
+    /// Pass `nil` for either to opt out and fall back to the adaptive
+    /// scaling policy.
+    func setLivePreviewEstimate(audioDuration: TimeInterval?, rtf: Double?) {
+        pendingExpectedAudioDuration = audioDuration
+        pendingEstimatedRTF = rtf
     }
 
     func prepareStreamingPreview(title: String, shouldAutoPlay: Bool) {
@@ -620,6 +674,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         liveMaxChunkGapMS = 0
         liveDecodeFailureCount = 0
         liveStreamErrorCount = 0
+        // Predictive prebuffer estimate handoff: pending values
+        // captured pre-generation become the active session's
+        // estimate, then are cleared so a future session that arrives
+        // without a fresh estimate falls back to adaptive scaling.
+        liveExpectedAudioDuration = pendingExpectedAudioDuration
+        liveEstimatedRTF = pendingEstimatedRTF
+        pendingExpectedAudioDuration = nil
+        pendingEstimatedRTF = nil
         currentTitle = title
         currentFilePath = nil
         duration = 0
@@ -696,7 +758,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             prebufferThreshold: livePreviewConfiguration.prebufferThreshold,
             minimumBufferedDuration: livePreviewConfiguration.minimumBufferedDuration,
             finalFileAvailable: liveFinalFilePath != nil,
-            underrunCount: liveUnderrunCount
+            underrunCount: liveUnderrunCount,
+            expectedAudioDuration: liveExpectedAudioDuration,
+            estimatedRTF: liveEstimatedRTF,
+            smoothPlaybackEnabled: AudioService.smoothPlaybackEnabled
         ) {
             attemptLivePlay()
         } else {
@@ -763,7 +828,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             prebufferThreshold: livePreviewConfiguration.prebufferThreshold,
             minimumBufferedDuration: livePreviewConfiguration.minimumBufferedDuration,
             finalFileAvailable: liveFinalFilePath != nil,
-            underrunCount: liveUnderrunCount
+            underrunCount: liveUnderrunCount,
+            expectedAudioDuration: liveExpectedAudioDuration,
+            estimatedRTF: liveEstimatedRTF,
+            smoothPlaybackEnabled: AudioService.smoothPlaybackEnabled
         ) {
             attemptLivePlay()
         } else {
@@ -998,6 +1066,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         livePlaybackTimeOffset = 0
         liveUnderrunCount = 0
         liveFormat = nil
+        liveExpectedAudioDuration = nil
+        liveEstimatedRTF = nil
         setLivePreviewQueueDepth(0)
         clearPendingFirstChunkInterval()
 

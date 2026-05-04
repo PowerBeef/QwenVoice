@@ -3,6 +3,7 @@ import SwiftUI
 struct PreferencesView: View {
     @AppStorage("autoPlay") private var autoPlay = true
     @AppStorage("outputDirectory") private var outputDirectory = ""
+    @AppStorage(AudioService.smoothPlaybackKey) private var smoothPlayback = false
 
     var body: some View {
         Form {
@@ -12,6 +13,16 @@ struct PreferencesView: View {
                     .accessibilityIdentifier("preferences_autoPlayToggle")
 
                 Text("Play the latest result automatically after generation finishes.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Playback") {
+                Toggle("Smooth playback", isOn: $smoothPlayback)
+                    .tint(AppTheme.preferences)
+                    .accessibilityIdentifier("preferences_smoothPlaybackToggle")
+
+                Text("Wait for enough audio to play through long scripts without buffering pauses. Adds a few seconds before audio starts; eliminates mid-playback interruptions.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

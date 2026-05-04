@@ -70,6 +70,14 @@ final class CustomVoiceCoordinator: ObservableObject {
                     outputPath: outputPath
                 )
                 CustomVoiceUIPerformanceTrace.mark(.previewSetupStarted)
+                // Predictive prebuffer hint for the smooth-playback
+                // policy. Always sent (cheap); the policy is gated by
+                // AudioService.smoothPlaybackEnabled so the value only
+                // takes effect when the user has the toggle on.
+                audioPlayer.setLivePreviewEstimate(
+                    audioDuration: LivePreviewEstimator.estimatedAudioSeconds(forText: draft.text),
+                    rtf: LivePreviewEstimator.estimatedRTF(for: .custom)
+                )
                 audioPlayer.prepareStreamingPreview(
                     title: String(draft.text.prefix(40)),
                     shouldAutoPlay: AudioService.shouldAutoPlay

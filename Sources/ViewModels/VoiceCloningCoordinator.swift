@@ -153,6 +153,13 @@ final class VoiceCloningCoordinator: ObservableObject {
                     return
                 }
                 CustomVoiceUIPerformanceTrace.mark(.previewSetupStarted)
+                // Smooth-playback prebuffer hint (gated by
+                // AudioService.smoothPlaybackEnabled). See the
+                // CustomVoiceCoordinator counterpart.
+                audioPlayer.setLivePreviewEstimate(
+                    audioDuration: LivePreviewEstimator.estimatedAudioSeconds(forText: draft.wrappedValue.text),
+                    rtf: LivePreviewEstimator.estimatedRTF(for: .clone)
+                )
                 audioPlayer.prepareStreamingPreview(
                     title: title,
                     shouldAutoPlay: AudioService.shouldAutoPlay
