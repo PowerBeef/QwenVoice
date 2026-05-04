@@ -292,6 +292,8 @@ public struct PreparedVoice: Identifiable, Hashable, Codable, Sendable {
 /// Unknown tokens fall through to `nil` so callers can choose whether to
 /// display a generic warning line or drop it.
 public enum PreparedVoiceQualityWarning {
+    /// Sentence-length explanation. Used in the enrollment alert body
+    /// and any place the row has room for full prose.
     public static func headline(for token: String) -> String? {
         switch token {
         case "reference_duration_short":
@@ -300,6 +302,23 @@ public enum PreparedVoiceQualityWarning {
             return "Reference is longer than recommended (over 20 seconds)."
         case "reference_quality_unreadable":
             return "Reference audio could not be read."
+        default:
+            return nil
+        }
+    }
+
+    /// Compact 2-3 word label used inside the saved-voice row's
+    /// warning chip, where the full sentence wraps awkwardly. Pairs
+    /// with `exclamationmark.triangle.fill` + a chevron; the popover
+    /// behind the chip carries the full headline + `summary(for:)` body.
+    public static func shortLabel(for token: String) -> String? {
+        switch token {
+        case "reference_duration_short":
+            return "Reference too short"
+        case "reference_duration_long":
+            return "Reference too long"
+        case "reference_quality_unreadable":
+            return "Reference unreadable"
         default:
             return nil
         }

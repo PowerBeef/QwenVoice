@@ -18,22 +18,50 @@ private struct NavigationSectionHeader: View {
 }
 
 /// Compact Vocello brand lockup pinned to the top of the sidebar via
-/// `safeAreaInset(edge: .top)`. Reuses the bundled `VocelloHeaderMark`
-/// asset that the iPhone target already ships; the same asset carries the
-/// Vocello wordmark + V glyph so we don't need to ship a separate macOS
-/// lockup. Stays out of the List's scroll region so the brand anchor
-/// remains visible as the user scrolls through sections.
+/// `safeAreaInset(edge: .top)`. Stays out of the List's scroll region so
+/// the brand anchor remains visible as the user scrolls through sections.
+///
+/// Three-tier typography:
+///   • V glyph (22pt image)            — the colored brand anchor.
+///   • "AI·TTS" preamble (caption,
+///      medium, secondary)             — quiet category qualifier; SF Pro
+///                                        default for a slightly technical
+///                                        feel that contrasts the wordmark's
+///                                        rounded warmth.
+///   • "Vocello" wordmark (18pt SF
+///      Rounded semibold, primary)     — the spoken-aloud name.
+///
+/// Intentionally NOT a stylized display face: PRODUCT.md asks the brand
+/// to defer to the output, so the lockup sits in the same visual tier
+/// as the section headers instead of competing with them.
 private struct SidebarBrandHeader: View {
     var body: some View {
-        Image("VocelloHeaderMark")
-            .resizable()
-            .scaledToFit()
-            .frame(height: 22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
-            .accessibilityHidden(true)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image("VocelloHeaderMark")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 22)
+                .alignmentGuide(.firstTextBaseline) { dimension in
+                    dimension[.bottom] - 2
+                }
+
+            Text("Vocello")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+
+            Text("AI·TTS")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        // Audit Batch 7b: symmetric top/bottom padding so the brand
+        // lockup sits centered in its slot. Previous (.top 14, .bottom 8)
+        // looked off-balance at small window heights.
+        .padding(.top, 14)
+        .padding(.bottom, 14)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Vocello, AI text to speech")
     }
 }
 

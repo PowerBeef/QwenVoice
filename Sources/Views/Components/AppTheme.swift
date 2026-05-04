@@ -52,7 +52,14 @@ enum AppTheme {
         dark:  Color(red: 0.75, green: 0.67, blue: 0.86)   // lavender purple
     )
     static let voiceCloning = Color(
-        light: Color(red: 0.70, green: 0.43, blue: 0.24),  // deeper terracotta
+        // Light mode shifted toward a clearer terracotta-orange (May 2026
+        // audit, Batch 4): the prior `(0.70, 0.43, 0.24)` sat ~0.10 RGB
+        // away from `customVoice` light gold and read as "two oranges"
+        // in the sidebar selection edge + chip cluster, especially for
+        // users with red-green color vision deficiency. The new value
+        // opens a clearer hue gap from gold while staying in the warm
+        // family.
+        light: Color(red: 0.83, green: 0.42, blue: 0.20),  // brighter terracotta
         dark:  Color(red: 0.86, green: 0.66, blue: 0.53)   // warm terracotta
     )
     // Library + Settings continue to resolve to the primary accent (golden) so
@@ -143,26 +150,32 @@ enum AppTheme {
     static var legacyDividerBlendAlpha: CGFloat { 0 }
     static var legacyDividerEdgeAlpha: CGFloat { 0 }
 
+    /// Per the May 2026 audit (Batch 4 — colorize): the emotion palette
+    /// no longer reaches for raw fully-saturated system colors (which
+    /// fought the warm-golden Vocello chrome). Each emotion sits in the
+    /// same midtone OKLCH-ish neighborhood, distinguishable through hue
+    /// but unified in chroma + lightness so an emotion chip never feels
+    /// like a sticker on the panel.
     static func emotionColor(for emotionID: String) -> Color {
         switch emotionID {
         case "neutral":
             return .secondary
         case "happy":
-            return .yellow
+            return Color(red: 0.95, green: 0.78, blue: 0.30)  // warm gold-yellow
         case "sad":
-            return .blue
+            return Color(red: 0.55, green: 0.62, blue: 0.78)  // muted slate-blue
         case "angry":
-            return .red
+            return Color(red: 0.78, green: 0.32, blue: 0.20)  // deep rust
         case "fearful":
-            return .purple
+            return Color(red: 0.62, green: 0.50, blue: 0.78)  // quiet violet
         case "whisper":
-            return .gray
+            return Color(red: 0.62, green: 0.62, blue: 0.66)  // cool gray
         case "dramatic":
-            return .pink
+            return Color(red: 0.78, green: 0.52, blue: 0.66)  // mauve
         case "calm":
-            return .green
+            return Color(red: 0.62, green: 0.74, blue: 0.62)  // sage
         case "excited":
-            return .orange
+            return Color(red: 0.92, green: 0.58, blue: 0.32)  // warm orange
         default:
             return accent
         }
@@ -300,56 +313,33 @@ private struct StudioChipStyle: ViewModifier {
     let isSelected: Bool
     let color: Color
 
+    // Per the May 2026 audit (Batch 2 — quieter): chips no longer
+    // use Liquid Glass + 3D depth. Glass is reserved for cards /
+    // panels / the primary CTA so the chrome around them reads
+    // quieter and the cards feel more substantial. Single flat code
+    // path for both Liquid + legacy builds.
     func body(content: Content) -> some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            content
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .foregroundStyle(isSelected ? color : .primary)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? AppTheme.accentWash(color, for: colorScheme) : AppTheme.inlineFill)
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    isSelected
-                                        ? AppTheme.accentStroke(color, for: colorScheme)
-                                        : AppTheme.cardStroke.opacity(colorScheme == .dark ? 0.18 : 0.40),
-                                    lineWidth: isSelected ? (colorScheme == .dark ? 1 : 0.9) : AppTheme.surfaceStrokeWidth(for: colorScheme)
-                                )
-                        )
-                )
-                .glassEffect(
-                    isSelected
-                        ? .regular.tint(AppTheme.accentGlassTint(color, for: colorScheme))
-                        : .regular.tint(AppTheme.smokedGlassTint),
-                    in: .capsule
-                )
-                .glass3DDepth(radius: 999, intensity: isSelected ? 0.8 : 0.45)
-                .appAnimation(.easeInOut(duration: 0.15), value: isSelected)
-        } else {
-            legacyBody(content: content)
-        }
-        #else
-        legacyBody(content: content)
-        #endif
-    }
-
-    private func legacyBody(content: Content) -> some View {
         content
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(isSelected ? color.opacity(0.16) : Color(nsColor: .controlBackgroundColor))
-            )
             .foregroundStyle(isSelected ? color : .primary)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(
+                        isSelected
+                            ? AppTheme.accentWash(color, for: colorScheme)
+                            : AppTheme.inlineFill
+                    )
+            )
             .overlay(
-                Capsule()
-                    .stroke(isSelected ? color.opacity(0.32) : AppTheme.cardStroke.opacity(0.45), lineWidth: 1)
+                Capsule(style: .continuous)
+                    .stroke(
+                        isSelected
+                            ? color.opacity(colorScheme == .dark ? 0.32 : 0.28)
+                            : AppTheme.cardStroke.opacity(colorScheme == .dark ? 0.20 : 0.40),
+                        lineWidth: isSelected ? 1 : 0.75
+                    )
             )
             .appAnimation(.easeInOut(duration: 0.15), value: isSelected)
     }
@@ -411,29 +401,35 @@ private struct GlassBadgeStyle: ViewModifier {
 
     let tint: Color?
 
+    // Per the May 2026 audit (Batch 2 — quieter): badges no longer
+    // use Liquid Glass. A flat capsule fill + subtle stroke reads
+    // quieter against the cards / panels that DO use glass. Tinted
+    // badges (e.g. mode capsules in History rows) keep a subtle
+    // tint-washed fill so they remain identity-coherent.
     func body(content: Content) -> some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            content
-                .background(
-                    Capsule()
-                        .fill(AppTheme.inlineFill)
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    AppTheme.inlineStroke.opacity(colorScheme == .dark ? 0.18 : 0.42),
-                                    lineWidth: AppTheme.surfaceStrokeWidth(for: colorScheme)
-                                )
-                        )
-                )
-                .glassEffect(.regular.tint(tint ?? AppTheme.smokedGlassTint), in: .capsule)
-                .glass3DDepth(radius: 999, intensity: colorScheme == .dark ? 0.45 : 0.28)
-        } else {
-            content
-        }
-        #else
         content
-        #endif
+            .background(
+                Capsule(style: .continuous)
+                    .fill(badgeFill)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(badgeStroke, lineWidth: 0.5)
+            )
+    }
+
+    private var badgeFill: Color {
+        if let tint {
+            return tint.opacity(colorScheme == .dark ? 0.16 : 0.12)
+        }
+        return AppTheme.inlineFill
+    }
+
+    private var badgeStroke: Color {
+        if let tint {
+            return tint.opacity(colorScheme == .dark ? 0.30 : 0.24)
+        }
+        return AppTheme.inlineStroke.opacity(colorScheme == .dark ? 0.30 : 0.42)
     }
 }
 
@@ -444,41 +440,24 @@ private struct GlassTextFieldStyle: ViewModifier {
     let strokeColor: Color?
     let strokeWidth: CGFloat
 
+    // Per the May 2026 audit (Batch 2 — quieter): text fields no
+    // longer use Liquid Glass. A flat rounded fill + a focus-aware
+    // stroke (passed in by the caller via `strokeColor`) reads
+    // calmer and lets the surrounding cards carry the depth.
     func body(content: Content) -> some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            content
-                .background {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(AppTheme.fieldFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                                .stroke(
-                                    (strokeColor ?? AppTheme.fieldStroke)
-                                        .opacity(colorScheme == .dark ? 0.90 : 0.86),
-                                    lineWidth: colorScheme == .dark ? max(strokeWidth, 0.75) : strokeWidth
-                                )
-                        )
-                        .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: radius))
-                        .glass3DDepth(radius: radius, intensity: colorScheme == .dark ? 0.65 : 0.38)
-                }
-        } else {
-            content
-                .background(
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .stroke(
-                            (strokeColor ?? AppTheme.cardStroke).opacity(colorScheme == .dark ? 0.22 : 0.62),
-                            lineWidth: colorScheme == .dark ? 0.5 : strokeWidth
-                        )
-                )
-        }
-        #else
         content
-        #endif
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(AppTheme.fieldFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(
+                        (strokeColor ?? AppTheme.fieldStroke)
+                            .opacity(colorScheme == .dark ? 0.45 : 0.62),
+                        lineWidth: colorScheme == .dark ? 0.5 : strokeWidth
+                    )
+            )
     }
 }
 

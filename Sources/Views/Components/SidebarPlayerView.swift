@@ -10,12 +10,12 @@ struct SidebarPlayerView: View {
         if audioPlayer.hasAudio {
             VStack(alignment: .leading, spacing: 7) {
                 Text("Player")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
 
                 HStack {
                     Text(audioPlayer.currentTitle)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
@@ -74,7 +74,7 @@ struct SidebarPlayerView: View {
                         }
                     } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(AppTheme.accent)
                     }
                     .buttonStyle(.plain)
@@ -82,15 +82,16 @@ struct SidebarPlayerView: View {
                     .accessibilityValue(audioPlayer.isPlaying ? "pause" : "play")
 
                     Text("\(playbackProgress.formattedCurrentTime) / \(audioPlayer.durationDisplayText)")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.caption.monospacedDigit().weight(.medium))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("sidebarPlayer_time")
 
                     Spacer(minLength: 0)
 
-                    Text(audioPlayer.isLiveStream ? "Preview" : "Playback")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.tertiary)
+                    // Audit Batch 6a: dropped the redundant "Playback" /
+                    // "Preview" trailing role label. Play/pause + time
+                    // already imply playback; the "Live" capsule next to
+                    // the title still distinguishes streaming.
                 }
 
                 if let inlinePlayerActivity {
@@ -135,11 +136,11 @@ private struct InlineLivePreviewStatusView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "waveform")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(AppTheme.accent)
 
                 Text(activity.label)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
@@ -147,7 +148,7 @@ private struct InlineLivePreviewStatusView: View {
 
                 if let percentLabel {
                     Text(percentLabel)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .font(.caption2.monospacedDigit().weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
             }

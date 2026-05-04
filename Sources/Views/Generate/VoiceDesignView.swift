@@ -153,7 +153,7 @@ private extension VoiceDesignView {
                 TextInputView(
                     text: $draft.text,
                     isGenerating: coordinator.isGenerating,
-                    placeholder: "What should I say?",
+                    placeholder: "Type or paste your script",
                     buttonColor: AppTheme.voiceDesign,
                     batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
@@ -205,7 +205,7 @@ private extension VoiceDesignView {
         WorkflowReadinessNote(
             isReady: canGenerate && !coordinator.isGenerating,
             title: coordinator.isGenerating ? "Generating live preview" : (canGenerate ? "Ready to generate" : readinessTitle),
-            detail: coordinator.isGenerating ? "Vocello is streaming audio now. The final file will load into the player as soon as it is ready." : readinessDetail,
+            detail: coordinator.isGenerating ? "Streaming audio now. The final file lands in the player when ready." : readinessDetail,
             accentColor: AppTheme.voiceDesign,
             isBusy: coordinator.isGenerating,
             accessibilityIdentifier: "voiceDesign_readiness"
@@ -230,18 +230,18 @@ private extension VoiceDesignView {
 
     var readinessDetail: String {
         if !ttsEngineStore.isReady {
-            return "Vocello is still preparing the generation engine."
+            return "The engine is still preparing."
         }
         if !isModelAvailable {
             return "Install \(modelDisplayName) in Models to enable generation."
         }
         if !draft.hasVoiceDescription {
-            return "Describe the voice you want before writing the final line."
+            return "Describe the voice before writing the final line."
         }
         if !draft.hasText {
-            return "Once the line is written, the generated voice will use this brief and delivery."
+            return "The generated voice uses this brief and delivery once a line is written."
         }
-        return "Everything is in place for a live preview and a saved generation."
+        return "Ready for live preview and save."
     }
 
     var composerFooter: some View {

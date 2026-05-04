@@ -25,6 +25,11 @@ struct VoicesView: View {
     @State private var pendingRevealVoiceID: String?
     @State private var highlightedVoiceID: String?
     @State private var highlightResetTask: Task<Void, Never>?
+    /// Set when the user starts a "Replace reference" flow from a
+    /// flagged saved voice. The old voice is deleted on successful
+    /// completion of the enrollment sheet (see
+    /// `handleSavedVoiceSheetCompletion`). Nil for normal add flows.
+    @State private var voiceBeingReplaced: Voice?
 
     private var voices: [Voice] {
         savedVoicesViewModel.voices
@@ -147,6 +152,9 @@ struct VoicesView: View {
                             },
                             onDelete: {
                                 requestDeleteVoice(voice)
+                            },
+                            onReplaceReference: {
+                                requestReplaceReference(voice)
                             }
                         )
                         .id(voice.id)
@@ -186,13 +194,48 @@ private extension VoicesView {
     }
 
     func presentAddSavedVoiceSheet() {
+        voiceBeingReplaced = nil
         savedVoiceSheetConfiguration = .manualAdd
     }
 
+    /// Opens the SavedVoiceSheet pre-filled for replacing the given
+    /// voice's reference clip. The transcript is loaded best-effort
+    /// from the sidecar `.txt` file; a missing/unreadable transcript
+    /// just means the user has to retype it.
+    func requestReplaceReference(_ voice: Voice) {
+        // `Voice.loadTranscript()` is `() throws -> String?`; `try?`
+        // collapses any throw into `nil`, then `flatMap` drops the
+        // missing-file `nil` case so we end up with `String?`.
+        let transcript = (try? voice.loadTranscript()).flatMap { $0 } ?? ""
+        voiceBeingReplaced = voice
+        savedVoiceSheetConfiguration = .replaceReference(
+            name: voice.name,
+            transcript: transcript
+        )
+    }
+
     func handleSavedVoiceSheetCompletion(_ voice: Voice) {
+        let replacedVoice = voiceBeingReplaced
+        voiceBeingReplaced = nil
+
         pendingRevealVoiceID = voice.id
         savedVoicesViewModel.insertOrReplace(voice)
-        Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
+
+        // If this was a replace flow and the new voice landed on a
+        // different on-disk slot (different normalized id), delete the
+        // old voice. When the ids match, enrollment overwrote the
+        // existing slot — nothing to clean up.
+        if let replacedVoice, replacedVoice.id != voice.id {
+            Task {
+                try? await ttsEngineStore.deletePreparedVoice(id: replacedVoice.id)
+                await MainActor.run {
+                    savedVoicesViewModel.removeVoiceFromVisibleState(id: replacedVoice.id)
+                }
+                await savedVoicesViewModel.refresh(using: ttsEngineStore)
+            }
+        } else {
+            Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) }
+        }
     }
 
     func retryLoadVoices() {
@@ -265,6 +308,7 @@ private struct VoiceRow: View {
     let onUseInVoiceCloning: () -> Void
     let onPlay: () -> Void
     let onDelete: () -> Void
+    let onReplaceReference: () -> Void
 
     private var highlightFill: Color {
         isHighlighted ? AppTheme.accent.opacity(0.12) : .clear
@@ -333,7 +377,9 @@ private struct VoiceRow: View {
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
                 detailCopy: detailCopy,
-                qualityHeadline: voice.qualityHeadline
+                qualityHeadline: voice.qualityHeadline,
+                qualityWarnings: voice.qualityWarnings,
+                onReplaceReference: onReplaceReference
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -354,7 +400,9 @@ private struct VoiceRow: View {
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
                 detailCopy: detailCopy,
-                qualityHeadline: voice.qualityHeadline
+                qualityHeadline: voice.qualityHeadline,
+                qualityWarnings: voice.qualityWarnings,
+                onReplaceReference: onReplaceReference
             )
             VoiceRowActions(
                 voiceID: voice.id,
@@ -373,6 +421,10 @@ private struct VoiceRowMetadata: View {
     let transcriptStatus: String
     let detailCopy: String
     let qualityHeadline: String?
+    let qualityWarnings: [String]
+    let onReplaceReference: () -> Void
+
+    @State private var showsWarningDetails = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -396,22 +448,93 @@ private struct VoiceRowMetadata: View {
                     )
                     #endif
 
-                if let qualityHeadline {
-                    Label("Reference may be poor", systemImage: "exclamationmark.triangle.fill")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(.orange)
-                        .help(qualityHeadline)
-                        .accessibilityLabel("Reference quality warning")
-                        .accessibilityHint(qualityHeadline)
-                        .accessibilityIdentifier("voicesRow_\(voiceID)_qualityWarning")
-                }
+                // Title-row triangle removed: the warning chip below
+                // carries the warning visual; doubling it on the title
+                // row was the redundancy that made the row look busy.
             }
 
-            Text(detailCopy)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            if qualityHeadline != nil {
+                warningChip
+            } else {
+                Text(detailCopy)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
+    }
+
+    /// Compact tappable status pill that replaces the wrapping orange
+    /// sentence + inline "Why?" link. Single visual element, single
+    /// tap target — the full explanation lives in the popover behind
+    /// it (unchanged).
+    private var warningChip: some View {
+        let token = qualityWarnings.first ?? ""
+        let label = PreparedVoiceQualityWarning.shortLabel(for: token)
+            ?? "Reference may be poor"
+
+        return Button {
+            showsWarningDetails = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                Text(label)
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .opacity(0.7)
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.orange.opacity(0.12))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.orange.opacity(0.30), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reference quality warning")
+        .accessibilityHint(qualityHeadline ?? label)
+        .accessibilityIdentifier("voicesRow_\(voiceID)_qualityWarning")
+        .popover(isPresented: $showsWarningDetails, arrowEdge: .top) {
+            warningDetailsPopover
+        }
+    }
+
+    private var warningDetailsPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Reference quality may be poor", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+
+            Text(PreparedVoiceQualityWarning.summary(for: qualityWarnings))
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button("Replace reference…") {
+                    showsWarningDetails = false
+                    onReplaceReference()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("voicesRow_\(voiceID)_replaceReference")
+
+                Spacer(minLength: 8)
+
+                Button("Close") {
+                    showsWarningDetails = false
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 360)
     }
 }
 

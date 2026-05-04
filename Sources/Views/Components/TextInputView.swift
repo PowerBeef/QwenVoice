@@ -5,7 +5,7 @@ struct TextInputView: View {
     @Binding var text: String
 
     var isGenerating: Bool
-    var placeholder: String = "What should I say?"
+    var placeholder: String = "Type or paste your script"
     var buttonColor: Color = AppTheme.customVoice
     var batchAction: (() -> Void)? = nil
     var batchDisabled: Bool = true
@@ -67,8 +67,16 @@ struct TextInputView: View {
                 Button {
                     onGenerate()
                 } label: {
-                    Label("Generate", systemImage: "sparkles")
-                        .frame(minWidth: 88)
+                    // Audit Batch 5a/b: `sparkles` is the SaaS-AI category
+                    // reflex; `waveform` ties the icon directly to the
+                    // audio output the button produces. The label swaps to
+                    // "Generating…" while busy so the most-watched element
+                    // on the screen reflects the actual state.
+                    Label(
+                        isGenerating ? "Generating…" : "Generate",
+                        systemImage: "waveform"
+                    )
+                    .frame(minWidth: 100)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(buttonColor)
@@ -78,11 +86,32 @@ struct TextInputView: View {
 
             Spacer(minLength: 0)
 
-            Text("\(text.count) characters")
-                .font(.callout)
-                .foregroundStyle(text.count > 500 ? .orange : .secondary)
-                .accessibilityIdentifier("textInput_charCount")
+            characterCount
         }
+    }
+
+    /// Pairs the character count with an icon when the script crosses
+    /// the 500-char "long" threshold. Color-only signal (the prior
+    /// orange-tint-on-overflow) violated WCAG 1.4.1; the icon +
+    /// accessibility label give non-color-perceiving users the same
+    /// information.
+    private var characterCount: some View {
+        let isLong = text.count > 500
+        let baseLabel = "\(text.count) characters"
+        return HStack(spacing: 6) {
+            if isLong {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+            }
+            Text(baseLabel)
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(isLong ? .orange : .secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isLong ? "\(baseLabel), long script" : baseLabel)
+        .accessibilityIdentifier("textInput_charCount")
     }
 
     private var shortcutBridge: some View {

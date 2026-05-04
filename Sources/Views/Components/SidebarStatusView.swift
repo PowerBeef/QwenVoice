@@ -69,7 +69,7 @@ struct SidebarStatusView: View {
                 .fill(AppTheme.accent)
                 .frame(width: 5, height: 5)
             Text("Ready")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_idle")
@@ -83,7 +83,7 @@ struct SidebarStatusView: View {
             ProgressView()
                 .controlSize(.mini)
             Text("Starting engine…")
-                .font(.system(size: 11, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
         .accessibilityIdentifier("sidebar_backendStatus_starting")
@@ -96,12 +96,18 @@ struct SidebarStatusView: View {
     private func activeView(activity: ActivityStatus) -> some View {
         let percent = Int(((activity.fraction ?? 0.0) * 100.0).rounded())
 
+        // Audit Batch 6b: one progress affordance at a time. When we
+        // know the fraction, the determinate bar + percent is the
+        // signal — the indeterminate spinner alongside it was visual
+        // noise. When fraction is nil, the spinner replaces the bar.
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                ProgressView()
-                    .controlSize(.mini)
+                if activity.fraction == nil {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
                 Text(activity.label)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -112,7 +118,7 @@ struct SidebarStatusView: View {
                         .tint(AppTheme.statusProgressTint)
                         .scaleEffect(y: 0.6)
                     Text("\(percent)%")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.caption2.monospacedDigit().weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -133,7 +139,7 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
                 Text("Error")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
                 Spacer()
                 Button {
@@ -146,7 +152,7 @@ struct SidebarStatusView: View {
                 .buttonStyle(.plain)
             }
             Text(message)
-                .font(.system(size: 11, weight: .regular))
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
@@ -163,7 +169,7 @@ struct SidebarStatusView: View {
         let detail = message.isEmpty ? "Restart the app to continue" : message
         let title = detail.localizedCaseInsensitiveContains("unavailable")
             ? "Engine unavailable"
-            : "Engine Stopped"
+            : "Engine stopped"
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -171,11 +177,11 @@ struct SidebarStatusView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
             }
             Text(detail)
-                .font(.system(size: 11, weight: .regular))
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }

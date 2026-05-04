@@ -163,7 +163,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Engine starting",
-                detail: "Vocello is still starting the native generation engine.",
+                detail: "The engine is still preparing.",
                 trailingText: nil
             )
         }
@@ -181,7 +181,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Add a reference",
-                detail: "Saved voices or imported clips both work here. Choose one before writing the final line.",
+                detail: "Saved voices or imported clips both work. Pick one before writing the line.",
                 trailingText: nil
             )
         }
@@ -190,7 +190,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Preparing saved voice",
-                detail: "Vocello is loading the saved transcript and voice context for cloning.",
+                detail: "Loading the saved transcript and voice context.",
                 trailingText: nil
             )
         }
@@ -199,7 +199,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Preparing voice context",
-                detail: "Vocello is priming this reference so the first live preview starts quickly.",
+                detail: "Priming this reference so the first live preview starts quickly.",
                 trailingText: nil
             )
         }
@@ -208,7 +208,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Add a script",
-                detail: "Your reference voice context is ready. Add the line you want the cloned voice to perform.",
+                detail: "Reference is ready. Add the line for the cloned voice.",
                 trailingText: nil
             )
         }
@@ -225,7 +225,7 @@ enum VoiceCloningReadiness {
         return VoiceCloningReadinessDescriptor(
             noteIsReady: true,
             title: "Ready to generate",
-            detail: "Everything is in place for a live preview and a saved clone.",
+            detail: "Ready for live preview and save.",
             trailingText: "Ready"
         )
     }

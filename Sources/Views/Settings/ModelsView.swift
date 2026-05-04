@@ -162,6 +162,10 @@ struct ModelRow: View {
             modeIcon
 
             VStack(alignment: .leading, spacing: 6) {
+                // Audit Batch 7a: two-tier hierarchy (name + usage on
+                // the leading line; variant + folder path quiet
+                // beneath) instead of three competing labels jammed
+                // horizontally. Wraps cleanly at narrow widths.
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(model.name)
                         .font(.body.weight(.semibold))
@@ -170,17 +174,24 @@ struct ModelRow: View {
                     Text(usageLabel)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
-
-                    Text(variantLabel)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.secondary)
                 }
 
-                Text(model.folder)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 8) {
+                    Text(variantLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+
+                    Text(model.folder)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
 
                 statusView
             }
@@ -331,13 +342,24 @@ struct ModelRow: View {
         }
     }
 
+    private var iconTint: Color {
+        AppTheme.modeColor(for: model.mode)
+    }
+
     @ViewBuilder
     private var modeIcon: some View {
         #if QW_UI_LIQUID
         if #available(macOS 26, *) {
+            // Audit Batch 4c: tint the Liquid Glass tile in the model's
+            // own mode color (gold for Custom Voice, lavender for Voice
+            // Design, terracotta for Voice Cloning) so the row reads
+            // as belonging to the mode it serves.
             Color.clear
                 .frame(width: 34, height: 34)
-                .glassEffect(.regular.tint(AppTheme.smokedGlassTint), in: .rect(cornerRadius: 8))
+                .glassEffect(
+                    .regular.tint(AppTheme.accentGlassTint(iconTint, for: .dark)),
+                    in: .rect(cornerRadius: 8)
+                )
                 .overlay {
                     Image(systemName: model.mode.iconName)
                         .font(.system(size: 16, weight: .semibold))
@@ -353,12 +375,12 @@ struct ModelRow: View {
 
     private var modeIconLegacy: some View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(AppTheme.accent.opacity(isHighlighted ? 0.14 : 0.08))
+            .fill(iconTint.opacity(isHighlighted ? 0.18 : 0.10))
             .frame(width: 34, height: 34)
             .overlay {
                 Image(systemName: model.mode.iconName)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(iconTint)
             }
     }
 

@@ -456,19 +456,39 @@ private struct IOSSavedVoiceCard: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(IOSAppTheme.textPrimary)
 
-                        if let headline = voice.qualityHeadline {
+                        if voice.qualityHeadline != nil {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
-                                .accessibilityLabel("Reference quality warning")
-                                .accessibilityHint(headline)
+                                .accessibilityHidden(true)
                         }
                     }
 
-                    Text(voiceMetadata)
-                        .font(.caption)
-                        .foregroundStyle(IOSAppTheme.textSecondary)
-                        .lineLimit(1)
+                    if let headline = voice.qualityHeadline {
+                        // Replace the default metadata line with the
+                        // warning text when the saved voice fails the
+                        // duration check. The bare triangle alone was
+                        // too cryptic without sighted-user copy.
+                        Label {
+                            Text(headline)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Reference quality warning")
+                        .accessibilityHint(headline)
+                    } else {
+                        Text(voiceMetadata)
+                            .font(.caption)
+                            .foregroundStyle(IOSAppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 8)

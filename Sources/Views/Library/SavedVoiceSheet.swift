@@ -11,6 +11,30 @@ struct SavedVoiceSheetConfiguration: Identifiable {
     let initialName: String
     let initialAudioPath: String
     let initialTranscript: String
+    /// Normalized name of an existing saved voice that this enrollment
+    /// is intended to replace. The duplicate-name guard ignores this
+    /// name so the user can keep the same identifier; the caller is
+    /// responsible for deleting the old voice after successful save.
+    /// Nil for the standard add / cloneResult / designResult flows.
+    let replacingNormalizedName: String?
+
+    init(
+        title: String,
+        subtitle: String,
+        confirmLabel: String,
+        initialName: String,
+        initialAudioPath: String,
+        initialTranscript: String,
+        replacingNormalizedName: String? = nil
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.confirmLabel = confirmLabel
+        self.initialName = initialName
+        self.initialAudioPath = initialAudioPath
+        self.initialTranscript = initialTranscript
+        self.replacingNormalizedName = replacingNormalizedName
+    }
 
     static let manualAdd = SavedVoiceSheetConfiguration(
         title: "Add Voice Sample",
@@ -48,6 +72,28 @@ struct SavedVoiceSheetConfiguration: Identifiable {
             initialName: SavedVoiceNameSuggestion.designResultName(from: voiceDescription),
             initialAudioPath: audioPath,
             initialTranscript: transcript
+        )
+    }
+
+    /// Used by the saved-voices "Replace reference" flow. Pre-fills the
+    /// existing name + transcript and leaves the audio path blank so the
+    /// user has to pick a new clip. The duplicate-name guard skips the
+    /// existing entry (`replacingNormalizedName`) so the user can reuse
+    /// the same identifier. The caller is responsible for deleting the
+    /// old voice on successful completion (see
+    /// `VoicesView.handleSavedVoiceSheetCompletion`).
+    static func replaceReference(
+        name: String,
+        transcript: String
+    ) -> SavedVoiceSheetConfiguration {
+        SavedVoiceSheetConfiguration(
+            title: "Replace Voice Reference",
+            subtitle: "Pick a longer, cleaner clip (10–20 seconds works best). The existing reference will be replaced after the new one saves successfully.",
+            confirmLabel: "Replace Reference",
+            initialName: name,
+            initialAudioPath: "",
+            initialTranscript: transcript,
+            replacingNormalizedName: SavedVoiceNameSanitizer.normalizedName(name)
         )
     }
 }
@@ -142,7 +188,11 @@ struct SavedVoiceSheet: View {
             return "Enter a name with letters or numbers."
         }
 
-        if existingNormalizedNames.contains(normalizedName) {
+        // In the replace-reference flow the user is expected to keep the
+        // same identifier; only flag an existing-name collision when the
+        // name belongs to a different saved voice.
+        if existingNormalizedNames.contains(normalizedName)
+            && normalizedName != configuration.replacingNormalizedName {
             return "A saved voice named \"\(normalizedName)\" already exists. Choose a different name."
         }
 

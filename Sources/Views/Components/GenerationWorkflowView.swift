@@ -133,7 +133,12 @@ struct WorkflowReadinessNote: View {
                     .tint(accentColor)
                     .frame(width: 16, height: 16)
             } else {
-                Image(systemName: isReady ? "checkmark.circle.fill" : "info.circle")
+                // Audit Batch 5c: stronger ready vs not-ready icon
+                // contrast. `checkmark.seal.fill` (sealed badge) reads
+                // heavier than the plain circle; `clock` is shape-
+                // distinct from a checkmark so a quick glance lands the
+                // state without parsing color.
+                Image(systemName: isReady ? "checkmark.seal.fill" : "clock")
                     .font(.subheadline)
                     .foregroundStyle(isReady ? accentColor : .secondary)
             }

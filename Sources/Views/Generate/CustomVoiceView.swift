@@ -21,7 +21,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Generating live preview",
-                detail: "Vocello is streaming audio now. The final file will load into the player as soon as it is ready.",
+                detail: "Streaming audio now. The final file lands in the player when ready.",
                 trailingText: "Generating",
                 isBusy: true
             )
@@ -31,7 +31,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Engine starting",
-                detail: "Vocello is still preparing the generation engine.",
+                detail: "The engine is still preparing.",
                 trailingText: nil,
                 isBusy: snapshot.loadState == .starting
             )
@@ -51,7 +51,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Add a script",
-                detail: "The selected speaker and delivery settings are ready as soon as the line is written.",
+                detail: "Speaker and delivery are set. Add a line to generate.",
                 trailingText: nil,
                 isBusy: false
             )
@@ -62,7 +62,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: true,
                 title: "Ready to generate",
-                detail: "Everything is in place for a live preview and a saved generation.",
+                detail: "Ready for live preview and save.",
                 trailingText: "Ready",
                 isBusy: false
             )
@@ -70,7 +70,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Preparing Custom Voice",
-                detail: "Vocello is loading and warming the Custom Voice path. You can generate now; the engine will finish preparation if needed.",
+                detail: "Loading the Custom Voice path. You can generate now; preparation finishes in the background.",
                 trailingText: "Preparing",
                 isBusy: true
             )
@@ -78,7 +78,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Preparing Custom Voice",
-                detail: "Vocello will warm the Custom Voice path in the background, or finish preparation when you generate.",
+                detail: "Warming the Custom Voice path. Generation will finish preparation if it hasn't yet.",
                 trailingText: "Preparing",
                 isBusy: true
             )
@@ -86,7 +86,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Preparing Custom Voice",
-                detail: "Vocello is warming the Custom Voice path before generation.",
+                detail: "Warming the Custom Voice path.",
                 trailingText: "Preparing",
                 isBusy: true
             )
@@ -94,7 +94,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Engine busy",
-                detail: "Vocello is finishing another engine task before Custom Voice can be ready.",
+                detail: "Finishing another engine task before Custom Voice can be ready.",
                 trailingText: nil,
                 isBusy: true
             )
@@ -102,7 +102,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
                 title: "Custom Voice will prepare on generate",
-                detail: "A different model is loaded. Vocello will switch to Custom Voice when you generate.",
+                detail: "A different model is loaded. The engine will switch to Custom Voice on generate.",
                 trailingText: nil,
                 isBusy: false
             )
@@ -255,7 +255,7 @@ private extension CustomVoiceView {
                 TextInputView(
                     text: $draft.text,
                     isGenerating: coordinator.isGenerating,
-                    placeholder: "What should I say?",
+                    placeholder: "Type or paste your script",
                     buttonColor: AppTheme.customVoice,
                     batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,

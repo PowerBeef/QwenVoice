@@ -338,7 +338,7 @@ private extension VoiceCloningView {
                 TextInputView(
                     text: $draft.text,
                     isGenerating: coordinator.isGenerating,
-                    placeholder: "What should the cloned voice say?",
+                    placeholder: "Type the line for the cloned voice",
                     buttonColor: AppTheme.voiceCloning,
                     batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
@@ -520,7 +520,7 @@ private struct VoiceCloningComposerFooter: View {
             WorkflowReadinessNote(
                 isReady: isReadyForFastGenerate && !isGenerating,
                 title: isGenerating ? "Generating live preview" : readinessTitle,
-                detail: isGenerating ? "Vocello is streaming audio now. The final file will load into the player as soon as it is ready." : readinessDetail,
+                detail: isGenerating ? "Streaming audio now. The final file lands in the player when ready." : readinessDetail,
                 accentColor: AppTheme.voiceCloning,
                 isBusy: isGenerating,
                 accessibilityIdentifier: "voiceCloning_readiness"
@@ -550,30 +550,51 @@ private struct CloneReferenceStatus: View {
 
     var body: some View {
         if let path = referenceAudioPath {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(accentColor)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(accentColor)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(URL(fileURLWithPath: path).lastPathComponent)
-                        .font(.system(size: 12, weight: .semibold))
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(URL(fileURLWithPath: path).lastPathComponent)
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
 
-                    Text(selectedVoice == nil ? "Imported file ready" : "Saved voice ready")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                Button("Clear") {
-                    AppLaunchConfiguration.performAnimated(.default) {
-                        clearReference()
+                        Text(selectedVoice == nil ? "Imported file ready" : "Saved voice ready")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
+
+                    Spacer(minLength: 0)
+
+                    Button("Clear") {
+                        AppLaunchConfiguration.performAnimated(.default) {
+                            clearReference()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+
+                // Mirror the saved-voices warning so the user gets a
+                // last reminder before generation. Read-only here —
+                // the fix lives in Library → Saved Voices.
+                if let headline = selectedVoice?.qualityHeadline {
+                    Label {
+                        Text(headline)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("voiceCloning_referenceWarning")
+                }
             }
             .inlinePanel(padding: 8, radius: 10)
             .accessibilityIdentifier("voiceCloning_activeReference")

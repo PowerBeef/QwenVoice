@@ -539,6 +539,8 @@ private struct HistoryRow: View {
     let onSaveAs: () -> Void
     let onDelete: () -> Void
 
+    @State private var isHovered = false
+
     private var modeColor: Color {
         AppTheme.modeColor(for: item.generation.mode)
     }
@@ -590,7 +592,25 @@ private struct HistoryRow: View {
                 itemID: item.id
             )
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
+        // Audit Batch 8: subtle border-tint on hover signals "this row
+        // is content-bearing." No background fill, no motion — just an
+        // edge so the user knows the row is part of the interactive
+        // chrome. The play / save / delete buttons remain the actual
+        // affordances.
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    isHovered ? AppTheme.cardStroke.opacity(0.4) : .clear,
+                    lineWidth: 0.75
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .appAnimation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityIdentifier("historyRow_\(item.id)")
         .accessibilityElement(children: .contain)
     }
