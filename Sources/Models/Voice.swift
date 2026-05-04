@@ -14,6 +14,11 @@ struct Voice: Identifiable, Hashable {
     /// dialogs at enrollment + indicator badges in the saved-voices
     /// list.
     let qualityWarnings: [String]
+    /// Cached `headline` for the first warning token. Computed once at
+    /// init time so the saved-voices list rendering doesn't re-run the
+    /// `PreparedVoiceQualityWarning.headline(for:)` lookup for every
+    /// row on every body recomputation.
+    let qualityHeadline: String?
 
     func loadTranscript(fileManager: FileManager = .default) throws -> String? {
         let txtURL = URL(fileURLWithPath: wavPath).deletingPathExtension().appendingPathExtension("txt")
@@ -33,6 +38,7 @@ struct Voice: Identifiable, Hashable {
         self.wavPath = wavPath
         self.hasTranscript = hasTranscript
         self.qualityWarnings = qualityWarnings
+        self.qualityHeadline = qualityWarnings.first.flatMap(PreparedVoiceQualityWarning.headline(for:))
     }
 
     init(preparedVoice: PreparedVoice) {
@@ -41,6 +47,7 @@ struct Voice: Identifiable, Hashable {
         self.wavPath = preparedVoice.audioPath
         self.hasTranscript = preparedVoice.hasTranscript
         self.qualityWarnings = preparedVoice.qualityWarnings
+        self.qualityHeadline = preparedVoice.qualityWarnings.first.flatMap(PreparedVoiceQualityWarning.headline(for:))
     }
 }
 

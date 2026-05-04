@@ -333,7 +333,7 @@ private struct VoiceRow: View {
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
                 detailCopy: detailCopy,
-                qualityWarnings: voice.qualityWarnings
+                qualityHeadline: voice.qualityHeadline
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -354,7 +354,7 @@ private struct VoiceRow: View {
                 voiceID: voice.id,
                 transcriptStatus: transcriptStatus,
                 detailCopy: detailCopy,
-                qualityWarnings: voice.qualityWarnings
+                qualityHeadline: voice.qualityHeadline
             )
             VoiceRowActions(
                 voiceID: voice.id,
@@ -372,12 +372,7 @@ private struct VoiceRowMetadata: View {
     let voiceID: String
     let transcriptStatus: String
     let detailCopy: String
-    let qualityWarnings: [String]
-
-    private var qualityHeadline: String? {
-        guard let firstToken = qualityWarnings.first else { return nil }
-        return PreparedVoiceQualityWarning.headline(for: firstToken)
-    }
+    let qualityHeadline: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

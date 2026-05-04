@@ -277,6 +277,14 @@ public struct PreparedVoice: Identifiable, Hashable, Codable, Sendable {
     public var audioURL: URL {
         URL(fileURLWithPath: audioPath)
     }
+
+    /// Cached headline for the first warning token. Avoids re-running
+    /// the `PreparedVoiceQualityWarning.headline(for:)` lookup every
+    /// time the saved-voices list re-renders. Nil when no warnings
+    /// (the common case).
+    public var qualityHeadline: String? {
+        qualityWarnings.first.flatMap(PreparedVoiceQualityWarning.headline(for:))
+    }
 }
 
 /// Human-readable summaries of `PreparedVoice.qualityWarnings` tokens.

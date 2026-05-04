@@ -456,12 +456,12 @@ private struct IOSSavedVoiceCard: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(IOSAppTheme.textPrimary)
 
-                        if let qualityHeadline {
+                        if let headline = voice.qualityHeadline {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                                 .accessibilityLabel("Reference quality warning")
-                                .accessibilityHint(qualityHeadline)
+                                .accessibilityHint(headline)
                         }
                     }
 
@@ -493,10 +493,5 @@ private struct IOSSavedVoiceCard: View {
 
     private var voiceMetadata: String {
         voice.hasTranscript ? "Saved voice • Transcript ready" : "Saved voice"
-    }
-
-    private var qualityHeadline: String? {
-        guard let firstToken = voice.qualityWarnings.first else { return nil }
-        return PreparedVoiceQualityWarning.headline(for: firstToken)
     }
 }

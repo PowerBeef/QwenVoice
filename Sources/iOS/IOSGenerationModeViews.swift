@@ -201,8 +201,8 @@ struct IOSCustomVoiceView: View {
                     duration: result.durationSeconds,
                     createdAt: Date()
                 )
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation,
+                GenerationPersistence.persistAndAutoplay(
+                    generation,
                     result: result,
                     text: promptText,
                     audioPlayer: audioPlayer,
@@ -210,9 +210,7 @@ struct IOSCustomVoiceView: View {
                 )
                 IOSHaptics.success()
             } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
                 IOSHaptics.warning()
             }
@@ -546,8 +544,8 @@ struct IOSVoiceDesignView: View {
                     duration: result.durationSeconds,
                     createdAt: Date()
                 )
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation,
+                GenerationPersistence.persistAndAutoplay(
+                    generation,
                     result: result,
                     text: promptText,
                     audioPlayer: audioPlayer,
@@ -556,9 +554,7 @@ struct IOSVoiceDesignView: View {
                 saveSheetAudioPath = result.audioPath
                 IOSHaptics.success()
             } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
                 IOSHaptics.warning()
             }
@@ -924,8 +920,8 @@ struct IOSVoiceCloningView: View {
                     duration: result.durationSeconds,
                     createdAt: Date()
                 )
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation,
+                GenerationPersistence.persistAndAutoplay(
+                    generation,
                     result: result,
                     text: promptText,
                     audioPlayer: audioPlayer,
@@ -933,9 +929,7 @@ struct IOSVoiceCloningView: View {
                 )
                 IOSHaptics.success()
             } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
                 IOSHaptics.warning()
             }

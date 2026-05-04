@@ -195,8 +195,8 @@ final class VoiceCloningCoordinator: ObservableObject {
                     duration: result.durationSeconds,
                     createdAt: Date()
                 )
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation,
+                GenerationPersistence.persistAndAutoplay(
+                    generation,
                     result: result,
                     text: currentDraft.text,
                     audioPlayer: audioPlayer,
@@ -212,9 +212,7 @@ final class VoiceCloningCoordinator: ObservableObject {
                 errorMessage = nil
                 CustomVoiceUIPerformanceTrace.finish(status: "cancelled")
             } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
+                audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
                 CustomVoiceUIPerformanceTrace.finish(status: "failed")
             }

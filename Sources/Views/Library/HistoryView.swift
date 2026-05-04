@@ -93,7 +93,7 @@ struct HistoryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityIdentifier("screen_history")
             .onAppear(perform: handleAppear)
-            .onReceive(generationLibraryEvents.generationSaved) { _ in handleGenerationSaved() }
+            .onReceive(generationLibraryEvents.generationAppended) { generation in handleGenerationAppended(generation) }
             .onChange(of: itemsRevision) { _, _ in recomputeFilteredItems() }
             .onChange(of: sortOrder) { _, _ in recomputeFilteredItems() }
             .onChange(of: searchText) { _, _ in
@@ -221,8 +221,19 @@ private extension HistoryView {
         reloadHistory()
     }
 
-    func handleGenerationSaved() {
-        reloadHistory()
+    /// Append-in-place handler for the new `generationAppended` publisher.
+    /// Avoids the full SQLite re-fetch that the previous
+    /// `generationSaved` (Void) handler did. The HistoryListItem
+    /// constructor still does a `FileManager.fileExists` check, but
+    /// only once per appended generation — not once per existing row.
+    func handleGenerationAppended(_ generation: Generation) {
+        if let existingIndex = items.firstIndex(where: { $0.generation.id == generation.id && generation.id != nil }) {
+            items[existingIndex] = HistoryListItem(generation: generation)
+        } else {
+            items.append(HistoryListItem(generation: generation))
+        }
+        itemsRevision &+= 1
+        HistorySessionCache.generations = items.map(\.generation)
     }
 
     func handleDisappear() {

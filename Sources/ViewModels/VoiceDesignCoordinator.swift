@@ -188,8 +188,8 @@ final class VoiceDesignCoordinator: ObservableObject {
                     createdAt: Date()
                 )
 
-                try GenerationPersistence.persistAndAutoplay(
-                    &generation,
+                GenerationPersistence.persistAndAutoplay(
+                    generation,
                     result: result,
                     text: text,
                     audioPlayer: audioPlayer,
@@ -213,9 +213,7 @@ final class VoiceDesignCoordinator: ObservableObject {
                 self.errorMessage = nil
                 CustomVoiceUIPerformanceTrace.finish(status: "cancelled")
             } catch {
-                if (error as? GenerationPersistence.PersistenceError) == nil {
-                    audioPlayer.abortLivePreviewIfNeeded()
-                }
+                audioPlayer.abortLivePreviewIfNeeded()
                 self.errorMessage = error.localizedDescription
                 CustomVoiceUIPerformanceTrace.finish(status: "failed")
             }
