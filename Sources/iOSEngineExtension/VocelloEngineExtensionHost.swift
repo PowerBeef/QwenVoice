@@ -17,6 +17,15 @@ private final class RuntimeContext: @unchecked Sendable {
     let engine: MLXTTSEngine
     var cancellables: Set<AnyCancellable> = []
     var lastPublishedEvent: GenerationEvent?
+    /// Audit Finding #1 (iPhone path) — long-running Task that
+    /// drains the engine's lossless `events` AsyncStream and
+    /// publishes each event over the extension XPC channel in
+    /// order. Mirrors the macOS `EngineServiceHost` fix landed
+    /// in commit `c951d4c`. The producer side
+    /// (`MLXTTSEngine.events`) is shared across both transports
+    /// via `QwenVoiceCore`. Cancelled when the `RuntimeContext`
+    /// is replaced (only when `appSupportDirectory` differs).
+    var eventForwardingTask: Task<Void, Never>?
 
     init(appSupportDirectory: URL, engine: MLXTTSEngine) {
         self.appSupportDirectory = appSupportDirectory
@@ -226,21 +235,49 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
             engine: runtime.engine
         )
 
+        // Snapshot publishing — `loadState`,
+        // `clonePreparationState`, `visibleErrorMessage` changes
+        // need to flow over the extension XPC channel so the
+        // iPhone client's UI bindings stay live. This sink fires
+        // on every `@Published` change including `latestEvent` —
+        // that's harmless redundancy because `Self.snapshot(for:)`
+        // does NOT include `latestEvent`. The chunk-delivery
+        // transport moved to the AsyncStream consumer below.
         runtime.engine.objectWillChange
             .sink { [weak self, weak runtimeContext] _ in
                 Task { @MainActor [weak self, weak runtimeContext] in
                     guard let self, let runtimeContext else { return }
-                    let snapshot = Self.snapshot(for: runtimeContext.engine)
-                    self.publish(.snapshot(snapshot))
-                    if runtimeContext.lastPublishedEvent != runtimeContext.engine.latestEvent,
-                       let latestEvent = runtimeContext.engine.latestEvent {
-                        runtimeContext.lastPublishedEvent = latestEvent
-                        self.publish(.generationChunk(latestEvent))
-                    }
+                    self.publish(.snapshot(Self.snapshot(for: runtimeContext.engine)))
                 }
             }
             .store(in: &runtimeContext.cancellables)
 
+        // Audit Finding #1 (iPhone path) — chunk delivery via the
+        // engine's lossless AsyncStream. Mirrors the macOS
+        // `EngineServiceHost` fix landed in commit `c951d4c`. The
+        // pre-fix `objectWillChange.sink` slot-sampler dropped the
+        // trailing `.chunk` of every streaming generation when
+        // `NativeStreamingSynthesisSession.run` emitted `.completed`
+        // back-to-back — the dedup guard
+        // `lastPublishedEvent != engine.latestEvent` saw the slot
+        // already overwritten by `.completed` and suppressed the
+        // chunk read. The AsyncStream consumer drains the stream
+        // serially; no slot-sampling, no dedup, no race window.
+        let engine = runtime.engine
+        runtimeContext.eventForwardingTask = Task { [weak self, weak runtimeContext] in
+            for await event in engine.events {
+                guard let self, let runtimeContext else { return }
+                await MainActor.run {
+                    self.publish(.generationChunk(event))
+                    runtimeContext.lastPublishedEvent = event
+                }
+            }
+        }
+
+        // Cancel any prior context's forwarding task before we
+        // replace the slot, otherwise the prior task races the
+        // new one publishing into the same XPC channel.
+        self.runtimeContext?.eventForwardingTask?.cancel()
         self.runtimeContext = runtimeContext
         return runtimeContext
     }
