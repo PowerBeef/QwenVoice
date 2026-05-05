@@ -441,18 +441,41 @@ final class LivePreviewIntegrationTests: XCTestCase {
             "Pre-condition: session is active, not yet completed."
         )
 
-        // The production path of `completeStreamingPreview`'s
-        // Case B branch (live still playing) is exercised
-        // directly by NOT draining the queue and asserting the
-        // gate stays open. We simulate the post-completion
-        // state by leaving `liveScheduledCount > 0` and asserting
-        // the session still does not appear in
-        // `completedLiveSessionIDs`. (Pre-fix this would have
-        // been recorded at line 651 of `completeStreamingPreview`
-        // immediately upon result delivery.)
+        // Drive `completeStreamingPreview` with a streaming
+        // result. `usedStreaming` derives from
+        // `benchmarkSample.streamingUsed`; without it, the
+        // function returns at the early guard before reaching
+        // any session-completion logic. The first cut of this
+        // test omitted this call entirely — it asserted the
+        // empty-set state both before AND after a no-op,
+        // meaning the test would pass even if Commit B's fix
+        // were reverted.
+        let result = PlaybackGenerationResult(
+            audioPath: "/tmp/test-late-chunk-deferred.wav",
+            durationSeconds: 1.92,
+            streamSessionDirectory: nil,
+            benchmarkSample: BenchmarkSample(streamingUsed: true)
+        )
+        viewModel.completeStreamingPreview(
+            result: result,
+            title: "Audit Finding #2 deferred-gate test",
+            shouldAutoPlay: false
+        )
+
+        // KEY ASSERTION: the gate stays open immediately after
+        // `completeStreamingPreview` runs. Pre-Commit-B this
+        // would have been TRUE because the early
+        // `recordCompletedLiveSessionID(liveSessionID)` call
+        // fired in the function's prologue. Commit B's fix
+        // moved that call out of the prologue and into the
+        // immediate-handoff branch (`!livePlaybackStarted ||
+        // liveScheduledCount == 0`); since we set up a session
+        // with both `livePlaybackStarted = true` and
+        // `liveScheduledCount > 0`, that branch is skipped and
+        // the gate must stay open.
         XCTAssertFalse(
             viewModel.completedLiveSessionIDsContainsForTesting(sessionID),
-            "Audit Finding #2: with live playback in progress, the completion gate must stay open so late broker chunks are still appended."
+            "Audit Finding #2: with live playback in progress, completeStreamingPreview must NOT close the completion gate. Late broker chunks for this session must still pass handleGenerationChunk's guard so they can be appended to the live queue."
         )
 
         // After the queue drains and
@@ -467,6 +490,42 @@ final class LivePreviewIntegrationTests: XCTestCase {
         XCTAssertTrue(
             viewModel.completedLiveSessionIDsContainsForTesting(sessionID),
             "After live playback drains, the gate closes so genuinely stale chunks are dropped."
+        )
+    }
+
+    /// Audit Finding #2 — the immediate-handoff branch (Case A:
+    /// live preview never started OR queue already at 0). In
+    /// this branch `completeStreamingPreview` IS expected to
+    /// close the completion gate immediately because there's no
+    /// live playback to append chunks to anyway. Verifies the
+    /// branch's `recordCompletedLiveSessionID` call still fires
+    /// where it should.
+    func testCompletionGateClosesImmediatelyWhenLiveNeverStarted() {
+        let sessionID = "test-session-immediate-handoff"
+        viewModel.setLiveSessionIDForTesting(sessionID)
+        // livePlaybackStarted defaults to false; liveScheduledCount
+        // is 0 — Case A.
+
+        XCTAssertFalse(
+            viewModel.completedLiveSessionIDsContainsForTesting(sessionID),
+            "Pre-condition: session is active, not yet completed."
+        )
+
+        let result = PlaybackGenerationResult(
+            audioPath: "/tmp/test-immediate-handoff.wav",
+            durationSeconds: 1.0,
+            streamSessionDirectory: nil,
+            benchmarkSample: BenchmarkSample(streamingUsed: true)
+        )
+        viewModel.completeStreamingPreview(
+            result: result,
+            title: "Audit Finding #2 immediate-handoff test",
+            shouldAutoPlay: false
+        )
+
+        XCTAssertTrue(
+            viewModel.completedLiveSessionIDsContainsForTesting(sessionID),
+            "Immediate-handoff branch (Case A): live preview never started so no chunks need to land. The gate closes here, dropping any (stale) late chunk."
         )
     }
 
