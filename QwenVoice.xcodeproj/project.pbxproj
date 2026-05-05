@@ -167,6 +167,7 @@
 		AA28D4C02B8584BC5B6A8D12 /* EngineHostPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F62310AABC856664C0A81B /* EngineHostPrimitives.swift */; };
 		AC562D9EF3EB6A8A3452FC8F /* VoiceDesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */; };
 		AC64FF05E2D99163335D063E /* AppPerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EA9E34083906B2A7FF4DE4 /* AppPerformanceSignposts.swift */; };
+		AD330DEDBF510E4458859F55 /* MLXTTSEngineEventStreamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AAD12C990F815F581AF8C2B /* MLXTTSEngineEventStreamTests.swift */; };
 		AD47A5FDA923066C25CF00F4 /* LivePreviewSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C15A84833CBBA98512F16C5 /* LivePreviewSmokeTests.swift */; };
 		AD4BB14FA57891024AF706D2 /* CustomVoiceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F45C532854D962580423BF6 /* CustomVoiceCoordinator.swift */; };
 		B005B34A94873FF7C4D80A7E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D3C6777F2ABFE603D026E0D /* VoicesView.swift */; };
@@ -485,6 +486,7 @@
 		5A36F6E714F753070D4A7261 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
 		5A5E5015EC4FD8CE25703210 /* IOSGenerationModeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerationModeViews.swift; sourceTree = "<group>"; };
 		5A9B0840026EFF26202877BF /* EmotionPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPickerView.swift; sourceTree = "<group>"; };
+		5AAD12C990F815F581AF8C2B /* MLXTTSEngineEventStreamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXTTSEngineEventStreamTests.swift; sourceTree = "<group>"; };
 		5ADD468538B8CB0B6E629FB7 /* GenerationWorkflowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationWorkflowView.swift; sourceTree = "<group>"; };
 		5B7F58AC8D59F087073797F7 /* IOSModelDeliveryBackgroundEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSModelDeliveryBackgroundEvents.swift; sourceTree = "<group>"; };
 		617BE72142511CD5043C341E /* qwenvoice_contract.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = qwenvoice_contract.json; sourceTree = "<group>"; };
@@ -835,6 +837,7 @@
 				0ED3E49E364284833C8F9F1B /* GenerationScreenCoordinatorTests.swift */,
 				E83A114E0405AC299EACA16D /* GenerationSemanticsTests.swift */,
 				F9F88D3A405265D7B25F2E3B /* LivePreviewIntegrationTests.swift */,
+				5AAD12C990F815F581AF8C2B /* MLXTTSEngineEventStreamTests.swift */,
 				66546858B033A7C709EE9056 /* MLXTTSEngineMockBackedTests.swift */,
 				3E945FA6D00942DDA36660B9 /* ModelManagerViewModelTests.swift */,
 				CE621138D32607BE4CF4FDE5 /* NativeRuntimeTestSupport.swift */,
@@ -1763,6 +1766,7 @@
 				A7095C0807C680DA1B7C3029 /* GenerationSemanticsTests.swift in Sources */,
 				B91DF38089CCAA0EFC6D06DF /* LivePreviewIntegrationTests.swift in Sources */,
 				33DC6B025F132E5FCEBC7753 /* MLXTTSEngine+Testing.swift in Sources */,
+				AD330DEDBF510E4458859F55 /* MLXTTSEngineEventStreamTests.swift in Sources */,
 				795FA65951A11930A1437F2E /* MLXTTSEngineMockBackedTests.swift in Sources */,
 				5FF82E08629211CFB9DEFBF9 /* MockMLXModelCoordinator.swift in Sources */,
 				0869614C171A038532E5EE98 /* MockNativeStreamingSession.swift in Sources */,

@@ -52,7 +52,34 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
     @Published public private(set) var loadState: EngineLoadState = .idle
     @Published public private(set) var clonePreparationState: ClonePreparationState = .idle
+    /// Most-recent event seen by the engine. Retained for snapshot
+    /// consumers (UI bindings via the `TTSEngine` protocol —
+    /// `IOSSimulatorTTSEngine`, `TTSEngineStore` macOS+iOS, the
+    /// `TTSEngineFrontendState.latestEvent` field) that read the
+    /// "what state is the engine in right now" view of generation
+    /// activity. **NOT** the chunk-delivery transport — that role
+    /// moved to the `events` `AsyncStream` below to fix the audit
+    /// Finding #1 race where `EngineServiceHost`'s
+    /// `objectWillChange.sink` slot-sampler could overwrite a
+    /// chunk before it was published, silently dropping the last
+    /// audio chunk of every streaming generation.
     @Published public private(set) var latestEvent: GenerationEvent?
+
+    /// In-order, lossless stream of every `GenerationEvent` the
+    /// engine emits — chunks, completion, failures. Audit Finding
+    /// #1 fix: replaces the prior single-slot `latestEvent` +
+    /// `objectWillChange` sampling pattern that
+    /// `EngineServiceHost` used as its chunk transport. The
+    /// AsyncStream's continuation is `unbounded` so back-to-back
+    /// emissions (notably the last `.chunk` followed immediately
+    /// by `.completed` from
+    /// `NativeStreamingSynthesisSession.run`) are buffered without
+    /// loss; the consuming `Task { for await event in events }` in
+    /// `EngineServiceHost.makeOrReuseRuntimeContext` drains the
+    /// stream serially and publishes each event over XPC in the
+    /// exact order they were yielded.
+    public let events: AsyncStream<GenerationEvent>
+    private let eventStreamContinuation: AsyncStream<GenerationEvent>.Continuation
 
     public var isReady: Bool {
         isInitialized
@@ -195,6 +222,21 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         self.streamSessionsDirectory = streamSessionsDirectory
         self.telemetryRecorder = telemetryRecorder
         self.diagnosticAppSupportBox = diagnosticAppSupportBox
+        // Audit Finding #1 — initialize the lossless event stream.
+        // `bufferingPolicy: .unbounded` is correct here: events are
+        // small structs and rare (≈ one per audio chunk on the
+        // streaming hot path, plus one final `.completed` and any
+        // error events). The XPC consumer in EngineServiceHost
+        // drains the stream eagerly, so the buffer never grows
+        // beyond a couple of events in practice. The unbounded
+        // policy guarantees no drops — which is the entire point
+        // of replacing the prior single-slot `latestEvent`
+        // sampling path.
+        var capturedContinuation: AsyncStream<GenerationEvent>.Continuation!
+        self.events = AsyncStream(bufferingPolicy: .unbounded) { continuation in
+            capturedContinuation = continuation
+        }
+        self.eventStreamContinuation = capturedContinuation
         self.runtime = NativeEngineRuntime(
             loadCoordinator: loadCoordinator,
             audioPreparationService: audioPreparationService,
@@ -508,7 +550,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                         message: "The native runtime could not start audio generation after one allocation retry."
                     )
                     handle(surfacedError)
-                    latestEvent = .failed(surfacedError.localizedDescription)
+                    let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)
+                    eventStreamContinuation.yield(failureEvent)
+                    latestEvent = failureEvent
                     throw surfacedError
                 }
             }
@@ -518,7 +562,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                 message: "The native runtime could not start audio generation."
             )
             handle(surfacedError)
-            latestEvent = .failed(surfacedError.localizedDescription)
+            let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)
+            eventStreamContinuation.yield(failureEvent)
+            latestEvent = failureEvent
             throw surfacedError
         }
     }
@@ -549,6 +595,16 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             prepared.mlxMemorySnapshots
         )
         return try await session.run { [weak self] event in
+            // Audit Finding #1 — yield to the lossless AsyncStream
+            // BEFORE the @Published slot. The stream is the
+            // chunk-delivery transport; the slot is for snapshot
+            // consumers. Two distinct concerns. Order matters
+            // here only in the failure-mode of these two writes
+            // racing with concurrent observers — putting the
+            // stream first means the in-order consumer wins by
+            // construction, and the slot's @Published observers
+            // run on whatever schedule Combine gives them.
+            self?.eventStreamContinuation.yield(event)
             self?.latestEvent = event
         }
     }

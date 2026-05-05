@@ -44,6 +44,17 @@ private final class RuntimeContext: @unchecked Sendable {
     let engine: MLXTTSEngine
     var cancellables: Set<AnyCancellable> = []
     var lastPublishedEvent: GenerationEvent?
+    /// Audit Finding #1 — long-running Task that drains the
+    /// engine's lossless `events` AsyncStream and publishes each
+    /// event over XPC in order. Replaces the prior
+    /// `objectWillChange.sink` slot-sampling path that could
+    /// silently drop the trailing `.chunk` event when
+    /// `NativeStreamingSynthesisSession.run` emitted it
+    /// back-to-back with `.completed`. Cancelled when the
+    /// `RuntimeContext` is replaced (only happens on a fresh
+    /// `appSupportDirectory`); otherwise lives for the host's
+    /// lifetime.
+    var eventForwardingTask: Task<Void, Never>?
 
     init(appSupportDirectory: URL, engine: MLXTTSEngine) {
         self.appSupportDirectory = appSupportDirectory
@@ -293,21 +304,46 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             engine: runtime.engine
         )
 
+        // Snapshot publishing — `loadState`, `clonePreparationState`,
+        // `visibleErrorMessage` changes need to flow over XPC so the
+        // client's UI bindings stay live. This sink fires on every
+        // `@Published` change including `latestEvent` — that's
+        // harmless redundancy because `Self.snapshot(for:)` does NOT
+        // include `latestEvent`, so we only re-publish the same
+        // engine state on chunk events. The chunk-delivery transport
+        // moved to the AsyncStream consumer below; only snapshots
+        // travel here now.
         runtime.engine.objectWillChange
             .sink { [weak self, weak runtimeContext] _ in
                 Task { @MainActor [weak self, weak runtimeContext] in
                     guard let self, let runtimeContext else { return }
-                    let snapshot = Self.snapshot(for: runtimeContext.engine)
-                    self.publish(.snapshot(snapshot))
-                    if runtimeContext.lastPublishedEvent != runtimeContext.engine.latestEvent,
-                       let latestEvent = runtimeContext.engine.latestEvent {
-                        runtimeContext.lastPublishedEvent = latestEvent
-                        self.publish(.generationChunk(latestEvent))
-                    }
+                    self.publish(.snapshot(Self.snapshot(for: runtimeContext.engine)))
                 }
             }
             .store(in: &runtimeContext.cancellables)
 
+        // Audit Finding #1 — chunk delivery via the engine's
+        // lossless AsyncStream. The producer (`MLXTTSEngine`'s
+        // `eventSink` callback) yields every event into
+        // `engine.events`; this Task drains the stream serially
+        // and publishes each event over XPC in the exact order
+        // they were yielded. No slot-sampling, no dedup,
+        // no race window.
+        let engine = runtime.engine
+        runtimeContext.eventForwardingTask = Task { [weak self, weak runtimeContext] in
+            for await event in engine.events {
+                guard let self, let runtimeContext else { return }
+                await MainActor.run {
+                    self.publish(.generationChunk(event))
+                    runtimeContext.lastPublishedEvent = event
+                }
+            }
+        }
+
+        // Cancel any prior context's forwarding task before we
+        // replace the slot. Without this, the prior task races
+        // the new one publishing into the same XPC channel.
+        self.runtimeContext?.eventForwardingTask?.cancel()
         self.runtimeContext = runtimeContext
         return runtimeContext
     }
