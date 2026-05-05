@@ -429,6 +429,26 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         liveScheduledCount = max(0, liveScheduledCount - 1)
         return drained
     }
+
+    /// Test hooks for audit Finding #2 coverage. Let tests
+    /// construct the "live preview session active, result just
+    /// delivered" state and inspect the late-chunk gate without
+    /// driving a real AVAudioEngine pipeline.
+    func setLiveSessionIDForTesting(_ id: String?) {
+        liveSessionID = id
+    }
+
+    func setLivePlaybackStartedForTesting(_ started: Bool) {
+        livePlaybackStarted = started
+    }
+
+    func completedLiveSessionIDsContainsForTesting(_ id: String) -> Bool {
+        completedLiveSessionIDs.contains(id)
+    }
+
+    func finishLivePlaybackAfterDrainingBuffersForTesting() {
+        finishLivePlaybackAfterDrainingBuffers()
+    }
 #endif
 
     deinit {
@@ -648,7 +668,24 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         currentTitle = title
         currentFilePath = result.audioPath
         liveFinalFilePath = result.audioPath
-        recordCompletedLiveSessionID(liveSessionID)
+        // Audit Finding #2 — DO NOT add `liveSessionID` to
+        // `completedLiveSessionIDs` here. Two independent XPC paths
+        // race on MainActor: the awaited generation result (this
+        // function's caller) and the chunk broker
+        // (`Task { @MainActor in subject.send }` inside
+        // `GenerationChunkBroker.publish`). If the result-channel
+        // continuation runs first and we record the session ID
+        // immediately, any chunk still queued on the broker is
+        // rejected by the guard at the top of
+        // `handleGenerationChunk` and silently dropped. Defer the
+        // record to the actual drain points below
+        // (`finishLivePlaybackAfterDrainingBuffers` for the
+        // live-still-playing path, the `if` block below for the
+        // immediate-handoff path, and `teardownLivePlayback` for
+        // dismissed sessions). All three call
+        // `recordCompletedLiveSessionID` which is idempotent
+        // (`Set.insert(_:).inserted`), so multiple invocations
+        // from different paths are safe.
         if let streamSessionDirectory = result.streamSessionDirectory {
             liveSessionDirectory = streamSessionDirectory
         }
@@ -659,6 +696,12 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         // mechanism (handleLiveBufferPlaybackCompletion -> finishLivePlaybackAfterDrainingBuffers)
         // keeps playback moving from the heard preview position into the final file.
         if !livePlaybackStarted || liveScheduledCount == 0 {
+            // Immediate-handoff branch: live preview is over (never
+            // started or already drained). Any chunk arriving from
+            // the broker now is genuinely stale. Record the session
+            // as completed so the `handleGenerationChunk` guard
+            // drops it.
+            recordCompletedLiveSessionID(liveSessionID)
             let handoff = Self.finalPlaybackHandoff(
                 heardLivePreview: livePlaybackStarted,
                 currentTime: currentTime,
@@ -671,6 +714,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 autoPlay: handoff.shouldAutoPlay
             )
         }
+        // Else: live preview still draining. Late chunks that
+        // arrive between now and the drain are appended naturally
+        // by `appendLiveChunk` (the session ID is NOT in
+        // `completedLiveSessionIDs` yet, so the guard lets them
+        // through). When the queue drains and
+        // `finishLivePlaybackAfterDrainingBuffers` fires, the
+        // session ID is recorded there.
     }
 
     func abortLivePreviewIfNeeded() {
@@ -1177,6 +1227,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func finishLivePlaybackAfterDrainingBuffers() {
+        // Audit Finding #2 — record the session as completed at
+        // drain time, not when the result was delivered to
+        // `completeStreamingPreview`. By now, all scheduled
+        // buffers have played out (`.dataPlayedBack` callback for
+        // the last buffer fired immediately before this function
+        // was called); any chunk arriving now is truly stale.
+        recordCompletedLiveSessionID(liveSessionID)
+
         let heardTime = max(currentTime, livePreviewDuration)
         stopLivePlayback(resetCurrentTime: false)
         currentTime = heardTime
@@ -1250,6 +1308,15 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func teardownLivePlayback(clearSession: Bool) {
+        // Audit Finding #2 — defensive record. If teardown is
+        // reached without a completion-handoff path having fired
+        // (user-driven dismiss, error-path teardown, etc.), the
+        // session ID still belongs in `completedLiveSessionIDs` so
+        // a later straggler chunk doesn't accidentally restart a
+        // new live session via `startLiveSession`'s
+        // `liveSessionID != sessionID` branch. Idempotent.
+        recordCompletedLiveSessionID(liveSessionID)
+
         // Emit the preview_completed summary BEFORE we wipe live-*
         // counters. emitPreviewCompletedTrace is idempotent (no-op when
         // already fired by a successful handoff), so this only fires
