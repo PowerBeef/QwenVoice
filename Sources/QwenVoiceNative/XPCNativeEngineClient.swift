@@ -282,6 +282,7 @@ actor XPCNativeEngineCoordinator {
             case .snapshot(let snapshot):
                 onSnapshot(snapshot)
             case .generationChunk(let generationEvent):
+                emitChunkProbeEvents(for: generationEvent)
                 onChunk(generationEvent)
             case .batchProgress(let update):
                 guard let handler = batchProgressHandlers[update.commandID] else { return }
@@ -297,6 +298,28 @@ actor XPCNativeEngineCoordinator {
                 message: "The engine service sent an unreadable event: \(error.localizedDescription)"
             )
         }
+    }
+
+    /// Cross-layer chunk probes: emit `[Probe.Engine] event=chunk_emitted`
+    /// using the embedded engine timestamp + `[Probe.Transport] event=chunk_delivered`
+    /// using the wall-clock at receive time. The bench helper joins these
+    /// with `[Probe.UI] event=chunk_consumed` (emitted by AudioPlayerViewModel)
+    /// on `seq` to produce per-chunk cross-layer latency aggregates.
+    private func emitChunkProbeEvents(for generationEvent: GenerationEvent) {
+        guard let probe = generationEvent.probeMetadata else { return }
+        let transportAtMS = Date().timeIntervalSince1970 * 1000.0
+        let audioSeconds = generationEvent.chunkDurationSeconds ?? 0
+        logProbeEvent("Engine", event: "chunk_emitted", details: [
+            "seq": "\(probe.seq)",
+            "audio_s": String(format: "%.3f", audioSeconds),
+            "infer_ms": String(format: "%.3f", probe.inferMS),
+            "engine_at_ms": String(format: "%.3f", probe.engineEmittedAtMS),
+        ])
+        logProbeEvent("Transport", event: "chunk_delivered", details: [
+            "seq": "\(probe.seq)",
+            "transport_at_ms": String(format: "%.3f", transportAtMS),
+            "xpc_latency_ms": String(format: "%.3f", transportAtMS - probe.engineEmittedAtMS),
+        ])
     }
 
     func handleRemoteError(_ error: Error, from connectionID: UUID) {
@@ -899,3 +922,32 @@ private extension EngineCommand {
         }
     }
 }
+
+#if DEBUG
+/// Mirror of `AudioPlayerViewModel.logLivePreviewEvent`. Writes a
+/// `[Probe.<layer>] event=<name> key=value ...` line to stderr
+/// (line-buffered) so the desktop-UI bench helper picks up cross-layer
+/// chunk timings in the same `nohup Vocello > /tmp/vocello-bench.log`
+/// stream that already captures the `[LivePreview]` trace. DEBUG-only
+/// — release builds compile to a no-op.
+fileprivate func logProbeEvent(
+    _ layer: String,
+    event: String,
+    details: KeyValuePairs<String, String> = [:]
+) {
+    var line = "[Probe.\(layer)] event=\(event)"
+    for (key, value) in details {
+        line += " \(key)=\(value)"
+    }
+    line += "\n"
+    if let data = line.data(using: .utf8) {
+        FileHandle.standardError.write(data)
+    }
+}
+#else
+fileprivate func logProbeEvent(
+    _ layer: String,
+    event: String,
+    details: KeyValuePairs<String, String> = [:]
+) {}
+#endif

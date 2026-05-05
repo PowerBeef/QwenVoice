@@ -187,4 +187,49 @@ final class GenerationSemanticsTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - ChunkProbeMetadata round-trip
+
+    func testGenerationChunkRoundTripsThroughCodableWithProbeMetadata() throws {
+        let probe = ChunkProbeMetadata(
+            seq: 7,
+            engineEmittedAtMS: 1_777_944_000_000.0,
+            inferMS: 482.5
+        )
+        let chunk = GenerationChunk(
+            requestID: 42,
+            mode: "custom",
+            title: "probe round-trip",
+            chunkPath: "/tmp/chunk_007.wav",
+            isFinal: false,
+            chunkDurationSeconds: 1.12,
+            cumulativeDurationSeconds: 7.84,
+            streamSessionDirectory: "/tmp/session-x",
+            previewAudio: nil,
+            probeMetadata: probe
+        )
+        let encoded = try JSONEncoder().encode(chunk)
+        let decoded = try JSONDecoder().decode(GenerationChunk.self, from: encoded)
+        XCTAssertEqual(decoded.probeMetadata, probe)
+        XCTAssertEqual(decoded.requestID, 42)
+        XCTAssertEqual(decoded.chunkDurationSeconds, 1.12)
+    }
+
+    func testGenerationChunkDecodesLegacyPayloadWithoutProbeMetadata() throws {
+        // Older serialized chunks (or chunks coming from a non-streaming
+        // path) carry no `probeMetadata` field. They must still decode
+        // cleanly with `nil` so the probe branch in
+        // XPCNativeEngineClient.emitChunkProbeEvents is a graceful no-op.
+        let legacyJSON = """
+        {
+            "mode": "design",
+            "title": "legacy",
+            "isFinal": false
+        }
+        """
+        let data = Data(legacyJSON.utf8)
+        let decoded = try JSONDecoder().decode(GenerationChunk.self, from: data)
+        XCTAssertNil(decoded.probeMetadata)
+        XCTAssertEqual(decoded.title, "legacy")
+    }
 }

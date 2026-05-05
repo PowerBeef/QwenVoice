@@ -951,6 +951,32 @@ public struct GenerationProgress: Hashable, Codable, Sendable {
     }
 }
 
+/// Per-chunk metadata used by the cross-layer probe trace
+/// (`[Probe.Engine]`, `[Probe.Transport]`, `[Probe.UI]`).
+///
+/// Set by the engine at chunk-construction time inside the bundled XPC
+/// helper (`NativeStreamingSynthesisSession`). The app process re-emits
+/// the engine + transport probe events from `XPCNativeEngineClient` on
+/// receipt, using the embedded `engineEmittedAtMS` (wall-clock) for
+/// cross-process latency math. `seq` is the engine's monotonic per-
+/// generation chunk index (1-based) and is the join key that the bench
+/// helper uses to correlate `[Probe.*]` lines across layers.
+///
+/// Optional: nil when the chunk did not originate from the streaming
+/// synthesis path (legacy paths, mocks, fixtures), so the probe emits
+/// are skipped gracefully and Codable round-trip stays backward-compat.
+public struct ChunkProbeMetadata: Hashable, Codable, Sendable {
+    public let seq: Int
+    public let engineEmittedAtMS: Double
+    public let inferMS: Double
+
+    public init(seq: Int, engineEmittedAtMS: Double, inferMS: Double) {
+        self.seq = seq
+        self.engineEmittedAtMS = engineEmittedAtMS
+        self.inferMS = inferMS
+    }
+}
+
 public struct GenerationChunk: Hashable, Codable, Sendable {
     public let requestID: Int?
     public let mode: String
@@ -961,6 +987,7 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
     public let cumulativeDurationSeconds: Double?
     public let streamSessionDirectory: String?
     public let previewAudio: StreamingAudioChunk?
+    public let probeMetadata: ChunkProbeMetadata?
 
     public init(
         requestID: Int? = nil,
@@ -971,7 +998,8 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
         chunkDurationSeconds: Double?,
         cumulativeDurationSeconds: Double?,
         streamSessionDirectory: String?,
-        previewAudio: StreamingAudioChunk? = nil
+        previewAudio: StreamingAudioChunk? = nil,
+        probeMetadata: ChunkProbeMetadata? = nil
     ) {
         self.requestID = requestID
         self.mode = mode
@@ -982,6 +1010,7 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
         self.cumulativeDurationSeconds = cumulativeDurationSeconds
         self.streamSessionDirectory = streamSessionDirectory
         self.previewAudio = previewAudio
+        self.probeMetadata = probeMetadata
     }
 
     public func withoutPreviewAudioPayload() -> GenerationChunk {
@@ -994,7 +1023,8 @@ public struct GenerationChunk: Hashable, Codable, Sendable {
             chunkDurationSeconds: chunkDurationSeconds,
             cumulativeDurationSeconds: cumulativeDurationSeconds,
             streamSessionDirectory: streamSessionDirectory,
-            previewAudio: nil
+            previewAudio: nil,
+            probeMetadata: probeMetadata
         )
     }
 
@@ -1130,6 +1160,11 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
     public var streamSessionDirectory: String? {
         guard case .chunk(let chunk) = self else { return nil }
         return chunk.streamSessionDirectory
+    }
+
+    public var probeMetadata: ChunkProbeMetadata? {
+        guard case .chunk(let chunk) = self else { return nil }
+        return chunk.probeMetadata
     }
 
     public func withoutPreviewAudioPayload() -> GenerationEvent {

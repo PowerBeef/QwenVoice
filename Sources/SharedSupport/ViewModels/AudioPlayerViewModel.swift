@@ -549,6 +549,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         let previewAudio: StreamingAudioChunk?
         let sessionDirectory: String?
         let cumulativeDuration: Double?
+        /// Engine-assigned monotonic per-generation seq. Carries through
+        /// to `[LivePreview] event=chunk_arrived engine_seq=N` and the
+        /// new `[Probe.UI] event=chunk_consumed seq=N` so the bench
+        /// helper can join with `[Probe.Engine]` / `[Probe.Transport]`.
+        let probeSeq: Int?
     }
 
     private func bindGenerationEventSource() {
@@ -566,7 +571,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                     chunkPath: event.chunkPath,
                     previewAudio: event.previewAudio,
                     sessionDirectory: event.streamSessionDirectory,
-                    cumulativeDuration: event.cumulativeDurationSeconds
+                    cumulativeDuration: event.cumulativeDurationSeconds,
+                    probeSeq: event.probeMetadata?.seq
                 )
                 self.handleGenerationChunk(chunk)
             }
@@ -587,7 +593,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 chunkPath: chunkPath,
                 previewAudio: nil,
                 sessionDirectory: userInfo["streamSessionDirectory"] as? String,
-                cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double
+                cumulativeDuration: userInfo["cumulativeDurationSeconds"] as? Double,
+                probeSeq: userInfo["probeSeq"] as? Int
             )
             Task { @MainActor [weak self] in
                 self?.handleGenerationChunk(chunk)
@@ -626,12 +633,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         if let previewAudio = chunk.previewAudio {
             appendLiveChunk(
                 previewAudio,
-                cumulativeDuration: cumulativeDuration
+                cumulativeDuration: cumulativeDuration,
+                probeSeq: chunk.probeSeq
             )
         } else if let chunkPath = chunk.chunkPath {
             appendLiveChunk(
                 from: URL(fileURLWithPath: chunkPath),
-                cumulativeDuration: cumulativeDuration
+                cumulativeDuration: cumulativeDuration,
+                probeSeq: chunk.probeSeq
             )
         }
     }
@@ -697,7 +706,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         logLivePreviewEvent("session_start", ["session": id])
     }
 
-    private func appendLiveChunk(from url: URL, cumulativeDuration: TimeInterval?) {
+    private func appendLiveChunk(from url: URL, cumulativeDuration: TimeInterval?, probeSeq: Int?) {
         LivePreviewDiagnostics.logChunkEvent(
             "appendLiveChunk.enter",
             viewModel: self,
@@ -749,7 +758,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             AppPerformanceSignposts.emit("First Chunk Received")
             self.pendingFirstChunkInterval = nil
         }
-        recordChunkArrivalForTrace(audioSeconds: chunkAudioSeconds)
+        recordChunkArrivalForTrace(audioSeconds: chunkAudioSeconds, probeSeq: probeSeq)
 
         if Self.shouldStartLivePlayback(
             autoplayEnabled: liveAutoplayEnabled,
@@ -777,7 +786,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         cleanupLiveSessionDirectoryIfEmpty()
     }
 
-    private func appendLiveChunk(_ previewAudio: StreamingAudioChunk, cumulativeDuration: TimeInterval?) {
+    private func appendLiveChunk(_ previewAudio: StreamingAudioChunk, cumulativeDuration: TimeInterval?, probeSeq: Int?) {
         guard let (buffer, format) = makePCMBuffer(from: previewAudio) else {
             liveDecodeFailureCount += 1
             logLivePreviewEvent("decode_failed", ["branch": "inline"])
@@ -819,7 +828,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             AppPerformanceSignposts.emit("First Chunk Received")
             self.pendingFirstChunkInterval = nil
         }
-        recordChunkArrivalForTrace(audioSeconds: chunkAudioSeconds)
+        recordChunkArrivalForTrace(audioSeconds: chunkAudioSeconds, probeSeq: probeSeq)
 
         if Self.shouldStartLivePlayback(
             autoplayEnabled: liveAutoplayEnabled,
@@ -842,7 +851,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     /// Tracks chunk arrival timestamps + max inter-chunk gap for the
     /// DEBUG-only `[LivePreview]` trace. Emits the `chunk_arrived`
     /// event with the gap from the previous chunk in milliseconds.
-    private func recordChunkArrivalForTrace(audioSeconds: TimeInterval) {
+    private func recordChunkArrivalForTrace(audioSeconds: TimeInterval, probeSeq: Int?) {
         liveChunkArrivalCount += 1
         let now = Date()
         let gapMS: Int
@@ -853,13 +862,24 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
             gapMS = 0
         }
         liveLastChunkArrivedAt = now
+        // Existing UI-side trace; gains `engine_seq` for cross-correlation.
         logLivePreviewEvent("chunk_arrived", [
             "seq": "\(liveChunkArrivalCount)",
+            "engine_seq": probeSeq.map { "\($0)" } ?? "",
             "audio_s": String(format: "%.3f", audioSeconds),
             "cumulative_s": String(format: "%.3f", livePreviewDuration),
             "queue_depth": "\(liveScheduledCount)",
             "gap_ms": "\(gapMS)",
         ])
+        // Cross-layer probe (UI side). Joined offline by the bench
+        // helper with `[Probe.Engine]` / `[Probe.Transport]` on `seq`
+        // to compute per-chunk e2e + transport-to-ui latencies.
+        if let probeSeq {
+            logProbeEvent("UI", event: "chunk_consumed", details: [
+                "seq": "\(probeSeq)",
+                "ui_at_ms": String(format: "%.3f", now.timeIntervalSince1970 * 1000.0),
+            ])
+        }
     }
 
     private func attemptLivePlay() {
@@ -1529,3 +1549,31 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
     }
 }
+
+#if DEBUG
+/// Mirror of `XPCNativeEngineClient.logProbeEvent`. Emits cross-layer
+/// chunk probe lines to stderr so the desktop-UI bench helper can join
+/// `[Probe.Engine]`, `[Probe.Transport]`, and `[Probe.UI]` records on
+/// the engine-assigned `seq` to derive per-chunk latency aggregates.
+/// DEBUG-only — release builds compile to a no-op.
+fileprivate func logProbeEvent(
+    _ layer: String,
+    event: String,
+    details: KeyValuePairs<String, String> = [:]
+) {
+    var line = "[Probe.\(layer)] event=\(event)"
+    for (key, value) in details {
+        line += " \(key)=\(value)"
+    }
+    line += "\n"
+    if let data = line.data(using: .utf8) {
+        FileHandle.standardError.write(data)
+    }
+}
+#else
+fileprivate func logProbeEvent(
+    _ layer: String,
+    event: String,
+    details: KeyValuePairs<String, String> = [:]
+) {}
+#endif

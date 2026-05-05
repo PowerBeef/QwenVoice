@@ -591,6 +591,11 @@ private struct StreamingExecutionContext: Sendable {
         var chunkWriteMaxMS = 0
         var finalWriteMS = 0
         var eventDispatchMS = 0
+        // Cross-layer probe (`[Probe.Engine]`): captures the
+        // ContinuousClock instant after each chunk struct is constructed
+        // so the next chunk can record `inferMS` as the duration of its
+        // own production work since the previous emit.
+        var lastChunkEmittedAt: ContinuousClock.Instant?
         var mlxMemorySnapshots = initialMLXMemorySnapshots
         mlxMemorySnapshots["before_stream"] = NativeMemoryPolicyResolver.snapshot()
         let streamingOutputPolicy = NativeStreamingOutputPolicy.current()
@@ -682,6 +687,28 @@ private struct StreamingExecutionContext: Sendable {
 
                     let chunkDurationSeconds = Double(pcmSamples.count) / Double(sampleRate)
                     let cumulativeDurationSeconds = Double(totalFramesWritten) / Double(sampleRate)
+
+                    // Cross-layer probe metadata. `inferMS` is wall time
+                    // spent producing this chunk (delta from the previous
+                    // chunk's emit, or 0 for the first chunk). `engine
+                    // EmittedAtMS` is wall-clock since epoch so the app
+                    // process can compute cross-process XPC latency.
+                    let chunkEmitInstant = ContinuousClock.now
+                    let probeInferMS: Double
+                    if let last = lastChunkEmittedAt {
+                        let elapsed = chunkEmitInstant - last
+                        probeInferMS = Double(elapsed.components.seconds) * 1000.0
+                            + Double(elapsed.components.attoseconds) / 1e15
+                    } else {
+                        probeInferMS = 0
+                    }
+                    lastChunkEmittedAt = chunkEmitInstant
+                    let probeMetadata = ChunkProbeMetadata(
+                        seq: chunkIndex,
+                        engineEmittedAtMS: Date().timeIntervalSince1970 * 1000.0,
+                        inferMS: probeInferMS
+                    )
+
                     let chunkEvent = GenerationEvent.chunk(
                         GenerationChunk(
                             requestID: requestID,
@@ -699,7 +726,8 @@ private struct StreamingExecutionContext: Sendable {
                                 frameCount: pcmSamples.count,
                                 pcm16LE: previewData,
                                 isFinal: false
-                            )
+                            ),
+                            probeMetadata: probeMetadata
                         )
                     )
 
