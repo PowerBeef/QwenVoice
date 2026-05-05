@@ -59,7 +59,8 @@ struct ResolvedCloneConditioning: @unchecked Sendable {
 }
 
 actor NativePreparedCloneConditioningCache {
-    static let capacity = 16
+    private let capacity: Int
+
     private struct NormalizedCloneReferenceOutcome {
         let result: AudioNormalizationResult
         let reusedExistingOutput: Bool
@@ -90,6 +91,10 @@ actor NativePreparedCloneConditioningCache {
     private var voiceClonePromptCache: [String: CachedVoiceClonePrompt] = [:]
     private var voiceClonePromptLRUKeys: [String] = []
 
+    init(capacity: Int = NativeMemoryPolicyResolver.cloneCacheCapacity()) {
+        self.capacity = max(capacity, 0)
+    }
+
     func clear() {
         cachedValues.removeAll()
         lruKeys.removeAll()
@@ -104,6 +109,11 @@ actor NativePreparedCloneConditioningCache {
 
     func softTrim(retainingMostRecent retainedCount: Int = 1) {
         let keepCount = max(retainedCount, 0)
+        trimCache(
+            &cachedValues,
+            lruKeys: &lruKeys,
+            retainingMostRecent: keepCount
+        )
         trimCache(
             &decodedReferenceAudioCache,
             lruKeys: &decodedReferenceAudioLRUKeys,
@@ -352,7 +362,7 @@ actor NativePreparedCloneConditioningCache {
         cachedValues[conditioning.internalIdentityKey] = conditioning
         touch(conditioning.internalIdentityKey)
         var evicted = false
-        while lruKeys.count > Self.capacity {
+        while lruKeys.count > capacity {
             let evictedKey = lruKeys.removeFirst()
             cachedValues.removeValue(forKey: evictedKey)
             evicted = true
@@ -406,7 +416,7 @@ actor NativePreparedCloneConditioningCache {
         try Self.mirrorTranscriptSidecarIfNeeded(from: sourceURL, to: result.normalizedURL)
         normalizedReferenceCache[cacheKey] = result
         touchNormalizedReference(cacheKey)
-        while normalizedReferenceLRUKeys.count > Self.capacity {
+        while normalizedReferenceLRUKeys.count > capacity {
             let evictedKey = normalizedReferenceLRUKeys.removeFirst()
             normalizedReferenceCache.removeValue(forKey: evictedKey)
         }
@@ -441,7 +451,7 @@ actor NativePreparedCloneConditioningCache {
         decodedReferenceAudioCache[key] = DecodedReferenceAudio(referenceAudio: referenceAudio)
         touchDecodedReferenceAudio(key)
         var evicted = false
-        while decodedReferenceAudioLRUKeys.count > Self.capacity {
+        while decodedReferenceAudioLRUKeys.count > capacity {
             let evictedKey = decodedReferenceAudioLRUKeys.removeFirst()
             decodedReferenceAudioCache.removeValue(forKey: evictedKey)
             evicted = true
@@ -461,7 +471,7 @@ actor NativePreparedCloneConditioningCache {
         voiceClonePromptCache[key] = CachedVoiceClonePrompt(prompt: prompt)
         touchVoiceClonePrompt(key)
         var evicted = false
-        while voiceClonePromptLRUKeys.count > Self.capacity {
+        while voiceClonePromptLRUKeys.count > capacity {
             let evictedKey = voiceClonePromptLRUKeys.removeFirst()
             voiceClonePromptCache.removeValue(forKey: evictedKey)
             evicted = true

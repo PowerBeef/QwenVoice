@@ -42,7 +42,7 @@ enum TTSContract {
         let url = locateManifestURL()
         do {
             return try ContractBackedModelRegistry(manifestURL: url)
-                .resolvedForPlatform(.iOS)
+                .resolvedForPlatform(.iOS, deviceClass: .iPhonePro)
         } catch {
             fatalError("Failed to load qwenvoice_contract.json: \(error.localizedDescription)")
         }

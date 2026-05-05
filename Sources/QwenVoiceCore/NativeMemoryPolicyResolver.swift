@@ -74,6 +74,62 @@ public enum NativeMemoryPolicyResolver {
         }
     }
 
+    public static func minimumStreamingInterval(
+        for policy: NativeMemoryPolicy,
+        request: GenerationRequest
+    ) -> Double {
+        if request.batchTotal != nil {
+            return 0.8
+        }
+
+        switch policy.deviceClass {
+        case .floor8GBMac, .iPhonePro:
+            return 0.6
+        case .mid16GBMac, .highMemoryMac:
+            return 0.4
+        }
+    }
+
+    public static func effectiveStreamingInterval(
+        requested: Double?,
+        request: GenerationRequest,
+        policy: NativeMemoryPolicy
+    ) -> Double {
+        let adaptiveInterval = minimumStreamingInterval(for: policy, request: request)
+        guard let requested else {
+            return adaptiveInterval
+        }
+        guard request.benchmarkOptions == nil else {
+            return requested
+        }
+        guard policy.deviceClass == .floor8GBMac || policy.deviceClass == .iPhonePro || request.batchTotal != nil else {
+            return requested
+        }
+        return max(requested, adaptiveInterval)
+    }
+
+    public static func cloneCacheCapacity(deviceClass: NativeDeviceMemoryClass = deviceClass()) -> Int {
+        switch deviceClass {
+        case .floor8GBMac, .iPhonePro:
+            return 2
+        case .mid16GBMac:
+            return 8
+        case .highMemoryMac:
+            return 16
+        }
+    }
+
+    public static func postBatchTrimLevel(
+        deviceClass: NativeDeviceMemoryClass = deviceClass()
+    ) -> NativeMemoryTrimLevel? {
+        switch deviceClass {
+        case .floor8GBMac:
+            return .hardTrim
+        case .iPhonePro, .mid16GBMac, .highMemoryMac:
+            return nil
+        }
+    }
+
     public static func snapshot() -> NativeMLXMemorySnapshot {
         let snapshot = Memory.snapshot()
         return NativeMLXMemorySnapshot(

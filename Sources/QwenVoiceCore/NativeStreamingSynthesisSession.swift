@@ -555,7 +555,7 @@ private struct StreamingExecutionContext: Sendable {
         let postRequestCachePolicy = NativeBenchmarkPostRequestCachePolicy.resolve(request.benchmarkOptions)
         let outputURL = URL(fileURLWithPath: request.outputPath)
         let sampleRate = model.sampleRate
-        let telemetryMode = NativeTelemetryMode.current()
+        let telemetryMode = NativeTelemetryMode.current(benchmarkOptions: request.benchmarkOptions)
         let telemetrySampler = telemetryMode.sampleIntervalMS.map {
             NativeTelemetrySampler(
                 startUptimeSeconds: ProcessInfo.processInfo.systemUptime,
@@ -617,9 +617,10 @@ private struct StreamingExecutionContext: Sendable {
             finalWriter.finish()
         }
 
-        let streamingInterval = request.streamingInterval ?? Self.adaptiveStreamingInterval(
-            for: request,
-            memoryPolicy: memoryPolicy
+        let streamingInterval = NativeMemoryPolicyResolver.effectiveStreamingInterval(
+            requested: request.streamingInterval,
+            request: request,
+            policy: memoryPolicy
         )
         let stream = try NativeStreamingSynthesisSession.buildStream(
             request: request,
@@ -873,6 +874,7 @@ private struct StreamingExecutionContext: Sendable {
         timingsMS["max_chunk_frames"] = maxChunkFrames
         timingsMS["streaming_interval_ms"] = Int((streamingInterval * 1_000).rounded())
         timingsMS["post_request_cache_clear_applied"] = postRequestCacheClearApplied ? 1 : 0
+        timingsMS["telemetry_sample_count"] = telemetrySamples.count
         if let firstAudioReadyMS {
             timingsMS["first_audio_ready"] = firstAudioReadyMS
             timingsMS["first_stream_chunk"] = firstAudioReadyMS
@@ -905,7 +907,7 @@ private struct StreamingExecutionContext: Sendable {
             gpuAllocatedPeakMB: telemetrySummary.gpuAllocatedPeakMB,
             gpuRecommendedWorkingSetMB: telemetrySummary.gpuRecommendedWorkingSetMB,
             telemetryEnabled: telemetryMode != .off,
-            telemetrySamples: telemetrySamples,
+            telemetrySamples: telemetryMode == .benchmarkFull ? telemetrySamples : nil,
             telemetryStageMarks: telemetryStageMarks,
             timingsMS: timingsMS,
             booleanFlags: mergedBooleanFlags(),

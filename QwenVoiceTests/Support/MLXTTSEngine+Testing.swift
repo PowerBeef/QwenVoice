@@ -103,7 +103,8 @@ extension MLXTTSEngine {
         rootDirectory: URL,
         loadCoordinator: any MLXModelCoordinating,
         streamingSessionFactory: StreamingSessionFactory? = nil,
-        storeVersionSeed: String = "tests-mock"
+        storeVersionSeed: String = "tests-mock",
+        idleUnloadDelayOverride: Double? = nil
     ) -> MLXTTSEngine {
         let modelAssetStore = LocalModelAssetStore(
             modelRegistry: modelRegistry,
@@ -127,7 +128,8 @@ extension MLXTTSEngine {
             documentIO: documentIO,
             streamSessionsDirectory: streamSessionsDirectory,
             loadCoordinator: loadCoordinator,
-            streamingSessionFactory: factory
+            streamingSessionFactory: factory,
+            idleUnloadDelayOverride: idleUnloadDelayOverride
         )
     }
 }

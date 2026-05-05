@@ -85,6 +85,64 @@ final class MLXTTSEngineMockBackedTests: XCTestCase {
         XCTAssertNil(loadedID)
     }
 
+    func testIdleUnloadPolicyUnloadsLoadedModelAfterDelay() async throws {
+        let registry = try ContractBackedModelRegistry(
+            manifestURL: try Self.bundledManifestURL()
+        )
+        let coordinator = MockMLXModelCoordinator(loadHandler: { _, capabilityProfile in
+            await NativeModelLoadResult.makeForTesting(
+                model: UnsafeSpeechGenerationModel.makeFullySupportingForTesting(),
+                capabilityProfile: capabilityProfile
+            )
+        })
+        let engine = MLXTTSEngine.makeForTesting(
+            modelRegistry: registry,
+            rootDirectory: temporaryRoot,
+            loadCoordinator: coordinator,
+            idleUnloadDelayOverride: 0.01
+        )
+        try await engine.initialize(appSupportDirectory: temporaryRoot)
+
+        try await engine.loadModel(id: "pro_custom")
+        XCTAssertEqual(engine.loadState, .loaded(modelID: "pro_custom"))
+
+        try await Task.sleep(nanoseconds: 60_000_000)
+
+        XCTAssertEqual(coordinator.unloadCallCount, 1)
+        XCTAssertEqual(engine.loadState, .idle)
+        let loadedID = await engine.currentLoadedModelID()
+        XCTAssertNil(loadedID)
+    }
+
+    func testIdleUnloadPolicyCancelsWhenWorkRestarts() async throws {
+        let registry = try ContractBackedModelRegistry(
+            manifestURL: try Self.bundledManifestURL()
+        )
+        let coordinator = MockMLXModelCoordinator(loadHandler: { _, capabilityProfile in
+            await NativeModelLoadResult.makeForTesting(
+                model: UnsafeSpeechGenerationModel.makeFullySupportingForTesting(),
+                capabilityProfile: capabilityProfile
+            )
+        })
+        let engine = MLXTTSEngine.makeForTesting(
+            modelRegistry: registry,
+            rootDirectory: temporaryRoot,
+            loadCoordinator: coordinator,
+            idleUnloadDelayOverride: 0.06
+        )
+        try await engine.initialize(appSupportDirectory: temporaryRoot)
+
+        try await engine.loadModel(id: "pro_custom")
+        try await Task.sleep(nanoseconds: 30_000_000)
+        try await engine.loadModel(id: "pro_custom")
+        try await Task.sleep(nanoseconds: 40_000_000)
+
+        XCTAssertEqual(coordinator.unloadCallCount, 0)
+        XCTAssertEqual(engine.loadState, .loaded(modelID: "pro_custom"))
+
+        try await engine.unloadModel()
+    }
+
     // MARK: - Ported from NativeMLXMacEngineTests (Session 5c batch 1)
 
     /// Ported equivalent of

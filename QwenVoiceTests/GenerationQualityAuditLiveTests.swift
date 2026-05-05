@@ -1362,10 +1362,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         guard request.allowModelLoad else {
             throw XCTSkip("Live audio QC request file does not allow model loading.")
         }
-        if let expiresAt = request.expiresAt,
-           let expiry = ISO8601DateFormatter().date(from: expiresAt),
-           expiry < Date() {
-            throw XCTSkip("Live audio QC request file expired.")
+        guard let expiresAt = request.expiresAt,
+              let expiry = ISO8601DateFormatter().date(from: expiresAt),
+              expiry >= Date() else {
+            throw XCTSkip("Live audio QC request file expired or was written by an older perf harness.")
         }
         return LiveAuditConfiguration(
             outputRoot: URL(fileURLWithPath: request.outputDirectory, isDirectory: true),
@@ -1485,7 +1485,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
 
         for mode in modes {
-            let model = try NativeRuntimeTestSupport.bundledModelEntry(id: mode.modelID)
+            let model = try resolvedAuditModelEntry(id: mode.modelID)
             let source = modelsRoot.appendingPathComponent(model.folder, isDirectory: true)
             try validateInstalledModel(model, at: source)
 
@@ -1501,6 +1501,24 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             try mirrorModelDirectory(from: source, to: destination)
         }
         return elapsedMilliseconds(since: started)
+    }
+
+    private func resolvedAuditModelEntry(id: String) throws -> NativeRuntimeTestSupport.ModelEntry {
+        guard let model = TTSModel.model(id: id) else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Missing resolved app model entry for \(id)."]
+            )
+        }
+
+        return NativeRuntimeTestSupport.ModelEntry(
+            id: model.id,
+            name: model.name,
+            folder: model.folder,
+            mode: model.mode.rawValue,
+            requiredRelativePaths: model.requiredRelativePaths
+        )
     }
 
     private func mirrorModelDirectory(from source: URL, to destination: URL) throws {

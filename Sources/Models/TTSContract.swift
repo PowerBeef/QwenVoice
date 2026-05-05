@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 
 private struct TTSContractManifest: Decodable {
     let defaultSpeaker: String
@@ -63,6 +64,11 @@ enum TTSContract {
         loadState.manifest.models.first { $0.id == id }
     }
 
+    static func modelsForTesting(deviceClass: NativeDeviceMemoryClass) throws -> [TTSModel] {
+        let url = try locateManifestURL()
+        return try resolvedManifest(from: url, deviceClass: deviceClass).models
+    }
+
     private static let loadState: TTSContractLoadState = loadManifestState()
 
     private static func loadManifestState() -> TTSContractLoadState {
@@ -70,8 +76,10 @@ enum TTSContract {
         do {
             let url = try locateManifestURL()
             locatedManifestURL = url
-            let data = try Data(contentsOf: url)
-            let decoded = try JSONDecoder().decode(TTSContractManifest.self, from: data)
+            let decoded = try resolvedManifest(
+                from: url,
+                deviceClass: NativeMemoryPolicyResolver.deviceClass()
+            )
             try validate(decoded)
             return TTSContractLoadState(
                 manifest: decoded,
@@ -88,6 +96,35 @@ enum TTSContract {
             )
             return handleLoadFailure(failure)
         }
+    }
+
+    private static func resolvedManifest(
+        from url: URL,
+        deviceClass: NativeDeviceMemoryClass
+    ) throws -> TTSContractManifest {
+        let registry = try ContractBackedModelRegistry(manifestURL: url)
+            .resolvedForPlatform(.macOS, deviceClass: deviceClass)
+        return try TTSContractManifest(
+            defaultSpeaker: registry.defaultSpeaker.id,
+            speakers: registry.groupedSpeakers.mapValues { speakers in
+                speakers.map(\.id)
+            },
+            models: registry.models.map { descriptor in
+                guard let mode = GenerationMode(rawValue: descriptor.mode.rawValue) else {
+                    throw ValidationError("Model '\(descriptor.id)' declares unsupported mode '\(descriptor.mode.rawValue)'.")
+                }
+                return TTSModel(
+                    id: descriptor.id,
+                    name: descriptor.name,
+                    tier: descriptor.tier,
+                    folder: descriptor.folder,
+                    mode: mode,
+                    huggingFaceRepo: descriptor.huggingFaceRepo,
+                    outputSubfolder: descriptor.outputSubfolder,
+                    requiredRelativePaths: descriptor.requiredRelativePaths
+                )
+            }
+        )
     }
 
     private static func handleLoadFailure(_ error: ContractLoadError) -> TTSContractLoadState {

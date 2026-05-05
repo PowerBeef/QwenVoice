@@ -184,6 +184,13 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
     }
 
     public func preferredVariant(for platform: ModelArtifactPlatform) -> ModelVariantDescriptor? {
+        preferredVariant(for: platform, deviceClass: nil)
+    }
+
+    public func preferredVariant(
+        for platform: ModelArtifactPlatform,
+        deviceClass: NativeDeviceMemoryClass?
+    ) -> ModelVariantDescriptor? {
         let platformVariants = variants.filter { $0.platforms.contains(platform) }
         guard !platformVariants.isEmpty else { return nil }
 
@@ -191,12 +198,22 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
         case .iOS:
             return platformVariants.first(where: { $0.kind == .speed }) ?? platformVariants.first
         case .macOS:
+            if deviceClass == .floor8GBMac {
+                return platformVariants.first(where: { $0.kind == .speed }) ?? platformVariants.first
+            }
             return platformVariants.first(where: { $0.kind == .quality }) ?? platformVariants.first
         }
     }
 
     public func resolvedForPlatform(_ platform: ModelArtifactPlatform) -> ModelDescriptor {
-        guard let variant = preferredVariant(for: platform) else {
+        resolvedForPlatform(platform, deviceClass: nil)
+    }
+
+    public func resolvedForPlatform(
+        _ platform: ModelArtifactPlatform,
+        deviceClass: NativeDeviceMemoryClass?
+    ) -> ModelDescriptor {
+        guard let variant = preferredVariant(for: platform, deviceClass: deviceClass) else {
             return self
         }
 
@@ -475,13 +492,22 @@ public enum NativeTelemetryMode: String, Hashable, Codable, Sendable {
     }
 
     public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeTelemetryMode {
+        current(environment: environment, benchmarkOptions: nil)
+    }
+
+    public static func current(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        benchmarkOptions: GenerationRequest.BenchmarkOptions?
+    ) -> NativeTelemetryMode {
         switch environment["QWENVOICE_NATIVE_TELEMETRY_MODE"]?.lowercased() {
         case "off", "disabled":
             return .off
         case "full", "benchmark", "benchmark_full":
             return .benchmarkFull
-        default:
+        case "light", "lightweight":
             return .lightweight
+        default:
+            return benchmarkOptions == nil ? .off : .lightweight
         }
     }
 }

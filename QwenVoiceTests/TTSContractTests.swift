@@ -1,4 +1,5 @@
 import XCTest
+import QwenVoiceCore
 @testable import QwenVoice
 
 final class TTSContractTests: XCTestCase {
@@ -25,7 +26,7 @@ final class TTSContractTests: XCTestCase {
     }
 
     func testModelForModeReturnsCorrectModel() {
-        for mode in GenerationMode.allCases {
+        for mode in QwenVoice.GenerationMode.allCases {
             let model = TTSModel.model(for: mode)
             XCTAssertNotNil(model, "No model found for mode \(mode.rawValue)")
             XCTAssertEqual(model?.mode, mode)
@@ -37,6 +38,19 @@ final class TTSContractTests: XCTestCase {
             let found = TTSModel.model(id: model.id)
             XCTAssertNotNil(found)
             XCTAssertEqual(found?.id, model.id)
+        }
+    }
+
+    func testFloorMacModelsResolveToSpeedArtifacts() throws {
+        let floorModels = try TTSContract.modelsForTesting(deviceClass: .floor8GBMac)
+        let midModels = try TTSContract.modelsForTesting(deviceClass: .mid16GBMac)
+
+        XCTAssertFalse(floorModels.isEmpty)
+        XCTAssertEqual(floorModels.count, midModels.count)
+        for floorModel in floorModels {
+            let midModel = try XCTUnwrap(midModels.first { $0.id == floorModel.id })
+            XCTAssertTrue(floorModel.folder.contains("4bit"), "\(floorModel.id) should use the Speed artifact on floor Macs.")
+            XCTAssertTrue(midModel.folder.contains("8bit"), "\(midModel.id) should use the Quality artifact on mid/high Macs.")
         }
     }
 

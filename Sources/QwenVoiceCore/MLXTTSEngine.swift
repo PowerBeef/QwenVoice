@@ -99,6 +99,71 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         loadState.currentModelID
     }
 
+    private func cancelIdleUnload() {
+        idleUnloadToken = nil
+        idleUnloadTask?.cancel()
+        idleUnloadTask = nil
+    }
+
+    private func scheduleIdleUnloadIfNeeded(modelID: String, isBatch: Bool) {
+        guard let mode = modelRegistry.model(id: modelID)?.mode else { return }
+        scheduleIdleUnloadIfNeeded(modelID: modelID, mode: mode, isBatch: isBatch)
+    }
+
+    private func applyMemoryPolicyIfKnown(modelID: String, isBatch: Bool) {
+        guard let mode = modelRegistry.model(id: modelID)?.mode else { return }
+        NativeMemoryPolicyResolver.apply(
+            NativeMemoryPolicyResolver.policy(mode: mode, isBatch: isBatch)
+        )
+    }
+
+    private func scheduleIdleUnloadIfNeeded(
+        modelID: String,
+        mode: GenerationMode,
+        isBatch: Bool
+    ) {
+        let policy = NativeMemoryPolicyResolver.policy(mode: mode, isBatch: isBatch)
+        scheduleIdleUnloadIfNeeded(modelID: modelID, policy: policy)
+    }
+
+    private func scheduleIdleUnloadIfNeeded(modelID: String, policy: NativeMemoryPolicy) {
+        cancelIdleUnload()
+        guard let policyDelay = policy.unloadAfterIdleSeconds else { return }
+
+        let delay = max(idleUnloadDelayOverride ?? policyDelay, 0)
+        let token = UUID()
+        idleUnloadToken = token
+        idleUnloadTask = Task { [weak self] in
+            let nanoseconds = UInt64((delay * 1_000_000_000).rounded())
+            if nanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self?.performIdleUnloadIfStillIdle(modelID: modelID, token: token)
+        }
+    }
+
+    private func performIdleUnloadIfStillIdle(modelID: String, token: UUID) async {
+        guard idleUnloadToken == token, canIdleUnload(modelID: modelID) else { return }
+        await runtime.unloadModel()
+        guard idleUnloadToken == token, canIdleUnload(modelID: modelID) else { return }
+        idleUnloadToken = nil
+        idleUnloadTask = nil
+        loadState = .idle
+        clonePreparationState = .idle
+        visibleErrorMessage = nil
+    }
+
+    private func canIdleUnload(modelID: String) -> Bool {
+        guard case .loaded(let loadedModelID) = loadState,
+              loadedModelID == modelID,
+              clonePreparationState.phase == .idle
+        else {
+            return false
+        }
+        return true
+    }
+
     public private(set) var visibleErrorMessage: String?
 
     private let audioPreparationService: any AudioPreparationService
@@ -108,10 +173,13 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     private let diagnosticAppSupportBox: DiagnosticAppSupportBox
     private let runtime: NativeEngineRuntime
     private let streamingSessionFactory: StreamingSessionFactory
+    private let idleUnloadDelayOverride: Double?
     private var isInitialized = false
     private var appSupportDirectoryURL: URL?
     private var voicesDirectory: URL?
     private var allowsProactiveWarmOperations = true
+    private var idleUnloadTask: Task<Void, Never>?
+    private var idleUnloadToken: UUID?
 
     public convenience init(
         modelRegistry: any ModelRegistry,
@@ -213,7 +281,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         telemetryRecorder: NativeTelemetryRecorder? = nil,
         customPrewarmPolicy: NativeCustomPrewarmPolicy = .eager,
         diagnosticAppSupportBox: DiagnosticAppSupportBox = DiagnosticAppSupportBox(),
-        streamingSessionFactory: @escaping StreamingSessionFactory
+        streamingSessionFactory: @escaping StreamingSessionFactory,
+        idleUnloadDelayOverride: Double? = nil
     ) {
         self.modelRegistry = modelRegistry
         self.modelAssetStore = modelAssetStore
@@ -222,6 +291,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         self.streamSessionsDirectory = streamSessionsDirectory
         self.telemetryRecorder = telemetryRecorder
         self.diagnosticAppSupportBox = diagnosticAppSupportBox
+        self.idleUnloadDelayOverride = idleUnloadDelayOverride
         // Audit Finding #1 — initialize the lossless event stream.
         // `bufferingPolicy: .unbounded` is correct here: events are
         // small structs and rare (≈ one per audio chunk on the
@@ -271,6 +341,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func start() {}
 
     public func stop() {
+        cancelIdleUnload()
         let runtime = runtime
         Task.detached(priority: .utility) {
             await runtime.configure(normalizedCloneReferenceDirectory: nil, voicesDirectory: nil)
@@ -323,12 +394,15 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
     public func loadModel(id: String) async throws {
         try ensureInitialized()
+        cancelIdleUnload()
         do {
             loadState = .starting
+            applyMemoryPolicyIfKnown(modelID: id, isBatch: false)
             _ = try await runtime.loadModel(id: id)
             loadState = .loaded(modelID: id)
             clonePreparationState = .idle
             visibleErrorMessage = nil
+            scheduleIdleUnloadIfNeeded(modelID: id, isBatch: false)
         } catch {
             handle(error)
             throw error
@@ -336,6 +410,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     }
 
     public func unloadModel() async throws {
+        cancelIdleUnload()
         await runtime.unloadModel()
         loadState = .idle
         clonePreparationState = .idle
@@ -347,9 +422,12 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     }
 
     public func ensureModelLoadedIfNeeded(id: String) async {
+        cancelIdleUnload()
         do {
+            applyMemoryPolicyIfKnown(modelID: id, isBatch: false)
             _ = try await runtime.loadModel(id: id)
             loadState = .loaded(modelID: id)
+            scheduleIdleUnloadIfNeeded(modelID: id, isBatch: false)
         } catch {
             handle(error)
         }
@@ -358,12 +436,14 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func prewarmModelIfNeeded(for request: GenerationRequest) async {
         guard allowsProactiveWarmOperations else { return }
         guard case .supported = supportDecision(for: request) else { return }
+        cancelIdleUnload()
         do {
             try ensureInitialized()
             loadState = .starting
             _ = try await runtime.prepareInteractiveReadiness(for: request)
             loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
+            scheduleIdleUnloadIfNeeded(modelID: request.modelID, mode: request.mode, isBatch: false)
         } catch {
             handle(error)
         }
@@ -383,6 +463,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     ) async -> InteractivePrefetchDiagnostics? {
         guard allowsProactiveWarmOperations else { return nil }
         guard case .supported = supportDecision(for: request) else { return nil }
+        cancelIdleUnload()
         do {
             try ensureInitialized()
             loadState = .starting
@@ -392,6 +473,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             )
             loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
+            scheduleIdleUnloadIfNeeded(modelID: request.modelID, mode: request.mode, isBatch: false)
             return diagnostics
         } catch {
             // Background prefetch should not interrupt the active UI with an
@@ -407,6 +489,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {
         guard allowsProactiveWarmOperations else { return }
         try ensureInitialized()
+        cancelIdleUnload()
 
         let requestedTranscript = NativePreparedCloneConditioningCache.normalizedTranscript(
             reference.transcript
@@ -433,6 +516,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             )
             loadState = .loaded(modelID: modelID)
             visibleErrorMessage = nil
+            scheduleIdleUnloadIfNeeded(modelID: modelID, mode: .clone, isBatch: false)
         } catch is CancellationError {
             clonePreparationState = .idle
             loadState = .loaded(modelID: modelID)
@@ -466,6 +550,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     ) async throws -> [GenerationResult] {
         try ensureInitialized()
         guard !requests.isEmpty else { return [] }
+        cancelIdleUnload()
         let firstKey = Self.generationSessionKey(for: requests[0])
         guard requests.allSatisfy({ Self.generationSessionKey(for: $0) == firstKey }) else {
             throw MLXTTSEngineError.unsupportedRequest(
@@ -499,11 +584,23 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             clearGenerationActivity()
         }
         progressHandler?(1.0, "Done")
+        if let trimLevel = NativeMemoryPolicyResolver.postBatchTrimLevel() {
+            await runtime.trimMemory(level: trimLevel, reason: "post_batch_low_ram")
+            if trimLevel == .hardTrim {
+                clonePreparationState = .idle
+            }
+        }
+        scheduleIdleUnloadIfNeeded(
+            modelID: requests[0].modelID,
+            mode: requests[0].mode,
+            isBatch: true
+        )
         return results
     }
 
     private func generate(_ request: GenerationRequest, allowsBatchRequest: Bool) async throws -> GenerationResult {
         try ensureInitialized()
+        cancelIdleUnload()
         if !allowsBatchRequest {
             let supportDecision = supportDecision(for: request)
             guard case .supported = supportDecision else {
@@ -518,13 +615,19 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             let result = try await runGenerationAttempt(request)
             loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
-            return Self.annotatingAllocationRetry(
+            let annotated = Self.annotatingAllocationRetry(
                 result,
                 streamingUsed: request.shouldStream,
                 attempted: false,
                 succeeded: false,
                 cleanupMS: nil
             )
+            scheduleIdleUnloadIfNeeded(
+                modelID: request.modelID,
+                mode: request.mode,
+                isBatch: allowsBatchRequest || request.batchTotal != nil
+            )
+            return annotated
         } catch {
             if Self.isRetryableAllocationFailure(error) {
                 let cleanupStartedAt = ContinuousClock.now
@@ -536,13 +639,19 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                     let retryResult = try await runGenerationAttempt(request)
                     loadState = .loaded(modelID: request.modelID)
                     visibleErrorMessage = nil
-                    return Self.annotatingAllocationRetry(
+                    let annotated = Self.annotatingAllocationRetry(
                         retryResult,
                         streamingUsed: request.shouldStream,
                         attempted: true,
                         succeeded: true,
                         cleanupMS: cleanupMS
                     )
+                    scheduleIdleUnloadIfNeeded(
+                        modelID: request.modelID,
+                        mode: request.mode,
+                        isBatch: allowsBatchRequest || request.batchTotal != nil
+                    )
+                    return annotated
                 } catch {
                     let surfacedError = NativeRuntimeError.wrapping(
                         error,
@@ -897,6 +1006,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     }
 
     public func trimMemory(level: NativeMemoryTrimLevel, reason: String) async {
+        if level == .fullUnload {
+            cancelIdleUnload()
+        }
         await runtime.trimMemory(level: level, reason: reason)
 
         switch level {

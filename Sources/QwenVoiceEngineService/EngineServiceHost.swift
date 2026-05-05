@@ -44,6 +44,7 @@ private final class RuntimeContext: @unchecked Sendable {
     let engine: MLXTTSEngine
     var cancellables: Set<AnyCancellable> = []
     var lastPublishedEvent: GenerationEvent?
+    var lastPublishedSnapshot: TTSEngineSnapshot?
     /// Audit Finding #1 — long-running Task that drains the
     /// engine's lossless `events` AsyncStream and publishes each
     /// event over XPC in order. Replaces the prior
@@ -294,6 +295,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
 
         let manifestURL = try Self.locateManifestURL()
         let registry = try ContractBackedModelRegistry(manifestURL: manifestURL)
+            .resolvedForPlatform(.macOS, deviceClass: NativeMemoryPolicyResolver.deviceClass())
         let runtime = try NativeRuntimeFactory.make(
             registry: registry,
             paths: .rooted(at: appSupportDirectory),
@@ -306,18 +308,17 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
 
         // Snapshot publishing — `loadState`, `clonePreparationState`,
         // `visibleErrorMessage` changes need to flow over XPC so the
-        // client's UI bindings stay live. This sink fires on every
-        // `@Published` change including `latestEvent` — that's
-        // harmless redundancy because `Self.snapshot(for:)` does NOT
-        // include `latestEvent`, so we only re-publish the same
-        // engine state on chunk events. The chunk-delivery transport
-        // moved to the AsyncStream consumer below; only snapshots
-        // travel here now.
+        // client's UI bindings stay live. Chunk delivery is handled by
+        // the AsyncStream below; this sink suppresses unchanged snapshots
+        // produced by chunk-only `latestEvent` updates.
         runtime.engine.objectWillChange
             .sink { [weak self, weak runtimeContext] _ in
                 Task { @MainActor [weak self, weak runtimeContext] in
                     guard let self, let runtimeContext else { return }
-                    self.publish(.snapshot(Self.snapshot(for: runtimeContext.engine)))
+                    let snapshot = Self.snapshot(for: runtimeContext.engine)
+                    guard runtimeContext.lastPublishedSnapshot != snapshot else { return }
+                    runtimeContext.lastPublishedSnapshot = snapshot
+                    self.publish(.snapshot(snapshot))
                 }
             }
             .store(in: &runtimeContext.cancellables)

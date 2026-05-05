@@ -857,20 +857,11 @@ final class LivePreviewIntegrationTests: XCTestCase {
             )
         }
 
-        let contractURL = try locateContract()
-        let contract = try JSONSerialization.jsonObject(
-            with: Data(contentsOf: contractURL)
-        ) as? [String: Any] ?? [:]
-        let models = contract["models"] as? [[String: Any]] ?? []
         let modelsRoot = root.appendingPathComponent("models", isDirectory: true)
-        for model in models {
-            guard let folder = model["folder"] as? String, !folder.isEmpty else {
-                continue
-            }
-            let modelDir = modelsRoot.appendingPathComponent(folder, isDirectory: true)
+        for model in TTSContract.models {
+            let modelDir = model.installDirectory(in: modelsRoot)
             try fm.createDirectory(at: modelDir, withIntermediateDirectories: true)
-            let requiredPaths = model["requiredRelativePaths"] as? [String] ?? []
-            for relative in requiredPaths {
+            for relative in model.requiredRelativePaths {
                 let target = modelDir.appendingPathComponent(relative)
                 try fm.createDirectory(
                     at: target.deletingLastPathComponent(),

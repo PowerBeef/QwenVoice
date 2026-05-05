@@ -134,9 +134,16 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
     }
 
     public func resolvedForPlatform(_ platform: ModelArtifactPlatform) -> ContractBackedModelRegistry {
+        resolvedForPlatform(platform, deviceClass: nil)
+    }
+
+    public func resolvedForPlatform(
+        _ platform: ModelArtifactPlatform,
+        deviceClass: NativeDeviceMemoryClass?
+    ) -> ContractBackedModelRegistry {
         ContractBackedModelRegistry(
             manifestURL: manifestURL,
-            models: models.map { $0.resolvedForPlatform(platform) },
+            models: models.map { $0.resolvedForPlatform(platform, deviceClass: deviceClass) },
             defaultSpeaker: defaultSpeaker,
             groupedSpeakers: groupedSpeakers
         )

@@ -219,6 +219,11 @@ actor NativeEngineRuntime {
         customPrewarmDepth: String? = nil
     ) async throws -> InteractivePrefetchDiagnostics {
         try GenerationSemantics.validateQwenPromptContract(for: request)
+        let memoryPolicy = NativeMemoryPolicyResolver.policy(
+            mode: request.mode,
+            isBatch: false
+        )
+        NativeMemoryPolicyResolver.apply(memoryPolicy)
         let prefetchStartedAt = ContinuousClock.now
         let identityKey = prewarmIdentityKey(for: request)
         let loadResult = try await loadModel(
@@ -469,6 +474,11 @@ actor NativeEngineRuntime {
         modelID: String,
         reference: CloneReference
     ) async throws -> NativeClonePrimeResult {
+        let memoryPolicy = NativeMemoryPolicyResolver.policy(
+            mode: .clone,
+            isBatch: false
+        )
+        NativeMemoryPolicyResolver.apply(memoryPolicy)
         let token = UUID()
         activeClonePrimeToken = token
         defer {

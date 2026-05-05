@@ -202,6 +202,15 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(floorPolicy.cacheLimitBytes, 256 * 1_024 * 1_024)
         XCTAssertTrue(floorPolicy.clearCacheAfterGeneration)
         XCTAssertEqual(floorPolicy.unloadAfterIdleSeconds, 120)
+        XCTAssertEqual(
+            NativeMemoryPolicyResolver.minimumStreamingInterval(
+                for: floorPolicy,
+                request: Self.streamingRequest(mode: .custom)
+            ),
+            0.6
+        )
+        XCTAssertEqual(NativeMemoryPolicyResolver.cloneCacheCapacity(deviceClass: .floor8GBMac), 2)
+        XCTAssertEqual(NativeMemoryPolicyResolver.postBatchTrimLevel(deviceClass: .floor8GBMac), .hardTrim)
 
         let midBatchPolicy = NativeMemoryPolicyResolver.policy(
             deviceClass: .mid16GBMac,
@@ -211,6 +220,8 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(midBatchPolicy.cacheLimitBytes, 512 * 1_024 * 1_024)
         XCTAssertFalse(midBatchPolicy.clearCacheAfterGeneration)
         XCTAssertEqual(midBatchPolicy.unloadAfterIdleSeconds, 300)
+        XCTAssertEqual(NativeMemoryPolicyResolver.cloneCacheCapacity(deviceClass: .mid16GBMac), 8)
+        XCTAssertNil(NativeMemoryPolicyResolver.postBatchTrimLevel(deviceClass: .mid16GBMac))
 
         let iPhonePolicy = NativeMemoryPolicyResolver.policy(
             deviceClass: .iPhonePro,
@@ -220,6 +231,49 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(iPhonePolicy.cacheLimitBytes, 128 * 1_024 * 1_024)
         XCTAssertTrue(iPhonePolicy.clearCacheAfterGeneration)
         XCTAssertEqual(iPhonePolicy.unloadAfterIdleSeconds, 30)
+        XCTAssertEqual(NativeMemoryPolicyResolver.cloneCacheCapacity(deviceClass: .iPhonePro), 2)
+        XCTAssertNil(NativeMemoryPolicyResolver.postBatchTrimLevel(deviceClass: .iPhonePro))
+    }
+
+    func testVariantResolutionUsesSpeedOnFloorMacAndIPhone() throws {
+        let manifestURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Resources/qwenvoice_contract.json")
+        let registry = try ContractBackedModelRegistry(manifestURL: manifestURL)
+        let floorMacRegistry = registry.resolvedForPlatform(.macOS, deviceClass: .floor8GBMac)
+        let midMacRegistry = registry.resolvedForPlatform(.macOS, deviceClass: .mid16GBMac)
+        let iPhoneRegistry = registry.resolvedForPlatform(.iOS, deviceClass: .iPhonePro)
+
+        for descriptor in registry.models {
+            let floorModel = try XCTUnwrap(floorMacRegistry.model(id: descriptor.id))
+            let midModel = try XCTUnwrap(midMacRegistry.model(id: descriptor.id))
+            let iPhoneModel = try XCTUnwrap(iPhoneRegistry.model(id: descriptor.id))
+            XCTAssertEqual(floorModel.folder, descriptor.preferredVariant(for: .macOS, deviceClass: .floor8GBMac)?.folder)
+            XCTAssertEqual(midModel.folder, descriptor.preferredVariant(for: .macOS, deviceClass: .mid16GBMac)?.folder)
+            XCTAssertEqual(iPhoneModel.folder, descriptor.preferredVariant(for: .iOS, deviceClass: .iPhonePro)?.folder)
+            XCTAssertTrue(floorModel.folder.contains("4bit"))
+            XCTAssertTrue(iPhoneModel.folder.contains("4bit"))
+            XCTAssertTrue(midModel.folder.contains("8bit"))
+        }
+    }
+
+    func testTelemetryDefaultsAreProductOffAndBenchmarkLightweight() {
+        XCTAssertEqual(NativeTelemetryMode.current(environment: [:]), .off)
+        XCTAssertEqual(
+            NativeTelemetryMode.current(
+                environment: [:],
+                benchmarkOptions: GenerationRequest.BenchmarkOptions(generationSpeedProfile: "current")
+            ),
+            .lightweight
+        )
+        XCTAssertEqual(
+            NativeTelemetryMode.current(
+                environment: ["QWENVOICE_NATIVE_TELEMETRY_MODE": "benchmark_full"],
+                benchmarkOptions: nil
+            ),
+            .benchmarkFull
+        )
     }
 
     func testModelPrewarmStateDoesNotPersistAcrossCoordinatorInstances() async throws {
@@ -571,6 +625,27 @@ private extension BackendPerformanceContractTests {
         case .clone:
             return "Base"
         }
+    }
+
+    static func streamingRequest(mode: GenerationMode) -> GenerationRequest {
+        let payload: GenerationRequest.Payload
+        switch mode {
+        case .custom:
+            payload = .custom(speakerID: "vivian", deliveryStyle: nil)
+        case .design:
+            payload = .design(voiceDescription: "Warm narrator", deliveryStyle: nil)
+        case .clone:
+            payload = .clone(reference: CloneReference(audioPath: "/tmp/reference.wav"))
+        }
+        return GenerationRequest(
+            mode: mode,
+            modelID: "test_model",
+            text: "Hello",
+            outputPath: "/tmp/output.wav",
+            shouldStream: true,
+            streamingInterval: 0.32,
+            payload: payload
+        )
     }
 
     static func writeFakeQwenModelFiles(to modelRoot: URL, family: String) throws {

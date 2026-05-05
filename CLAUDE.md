@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. It is the primary repo operating guide for coding agents working in QwenVoice.
+`AGENTS.md` is the canonical repository operating guide for coding agents working in QwenVoice. This file is a Claude Code compatibility supplement with Claude-specific tooling notes and historical context; if it conflicts with `AGENTS.md`, follow `AGENTS.md`.
 
 ## Repo Overview
 
@@ -31,7 +31,8 @@ This checkout is a native Apple-platform codebase for macOS and iPhone. Do not r
 
 ## Maintained Docs
 
-- `CLAUDE.md` — this file, the primary repo operating guide for Claude Code and other coding agents
+- `AGENTS.md` — canonical repository operating guide for coding agents
+- `CLAUDE.md` — Claude Code compatibility supplement; defer to `AGENTS.md` on conflicts
 - `README.md` — public landing page and end-user overview
 - `CONTRIBUTING.md` — contributor workflow, source-of-truth order, validation entrypoints
 - `docs/README.md` — documentation index
@@ -384,7 +385,7 @@ Release facts:
 - iPhone archive/export/TestFlight behavior:
   keep `scripts/check_ios_catalog.sh`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
+  update `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 
@@ -411,7 +412,7 @@ This dev machine has limited disk; the `build/` tree balloons quickly during act
 - Prefer manifest-backed data over duplicated constants.
 - Keep accessibility identifiers stable when UI control types change.
 - Re-run `./scripts/check_project_inputs.sh` and `./scripts/qa.sh validate` plus the most relevant QA layer before declaring work complete.
-- If you changed engine architecture or runtime ownership, verify `CLAUDE.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
+- If you changed engine architecture or runtime ownership, verify `AGENTS.md`, `CLAUDE.md`, and `docs/reference/current-state.md` still describe the same app/service/runtime split.
 - If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
 - If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public homepage posture and current release-track policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.

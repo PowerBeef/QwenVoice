@@ -161,7 +161,7 @@ public struct IOSMemoryBudgetPolicy: Hashable, Codable, Sendable {
             return .critical
         }
 
-        guard let headroom = snapshot.availableHeadroomBytes else {
+        guard let headroom = snapshot.availableHeadroomBytes ?? fallbackHeadroom(from: snapshot) else {
             return .healthy
         }
 
@@ -172,6 +172,14 @@ public struct IOSMemoryBudgetPolicy: Hashable, Codable, Sendable {
             return .guarded
         }
         return .healthy
+    }
+
+    private func fallbackHeadroom(from snapshot: IOSMemorySnapshot) -> UInt64? {
+        let usedBytes = snapshot.physFootprintBytes ?? snapshot.residentBytes
+        guard let usedBytes, snapshot.totalDeviceRAMBytes > usedBytes else {
+            return nil
+        }
+        return snapshot.totalDeviceRAMBytes - usedBytes
     }
 
     public func allowsProactiveWarmOperations(for band: IOSMemoryPressureBand) -> Bool {

@@ -110,6 +110,47 @@ final class IOSFoundationPolicyTests: XCTestCase {
         )
     }
 
+    func testIOSMemoryBandFallsBackToFootprintWhenHeadroomIsUnavailable() {
+        let policy = IOSMemoryBudgetPolicy.iPhoneShippingDefault
+        let totalRAM = UInt64(8 * 1_073_741_824)
+
+        let guardedSnapshot = IOSMemorySnapshot(
+            totalDeviceRAMBytes: totalRAM,
+            availableHeadroomBytes: nil,
+            residentBytes: nil,
+            physFootprintBytes: totalRAM - policy.healthyHeadroomBytes + 1,
+            compressedBytes: nil,
+            gpuAllocatedBytes: nil,
+            gpuRecommendedWorkingSetBytes: nil,
+            hasUnifiedMemory: true
+        )
+        XCTAssertEqual(policy.band(for: guardedSnapshot), .guarded)
+
+        let criticalSnapshot = IOSMemorySnapshot(
+            totalDeviceRAMBytes: totalRAM,
+            availableHeadroomBytes: nil,
+            residentBytes: totalRAM - policy.guardedHeadroomBytes + 1,
+            physFootprintBytes: nil,
+            compressedBytes: nil,
+            gpuAllocatedBytes: nil,
+            gpuRecommendedWorkingSetBytes: nil,
+            hasUnifiedMemory: true
+        )
+        XCTAssertEqual(policy.band(for: criticalSnapshot), .critical)
+
+        let unknownSnapshot = IOSMemorySnapshot(
+            totalDeviceRAMBytes: totalRAM,
+            availableHeadroomBytes: nil,
+            residentBytes: nil,
+            physFootprintBytes: nil,
+            compressedBytes: nil,
+            gpuAllocatedBytes: nil,
+            gpuRecommendedWorkingSetBytes: nil,
+            hasUnifiedMemory: true
+        )
+        XCTAssertEqual(policy.band(for: unknownSnapshot), .healthy)
+    }
+
     private func loadMatrix() throws -> PlatformCapabilityMatrix {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

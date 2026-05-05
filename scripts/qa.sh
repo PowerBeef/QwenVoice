@@ -354,12 +354,15 @@ write_live_audit_request() {
   local modes_json
   modes_json="$(printf '%s' "$QWENVOICE_AUDIO_QC_MODES" \
     | jq -R 'split(",") | map(select(length > 0))')"
+  local expires_at
+  expires_at="$(date -u -v+12H +"%Y-%m-%dT%H:%M:%SZ")"
 
   jq -n \
     --argjson modes "$modes_json" \
     --arg output "$QWENVOICE_AUDIO_QC_OUTPUT_DIR" \
     --arg models "$QWENVOICE_AUDIO_QC_MODELS_ROOT" \
     --arg profile "$QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE" \
+    --arg expiresAt "$expires_at" \
     --argjson repeatCount "$QWENVOICE_AUDIO_QC_REPEAT_COUNT" \
     --argjson coldRuns "$QWENVOICE_AUDIO_QC_COLD_RUNS" \
     --argjson warmRuns "$QWENVOICE_AUDIO_QC_WARM_RUNS" \
@@ -375,6 +378,7 @@ write_live_audit_request() {
     '{
       live: true,
       allowModelLoad: true,
+      expiresAt: $expiresAt,
       outputDirectory: $output,
       modes: $modes,
       modelsRoot: $models,

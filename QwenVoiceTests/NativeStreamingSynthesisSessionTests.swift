@@ -123,7 +123,109 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
         )
     }
 
+    func testLowMemoryProductStreamingIntervalIsClamped() async throws {
+        let result = try await runSingleChunkSession(
+            request: streamingRequest(
+                outputFileName: "floor-clamp.wav",
+                streamingInterval: 0.32
+            ),
+            memoryPolicy: NativeMemoryPolicyResolver.policy(
+                deviceClass: .floor8GBMac,
+                mode: .custom,
+                isBatch: false
+            )
+        )
+
+        XCTAssertEqual(result.benchmarkSample?.timingsMS["streaming_interval_ms"], 600)
+        XCTAssertNil(result.benchmarkSample?.telemetrySamples)
+        XCTAssertEqual(result.benchmarkSample?.stringFlags["telemetry_mode"], NativeTelemetryMode.off.rawValue)
+    }
+
+    func testBatchStreamingIntervalIsClamped() async throws {
+        let result = try await runSingleChunkSession(
+            request: streamingRequest(
+                outputFileName: "batch-clamp.wav",
+                streamingInterval: 0.32,
+                batchIndex: 0,
+                batchTotal: 2
+            ),
+            memoryPolicy: NativeMemoryPolicyResolver.policy(
+                deviceClass: .floor8GBMac,
+                mode: .custom,
+                isBatch: true
+            )
+        )
+
+        XCTAssertEqual(result.benchmarkSample?.timingsMS["streaming_interval_ms"], 800)
+    }
+
+    func testBenchmarkStreamingIntervalRemainsExplicit() async throws {
+        let result = try await runSingleChunkSession(
+            request: streamingRequest(
+                outputFileName: "benchmark-explicit.wav",
+                streamingInterval: 0.32,
+                benchmarkOptions: GenerationRequest.BenchmarkOptions(generationSpeedProfile: "current")
+            ),
+            memoryPolicy: NativeMemoryPolicyResolver.policy(
+                deviceClass: .floor8GBMac,
+                mode: .custom,
+                isBatch: false
+            )
+        )
+
+        XCTAssertEqual(result.benchmarkSample?.timingsMS["streaming_interval_ms"], 320)
+        XCTAssertEqual(result.benchmarkSample?.stringFlags["telemetry_mode"], NativeTelemetryMode.lightweight.rawValue)
+    }
+
     // MARK: - Helpers
+
+    private func runSingleChunkSession(
+        request: GenerationRequest,
+        memoryPolicy: NativeMemoryPolicy
+    ) async throws -> GenerationResult {
+        let sessionsRoot = temporaryRoot.appendingPathComponent("stream_sessions", isDirectory: true)
+        let model = UnsafeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    continuation.yield(.audio(MLXArray([Float32(0.0), Float32(0.1)])))
+                    continuation.finish()
+                }
+            }
+        )
+        let session = NativeStreamingSynthesisSession(
+            requestID: 1,
+            request: request,
+            model: model,
+            streamSessionsDirectory: sessionsRoot,
+            warmState: .cold,
+            loadCapabilityProfile: .fullCapabilities,
+            memoryPolicy: memoryPolicy,
+            mlxMemorySnapshots: [:]
+        )
+        return try await session.run { _ in }
+    }
+
+    private func streamingRequest(
+        outputFileName: String,
+        streamingInterval: Double,
+        batchIndex: Int? = nil,
+        batchTotal: Int? = nil,
+        benchmarkOptions: GenerationRequest.BenchmarkOptions? = nil
+    ) -> GenerationRequest {
+        GenerationRequest(
+            modelID: "test_model",
+            text: "Session interval",
+            outputPath: temporaryRoot.appendingPathComponent(outputFileName).path,
+            shouldStream: true,
+            streamingInterval: streamingInterval,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal,
+            benchmarkOptions: benchmarkOptions,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+    }
 
     private static func makeTemporaryRoot() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
