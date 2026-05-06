@@ -17,7 +17,7 @@ struct ModelsView: View {
                     ModelsIntroLine(deviceClass: viewModel.deviceClass)
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 8, trailing: 16))
                 }
                 .listSectionSeparator(.hidden)
 
@@ -26,7 +26,7 @@ struct ModelsView: View {
                         ModelSectionHeader(mode: mode)
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 14, leading: 0, bottom: 6, trailing: 0))
+                            .listRowInsets(EdgeInsets(top: 10, leading: 0, bottom: 4, trailing: 0))
 
                         let pair = viewModel.pairedVariants(for: mode)
                         ModeVariantsRow(
@@ -43,7 +43,7 @@ struct ModelsView: View {
                         .id(mode.rawValue)
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 6, trailing: 16))
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -136,7 +136,7 @@ private struct ModelSectionHeader: View {
     let mode: GenerationMode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(mode.displayName)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -151,9 +151,8 @@ private struct ModelSectionHeader: View {
             Text(Self.description(for: mode))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .padding(.top, 2)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(mode.displayName). \(Self.description(for: mode))")
     }
@@ -217,27 +216,17 @@ private struct ModeVariantsRow: View {
     let onDeleteRequest: (TTSModel) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 10) {
                 if let speed {
-                    VariantPill(
-                        model: speed,
-                        viewModel: viewModel,
-                        isHighlighted: highlightedModelID == speed.id,
-                        onDeleteRequest: { onDeleteRequest(speed) }
-                    )
+                    pillColumn(for: speed)
                 }
                 if let quality {
-                    VariantPill(
-                        model: quality,
-                        viewModel: viewModel,
-                        isHighlighted: highlightedModelID == quality.id,
-                        onDeleteRequest: { onDeleteRequest(quality) }
-                    )
+                    pillColumn(for: quality)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.top, 6)   // breathing room for star/warning badges that sit above each pill
+            .padding(.top, 4)   // breathing room for the corner badges
 
             if let progressContext = inflightDownloadContext {
                 DownloadProgressLine(progress: progressContext.progress)
@@ -335,6 +324,40 @@ private struct ModeVariantsRow: View {
         guard let model else { return false }
         if case .downloaded = viewModel.statuses[model.id] { return true }
         return false
+    }
+
+    /// Wraps a pill with a small caption directly under it. The
+    /// caption renders as "Recommended" (green) for the
+    /// hardware-recommended variant and as a hidden placeholder
+    /// for the non-recommended variant, so both columns share the
+    /// same vertical height — otherwise the recommended column
+    /// would sit slightly lower than its sibling and the row
+    /// would look uneven.
+    @ViewBuilder
+    private func pillColumn(for model: TTSModel) -> some View {
+        VStack(alignment: .center, spacing: 3) {
+            VariantPill(
+                model: model,
+                viewModel: viewModel,
+                isHighlighted: highlightedModelID == model.id,
+                onDeleteRequest: { onDeleteRequest(model) }
+            )
+
+            if model.isHardwareRecommended {
+                Text("Recommended")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.green)
+                    .accessibilityHidden(true)
+            } else {
+                // Invisible spacer with the same line metrics so
+                // the pill row stays balanced even when only one
+                // variant carries the caption.
+                Text(" ")
+                    .font(.caption2.weight(.semibold))
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     private var orderedVariants: [TTSModel] {
@@ -503,7 +526,11 @@ private struct VariantPill: View {
         if isRisky {
             cornerBadge(systemName: "exclamationmark.triangle.fill", tint: .orange)
         } else if isRecommended {
-            cornerBadge(systemName: "star.fill", tint: modeColor)
+            // Green check decouples the recommendation from the
+            // mode color so it reads as "good / approved"
+            // regardless of which mode the user is on. Pairs with
+            // the small "Recommended" caption below the pill.
+            cornerBadge(systemName: "checkmark.circle.fill", tint: .green)
         }
     }
 
@@ -592,9 +619,9 @@ private struct VariantPill: View {
         }
 
         if isRisky {
-            lines.append("⚠ This variant may exceed the memory available on your Mac. Generation could fail or be very slow — the 4-bit variant is the safe choice for your hardware.")
+            lines.append("⚠ This variant may exceed the memory available on your Mac. Generation could fail or be very slow. The 4-bit variant is the safe choice for your hardware.")
         } else if isRecommended {
-            lines.append("★ Recommended for your Mac.")
+            lines.append("✓ Recommended for your Mac.")
         }
 
         return lines.joined(separator: "\n")
