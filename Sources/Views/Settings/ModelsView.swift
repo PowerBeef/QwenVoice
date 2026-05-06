@@ -9,47 +9,32 @@ struct ModelsView: View {
     @State private var modelToDelete: TTSModel?
     @State private var showDeleteConfirmation = false
 
-    private var modeGroups: [(GenerationMode, [TTSModel])] {
-        GenerationMode.allCases.map { mode in
-            (mode, TTSModel.all.filter { $0.mode == mode })
-        }
-    }
-
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                // The header lives inside the section's content (not
-                // the `header:` slot) so the row-level
-                // `.listRowSeparator(.hidden)` modifier actually
-                // suppresses the divider — `.listStyle(.inset)` on
-                // macOS draws a separator below `header:` views and
-                // ignores attempts to hide it from the
-                // `.listSectionSeparator` chain.
-                ForEach(modeGroups, id: \.0) { (mode, modelsForMode) in
+                ForEach(GenerationMode.allCases, id: \.self) { mode in
                     Section {
                         ModelSectionHeader(mode: mode)
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 14, leading: 0, bottom: 6, trailing: 0))
 
-                        ForEach(modelsForMode) { model in
-                            ModelRow(
-                                model: model,
-                                viewModel: viewModel,
-                                isActive: viewModel.isActive(model),
-                                isRecommended: model.isHardwareRecommended,
-                                isHighlighted: flashedModelID == model.id,
-                                onUse: { viewModel.use(model) },
-                                onDelete: {
-                                    modelToDelete = model
-                                    showDeleteConfirmation = true
-                                }
-                            )
-                            .id(model.id)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
+                        let pair = viewModel.pairedVariants(for: mode)
+                        ModeVariantsRow(
+                            mode: mode,
+                            speed: pair.speed,
+                            quality: pair.quality,
+                            viewModel: viewModel,
+                            highlightedModelID: flashedModelID,
+                            onDeleteRequest: { model in
+                                modelToDelete = model
+                                showDeleteConfirmation = true
+                            }
+                        )
+                        .id(mode.rawValue)
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 16))
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -101,8 +86,19 @@ private extension ModelsView {
     func focusHighlightedModel(using proxy: ScrollViewProxy) {
         guard let highlightedModelID else { return }
         let modelID = highlightedModelID
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-            proxy.scrollTo(modelID, anchor: .center)
+        // Resolve the model id back to its mode so we can scroll
+        // to the row that owns it (the row id is the mode's
+        // raw value now, not the per-variant id).
+        let scrollAnchor: String? = {
+            if let model = TTSModel.model(id: modelID) {
+                return model.mode.rawValue
+            }
+            return nil
+        }()
+        if let scrollAnchor {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                proxy.scrollTo(scrollAnchor, anchor: .center)
+            }
         }
         flashedModelID = modelID
         self.highlightedModelID = nil
@@ -149,16 +145,107 @@ private struct ModelSectionHeader: View {
     }
 }
 
-// MARK: - Row
+// MARK: - Mode-grouped row (both variants on one line)
 
-struct ModelRow: View {
+/// One row per generation mode. Renders both variants as
+/// tappable pills sharing the same horizontal anchor, and
+/// surfaces a single secondary line for an in-flight download
+/// or a most-recent error message — whichever variant they
+/// belong to.
+private struct ModeVariantsRow: View {
+    let mode: GenerationMode
+    let speed: TTSModel?
+    let quality: TTSModel?
+    @ObservedObject var viewModel: ModelManagerViewModel
+    let highlightedModelID: String?
+    let onDeleteRequest: (TTSModel) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                if let speed {
+                    VariantPill(
+                        model: speed,
+                        viewModel: viewModel,
+                        isHighlighted: highlightedModelID == speed.id,
+                        onDeleteRequest: { onDeleteRequest(speed) }
+                    )
+                }
+                if let quality {
+                    VariantPill(
+                        model: quality,
+                        viewModel: viewModel,
+                        isHighlighted: highlightedModelID == quality.id,
+                        onDeleteRequest: { onDeleteRequest(quality) }
+                    )
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 6)   // breathing room for star/warning badges that sit above each pill
+
+            if let progressContext = inflightDownloadContext {
+                DownloadProgressLine(progress: progressContext.progress)
+                    .padding(.leading, 4)
+                    .accessibilityIdentifier("models_progress_\(progressContext.modelID)")
+            }
+
+            if let surfacedError {
+                Text(surfacedError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 4)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(mode.displayName)
+    }
+
+    private var orderedVariants: [TTSModel] {
+        [speed, quality].compactMap { $0 }
+    }
+
+    private var inflightDownloadContext: (modelID: String, progress: ModelManagerViewModel.DownloadProgress)? {
+        for model in orderedVariants {
+            if case .downloading(let progress) = viewModel.statuses[model.id] {
+                return (model.id, progress)
+            }
+        }
+        return nil
+    }
+
+    private var surfacedError: String? {
+        for model in orderedVariants {
+            switch viewModel.statuses[model.id] {
+            case .notDownloaded(let message):
+                if let message, !message.isEmpty { return message }
+            case .repairAvailable(_, _, let message):
+                if let message, !message.isEmpty { return message }
+            default:
+                break
+            }
+        }
+        return nil
+    }
+}
+
+// MARK: - Variant pill
+
+/// One tappable pill per variant. Mode color is the variant's
+/// identity (always present), with state expressed through fill
+/// vs. outline vs. ghost. A small icon at the top-trailing
+/// corner marks the hardware-recommended variant (★) or, when
+/// the variant would be too heavy for this Mac's RAM, a
+/// warning (⚠). Tap is the action: download / make-active /
+/// cancel / repair. Right-click offers Delete on downloaded
+/// variants. Hover shows a tooltip with size + state guidance,
+/// including the warning explanation for risky variants.
+private struct VariantPill: View {
     let model: TTSModel
-    let viewModel: ModelManagerViewModel
-    let isActive: Bool
-    let isRecommended: Bool
-    var isHighlighted: Bool = false
-    var onUse: (() -> Void)? = nil
-    var onDelete: (() -> Void)? = nil
+    @ObservedObject var viewModel: ModelManagerViewModel
+    let isHighlighted: Bool
+    let onDeleteRequest: () -> Void
 
     @State private var isHovering: Bool = false
 
@@ -166,288 +253,249 @@ struct ModelRow: View {
         viewModel.statuses[model.id] ?? .checking
     }
 
-    private var variantName: String {
-        model.variantKind?.displayName ?? "Default"
+    private var modeColor: Color {
+        AppTheme.modeColor(for: model.mode)
     }
 
-    private var bitDepthLabel: String? {
-        model.variantKind?.bitDepthLabel
+    private var bitDepthLabel: String {
+        model.variantKind?.bitDepthLabel ?? "—"
+    }
+
+    private var isActive: Bool { viewModel.isActive(model) }
+    private var isRecommended: Bool { model.isHardwareRecommended }
+    private var isRisky: Bool { viewModel.isHardwareRisky(model) }
+
+    private var isDownloaded: Bool {
+        if case .downloaded = status { return true }
+        return false
+    }
+    private var isDownloading: Bool {
+        if case .downloading = status { return true }
+        return false
+    }
+    private var needsRepair: Bool {
+        if case .repairAvailable = status { return true }
+        return false
+    }
+    private var isChecking: Bool {
+        if case .checking = status { return true }
+        return false
     }
 
     private var sizeText: String? {
         viewModel.sizeText(for: model)
     }
 
-    private var modeColor: Color {
-        AppTheme.modeColor(for: model.mode)
-    }
-
-    private var rowAccessibilityLabel: String {
-        var parts: [String] = [model.mode.displayName, variantName]
-        if let bitDepthLabel { parts.append(bitDepthLabel) }
-        if let sizeText { parts.append(sizeText) }
-        if isRecommended { parts.append("Recommended") }
-        if isActive { parts.append("Active") }
-        switch status {
-        case .checking: parts.append("Checking")
-        case .downloading: parts.append("Downloading")
-        case .repairAvailable: parts.append("Needs repair")
-        case .notDownloaded: parts.append("Not downloaded")
-        case .downloaded: break
-        }
-        return parts.joined(separator: ", ")
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            primaryLine
-            secondaryLineContent
-                .padding(.leading, 10)
+        Button(action: handleTap) {
+            ZStack(alignment: .topTrailing) {
+                pillContent
+                badgeOverlay
+                    .offset(x: 4, y: -4)
+                    .allowsHitTesting(false)
+            }
+            // Reserve room above and to the trailing edge of the
+            // pill so the corner badge never gets clipped by the
+            // row's listRowInsets.
+            .padding(.top, 4)
+            .padding(.trailing, 4)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(rowSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.18)) {
-                isHovering = hovering
+        .buttonStyle(.plain)
+        .help(tooltipText)
+        .contextMenu {
+            if isDownloaded || needsRepair {
+                Button(role: .destructive, action: onDeleteRequest) {
+                    Label("Delete \(bitDepthLabel) Variant", systemImage: "trash")
+                }
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(rowAccessibilityLabel)
-        .accessibilityIdentifier("models_card_\(model.id)")
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) { isHovering = hovering }
+        }
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier("models_pill_\(model.id)")
     }
 
-    /// The single anchor line for every healthy state. The outer
-    /// row body carries `.frame(maxWidth: .infinity)`, so a plain
-    /// `HStack` + `Spacer` reliably places the leading metadata at
-    /// the leading edge and pushes the trailing indicator + action
-    /// group flush against the trailing edge — every row, every
-    /// variant, identical right-edge x. The `Spacer(minLength:)`
-    /// guarantees a minimum gap between the two groups when content
-    /// is dense, preventing the "Recommended" chip from kissing the
-    /// size metadata.
-    private var primaryLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(variantName)
-                .font(.body.weight(isActive ? .semibold : .medium))
-                .foregroundStyle(isActive ? AnyShapeStyle(modeColor) : AnyShapeStyle(Color.primary))
+    private var pillContent: some View {
+        HStack(spacing: 6) {
+            Text(bitDepthLabel)
+                .font(.callout.weight(isLiveActive ? .semibold : .medium))
+                .monospacedDigit()
+                .foregroundStyle(textForeground)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(minWidth: 60, alignment: .leading)
-                .help(model.folder)
 
-            if let bitDepthLabel {
-                Text(bitDepthLabel)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            if let sizeText {
-                Text(separator)
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-
-                Text(sizeText)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            Spacer(minLength: 16)
-
-            indicators
-
-            actionView
-                .frame(minWidth: 92, alignment: .trailing)
+            stateGlyph
         }
-    }
-
-    private var separator: String { "·" }
-
-    /// Show at most one chip per row. `Active` wins when the row is
-    /// the selected variant, since the recommendation is informational
-    /// guidance for users picking *between* variants — once a row is
-    /// already chosen, the recommendation chip is redundant. This also
-    /// caps the trailing-group width so every row has the same right
-    /// edge: with Speed-recommended-and-active rows previously carrying
-    /// two chips while Quality rows carried zero, the row widths
-    /// diverged enough to overflow the Models panel on Active rows.
-    @ViewBuilder
-    private var indicators: some View {
-        if isActive {
-            ModelBadge(text: "Active", tint: modeColor)
-        } else if isRecommended {
-            ModelBadge(text: "Recommended", tint: AppTheme.accent)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .frame(minWidth: 76)
+        .background(pillBackground)
+        .clipShape(Capsule(style: .continuous))
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(borderColor, lineWidth: borderWidth)
         }
-    }
-
-    /// Layered surface for the row: a base resting fill, a hover
-    /// lift, an active backdrop, and the deep-link flash overlay.
-    /// On macOS 26 with Liquid Glass available, the active row
-    /// upgrades to a tinted glass material. On older macOS or
-    /// with Reduce Transparency, the legacy fallback is a flat
-    /// mode-tinted fill: the visual stays legible without glass.
-    @ViewBuilder
-    private var rowSurface: some View {
-        ZStack {
-            #if QW_UI_LIQUID
-            if #available(macOS 26, *) {
-                if isActive {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.clear)
-                        .glassEffect(
-                            .regular.tint(modeColor.opacity(0.18)),
-                            in: .rect(cornerRadius: 10)
-                        )
-                } else if isHovering {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(modeColor.opacity(0.05))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(modeColor.opacity(0.18), lineWidth: 0.5)
-                        }
-                } else {
-                    Color.clear
-                }
-            } else {
-                rowSurfaceLegacy
-            }
-            #else
-            rowSurfaceLegacy
-            #endif
-
+        .overlay {
             if isHighlighted {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AppTheme.accent.opacity(0.10))
+                Capsule(style: .continuous)
+                    .stroke(AppTheme.accent, lineWidth: 2)
+            }
+        }
+        .scaleEffect(isHovering && !isLiveActive ? 1.02 : 1.0)
+        .animation(.easeOut(duration: 0.15), value: isHovering)
+    }
+
+    @ViewBuilder
+    private var stateGlyph: some View {
+        if isDownloading {
+            ProgressView()
+                .controlSize(.mini)
+                .tint(modeColor)
+        } else if needsRepair {
+            Image(systemName: "wrench.adjustable.fill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.orange)
+        } else if isChecking {
+            Image(systemName: "hourglass")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var badgeOverlay: some View {
+        if isRisky {
+            cornerBadge(systemName: "exclamationmark.triangle.fill", tint: .orange)
+        } else if isRecommended {
+            cornerBadge(systemName: "star.fill", tint: modeColor)
+        }
+    }
+
+    private func cornerBadge(systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(tint)
+            .padding(3)
+            .background {
+                Circle()
+                    .fill(.background)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(AppTheme.accent.opacity(0.22), lineWidth: 1)
+                        Circle().stroke(tint.opacity(0.35), lineWidth: 0.5)
                     }
             }
-        }
     }
 
+    /// `true` only when the variant is BOTH the user's selected
+    /// active variant AND actually present on disk. We deliberately
+    /// don't promote a not-yet-downloaded variant to the filled
+    /// treatment even when it's the active fallback (recommended
+    /// for the hardware): the filled pill should always read as
+    /// "this is what generation is running on", not "this would
+    /// be active if you installed it".
+    private var isLiveActive: Bool { isActive && isDownloaded }
+
     @ViewBuilder
-    private var rowSurfaceLegacy: some View {
-        if isActive {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(modeColor.opacity(0.10))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(modeColor.opacity(0.22), lineWidth: 0.5)
-                }
-        } else if isHovering {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(modeColor.opacity(0.05))
+    private var pillBackground: some View {
+        if isLiveActive {
+            modeColor
+        } else if isDownloaded {
+            modeColor.opacity(0.12)
+        } else if isDownloading || needsRepair {
+            modeColor.opacity(0.06)
         } else {
+            // not downloaded — ghost
             Color.clear
         }
     }
 
-    /// Inline secondary content shown only for the abnormal
-    /// states that genuinely benefit from extra explanation:
-    /// download progress, repair details, and surfaced error
-    /// messages. Healthy states (checking, notDownloaded with no
-    /// error, downloaded) collapse to the single primary line.
-    @ViewBuilder
-    private var secondaryLineContent: some View {
-        switch status {
-        case .checking:
-            EmptyView()
-        case .notDownloaded(let message):
-            if let message, !message.isEmpty {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-        case .downloading(let progress):
-            DownloadProgressLine(progress: progress)
-        case .repairAvailable(let sizeBytes, let missingRequiredPaths, let message):
-            VStack(alignment: .leading, spacing: 2) {
-                if !missingRequiredPaths.isEmpty {
-                    Text("Missing \(missingRequiredPaths.count) required file\(missingRequiredPaths.count == 1 ? "" : "s").")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if sizeBytes > 0 {
-                    Text("Local files are incomplete.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let message, !message.isEmpty {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-        case .downloaded:
-            EmptyView()
-        }
+    private var textForeground: Color {
+        if isLiveActive { return .white }
+        if isDownloaded || isDownloading || needsRepair { return modeColor }
+        return .secondary
     }
 
-    @ViewBuilder
-    private var actionView: some View {
+    private var borderColor: Color {
+        if isLiveActive { return Color.clear }
+        if needsRepair { return Color.orange.opacity(0.7) }
+        if isDownloaded || isDownloading { return modeColor.opacity(0.7) }
+        return modeColor.opacity(0.35)
+    }
+
+    private var borderWidth: CGFloat {
+        isLiveActive ? 0 : 1
+    }
+
+    private var tooltipText: String {
+        var lines: [String] = []
+        let kindName = model.variantKind?.displayName ?? model.name
+        let sizePart = sizeText ?? "Size unknown until download starts"
+        lines.append("\(kindName) (\(bitDepthLabel)) — \(sizePart)")
+
         switch status {
         case .checking:
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityIdentifier("models_checking_\(model.id)")
-        case .notDownloaded:
-            Button("Download") {
-                Task { await viewModel.download(model) }
+            lines.append("Checking local files…")
+        case .notDownloaded(let message):
+            if let message, !message.isEmpty {
+                lines.append(message)
+            } else {
+                lines.append("Click to download.")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .tint(AppTheme.accent)
-            .accessibilityIdentifier("models_download_\(model.id)")
         case .downloading:
-            Button("Cancel") {
-                viewModel.cancelDownload(model)
+            lines.append("Downloading… click to cancel.")
+        case .repairAvailable(_, _, let message):
+            lines.append("Local files are incomplete. Click to repair.")
+            if let message, !message.isEmpty {
+                lines.append(message)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        case .repairAvailable:
-            Button("Repair") {
-                Task { await viewModel.download(model) }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .tint(AppTheme.accent)
-            .accessibilityIdentifier("models_retry_\(model.id)")
         case .downloaded:
             if isActive {
-                // Quieter trash on the Active row. The row itself
-                // already telegraphs "this is your selection" via
-                // the mode-tinted backdrop and the Active badge;
-                // a borderless icon-only button keeps the action
-                // available without competing with the indicator
-                // strip.
-                Button(role: .destructive) {
-                    onDelete?()
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .help("Delete \(model.name)")
-                .accessibilityIdentifier("models_delete_\(model.id)")
+                lines.append("Active variant. Right-click to delete.")
             } else {
-                Button("Use") {
-                    onUse?()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(AppTheme.accent)
-                .accessibilityIdentifier("models_use_\(model.id)")
+                lines.append("Click to make this the active variant.")
+            }
+        }
+
+        if isRisky {
+            lines.append("⚠ This variant may exceed the memory available on your Mac. Generation could fail or be very slow — the 4-bit variant is the safe choice for your hardware.")
+        } else if isRecommended {
+            lines.append("★ Recommended for your Mac.")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private var accessibilityLabel: String {
+        var parts: [String] = [
+            model.mode.displayName,
+            model.variantKind?.displayName ?? model.name,
+            bitDepthLabel
+        ]
+        if isActive { parts.append("Active") }
+        else if isDownloaded { parts.append("Downloaded") }
+        else if isDownloading { parts.append("Downloading") }
+        else if needsRepair { parts.append("Needs repair") }
+        else if isChecking { parts.append("Checking") }
+        else { parts.append("Not downloaded") }
+        if isRecommended { parts.append("Recommended") }
+        if isRisky { parts.append("Hardware warning") }
+        if let sizeText { parts.append(sizeText) }
+        return parts.joined(separator: ", ")
+    }
+
+    private func handleTap() {
+        switch status {
+        case .checking:
+            break
+        case .notDownloaded:
+            Task { await viewModel.download(model) }
+        case .downloading:
+            viewModel.cancelDownload(model)
+        case .repairAvailable:
+            Task { await viewModel.download(model) }
+        case .downloaded:
+            if !isActive {
+                viewModel.use(model)
             }
         }
     }
@@ -455,9 +503,9 @@ struct ModelRow: View {
 
 // MARK: - Download progress line
 
-/// Tight inline detail for an in-flight download. Replaces the
-/// prior multi-line progress block; condenses the same data into
-/// a single readable line plus a thin progress bar.
+/// Tight inline detail for an in-flight download. Shared by all
+/// modes; rendered once per row, only when one of that row's
+/// variants is mid-download.
 private struct DownloadProgressLine: View {
     let progress: ModelManagerViewModel.DownloadProgress
 
@@ -467,12 +515,12 @@ private struct DownloadProgressLine: View {
                 ProgressView(value: Double(progress.downloadedBytes), total: Double(totalBytes))
                     .progressViewStyle(.linear)
                     .tint(AppTheme.statusProgressTint)
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 280)
             } else {
                 ProgressView()
                     .progressViewStyle(.linear)
                     .tint(AppTheme.statusProgressTint)
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 280)
             }
 
             HStack(spacing: 6) {
@@ -517,27 +565,6 @@ private struct DownloadProgressLine: View {
             .font(.caption)
             .lineLimit(1)
         }
-    }
-}
-
-// MARK: - Badge
-
-private struct ModelBadge: View {
-    let text: String
-    let tint: Color
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background {
-                Capsule()
-                    .fill(tint.opacity(0.14))
-            }
     }
 }
 

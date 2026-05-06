@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 
 /// Manages model install state, repairability, download, and delete flows.
 @MainActor
@@ -72,6 +73,7 @@ final class ModelManagerViewModel: ObservableObject {
 
     private let fileManager: FileManager
     private let modelsDirectory: URL
+    private let deviceClass: NativeDeviceMemoryClass
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
@@ -81,10 +83,12 @@ final class ModelManagerViewModel: ObservableObject {
 
     init(
         fileManager: FileManager = .default,
-        modelsDirectory: URL = QwenVoiceApp.modelsDir
+        modelsDirectory: URL = QwenVoiceApp.modelsDir,
+        deviceClass: NativeDeviceMemoryClass = NativeMemoryPolicyResolver.deviceClass()
     ) {
         self.fileManager = fileManager
         self.modelsDirectory = modelsDirectory
+        self.deviceClass = deviceClass
 
         for model in TTSModel.all {
             let info = localModelInfo(for: model)
@@ -135,6 +139,34 @@ final class ModelManagerViewModel: ObservableObject {
 
     func isActive(_ model: TTSModel) -> Bool {
         TTSModel.model(for: model.mode)?.id == model.id
+    }
+
+    /// Returns the Speed and Quality variants for a generation
+    /// mode in display order. Either side can be `nil` if the
+    /// manifest doesn't include that variant kind for the mode
+    /// (today every mode has both; this stays defensive in case
+    /// future contract changes drop one). Used by the Models tab
+    /// to render both variants on a single row.
+    func pairedVariants(
+        for mode: GenerationMode
+    ) -> (speed: TTSModel?, quality: TTSModel?) {
+        let modelsForMode = TTSModel.all.filter { $0.mode == mode }
+        let speed = modelsForMode.first { $0.variantKind == .speed }
+        let quality = modelsForMode.first { $0.variantKind == .quality }
+        return (speed, quality)
+    }
+
+    /// `true` when running this variant on the current Mac is
+    /// likely to overrun memory and either fail or thrash badly.
+    /// Today the only risky combination is the Quality (8-bit)
+    /// variant on `.floor8GBMac`. The cached `deviceClass` is
+    /// computed once at init from `ProcessInfo.physicalMemory`,
+    /// so this lookup stays cheap. If we add a
+    /// `recommendedMemoryGB` field to the manifest later, this
+    /// is the single seam to extend.
+    func isHardwareRisky(_ model: TTSModel) -> Bool {
+        guard model.variantKind == .quality else { return false }
+        return deviceClass == .floor8GBMac
     }
 
     /// Localized "1.6 GB" / "3.2 GB" string for the Models row's
