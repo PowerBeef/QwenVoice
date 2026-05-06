@@ -394,16 +394,20 @@ private struct ActionButton: View {
                 .accessibilityIdentifier("settings_checking_\(model.id)")
 
         case .notDownloaded:
-            // Standard bordered button at regular size, filled to
-            // the parent action-column frame so the button stays a
-            // constant width even when its text content changes
-            // (e.g. switching Speed `Get 2.31 GB` -> Quality
-            // `Get 3.08 GB`). The container drives the size, the
-            // text rides inside.
-            Button(getButtonTitle) {
+            // The frame must go on the LABEL inside the button, not
+            // on the button itself. SwiftUI's bordered-button bezel
+            // hugs its label's intrinsic size; a frame applied to
+            // the Button view affects layout but doesn't widen the
+            // bezel. Stretching the Text label is what forces the
+            // bezel to fill the parent action column so the button
+            // stays a constant width regardless of whether its text
+            // is `Get 2.31 GB` or `Get 3.08 GB`.
+            Button {
                 Task { await viewModel.download(model) }
+            } label: {
+                Text(getButtonTitle)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("settings_get_\(model.id)")
 
         case .downloading(let progress):
@@ -425,10 +429,12 @@ private struct ActionButton: View {
             }
 
         case .repairAvailable:
-            Button("Repair") {
+            Button {
                 Task { await viewModel.download(model) }
+            } label: {
+                Text("Repair")
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
             .tint(.orange)
             .accessibilityIdentifier("settings_repair_\(model.id)")
 
