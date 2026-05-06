@@ -400,21 +400,33 @@ private struct ActionButton: View {
             .accessibilityIdentifier("settings_get_\(model.id)")
 
         case .downloading(let progress):
+            // Progress bar fills remaining width; cancel collapses
+            // to a borderless `xmark.circle.fill` icon next to it
+            // so the column stays at its 115 pt width without
+            // wrapping the word "Cancel". Tooltip + a11y label
+            // preserve the action's name for non-visual surfaces.
             HStack(spacing: 8) {
                 if let total = progress.totalBytes, total > 0 {
                     ProgressView(value: Double(progress.downloadedBytes), total: Double(total))
                         .progressViewStyle(.linear)
-                        .frame(width: 80)
+                        .frame(maxWidth: .infinity)
                         .tint(AppTheme.statusProgressTint)
                 } else {
                     ProgressView()
                         .controlSize(.small)
+                        .frame(maxWidth: .infinity)
                 }
-                Button("Cancel") {
+                Button {
                     viewModel.cancelDownload(model)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .imageScale(.large)
                 }
                 .buttonStyle(.borderless)
-                .controlSize(.small)
+                .help("Cancel download")
+                .accessibilityLabel("Cancel download")
+                .accessibilityIdentifier("settings_cancel_\(model.id)")
             }
 
         case .repairAvailable:
@@ -424,19 +436,29 @@ private struct ActionButton: View {
             .accessibilityIdentifier("settings_repair_\(model.id)")
 
         case .downloaded:
-            // Active-and-downloaded: the picker shows it's selected,
-            // so the trailing action becomes a quiet trash. If a
-            // user picked this variant via the popup but the engine
-            // hasn't moved it to active yet (rare race), there's
-            // nothing else to do — same trash.
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundStyle(.secondary)
+            // Active-and-downloaded: a `Manage` Menu fills the
+            // action column so the row reads as complete (the prior
+            // bare trash icon left the slot looking empty). The
+            // menu opens to: Reveal in Finder, Delete Model. Same
+            // bordered shape as Get/Repair so the rows stay
+            // visually balanced no matter which state they're in.
+            Menu {
+                Button {
+                    let url = model.installDirectory(in: QwenVoiceApp.modelsDir)
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+                Divider()
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete Model", systemImage: "trash")
+                }
+            } label: {
+                Text("Manage")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .help("Delete \(model.variantKind?.displayName ?? model.name) variant")
-            .accessibilityIdentifier("settings_delete_\(model.id)")
+            .help("Manage \(model.variantKind?.displayName ?? model.name) variant")
+            .accessibilityIdentifier("settings_manage_\(model.id)")
         }
     }
 
