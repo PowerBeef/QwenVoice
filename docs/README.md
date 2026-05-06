@@ -4,7 +4,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 
 ## Maintained Reference Docs
 
-- [`../CLAUDE.md`](../CLAUDE.md) — primary repository operating guide for Claude Code and contributors
+- [`../CLAUDE.md`](../CLAUDE.md) — canonical repository operating guide for coding agents
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
 - [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — rebuilt QA gate for static validation, source/native/UI QA layers, builds, and unsigned release proof
@@ -44,7 +44,7 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 ## Notes
 
-- Maintained contributor guidance in this checkout lives in the maintained reference docs listed above.
+- Maintained contributor guidance in this checkout lives in `CLAUDE.md`, `CONTRIBUTING.md`, and the maintained reference docs listed above.
 - This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
 - Current automation surfaces live in `scripts/` and `.github/workflows/`, including `scripts/qa.sh`, project-input validation, source/native/UI QA layers, build proof, macOS release packaging, and the deferred iPhone TestFlight workflow.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.

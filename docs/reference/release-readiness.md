@@ -38,6 +38,8 @@ Public messaging rules:
 
 - Official minimum hardware: `Mac mini M1, 8 GB RAM`
 - Supported default path on minimum hardware: 4-bit `Speed`
+- Model catalog proof: six macOS rows, covering `Speed / 4-bit` and `Quality / 8-bit` for Custom Voice, Voice Design, and Voice Cloning
+- Active/recommended behavior: floor Macs default to and recommend Speed; mid/high-memory Macs default to and recommend Quality
 - Current local source gates: maintained
 - Current hosted release path: signed and notarized DMG on GitHub Releases
 - Current public release target: yes
@@ -76,6 +78,7 @@ Release-facing metadata and docs should record:
 - whether minimum-device proof is `pending`, `recorded`, or `not_applicable`
 - whether the TestFlight path was exported locally or uploaded to App Store Connect
 - the current capability and entitlement baseline from `config/apple-platform-capability-matrix.json`
+- macOS model-catalog proof for dual Speed/Quality rows, Active and Recommended states, per-mode active selection, and folder coexistence
 - the `.xcresult` evidence paths for maintained build and release lanes when relevant
 
 ## Current Signoff Tiers
@@ -170,7 +173,7 @@ Do not treat iPhone as a public release target again until all of the following 
 Minimum-device re-entry evidence should explicitly cover:
 
 - iPhone 15 Pro install and first launch
-- 4-bit Speed model catalog, download, resume, verification, and install
+- Speed-only model catalog, download, resume, verification, and install
 - App Group persistence for models, downloads, staging, outputs, voices, and cache
 - engine-extension discovery, generation, cancellation, teardown, and replacement
 - memory-pressure admission, trim, and unload behavior

@@ -16,15 +16,16 @@ The macOS app also honors:
 QWENVOICE_APP_SUPPORT_DIR=/path/to/custom/app-support
 ```
 
-Maintained macOS subtrees:
+Maintained macOS subtrees and preferences:
 
-- `models/` stores installed Hugging Face model files.
+- `models/` stores installed Hugging Face model files. Speed and Quality folders for the same generation mode can coexist on macOS.
 - `.qwenvoice-downloads/` stores staged model downloads, partial files, resume data, and download-state metadata while a download is in progress.
 - `outputs/CustomVoice/`, `outputs/VoiceDesign/`, and `outputs/Clones/` store generated audio unless the user chooses a different output directory.
 - `voices/` stores saved voice reference assets.
 - `history.sqlite` stores local generation history.
+- Active macOS model-quality choices are stored in normal app preferences, keyed per generation mode.
 
-Delete local macOS app data by quitting the app and removing the app support root or the specific subtree above. Deleting `models/` removes installed model files and requires downloading them again.
+Delete local macOS app data by quitting the app and removing the app support root or the specific subtree above. Deleting `models/` removes installed model files and requires downloading them again; it does not by itself clear normal app preferences such as the active model-quality choice.
 
 ## iPhone Storage
 

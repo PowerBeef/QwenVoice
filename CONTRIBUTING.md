@@ -14,6 +14,16 @@ When facts disagree, trust:
 
 `Sources/Resources/qwenvoice_contract.json` is the source of truth for model, speaker, variant, output, and required-file metadata.
 
+`CLAUDE.md` is the canonical repository operating guide for coding agents working in this checkout.
+
+Current model-selection policy:
+
+- macOS exposes both `Speed / 4-bit` and `Quality / 8-bit` variants for Custom Voice, Voice Design, and Voice Cloning.
+- 8 GB/floor Macs default to and recommend Speed; mid/high-memory Macs default to and recommend Quality.
+- Mac users may select either installed variant per generation mode.
+- iPhone remains Speed-only.
+- Legacy base model IDs resolve to the hardware-recommended variant; variant-specific IDs own model status, download, repair, delete, and install metadata.
+
 ## Workflow
 
 - Work on `main` unless the maintainer asks for a branch.

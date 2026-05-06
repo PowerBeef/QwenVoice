@@ -110,6 +110,7 @@ Treat frontend work as unblocked only when these statements are true:
 - macOS and iPhone publish the same lifecycle vocabulary: `idle`, `launching`, `connected`, `interrupted`, `recovering`, `invalidated`, `failed`.
 - app-facing engine state is consumed through `TTSEngineFrontendState`, not transport-specific state.
 - app-facing delivery state is consumed through `IOSModelDeliverySnapshot`, not URLSession or staging internals.
+- macOS model catalog exposes variant-specific Speed and Quality rows with hardware-based Recommended defaults and per-mode Active selection; iPhone model catalog remains Speed-only.
 - capability, bundle identity, entitlement, and packaged-resource drift are caught by `scripts/check_project_inputs.sh` and `./scripts/qa.sh validate`.
 - contract, macOS source, and native-runtime QA layers pass.
 - macOS and iPhone compile through the maintained foundation build script.

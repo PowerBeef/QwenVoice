@@ -39,7 +39,7 @@ The next recovery work should keep this baseline stable: native SwiftUI only, no
 ## Current Caveats
 
 - The iPhone target is Vocello-branded, but the macOS target graph still keeps several internal `QwenVoice` names and bundle paths for continuity.
-- The supported macOS minimum-hardware path is the 4-bit `Speed` lane on `Mac mini M1, 8 GB RAM`; `Quality` remains opt-in and must stay admission-guarded.
+- The supported macOS minimum-hardware path is the 4-bit `Speed` lane on `Mac mini M1, 8 GB RAM`; `Quality` is selectable per generation mode when installed, but floor hardware defaults to Speed and Quality is not guaranteed there.
 - The repo compiles the iPhone app and engine extension, but official minimum-device proof still depends on real `iPhone 15 Pro` validation under load.
 - Owned-device iPhone validation currently centers on `iPhone 17 Pro`; that does not replace the separate `iPhone 15 Pro` proof obligation.
 - The restored iPhone TestFlight workflow still depends on real Apple signing materials, provisioning, and App Store Connect credentials when run outside local source-only validation.

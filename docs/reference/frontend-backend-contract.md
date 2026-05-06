@@ -85,6 +85,28 @@ Frontend code must not depend on:
 - URLSession task identifiers
 - App Group file internals beyond the documented app-layer actions
 
+## Stable Model Selection State
+
+The macOS model-management surface may expose variant-specific model identifiers such as:
+
+- `pro_custom_speed`
+- `pro_custom_quality`
+- `pro_design_speed`
+- `pro_design_quality`
+- `pro_clone_speed`
+- `pro_clone_quality`
+
+Frontend code may rely on:
+
+- macOS showing Speed and Quality rows for each generation mode
+- separate `Recommended` and `Active` states in the model catalog
+- active macOS variant selection being stored per generation mode through app preference state
+- generation flows resolving the active model through the app model layer rather than changing request wire shapes
+- legacy base IDs resolving to the hardware-recommended variant for compatibility
+- iPhone exposing Speed-only model delivery
+
+Frontend code must not require changes to `qwenvoice_contract.json`, XPC envelopes, saved-voice schema, database schema, or `GenerationRequest` wire shapes to support macOS variant selection.
+
 ## Stable App-Layer Adapters
 
 The maintained app-layer adapters that translate transport/runtime details into frontend-safe state are:

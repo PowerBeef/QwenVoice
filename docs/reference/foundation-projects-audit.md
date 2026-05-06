@@ -36,13 +36,13 @@ The healthiest dependencies are `GRDB.swift`, `swift-huggingface`, `swift-jinja`
 
 Qwen3-TTS remains the model foundation for the current product. The root README credits `Qwen3-TTS`, and `Sources/Resources/qwenvoice_contract.json` maps the three product modes to Qwen3-TTS model families:
 
-| Product mode | Default macOS model repo | iPhone/macOS Speed variant | Contract artifact version |
+| Product mode | macOS Quality variant repo | macOS/iPhone Speed variant repo | Contract artifact version |
 | --- | --- | --- | --- |
 | Custom Voice | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit` | `2026.04.05.2` |
 | Voice Design | `mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit` | `2026.04.05.2` |
 | Voice Cloning | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit` | `2026.04.05.2` |
 
-Live Hugging Face checks found the referenced model repos and current repository SHAs:
+macOS treats both variant repos as first-class downloadable rows, with the active default and recommendation derived from hardware class. iPhone remains Speed-only. The live Hugging Face checks recorded during this 2026-04-28 audit found the referenced model repos and repository SHAs below; they were not refreshed for the model-selection documentation update.
 
 | Model repo | Last modified | Current SHA |
 | --- | --- | --- |
@@ -152,4 +152,3 @@ The behind transitive packages are not urgent by themselves. Updating them shoul
 3. Defer MLX Swift, MLX Swift LM, and Swift Transformers upgrades until a dedicated vendor refresh can run source tests, macOS/iOS foundation builds, autonomous audio QC, and cold/warm generation timing.
 4. Keep `GRDB.swift` and `swift-huggingface` unchanged for now because their pinned versions match the latest observed release tags.
 5. Keep `third_party_patches/mlx-audio-swift/` narrow and readable; do not mass-format or fold unrelated upstream products into app targets.
-

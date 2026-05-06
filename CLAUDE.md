@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`AGENTS.md` is the canonical repository operating guide for coding agents working in QwenVoice. This file is a Claude Code compatibility supplement with Claude-specific tooling notes and historical context; if it conflicts with `AGENTS.md`, follow `AGENTS.md`.
+`CLAUDE.md` is the authoritative repository operating guide for coding agents working in QwenVoice. Session-level user, system, and developer instructions still apply above this guide.
 
 ## Repo Overview
 
@@ -31,8 +31,7 @@ This checkout is a native Apple-platform codebase for macOS and iPhone. Do not r
 
 ## Maintained Docs
 
-- `AGENTS.md` — canonical repository operating guide for coding agents
-- `CLAUDE.md` — Claude Code compatibility supplement; defer to `AGENTS.md` on conflicts
+- `CLAUDE.md` — canonical repository operating guide for coding agents
 - `README.md` — public landing page and end-user overview
 - `CONTRIBUTING.md` — contributor workflow, source-of-truth order, validation entrypoints
 - `docs/README.md` — documentation index
@@ -99,6 +98,10 @@ Browser MCPs (`chrome-devtools`, `claude-in-chrome`) and computer-use are not re
 - Do not create extra branches or worktrees unless the user explicitly asks for one.
 - Do not let generic tool, plugin, or skill defaults override this repo-specific rule.
 
+## Commit & Pull Requests
+
+Use short imperative subjects, often scoped with a colon (for example, `Engine probe Phase 2c: …` or `Fix bench helper …`). Keep commits focused. Pull requests should describe behavior changes, list commands run, link related issues, and include screenshots or screen recordings for UI-facing changes.
+
 ## Safe Edit Boundaries
 
 - `project.yml` drives `QwenVoice.xcodeproj`. Prefer editing `project.yml` and regenerating the project over hand-editing generated project files.
@@ -145,10 +148,16 @@ Default macOS runtime data layout:
 - The official minimum hardware floor is `Mac mini M1, 8 GB RAM` and `iPhone 15 Pro`.
 - Process isolation is a product requirement on both platforms. Do not move heavy generation, prewarm, or model-load work back into the UI process.
 - `QW_UI_LEGACY_GLASS` and macOS 15 compatibility are retired. Do not restore older dual-profile or dual-OS support.
-- iPhone uses 4-bit `Speed` variants only.
-- macOS defaults to 4-bit `Speed` on minimum hardware and can also expose 8-bit `Quality` when runtime admission allows it.
+- macOS exposes both `Speed / 4-bit` and `Quality / 8-bit` variants for Custom Voice, Voice Design, and Voice Cloning.
+- 8 GB/floor Macs default to and recommend Speed; mid/high-memory Macs default to and recommend Quality.
+- Mac users may select either installed macOS variant per generation mode; legacy base IDs resolve to the hardware-recommended variant. Keep download/install/repair/delete metadata keyed by variant-specific IDs such as `pro_custom_speed` and `pro_custom_quality`.
+- iPhone uses Speed-only model variants.
 - Keep shared styling centralized in `Sources/Views/Components/AppTheme.swift` on macOS and in the iPhone shell primitives/theme layer on iOS.
 - `QW_TEST_SUPPORT` is a Debug/test-only Swift compilation condition (stub engines, UI launch configuration, fault injection, fixture helpers, opt-in benchmark hooks). Release builds must not depend on it.
+
+## Coding Style
+
+Match the existing Swift style: 4-space indentation, `PascalCase` types, `camelCase` properties/functions, and descriptive enum cases. Keep SwiftUI views and coordinators focused by feature area. No repo-wide SwiftFormat or SwiftLint config is present, so preserve local formatting and avoid mass-formatting, especially under `third_party_patches/`.
 
 ## Native SwiftUI Discipline
 
@@ -235,6 +244,10 @@ Disk-space recovery (this dev machine has limited storage):
 ./scripts/clean_build_caches.sh --aggressive # also wipe qa.sh + release derived-data (~11 GB extra; slower next build)
 ./scripts/clean_build_caches.sh --dry-run    # print what would be removed
 ```
+
+## Testing Conventions
+
+Use XCTest. Name test files after the behavior under test (for example, `GenerationDraftsTests.swift`), and prefix test methods with `test…`. The lane preference (cheapest first, then progressively heavier) is covered above under Common Commands.
 
 ## Performance Benchmarking
 
@@ -385,7 +398,7 @@ Release facts:
 - iPhone archive/export/TestFlight behavior:
   keep `scripts/check_ios_catalog.sh`, `scripts/release_ios_testflight.sh`, `scripts/verify_ios_release_archive.sh`, `.github/workflows/ios-testflight.yml`, and iPhone distribution docs aligned.
 - Broad repo facts that users or contributors rely on:
-  update `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
+  update `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, and `docs/reference/release-readiness.md`.
 
 ## Operational Safety
 
@@ -412,7 +425,7 @@ This dev machine has limited disk; the `build/` tree balloons quickly during act
 - Prefer manifest-backed data over duplicated constants.
 - Keep accessibility identifiers stable when UI control types change.
 - Re-run `./scripts/check_project_inputs.sh` and `./scripts/qa.sh validate` plus the most relevant QA layer before declaring work complete.
-- If you changed engine architecture or runtime ownership, verify `AGENTS.md`, `CLAUDE.md`, and `docs/reference/current-state.md` still describe the same app/service/runtime split.
+- If you changed engine architecture or runtime ownership, verify `CLAUDE.md` and `docs/reference/current-state.md` still describe the same app/service/runtime split.
 - If you changed release behavior, verify the scripts, workflows, artifact names, `docs/reference/release-readiness.md`, and README/docs all still agree.
 - If you changed any public-facing product copy, make sure the README and GitHub repo description still honor the active public homepage posture and current release-track policy.
 - For doc-only refreshes, rerun the stale-reference grep and verify referenced commands, workflows, artifact names, and doc links still exist.

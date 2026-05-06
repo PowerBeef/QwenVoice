@@ -84,8 +84,12 @@ The shared logical mode families remain:
 
 Platform-specific install policy:
 
-- iPhone resolves to 4-bit `Speed` variants only
-- macOS resolves to 8-bit `Quality` by default when available, while minimum-hardware guidance recommends 4-bit `Speed`
+- macOS exposes both `Speed / 4-bit` and `Quality / 8-bit` variants for Custom Voice, Voice Design, and Voice Cloning.
+- 8 GB/floor Macs default to and recommend `Speed / 4-bit`; mid/high-memory Macs default to and recommend `Quality / 8-bit`.
+- Mac users may select either installed macOS variant per generation mode. Status, downloads, repair/delete actions, install metadata, and progress are keyed by variant-specific IDs such as `pro_custom_speed` and `pro_custom_quality`.
+- Installed Speed and Quality folders can coexist under the macOS app-support `models/` subtree.
+- Legacy base IDs such as `pro_custom`, `pro_design`, and `pro_clone` remain compatibility aliases to the hardware-recommended variant.
+- iPhone resolves to and downloads `Speed / 4-bit` variants only.
 
 ## Memory And Isolation Posture
 
@@ -93,6 +97,7 @@ Platform-specific install policy:
 - The shared memory bands are `healthy`, `guarded`, and `critical`.
 - iPhone shell code reacts to memory and thermal pressure and can trim or unload proactively.
 - The iPhone App Group surface is intentionally limited to the shared app-support subtree rooted by `Sources/iOSSupport/Services/AppPaths.swift` for models, downloads, outputs, voices, and required cache state; no parallel shared-user-defaults channel is maintained.
+- macOS active model-quality selection is stored as normal app preference state per generation mode; model files themselves remain folder-based under app support.
 - The repo’s supported minimum-hardware path is “smooth and reliable on the default path,” not “every optional quality mode is guaranteed on floor hardware.”
 
 ## Distribution
@@ -158,7 +163,7 @@ The maintained qa.sh and foundation paths now use:
 
 ## Current Documentation Boundaries
 
-- `CLAUDE.md` is the primary repo-operating guide for Claude Code and contributors.
+- `CLAUDE.md` is the canonical repository operating guide for coding agents.
 - `docs/README.md` is the index of the maintained documentation set.
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, `docs/reference/live-testing.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `docs/reference/privacy-storage.md` records local storage, deletion paths, and voice-cloning consent posture.
