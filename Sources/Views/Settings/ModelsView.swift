@@ -120,24 +120,28 @@ private extension ModelsView {
 
 // MARK: - Section header
 
-/// Mode-grouped section header. Renders the mode name with a
-/// small leading dot in the mode color (the same color the user
-/// associates with the mode in the sidebar). Replaces the prior
-/// design's per-row mode-icon tile, which repeated the same
-/// information twice for every variant pair.
+/// Mode-grouped section header. The mode name carries the row in
+/// `.title3` weight; a 28×2 underscore in the mode color sits
+/// beneath the text as a quiet identity mark, replacing the
+/// earlier leading dot. PRODUCT.md treats Vocello gold + Voice
+/// Design lavender + Voice Cloning terracotta as whisper-tinted
+/// peripherals, never wallpaper, so the underscore stays narrow
+/// and tucked beneath the label.
 private struct ModelSectionHeader: View {
     let mode: GenerationMode
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(AppTheme.modeColor(for: mode))
-                .frame(width: 8, height: 8)
-
+        VStack(alignment: .leading, spacing: 5) {
             Text(mode.displayName)
-                .font(.headline.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .textCase(nil)
+
+            Capsule(style: .continuous)
+                .fill(AppTheme.modeColor(for: mode))
+                .frame(width: 26, height: 2)
+                .opacity(0.85)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
@@ -156,6 +160,8 @@ struct ModelRow: View {
     var onUse: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
 
+    @State private var isHovering: Bool = false
+
     private var status: ModelManagerViewModel.ModelStatus {
         viewModel.statuses[model.id] ?? .checking
     }
@@ -170,6 +176,10 @@ struct ModelRow: View {
 
     private var sizeText: String? {
         viewModel.sizeText(for: model)
+    }
+
+    private var modeColor: Color {
+        AppTheme.modeColor(for: model.mode)
     }
 
     private var rowAccessibilityLabel: String {
@@ -195,8 +205,14 @@ struct ModelRow: View {
                 .padding(.leading, 10)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(rowHighlight)
+        .padding(.vertical, 9)
+        .background(rowSurface)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.18)) {
+                isHovering = hovering
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(rowAccessibilityLabel)
         .accessibilityIdentifier("models_card_\(model.id)")
@@ -209,8 +225,10 @@ struct ModelRow: View {
     private var primaryLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(variantName)
-                .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
+                .font(.body.weight(isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? AnyShapeStyle(modeColor) : AnyShapeStyle(Color.primary))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(minWidth: 60, alignment: .leading)
                 .help(model.folder)
 
@@ -219,6 +237,8 @@ struct ModelRow: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             if let sizeText {
@@ -232,6 +252,7 @@ struct ModelRow: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             Spacer(minLength: 8)
@@ -251,11 +272,70 @@ struct ModelRow: View {
             ModelBadge(text: "Recommended", tint: AppTheme.accent)
         }
         if isActive {
-            Circle()
-                .fill(AppTheme.modeColor(for: model.mode))
-                .frame(width: 8, height: 8)
-                .help("Active variant")
-                .accessibilityHidden(true)
+            ModelBadge(text: "Active", tint: modeColor)
+        }
+    }
+
+    /// Layered surface for the row: a base resting fill, a hover
+    /// lift, an active backdrop, and the deep-link flash overlay.
+    /// On macOS 26 with Liquid Glass available, the active row
+    /// upgrades to a tinted glass material. On older macOS or
+    /// with Reduce Transparency, the legacy fallback is a flat
+    /// mode-tinted fill: the visual stays legible without glass.
+    @ViewBuilder
+    private var rowSurface: some View {
+        ZStack {
+            #if QW_UI_LIQUID
+            if #available(macOS 26, *) {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(
+                            .regular.tint(modeColor.opacity(0.18)),
+                            in: .rect(cornerRadius: 10)
+                        )
+                } else if isHovering {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(modeColor.opacity(0.05))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(modeColor.opacity(0.18), lineWidth: 0.5)
+                        }
+                } else {
+                    Color.clear
+                }
+            } else {
+                rowSurfaceLegacy
+            }
+            #else
+            rowSurfaceLegacy
+            #endif
+
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.accent.opacity(0.10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(AppTheme.accent.opacity(0.22), lineWidth: 1)
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var rowSurfaceLegacy: some View {
+        if isActive {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(modeColor.opacity(0.10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(modeColor.opacity(0.22), lineWidth: 0.5)
+                }
+        } else if isHovering {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(modeColor.opacity(0.05))
+        } else {
+            Color.clear
         }
     }
 
@@ -330,13 +410,21 @@ struct ModelRow: View {
             .accessibilityIdentifier("models_retry_\(model.id)")
         case .downloaded:
             if isActive {
+                // Quieter trash on the Active row. The row itself
+                // already telegraphs "this is your selection" via
+                // the mode-tinted backdrop and the Active badge;
+                // a borderless icon-only button keeps the action
+                // available without competing with the indicator
+                // strip.
                 Button(role: .destructive) {
                     onDelete?()
                 } label: {
                     Image(systemName: "trash")
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
                 .controlSize(.small)
+                .help("Delete \(model.name)")
                 .accessibilityIdentifier("models_delete_\(model.id)")
             } else {
                 Button("Use") {
@@ -348,34 +436,6 @@ struct ModelRow: View {
                 .accessibilityIdentifier("models_use_\(model.id)")
             }
         }
-    }
-
-    @ViewBuilder
-    private var rowHighlight: some View {
-        #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
-            if isHighlighted {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.clear)
-                    .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 10))
-            } else {
-                Color.clear
-            }
-        } else {
-            rowHighlightLegacy
-        }
-        #else
-        rowHighlightLegacy
-        #endif
-    }
-
-    private var rowHighlightLegacy: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(isHighlighted ? AppTheme.accent.opacity(0.08) : .clear)
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isHighlighted ? AppTheme.accent.opacity(0.18) : .clear, lineWidth: 1)
-            }
     }
 }
 
@@ -456,11 +516,13 @@ private struct ModelBadge: View {
         Text(text)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(tint)
-            .padding(.horizontal, 6)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background {
                 Capsule()
-                    .fill(tint.opacity(0.12))
+                    .fill(tint.opacity(0.14))
             }
     }
 }
