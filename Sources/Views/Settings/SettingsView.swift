@@ -117,6 +117,11 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
+            // Match the darker canvas background used by Generate
+            // tabs. Without this, Form's grouped style paints its
+            // own lighter gray panel that diverges from the rest
+            // of the app's chrome.
+            .scrollContentBackground(.hidden)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationTitle("Settings")
             .accessibilityIdentifier("screen_settings")

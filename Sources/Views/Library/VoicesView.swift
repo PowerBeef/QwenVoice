@@ -161,6 +161,7 @@ struct VoicesView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
                 .onChange(of: voices) { _, newVoices in
                     guard let pendingRevealVoiceID else { return }
                     guard newVoices.contains(where: { $0.id == pendingRevealVoiceID }) else { return }
