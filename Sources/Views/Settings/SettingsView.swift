@@ -392,10 +392,16 @@ private struct ActionButton: View {
                 .accessibilityIdentifier("settings_checking_\(model.id)")
 
         case .notDownloaded:
+            // Primary download action: filled prominent button tinted
+            // with the mode's identity color so it reads
+            // unambiguously as the row's call-to-action and visually
+            // links to its generation mode in the section above.
             Button(getButtonTitle) {
                 Task { await viewModel.download(model) }
             }
+            .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .tint(AppTheme.modeColor(for: model.mode))
             .accessibilityIdentifier("settings_get_\(model.id)")
 
         case .downloading(let progress):
