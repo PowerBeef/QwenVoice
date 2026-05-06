@@ -301,6 +301,11 @@ private struct ModeRow: View {
                 }
             }
         } label: {
+            // Spacer + maxWidth: .infinity forces the Menu's label
+            // to fill the parent's fixed 175 pt frame so the
+            // trailing chevron (rendered by SwiftUI outside this
+            // HStack) anchors to the same x on every row,
+            // regardless of how short or long the variant text is.
             HStack(spacing: 6) {
                 Text(closedLabel)
                     .lineLimit(1)
@@ -308,7 +313,9 @@ private struct ModeRow: View {
                     statusGlyph(for: active)
                         .help(statusHint(for: active))
                 }
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityLabel("\(mode.displayName) variant")
     }
