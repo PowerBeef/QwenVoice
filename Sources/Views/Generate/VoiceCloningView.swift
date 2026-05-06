@@ -400,7 +400,7 @@ private extension VoiceCloningView {
                     Task { await modelManager.download(model) }
                 },
                 onSecondaryAction: {
-                    appCommandRouter.navigate(to: .models)
+                    appCommandRouter.navigate(to: .settings)
                 }
             )
         )

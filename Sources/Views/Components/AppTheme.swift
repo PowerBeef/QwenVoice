@@ -188,7 +188,7 @@ enum AppTheme {
         case .voiceCloning: return voiceCloning
         case .history: return history
         case .voices: return voices
-        case .models: return models
+        case .settings: return preferences
         }
     }
 

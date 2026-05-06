@@ -60,9 +60,16 @@ struct QwenVoiceApp: App {
         }
         .defaultSize(width: 720, height: 560)
         Settings {
-            PreferencesView()
+            // The Cmd+, scene hosts the same SettingsView the
+            // sidebar shows, so muscle memory keeps working. Deep
+            // link highlighting is a no-op in this surface (the
+            // sidebar has no notion of "the user just clicked a
+            // disabled mode" inside the standalone settings
+            // window).
+            SettingsView(highlightedModelID: .constant(nil))
+                .environmentObject(modelManager)
 #if QW_TEST_SUPPORT
-            .defaultAppStorage(UITestAutomationSupport.appStorage)
+                .defaultAppStorage(UITestAutomationSupport.appStorage)
 #endif
         }
         .commands {
@@ -110,7 +117,7 @@ struct QwenVoiceApp: App {
                 .keyboardShortcut("5", modifiers: .command)
 
                 Button("Models") {
-                    appCommandRouter.navigate(to: .models)
+                    appCommandRouter.navigate(to: .settings)
                 }
                 .keyboardShortcut("6", modifiers: .command)
             }

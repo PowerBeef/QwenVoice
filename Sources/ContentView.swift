@@ -13,7 +13,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case voiceCloning = "Voice Cloning"
     case history = "History"
     case voices = "Saved Voices"
-    case models = "Models"
+    /// Renamed from `.models` (May 2026 redesign): the Models tab
+    /// merged with the Cmd+, Preferences window into one unified
+    /// Settings surface that hosts model downloads, playback,
+    /// storage, and about. The enum case stays internal for code
+    /// clarity; the rawValue drives the sidebar label.
+    case settings = "Settings"
 
     var id: String { rawValue }
 
@@ -31,8 +36,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
             return "screen_history"
         case .voices:
             return "screen_voices"
-        case .models:
-            return "screen_models"
+        case .settings:
+            return "screen_settings"
         }
     }
 
@@ -44,7 +49,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
             return .design
         case .voiceCloning:
             return .clone
-        case .history, .voices, .models:
+        case .history, .voices, .settings:
             return nil
         }
     }
@@ -60,7 +65,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .voiceCloning: return "waveform.badge.plus"
         case .history: return "clock.arrow.circlepath"
         case .voices: return "person.2.wave.2"
-        case .models: return "square.stack.3d.down.right"
+        case .settings: return "gearshape"
         }
     }
 
@@ -77,8 +82,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
             self = .history
         case "voices", "savedVoices":
             self = .voices
-        case "models":
-            self = .models
+        case "models", "settings":
+            self = .settings
         default:
             return nil
         }
@@ -101,7 +106,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
             case .library:
                 return [.history, .voices]
             case .settings:
-                return [.models]
+                return [.settings]
             }
         }
     }
@@ -341,8 +346,8 @@ struct ContentView: View {
                     startSavedVoiceCloningHandoff(plan)
                 }
             )
-        case .models:
-            ModelsView(highlightedModelID: $pendingHighlightedModelID)
+        case .settings:
+            SettingsView(highlightedModelID: $pendingHighlightedModelID)
         }
     }
 
@@ -447,7 +452,7 @@ struct ContentView: View {
             pendingHighlightedModelID = modelID
         }
 
-        self.selectedItem = .models
+        self.selectedItem = .settings
     }
 
     private func scheduleGenerationWarmupIfNeeded(for item: SidebarItem?) {
