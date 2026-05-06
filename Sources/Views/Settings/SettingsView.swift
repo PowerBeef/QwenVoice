@@ -497,7 +497,11 @@ private struct ActionButton: View {
             systemImage: "folder",
             handler: {
                 let url = model.installDirectory(in: QwenVoiceApp.modelsDir)
-                NSWorkspace.shared.open(url)
+                // `activateFileViewerSelecting(_:)` highlights the
+                // model folder inside its parent (the macOS native
+                // "Reveal in Finder" idiom), as opposed to
+                // `open(_:)` which would open the folder's contents.
+                NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         ))
         menu.addItem(.separator())
