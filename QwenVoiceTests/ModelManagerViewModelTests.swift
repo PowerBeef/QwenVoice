@@ -267,17 +267,60 @@ final class ModelManagerViewModelTests: XCTestCase {
         let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
-        // The current contract manifest sets
-        // `estimated_download_bytes: null` for every variant, so a
-        // model that's not on disk has no fallback to surface; the
-        // UI should elide the size column rather than render an
-        // em-dash.
-        let qualityModel = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
+        // The shipped manifest now carries an `estimatedDownloadBytes`
+        // for every variant, so we can no longer reach the no-estimate
+        // branch through `TTSModel.model(id:)`. The branch is still
+        // reachable in production whenever a future variant is shipped
+        // without a size estimate, so we exercise it by overlaying a
+        // synthetic TTSModel that shares the real `pro_custom_quality`
+        // id (so the view model's status table resolves to
+        // `.notDownloaded`) but sets `estimatedDownloadBytes` to nil.
+        let realQuality = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
         let viewModel = ModelManagerViewModel(modelsDirectory: tempRoot)
+        XCTAssertEqual(
+            viewModel.statuses[realQuality.id],
+            .notDownloaded(message: nil),
+            "Precondition: the real quality model is not downloaded in the temp root."
+        )
 
+        let syntheticNoEstimate = TTSModel(
+            id: realQuality.id,
+            name: realQuality.name,
+            tier: realQuality.tier,
+            folder: realQuality.folder,
+            mode: realQuality.mode,
+            huggingFaceRepo: realQuality.huggingFaceRepo,
+            outputSubfolder: realQuality.outputSubfolder,
+            requiredRelativePaths: realQuality.requiredRelativePaths,
+            baseModelID: realQuality.baseModelID,
+            variantID: realQuality.variantID,
+            variantKind: realQuality.variantKind,
+            estimatedDownloadBytes: nil,
+            isHardwareRecommended: realQuality.isHardwareRecommended
+        )
         XCTAssertNil(
-            viewModel.sizeText(for: qualityModel),
+            viewModel.sizeText(for: syntheticNoEstimate),
             "When the model is not downloaded and the manifest doesn't carry an estimate, sizeText must return nil."
+        )
+
+        let syntheticZeroEstimate = TTSModel(
+            id: realQuality.id,
+            name: realQuality.name,
+            tier: realQuality.tier,
+            folder: realQuality.folder,
+            mode: realQuality.mode,
+            huggingFaceRepo: realQuality.huggingFaceRepo,
+            outputSubfolder: realQuality.outputSubfolder,
+            requiredRelativePaths: realQuality.requiredRelativePaths,
+            baseModelID: realQuality.baseModelID,
+            variantID: realQuality.variantID,
+            variantKind: realQuality.variantKind,
+            estimatedDownloadBytes: 0,
+            isHardwareRecommended: realQuality.isHardwareRecommended
+        )
+        XCTAssertNil(
+            viewModel.sizeText(for: syntheticZeroEstimate),
+            "A zero-byte estimate must be treated the same as a missing estimate."
         )
     }
 
