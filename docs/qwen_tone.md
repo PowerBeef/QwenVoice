@@ -19,7 +19,7 @@ Current app behavior:
 - **Custom Voice** uses one of the shipped English speakers plus an instruction prompt
 - **Voice Design** has its own generation screen and prompt flow
 - **Voice Cloning** uses reference audio and can optionally use a transcript for better preparation quality, but it does not expose a separate instruction-only tone surface
-- single generations stream live preview, but the app does not expose temperature or max-token controls
+- single generations produce a complete final take, and the app does not expose temperature or max-token controls
 
 Useful instruction patterns:
 

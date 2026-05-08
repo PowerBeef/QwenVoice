@@ -1242,7 +1242,7 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         XCTAssertEqual(request.modelID, model.id)
         XCTAssertEqual(request.text, "Design this voice")
         XCTAssertEqual(request.outputPath, "/tmp/design.wav")
-        XCTAssertTrue(request.shouldStream)
+        XCTAssertFalse(request.shouldStream)
         XCTAssertEqual(request.streamingTitle, "Design this voice")
         guard case .design(let voiceDescription, let deliveryStyle) = request.payload else {
             return XCTFail("Expected Voice Design payload")
@@ -1429,7 +1429,7 @@ final class GenerationScreenCoordinatorTests: XCTestCase {
         XCTAssertEqual(request.modelID, model.id)
         XCTAssertEqual(request.text, "Clone this line")
         XCTAssertEqual(request.outputPath, "/tmp/clone.wav")
-        XCTAssertTrue(request.shouldStream)
+        XCTAssertFalse(request.shouldStream)
         XCTAssertEqual(request.streamingTitle, "Clone this line")
         guard case .clone(let reference) = request.payload else {
             return XCTFail("Expected Voice Cloning payload")

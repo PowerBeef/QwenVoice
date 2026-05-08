@@ -3,6 +3,7 @@ import Foundation
 import MLX
 import MLXAudioCore
 @preconcurrency import MLXAudioTTS
+@preconcurrency import QwenVoiceBackendCore
 import OSLog
 
 // MARK: - QwenVoiceCore Runtime Ownership
@@ -72,6 +73,36 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
     }
 
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
+        if !request.shouldStream {
+            let sessionDirectory = try makeSessionDirectory()
+            let execution = StreamingExecutionContext(
+                requestID: requestID,
+                request: request,
+                model: model,
+                sessionDirectory: sessionDirectory,
+                warmState: warmState,
+                timingOverridesMS: timingOverridesMS,
+                booleanFlags: booleanFlags,
+                stringFlags: stringFlags,
+                cloneConditioning: cloneConditioning,
+                wasPrimed: wasPrimed,
+                telemetryRecorder: telemetryRecorder,
+                loadCapabilityProfile: loadCapabilityProfile,
+                memoryPolicy: memoryPolicy,
+                initialMLXMemorySnapshots: initialMLXMemorySnapshots
+            )
+            let task = Task.detached(priority: .userInitiated) {
+                try await execution.runQualityFirstFinalAudio()
+            }
+            let result = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            await eventSink(.completed(result))
+            return result
+        }
+
         let sessionDirectory = try makeSessionDirectory()
         let execution = StreamingExecutionContext(
             requestID: requestID,
@@ -529,6 +560,242 @@ private struct StreamingExecutionContext: Sendable {
         String(request.text.prefix(40))
     }
 
+    func runQualityFirstFinalAudio() async throws -> GenerationResult {
+        let generationSignpost = NativeStreamingSignposts.signposter.beginInterval("Native Quality-First Generation")
+        defer {
+            NativeStreamingSignposts.signposter.endInterval("Native Quality-First Generation", generationSignpost)
+        }
+
+        let startedAt = ContinuousClock.now
+        let outputURL = URL(fileURLWithPath: request.outputPath)
+        let sampleRate = model.sampleRate
+        let telemetryMode = NativeTelemetryMode.current(benchmarkOptions: request.benchmarkOptions)
+        let telemetrySampler = telemetryMode.sampleIntervalMS.map {
+            NativeTelemetrySampler(
+                startUptimeSeconds: ProcessInfo.processInfo.systemUptime,
+                sampleIntervalMS: $0
+            )
+        }
+        await telemetrySampler?.start()
+        await telemetryRecorder?.mark(stage: .streamStartup)
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var shouldRetainOutput = false
+        defer {
+            if !shouldRetainOutput {
+                try? FileManager.default.removeItem(at: sessionDirectory)
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+        }
+
+        var mlxMemorySnapshots = initialMLXMemorySnapshots
+        mlxMemorySnapshots["before_quality_generation"] = NativeMemoryPolicyResolver.snapshot()
+        let completion: AudioGenerationCompletion
+        do {
+            completion = try await generateQualityFirstAudio()
+        } catch {
+            await telemetryRecorder?.mark(
+                stage: .streamFailed,
+                metadata: ["message": error.localizedDescription]
+            )
+            _ = await Self.stopTelemetrySampler(
+                telemetrySampler,
+                stageMarks: await telemetryRecorder?.snapshot() ?? []
+            )
+            Memory.clearCache()
+            throw error
+        }
+
+        let finishReason = Self.mapFinishReason(completion.finishReason)
+        guard finishReason == .eos else {
+            await telemetryRecorder?.mark(
+                stage: .streamFailed,
+                metadata: ["finish_reason": finishReason.rawValue]
+            )
+            _ = await Self.stopTelemetrySampler(
+                telemetrySampler,
+                stageMarks: await telemetryRecorder?.snapshot() ?? []
+            )
+            Memory.clearCache()
+            throw MLXTTSEngineError.generationFailed(
+                "Qwen3-TTS reached maxNewTokens before EOS. The output was discarded to avoid a truncated generation."
+            )
+        }
+
+        let samples = completion.audio.asArray(Float.self)
+        guard !samples.isEmpty else {
+            throw MLXTTSEngineError.generationFailed("The native engine did not produce final audio.")
+        }
+
+        let scratchBuffer = PCM16ScratchBuffer()
+        let pcmSamples = scratchBuffer.convertLimited(samples)
+        let finalWriter = try IncrementalPCM16WAVFileWriter(
+            sampleRate: sampleRate,
+            outputURL: outputURL
+        )
+        let finalWriteStartedAt = ContinuousClock.now
+        try finalWriter.append(pcmSamples: pcmSamples)
+        finalWriter.finish()
+        let finalWriteMS = finalWriteStartedAt.elapsedMilliseconds
+        mlxMemorySnapshots["after_final_write"] = NativeMemoryPolicyResolver.snapshot()
+        Memory.clearCache()
+        mlxMemorySnapshots["after_generation_trim"] = NativeMemoryPolicyResolver.snapshot()
+
+        let generationMS = startedAt.duration(to: .now).roundedMilliseconds
+        let durationSeconds = Double(pcmSamples.count) / Double(sampleRate)
+        let stageMarks = await telemetryRecorder?.snapshot() ?? []
+        let telemetryCapture = await Self.stopTelemetrySampler(
+            telemetrySampler,
+            stageMarks: stageMarks
+        )
+        await telemetryRecorder?.mark(stage: .streamCompleted)
+
+        var timingsMS = timingOverridesMS
+        for (key, value) in model.latestPreparationTimingsMS {
+            timingsMS[key] = value
+        }
+        for (key, value) in scratchBuffer.limiterMetrics.benchmarkTimingFields {
+            timingsMS[key] = value
+        }
+        timingsMS["generation"] = generationMS
+        timingsMS["final_write"] = finalWriteMS
+        timingsMS["stream_chunk_count"] = 0
+        timingsMS["quality_first_final_audio"] = 1
+
+        var finalBooleanFlags = mergedBooleanFlags()
+        finalBooleanFlags["quality_first_final_audio"] = true
+        finalBooleanFlags["generation_ended_by_eos"] = true
+        finalBooleanFlags["generation_hit_token_cap"] = false
+
+        var finalStringFlags = mergedStringFlags(
+            telemetryMode: telemetryMode,
+            streamingOutputPolicy: .pcmPreview,
+            postRequestCachePolicy: "quality-first"
+        )
+        finalStringFlags["generation_finish_reason"] = finishReason.rawValue
+        finalStringFlags["backend_provenance_upstream_tag"] = QwenVoiceBackendProvenance.upstreamTag
+        finalStringFlags["backend_provenance_upstream_commit"] = QwenVoiceBackendProvenance.upstreamCommit
+        finalStringFlags["backend_text_conditioning"] = "full_text_non_streaming"
+
+        let info = completion.info
+        let telemetrySummary = telemetryCapture.summary
+        let audioSecondsPerWallSecond = generationMS > 0
+            ? durationSeconds / (Double(generationMS) / 1_000)
+            : nil
+        let benchmarkSample = BenchmarkSample(
+            engineKind: .nativeMLX,
+            warmState: warmState,
+            tokenCount: info.map { $0.promptTokenCount + $0.generationTokenCount },
+            processingTimeSeconds: info.map { $0.prefillTime + $0.generateTime },
+            peakMemoryUsage: info?.peakMemoryUsage,
+            streamingUsed: false,
+            preparedCloneUsed: cloneConditioning?.preparedCloneUsed,
+            cloneCacheHit: cloneConditioning?.cloneCacheHit,
+            firstChunkMs: nil,
+            peakResidentMB: telemetrySummary.residentPeakMB,
+            peakPhysFootprintMB: telemetrySummary.physFootprintPeakMB,
+            residentStartMB: telemetrySummary.residentStartMB,
+            residentEndMB: telemetrySummary.residentEndMB,
+            compressedPeakMB: telemetrySummary.compressedPeakMB,
+            headroomStartMB: telemetrySummary.headroomStartMB,
+            headroomEndMB: telemetrySummary.headroomEndMB,
+            headroomMinMB: telemetrySummary.headroomMinMB,
+            gpuAllocatedPeakMB: telemetrySummary.gpuAllocatedPeakMB,
+            gpuRecommendedWorkingSetMB: telemetrySummary.gpuRecommendedWorkingSetMB,
+            telemetryEnabled: telemetryMode != .off,
+            telemetrySamples: telemetryMode == .benchmarkFull ? telemetryCapture.samples : nil,
+            telemetryStageMarks: stageMarks,
+            timingsMS: timingsMS,
+            booleanFlags: finalBooleanFlags,
+            stringFlags: finalStringFlags,
+            backendPerformance: NativeBackendPerformanceSample(
+                coldLoadMS: timingsMS["load_model"],
+                warmGenerationMS: generationMS,
+                timeToFirstAudioMS: nil,
+                audioSecondsPerWallSecond: audioSecondsPerWallSecond,
+                chunkWriteTotalMS: 0,
+                chunkWriteMaxMS: 0,
+                eventDispatchMS: 0,
+                finalWriteMS: finalWriteMS,
+                mlxMemoryByStage: mlxMemorySnapshots,
+                loadCapabilityProfile: loadCapabilityProfile.rawValue,
+                memoryPolicyName: memoryPolicy.name,
+                streamingTransport: "quality_first_final_audio",
+                telemetryMode: telemetryMode.rawValue
+            )
+        )
+
+        shouldRetainOutput = true
+        try? FileManager.default.removeItem(at: sessionDirectory)
+        return GenerationResult(
+            audioPath: outputURL.path,
+            durationSeconds: durationSeconds,
+            streamSessionDirectory: nil,
+            benchmarkSample: benchmarkSample,
+            finishReason: finishReason
+        )
+    }
+
+    private func generateQualityFirstAudio() async throws -> AudioGenerationCompletion {
+        switch request.payload {
+        case .clone:
+            guard let cloneConditioning else {
+                throw MLXTTSEngineError.generationFailed(
+                    "Voice Cloning needs resolved native clone conditioning before generation."
+                )
+            }
+            guard let voiceClonePrompt = cloneConditioning.voiceClonePrompt else {
+                throw MLXTTSEngineError.unsupportedRequest(
+                    "Voice Cloning requires Qwen3 clone conditioning."
+                )
+            }
+            let language = GenerationSemantics.qwenLanguageHint(
+                for: request,
+                resolvedCloneTranscript: cloneConditioning.resolvedTranscript
+            )
+            return try await model.generateVoiceClone(
+                text: request.text,
+                language: language,
+                voiceClonePrompt: voiceClonePrompt,
+                benchmarkOptions: request.benchmarkOptions
+            )
+        case .custom(let speakerID, let deliveryStyle):
+            return try await model.generateCustomVoice(
+                text: request.text,
+                language: GenerationSemantics.qwenLanguageHint(for: request),
+                speaker: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
+                instruct: GenerationSemantics.customInstruction(deliveryStyle: deliveryStyle),
+                benchmarkOptions: request.benchmarkOptions
+            )
+        case .design(let voiceDescription, let deliveryStyle):
+            return try await model.generateVoiceDesign(
+                text: request.text,
+                language: GenerationSemantics.qwenLanguageHint(for: request),
+                voiceDescription: GenerationSemantics.designInstruction(
+                    voiceDescription: voiceDescription,
+                    emotion: deliveryStyle ?? ""
+                ),
+                benchmarkOptions: request.benchmarkOptions
+            )
+        }
+    }
+
+    private static func mapFinishReason(_ reason: AudioGenerationFinishReason) -> GenerationFinishReason {
+        switch reason {
+        case .eos:
+            return .eos
+        case .maxTokens:
+            return .maxTokens
+        case .cancelled:
+            return .cancelled
+        case .failed:
+            return .failed
+        }
+    }
+
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
         let generationSignpost = NativeStreamingSignposts.signposter.beginInterval("Native Generation Stream")
         defer {
@@ -760,6 +1027,11 @@ private struct StreamingExecutionContext: Sendable {
         guard totalFramesWritten > 0 else {
             throw MLXTTSEngineError.generationFailed("The native engine did not emit any audio chunks.")
         }
+        if model.latestPreparationStringFlags["generation_end_reason"] == "token_cap" {
+            throw MLXTTSEngineError.generationFailed(
+                "Qwen3-TTS reached maxNewTokens before EOS. The output was discarded to avoid a truncated generation."
+            )
+        }
 
         let finalizeStartedAt = ContinuousClock.now
         let finalWriteSignpost = NativeStreamingSignposts.signposter.beginInterval("Native Final WAV Finish")
@@ -813,7 +1085,10 @@ private struct StreamingExecutionContext: Sendable {
             audioPath: outputURL.path,
             durationSeconds: durationSeconds,
             streamSessionDirectory: sessionDirectory.path,
-            benchmarkSample: benchmarkSample
+            benchmarkSample: benchmarkSample,
+            finishReason: model.latestPreparationStringFlags["generation_end_reason"] == "token_cap"
+                ? .maxTokens
+                : .eos
         )
     }
 

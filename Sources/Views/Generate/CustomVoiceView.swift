@@ -20,8 +20,8 @@ struct CustomVoiceReadinessPresentation: Equatable {
         if isGenerating {
             return CustomVoiceReadinessPresentation(
                 isReady: false,
-                title: "Generating live preview",
-                detail: "Streaming audio now. The final file lands in the player when ready.",
+                title: "Generating final audio",
+                detail: "Rendering the complete take. The file lands in the player when ready.",
                 trailingText: "Generating",
                 isBusy: true
             )
@@ -62,7 +62,7 @@ struct CustomVoiceReadinessPresentation: Equatable {
             return CustomVoiceReadinessPresentation(
                 isReady: true,
                 title: "Ready to generate",
-                detail: "Ready for live preview and save.",
+                detail: "Ready to generate and save.",
                 trailingText: "Ready",
                 isBusy: false
             )

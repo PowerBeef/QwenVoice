@@ -141,7 +141,7 @@ private enum Qwen3CustomVoiceBenchmarkProfile: String, Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
               !rawValue.isEmpty else {
-            return .balancedShort
+            return .baseline
         }
 
         return Qwen3CustomVoiceBenchmarkProfile(rawValue: rawValue) ?? .baseline
@@ -181,7 +181,7 @@ private enum Qwen3CustomVoiceBenchmarkProfile: String, Sendable {
     }
 
     func effectiveMaxTokens(defaultMaxTokens: Int, targetTokenCount: Int) -> Int {
-        min(
+        return min(
             defaultMaxTokens,
             max(minimumGeneratedCodes, targetTokenCount * maxTokenMultiplier)
         )
@@ -205,9 +205,32 @@ private struct Qwen3TokenBudgetPolicy: Sendable {
     let name: String
     let maxTokenMultiplier: Int
     let minimumGeneratedCodes: Int
+    let usesDefaultMaxTokens: Bool
+
+    init(
+        name: String,
+        maxTokenMultiplier: Int,
+        minimumGeneratedCodes: Int,
+        usesDefaultMaxTokens: Bool = false
+    ) {
+        self.name = name
+        self.maxTokenMultiplier = maxTokenMultiplier
+        self.minimumGeneratedCodes = minimumGeneratedCodes
+        self.usesDefaultMaxTokens = usesDefaultMaxTokens
+    }
+
+    static let officialQuality = Qwen3TokenBudgetPolicy(
+        name: "official-quality-max-new-tokens",
+        maxTokenMultiplier: 0,
+        minimumGeneratedCodes: 0,
+        usesDefaultMaxTokens: true
+    )
 
     func effectiveMaxTokens(defaultMaxTokens: Int, targetTokenCount: Int) -> Int {
-        min(
+        if usesDefaultMaxTokens {
+            return defaultMaxTokens
+        }
+        return min(
             defaultMaxTokens,
             max(minimumGeneratedCodes, targetTokenCount * maxTokenMultiplier)
         )
@@ -247,9 +270,7 @@ private enum Qwen3GenerationSpeedProfile: String, Sendable {
             return max(0, explicitCadence)
         }
         switch self {
-        case .current:
-            return 8
-        case .legacy123Memory, .adaptiveFailureOnly, .balancedAllModes:
+        case .current, .legacy123Memory, .adaptiveFailureOnly, .balancedAllModes:
             return 50
         }
     }
@@ -259,7 +280,9 @@ private enum Qwen3GenerationSpeedProfile: String, Sendable {
         customVoiceProfile: Qwen3CustomVoiceBenchmarkProfile
     ) -> Qwen3TokenBudgetPolicy {
         switch self {
-        case .current, .legacy123Memory, .adaptiveFailureOnly:
+        case .current:
+            return .officialQuality
+        case .legacy123Memory, .adaptiveFailureOnly:
             if mode == .custom {
                 return Qwen3TokenBudgetPolicy(
                     name: "custom-\(customVoiceProfile.rawValue)",
@@ -337,6 +360,11 @@ private enum Qwen3StreamingGenerationMode: String, Sendable {
             baseChunkSize * postFirstStreamChunkMultiplier(customVoiceProfile: customVoiceProfile)
         )
     }
+}
+
+fileprivate enum Qwen3TextConditioningMode: String, Sendable {
+    case streamingTrailingText = "streaming_trailing_text"
+    case fullTextNonStreaming = "full_text_non_streaming"
 }
 
 private enum Qwen3StreamStepEvalPolicy: String, Sendable {
@@ -958,11 +986,62 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         )
     }
 
+    private func prepareFullTextNonStreamingInputs(
+        text: String,
+        prefix: CachedConditioningPrefix
+    ) throws -> (
+        inputEmbeds: MLXArray,
+        trailingTextHidden: MLXArray,
+        ttsPadEmbed: MLXArray,
+        textPrepareMS: Int,
+        targetTokenCount: Int
+    ) {
+        guard let tokenizer, let talkerConfig = config.talkerConfig else {
+            throw AudioGenerationError.modelNotInitialized("Tokenizer/config not loaded")
+        }
+
+        let textPrepareStartedAt = ContinuousClock.now
+        let targetTokenCount = tokenizer.encode(text: text).count
+        let chatText = "<|im_start|>assistant\n\(text)<|im_end|>\n<|im_start|>assistant\n"
+        let inputIds = MLXArray(tokenizer.encode(text: chatText).map(Int32.init)).reshaped(1, -1)
+        let textEmbed = talker.textProjection(talker.getTextEmbeddings()(inputIds))
+        try validateOptimizedCustomVoiceTextEmbeddingLength(
+            textTokenCount: textEmbed.dim(1),
+            originalText: text
+        )
+
+        let targetTextEmbed = concatenated(
+            [textEmbed[0..., 3 ..< (textEmbed.dim(1) - 5), 0...], prefix.ttsEosEmbed],
+            axis: 1
+        )
+        let codecPadIDs = MLXArray(
+            Array(
+                repeating: Int32(talkerConfig.codecPadId),
+                count: targetTextEmbed.dim(1)
+            )
+        ).reshaped(1, -1)
+        let fullTextOverlay = targetTextEmbed + talker.getInputEmbeddings()(codecPadIDs)
+        let codecBosOverlay = prefix.ttsPadEmbed + prefix.codecLastEmbed
+        let inputEmbeds = concatenated(
+            [prefix.inputPrefixEmbeds, fullTextOverlay, codecBosOverlay],
+            axis: 1
+        )
+
+        return (
+            inputEmbeds,
+            prefix.ttsPadEmbed,
+            prefix.ttsPadEmbed,
+            textPrepareStartedAt.elapsedMilliseconds,
+            targetTokenCount
+        )
+    }
+
     private func prepareCustomVoiceInputs(
         text: String,
         language: String,
         speaker: String,
-        instruct: String?
+        instruct: String?,
+        textConditioningMode: Qwen3TextConditioningMode = .streamingTrailingText
     ) throws -> (
         inputEmbeds: MLXArray,
         trailingTextHidden: MLXArray,
@@ -983,7 +1062,19 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             instruct: instruct,
             cacheKey: cacheKey
         )
-        let prepared = try prepareInputs(text: text, prefix: prefix)
+        let prepared: (
+            inputEmbeds: MLXArray,
+            trailingTextHidden: MLXArray,
+            ttsPadEmbed: MLXArray,
+            textPrepareMS: Int,
+            targetTokenCount: Int
+        )
+        switch textConditioningMode {
+        case .streamingTrailingText:
+            prepared = try prepareInputs(text: text, prefix: prefix)
+        case .fullTextNonStreaming:
+            prepared = try prepareFullTextNonStreamingInputs(text: text, prefix: prefix)
+        }
         let customTimingsMS = [
             "custom_prefix_prepare": prefixPrepareStartedAt.elapsedMilliseconds,
             "custom_prefix_tokenize_ms": prefixTokenizeMS,
@@ -1003,7 +1094,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
     private func prepareVoiceDesignInputs(
         text: String,
         language: String,
-        voiceDescription: String
+        voiceDescription: String,
+        textConditioningMode: Qwen3TextConditioningMode = .streamingTrailingText
     ) throws -> (
         inputEmbeds: MLXArray,
         trailingTextHidden: MLXArray,
@@ -1023,7 +1115,19 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             instruct: voiceDescription,
             cacheKey: cacheKey
         )
-        let prepared = try prepareInputs(text: text, prefix: prefix)
+        let prepared: (
+            inputEmbeds: MLXArray,
+            trailingTextHidden: MLXArray,
+            ttsPadEmbed: MLXArray,
+            textPrepareMS: Int,
+            targetTokenCount: Int
+        )
+        switch textConditioningMode {
+        case .streamingTrailingText:
+            prepared = try prepareInputs(text: text, prefix: prefix)
+        case .fullTextNonStreaming:
+            prepared = try prepareFullTextNonStreamingInputs(text: text, prefix: prefix)
+        }
         let designTimingsMS = [
             "design_prefix_prepare": prefixPrepareStartedAt.elapsedMilliseconds,
             "design_prefix_tokenize_ms": prefixTokenizeMS,
@@ -1543,6 +1647,120 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         return stream
     }
 
+    public func generateCustomVoice(
+        text: String,
+        language: String,
+        speaker: String,
+        instruct: String?,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion {
+        var generationInfo: AudioGenerationInfo?
+        let audio = try generateVoiceDesign(
+            text: text,
+            instruct: instruct,
+            language: language,
+            speaker: speaker,
+            refAudio: nil,
+            refText: nil,
+            temperature: generationParameters.temperature,
+            topK: 50,
+            topP: generationParameters.topP,
+            repetitionPenalty: generationParameters.repetitionPenalty ?? 1.05,
+            minP: 0.0,
+            maxTokens: generationParameters.maxTokens ?? 2_048,
+            textConditioningMode: .fullTextNonStreaming,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            onInfo: { generationInfo = $0 }
+        )
+        return AudioGenerationCompletion(
+            audio: audio,
+            info: generationInfo,
+            finishReason: latestAudioGenerationFinishReason()
+        )
+    }
+
+    public func generateVoiceDesign(
+        text: String,
+        language: String,
+        voiceDescription: String,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion {
+        var generationInfo: AudioGenerationInfo?
+        let audio = try generateVoiceDesign(
+            text: text,
+            instruct: voiceDescription,
+            language: language,
+            refAudio: nil,
+            refText: nil,
+            temperature: generationParameters.temperature,
+            topK: 50,
+            topP: generationParameters.topP,
+            repetitionPenalty: generationParameters.repetitionPenalty ?? 1.05,
+            minP: 0.0,
+            maxTokens: generationParameters.maxTokens ?? 2_048,
+            textConditioningMode: .fullTextNonStreaming,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            onInfo: { generationInfo = $0 }
+        )
+        return AudioGenerationCompletion(
+            audio: audio,
+            info: generationInfo,
+            finishReason: latestAudioGenerationFinishReason()
+        )
+    }
+
+    public func generateVoiceClone(
+        text: String,
+        language: String,
+        voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion {
+        var generationInfo: AudioGenerationInfo?
+        let audio = try generateVoiceDesign(
+            text: text,
+            instruct: nil,
+            language: language,
+            speaker: nil,
+            refAudio: nil,
+            refText: nil,
+            voiceClonePrompt: voiceClonePrompt,
+            temperature: generationParameters.temperature,
+            topK: 50,
+            topP: generationParameters.topP,
+            repetitionPenalty: generationParameters.repetitionPenalty ?? 1.05,
+            minP: 0.0,
+            maxTokens: generationParameters.maxTokens ?? 2_048,
+            textConditioningMode: .fullTextNonStreaming,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            onInfo: { generationInfo = $0 }
+        )
+        return AudioGenerationCompletion(
+            audio: audio,
+            info: generationInfo,
+            finishReason: latestAudioGenerationFinishReason()
+        )
+    }
+
+    private func latestAudioGenerationFinishReason() -> AudioGenerationFinishReason {
+        switch latestPreparationStringFlags["generation_end_reason"] {
+        case "eos":
+            return .eos
+        case "token_cap":
+            return .maxTokens
+        default:
+            return .failed
+        }
+    }
+
     public func generateCustomVoiceStream(
         text: String,
         language: String,
@@ -1706,7 +1924,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
 
     // MARK: - VoiceDesign generation
 
-    func generateVoiceDesign(
+    fileprivate func generateVoiceDesign(
         text: String,
         instruct: String?,
         language: String,
@@ -1721,6 +1939,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         minP: Float,
         maxTokens: Int,
         streamingInterval: Double = 2.0,
+        textConditioningMode: Qwen3TextConditioningMode = .streamingTrailingText,
         customVoiceProfile explicitCustomVoiceProfile: String? = nil,
         streamStepEvalPolicy explicitStreamStepEvalPolicy: String? = nil,
         generationSpeedProfile explicitGenerationSpeedProfile: String? = nil,
@@ -1797,7 +2016,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 text: text,
                 language: language,
                 speaker: speaker,
-                instruct: instruct
+                instruct: instruct,
+                textConditioningMode: textConditioningMode
             )
             inputEmbedsInit = prepared.inputEmbeds
             trailingTextHidden = prepared.trailingTextHidden
@@ -1815,7 +2035,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             let prepared = try prepareVoiceDesignInputs(
                 text: text,
                 language: language,
-                voiceDescription: instruct ?? ""
+                voiceDescription: instruct ?? "",
+                textConditioningMode: textConditioningMode
             )
             inputEmbedsInit = prepared.inputEmbeds
             trailingTextHidden = prepared.trailingTextHidden
@@ -1831,7 +2052,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         }
         storePreparationBooleanFlags(preparationBooleanFlags)
         mergePreparationTimingsMS(preparationTimingsMS)
-        storePreparationStringFlags([:])
+        storePreparationStringFlags([
+            "text_conditioning_mode": textConditioningMode.rawValue,
+        ])
 
         // Cap max tokens based on text length
         let customVoiceProfile = isDedicatedCustomVoice
@@ -2215,6 +2438,22 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             peakMemoryUsage: Double(Memory.peakMemory) / 1e9
         )
         onInfo?(info)
+        mergePreparationBooleanFlags([
+            "generation_ended_by_eos": generationEndReason == "eos",
+            "generation_hit_token_cap": generationEndReason == "token_cap",
+        ])
+        mergePreparationStringFlags([
+            "generation_end_reason": generationEndReason,
+        ])
+        if let timingPrefix = streamingGenerationMode.timingPrefix {
+            mergePreparationBooleanFlags([
+                "\(timingPrefix)_generation_ended_by_eos": generationEndReason == "eos",
+                "\(timingPrefix)_generation_hit_token_cap": generationEndReason == "token_cap",
+            ])
+            mergePreparationStringFlags([
+                "\(timingPrefix)_generation_end_reason": generationEndReason,
+            ])
+        }
 
         // Streaming path: yield remaining tokens and return early
         if let onAudioChunk {

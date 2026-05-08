@@ -204,8 +204,8 @@ private extension VoiceDesignView {
     var generationReadiness: some View {
         WorkflowReadinessNote(
             isReady: canGenerate && !coordinator.isGenerating,
-            title: coordinator.isGenerating ? "Generating live preview" : (canGenerate ? "Ready to generate" : readinessTitle),
-            detail: coordinator.isGenerating ? "Streaming audio now. The final file lands in the player when ready." : readinessDetail,
+            title: coordinator.isGenerating ? "Generating final audio" : (canGenerate ? "Ready to generate" : readinessTitle),
+            detail: coordinator.isGenerating ? "Rendering the complete take. The file lands in the player when ready." : readinessDetail,
             accentColor: AppTheme.voiceDesign,
             isBusy: coordinator.isGenerating,
             accessibilityIdentifier: "voiceDesign_readiness"
@@ -241,7 +241,7 @@ private extension VoiceDesignView {
         if !draft.hasText {
             return "The generated voice uses this brief and delivery once a line is written."
         }
-        return "Ready for live preview and save."
+        return "Ready to generate and save."
     }
 
     var composerFooter: some View {

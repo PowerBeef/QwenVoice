@@ -328,9 +328,6 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         guard request.batchIndex == nil, request.batchTotal == nil else {
             return .unsupported(reason: "Batch generation is not available in the native-only app.")
         }
-        guard request.shouldStream else {
-            return .unsupported(reason: "The native MLX engine currently supports streaming single-generation only.")
-        }
 
         switch request.payload {
         case .custom, .design, .clone:
@@ -566,20 +563,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                 Double(index) / Double(max(requests.count, 1)),
                 "Generating item \(index + 1)/\(requests.count)"
             )
-            let batchRequest = request.shouldStream ? request : GenerationRequest(
-                mode: request.mode,
-                modelID: request.modelID,
-                text: request.text,
-                outputPath: request.outputPath,
-                shouldStream: true,
-                streamingInterval: request.streamingInterval,
-                batchIndex: request.batchIndex,
-                batchTotal: request.batchTotal,
-                streamingTitle: request.streamingTitle,
-                benchmarkOptions: request.benchmarkOptions,
-                payload: request.payload
-            )
-            let result = try await generate(batchRequest, allowsBatchRequest: true)
+            let result = try await generate(request, allowsBatchRequest: true)
             results.append(result)
             clearGenerationActivity()
         }

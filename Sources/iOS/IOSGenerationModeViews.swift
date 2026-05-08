@@ -172,17 +172,13 @@ struct IOSCustomVoiceView: View {
         Task {
             let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
             do {
-                audioPlayer.prepareStreamingPreview(
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
                         mode: .custom,
                         modelID: model.id,
                         text: promptText,
                         outputPath: outputPath,
-                        shouldStream: true,
+                        shouldStream: false,
                         streamingInterval: GenerationSemantics.appStreamingInterval,
                         payload: .custom(
                             speakerID: draft.selectedSpeaker,
@@ -515,17 +511,13 @@ struct IOSVoiceDesignView: View {
         Task {
             let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
             do {
-                audioPlayer.prepareStreamingPreview(
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
                         mode: .design,
                         modelID: model.id,
                         text: promptText,
                         outputPath: outputPath,
-                        shouldStream: true,
+                        shouldStream: false,
                         streamingInterval: GenerationSemantics.appStreamingInterval,
                         payload: .design(
                             voiceDescription: draft.voiceDescription,
@@ -887,17 +879,13 @@ struct IOSVoiceCloningView: View {
                 }
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
-                audioPlayer.prepareStreamingPreview(
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
                 let result = try await ttsEngine.generate(
                     GenerationRequest(
                         mode: .clone,
                         modelID: model.id,
                         text: promptText,
                         outputPath: outputPath,
-                        shouldStream: true,
+                        shouldStream: false,
                         streamingInterval: GenerationSemantics.appStreamingInterval,
                         payload: .clone(
                             reference: CloneReference(

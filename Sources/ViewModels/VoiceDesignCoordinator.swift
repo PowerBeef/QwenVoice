@@ -148,17 +148,6 @@ final class VoiceDesignCoordinator: ObservableObject {
                     outputPath: outputPath
                 )
                 CustomVoiceUIPerformanceTrace.mark(.previewSetupStarted)
-                // Smooth-playback prebuffer hint (gated by
-                // AudioService.smoothPlaybackEnabled). See the
-                // CustomVoiceCoordinator counterpart.
-                audioPlayer.setLivePreviewEstimate(
-                    audioDuration: LivePreviewEstimator.estimatedAudioSeconds(forText: text),
-                    rtf: LivePreviewEstimator.estimatedRTF(for: .design)
-                )
-                audioPlayer.prepareStreamingPreview(
-                    title: String(text.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
 
                 CustomVoiceUIPerformanceTrace.mark(
                     .engineRequestStarted,
@@ -238,7 +227,7 @@ final class VoiceDesignCoordinator: ObservableObject {
             modelID: model.id,
             text: draft.text,
             outputPath: outputPath,
-            shouldStream: true,
+            shouldStream: false,
             streamingTitle: String(draft.text.prefix(40)),
             payload: .design(
                 voiceDescription: draft.voiceDescription,

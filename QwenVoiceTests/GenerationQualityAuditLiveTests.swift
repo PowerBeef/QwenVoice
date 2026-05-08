@@ -12,6 +12,20 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         case voiceDesign = "VoiceDesign"
         case clones = "Clones"
 
+        static func parse(_ rawName: String) -> AuditMode? {
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch name {
+            case Self.customVoice.rawValue:
+                return .customVoice
+            case Self.voiceDesign.rawValue:
+                return .voiceDesign
+            case Self.clones.rawValue, "VoiceCloning":
+                return .clones
+            default:
+                return nil
+            }
+        }
+
         var modelID: String {
             switch self {
             case .customVoice:
@@ -307,6 +321,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         )
 
         XCTAssertEqual(request.streamingInterval, 0.4)
+        XCTAssertFalse(request.shouldStream)
         XCTAssertEqual(configuration.customVoiceProfile, "balanced-short")
         XCTAssertEqual(request.benchmarkOptions?.generationSpeedProfile, "balanced-all-modes")
         XCTAssertEqual(request.benchmarkOptions?.memoryClearCadence, 50)
@@ -331,6 +346,13 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         XCTAssertEqual(
             segments.joined(separator: " ").prefix(80),
             LongFormBatchSegmenter.segments(from: batchText).joined(separator: " ").prefix(80)
+        )
+    }
+
+    func testAudioQCModesAcceptVoiceCloningAlias() throws {
+        XCTAssertEqual(
+            try parseModes("CustomVoice,VoiceDesign,VoiceCloning,Clones"),
+            [.customVoice, .voiceDesign, .clones]
         )
     }
 
@@ -1409,7 +1431,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             .filter { !$0.isEmpty } ?? []
         let modeNames = requested.isEmpty ? ["CustomVoice", "VoiceDesign"] : requested
         let modes = try modeNames.map { name in
-            guard let mode = AuditMode(rawValue: name) else {
+            guard let mode = AuditMode.parse(name) else {
                 throw NSError(
                     domain: "GenerationQualityAuditLiveTests",
                     code: 2,
@@ -1616,7 +1638,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
-                shouldStream: true,
+                shouldStream: false,
                 streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
@@ -1635,7 +1657,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
-                shouldStream: true,
+                shouldStream: false,
                 streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
@@ -1655,7 +1677,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 modelID: mode.modelID,
                 text: text,
                 outputPath: outputURL.path,
-                shouldStream: true,
+                shouldStream: false,
                 streamingInterval: streamingInterval,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,

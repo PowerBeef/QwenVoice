@@ -237,8 +237,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             }
             let runtimeContext = try requireRuntimeContext()
             let generationTask = Task { @MainActor [weak self] in
-                let batchRequests = requests.map { Self.batchRequest(from: $0) }
-                let results = try await runtimeContext.engine.generateBatch(batchRequests) { fraction, message in
+                let results = try await runtimeContext.engine.generateBatch(requests) { fraction, message in
                     self?.publish(
                         .batchProgress(
                             EngineBatchProgressUpdate(
@@ -466,23 +465,6 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         return "\(bundleIdentifier)|\(marketingVersion)|\(buildVersion)"
     }
 
-    private static func batchRequest(from request: GenerationRequest) -> GenerationRequest {
-        guard !request.shouldStream else { return request }
-        return GenerationRequest(
-            mode: request.mode,
-            modelID: request.modelID,
-            text: request.text,
-            outputPath: request.outputPath,
-            shouldStream: true,
-            streamingInterval: request.streamingInterval,
-            batchIndex: request.batchIndex,
-            batchTotal: request.batchTotal,
-            streamingTitle: request.streamingTitle,
-            benchmarkOptions: request.benchmarkOptions,
-            payload: request.payload
-        )
-    }
-
     private static func normalizedBatchResult(from result: GenerationResult) -> GenerationResult {
         if let streamSessionDirectoryURL = result.streamSessionDirectoryURL {
             try? FileManager.default.removeItem(at: streamSessionDirectoryURL)
@@ -491,7 +473,8 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             audioPath: result.audioPath,
             durationSeconds: result.durationSeconds,
             streamSessionDirectory: nil,
-            benchmarkSample: normalizedBatchBenchmarkSample(from: result.benchmarkSample)
+            benchmarkSample: normalizedBatchBenchmarkSample(from: result.benchmarkSample),
+            finishReason: result.finishReason
         )
     }
 

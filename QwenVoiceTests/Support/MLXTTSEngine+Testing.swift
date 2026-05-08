@@ -31,14 +31,23 @@ extension UnsafeSpeechGenerationModel {
                 continuation.finish()
             }
         }
+        let oneShotCompletion: @Sendable () -> AudioGenerationCompletion = {
+            AudioGenerationCompletion(
+                audio: MLXArray([Float32(0.0), Float32(0.0)]),
+                info: nil,
+                finishReason: .eos
+            )
+        }
         return UnsafeSpeechGenerationModel(
             sampleRate: sampleRate,
             prewarmHandler: { _, _ in },
             streamHandler: { _, _, _ in oneShotStream() },
             customPrewarmHandler: { _, _, _, _ in },
             customStreamHandler: { _, _, _, _, _ in oneShotStream() },
+            customGenerateHandler: { _, _, _, _ in oneShotCompletion() },
             designPrewarmHandler: { _, _, _ in },
             designStreamHandler: { _, _, _, _ in oneShotStream() },
+            designGenerateHandler: { _, _, _ in oneShotCompletion() },
             clonePromptCreator: { _, refText, xVectorOnlyMode in
                 Qwen3TTSVoiceClonePrompt(
                     refCodes: MLXArray([Int32(1), Int32(2), Int32(3)]),
@@ -49,7 +58,8 @@ extension UnsafeSpeechGenerationModel {
                 )
             },
             clonePrewarmHandler: { _, _, _ in },
-            cloneStreamHandler: { _, _, _, _ in oneShotStream() }
+            cloneStreamHandler: { _, _, _, _ in oneShotStream() },
+            cloneGenerateHandler: { _, _, _ in oneShotCompletion() }
         )
     }
 }

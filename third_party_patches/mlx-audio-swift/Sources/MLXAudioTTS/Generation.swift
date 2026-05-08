@@ -47,6 +47,29 @@ public protocol SpeechGenerationModel: AnyObject {
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 }
 
+public enum AudioGenerationFinishReason: String, Sendable {
+    case eos
+    case maxTokens = "max_tokens"
+    case cancelled
+    case failed
+}
+
+public struct AudioGenerationCompletion: Sendable {
+    public let audio: MLXArray
+    public let info: AudioGenerationInfo?
+    public let finishReason: AudioGenerationFinishReason
+
+    public init(
+        audio: MLXArray,
+        info: AudioGenerationInfo?,
+        finishReason: AudioGenerationFinishReason
+    ) {
+        self.audio = audio
+        self.info = info
+        self.finishReason = finishReason
+    }
+}
+
 public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
     func prepareCustomVoice(
         text: String,
@@ -69,6 +92,14 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 
+    func generateCustomVoice(
+        text: String,
+        language: String,
+        speaker: String,
+        instruct: String?,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion
+
     func prepareVoiceDesign(
         text: String,
         language: String,
@@ -86,6 +117,13 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         generationSpeedProfile: String?,
         memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
+
+    func generateVoiceDesign(
+        text: String,
+        language: String,
+        voiceDescription: String,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion
 
     func createVoiceClonePrompt(
         refAudio: MLXArray,
@@ -110,6 +148,13 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
         generationSpeedProfile: String?,
         memoryClearCadence: Int?
     ) -> AsyncThrowingStream<AudioGeneration, Error>
+
+    func generateVoiceClone(
+        text: String,
+        language: String,
+        voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
+        generationParameters: GenerateParameters
+    ) async throws -> AudioGenerationCompletion
 }
 
 public extension SpeechGenerationModel {

@@ -719,22 +719,32 @@ public struct BenchmarkSample: Hashable, Codable, Sendable {
     }
 }
 
+public enum GenerationFinishReason: String, Hashable, Codable, Sendable {
+    case eos
+    case maxTokens = "max_tokens"
+    case cancelled
+    case failed
+}
+
 public struct GenerationResult: Hashable, Codable, Sendable {
     public let audioPath: String
     public let durationSeconds: Double
     public let streamSessionDirectory: String?
     public let benchmarkSample: BenchmarkSample?
+    public let finishReason: GenerationFinishReason?
 
     public init(
         audioPath: String,
         durationSeconds: Double,
         streamSessionDirectory: String?,
-        benchmarkSample: BenchmarkSample?
+        benchmarkSample: BenchmarkSample?,
+        finishReason: GenerationFinishReason? = nil
     ) {
         self.audioPath = audioPath
         self.durationSeconds = durationSeconds
         self.streamSessionDirectory = streamSessionDirectory
         self.benchmarkSample = benchmarkSample
+        self.finishReason = finishReason
     }
 
     public var audioURL: URL {
@@ -755,7 +765,8 @@ public struct GenerationResult: Hashable, Codable, Sendable {
             audioPath: audioPath,
             durationSeconds: durationSeconds,
             streamSessionDirectory: streamSessionDirectory,
-            benchmarkSample: benchmarkSample
+            benchmarkSample: benchmarkSample,
+            finishReason: finishReason
         )
     }
 }
@@ -877,13 +888,12 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         public let generationSpeedProfile: String?
         public let memoryClearCadence: Int?
         public let postRequestCachePolicy: String?
-        /// Sampling temperature override; replaces the Custom Voice product
-        /// default (0.7) before `Qwen3BenchmarkGenerationParameterOverrides`
+        /// Sampling temperature override; replaces the official Qwen3-TTS
+        /// default before `Qwen3BenchmarkGenerationParameterOverrides`
         /// applies any `QWENVOICE_QWEN3_BENCHMARK_TEMPERATURE` env override.
         public let temperature: Double?
-        /// Sampling top-p override; replaces the Custom Voice product
-        /// default (0.9) before
-        /// `Qwen3BenchmarkGenerationParameterOverrides` applies any
+        /// Sampling top-p override; replaces the official Qwen3-TTS default
+        /// before `Qwen3BenchmarkGenerationParameterOverrides` applies any
         /// `QWENVOICE_QWEN3_BENCHMARK_TOP_P` env override.
         public let topP: Double?
 

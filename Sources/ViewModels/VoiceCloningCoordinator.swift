@@ -176,7 +176,6 @@ final class VoiceCloningCoordinator: ObservableObject {
                     subfolder: model.outputSubfolder,
                     text: currentDraft.text
                 )
-                let title = String(currentDraft.text.prefix(40))
                 // Sync prefix already validated text + referenceAudioPath
                 // so makeGenerationRequest can never return nil here. If
                 // it does (defensive only) throw and let the catch reset
@@ -190,17 +189,6 @@ final class VoiceCloningCoordinator: ObservableObject {
                     throw VoiceCloningCoordinatorError.requestConstructionFailed
                 }
                 CustomVoiceUIPerformanceTrace.mark(.previewSetupStarted)
-                // Smooth-playback prebuffer hint (gated by
-                // AudioService.smoothPlaybackEnabled). See the
-                // CustomVoiceCoordinator counterpart.
-                audioPlayer.setLivePreviewEstimate(
-                    audioDuration: LivePreviewEstimator.estimatedAudioSeconds(forText: draft.wrappedValue.text),
-                    rtf: LivePreviewEstimator.estimatedRTF(for: .clone)
-                )
-                audioPlayer.prepareStreamingPreview(
-                    title: title,
-                    shouldAutoPlay: AudioService.shouldAutoPlay
-                )
 
                 CustomVoiceUIPerformanceTrace.mark(
                     .engineRequestStarted,
@@ -276,7 +264,7 @@ final class VoiceCloningCoordinator: ObservableObject {
             modelID: model.id,
             text: draft.text,
             outputPath: outputPath,
-            shouldStream: true,
+            shouldStream: false,
             streamingTitle: String(draft.text.prefix(40)),
             payload: .clone(
                 reference: CloneReference(

@@ -48,7 +48,7 @@ Important consequence: some historical docs and comments still mention prior res
 
 Top-level maintained surfaces:
 
-- `Sources/` - macOS app shell, shared app models/services/views, iPhone app code, shared core, native engine boundaries, resources, and assets.
+- `Sources/` - macOS app shell, shared app models/services/views, iPhone app code, shared core, owned backend core, native engine boundaries, resources, and assets.
 - `QwenVoiceTests/` - macOS XCTest coverage for app state, contract, engine, XPC, native runtime, playback, persistence, and quality gates.
 - `VocelloUITests/` - macOS XCUITest smoke coverage.
 - `VocelloiOSTests/` - iPhone foundation and extension-contract tests.
@@ -87,6 +87,7 @@ Maintained schemes:
 Primary targets:
 
 - `QwenVoice` - macOS application, product name `Vocello`, wrapper `Vocello.app`, Swift module `QwenVoice`
+- `QwenVoiceBackendCore` - owned QwenVoice backend facade seeded from upstream `mlx-audio-swift v0.1.2`, carrying Qwen3-TTS provenance, official sampling defaults, finish reasons, and the narrow synthesis backend interface
 - `QwenVoiceCore` - shared static framework for macOS and iOS engine semantics and runtime policy
 - `QwenVoiceNative` - macOS app-side engine proxy/store/client framework
 - `QwenVoiceEngineSupport` - shared macOS XPC transport, domain models, and trust policy
@@ -117,7 +118,8 @@ Shared engine core:
 - `Sources/QwenVoiceCore/TTSEngine.swift` defines frontend-safe engine state and engine protocols.
 - `Sources/QwenVoiceCore/SemanticTypes.swift` and `GenerationSemantics.swift` define shared request, result, event, mode, clone, and generation semantics.
 - `Sources/QwenVoiceCore/ContractBackedModelRegistry.swift` loads the checked-in model contract.
-- `Sources/QwenVoiceCore/MLXTTSEngine.swift`, `NativeEngineRuntime.swift`, `MLXModelLoadCoordinator.swift`, `NativeStreamingSynthesisSession.swift`, `NativeCloneSupport.swift`, and `AudioPreparation.swift` own the active native generation path.
+- `Sources/QwenVoiceBackendCore/` owns the QwenVoice-controlled backend facade and provenance for the upstream `mlx-audio-swift v0.1.2` seed.
+- `Sources/QwenVoiceCore/MLXTTSEngine.swift`, `NativeEngineRuntime.swift`, `MLXModelLoadCoordinator.swift`, `NativeStreamingSynthesisSession.swift`, `NativeCloneSupport.swift`, and `AudioPreparation.swift` own the active native generation path. Normal production generation is quality-first full-result audio; live preview/streaming is secondary diagnostic or future preview work and must not affect the final waveform.
 - `Sources/QwenVoiceCore/ExtensionEngine*` owns iPhone extension IPC, transport, host replacement, invalidation, and teardown.
 - `Sources/QwenVoiceCore/IOSMemorySnapshot.swift` and `NativeMemoryPolicyResolver.swift` own shared memory-pressure vocabulary and policy.
 

@@ -40,17 +40,20 @@
 		1F36AEB15D5E59DE2BE99B63 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CA92F4A03738BC1991C7A752 /* HuggingFace */; };
 		1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BA97E899E616829A78233A /* Generation.swift */; };
 		204995EE6E17D7F1DDFA02FB /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 357F5CA9E28DE9CA8F48905E /* HuggingFace */; };
+		207CC9B667B93AD4010CE0B5 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 356CE30F0920C8E6BEDAFCBF /* MLXAudioTTS */; };
 		21012A67D1700D60D741FCBC /* QwenVoiceNative.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 405DF32499EDF28E20D73FEA /* QwenVoiceNative.framework */; };
 		25AA6B68605F58DB9EE09EE6 /* RuntimeReleaseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43033F9668B23257EDC8EEE3 /* RuntimeReleaseCoordinator.swift */; };
 		2652AA780375CA68D2A076C9 /* IOSShellPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA28E2DF284402995B080598 /* IOSShellPrimitives.swift */; };
 		280A67A391CE1EE6F93C3BC4 /* UnsafeSpeechGenerationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC0AAA8033470C310E11EA6 /* UnsafeSpeechGenerationModel.swift */; };
 		2C2CBBF7A0F35575F82E0A57 /* GenerationScreenCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ED3E49E364284833C8F9F1B /* GenerationScreenCoordinatorTests.swift */; };
 		2C76DCA86A8223765A4151FE /* QVoiceiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006BE9D0FEE391DC25395879 /* QVoiceiOSApp.swift */; };
+		2C8FBC7529B64995EEFE908D /* QwenVoiceBackendCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081A93CD768E8D9657E5B63F /* QwenVoiceBackendCoreTests.swift */; };
 		2D5BBF0086459B904EBDD4D8 /* QwenVoiceCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1CD42CBFA3E0E68EDA48DEA /* QwenVoiceCore.framework */; };
 		2E23D409A2825F81A07CC89A /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE335D1E032508F0E9B7614 /* AudioPlayerViewModel.swift */; };
 		2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = E876590A12FADBE38100CD17 /* LayoutConstants.swift */; };
 		2EA6BDC67DBC9CF242C64949 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 197C02DEBAE4CD7083953F31 /* MLX */; };
 		30609C65E67479598357E64F /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C7D6BE8A8364773C069202 /* WaveformService.swift */; };
+		30FB7ACB9FAA05EA35B76940 /* QwenVoiceBackendCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305B82987DE76A718A67DE36 /* QwenVoiceBackendCore.swift */; };
 		31876E8C0C4EABE4E984FD02 /* LivePreviewEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52C2D1A7252AA9B66C8435D /* LivePreviewEstimator.swift */; };
 		33DC6B025F132E5FCEBC7753 /* MLXTTSEngine+Testing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88958C79C893DBC732C5D934 /* MLXTTSEngine+Testing.swift */; };
 		344EA1CECA3F8F8B111BC547 /* IOSRootNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A51A054EBF03C0D4E010A6 /* IOSRootNavigationModels.swift */; };
@@ -130,6 +133,7 @@
 		8612AA28117CF2FDD46D401A /* AppPerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C8C4331104AAE56B2B7047 /* AppPerformanceSignposts.swift */; };
 		86BD0EC967C415EFDF6B914A /* CustomVoiceUIPerformanceTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5986D49EEC70ECF5CA29CF1 /* CustomVoiceUIPerformanceTrace.swift */; };
 		881B6A72F8BD0FAEC1E291D8 /* NativeMemoryPolicyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEE16398D08C10B333F02D3 /* NativeMemoryPolicyResolver.swift */; };
+		89F97758995DAD1D29ACAA4A /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 10BB053B15B150038F4C3B67 /* MLXAudioCore */; };
 		8C368E980B5C4B59C1179736 /* IOSMemoryMetricsBridge.h in Headers */ = {isa = PBXBuildFile; fileRef = 04959460DEEFC35448B5F9F7 /* IOSMemoryMetricsBridge.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		8C675B0590E4A89594D8FE33 /* QwenVoiceCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1CD42CBFA3E0E68EDA48DEA /* QwenVoiceCore.framework */; };
 		8E58BE1E09A9430CD949DF6D /* ExtensionEngineTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C75B51B150DAD46318887D /* ExtensionEngineTransport.swift */; };
@@ -154,6 +158,7 @@
 		9F33BE2BD7E13711926ED9B8 /* UITestAutomationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF172A7D6DB2AC4CF2F8E39 /* UITestAutomationSupport.swift */; };
 		9FFF8ADC22405360E2CA2244 /* QwenVoiceCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1CD42CBFA3E0E68EDA48DEA /* QwenVoiceCore.framework */; };
 		A03B1385633EBB3E837A4B4C /* EngineServiceCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30217C0DF571FAC613EA347F /* EngineServiceCodecTests.swift */; };
+		A18C090DB562D87CDE228F9F /* QwenVoiceBackendCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F63A0639D422EF070197E1B1 /* QwenVoiceBackendCore.framework */; };
 		A1A06C031B9A40EA24BB7C8A /* MLXModelLoadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9DFF46140E21950EEDD4721 /* MLXModelLoadCoordinator.swift */; };
 		A1CC8ADC787EFD99DF441B8D /* AppGenerationTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE17D8F4587716FB24641C /* AppGenerationTelemetry.swift */; };
 		A20A5F9DDA5CA1796AAEABEB /* QwenVoiceEngineSupport.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F796BD7F461844DF75A7EE /* QwenVoiceEngineSupport.framework */; };
@@ -201,6 +206,7 @@
 		C48459C5FE651F4D64B264D5 /* TTSContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169416ABF9E023B87DCE932D /* TTSContract.swift */; };
 		C4E618779FCA378BDBF07857 /* EngineServiceIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18DE6BAD8C5C43316C0B347E /* EngineServiceIPC.swift */; };
 		C7614DCEA3F190692321161D /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4BA2E12FB2E8DADF0D68B35C /* GRDB */; };
+		C7AAAF166EB69C7C32685A63 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 49B72AF8E8AFB85CE902FC6B /* MLX */; };
 		C80870F3585538BACB90AD65 /* UITestStubMacEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5676B83D5059D1F1311DEA78 /* UITestStubMacEngine.swift */; };
 		C838C6E3E59717F67F49C45C /* SidebarPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C317D7467D26FD09704CFD81 /* SidebarPlayerView.swift */; };
 		C8B7F513336ADCF7C6508D74 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 040444BEBB6ECEEBD1514C41 /* MLX */; };
@@ -268,6 +274,13 @@
 			remoteGlobalIDString = FDEEB4D6308B4114B0CD6002;
 			remoteInfo = QwenVoiceEngineService;
 		};
+		1BE71F1BB66170BC55E0902D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D6CCFF7F32B95B1A9F0E3FB7;
+			remoteInfo = QwenVoiceBackendCore;
+		};
 		2995B9BE05CC5F23CBCD30A2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
@@ -323,6 +336,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 1AC811490BEB9ED2A301BD4E;
 			remoteInfo = QwenVoiceCore;
+		};
+		885753F98A59CDB34A6E536D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED55BB692FF8964B44B4CF30 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D6CCFF7F32B95B1A9F0E3FB7;
+			remoteInfo = QwenVoiceBackendCore;
 		};
 		8F6C28E125A1EC88AC51DE2D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -416,6 +436,7 @@
 		05AE04FC3819262A8952F8FB /* NativeCloneSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCloneSupport.swift; sourceTree = "<group>"; };
 		06720D555739C2E8AE36A913 /* NativeStreamingSynthesisSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStreamingSynthesisSession.swift; sourceTree = "<group>"; };
 		06F87CB9B9415D7556595B20 /* TimingExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimingExtensions.swift; sourceTree = "<group>"; };
+		081A93CD768E8D9657E5B63F /* QwenVoiceBackendCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceBackendCoreTests.swift; sourceTree = "<group>"; };
 		08A7E4D67B06F288693FEAC2 /* GenerationScreenPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationScreenPresentation.swift; sourceTree = "<group>"; };
 		0AEC31C6C5F1978398C647E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
@@ -450,6 +471,7 @@
 		2CE335D1E032508F0E9B7614 /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
 		2EC6F0D89B4220E1F3A6CA71 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		30217C0DF571FAC613EA347F /* EngineServiceCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineServiceCodecTests.swift; sourceTree = "<group>"; };
+		305B82987DE76A718A67DE36 /* QwenVoiceBackendCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceBackendCore.swift; sourceTree = "<group>"; };
 		3104C20A9FE70BE2214E0E6F /* StubBackendTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubBackendTransport.swift; sourceTree = "<group>"; };
 		3391463774A620DD7488F8FB /* SemanticTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticTypes.swift; sourceTree = "<group>"; };
 		3483DA3A98B8B584FB8B4026 /* IOSGenerationSharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerationSharedViews.swift; sourceTree = "<group>"; };
@@ -604,6 +626,7 @@
 		F1FFAA967392EE269CF32328 /* VoiceDesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignView.swift; sourceTree = "<group>"; };
 		F3D8ACB81CF073C1688E259F /* ExtensionBackedTTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBackedTTSEngine.swift; sourceTree = "<group>"; };
 		F4F9D906B9BDE4A6978A5650 /* TextInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputView.swift; sourceTree = "<group>"; };
+		F63A0639D422EF070197E1B1 /* QwenVoiceBackendCore.framework */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.framework; path = QwenVoiceBackendCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F84E19D8BAEB03195166A26A /* IOSMemoryMetricsBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = IOSMemoryMetricsBridge.m; sourceTree = "<group>"; };
 		F8D4D8DFF4CFC912BE52FF1E /* IOSGenerateFlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerateFlowViews.swift; sourceTree = "<group>"; };
 		F9F88D3A405265D7B25F2E3B /* LivePreviewIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePreviewIntegrationTests.swift; sourceTree = "<group>"; };
@@ -615,6 +638,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		20A9771FAF850BE17A495A2F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				89F97758995DAD1D29ACAA4A /* MLXAudioCore in Frameworks */,
+				207CC9B667B93AD4010CE0B5 /* MLXAudioTTS in Frameworks */,
+				C7AAAF166EB69C7C32685A63 /* MLX in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		27632C381181CA8727A15BF1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -665,6 +698,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A18C090DB562D87CDE228F9F /* QwenVoiceBackendCore.framework in Frameworks */,
 				126A84D9198676537C91D907 /* QwenVoiceCore.framework in Frameworks */,
 				21012A67D1700D60D741FCBC /* QwenVoiceNative.framework in Frameworks */,
 				A20A5F9DDA5CA1796AAEABEB /* QwenVoiceEngineSupport.framework in Frameworks */,
@@ -840,6 +874,7 @@
 				CE621138D32607BE4CF4FDE5 /* NativeRuntimeTestSupport.swift */,
 				0C7BA4FF12070F1DA7C43CB8 /* NativeStreamingSynthesisSessionTests.swift */,
 				B842FA688FF4CEEB23507095 /* PlatformCapabilityMatrixTests.swift */,
+				081A93CD768E8D9657E5B63F /* QwenVoiceBackendCoreTests.swift */,
 				7658FC7786FF12AFB1D10CB4 /* SavedVoicesViewModelTests.swift */,
 				CA69FF9D2F8980B6EECA2831 /* StreamingChunkFinalizationTests.swift */,
 				F1BEC9303B02719EAE3E8EB4 /* TTSContractTests.swift */,
@@ -964,6 +999,7 @@
 			isa = PBXGroup;
 			children = (
 				3ADE213695C11F46205AE6DC /* QwenVoice.app */,
+				F63A0639D422EF070197E1B1 /* QwenVoiceBackendCore.framework */,
 				C1CD42CBFA3E0E68EDA48DEA /* QwenVoiceCore.framework */,
 				34A69E43A7FA75DD38753845 /* QwenVoiceEngineService.xpc */,
 				E1F796BD7F461844DF75A7EE /* QwenVoiceEngineSupport.framework */,
@@ -1040,6 +1076,7 @@
 				DC940CD166A1E82A4A668C51 /* iOSEngineExtension */,
 				7EC3F209FA67973CC7094724 /* iOSSupport */,
 				2332A759DFDCB13AFAF18179 /* Packages */,
+				CF3C857C12C47F83E43ED909 /* QwenVoiceBackendCore */,
 				1FDA267612B41BC391194DD6 /* QwenVoiceCore */,
 				3805469BB0E39FB1D6597AB4 /* QwenVoiceEngineService */,
 				467EA88EED6E5621C68047F3 /* QwenVoiceEngineSupport */,
@@ -1138,6 +1175,15 @@
 				0D3C6777F2ABFE603D026E0D /* VoicesView.swift */,
 			);
 			path = Library;
+			sourceTree = "<group>";
+		};
+		CF3C857C12C47F83E43ED909 /* QwenVoiceBackendCore */ = {
+			isa = PBXGroup;
+			children = (
+				305B82987DE76A718A67DE36 /* QwenVoiceBackendCore.swift */,
+			);
+			name = QwenVoiceBackendCore;
+			path = Sources/QwenVoiceBackendCore;
 			sourceTree = "<group>";
 		};
 		D04B5DF95506C7083D60178B /* Sidebar */ = {
@@ -1255,6 +1301,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				13BFE4B4D2E8BB43D3A101D3 /* PBXTargetDependency */,
 			);
 			name = QwenVoiceCore;
 			packageProductDependencies = (
@@ -1278,6 +1325,7 @@
 			);
 			dependencies = (
 				2DF98504E7F30FF4678CF160 /* PBXTargetDependency */,
+				D8D922BB2078ED59B9C7F9CB /* PBXTargetDependency */,
 				C33E456414FF5FE5F236AAA6 /* PBXTargetDependency */,
 				52BE9D996997DCA8262BAE48 /* PBXTargetDependency */,
 				0E458F5130325AE758F70543 /* PBXTargetDependency */,
@@ -1392,6 +1440,27 @@
 			productReference = A6B73109FDA26E5BE216F042 /* VocelloiOSTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		D6CCFF7F32B95B1A9F0E3FB7 /* QwenVoiceBackendCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 19D569918E369A8988632FB3 /* Build configuration list for PBXNativeTarget "QwenVoiceBackendCore" */;
+			buildPhases = (
+				7D00AFD809BA1F5F9CBE3EA0 /* Sources */,
+				20A9771FAF850BE17A495A2F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QwenVoiceBackendCore;
+			packageProductDependencies = (
+				10BB053B15B150038F4C3B67 /* MLXAudioCore */,
+				356CE30F0920C8E6BEDAFCBF /* MLXAudioTTS */,
+				49B72AF8E8AFB85CE902FC6B /* MLX */,
+			);
+			productName = QwenVoiceBackendCore;
+			productReference = F63A0639D422EF070197E1B1 /* QwenVoiceBackendCore.framework */;
+			productType = "com.apple.product-type.framework.static";
+		};
 		FA670FC80E3BD49BCF8BF50F /* VocelloUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 12821E1E8F7F2DDE4A72FAED /* Build configuration list for PBXNativeTarget "VocelloUITests" */;
@@ -1483,6 +1552,7 @@
 			projectRoot = "";
 			targets = (
 				939725D6CC844653EA90F39E /* QwenVoice */,
+				D6CCFF7F32B95B1A9F0E3FB7 /* QwenVoiceBackendCore */,
 				1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */,
 				FDEEB4D6308B4114B0CD6002 /* QwenVoiceEngineService */,
 				7A07A3AD93684A473AD5179F /* QwenVoiceEngineSupport */,
@@ -1712,6 +1782,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7D00AFD809BA1F5F9CBE3EA0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30FB7ACB9FAA05EA35B76940 /* QwenVoiceBackendCore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7D073BFD3554AC50A7197B60 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1770,6 +1848,7 @@
 				FD91BD747BB74FD43BF11625 /* NativeRuntimeTestSupport.swift in Sources */,
 				75661F0C5807236FAE29D39B /* NativeStreamingSynthesisSessionTests.swift in Sources */,
 				EA3CD1A5A33D68FCB2AD81FF /* PlatformCapabilityMatrixTests.swift in Sources */,
+				2C8FBC7529B64995EEFE908D /* QwenVoiceBackendCoreTests.swift in Sources */,
 				11CA91F6DBFE2022CE55E567 /* SavedVoicesViewModelTests.swift in Sources */,
 				9BA39200B030E81EDD24427E /* StreamingChunkFinalizationTests.swift in Sources */,
 				47047F5254483416802EA6E7 /* TTSContractTests.swift in Sources */,
@@ -1788,6 +1867,11 @@
 			isa = PBXTargetDependency;
 			target = 7A07A3AD93684A473AD5179F /* QwenVoiceEngineSupport */;
 			targetProxy = C5DBB45B309D6DD171F8CAA9 /* PBXContainerItemProxy */;
+		};
+		13BFE4B4D2E8BB43D3A101D3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D6CCFF7F32B95B1A9F0E3FB7 /* QwenVoiceBackendCore */;
+			targetProxy = 885753F98A59CDB34A6E536D /* PBXContainerItemProxy */;
 		};
 		1B909D47EDC41AF7BFC39B94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1869,6 +1953,11 @@
 			target = 1AC811490BEB9ED2A301BD4E /* QwenVoiceCore */;
 			targetProxy = 8F6C28E125A1EC88AC51DE2D /* PBXContainerItemProxy */;
 		};
+		D8D922BB2078ED59B9C7F9CB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D6CCFF7F32B95B1A9F0E3FB7 /* QwenVoiceBackendCore */;
+			targetProxy = 1BE71F1BB66170BC55E0902D /* PBXContainerItemProxy */;
+		};
 		E309228D930B1FB079CD8A6B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 8E4346491ECB9C6C678CD73F /* VocelloiOS */;
@@ -1938,6 +2027,38 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		2948D566F93EF3E13DCA0AED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qvoice.backend-core";
+				PRODUCT_MODULE_NAME = QwenVoiceBackendCore;
+				PRODUCT_NAME = QwenVoiceBackendCore;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_VERSION = 6;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
 		};
 		346A27324B03F671F09E2022 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -2460,6 +2581,38 @@
 			};
 			name = Debug;
 		};
+		D4FACB4706117D4E27BD82BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qvoice.backend-core";
+				PRODUCT_MODULE_NAME = QwenVoiceBackendCore;
+				PRODUCT_NAME = QwenVoiceBackendCore;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_VERSION = 6;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
 		DADEB91BD0B9AE8B874ABE53 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2525,6 +2678,15 @@
 			buildConfigurations = (
 				4908F8B6510BE86724256789 /* Debug */,
 				B14AF113F30CD9D1EC02C270 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		19D569918E369A8988632FB3 /* Build configuration list for PBXNativeTarget "QwenVoiceBackendCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2948D566F93EF3E13DCA0AED /* Debug */,
+				D4FACB4706117D4E27BD82BE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -2661,6 +2823,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = MLXAudioCore;
 		};
+		10BB053B15B150038F4C3B67 /* MLXAudioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioCore;
+		};
 		11FDE2EFFA7EC79F899F3714 /* MLXAudioTTS */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MLXAudioTTS;
@@ -2683,6 +2849,10 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = MLXAudioCore;
 		};
+		356CE30F0920C8E6BEDAFCBF /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioTTS;
+		};
 		357F5CA9E28DE9CA8F48905E /* HuggingFace */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 50F552015729986D9C4DD1EE /* XCRemoteSwiftPackageReference "swift-huggingface" */;
@@ -2701,6 +2871,11 @@
 			productName = MLXAudioCore;
 		};
 		48B30CCCAF9E1C70BAE4C419 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 32E79430CFED0938C03DCC61 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		49B72AF8E8AFB85CE902FC6B /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 32E79430CFED0938C03DCC61 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;

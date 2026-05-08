@@ -82,7 +82,7 @@ Performance and audio-QC validation runs through the opt-in `perf` layer. It is 
 ./scripts/qa.sh test --layer perf
 ```
 
-The lane drives `GenerationQualityAuditLiveTests`, which manages the cold/warm/exhaustive matrix internally and consumes:
+The lane drives `GenerationQualityAuditLiveTests`, which manages the cold/warm/exhaustive matrix internally and consumes these diagnostics-only controls:
 
 - `QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE` (`current` | `legacy123-memory` | `adaptive-failure-only` | `balanced-all-modes`)
 - `QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE` (`0` disables per-step MLX cache clears)

@@ -519,8 +519,8 @@ private struct VoiceCloningComposerFooter: View {
 
             WorkflowReadinessNote(
                 isReady: isReadyForFastGenerate && !isGenerating,
-                title: isGenerating ? "Generating live preview" : readinessTitle,
-                detail: isGenerating ? "Streaming audio now. The final file lands in the player when ready." : readinessDetail,
+                title: isGenerating ? "Generating final audio" : readinessTitle,
+                detail: isGenerating ? "Rendering the complete take. The file lands in the player when ready." : readinessDetail,
                 accentColor: AppTheme.voiceCloning,
                 isBusy: isGenerating,
                 accessibilityIdentifier: "voiceCloning_readiness"

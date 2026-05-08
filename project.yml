@@ -93,6 +93,8 @@ targets:
         excludes:
           - "QwenVoiceCore"
           - "QwenVoiceCore/**"
+          - "QwenVoiceBackendCore"
+          - "QwenVoiceBackendCore/**"
           - "QwenVoiceEngineService"
           - "QwenVoiceEngineService/**"
           - "QwenVoiceEngineSupport"
@@ -234,6 +236,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_OBJC_BRIDGING_HEADER: Sources/QwenVoiceCore/QwenVoiceCore-Bridging-Header.h
     dependencies:
+      - target: QwenVoiceBackendCore
       - package: MLXAudio
         product: MLXAudioCore
       - package: MLXAudio
@@ -242,6 +245,28 @@ targets:
         product: MLX
       - package: SwiftHuggingFace
         product: HuggingFace
+
+  QwenVoiceBackendCore:
+    type: framework.static
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Sources/QwenVoiceBackendCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qvoice.backend-core
+        PRODUCT_NAME: QwenVoiceBackendCore
+        PRODUCT_MODULE_NAME: QwenVoiceBackendCore
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
 
   QwenVoiceEngineService:
     type: xpc-service
@@ -287,6 +312,7 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: QwenVoice
+      - target: QwenVoiceBackendCore
       - target: QwenVoiceCore
       - target: QwenVoiceNative
       - target: QwenVoiceEngineSupport

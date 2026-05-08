@@ -199,7 +199,7 @@ enum VoiceCloningReadiness {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Preparing voice context",
-                detail: "Priming this reference so the first live preview starts quickly.",
+                detail: "Priming this reference so final generation starts cleanly.",
                 trailingText: nil
             )
         }
@@ -225,7 +225,7 @@ enum VoiceCloningReadiness {
         return VoiceCloningReadinessDescriptor(
             noteIsReady: true,
             title: "Ready to generate",
-            detail: "Ready for live preview and save.",
+            detail: "Ready to generate and save.",
             trailingText: "Ready"
         )
     }

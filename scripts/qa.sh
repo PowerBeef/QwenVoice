@@ -37,14 +37,14 @@ Environment:
   QWENVOICE_PERF_SWAP_MIN_FREE_MB       perf-lane preflight swap-free minimum (default 512)
   QWENVOICE_AUDIO_QC_OUTPUT_DIR         perf-lane artifact root (default build/audio-qc/qa-perf)
   QWENVOICE_AUDIO_QC_MODELS_ROOT        perf-lane models root (default ~/Library/Application Support/QwenVoice/models)
-  QWENVOICE_AUDIO_QC_MODES              perf-lane modes (default CustomVoice,VoiceDesign)
+  QWENVOICE_AUDIO_QC_MODES              perf-lane modes (default CustomVoice,VoiceDesign; VoiceCloning supported)
   QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE  perf-lane profile (default repeat)
   QWENVOICE_AUDIO_QC_REPEAT_COUNT       perf-lane repeats (default 1)
   QWENVOICE_AUDIO_QC_COLD_RUNS          perf-lane cold runs per mode (default 2)
   QWENVOICE_AUDIO_QC_WARM_RUNS          perf-lane warm runs per mode (default 3)
-  QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE  current|legacy123-memory|adaptive-failure-only|balanced-all-modes
-  QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE      0+ (per-step MLX cache clear cadence; 0 disables)
-  QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY current|always|failure-only|never
+  QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE  diagnostics-only: current|legacy123-memory|adaptive-failure-only|balanced-all-modes
+  QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE      diagnostics-only: 0+ (per-step MLX cache clear cadence; 0 disables)
+  QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY diagnostics-only: current|always|failure-only|never
 USAGE
 }
 
@@ -310,6 +310,12 @@ run_perf_layer() {
   : "${QWENVOICE_AUDIO_QC_COLD_RUNS:=2}"
   : "${QWENVOICE_AUDIO_QC_WARM_RUNS:=3}"
 
+  if printf '%s' "$QWENVOICE_AUDIO_QC_MODES" \
+      | tr ',' '\n' \
+      | grep -Eq '^[[:space:]]*(VoiceCloning|Clones)[[:space:]]*$'; then
+    : "${QWENVOICE_AUDIO_QC_CLONE_REFERENCE:=$PROJECT_DIR/tests/fixtures/clone_reference.wav}"
+  fi
+
   export QWENVOICE_AUDIO_QC_LIVE=1
   export QWENVOICE_AUDIO_QC_ALLOW_MODEL_LOAD=1
   export QWENVOICE_AUDIO_QC_HEADLESS_APP_HOST=1
@@ -332,6 +338,9 @@ run_perf_layer() {
   echo "==> Models root:   $QWENVOICE_AUDIO_QC_MODELS_ROOT"
   echo "==> Modes:         $QWENVOICE_AUDIO_QC_MODES"
   echo "==> Profile:       $QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE (repeat=${QWENVOICE_AUDIO_QC_REPEAT_COUNT}, cold=${QWENVOICE_AUDIO_QC_COLD_RUNS}, warm=${QWENVOICE_AUDIO_QC_WARM_RUNS})"
+  if [[ -n "${QWENVOICE_AUDIO_QC_CLONE_REFERENCE:-}" ]]; then
+    echo "==> Clone ref:     $QWENVOICE_AUDIO_QC_CLONE_REFERENCE"
+  fi
 
   swap_preflight
 

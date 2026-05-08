@@ -5,7 +5,7 @@ import XCTest
 @testable import QwenVoiceCore
 
 final class BackendPerformanceContractTests: XCTestCase {
-    func testBenchmarkOptionsRoundTripGenerationSpeedControls() throws {
+    func testBenchmarkOptionsRoundTripDiagnosticsOnlyGenerationSpeedControls() throws {
         let request = GenerationRequest(
             modelID: "pro_custom",
             text: "Hello",
@@ -528,7 +528,7 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(benchmarkParameters.topP, 0.8)
     }
 
-    func testCustomVoiceGenerationParametersUseConservativeProductSampling() {
+    func testCustomVoiceGenerationParametersUseOfficialQualityProductSampling() {
         let defaults = GenerateParameters(
             maxTokens: 16,
             temperature: 0.9,
@@ -541,9 +541,9 @@ final class BackendPerformanceContractTests: XCTestCase {
             environment: [:]
         )
 
-        XCTAssertEqual(productParameters.maxTokens, defaults.maxTokens)
-        XCTAssertEqual(productParameters.temperature, 0.7, accuracy: 0.0001)
-        XCTAssertEqual(productParameters.topP, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(productParameters.maxTokens, 2048)
+        XCTAssertEqual(productParameters.temperature, 0.9, accuracy: 0.0001)
+        XCTAssertEqual(productParameters.topP, 1.0, accuracy: 0.0001)
         XCTAssertEqual(productParameters.repetitionPenalty, defaults.repetitionPenalty)
     }
 

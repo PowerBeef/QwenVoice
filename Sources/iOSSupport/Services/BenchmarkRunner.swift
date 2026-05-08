@@ -327,7 +327,7 @@ final class BenchmarkRunner {
             modelID: scenario.modelID,
             text: scenario.text,
             outputPath: outputPath,
-            shouldStream: true,
+            shouldStream: false,
             streamingInterval: 0.32,
             payload: payload
         )
