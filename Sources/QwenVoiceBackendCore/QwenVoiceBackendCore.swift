@@ -1,7 +1,3 @@
-@_exported import MLX
-@_exported import MLXAudioCore
-@_exported import MLXAudioTTS
-
 import Foundation
 
 public enum QwenVoiceBackendProvenance {
@@ -36,6 +32,14 @@ public struct Qwen3GenerationConfiguration: Codable, Equatable, Sendable {
     }
 
     public static let officialQualityDefault = Qwen3GenerationConfiguration()
+}
+
+public enum Qwen3GenerationPolicy {
+    public static let minimumGeneratedCodeTokensBeforeEOS = Qwen3GenerationConfiguration
+        .officialQualityDefault
+        .minNewTokens
+    public static let productionFullResultMemoryClearCadence = 0
+    public static let diagnosticStreamingDefaultMemoryClearCadence = 50
 }
 
 public enum QwenVoiceGenerationFinishReason: String, Codable, Hashable, Sendable {

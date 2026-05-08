@@ -135,9 +135,11 @@ actor NativePreparedCloneConditioningCache {
         normalizedCloneReferenceDirectory: URL
     ) async throws -> ResolvedCloneConditioning {
         let requestedTranscript = Self.normalizedTranscript(reference.transcript)
+        let referenceFingerprint = try Self.stableCloneReferenceFingerprint(for: reference.audioURL)
         let normalizationStartedAt = ContinuousClock.now
         let normalizedReferenceOutcome = try await normalizeCloneReference(
             reference.audioURL,
+            referenceFingerprint: referenceFingerprint,
             using: audioPreparationService,
             normalizedCloneReferenceDirectory: normalizedCloneReferenceDirectory
         )
@@ -155,7 +157,7 @@ actor NativePreparedCloneConditioningCache {
         )
         let internalIdentityKey = GenerationSemantics.cloneReferenceIdentityKey(
             modelID: modelID,
-            refAudio: normalizedReference.normalizedPath,
+            refAudio: "\(normalizedReference.normalizedPath)#\(referenceFingerprint)",
             refText: transcriptResolution.transcript
         )
 
@@ -190,6 +192,7 @@ actor NativePreparedCloneConditioningCache {
             let decodeStartedAt = ContinuousClock.now
             let (referenceAudio, reusedDecodedReference) = try resolveDecodedReferenceAudio(
                 normalizedReference: normalizedReference,
+                referenceFingerprint: referenceFingerprint,
                 sampleRate: sampleRate
             )
             let decodeDurationMS = decodeStartedAt.elapsedMilliseconds
@@ -228,6 +231,7 @@ actor NativePreparedCloneConditioningCache {
         let decodeStartedAt = ContinuousClock.now
         let (referenceAudio, reusedDecodedReference) = try resolveDecodedReferenceAudio(
             normalizedReference: normalizedReference,
+            referenceFingerprint: referenceFingerprint,
             sampleRate: sampleRate
         )
         let decodeDurationMS = decodeStartedAt.elapsedMilliseconds
@@ -379,10 +383,11 @@ actor NativePreparedCloneConditioningCache {
 
     private func normalizeCloneReference(
         _ sourceURL: URL,
+        referenceFingerprint: String,
         using audioPreparationService: any AudioPreparationService,
         normalizedCloneReferenceDirectory: URL
     ) async throws -> NormalizedCloneReferenceOutcome {
-        let cacheKey = normalizedReferenceCacheKey(for: sourceURL)
+        let cacheKey = normalizedReferenceCacheKey(referenceFingerprint: referenceFingerprint)
         if let cachedResult = normalizedReferenceCache[cacheKey],
            Self.canReuseCachedNormalizedReference(cachedResult, for: sourceURL) {
             touchNormalizedReference(cacheKey)
@@ -400,7 +405,10 @@ actor NativePreparedCloneConditioningCache {
             reusedExistingOutput = false
         } else {
             let outputURL = normalizedCloneReferenceDirectory.appendingPathComponent(
-                Self.stableNormalizedCloneReferenceFileName(for: sourceURL)
+                Self.stableNormalizedCloneReferenceFileName(
+                    for: sourceURL,
+                    referenceFingerprint: referenceFingerprint
+                )
             )
             normalizationRequest = AudioPreparationRequest(
                 inputURL: sourceURL,
@@ -408,7 +416,7 @@ actor NativePreparedCloneConditioningCache {
             )
             reusedExistingOutput = NativeAudioPreparationService.canReuseExistingNormalizedOutput(
                 at: outputURL,
-                fingerprint: Self.stableCloneReferenceFingerprint(for: sourceURL)
+                fingerprint: referenceFingerprint
             )
         }
 
@@ -433,10 +441,12 @@ actor NativePreparedCloneConditioningCache {
 
     private func resolveDecodedReferenceAudio(
         normalizedReference: AudioNormalizationResult,
+        referenceFingerprint: String,
         sampleRate: Int
     ) throws -> (referenceAudio: MLXArray, reusedDecodedReference: Bool) {
         let key = decodedReferenceAudioCacheKey(
             normalizedPath: normalizedReference.normalizedPath,
+            referenceFingerprint: referenceFingerprint,
             sampleRate: sampleRate
         )
         if let cached = decodedReferenceAudioCache[key] {
@@ -633,10 +643,20 @@ actor NativePreparedCloneConditioningCache {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    static func stableNormalizedCloneReferenceFileName(for sourceURL: URL) -> String {
-        let fingerprint = stableCloneReferenceFingerprint(for: sourceURL)
+    static func stableNormalizedCloneReferenceFileName(for sourceURL: URL) throws -> String {
+        let fingerprint = try stableCloneReferenceFingerprint(for: sourceURL)
+        return stableNormalizedCloneReferenceFileName(
+            for: sourceURL,
+            referenceFingerprint: fingerprint
+        )
+    }
+
+    static func stableNormalizedCloneReferenceFileName(
+        for sourceURL: URL,
+        referenceFingerprint: String
+    ) -> String {
         let stem = sanitizedStem(for: sourceURL)
-        return "\(stem)_\(fingerprint).wav"
+        return "\(stem)_\(referenceFingerprint).wav"
     }
 
     private static func sanitizedStem(for sourceURL: URL) -> String {
@@ -648,28 +668,23 @@ actor NativePreparedCloneConditioningCache {
         return sanitized.isEmpty ? "reference" : sanitized
     }
 
-    private static func stableCloneReferenceFingerprint(for sourceURL: URL) -> String {
-        // Tier 3.7: Drop `modificationDate` from the fingerprint — a `cp` or
-        // `touch` of the source file would invalidate an otherwise-valid cache
-        // entry. Resolved symlink path + file size is enough for the clone
-        // cache's identity guarantees; the file system's own atomicity
-        // protects against real content changes (which also change size).
+    static func stableCloneReferenceFingerprint(for sourceURL: URL) throws -> String {
         let resolvedPath = sourceURL.resolvingSymlinksInPath().path
-        let attributes = (try? FileManager.default.attributesOfItem(atPath: resolvedPath)) ?? [:]
-        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
-        let digest = SHA256.hash(data: Data("\(resolvedPath)|\(size)".utf8))
-        return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        let data = try Data(contentsOf: URL(fileURLWithPath: resolvedPath))
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private func decodedReferenceAudioCacheKey(
         normalizedPath: String,
+        referenceFingerprint: String,
         sampleRate: Int
     ) -> String {
-        "\(normalizedPath)|\(sampleRate)"
+        "\(normalizedPath)|\(referenceFingerprint)|\(sampleRate)"
     }
 
-    private func normalizedReferenceCacheKey(for sourceURL: URL) -> String {
-        Self.stableCloneReferenceFingerprint(for: sourceURL)
+    private func normalizedReferenceCacheKey(referenceFingerprint: String) -> String {
+        referenceFingerprint
     }
 
     static func preparedVoiceClonePromptRootDirectory(
@@ -692,9 +707,33 @@ actor NativePreparedCloneConditioningCache {
                 in: voicesDirectory,
                 voiceID: preparedVoiceID
             )
-            return root.appendingPathComponent(modelID, isDirectory: true)
+            let modelRoot = root.appendingPathComponent(modelID, isDirectory: true)
+            guard let conditioning else { return modelRoot }
+            return modelRoot.appendingPathComponent(
+                clonePromptArtifactDigest(
+                    modelID: modelID,
+                    conditioning: conditioning,
+                    language: language
+                ),
+                isDirectory: true
+            )
         }
         guard let conditioning else { return nil }
+        let digest = clonePromptArtifactDigest(
+            modelID: modelID,
+            conditioning: conditioning,
+            language: language
+        )
+        return voicesDirectory
+            .appendingPathComponent(".qvoice_clone_prompts", isDirectory: true)
+            .appendingPathComponent(digest, isDirectory: true)
+    }
+
+    private func clonePromptArtifactDigest(
+        modelID: String,
+        conditioning: ResolvedCloneConditioning,
+        language: String?
+    ) -> String {
         let normalizedLanguage = (language ?? "auto")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -707,9 +746,7 @@ actor NativePreparedCloneConditioningCache {
             .prefix(16)
             .map { String(format: "%02x", $0) }
             .joined()
-        return voicesDirectory
-            .appendingPathComponent(".qvoice_clone_prompts", isDirectory: true)
-            .appendingPathComponent(digest, isDirectory: true)
+        return digest
     }
 
     private func writeVoiceClonePrompt(

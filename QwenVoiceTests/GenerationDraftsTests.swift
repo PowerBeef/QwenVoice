@@ -354,6 +354,37 @@ final class GenerationDraftsTests: XCTestCase {
         XCTAssertEqual(descriptor.trailingText, "Ready")
     }
 
+    func testVoiceCloningReadinessTreatsMissingClonePrepAsUsable() {
+        let descriptor = VoiceCloningReadiness.describe(
+            engineReady: true,
+            isModelAvailable: true,
+            modelDisplayName: "Qwen3-TTS Pro Clone",
+            referenceAudioPath: "/tmp/reference.wav",
+            text: "Clone this line",
+            contextStatus: nil
+        )
+
+        XCTAssertTrue(descriptor.noteIsReady)
+        XCTAssertEqual(descriptor.title, "Ready to generate")
+        XCTAssertEqual(descriptor.trailingText, "Ready")
+    }
+
+    func testVoiceCloningReadinessTreatsFailedClonePrepAsReadyWithWarningCopy() {
+        let descriptor = VoiceCloningReadiness.describe(
+            engineReady: true,
+            isModelAvailable: true,
+            modelDisplayName: "Qwen3-TTS Pro Clone",
+            referenceAudioPath: "/tmp/reference.wav",
+            text: "Clone this line",
+            contextStatus: .fallback("Reference prep degraded.")
+        )
+
+        XCTAssertTrue(descriptor.noteIsReady)
+        XCTAssertEqual(descriptor.title, "Reference ready with slower first run")
+        XCTAssertEqual(descriptor.detail, "Reference prep degraded.")
+        XCTAssertEqual(descriptor.trailingText, "Ready")
+    }
+
     func testVoiceCloningReadinessRejectsWhitespaceOnlyScript() {
         let descriptor = VoiceCloningReadiness.describe(
             engineReady: true,

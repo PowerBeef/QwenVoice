@@ -42,6 +42,11 @@ Environment:
   QWENVOICE_AUDIO_QC_REPEAT_COUNT       perf-lane repeats (default 1)
   QWENVOICE_AUDIO_QC_COLD_RUNS          perf-lane cold runs per mode (default 2)
   QWENVOICE_AUDIO_QC_WARM_RUNS          perf-lane warm runs per mode (default 3)
+  QWENVOICE_AUDIO_REVIEW_ENABLED        enable local ASR/alignment review reports for perf lane (default 0)
+  QWENVOICE_AUDIO_REVIEW_MODELS_ROOT    local review-model cache root (default ~/Library/Application Support/QwenVoice/audio-review-models)
+  QWENVOICE_AUDIO_REVIEW_STRICTNESS     advisory|balanced|strict (default balanced)
+  QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB  minimum process memory headroom before review models load (default 4.0)
+  QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS  delay after engine termination before review headroom check (default 2.0)
   QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE  diagnostics-only: current|legacy123-memory|adaptive-failure-only|balanced-all-modes
   QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE      diagnostics-only: 0+ (per-step MLX cache clear cadence; 0 disables)
   QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY diagnostics-only: current|always|failure-only|never
@@ -152,7 +157,7 @@ def order(device):
 
 
 candidates.sort(key=order)
-print(f"platform=iOS Simulator,id={candidates[0][\"udid\"]}")
+print("platform=iOS Simulator,id={}".format(candidates[0]["udid"]))
 '
 }
 
@@ -309,6 +314,10 @@ run_perf_layer() {
   : "${QWENVOICE_AUDIO_QC_REPEAT_COUNT:=1}"
   : "${QWENVOICE_AUDIO_QC_COLD_RUNS:=2}"
   : "${QWENVOICE_AUDIO_QC_WARM_RUNS:=3}"
+  : "${QWENVOICE_AUDIO_REVIEW_ENABLED:=0}"
+  : "${QWENVOICE_AUDIO_REVIEW_STRICTNESS:=balanced}"
+  : "${QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB:=4.0}"
+  : "${QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS:=2.0}"
 
   if printf '%s' "$QWENVOICE_AUDIO_QC_MODES" \
       | tr ',' '\n' \
@@ -322,7 +331,9 @@ run_perf_layer() {
   export QWENVOICE_AUDIO_QC_OUTPUT_DIR QWENVOICE_AUDIO_QC_MODELS_ROOT \
     QWENVOICE_AUDIO_QC_MODES QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE \
     QWENVOICE_AUDIO_QC_REPEAT_COUNT QWENVOICE_AUDIO_QC_COLD_RUNS \
-    QWENVOICE_AUDIO_QC_WARM_RUNS
+    QWENVOICE_AUDIO_QC_WARM_RUNS QWENVOICE_AUDIO_REVIEW_ENABLED \
+    QWENVOICE_AUDIO_REVIEW_STRICTNESS QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB \
+    QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS
 
   if [[ ! -d "$QWENVOICE_AUDIO_QC_MODELS_ROOT" ]]; then
     echo "qa.sh perf: models root '$QWENVOICE_AUDIO_QC_MODELS_ROOT' does not exist." >&2
@@ -333,11 +344,33 @@ run_perf_layer() {
     exit 78
   fi
 
+  if [[ "$QWENVOICE_AUDIO_REVIEW_ENABLED" =~ ^(1|true|yes|on)$ ]]; then
+    : "${QWENVOICE_AUDIO_REVIEW_MODELS_ROOT:=$HOME/Library/Application Support/QwenVoice/audio-review-models}"
+    export QWENVOICE_AUDIO_REVIEW_MODELS_ROOT
+    local review_asr_dir="$QWENVOICE_AUDIO_REVIEW_MODELS_ROOT/mlx-audio/mlx-community_Qwen3-ASR-0.6B-4bit"
+    local review_aligner_dir="$QWENVOICE_AUDIO_REVIEW_MODELS_ROOT/mlx-audio/mlx-community_Qwen3-ForcedAligner-0.6B-4bit"
+    if [[ ! -f "$review_asr_dir/config.json" || -z "$(find "$review_asr_dir" -maxdepth 1 -name '*.safetensors' -print -quit 2>/dev/null)" ]]; then
+      echo "qa.sh perf: missing prepared ASR review model under '$review_asr_dir'." >&2
+      echo "Run scripts/bootstrap_audio_review_models.sh before enabling QWENVOICE_AUDIO_REVIEW_ENABLED=1." >&2
+      exit 78
+    fi
+    if [[ ! -f "$review_aligner_dir/config.json" || -z "$(find "$review_aligner_dir" -maxdepth 1 -name '*.safetensors' -print -quit 2>/dev/null)" ]]; then
+      echo "qa.sh perf: missing prepared forced-aligner review model under '$review_aligner_dir'." >&2
+      echo "Run scripts/bootstrap_audio_review_models.sh before enabling QWENVOICE_AUDIO_REVIEW_ENABLED=1." >&2
+      exit 78
+    fi
+  fi
+
   mkdir -p "$QWENVOICE_AUDIO_QC_OUTPUT_DIR"
   echo "==> Output dir:    $QWENVOICE_AUDIO_QC_OUTPUT_DIR"
   echo "==> Models root:   $QWENVOICE_AUDIO_QC_MODELS_ROOT"
   echo "==> Modes:         $QWENVOICE_AUDIO_QC_MODES"
   echo "==> Profile:       $QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE (repeat=${QWENVOICE_AUDIO_QC_REPEAT_COUNT}, cold=${QWENVOICE_AUDIO_QC_COLD_RUNS}, warm=${QWENVOICE_AUDIO_QC_WARM_RUNS})"
+  if [[ "$QWENVOICE_AUDIO_REVIEW_ENABLED" =~ ^(1|true|yes|on)$ ]]; then
+    echo "==> Audio review:  enabled (${QWENVOICE_AUDIO_REVIEW_STRICTNESS})"
+    echo "==> Review models: $QWENVOICE_AUDIO_REVIEW_MODELS_ROOT"
+    echo "==> Review guard:  ${QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB} GB available after ${QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS}s settle"
+  fi
   if [[ -n "${QWENVOICE_AUDIO_QC_CLONE_REFERENCE:-}" ]]; then
     echo "==> Clone ref:     $QWENVOICE_AUDIO_QC_CLONE_REFERENCE"
   fi
@@ -384,6 +417,11 @@ write_live_audit_request() {
     --arg speedProfile "${QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE:-}" \
     --arg memCadence "${QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE:-}" \
     --arg cachePolicy "${QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY:-}" \
+    --arg audioReviewEnabled "${QWENVOICE_AUDIO_REVIEW_ENABLED:-0}" \
+    --arg audioReviewModels "${QWENVOICE_AUDIO_REVIEW_MODELS_ROOT:-}" \
+    --arg audioReviewStrictness "${QWENVOICE_AUDIO_REVIEW_STRICTNESS:-balanced}" \
+    --arg audioReviewMinGB "${QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB:-4.0}" \
+    --arg audioReviewSettleSeconds "${QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS:-2.0}" \
     '{
       live: true,
       allowModelLoad: true,
@@ -403,7 +441,12 @@ write_live_audit_request() {
       streamStepEvalPolicy: (if $evalPolicy == "" then null else $evalPolicy end),
       generationSpeedProfile: (if $speedProfile == "" then null else $speedProfile end),
       memoryClearCadence: (if $memCadence == "" then null else ($memCadence | tonumber) end),
-      postRequestCachePolicy: (if $cachePolicy == "" then null else $cachePolicy end)
+      postRequestCachePolicy: (if $cachePolicy == "" then null else $cachePolicy end),
+      audioReviewEnabled: ($audioReviewEnabled | test("^(1|true|yes|on)$"; "i")),
+      audioReviewModelsRoot: (if $audioReviewModels == "" then null else $audioReviewModels end),
+      audioReviewStrictness: (if $audioReviewStrictness == "" then "balanced" else $audioReviewStrictness end),
+      audioReviewMinimumAvailableGB: (if $audioReviewMinGB == "" then 4.0 else ($audioReviewMinGB | tonumber) end),
+      audioReviewMemorySettleSeconds: (if $audioReviewSettleSeconds == "" then 2.0 else ($audioReviewSettleSeconds | tonumber) end)
     }' > "$request_path"
 
   echo "==> Wrote live-audit request: $request_path"

@@ -706,6 +706,9 @@ private final class Qwen3TTSStreamingDecoderBucketCache: @unchecked Sendable {
 // MARK: - Qwen3TTS Model
 
 public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedSpeechGenerationModel, SpeechGenerationModelDiagnosticsProvider, @unchecked Sendable {
+    private static let productionMinimumGeneratedCodeTokensBeforeEOS = 2
+    private static let productionFullResultMemoryClearCadence = 0
+
     let config: Qwen3TTSModelConfig
     let talker: Qwen3TTSTalkerForConditionalGeneration
     var speakerEncoder: Qwen3TTSSpeakerEncoder?
@@ -1558,7 +1561,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             topP: generationParameters.topP,
             repetitionPenalty: generationParameters.repetitionPenalty ?? 1.05,
             minP: 0.0,
-            maxTokens: generationParameters.maxTokens ?? 4096
+            maxTokens: generationParameters.maxTokens ?? 4096,
+            memoryClearCadence: Self.productionFullResultMemoryClearCadence
         )
         return audio
     }
@@ -1672,7 +1676,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             customVoiceProfile: nil,
             streamStepEvalPolicy: nil,
             generationSpeedProfile: nil,
-            memoryClearCadence: nil,
+            memoryClearCadence: Self.productionFullResultMemoryClearCadence,
             onInfo: { generationInfo = $0 }
         )
         return AudioGenerationCompletion(
@@ -1705,7 +1709,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             customVoiceProfile: nil,
             streamStepEvalPolicy: nil,
             generationSpeedProfile: nil,
-            memoryClearCadence: nil,
+            memoryClearCadence: Self.productionFullResultMemoryClearCadence,
             onInfo: { generationInfo = $0 }
         )
         return AudioGenerationCompletion(
@@ -1740,7 +1744,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             customVoiceProfile: nil,
             streamStepEvalPolicy: nil,
             generationSpeedProfile: nil,
-            memoryClearCadence: nil,
+            memoryClearCadence: Self.productionFullResultMemoryClearCadence,
             onInfo: { generationInfo = $0 }
         )
         return AudioGenerationCompletion(
@@ -1756,6 +1760,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             return .eos
         case "token_cap":
             return .maxTokens
+        case "failed":
+            return .failed
         default:
             return .failed
         }
@@ -2220,6 +2226,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             Qwen3Signposts.signposter.endInterval("Talker Forward", talkerSignpost)
             talkerForwardTotalMS += talkerForwardStartedAt.elapsedMilliseconds
 
+            let allowsEOS = generatedCodeCount >= Self.productionMinimumGeneratedCodeTokensBeforeEOS
+            let activeSuppressTokens = allowsEOS ? suppressTokens : suppressTokens + [eosTokenId]
+
             // Sample first codebook token
             let nextToken = sampleToken(
                 logits,
@@ -2228,8 +2237,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 topK: topK,
                 repetitionPenalty: repetitionPenalty,
                 generatedTokens: generatedCodebookTokens,
-                suppressTokens: suppressTokens,
-                eosTokenId: eosTokenId,
+                suppressTokens: activeSuppressTokens,
+                eosTokenId: allowsEOS ? eosTokenId : nil,
                 minP: minP
             )
 
@@ -2423,6 +2432,23 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         }
 
         guard generatedCodeCount > 0 else {
+            generationEndReason = "failed"
+            mergePreparationBooleanFlags([
+                "generation_ended_by_eos": false,
+                "generation_hit_token_cap": false,
+            ])
+            mergePreparationStringFlags([
+                "generation_end_reason": generationEndReason,
+            ])
+            if let timingPrefix = streamingGenerationMode.timingPrefix {
+                mergePreparationBooleanFlags([
+                    "\(timingPrefix)_generation_ended_by_eos": false,
+                    "\(timingPrefix)_generation_hit_token_cap": false,
+                ])
+                mergePreparationStringFlags([
+                    "\(timingPrefix)_generation_end_reason": generationEndReason,
+                ])
+            }
             return MLXArray.zeros([1])
         }
 

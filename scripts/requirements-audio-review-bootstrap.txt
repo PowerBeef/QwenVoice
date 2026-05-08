@@ -1,0 +1,6 @@
+# Python deps used only to bootstrap QA-only audio review models.
+# NOT an app runtime dependency and NOT used by Vocello generation.
+#
+# Install with:
+#   python3 -m pip install --user -r scripts/requirements-audio-review-bootstrap.txt
+huggingface_hub>=1.13.0,<2.0.0

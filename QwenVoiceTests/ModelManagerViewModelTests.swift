@@ -81,6 +81,136 @@ final class ModelManagerViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testModelSetupSummaryReflectsRecommendedDownloads() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        try withClearedVariantPreferences {
+            let customSpeed = try XCTUnwrap(TTSModel.model(id: "pro_custom_speed"))
+            let designSpeed = try XCTUnwrap(TTSModel.model(id: "pro_design_speed"))
+            let cloneSpeed = try XCTUnwrap(TTSModel.model(id: "pro_clone_speed"))
+
+            let empty = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            XCTAssertEqual(
+                empty.modelSetupSummary(),
+                ModelManagerViewModel.ModelSetupSummary(
+                    installedRecommendedCount: 0,
+                    totalRecommendedCount: 3
+                )
+            )
+            XCTAssertEqual(empty.modelSetupSummary().text, "0 of 3 recommended models installed")
+
+            try createInstalledModelFixture(for: customSpeed, in: tempRoot)
+            let partial = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            XCTAssertEqual(partial.modelSetupSummary().installedRecommendedCount, 1)
+            XCTAssertEqual(partial.modelSetupSummary().text, "1 of 3 recommended models installed")
+
+            try createInstalledModelFixture(for: designSpeed, in: tempRoot)
+            try createInstalledModelFixture(for: cloneSpeed, in: tempRoot)
+            let complete = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            XCTAssertEqual(
+                complete.modelSetupSummary(),
+                ModelManagerViewModel.ModelSetupSummary(
+                    installedRecommendedCount: 3,
+                    totalRecommendedCount: 3
+                )
+            )
+            XCTAssertEqual(complete.modelSetupSummary().text, "Recommended models ready")
+        }
+    }
+
+    @MainActor
+    func testRecommendedSetupCandidatesFollowHardwareRecommendation() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        try withClearedVariantPreferences {
+            let floorViewModel = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            let floorCandidates = floorViewModel.recommendedSetupCandidates()
+            XCTAssertEqual(Set(floorCandidates.map(\.mode)), Set(GenerationMode.allCases))
+            XCTAssertTrue(
+                floorCandidates.allSatisfy { $0.variantKind == .speed },
+                "Floor Macs should set up Speed variants first."
+            )
+
+            let midViewModel = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .mid16GBMac)
+            let midCandidates = midViewModel.recommendedSetupCandidates()
+            XCTAssertEqual(Set(midCandidates.map(\.mode)), Set(GenerationMode.allCases))
+            XCTAssertTrue(
+                midCandidates.allSatisfy { $0.variantKind == .quality },
+                "Higher-memory Macs should set up Quality variants first."
+            )
+        }
+    }
+
+    @MainActor
+    func testRecommendedSetupCandidatesSkipReadyRecommendedPackages() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        try withClearedVariantPreferences {
+            let customSpeed = try XCTUnwrap(TTSModel.model(id: "pro_custom_speed"))
+            try createInstalledModelFixture(for: customSpeed, in: tempRoot)
+
+            let viewModel = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            let candidates = viewModel.recommendedSetupCandidates()
+            XCTAssertFalse(candidates.contains { $0.id == customSpeed.id })
+            XCTAssertEqual(Set(candidates.map(\.mode)), Set([.design, .clone]))
+        }
+    }
+
+    @MainActor
+    func testRecommendedSetupCandidatesIgnoreActiveVariantSelection() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let qualityModel = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
+        let recommendedSpeed = try XCTUnwrap(TTSModel.model(id: "pro_custom_speed"))
+        try createInstalledModelFixture(for: qualityModel, in: tempRoot)
+
+        try withClearedVariantPreferences {
+            MacModelVariantPreferences.setSelectedVariantID("quality", for: .custom, defaults: .standard)
+
+            let viewModel = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            XCTAssertTrue(viewModel.isActive(qualityModel), "Precondition: Quality remains the active generation variant.")
+            XCTAssertTrue(
+                viewModel.recommendedSetupCandidates().contains { $0.id == recommendedSpeed.id },
+                "Settings downloads should still offer the missing hardware-recommended package even when generation currently prefers another installed variant."
+            )
+            XCTAssertFalse(viewModel.recommendedSetupCandidates().contains { $0.id == qualityModel.id })
+        }
+    }
+
+    @MainActor
+    func testPackagePresentationCoversMissingRepairReadyAndHardwareRisk() throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let customSpeed = try XCTUnwrap(TTSModel.model(id: "pro_custom_speed"))
+        let customQuality = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
+
+        let missing = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            .packagePresentation(for: customSpeed)
+        XCTAssertEqual(missing.kind, .notInstalled)
+        XCTAssertEqual(missing.label, "Not installed")
+
+        try createPartialModelFixture(for: customSpeed, in: tempRoot)
+        let repair = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            .packagePresentation(for: customSpeed)
+        XCTAssertEqual(repair.kind, .needsRepair)
+        XCTAssertEqual(repair.label, "Needs repair")
+
+        try createInstalledModelFixture(for: customSpeed, in: tempRoot)
+        let ready = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+            .packagePresentation(for: customSpeed)
+        XCTAssertEqual(ready.kind, .ready)
+        XCTAssertEqual(ready.label, "Ready")
+
+        let floorViewModel = ModelManagerViewModel(modelsDirectory: tempRoot, deviceClass: .floor8GBMac)
+        XCTAssertTrue(floorViewModel.isHardwareRisky(customQuality))
+    }
+
+    @MainActor
     func testUsePersistsActiveVariantSelection() throws {
         let qualityModel = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
         let key = MacModelVariantPreferences.key(for: .custom)
@@ -238,8 +368,8 @@ final class ModelManagerViewModelTests: XCTestCase {
         }
     }
 
-    /// `sizeText(for:)` is the source of truth for the redesigned
-    /// Models tab's size column. Verifies the three live-state
+    /// `sizeText(for:)` is the source of truth for model storage
+    /// size presentation. Verifies the three live-state
     /// branches: installed (uses on-disk size), repair-available
     /// (also on-disk size), and not-yet-downloaded (uses the
     /// manifest's `estimatedDownloadBytes` and elides the column
@@ -338,6 +468,29 @@ final class ModelManagerViewModelTests: XCTestCase {
         let fileURL = modelDirectory.appendingPathComponent(firstRelativePath)
         try fileManager.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: fileURL)
+    }
+
+    private func withClearedVariantPreferences(_ body: () throws -> Void) rethrows {
+        let storedValues = Dictionary(
+            uniqueKeysWithValues: GenerationMode.allCases.map {
+                ($0, UserDefaults.standard.string(forKey: MacModelVariantPreferences.key(for: $0)))
+            }
+        )
+        defer {
+            for mode in GenerationMode.allCases {
+                let key = MacModelVariantPreferences.key(for: mode)
+                if case .some(.some(let oldValue)) = storedValues[mode] {
+                    UserDefaults.standard.set(oldValue, forKey: key)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: key)
+                }
+            }
+        }
+
+        for mode in GenerationMode.allCases {
+            MacModelVariantPreferences.clearSelectedVariantID(for: mode, defaults: .standard)
+        }
+        try body()
     }
 }
 

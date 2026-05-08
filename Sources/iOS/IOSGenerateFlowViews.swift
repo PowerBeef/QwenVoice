@@ -9,6 +9,52 @@ private struct IOSPrefetchContext {
     let debounceNanoseconds: UInt64
 }
 
+enum IOSPrefetchRequestFactory {
+    static func customVoiceRequest(
+        model: ModelDescriptor,
+        draft: CustomVoiceDraft,
+        fallbackText: String
+    ) -> GenerationRequest {
+        let text = draft.text.isEmpty ? fallbackText : draft.text
+        return GenerationRequest(
+            mode: .custom,
+            modelID: model.id,
+            text: text,
+            outputPath: "",
+            shouldStream: false,
+            streamingInterval: GenerationSemantics.appStreamingInterval,
+            payload: .custom(
+                speakerID: draft.selectedSpeaker,
+                deliveryStyle: draft.resolvedDeliveryInstruction
+            )
+        )
+    }
+
+    static func voiceDesignRequest(
+        model: ModelDescriptor,
+        draft: VoiceDesignDraft,
+        fallbackText: String,
+        fallbackVoiceDescription: String
+    ) -> GenerationRequest {
+        let text = draft.text.isEmpty ? fallbackText : draft.text
+        let voiceDescription = draft.voiceDescription.isEmpty
+            ? fallbackVoiceDescription
+            : draft.voiceDescription
+        return GenerationRequest(
+            mode: .design,
+            modelID: model.id,
+            text: text,
+            outputPath: "",
+            shouldStream: false,
+            streamingInterval: GenerationSemantics.appStreamingInterval,
+            payload: .design(
+                voiceDescription: voiceDescription,
+                deliveryStyle: draft.resolvedDeliveryInstruction
+            )
+        )
+    }
+}
+
 struct IOSGenerateContainerView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
@@ -219,20 +265,10 @@ private struct IOSGeneratePrefetchCoordinator: View {
 
         switch selectedSection {
         case .custom:
-            let prefetchText = customVoiceDraft.text.isEmpty
-                ? MLXTTSEngine.lightweightWarmupTextForUI
-                : customVoiceDraft.text
-            let request = GenerationRequest(
-                mode: .custom,
-                modelID: model.id,
-                text: prefetchText,
-                outputPath: "",
-                shouldStream: true,
-                streamingInterval: GenerationSemantics.appStreamingInterval,
-                payload: .custom(
-                    speakerID: customVoiceDraft.selectedSpeaker,
-                    deliveryStyle: customVoiceDraft.resolvedDeliveryInstruction
-                )
+            let request = IOSPrefetchRequestFactory.customVoiceRequest(
+                model: model,
+                draft: customVoiceDraft,
+                fallbackText: MLXTTSEngine.lightweightWarmupTextForUI
             )
             let normalizedEmotion = GenerationSemantics.normalizedConditioningCacheKeyText(
                 customVoiceDraft.resolvedDeliveryInstruction
@@ -256,26 +292,21 @@ private struct IOSGeneratePrefetchCoordinator: View {
                 debounceNanoseconds: 150_000_000
             )
         case .design:
-            let prefetchText = voiceDesignDraft.text.isEmpty
-                ? GenerationSemantics.canonicalDesignWarmShortText
-                : voiceDesignDraft.text
-            let voiceDescription = voiceDesignDraft.voiceDescription.isEmpty
-                ? "Clear, natural narration voice"
-                : voiceDesignDraft.voiceDescription
-            let request = GenerationRequest(
-                mode: .design,
-                modelID: model.id,
-                text: prefetchText,
-                outputPath: "",
-                shouldStream: true,
-                streamingInterval: GenerationSemantics.appStreamingInterval,
-                payload: .design(
-                    voiceDescription: voiceDescription,
-                    deliveryStyle: voiceDesignDraft.resolvedDeliveryInstruction
-                )
+            let fallbackVoiceDescription = "Clear, natural narration voice"
+            let request = IOSPrefetchRequestFactory.voiceDesignRequest(
+                model: model,
+                draft: voiceDesignDraft,
+                fallbackText: GenerationSemantics.canonicalDesignWarmShortText,
+                fallbackVoiceDescription: fallbackVoiceDescription
             )
+            let voiceDescription: String
+            if case .design(let resolvedVoiceDescription, _) = request.payload {
+                voiceDescription = resolvedVoiceDescription
+            } else {
+                voiceDescription = fallbackVoiceDescription
+            }
             let requestKey = GenerationSemantics.designConditioningWarmKey(for: request) ?? ""
-            let bucket = GenerationSemantics.designWarmBucket(for: prefetchText)
+            let bucket = GenerationSemantics.designWarmBucket(for: request.text)
             let instructionIdentity = GenerationSemantics.normalizedDesignConditioningIdentity(
                 language: GenerationSemantics.qwenLanguageHint(for: request),
                 voiceDescription: voiceDescription,

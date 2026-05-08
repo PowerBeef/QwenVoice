@@ -3,6 +3,83 @@ import XCTest
 @testable import QwenVoice
 
 final class GenerationSemanticsTests: XCTestCase {
+    func testEngineActivityLabelsAreModeAware() {
+        XCTAssertEqual(
+            EngineActivityLabels.generating(mode: .custom),
+            "Generating Custom Voice…"
+        )
+        XCTAssertEqual(
+            EngineActivityLabels.generating(mode: .design),
+            "Generating Voice Design…"
+        )
+        XCTAssertEqual(
+            EngineActivityLabels.generating(mode: .clone),
+            "Generating Voice Cloning…"
+        )
+        XCTAssertEqual(
+            EngineActivityLabels.preparingVoiceReference,
+            "Preparing voice reference…"
+        )
+    }
+
+    func testCloneReferenceResolverOnlyShowsPreparingForMatchingPreparingState() {
+        let stalePreparing = CloneReferenceContextResolver.resolve(
+            hasReference: true,
+            selectedSavedVoiceID: nil,
+            hydratedSavedVoiceID: nil,
+            transcriptLoadError: nil,
+            expectedPreparationKey: "current-key",
+            preparationState: .preparing(key: "old-key")
+        )
+        XCTAssertEqual(stalePreparing, .usableWithoutPriming)
+
+        let idleCurrent = CloneReferenceContextResolver.resolve(
+            hasReference: true,
+            selectedSavedVoiceID: nil,
+            hydratedSavedVoiceID: nil,
+            transcriptLoadError: nil,
+            expectedPreparationKey: "current-key",
+            preparationState: .idle
+        )
+        XCTAssertEqual(idleCurrent, .usableWithoutPriming)
+
+        let matchingPreparing = CloneReferenceContextResolver.resolve(
+            hasReference: true,
+            selectedSavedVoiceID: nil,
+            hydratedSavedVoiceID: nil,
+            transcriptLoadError: nil,
+            expectedPreparationKey: "current-key",
+            preparationState: .preparing(key: "current-key")
+        )
+        XCTAssertEqual(matchingPreparing, .preparing)
+    }
+
+    func testCloneReferenceResolverReportsFailedPrepAsDegradedAvailableState() {
+        let failed = CloneReferenceContextResolver.resolve(
+            hasReference: true,
+            selectedSavedVoiceID: nil,
+            hydratedSavedVoiceID: nil,
+            transcriptLoadError: nil,
+            expectedPreparationKey: "current-key",
+            preparationState: .failed(key: "current-key", message: "Reference prep degraded.")
+        )
+
+        XCTAssertEqual(failed, .degraded("Reference prep degraded."))
+    }
+
+    func testCloneReferenceResolverWaitsForSavedVoiceHydration() {
+        let status = CloneReferenceContextResolver.resolve(
+            hasReference: true,
+            selectedSavedVoiceID: "voice-123",
+            hydratedSavedVoiceID: nil,
+            transcriptLoadError: nil,
+            expectedPreparationKey: "current-key",
+            preparationState: .idle
+        )
+
+        XCTAssertEqual(status, .waitingForHydration)
+    }
+
     func testEnglishCustomVoiceAddsConservativeDictionInstruction() {
         let request = GenerationRequest(
             modelID: "pro_custom",

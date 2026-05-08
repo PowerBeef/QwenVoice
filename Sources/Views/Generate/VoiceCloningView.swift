@@ -95,33 +95,16 @@ struct VoiceCloningView: View {
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
-        guard draft.referenceAudioPath != nil else { return nil }
-
-        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
-           coordinator.hydratedSavedVoiceID != selectedSavedVoiceID,
-           coordinator.transcriptLoadError == nil {
-            return .waitingForHydration
-        }
-
-        guard let clonePrimingRequestKey else { return nil }
-
-        if ttsEngineStore.clonePreparationState.key == clonePrimingRequestKey {
-            switch ttsEngineStore.clonePreparationState.phase {
-            case .idle:
-                break
-            case .preparing:
-                return .preparing
-            case .primed:
-                return .primed
-            case .failed:
-                return .fallback(
-                    ttsEngineStore.clonePreparationState.errorMessage
-                        ?? "Voice context priming didn't finish. Generation is still available, but the first preview may be slower."
-                )
-            }
-        }
-
-        return .preparing
+        VoiceCloningContextStatus(
+            CloneReferenceContextResolver.resolve(
+                hasReference: draft.referenceAudioPath != nil,
+                selectedSavedVoiceID: draft.selectedSavedVoiceID,
+                hydratedSavedVoiceID: coordinator.hydratedSavedVoiceID,
+                transcriptLoadError: coordinator.transcriptLoadError,
+                expectedPreparationKey: clonePrimingRequestKey,
+                preparationState: ttsEngineStore.clonePreparationState
+            )
+        )
     }
 
     private var readinessDescriptor: VoiceCloningReadinessDescriptor {
@@ -282,6 +265,24 @@ struct VoiceCloningView: View {
                 .environmentObject(ttsEngineStore)
                 .environmentObject(audioPlayer)
             }
+        }
+    }
+}
+
+private extension VoiceCloningContextStatus {
+    init?(_ resolution: CloneReferenceContextResolution?) {
+        guard let resolution else { return nil }
+        switch resolution {
+        case .waitingForHydration:
+            self = .waitingForHydration
+        case .preparing:
+            self = .preparing
+        case .primed:
+            self = .primed
+        case .usableWithoutPriming:
+            return nil
+        case .degraded(let message):
+            self = .fallback(message)
         }
     }
 }

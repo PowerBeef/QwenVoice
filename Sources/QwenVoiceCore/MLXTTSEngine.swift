@@ -292,18 +292,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         self.telemetryRecorder = telemetryRecorder
         self.diagnosticAppSupportBox = diagnosticAppSupportBox
         self.idleUnloadDelayOverride = idleUnloadDelayOverride
-        // Audit Finding #1 — initialize the lossless event stream.
-        // `bufferingPolicy: .unbounded` is correct here: events are
-        // small structs and rare (≈ one per audio chunk on the
-        // streaming hot path, plus one final `.completed` and any
-        // error events). The XPC consumer in EngineServiceHost
-        // drains the stream eagerly, so the buffer never grows
-        // beyond a couple of events in practice. The unbounded
-        // policy guarantees no drops — which is the entire point
-        // of replacing the prior single-slot `latestEvent`
-        // sampling path.
+        // Keep enough event history for the XPC forwarder to survive short
+        // scheduling stalls, but bound the buffer so diagnostic preview PCM
+        // payloads cannot accumulate without limit if the consumer is blocked.
         var capturedContinuation: AsyncStream<GenerationEvent>.Continuation!
-        self.events = AsyncStream(bufferingPolicy: .unbounded) { continuation in
+        self.events = AsyncStream(bufferingPolicy: .bufferingNewest(64)) { continuation in
             capturedContinuation = continuation
         }
         self.eventStreamContinuation = capturedContinuation
@@ -500,7 +493,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             phase: .preparing,
             identityKey: uiIdentityKey
         )
-        loadState = .running(modelID: modelID, label: "Preparing clone…", fraction: nil)
+        loadState = .running(
+            modelID: modelID,
+            label: EngineActivityLabels.preparingVoiceReference,
+            fraction: nil
+        )
 
         do {
             let result = try await runtime.primeCloneReference(
@@ -666,7 +663,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         await telemetryRecorder?.reset()
         loadState = .running(
             modelID: request.modelID,
-            label: request.streamingTitle ?? String(request.text.prefix(40)),
+            label: request.engineActivityLabel,
             fraction: nil
         )
 
@@ -688,15 +685,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             prepared.mlxMemorySnapshots
         )
         return try await session.run { [weak self] event in
-            // Audit Finding #1 — yield to the lossless AsyncStream
-            // BEFORE the @Published slot. The stream is the
-            // chunk-delivery transport; the slot is for snapshot
-            // consumers. Two distinct concerns. Order matters
-            // here only in the failure-mode of these two writes
-            // racing with concurrent observers — putting the
-            // stream first means the in-order consumer wins by
-            // construction, and the slot's @Published observers
-            // run on whatever schedule Combine gives them.
+            // Yield to the bounded AsyncStream BEFORE the @Published
+            // slot. The stream is the chunk-delivery transport; the
+            // slot is for snapshot consumers.
             self?.eventStreamContinuation.yield(event)
             self?.latestEvent = event
         }
@@ -1105,18 +1096,25 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         switch profile {
         case .fullCapabilities:
             return "full_capabilities"
+        case .withoutCloneEncoders:
+            return "without_clone_encoders"
         case .streamingOnly:
-            return "streaming_only"
+            return "without_clone_encoders"
         }
     }
 
-    nonisolated private static func resolvedPreparedLoadProfile(
+    nonisolated static func resolvedPreparedLoadProfile(
         requestedCapabilityProfile: NativeLoadCapabilityProfile,
         explicitProfile: NativeQwenPreparedLoadProfile
     ) -> NativeQwenPreparedLoadProfile {
         switch explicitProfile {
-        case .streamingOnly:
-            return .streamingOnly
+        case .withoutCloneEncoders, .streamingOnly:
+            switch requestedCapabilityProfile {
+            case .customOnly, .designOnly:
+                return .withoutCloneEncoders
+            case .cloneOnly, .fullCapabilities:
+                return .fullCapabilities
+            }
         case .fullCapabilities:
             return NativeQwenPreparedLoadProfile(capabilityProfile: requestedCapabilityProfile)
         }
@@ -1133,7 +1131,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
                 trustPreparedCheckpoint: trustPreparedCheckpoint,
                 preparedDirectoryAlreadyValidated: preparedDirectoryAlreadyValidated
             )
-        case .streamingOnly:
+        case .withoutCloneEncoders, .streamingOnly:
             return QwenPreparedLoadBehavior(
                 trustPreparedCheckpoint: trustPreparedCheckpoint,
                 preparedDirectoryAlreadyValidated: preparedDirectoryAlreadyValidated,

@@ -272,7 +272,7 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
             paths: .rooted(at: appSupportDirectory),
             storeVersionSeed: Self.storeVersionSeed(),
             customPrewarmPolicy: .skipDedicatedCustomPrewarm,
-            qwenPreparedLoadProfile: .streamingOnly
+            qwenPreparedLoadProfile: .iOSProductionDefault
         )
         let runtimeContext = RuntimeContext(
             appSupportDirectory: appSupportDirectory,
@@ -298,13 +298,11 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
             }
             .store(in: &runtimeContext.cancellables)
 
-        // Audit Finding #1 (iPhone path) — chunk delivery via the
-        // engine's lossless AsyncStream. Mirrors the macOS
-        // `EngineServiceHost` fix landed in commit `c951d4c`. The
-        // pre-fix `objectWillChange.sink` slot-sampler dropped the
-        // trailing `.chunk` of every streaming generation when
-        // `NativeStreamingSynthesisSession.run` emitted `.completed`
-        // back-to-back — the dedup guard
+        // Chunk-capable diagnostic delivery via the engine's bounded
+        // AsyncStream. Mirrors the macOS `EngineServiceHost` transport:
+        // the previous `objectWillChange.sink` slot-sampler could drop
+        // a trailing diagnostic `.chunk` when `NativeStreamingSynthesisSession.run`
+        // emitted `.completed` back-to-back — the dedup guard
         // `lastPublishedEvent != engine.latestEvent` saw the slot
         // already overwritten by `.completed` and suppressed the
         // chunk read. The AsyncStream consumer drains the stream

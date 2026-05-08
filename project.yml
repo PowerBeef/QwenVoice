@@ -320,6 +320,8 @@ targets:
         product: MLXAudioCore
       - package: MLXAudio
         product: MLXAudioTTS
+      - package: MLXAudio
+        product: MLXAudioSTT
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace

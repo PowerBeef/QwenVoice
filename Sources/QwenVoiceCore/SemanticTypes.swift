@@ -28,6 +28,14 @@ public enum GenerationMode: String, CaseIterable, Codable, Hashable, Sendable {
     }
 }
 
+public enum EngineActivityLabels {
+    public static let preparingVoiceReference = "Preparing voice reference…"
+
+    public static func generating(mode: GenerationMode) -> String {
+        "Generating \(mode.displayName)…"
+    }
+}
+
 public enum EngineImplementationKind: String, Codable, Hashable, Sendable {
     case nativeMLX
 }
@@ -910,6 +918,55 @@ public struct ClonePreparationState: Hashable, Codable, Sendable {
     }
 }
 
+public enum CloneReferenceContextResolution: Hashable, Sendable {
+    case waitingForHydration
+    case preparing
+    case primed
+    case usableWithoutPriming
+    case degraded(String)
+}
+
+public enum CloneReferenceContextResolver {
+    public static let defaultDegradedMessage =
+        "Reference prep didn't finish. Generation is still available, but the first generation may be slower."
+
+    public static func resolve(
+        hasReference: Bool,
+        selectedSavedVoiceID: String?,
+        hydratedSavedVoiceID: String?,
+        transcriptLoadError: String?,
+        expectedPreparationKey: String?,
+        preparationState: ClonePreparationState
+    ) -> CloneReferenceContextResolution? {
+        guard hasReference else { return nil }
+
+        if let selectedSavedVoiceID,
+           hydratedSavedVoiceID != selectedSavedVoiceID,
+           transcriptLoadError == nil {
+            return .waitingForHydration
+        }
+
+        guard let expectedPreparationKey else {
+            return .usableWithoutPriming
+        }
+
+        guard preparationState.key == expectedPreparationKey else {
+            return .usableWithoutPriming
+        }
+
+        switch preparationState.phase {
+        case .idle:
+            return .usableWithoutPriming
+        case .preparing:
+            return .preparing
+        case .primed:
+            return .primed
+        case .failed:
+            return .degraded(preparationState.errorMessage ?? defaultDegradedMessage)
+        }
+    }
+}
+
 public struct GenerationRequest: Hashable, Codable, Sendable {
     public enum Payload: Hashable, Codable, Sendable {
         case custom(speakerID: String, deliveryStyle: String?)
@@ -1034,6 +1091,10 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
 
     public var modeIdentifier: String {
         mode.rawValue
+    }
+
+    public var engineActivityLabel: String {
+        EngineActivityLabels.generating(mode: mode)
     }
 }
 

@@ -639,29 +639,16 @@ struct IOSVoiceCloningView: View {
     }
 
     private var cloneContextStatus: VoiceCloningContextStatus? {
-        guard draft.referenceAudioPath != nil else { return nil }
-        if let selectedSavedVoiceID = draft.selectedSavedVoiceID,
-           hydratedSavedVoiceID != selectedSavedVoiceID,
-           transcriptLoadError == nil {
-            return .waitingForHydration
-        }
-        guard let clonePrimingRequestKey else { return nil }
-        if ttsEngine.clonePreparationState.identityKey == clonePrimingRequestKey {
-            switch ttsEngine.clonePreparationState.phase {
-            case .idle:
-                break
-            case .preparing:
-                return .preparing
-            case .primed:
-                return .primed
-            case .failed:
-                return .fallback(
-                    ttsEngine.clonePreparationState.message
-                        ?? "Reference prep didn't finish. The first preview may be slower."
-                )
-            }
-        }
-        return .preparing
+        VoiceCloningContextStatus(
+            CloneReferenceContextResolver.resolve(
+                hasReference: draft.referenceAudioPath != nil,
+                selectedSavedVoiceID: draft.selectedSavedVoiceID,
+                hydratedSavedVoiceID: hydratedSavedVoiceID,
+                transcriptLoadError: transcriptLoadError,
+                expectedPreparationKey: clonePrimingRequestKey,
+                preparationState: ttsEngine.clonePreparationState
+            )
+        )
     }
 
     private var canGenerate: Bool {
@@ -1027,6 +1014,24 @@ struct IOSVoiceCloningView: View {
             }
         } catch {
             errorMessage = "Couldn't import the reference audio: \(error.localizedDescription)"
+        }
+    }
+}
+
+private extension VoiceCloningContextStatus {
+    init?(_ resolution: CloneReferenceContextResolution?) {
+        guard let resolution else { return nil }
+        switch resolution {
+        case .waitingForHydration:
+            self = .waitingForHydration
+        case .preparing:
+            self = .preparing
+        case .primed:
+            self = .primed
+        case .usableWithoutPriming:
+            return nil
+        case .degraded(let message):
+            self = .fallback(message)
         }
     }
 }

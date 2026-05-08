@@ -131,7 +131,7 @@ final class UITestStubMacEngine: MacTTSEngine, @unchecked Sendable {
         publishSnapshot(
             loadState: .running(
                 modelID: request.modelID,
-                label: request.streamingTitle ?? String(request.text.prefix(40)),
+                label: request.engineActivityLabel,
                 fraction: nil
             ),
             clonePreparationState: snapshot.clonePreparationState,

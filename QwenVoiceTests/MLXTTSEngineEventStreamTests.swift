@@ -3,10 +3,10 @@ import XCTest
 @testable import QwenVoiceCore
 
 /// Audit Finding #1 producer-contract coverage. Validates that
-/// every event yielded into `MLXTTSEngine.session.run`'s
-/// `eventSink` callback arrives on the engine's `events`
-/// AsyncStream in order, with no drops, even when the underlying
-/// streaming session emits events back-to-back.
+/// events yielded into `MLXTTSEngine.session.run`'s `eventSink`
+/// callback arrive on the engine's `events` AsyncStream in order when
+/// the XPC consumer is actively draining the stream, while stalled
+/// consumers are protected by a bounded newest-event buffer.
 ///
 /// Pre-fix, `EngineServiceHost`'s `objectWillChange.sink` used
 /// the engine's single-slot `@Published latestEvent` as its chunk
@@ -20,14 +20,12 @@ import XCTest
 /// chunk silently dropped before reaching the `AudioPlayerViewModel`
 /// preview pipeline.
 ///
-/// The fix routes chunk delivery through a lossless
-/// `AsyncStream<GenerationEvent>` (`bufferingPolicy: .unbounded`)
+/// The fix routes chunk delivery through an `AsyncStream<GenerationEvent>`
 /// that the XPC service host drains serially via `for await`. The
-/// `latestEvent` slot is preserved for snapshot consumers but no
-/// longer carries the chunk transport. These tests assert the
-/// stream's loss-free, in-order contract holds even when the
-/// session drives N events back-to-back through the eventSink
-/// closure with no GPU work to provide a yield gap.
+/// `latestEvent` slot is preserved for snapshot consumers but no longer
+/// carries the chunk transport. The stream uses a bounded newest-event
+/// buffer so diagnostic PCM payloads cannot accumulate indefinitely if a
+/// consumer stalls.
 @MainActor
 final class MLXTTSEngineEventStreamTests: XCTestCase {
 
@@ -220,6 +218,81 @@ final class MLXTTSEngineEventStreamTests: XCTestCase {
             XCTFail("Expected a `.failed` event on the AsyncStream after generate threw, got \(String(describing: received)).")
             return
         }
+    }
+
+    func testEventStreamBoundsBufferedPreviewPayloadsWhenConsumerStalls() async throws {
+        let registry = try ContractBackedModelRegistry(
+            manifestURL: try Self.bundledManifestURL()
+        )
+        let coordinator = MockMLXModelCoordinator(loadHandler: { _, capabilityProfile in
+            return await NativeModelLoadResult.makeForTesting(
+                model: UnsafeSpeechGenerationModel.makeFullySupportingForTesting(),
+                capabilityProfile: capabilityProfile
+            )
+        })
+
+        let chunkCount = 96
+        let chunks: [GenerationEvent] = (0 ..< chunkCount).map { i in
+            GenerationEvent(
+                kind: .streamChunk,
+                requestID: 1,
+                mode: "custom",
+                title: "Bounded Event Buffer",
+                isFinal: i == chunkCount - 1,
+                chunkDurationSeconds: 0.05,
+                cumulativeDurationSeconds: 0.05 * Double(i + 1),
+                previewAudio: StreamingAudioChunk(
+                    requestID: 1,
+                    sampleRate: 24_000,
+                    frameOffset: Int64(i * 4),
+                    frameCount: 4,
+                    pcm16LE: Data(repeating: UInt8(i % 255), count: 4_096),
+                    isFinal: false
+                )
+            )
+        }
+        let cannedOutputPath = temporaryRoot
+            .appendingPathComponent("bounded-event-buffer.wav")
+            .path
+        let mockSession = MockNativeStreamingSession(
+            events: chunks,
+            result: GenerationResult(
+                audioPath: cannedOutputPath,
+                durationSeconds: 0.05 * Double(chunkCount),
+                streamSessionDirectory: nil,
+                benchmarkSample: nil
+            )
+        )
+
+        let engine = MLXTTSEngine.makeForTesting(
+            modelRegistry: registry,
+            rootDirectory: temporaryRoot,
+            loadCoordinator: coordinator,
+            streamingSessionFactory: { _, _, _, _, _, _, _, _, _, _, _, _, _, _ in
+                mockSession
+            }
+        )
+        try await engine.initialize(appSupportDirectory: temporaryRoot)
+        try await engine.loadModel(id: "qwen3_custom_voice")
+
+        _ = try await engine.generate(
+            GenerationRequest(
+                modelID: "qwen3_custom_voice",
+                text: "Bounded event stream buffer.",
+                outputPath: cannedOutputPath,
+                shouldStream: true,
+                streamingTitle: "Bounded Event Buffer",
+                payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+            )
+        )
+
+        var received: [GenerationEvent] = []
+        for await event in engine.events.prefix(64) {
+            received.append(event)
+        }
+
+        XCTAssertEqual(received, Array(chunks.suffix(64)))
+        XCTAssertEqual(engine.latestEvent, chunks.last)
     }
 
     // MARK: - Helpers

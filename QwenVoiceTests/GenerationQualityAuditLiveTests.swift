@@ -77,6 +77,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let modelsRoot: String
         let artifacts: [AuditArtifact]
         let longText: LongTextManifest?
+        let audioReview: AudioReview.RunManifest?
     }
 
     private struct AuditArtifact: Codable {
@@ -93,6 +94,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let segmentCount: Int?
         let segmentIndex: Int?
         let batchTotal: Int?
+        let speakerID: String?
+        let deliveryInstruction: String?
         let appSupportDirectory: String
         let outputPath: String
         let streamSessionDirectory: String?
@@ -177,6 +180,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let memoryClearCadence: Int?
         let postRequestCachePolicy: String?
         let expiresAt: String?
+        let audioReviewEnabled: Bool?
+        let audioReviewModelsRoot: String?
+        let audioReviewStrictness: String?
+        let audioReviewMinimumAvailableGB: Double?
+        let audioReviewMemorySettleSeconds: Double?
     }
 
     private struct LiveAuditConfiguration {
@@ -196,6 +204,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let generationSpeedProfile: String?
         let memoryClearCadence: Int?
         let postRequestCachePolicy: String?
+        let audioReview: AudioReview.RunConfiguration?
     }
 
     func testWarmFocusBenchmarkProfileUsesWarmRunLayout() throws {
@@ -220,7 +229,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             streamStepEvalPolicy: nil,
             generationSpeedProfile: nil,
             memoryClearCadence: nil,
-            postRequestCachePolicy: nil
+            postRequestCachePolicy: nil,
+            audioReview: nil
         )
 
         let runRoot = outputRootForRun(
@@ -260,7 +270,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             streamStepEvalPolicy: nil,
             generationSpeedProfile: nil,
             memoryClearCadence: nil,
-            postRequestCachePolicy: nil
+            postRequestCachePolicy: nil,
+            audioReview: nil
         )
 
         let runRoot = outputRootForRun(
@@ -300,7 +311,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             streamStepEvalPolicy: nil,
             generationSpeedProfile: "balanced-all-modes",
             memoryClearCadence: 50,
-            postRequestCachePolicy: "failure-only"
+            postRequestCachePolicy: "failure-only",
+            audioReview: nil
         )
 
         let request = try makeRequest(
@@ -426,6 +438,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             )
         }
 
+        let audioReviewManifest = try await runAudioReviewIfEnabled(
+            configuration: configuration,
+            artifacts: runResult.artifacts,
+            outputRoot: outputRoot
+        )
         let manifest = AuditManifest(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
             benchmarkProfile: configuration.benchmarkProfile.rawValue,
@@ -434,7 +451,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             appSupportDirectory: appSupportRoot.path,
             modelsRoot: modelsRoot.path,
             artifacts: runResult.artifacts,
-            longText: runResult.longText
+            longText: runResult.longText,
+            audioReview: audioReviewManifest
         )
         let data = try JSONEncoder.audioQCEncoder.encode(manifest)
         try data.write(to: outputRoot.appendingPathComponent("generation-manifest.json"))
@@ -442,6 +460,81 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             let longTextData = try JSONEncoder.audioQCEncoder.encode(longText)
             try longTextData.write(to: outputRoot.appendingPathComponent("long-text-manifest.json"))
         }
+    }
+
+    private func runAudioReviewIfEnabled(
+        configuration: LiveAuditConfiguration,
+        artifacts: [AuditArtifact],
+        outputRoot: URL
+    ) async throws -> AudioReview.RunManifest? {
+        guard let reviewConfiguration = configuration.audioReview, reviewConfiguration.enabled else {
+            return nil
+        }
+        terminateEngineServiceIfRunning()
+        let reviewRoot = outputRoot.appendingPathComponent("audio-review", isDirectory: true)
+        AudioReview.trimMLXCacheForReview()
+        try? await Task.sleep(nanoseconds: reviewConfiguration.memorySettleNanoseconds)
+        AudioReview.trimMLXCacheForReview()
+
+        let memoryGuard = AudioReview.evaluateMemoryGuard(
+            snapshot: AudioReview.captureMemorySnapshot(),
+            minimumAvailableMemoryBytes: reviewConfiguration.minimumAvailableMemoryBytes
+        )
+        guard memoryGuard.passed else {
+            return try AudioReviewArtifactWriter.writeRunManifest(
+                reviewRoot: reviewRoot,
+                configuration: reviewConfiguration,
+                clips: [],
+                memoryGuard: memoryGuard,
+                skippedReason: memoryGuard.reason
+            )
+        }
+
+        let reviewModels = try await Qwen3AudioReviewModels(configuration: reviewConfiguration)
+        let pipeline = AudioReviewPipeline(transcriber: reviewModels, aligner: reviewModels)
+        let eligibleArtifacts = artifacts.filter(\.qcEligible)
+        var clipSummaries: [AudioReview.ClipSummary] = []
+
+        for artifact in eligibleArtifacts {
+            let input = AudioReview.ClipInput(
+                clipID: reviewClipID(for: artifact),
+                mode: artifact.mode,
+                phase: artifact.phase,
+                runIndex: artifact.runIndex,
+                expectedText: artifact.text,
+                audioURL: URL(fileURLWithPath: artifact.outputPath),
+                deliveryInstruction: artifact.deliveryInstruction,
+                strictness: reviewConfiguration.strictness,
+                language: reviewConfiguration.language
+            )
+            let report = try await pipeline.review(input: input)
+            clipSummaries.append(
+                try AudioReviewArtifactWriter.writeClipArtifacts(
+                    report: report,
+                    reviewRoot: reviewRoot
+                )
+            )
+            AudioReview.trimMLXCacheForReview()
+        }
+
+        let manifest = try AudioReviewArtifactWriter.writeRunManifest(
+            reviewRoot: reviewRoot,
+            configuration: reviewConfiguration,
+            clips: clipSummaries,
+            memoryGuard: memoryGuard
+        )
+        XCTAssertTrue(
+            manifest.passed,
+            "Audio review failed. See \(reviewRoot.appendingPathComponent("audio-review.md").path)"
+        )
+        return manifest
+    }
+
+    private func reviewClipID(for artifact: AuditArtifact) -> String {
+        let mode = artifact.mode
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+        return "\(artifact.phase)-\(mode)-run-\(String(format: "%03d", artifact.runIndex))-iter-\(String(format: "%03d", artifact.iteration))"
     }
 
     private func runRepeatAudit(
@@ -1312,6 +1405,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             segmentCount: segmentCount,
             segmentIndex: segmentIndex,
             batchTotal: batchTotal ?? request.batchTotal,
+            speakerID: speakerID(from: request.payload),
+            deliveryInstruction: deliveryInstruction(from: request.payload),
             appSupportDirectory: appSupportRoot.path,
             outputPath: result.audioPath,
             streamSessionDirectory: result.streamSessionDirectory,
@@ -1326,6 +1421,29 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 .merging(extraBooleanFlags) { current, _ in current },
             stringFlags: result.benchmarkSample?.stringFlags ?? [:]
         )
+    }
+
+    private func speakerID(from payload: GenerationRequest.Payload) -> String? {
+        switch payload {
+        case .custom(let speakerID, _):
+            return speakerID
+        case .design, .clone:
+            return nil
+        }
+    }
+
+    private func deliveryInstruction(from payload: GenerationRequest.Payload) -> String? {
+        switch payload {
+        case .custom(_, let deliveryStyle):
+            return deliveryStyle?.nonEmpty
+        case .design(let voiceDescription, let deliveryStyle):
+            return [voiceDescription.nonEmpty, deliveryStyle?.nonEmpty]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .nonEmpty
+        case .clone:
+            return nil
+        }
     }
 
     private func loadLiveAuditConfiguration(environment: [String: String]) throws -> LiveAuditConfiguration {
@@ -1368,7 +1486,14 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 streamStepEvalPolicy: environment["QWENVOICE_QWEN3_STREAM_STEP_EVAL_POLICY"]?.nonEmpty,
                 generationSpeedProfile: environment["QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE"]?.nonEmpty,
                 memoryClearCadence: environment["QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE"].flatMap(Int.init),
-                postRequestCachePolicy: environment["QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY"]?.nonEmpty
+                postRequestCachePolicy: environment["QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY"]?.nonEmpty,
+                audioReview: try parseAudioReviewConfiguration(
+                    enabledRawValue: environment["QWENVOICE_AUDIO_REVIEW_ENABLED"],
+                    modelsRootRawValue: environment["QWENVOICE_AUDIO_REVIEW_MODELS_ROOT"],
+                    strictnessRawValue: environment["QWENVOICE_AUDIO_REVIEW_STRICTNESS"],
+                    minimumAvailableGBRawValue: environment["QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB"],
+                    memorySettleSecondsRawValue: environment["QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS"]
+                )
             )
         }
 
@@ -1407,8 +1532,72 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             streamStepEvalPolicy: request.streamStepEvalPolicy?.nonEmpty,
             generationSpeedProfile: request.generationSpeedProfile?.nonEmpty,
             memoryClearCadence: request.memoryClearCadence,
-            postRequestCachePolicy: request.postRequestCachePolicy?.nonEmpty
+            postRequestCachePolicy: request.postRequestCachePolicy?.nonEmpty,
+            audioReview: try parseAudioReviewConfiguration(
+                enabledRawValue: request.audioReviewEnabled.map { $0 ? "1" : "0" },
+                modelsRootRawValue: request.audioReviewModelsRoot,
+                strictnessRawValue: request.audioReviewStrictness,
+                minimumAvailableGBRawValue: request.audioReviewMinimumAvailableGB.map { String($0) },
+                memorySettleSecondsRawValue: request.audioReviewMemorySettleSeconds.map { String($0) }
+            )
         )
+    }
+
+    private func parseAudioReviewConfiguration(
+        enabledRawValue: String?,
+        modelsRootRawValue: String?,
+        strictnessRawValue: String?,
+        minimumAvailableGBRawValue: String?,
+        memorySettleSecondsRawValue: String?
+    ) throws -> AudioReview.RunConfiguration? {
+        let enabled = ["1", "true", "yes", "on"].contains(
+            enabledRawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        )
+        guard enabled else { return nil }
+        let root = URL(
+            fileURLWithPath: modelsRootRawValue?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+                ?? defaultAudioReviewModelsRoot().path,
+            isDirectory: true
+        )
+        return AudioReview.RunConfiguration(
+            enabled: true,
+            modelsRoot: root,
+            strictness: try AudioReview.parseStrictness(strictnessRawValue),
+            minimumAvailableMemoryBytes: try parseAudioReviewMinimumAvailableMemoryBytes(
+                minimumAvailableGBRawValue
+            ),
+            memorySettleSeconds: try parseAudioReviewMemorySettleSeconds(memorySettleSecondsRawValue)
+        )
+    }
+
+    private func parseAudioReviewMinimumAvailableMemoryBytes(_ rawValue: String?) throws -> UInt64 {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            return AudioReview.defaultMinimumAvailableMemoryBytes
+        }
+        guard let value = Double(trimmed), (0.5...128).contains(value) else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 16,
+                userInfo: [NSLocalizedDescriptionKey: "Audio review minimum available memory must be between 0.5 and 128 GB."]
+            )
+        }
+        return UInt64(value * 1_073_741_824)
+    }
+
+    private func parseAudioReviewMemorySettleSeconds(_ rawValue: String?) throws -> Double {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            return AudioReview.defaultMemorySettleSeconds
+        }
+        guard let value = Double(trimmed), (0...30).contains(value) else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 17,
+                userInfo: [NSLocalizedDescriptionKey: "Audio review memory settle seconds must be between 0 and 30."]
+            )
+        }
+        return value
     }
 
     private func requireURL(_ rawValue: String?, name: String) throws -> URL {
@@ -1791,6 +1980,11 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
     private func defaultModelsRoot() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/QwenVoice/models", isDirectory: true)
+    }
+
+    private func defaultAudioReviewModelsRoot() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/QwenVoice/audio-review-models", isDirectory: true)
     }
 
     private func repositoryRoot() -> URL {

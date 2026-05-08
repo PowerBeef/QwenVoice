@@ -326,8 +326,8 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             }
             .store(in: &runtimeContext.cancellables)
 
-        // Audit Finding #1 — chunk delivery via the engine's
-        // lossless AsyncStream. The producer (`MLXTTSEngine`'s
+        // Chunk delivery via the engine's bounded AsyncStream. The
+        // producer (`MLXTTSEngine`'s
         // `eventSink` callback) yields every event into
         // `engine.events`; this Task drains the stream serially
         // and publishes each event over XPC in the exact order

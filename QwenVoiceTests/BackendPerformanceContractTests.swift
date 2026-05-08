@@ -1,7 +1,9 @@
 import QwenVoiceCore
 import XCTest
+@preconcurrency import AVFoundation
 @preconcurrency import MLXLMCommon
 @preconcurrency import MLXAudioTTS
+import os
 @testable import QwenVoiceCore
 
 final class BackendPerformanceContractTests: XCTestCase {
@@ -186,6 +188,42 @@ final class BackendPerformanceContractTests: XCTestCase {
 
         let cloneBehavior = MLXTTSEngine.qwenPreparedLoadBehavior(
             for: NativeQwenPreparedLoadProfile(capabilityProfile: .cloneOnly),
+            trustPreparedCheckpoint: false
+        )
+        XCTAssertNil(cloneBehavior.loadSpeakerEncoder)
+        XCTAssertNil(cloneBehavior.loadSpeechTokenizerEncoder)
+        XCTAssertFalse(cloneBehavior.skipSpeechTokenizerEval)
+    }
+
+    func testIOSProductionPreparedLoadProfileElevatesCloneCapabilities() {
+        XCTAssertEqual(NativeQwenPreparedLoadProfile.iOSProductionDefault, .withoutCloneEncoders)
+        XCTAssertEqual(
+            MLXTTSEngine.resolvedPreparedLoadProfile(
+                requestedCapabilityProfile: .customOnly,
+                explicitProfile: .iOSProductionDefault
+            ),
+            .withoutCloneEncoders
+        )
+        XCTAssertEqual(
+            MLXTTSEngine.resolvedPreparedLoadProfile(
+                requestedCapabilityProfile: .designOnly,
+                explicitProfile: .iOSProductionDefault
+            ),
+            .withoutCloneEncoders
+        )
+        XCTAssertEqual(
+            MLXTTSEngine.resolvedPreparedLoadProfile(
+                requestedCapabilityProfile: .cloneOnly,
+                explicitProfile: .iOSProductionDefault
+            ),
+            .fullCapabilities
+        )
+
+        let cloneBehavior = MLXTTSEngine.qwenPreparedLoadBehavior(
+            for: MLXTTSEngine.resolvedPreparedLoadProfile(
+                requestedCapabilityProfile: .cloneOnly,
+                explicitProfile: .iOSProductionDefault
+            ),
             trustPreparedCheckpoint: false
         )
         XCTAssertNil(cloneBehavior.loadSpeakerEncoder)
@@ -426,6 +464,181 @@ final class BackendPerformanceContractTests: XCTestCase {
         XCTAssertEqual(second.booleanFlags["prepared_model_cache_hit"], true)
         XCTAssertEqual(second.booleanFlags["prepared_overlay_cache_hit"], true)
         XCTAssertEqual(second.booleanFlags["prepared_overlay_rebuilt"], false)
+    }
+
+    func testCloneConditioningCacheInvalidatesSamePathSameSizeDifferentAudio() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let referenceURL = root.appendingPathComponent("reference.wav")
+        try Self.writeCanonicalPCM16WAV(to: referenceURL, sampleOffset: 0)
+        let firstSize = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: referenceURL.path)[.size] as? NSNumber
+        ).int64Value
+
+        let cache = NativePreparedCloneConditioningCache(capacity: 4)
+        let audioPreparationService = NativeAudioPreparationService(
+            preparedAudioDirectory: root.appendingPathComponent("prepared", isDirectory: true)
+        )
+        let normalizedDirectory = root.appendingPathComponent("normalized", isDirectory: true)
+        let first = try await cache.resolve(
+            modelID: "pro_clone",
+            reference: CloneReference(audioPath: referenceURL.path, transcript: "The first reference."),
+            sampleRate: 24_000,
+            audioPreparationService: audioPreparationService,
+            normalizedCloneReferenceDirectory: normalizedDirectory
+        )
+
+        try Self.writeCanonicalPCM16WAV(to: referenceURL, sampleOffset: 11)
+        let secondSize = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: referenceURL.path)[.size] as? NSNumber
+        ).int64Value
+        XCTAssertEqual(firstSize, secondSize)
+
+        let second = try await cache.resolve(
+            modelID: "pro_clone",
+            reference: CloneReference(audioPath: referenceURL.path, transcript: "The first reference."),
+            sampleRate: 24_000,
+            audioPreparationService: audioPreparationService,
+            normalizedCloneReferenceDirectory: normalizedDirectory
+        )
+
+        XCTAssertNotEqual(first.internalIdentityKey, second.internalIdentityKey)
+        XCTAssertEqual(first.cloneCacheHit, false)
+        XCTAssertEqual(second.cloneCacheHit, false)
+        XCTAssertFalse(second.cloneConditioningReused)
+        XCTAssertFalse(second.reusedDecodedReference)
+    }
+
+    func testPreparedVoiceClonePromptArtifactInvalidatesTranscriptIdentity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let referenceURL = root.appendingPathComponent("reference.wav")
+        try Self.writeCanonicalPCM16WAV(to: referenceURL, sampleOffset: 3)
+        let audioPreparationService = NativeAudioPreparationService(
+            preparedAudioDirectory: root.appendingPathComponent("prepared", isDirectory: true)
+        )
+        let normalizedDirectory = root.appendingPathComponent("normalized", isDirectory: true)
+        let voicesDirectory = root.appendingPathComponent("voices", isDirectory: true)
+        let model = UnsafeSpeechGenerationModel.makeFullySupportingForTesting()
+
+        let firstCache = NativePreparedCloneConditioningCache(capacity: 4)
+        let firstConditioning = try await firstCache.resolve(
+            modelID: "pro_clone",
+            reference: CloneReference(
+                audioPath: referenceURL.path,
+                transcript: "First transcript.",
+                preparedVoiceID: "saved-voice"
+            ),
+            sampleRate: 24_000,
+            audioPreparationService: audioPreparationService,
+            normalizedCloneReferenceDirectory: normalizedDirectory
+        )
+        let firstPrompt = try await firstCache.resolveVoiceClonePrompt(
+            for: firstConditioning,
+            modelID: "pro_clone",
+            model: model,
+            voicesDirectory: voicesDirectory,
+            language: "english"
+        )
+        XCTAssertEqual(firstPrompt.clonePromptCacheHit, false)
+
+        let secondCache = NativePreparedCloneConditioningCache(capacity: 4)
+        let secondConditioning = try await secondCache.resolve(
+            modelID: "pro_clone",
+            reference: CloneReference(
+                audioPath: referenceURL.path,
+                transcript: "Second transcript.",
+                preparedVoiceID: "saved-voice"
+            ),
+            sampleRate: 24_000,
+            audioPreparationService: audioPreparationService,
+            normalizedCloneReferenceDirectory: normalizedDirectory
+        )
+        let secondPrompt = try await secondCache.resolveVoiceClonePrompt(
+            for: secondConditioning,
+            modelID: "pro_clone",
+            model: model,
+            voicesDirectory: voicesDirectory,
+            language: "english"
+        )
+
+        XCTAssertNotEqual(firstPrompt.internalIdentityKey, secondPrompt.internalIdentityKey)
+        XCTAssertEqual(secondPrompt.clonePromptCacheHit, false)
+        XCTAssertEqual(secondPrompt.voiceClonePrompt?.refText, "Second transcript.")
+    }
+
+    func testBeforeModelLoadReceivesPreviousLoadedModelID() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let modelsRoot = root.appendingPathComponent("models", isDirectory: true)
+        let hubCacheRoot = root.appendingPathComponent("cache", isDirectory: true)
+        let customModel = ModelDescriptor(
+            id: "pro_custom",
+            name: "Custom Voice",
+            tier: "pro",
+            folder: "Qwen3-TTS-Custom-Model",
+            mode: .custom,
+            huggingFaceRepo: "example/Qwen3-TTS-Custom",
+            artifactVersion: "test",
+            iosDownloadEligible: false,
+            estimatedDownloadBytes: nil,
+            outputSubfolder: "CustomVoice",
+            requiredRelativePaths: Self.fakeQwenRequiredPaths
+        )
+        let designModel = ModelDescriptor(
+            id: "pro_design",
+            name: "Voice Design",
+            tier: "pro",
+            folder: "Qwen3-TTS-Design-Model",
+            mode: .design,
+            huggingFaceRepo: "example/Qwen3-TTS-Design",
+            artifactVersion: "test",
+            iosDownloadEligible: false,
+            estimatedDownloadBytes: nil,
+            outputSubfolder: "VoiceDesign",
+            requiredRelativePaths: Self.fakeQwenRequiredPaths
+        )
+        let descriptors = [customModel, designModel].map { model in
+            ModelAssetDescriptor(
+                model: model,
+                version: "test-\(model.id)",
+                artifacts: model.requiredRelativePaths.map {
+                    ModelAssetArtifact(relativePath: $0, scope: .modelSpecific)
+                }
+            )
+        }
+        let store = TestModelAssetStore(rootDirectory: modelsRoot, descriptors: descriptors)
+        try Self.writeFakeQwenModelFiles(
+            to: store.localRoot(for: descriptors[0]),
+            family: "CustomVoice"
+        )
+        try Self.writeFakeQwenModelFiles(
+            to: store.localRoot(for: descriptors[1]),
+            family: "VoiceDesign"
+        )
+        let recorder = PreviousModelRecorder()
+        let coordinator = MLXModelLoadCoordinator(
+            modelAssetStore: store,
+            hubCacheDirectory: hubCacheRoot,
+            modelLoader: { _, _, _ in UnsafeSpeechGenerationModel() },
+            beforeModelLoad: { previousID in
+                recorder.record(previousID)
+            }
+        )
+
+        _ = try await coordinator.loadModel(id: "pro_custom", capabilityProfile: .customOnly)
+        _ = try await coordinator.loadModel(id: "pro_design", capabilityProfile: .designOnly)
+
+        let values = recorder.values
+        XCTAssertEqual(values.count, 2)
+        XCTAssertNil(values[0])
+        XCTAssertEqual(values[1], "pro_custom")
     }
 
     func testQwen3RuntimeProfileValidatesContractMetadata() throws {
@@ -728,6 +941,54 @@ private extension BackendPerformanceContractTests {
             try payload.write(to: fileURL)
         }
     }
+
+    static func writeCanonicalPCM16WAV(
+        to url: URL,
+        sampleOffset: Int,
+        frameCount: Int = 480
+    ) throws {
+        let format = try XCTUnwrap(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 24_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let frameCapacity = AVAudioFrameCount(frameCount)
+        let buffer = try XCTUnwrap(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)
+        )
+        buffer.frameLength = frameCapacity
+        let samples = try XCTUnwrap(buffer.int16ChannelData?[0])
+        for frame in 0..<frameCount {
+            samples[frame] = Int16(((frame + sampleOffset) % 32) * 512)
+        }
+
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 24_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: settings,
+            commonFormat: .pcmFormatInt16,
+            interleaved: false
+        )
+        try file.write(from: buffer)
+    }
 }
 
 private struct TestModelAssetStore: ModelAssetStore {
@@ -770,5 +1031,17 @@ private actor BackendLoadCounter {
 
     func currentCount() -> Int {
         count
+    }
+}
+
+private final class PreviousModelRecorder: @unchecked Sendable {
+    private let valuesLock = OSAllocatedUnfairLock(initialState: [String?]())
+
+    func record(_ value: String?) {
+        valuesLock.withLock { $0.append(value) }
+    }
+
+    var values: [String?] {
+        valuesLock.withLock { $0 }
     }
 }

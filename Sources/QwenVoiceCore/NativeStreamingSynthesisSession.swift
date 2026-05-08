@@ -609,7 +609,7 @@ private struct StreamingExecutionContext: Sendable {
         }
 
         let finishReason = Self.mapFinishReason(completion.finishReason)
-        guard finishReason == .eos else {
+        if finishReason != .eos {
             await telemetryRecorder?.mark(
                 stage: .streamFailed,
                 metadata: ["finish_reason": finishReason.rawValue]
@@ -619,9 +619,7 @@ private struct StreamingExecutionContext: Sendable {
                 stageMarks: await telemetryRecorder?.snapshot() ?? []
             )
             Memory.clearCache()
-            throw MLXTTSEngineError.generationFailed(
-                "Qwen3-TTS reached maxNewTokens before EOS. The output was discarded to avoid a truncated generation."
-            )
+            throw Self.error(for: finishReason)
         }
 
         let samples = completion.audio.asArray(Float.self)
@@ -793,6 +791,23 @@ private struct StreamingExecutionContext: Sendable {
             return .cancelled
         case .failed:
             return .failed
+        }
+    }
+
+    private static func error(for finishReason: GenerationFinishReason) -> Error {
+        switch finishReason {
+        case .eos:
+            return MLXTTSEngineError.generationFailed("Unexpected EOS finish reason error.")
+        case .maxTokens:
+            return MLXTTSEngineError.generationFailed(
+                "Qwen3-TTS reached maxNewTokens before EOS. The output was discarded to avoid a truncated generation."
+            )
+        case .cancelled:
+            return CancellationError()
+        case .failed:
+            return MLXTTSEngineError.generationFailed(
+                "Qwen3-TTS failed before producing a complete final audio result."
+            )
         }
     }
 

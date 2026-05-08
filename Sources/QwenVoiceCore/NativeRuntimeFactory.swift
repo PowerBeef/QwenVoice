@@ -5,16 +5,20 @@ public enum NativeCustomPrewarmPolicy: Sendable {
     case skipDedicatedCustomPrewarm
 }
 
-public enum NativeQwenPreparedLoadProfile: Sendable {
+public enum NativeQwenPreparedLoadProfile: Equatable, Sendable {
     case fullCapabilities
+    case withoutCloneEncoders
+    @available(*, deprecated, renamed: "withoutCloneEncoders")
     case streamingOnly
+
+    public static let iOSProductionDefault: NativeQwenPreparedLoadProfile = .withoutCloneEncoders
 
     public init(capabilityProfile: NativeLoadCapabilityProfile) {
         switch capabilityProfile {
         case .cloneOnly, .fullCapabilities:
             self = .fullCapabilities
         case .customOnly, .designOnly:
-            self = .streamingOnly
+            self = .withoutCloneEncoders
         }
     }
 }

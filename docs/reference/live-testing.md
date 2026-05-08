@@ -90,5 +90,20 @@ The lane drives `GenerationQualityAuditLiveTests`, which manages the cold/warm/e
 - `QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE` (`0` disables per-step MLX cache clears)
 - `QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY` (`current` | `always` | `failure-only` | `never`)
 - `QWENVOICE_AUDIO_QC_OUTPUT_DIR`, `QWENVOICE_AUDIO_QC_MODES`, `QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE`, `QWENVOICE_AUDIO_QC_REPEAT_COUNT`, `QWENVOICE_AUDIO_QC_COLD_RUNS`, `QWENVOICE_AUDIO_QC_WARM_RUNS`
+- `QWENVOICE_AUDIO_REVIEW_ENABLED=1` enables the autonomous local audio reviewer after generation.
+- `QWENVOICE_AUDIO_REVIEW_MODELS_ROOT` points at the QA-only ASR/forced-aligner cache, defaulting to `~/Library/Application Support/QwenVoice/audio-review-models`.
+- `QWENVOICE_AUDIO_REVIEW_STRICTNESS` accepts `advisory`, `balanced`, or `strict`; `balanced` fails technical defects and transcript-completeness regressions while keeping tone and pacing findings advisory.
+- `QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB` defaults to `4.0`. After generation finishes, the lane terminates the engine service, clears MLX cache, waits for memory to settle, then skips ASR/alignment review when available process headroom is below this guard.
+- `QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS` defaults to `2.0` and controls the wait before the review memory guard is evaluated.
+
+Bootstrap review models once before enabling audio review:
+
+```sh
+python3 -m pip install --user -r scripts/requirements-audio-review-bootstrap.txt
+./scripts/bootstrap_audio_review_models.sh
+QWENVOICE_AUDIO_REVIEW_ENABLED=1 ./scripts/qa.sh test --layer perf
+```
+
+When enabled, the lane writes `audio-review/audio-review-manifest.json`, per-clip `review.json`, `transcript.txt`, `alignment.json`, and a human-readable `audio-review/audio-review.md`. If the memory guard blocks model loading, it writes a skipped manifest with the measured headroom instead of loading the ASR and forced-aligner models. These artifacts are QA-only and are not product UI or release-bundle inputs.
 
 The app launches as a headless `.accessory` host (`QWENVOICE_AUDIO_QC_HEADLESS_APP_HOST=1` is forced by the lane), keeping the embedded XPC service alive without rendering UI on screen. A `vm.swapusage` preflight refuses to start when swap-used ≥ `QWENVOICE_PERF_SWAP_HARD_STOP_MB` (default 8 GB) or swap-free ≤ `QWENVOICE_PERF_SWAP_MIN_FREE_MB` (default 512 MB).

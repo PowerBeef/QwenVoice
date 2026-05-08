@@ -41,6 +41,43 @@ final class ModelManagerViewModel: ObservableObject {
         case downloaded(sizeBytes: Int)
     }
 
+    enum ModelPackageStatusKind: Equatable {
+        case checking
+        case ready
+        case notInstalled
+        case needsRepair
+        case downloading
+    }
+
+    struct ModelPackagePresentation: Equatable {
+        let kind: ModelPackageStatusKind
+        let label: String
+        let detail: String?
+    }
+
+    struct ModelSetupSummary: Equatable {
+        let installedRecommendedCount: Int
+        let totalRecommendedCount: Int
+
+        var text: String {
+            if installedRecommendedCount == totalRecommendedCount {
+                return "Recommended models ready"
+            }
+            return "\(installedRecommendedCount) of \(totalRecommendedCount) recommended models installed"
+        }
+    }
+
+    struct RecommendedSetupProgress: Equatable {
+        let completedCount: Int
+        let totalCount: Int
+        let currentModelID: String?
+
+        var fraction: Double {
+            guard totalCount > 0 else { return 0 }
+            return Double(completedCount) / Double(totalCount)
+        }
+    }
+
     private struct InstallMetadata: Codable, Equatable {
         let schemaVersion: Int
         let modelID: String
@@ -72,18 +109,19 @@ final class ModelManagerViewModel: ObservableObject {
     @Published private(set) var statuses: [String: ModelStatus] = [:]
     @Published private(set) var modelInfoByID: [String: ModelInfo] = [:]
     @Published private(set) var activeVariantRevision = 0
+    @Published private(set) var recommendedSetupProgress: RecommendedSetupProgress?
 
     private let fileManager: FileManager
     private let modelsDirectory: URL
     /// The user's Mac memory tier, computed once at init and
-    /// surfaced for UI surfaces that frame variant choice
-    /// (e.g. the Models panel's intro line and per-row caption).
+    /// surfaced for UI surfaces that frame download recommendations.
     let deviceClass: NativeDeviceMemoryClass
     private var downloaders: [String: HuggingFaceDownloader] = [:]
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
     private var lastProgressPublishTimes: [String: ContinuousClock.Instant] = [:]
     private var refreshTask: Task<Void, Never>?
+    private var recommendedSetupTask: Task<Void, Never>?
     private var lastFailureMessages: [String: String] = [:]
 
     init(
@@ -143,7 +181,7 @@ final class ModelManagerViewModel: ObservableObject {
     }
 
     func isActive(_ model: TTSModel) -> Bool {
-        TTSModel.model(for: model.mode)?.id == model.id
+        activeVariant(for: model.mode)?.id == model.id
     }
 
     /// Returns the Speed and Quality variants for a generation
@@ -161,6 +199,103 @@ final class ModelManagerViewModel: ObservableObject {
         return (speed, quality)
     }
 
+    func activeVariant(for mode: GenerationMode) -> TTSModel? {
+        let pair = pairedVariants(for: mode)
+        let modeModels = TTSModel.all.filter { $0.mode == mode }
+        let recommended = recommendedVariant(for: mode) ?? pair.speed ?? pair.quality
+        let selectedVariantID = MacModelVariantPreferences.selectedVariantID(
+            for: mode,
+            defaultVariantID: recommended?.variantID
+        )
+        return modeModels.first { $0.variantID == selectedVariantID } ?? recommended
+    }
+
+    func recommendedVariant(for mode: GenerationMode) -> TTSModel? {
+        let preferredKind = recommendedVariantKind
+        return TTSModel.all.first { $0.mode == mode && $0.variantKind == preferredKind }
+            ?? TTSModel.all.first { $0.mode == mode && $0.isHardwareRecommended }
+            ?? TTSModel.all.first { $0.mode == mode }
+    }
+
+    func isHardwareRecommended(_ model: TTSModel) -> Bool {
+        recommendedVariant(for: model.mode)?.id == model.id
+    }
+
+    func modelSetupSummary() -> ModelSetupSummary {
+        let recommendedModels = GenerationMode.allCases.compactMap(recommendedVariant)
+        let readyCount = recommendedModels.filter(isAvailable).count
+
+        return ModelSetupSummary(
+            installedRecommendedCount: readyCount,
+            totalRecommendedCount: recommendedModels.count
+        )
+    }
+
+    func recommendedSetupCandidates() -> [TTSModel] {
+        GenerationMode.allCases.compactMap { mode in
+            guard let recommended = recommendedVariant(for: mode) else { return nil }
+            if isAvailable(recommended) {
+                return nil
+            }
+            return recommended
+        }
+    }
+
+    func packagePresentation(for model: TTSModel) -> ModelPackagePresentation {
+        let status = statuses[model.id] ?? .checking
+
+        switch status {
+        case .checking:
+            return ModelPackagePresentation(
+                kind: .checking,
+                label: "Checking",
+                detail: "Looking for local model files."
+            )
+        case .notDownloaded(let message):
+            return ModelPackagePresentation(
+                kind: .notInstalled,
+                label: "Not installed",
+                detail: message
+            )
+        case .downloading(let progress):
+            return ModelPackagePresentation(
+                kind: .downloading,
+                label: progress.phase.displayLabel,
+                detail: downloadDetail(for: progress)
+            )
+        case .repairAvailable(_, let missingRequiredPaths, let message):
+            return ModelPackagePresentation(
+                kind: .needsRepair,
+                label: "Needs repair",
+                detail: message ?? repairDetail(missingRequiredPaths: missingRequiredPaths)
+            )
+        case .downloaded:
+            return ModelPackagePresentation(
+                kind: .ready,
+                label: "Ready",
+                detail: nil
+            )
+        }
+    }
+
+    func activeVariantLabel(for model: TTSModel) -> String {
+        let kind = model.variantKind?.displayName ?? model.name
+        let bits = model.variantKind?.bitDepthLabel
+        guard let bits, !bits.isEmpty else { return kind }
+        return "\(kind) (\(bits))"
+    }
+
+    func modePurpose(for mode: GenerationMode) -> String {
+        switch mode {
+        case .custom:
+            return "Built-in speakers"
+        case .design:
+            return "Describe a new voice"
+        case .clone:
+            return "Use a reference clip"
+        }
+    }
+
     /// `true` when running this variant on the current Mac is
     /// likely to overrun memory and either fail or thrash badly.
     /// Today the only risky combination is the Quality (8-bit)
@@ -174,7 +309,17 @@ final class ModelManagerViewModel: ObservableObject {
         return deviceClass == .floor8GBMac
     }
 
-    /// Localized "1.6 GB" / "3.2 GB" string for the Models row's
+    private var recommendedVariantKind: TTSModelVariantKind {
+        switch deviceClass {
+        case .floor8GBMac, .iPhonePro:
+            return .speed
+        case .mid16GBMac, .highMemoryMac:
+            return .quality
+        }
+    }
+
+    /// Localized "1.6 GB" / "3.2 GB" string for model download
+    /// controls.
     /// size column. Source of truth depends on install state:
     ///   * `.downloaded` / `.repairAvailable` use the resolved
     ///     `info.sizeBytes` (real on-disk size).
@@ -198,6 +343,81 @@ final class ModelManagerViewModel: ObservableObject {
         case .downloading, .checking, .none:
             return nil
         }
+    }
+
+    func setUpRecommendedModels() {
+        guard recommendedSetupTask == nil else { return }
+        let candidates = recommendedSetupCandidates()
+        guard !candidates.isEmpty else { return }
+
+        recommendedSetupProgress = RecommendedSetupProgress(
+            completedCount: 0,
+            totalCount: candidates.count,
+            currentModelID: candidates.first?.id
+        )
+
+        recommendedSetupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            var completedCount = 0
+
+            for model in candidates {
+                guard !Task.isCancelled else { break }
+                recommendedSetupProgress = RecommendedSetupProgress(
+                    completedCount: completedCount,
+                    totalCount: candidates.count,
+                    currentModelID: model.id
+                )
+                if !isAvailable(model) {
+                    await download(model)
+                }
+                guard !Task.isCancelled else { break }
+                guard isAvailable(model) else { break }
+                completedCount += 1
+                recommendedSetupProgress = RecommendedSetupProgress(
+                    completedCount: completedCount,
+                    totalCount: candidates.count,
+                    currentModelID: nil
+                )
+            }
+
+            recommendedSetupTask = nil
+            recommendedSetupProgress = nil
+        }
+    }
+
+    func cancelRecommendedSetup() {
+        recommendedSetupTask?.cancel()
+        if let modelID = recommendedSetupProgress?.currentModelID,
+           let model = TTSModel.model(id: modelID) {
+            cancelDownload(model)
+        }
+        recommendedSetupTask = nil
+        recommendedSetupProgress = nil
+    }
+
+    private func downloadDetail(for progress: DownloadProgress) -> String? {
+        if progress.isStalled {
+            return "Waiting for the connection to resume."
+        }
+        if let totalBytes = progress.totalBytes, totalBytes > 0 {
+            let downloaded = Self.formattedFileSize(progress.downloadedBytes)
+            let total = Self.formattedFileSize(totalBytes)
+            return "\(downloaded) of \(total)"
+        }
+        if let totalFiles = progress.totalFiles, totalFiles > 0 {
+            return "\(progress.completedFiles) of \(totalFiles) files"
+        }
+        return nil
+    }
+
+    private func repairDetail(missingRequiredPaths: [String]) -> String {
+        if missingRequiredPaths.isEmpty {
+            return "The local model folder is incomplete."
+        }
+        if missingRequiredPaths.count == 1 {
+            return "One required file is missing."
+        }
+        return "\(missingRequiredPaths.count) required files are missing."
     }
 
     private nonisolated static func formattedFileSize(_ bytes: Int64) -> String {
@@ -291,6 +511,7 @@ final class ModelManagerViewModel: ObservableObject {
             }
         }
         downloadTasks[model.id] = task
+        await task.value
     }
 
     func cancelDownload(_ model: TTSModel) {
@@ -584,6 +805,21 @@ final class ModelManagerViewModel: ObservableObject {
 }
 
 private extension ModelManagerViewModel.DownloadProgress.Phase {
+    var displayLabel: String {
+        switch self {
+        case .downloading:
+            return "Downloading"
+        case .interrupted:
+            return "Interrupted"
+        case .resuming:
+            return "Resuming"
+        case .verifying:
+            return "Verifying"
+        case .installing:
+            return "Installing"
+        }
+    }
+
     init(_ phase: HuggingFaceDownloader.DownloadPhase) {
         switch phase {
         case .downloading:

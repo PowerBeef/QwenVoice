@@ -29,4 +29,10 @@ final class QwenVoiceBackendCoreTests: XCTestCase {
         XCTAssertEqual(configuration.topP, 1.0, accuracy: 0.0001)
         XCTAssertEqual(configuration.repetitionPenalty, 1.05, accuracy: 0.0001)
     }
+
+    func testGenerationPolicyOwnsRuntimeSafetyDefaults() {
+        XCTAssertEqual(Qwen3GenerationPolicy.minimumGeneratedCodeTokensBeforeEOS, 2)
+        XCTAssertEqual(Qwen3GenerationPolicy.productionFullResultMemoryClearCadence, 0)
+        XCTAssertEqual(Qwen3GenerationPolicy.diagnosticStreamingDefaultMemoryClearCadence, 50)
+    }
 }

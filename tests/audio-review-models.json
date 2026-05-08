@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "cacheLayout": "huggingface-cache/mlx-audio/<repo-id-with-slash-replaced-by-underscore>",
+  "purpose": "QA-only local ASR and forced-alignment models for autonomous generated-audio review. These models are not app runtime dependencies and must not be bundled in releases.",
+  "models": [
+    {
+      "role": "asr",
+      "repoID": "mlx-community/Qwen3-ASR-0.6B-4bit",
+      "revision": "313d850181767edf09f00a9c289becca70e58cd0",
+      "requiredExtensions": [
+        "json",
+        "safetensors",
+        "txt"
+      ]
+    },
+    {
+      "role": "forcedAligner",
+      "repoID": "mlx-community/Qwen3-ForcedAligner-0.6B-4bit",
+      "revision": "2f652af86ae0c73fe189b9429225c908ce4bf020",
+      "requiredExtensions": [
+        "json",
+        "safetensors",
+        "txt"
+      ]
+    }
+  ]
+}

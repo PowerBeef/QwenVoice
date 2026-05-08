@@ -241,11 +241,12 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
             )
         }
 
+        let previousLoadedModelID = loadedDescriptor?.id
         if loadedDescriptor != nil {
             resetLoadedState()
         }
 
-        beforeModelLoad?(loadedDescriptor?.id)
+        beforeModelLoad?(previousLoadedModelID)
         let cachePrepareStartedAt = ContinuousClock.now
         let preparedCacheResult: PreparedCacheResult
         do {

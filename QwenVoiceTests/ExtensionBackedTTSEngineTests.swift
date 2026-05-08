@@ -172,7 +172,7 @@ final class ExtensionBackedTTSEngineTests: XCTestCase {
             modelID: "pro_custom",
             text: "Cancel me",
             outputPath: root.appendingPathComponent("cancel.wav").path,
-            shouldStream: true,
+            shouldStream: false,
             payload: .custom(speakerID: "vivian", deliveryStyle: nil)
         )
 
@@ -411,7 +411,7 @@ final class ExtensionBackedTTSEngineTests: XCTestCase {
             modelID: "pro_custom",
             text: "Reconnect after invalidation",
             outputPath: root.appendingPathComponent("reconnect.wav").path,
-            shouldStream: true,
+            shouldStream: false,
             payload: .custom(speakerID: "vivian", deliveryStyle: nil)
         )
 

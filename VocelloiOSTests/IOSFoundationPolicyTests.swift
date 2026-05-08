@@ -60,6 +60,47 @@ final class IOSFoundationPolicyTests: XCTestCase {
         }
     }
 
+    func testIOSCustomVoicePrefetchRequestUsesFinalResultSemantics() throws {
+        let model = try XCTUnwrap(TTSModel.model(for: .custom))
+        let draft = CustomVoiceDraft(
+            selectedSpeaker: "aiden",
+            delivery: DeliveryInputState(),
+            text: "Warm this final-result iPhone path."
+        )
+
+        let request = IOSPrefetchRequestFactory.customVoiceRequest(
+            model: model,
+            draft: draft,
+            fallbackText: MLXTTSEngine.lightweightWarmupTextForUI
+        )
+
+        XCTAssertFalse(request.shouldStream)
+        XCTAssertEqual(request.mode, .custom)
+        XCTAssertEqual(request.text, draft.text)
+        XCTAssertEqual(request.streamingInterval, GenerationSemantics.appStreamingInterval)
+    }
+
+    func testIOSVoiceDesignPrefetchRequestUsesFinalResultSemantics() throws {
+        let model = try XCTUnwrap(TTSModel.model(for: .design))
+        let draft = VoiceDesignDraft(
+            voiceDescription: "A clear, grounded English narrator.",
+            delivery: DeliveryInputState(),
+            text: "Warm this final-result design path."
+        )
+
+        let request = IOSPrefetchRequestFactory.voiceDesignRequest(
+            model: model,
+            draft: draft,
+            fallbackText: GenerationSemantics.canonicalDesignWarmShortText,
+            fallbackVoiceDescription: "Clear, natural narration voice"
+        )
+
+        XCTAssertFalse(request.shouldStream)
+        XCTAssertEqual(request.mode, .design)
+        XCTAssertEqual(request.text, draft.text)
+        XCTAssertEqual(request.streamingInterval, GenerationSemantics.appStreamingInterval)
+    }
+
     @MainActor
     func testTTSEngineStoreForwardsActiveGenerationCancellationAndResetsState() async throws {
         let engine = IOSCancellableEngineFixture()
@@ -77,7 +118,7 @@ final class IOSFoundationPolicyTests: XCTestCase {
             modelID: "pro_custom_speed",
             text: "Cancel this iPhone generation.",
             outputPath: "/tmp/ios-cancel.wav",
-            shouldStream: true,
+            shouldStream: false,
             payload: .custom(speakerID: "vivian", deliveryStyle: nil)
         )
 

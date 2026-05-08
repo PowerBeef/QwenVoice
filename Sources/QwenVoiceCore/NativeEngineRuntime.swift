@@ -507,7 +507,7 @@ actor NativeEngineRuntime {
                 modelID: modelID,
                 text: lightweightWarmupText,
                 outputPath: "",
-                shouldStream: true,
+                shouldStream: false,
                 payload: .clone(reference: reference)
             ),
             resolvedCloneTranscript: conditioning.resolvedTranscript
@@ -557,14 +557,6 @@ actor NativeEngineRuntime {
         if let activeModelID, activeModelID != modelID {
             return
         }
-        if let preparedVoiceID = reference.preparedVoiceID,
-           await preparedCloneConditioningCache.hasPersistedVoiceClonePromptArtifact(
-               modelID: modelID,
-               preparedVoiceID: preparedVoiceID,
-               voicesDirectory: voicesDirectory
-           ) {
-            return
-        }
 
         do {
             let loadResult = try await loadModel(
@@ -588,7 +580,7 @@ actor NativeEngineRuntime {
                         modelID: modelID,
                         text: lightweightWarmupText,
                         outputPath: "",
-                        shouldStream: true,
+                        shouldStream: false,
                         payload: .clone(reference: reference)
                     ),
                     resolvedCloneTranscript: conditioning.resolvedTranscript

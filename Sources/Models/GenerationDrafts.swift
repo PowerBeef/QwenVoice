@@ -215,10 +215,10 @@ enum VoiceCloningReadiness {
 
         if case .fallback(let message) = contextStatus {
             return VoiceCloningReadinessDescriptor(
-                noteIsReady: false,
-                title: "Generate is available",
+                noteIsReady: true,
+                title: "Reference ready with slower first run",
                 detail: message,
-                trailingText: nil
+                trailingText: "Ready"
             )
         }
 

@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @preconcurrency import MLX
 @preconcurrency import MLXAudioCore
+@preconcurrency import MLXAudioTTS
 @testable import QwenVoiceCore
 
 /// Direct unit tests for `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift`.
@@ -168,6 +169,34 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
         XCTAssertEqual(result.benchmarkSample?.stringFlags["telemetry_mode"], NativeTelemetryMode.lightweight.rawValue)
     }
 
+    func testQualityFirstMaxTokensFinishThrowsTruncationFailure() async throws {
+        do {
+            _ = try await runQualityFirstSession(finishReason: .maxTokens)
+            XCTFail("maxTokens finish should be treated as a discarded truncation failure.")
+        } catch let error as MLXTTSEngineError {
+            XCTAssertTrue(error.localizedDescription.contains("maxNewTokens"))
+        }
+    }
+
+    func testQualityFirstCancelledFinishThrowsCancellation() async throws {
+        do {
+            _ = try await runQualityFirstSession(finishReason: .cancelled)
+            XCTFail("cancelled finish should propagate cancellation.")
+        } catch is CancellationError {
+            // Expected.
+        }
+    }
+
+    func testQualityFirstFailedFinishThrowsGenericFailure() async throws {
+        do {
+            _ = try await runQualityFirstSession(finishReason: .failed)
+            XCTFail("failed finish should propagate a non-truncation generation failure.")
+        } catch let error as MLXTTSEngineError {
+            XCTAssertTrue(error.localizedDescription.contains("failed before producing"))
+            XCTAssertFalse(error.localizedDescription.contains("maxNewTokens"))
+        }
+    }
+
     // MARK: - Helpers
 
     private func runSingleChunkSession(
@@ -193,6 +222,46 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
             warmState: .cold,
             loadCapabilityProfile: .fullCapabilities,
             memoryPolicy: memoryPolicy,
+            mlxMemorySnapshots: [:]
+        )
+        return try await session.run { _ in }
+    }
+
+    private func runQualityFirstSession(
+        finishReason: AudioGenerationFinishReason
+    ) async throws -> GenerationResult {
+        let sessionsRoot = temporaryRoot.appendingPathComponent("stream_sessions", isDirectory: true)
+        let outputURL = temporaryRoot.appendingPathComponent("quality-\(finishReason.rawValue).wav")
+        let model = UnsafeSpeechGenerationModel(
+            sampleRate: 24_000,
+            customPrewarmHandler: { _, _, _, _ in },
+            customStreamHandler: { _, _, _, _, _ in
+                AsyncThrowingStream { continuation in
+                    continuation.finish()
+                }
+            },
+            customGenerateHandler: { _, _, _, _ in
+                AudioGenerationCompletion(
+                    audio: MLXArray([Float32(0.0), Float32(0.1), Float32(-0.1)]),
+                    info: nil,
+                    finishReason: finishReason
+                )
+            }
+        )
+        let session = NativeStreamingSynthesisSession(
+            requestID: 1,
+            request: GenerationRequest(
+                modelID: "test_model",
+                text: "Quality first finish reason",
+                outputPath: outputURL.path,
+                shouldStream: false,
+                payload: .custom(speakerID: "aiden", deliveryStyle: nil)
+            ),
+            model: model,
+            streamSessionsDirectory: sessionsRoot,
+            warmState: .cold,
+            loadCapabilityProfile: .customOnly,
+            memoryPolicy: NativeMemoryPolicyResolver.policy(mode: .custom, isBatch: false),
             mlxMemorySnapshots: [:]
         )
         return try await session.run { _ in }
