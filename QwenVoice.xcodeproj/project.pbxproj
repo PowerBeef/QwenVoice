@@ -216,6 +216,7 @@
 		CD9DB00F11DDB00BAE9AEE6E /* EmotionPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4377E3144E68AF1ECE1ABCDC /* EmotionPreset.swift */; };
 		CDA31B55F78B96D43385E1E6 /* AppStartupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40385AC6FD361E190A8E3CE3 /* AppStartupCoordinator.swift */; };
 		CE9FB73376B49D81E5BEFAF3 /* StartupDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21943A54ED34AAA37626A252 /* StartupDiagnosticsView.swift */; };
+		CFB6D629AFB397E152D59044 /* AudioPreparationHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7DC67795ED079EB06E8B231 /* AudioPreparationHardeningTests.swift */; };
 		D27D60A56143986204A2D592 /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623B6EAE78F8B7100D4675F4 /* Voice.swift */; };
 		D2DD8D5683671707CF6C06AA /* XPCNativeEngineCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895C57D89AE37AAB30A6D08E /* XPCNativeEngineCoordinatorTests.swift */; };
 		D9CD489105C5ADCF38E6EE96 /* IOSModelDeliverySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC061E247067EDDB99401F09 /* IOSModelDeliverySupport.swift */; };
@@ -572,6 +573,7 @@
 		B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B5986D49EEC70ECF5CA29CF1 /* CustomVoiceUIPerformanceTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceUIPerformanceTrace.swift; sourceTree = "<group>"; };
 		B62852B52626359D53D76C11 /* QwenVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = QwenVoice.entitlements; sourceTree = "<group>"; };
+		B7DC67795ED079EB06E8B231 /* AudioPreparationHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreparationHardeningTests.swift; sourceTree = "<group>"; };
 		B842FA688FF4CEEB23507095 /* PlatformCapabilityMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformCapabilityMatrixTests.swift; sourceTree = "<group>"; };
 		B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomVoiceView.swift; sourceTree = "<group>"; };
 		B8BD934015DBE86EA1193A6B /* VoiceCloningCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloningCoordinator.swift; sourceTree = "<group>"; };
@@ -859,6 +861,7 @@
 				E144F3BBE3091CDC68D46967 /* AppEngineSelectionTests.swift */,
 				DBEC7B0D62CB687A465F31B8 /* AppStartupCoordinatorTests.swift */,
 				E24F04C92F11D3A7A98A0244 /* AppStateRestorationPolicyTests.swift */,
+				B7DC67795ED079EB06E8B231 /* AudioPreparationHardeningTests.swift */,
 				AE485426FF9D761AEEC80E4D /* AudioQualityGateTests.swift */,
 				781481B181C874378DF5BCB0 /* AudioReviewTests.swift */,
 				6D4A9DBBACF0224EDE712E31 /* BackendPerformanceContractTests.swift */,
@@ -1829,6 +1832,7 @@
 				970DB4F990FBE7CBF0EFBCFF /* AppEngineSelectionTests.swift in Sources */,
 				7142299093710E7ECD0887F6 /* AppStartupCoordinatorTests.swift in Sources */,
 				05C45E2D020CE3D0E46AB49E /* AppStateRestorationPolicyTests.swift in Sources */,
+				CFB6D629AFB397E152D59044 /* AudioPreparationHardeningTests.swift in Sources */,
 				058BD271CE193915D587612D /* AudioQualityGateTests.swift in Sources */,
 				C07ABA57C7BEBE449EE8EAE1 /* AudioReviewSupport.swift in Sources */,
 				0E12225E9C7AA98FB51F3500 /* AudioReviewTests.swift in Sources */,
@@ -2230,6 +2234,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/QwenVoiceEngineService/Info.plist;
+				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -2474,6 +2479,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vocello;
+				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -2570,6 +2576,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vocello;
+				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -2653,6 +2660,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/QwenVoiceEngineService/Info.plist;
+				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

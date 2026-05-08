@@ -690,14 +690,13 @@ actor NativeEngineRuntime {
             switch request.payload {
             case .custom(let speakerID, _):
                 let language = GenerationSemantics.qwenLanguageHint(for: request)
-                try await withCustomVoicePrewarmDepthOverride(customPrewarmDepth) {
-                    try await model.prewarmCustomVoice(
-                        text: lightweightWarmupText,
-                        language: language,
-                        speaker: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
-                        instruct: GenerationSemantics.customInstruction(for: request)
-                    )
-                }
+                try await model.prewarmCustomVoice(
+                    text: lightweightWarmupText,
+                    language: language,
+                    speaker: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
+                    instruct: GenerationSemantics.customInstruction(for: request),
+                    customPrewarmDepth: customPrewarmDepth
+                )
             case .design:
                 let language = GenerationSemantics.qwenLanguageHint(for: request)
                 try await model.prewarmVoiceDesign(
@@ -755,37 +754,6 @@ actor NativeEngineRuntime {
             return false
         }
         return customPrewarmPolicy == .skipDedicatedCustomPrewarm
-    }
-
-    private func withCustomVoicePrewarmDepthOverride<T>(
-        _ customPrewarmDepth: String?,
-        operation: () async throws -> T
-    ) async throws -> T {
-        guard let depth = customPrewarmDepth,
-              !depth.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return try await operation()
-        }
-
-        let liveKey = "QWENVOICE_AUDIO_QC_LIVE"
-        let depthKey = "QWENVOICE_QWEN3_CUSTOM_PREWARM_DEPTH"
-        let previousLive = getenv(liveKey).map { String(cString: $0) }
-        let previousDepth = getenv(depthKey).map { String(cString: $0) }
-        setenv(liveKey, "1", 1)
-        setenv(depthKey, depth, 1)
-        defer {
-            if let previousLive {
-                setenv(liveKey, previousLive, 1)
-            } else {
-                unsetenv(liveKey)
-            }
-            if let previousDepth {
-                setenv(depthKey, previousDepth, 1)
-            } else {
-                unsetenv(depthKey)
-            }
-        }
-
-        return try await operation()
     }
 
     private var customPrewarmPolicyLabel: String {

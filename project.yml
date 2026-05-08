@@ -140,6 +140,7 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         INFOPLIST_FILE: Sources/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Vocello
+        INFOPLIST_KEY_QwenVoiceTeamIdentifier: $(QWENVOICE_DEVELOPMENT_TEAM)
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
@@ -283,6 +284,7 @@ targets:
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         INFOPLIST_FILE: Sources/QwenVoiceEngineService/Info.plist
+        INFOPLIST_KEY_QwenVoiceTeamIdentifier: $(QWENVOICE_DEVELOPMENT_TEAM)
         CODE_SIGN_ENTITLEMENTS: Sources/QwenVoice.entitlements
         GENERATE_INFOPLIST_FILE: NO
     dependencies:

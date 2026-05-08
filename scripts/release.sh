@@ -20,6 +20,7 @@ PREFLIGHT="none"
 SIGNING_MODE="${QWENVOICE_SIGNING_MODE:-ad-hoc}"
 SIGNING_IDENTITY="${QWENVOICE_SIGNING_IDENTITY:-}"
 CODESIGN_KEYCHAIN="${QWENVOICE_CODESIGN_KEYCHAIN:-}"
+RELEASE_TEAM_ID="${QWENVOICE_DEVELOPMENT_TEAM:-${APPLE_TEAM_ID:-}}"
 
 release_fail() {
     echo "Error: $*" >&2
@@ -92,6 +93,7 @@ case "$SIGNING_MODE" in
         ;;
     developer-id)
         [ -n "$SIGNING_IDENTITY" ] || release_fail "--signing-identity is required for developer-id signing"
+        [ -n "$RELEASE_TEAM_ID" ] || release_fail "APPLE_TEAM_ID or QWENVOICE_DEVELOPMENT_TEAM is required for developer-id signing"
         ACTIVE_SIGNING_IDENTITY="$SIGNING_IDENTITY"
         ;;
     *)
@@ -166,6 +168,7 @@ echo "  preflight: $PREFLIGHT"
 echo "  signing: $SIGNING_MODE"
 if [ "$SIGNING_MODE" = "developer-id" ]; then
     echo "  signing identity: $SIGNING_IDENTITY"
+    echo "  team id: $RELEASE_TEAM_ID"
 fi
 echo ""
 
@@ -221,6 +224,7 @@ else
         -resultBundlePath "$BUILD_RESULT_BUNDLE_PATH" \
         -resultBundleVersion 3 \
         CODE_SIGN_IDENTITY="-" \
+        QWENVOICE_DEVELOPMENT_TEAM="$RELEASE_TEAM_ID" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         ONLY_ACTIVE_ARCH=YES \
         ARCHS=arm64 \
@@ -243,6 +247,7 @@ xcodebuild -project "$PROJECT_FILE" \
     -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
     -disableAutomaticPackageResolution \
     -derivedDataPath "$DERIVED_DATA_PATH" \
+    QWENVOICE_DEVELOPMENT_TEAM="$RELEASE_TEAM_ID" \
     -showBuildSettings > "$SHOW_BUILD_SETTINGS_LOG"
 resolve_build_metadata "$SHOW_BUILD_SETTINGS_LOG"
 

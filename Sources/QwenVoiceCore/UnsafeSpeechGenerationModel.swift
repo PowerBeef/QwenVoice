@@ -130,7 +130,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
     private let latestPreparationBooleanFlagsProvider: @Sendable () -> [String: Bool]
     private let latestPreparationStringFlagsProvider: @Sendable () -> [String: String]
     private let resetPreparationDiagnosticsHandler: @Sendable () -> Void
-    private let customPrewarmHandler: (@Sendable (String, String, String, String?, GenerationRequest.BenchmarkOptions?) async throws -> Void)?
+    private let customPrewarmHandler: (@Sendable (String, String, String, String?, GenerationRequest.BenchmarkOptions?, String?) async throws -> Void)?
     private let customStreamHandler: (@Sendable (String, String, String, String?, Double, GenerationRequest.BenchmarkOptions?) -> AsyncThrowingStream<AudioGeneration, Error>)?
     private let customGenerateHandler: (@Sendable (String, String, String, String?, GenerationRequest.BenchmarkOptions?) async throws -> AudioGenerationCompletion)?
     private let designPrewarmHandler: (@Sendable (String, String, String) async throws -> Void)?
@@ -207,18 +207,29 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         }
         if let optimizedBase = base as? any Qwen3OptimizedSpeechGenerationModel {
             let optimizedBox = OptimizedModelBox(base: optimizedBase)
-            self.customPrewarmHandler = { text, language, speaker, instruct, benchmarkOptions in
+            self.customPrewarmHandler = { text, language, speaker, instruct, benchmarkOptions, customPrewarmDepth in
                 let parameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
                     defaultParameters: box.base.defaultGenerationParameters,
                     benchmarkOptions: benchmarkOptions
                 )
-                try await optimizedBox.base.prepareCustomVoice(
-                    text: text,
-                    language: language,
-                    speaker: speaker,
-                    instruct: instruct,
-                    generationParameters: parameters
-                )
+                if let configurable = optimizedBox.base as? any Qwen3CustomVoicePrewarmDepthControlling {
+                    try await configurable.prepareCustomVoice(
+                        text: text,
+                        language: language,
+                        speaker: speaker,
+                        instruct: instruct,
+                        generationParameters: parameters,
+                        customPrewarmDepth: customPrewarmDepth
+                    )
+                } else {
+                    try await optimizedBox.base.prepareCustomVoice(
+                        text: text,
+                        language: language,
+                        speaker: speaker,
+                        instruct: instruct,
+                        generationParameters: parameters
+                    )
+                }
             }
             self.customStreamHandler = { text, language, speaker, instruct, streamingInterval, benchmarkOptions in
                 let parameters = Qwen3CustomVoiceGenerationParameterPolicy.resolve(
@@ -397,7 +408,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         self.latestPreparationStringFlagsProvider = latestPreparationStringFlagsProvider
         self.resetPreparationDiagnosticsHandler = {}
         if let customPrewarmHandler {
-            self.customPrewarmHandler = { text, language, speaker, instruct, _ in
+            self.customPrewarmHandler = { text, language, speaker, instruct, _, _ in
                 try await customPrewarmHandler(text, language, speaker, instruct)
             }
         } else {
@@ -478,7 +489,7 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         self.latestPreparationStringFlagsProvider = latestPreparationStringFlagsProvider
         self.resetPreparationDiagnosticsHandler = {}
         if let customPrewarmHandler {
-            self.customPrewarmHandler = { text, language, speaker, instruct, _ in
+            self.customPrewarmHandler = { text, language, speaker, instruct, _, _ in
                 try await customPrewarmHandler(text, language, speaker, instruct)
             }
         } else {
@@ -611,14 +622,15 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         language: String,
         speaker: String,
         instruct: String?,
-        benchmarkOptions: GenerationRequest.BenchmarkOptions? = nil
+        benchmarkOptions: GenerationRequest.BenchmarkOptions? = nil,
+        customPrewarmDepth: String? = nil
     ) async throws {
         guard let customPrewarmHandler else {
             throw MLXTTSEngineError.unsupportedRequest(
                 "The active native model does not support optimized Qwen3 Custom Voice generation."
             )
         }
-        try await customPrewarmHandler(text, language, speaker, instruct, benchmarkOptions)
+        try await customPrewarmHandler(text, language, speaker, instruct, benchmarkOptions, customPrewarmDepth)
     }
 
     func generateCustomVoiceStream(

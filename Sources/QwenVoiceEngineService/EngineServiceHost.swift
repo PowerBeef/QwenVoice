@@ -45,9 +45,9 @@ private final class RuntimeContext: @unchecked Sendable {
     var cancellables: Set<AnyCancellable> = []
     var lastPublishedEvent: GenerationEvent?
     var lastPublishedSnapshot: TTSEngineSnapshot?
-    /// Audit Finding #1 — long-running Task that drains the
-    /// engine's lossless `events` AsyncStream and publishes each
-    /// event over XPC in order. Replaces the prior
+    /// Long-running Task that drains the engine's bounded `events`
+    /// AsyncStream and publishes each event over XPC in order while the
+    /// consumer stays active. Replaces the prior
     /// `objectWillChange.sink` slot-sampling path that could
     /// silently drop the trailing `.chunk` event when
     /// `NativeStreamingSynthesisSession.run` emitted it
@@ -102,7 +102,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         let sessionID = UUID()
         newConnection.setCodeSigningRequirement(
-            EngineServiceTrustPolicy.clientRequirement()
+            EngineServiceTrustPolicy.clientRequirementForCurrentBundle()
         )
         newConnection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
         newConnection.exportedObject = self
@@ -329,10 +329,10 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         // Chunk delivery via the engine's bounded AsyncStream. The
         // producer (`MLXTTSEngine`'s
         // `eventSink` callback) yields every event into
-        // `engine.events`; this Task drains the stream serially
-        // and publishes each event over XPC in the exact order
-        // they were yielded. No slot-sampling, no dedup,
-        // no race window.
+        // `engine.events`; this Task drains the stream serially while
+        // active. If this consumer stalls, the engine keeps the newest
+        // events and may drop older diagnostic preview payloads. No
+        // slot-sampling, no dedup, no race window.
         let engine = runtime.engine
         runtimeContext.eventForwardingTask = Task { [weak self, weak runtimeContext] in
             for await event in engine.events {

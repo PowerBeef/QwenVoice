@@ -88,7 +88,7 @@ private final class XPCServiceTransport: NSObject, XPCNativeEngineTransporting, 
         self.eventSink = sink
         let connection = NSXPCConnection(serviceName: QwenVoiceEngineServiceBundleIdentifier)
         connection.setCodeSigningRequirement(
-            EngineServiceTrustPolicy.serviceRequirement()
+            EngineServiceTrustPolicy.serviceRequirementForCurrentBundle()
         )
         connection.remoteObjectInterface = NSXPCInterface(with: QwenVoiceEngineServiceXPCProtocol.self)
         connection.exportedInterface = NSXPCInterface(with: QwenVoiceEngineClientEventXPCProtocol.self)

@@ -28,6 +28,7 @@ public enum MLXTTSEngineError: LocalizedError, Equatable {
 @MainActor
 public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     private static let lightweightWarmupText = "Hi."
+    public static let eventStreamBufferLimit = 64
     public static var lightweightWarmupTextForUI: String { lightweightWarmupText }
 
     typealias StreamingSessionFactory = (
@@ -65,19 +66,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     /// audio chunk of every streaming generation.
     @Published public private(set) var latestEvent: GenerationEvent?
 
-    /// In-order, lossless stream of every `GenerationEvent` the
-    /// engine emits — chunks, completion, failures. Audit Finding
-    /// #1 fix: replaces the prior single-slot `latestEvent` +
-    /// `objectWillChange` sampling pattern that
-    /// `EngineServiceHost` used as its chunk transport. The
-    /// AsyncStream's continuation is `unbounded` so back-to-back
-    /// emissions (notably the last `.chunk` followed immediately
-    /// by `.completed` from
-    /// `NativeStreamingSynthesisSession.run`) are buffered without
-    /// loss; the consuming `Task { for await event in events }` in
-    /// `EngineServiceHost.makeOrReuseRuntimeContext` drains the
-    /// stream serially and publishes each event over XPC in the
-    /// exact order they were yielded.
+    /// Bounded stream of `GenerationEvent` values for transport consumers.
+    /// Active consumers receive events in the order they are yielded. If a
+    /// consumer stalls, the stream keeps the newest `eventStreamBufferLimit`
+    /// events and may drop older diagnostic preview payloads to keep memory
+    /// bounded.
     public let events: AsyncStream<GenerationEvent>
     private let eventStreamContinuation: AsyncStream<GenerationEvent>.Continuation
 
@@ -296,7 +289,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         // scheduling stalls, but bound the buffer so diagnostic preview PCM
         // payloads cannot accumulate without limit if the consumer is blocked.
         var capturedContinuation: AsyncStream<GenerationEvent>.Continuation!
-        self.events = AsyncStream(bufferingPolicy: .bufferingNewest(64)) { continuation in
+        self.events = AsyncStream(bufferingPolicy: .bufferingNewest(Self.eventStreamBufferLimit)) { continuation in
             capturedContinuation = continuation
         }
         self.eventStreamContinuation = capturedContinuation

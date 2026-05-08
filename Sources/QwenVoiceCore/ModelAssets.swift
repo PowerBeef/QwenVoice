@@ -151,6 +151,10 @@ public struct LocalModelAssetStore: ModelAssetStore, Hashable, Sendable {
     }
 
     public func integrity(for descriptor: ModelAssetDescriptor) -> AssetIntegrity {
+        // Inventory check only: downloads verify size and SHA-256 from
+        // Hugging Face metadata before files land here. This store answers
+        // whether the required installed files are present, not whether a
+        // local directory is cryptographically trustworthy after mutation.
         let fileManager = FileManager.default
         let root = localRoot(for: descriptor)
         var present: [String] = []

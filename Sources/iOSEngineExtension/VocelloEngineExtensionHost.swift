@@ -44,10 +44,10 @@ private final class RuntimeContext: @unchecked Sendable {
     var cancellables: Set<AnyCancellable> = []
     var lastPublishedEvent: GenerationEvent?
     var lastPublishedSnapshot: TTSEngineSnapshot?
-    /// Audit Finding #1 (iPhone path) — long-running Task that
-    /// drains the engine's lossless `events` AsyncStream and
-    /// publishes each event over the extension XPC channel in
-    /// order. Mirrors the macOS `EngineServiceHost` fix landed
+    /// Long-running Task that drains the engine's bounded `events`
+    /// AsyncStream and publishes events over the extension XPC channel
+    /// in order while the consumer stays active. Mirrors the macOS
+    /// `EngineServiceHost` fix landed
     /// in commit `c951d4c`. The producer side
     /// (`MLXTTSEngine.events`) is shared across both transports
     /// via `QwenVoiceCore`. Cancelled when the `RuntimeContext`
@@ -306,7 +306,8 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
         // `lastPublishedEvent != engine.latestEvent` saw the slot
         // already overwritten by `.completed` and suppressed the
         // chunk read. The AsyncStream consumer drains the stream
-        // serially; no slot-sampling, no dedup, no race window.
+        // serially while active; stalled consumers keep the newest
+        // diagnostic events only. No slot-sampling, no dedup, no race window.
         let engine = runtime.engine
         runtimeContext.eventForwardingTask = Task { [weak self, weak runtimeContext] in
             for await event in engine.events {

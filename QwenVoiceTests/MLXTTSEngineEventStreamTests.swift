@@ -135,7 +135,7 @@ final class MLXTTSEngineEventStreamTests: XCTestCase {
         XCTAssertEqual(
             received.count,
             chunkCount,
-            "Every yielded event must reach the AsyncStream — no drops."
+            "Every yielded event must reach an actively-drained AsyncStream."
         )
         XCTAssertEqual(
             received,
@@ -287,11 +287,11 @@ final class MLXTTSEngineEventStreamTests: XCTestCase {
         )
 
         var received: [GenerationEvent] = []
-        for await event in engine.events.prefix(64) {
+        for await event in engine.events.prefix(MLXTTSEngine.eventStreamBufferLimit) {
             received.append(event)
         }
 
-        XCTAssertEqual(received, Array(chunks.suffix(64)))
+        XCTAssertEqual(received, Array(chunks.suffix(MLXTTSEngine.eventStreamBufferLimit)))
         XCTAssertEqual(engine.latestEvent, chunks.last)
     }
 

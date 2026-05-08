@@ -61,15 +61,34 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
             } else {
                 stringValue = String(describing: value)
             }
-            captured[key] = String(stringValue.prefix(512))
+            captured[key] = redactedDetailValue(key: key, value: stringValue)
         }
         if let failureReason = error.localizedFailureReason {
-            captured["NSLocalizedFailureReason"] = failureReason
+            captured["NSLocalizedFailureReason"] = redactedDetailValue(
+                key: "NSLocalizedFailureReason",
+                value: failureReason
+            )
         }
         if let recoverySuggestion = error.localizedRecoverySuggestion {
-            captured["NSLocalizedRecoverySuggestion"] = recoverySuggestion
+            captured["NSLocalizedRecoverySuggestion"] = redactedDetailValue(
+                key: "NSLocalizedRecoverySuggestion",
+                value: recoverySuggestion
+            )
         }
         return captured.isEmpty ? nil : captured
+    }
+
+    private static func redactedDetailValue(key: String, value: String) -> String {
+        let key = key.lowercased()
+        if ["prompt", "transcript", "reference"].contains(where: key.contains) {
+            return "<redacted>"
+        }
+        let pathRedacted = value.replacingOccurrences(
+            of: #"(?<!\S)(?:file://)?/(?:Users|private|var|tmp|Volumes)/[^\s,;:]+"#,
+            with: "<redacted-path>",
+            options: .regularExpression
+        )
+        return String(pathRedacted.prefix(512))
     }
 }
 
@@ -107,7 +126,7 @@ public struct EngineCapabilities: Codable, Equatable, Sendable {
     public static let macOSXPCDefault = EngineCapabilities(
         supportsBatchGeneration: true,
         supportsAudioPreparation: false,
-        supportsInteractivePrefetch: false,
+        supportsInteractivePrefetch: true,
         supportsMemoryTrim: false,
         supportsPreparedVoiceManagement: true
     )
@@ -119,6 +138,21 @@ public struct EngineCapabilities: Codable, Equatable, Sendable {
         supportsMemoryTrim: true,
         supportsPreparedVoiceManagement: true
     )
+}
+
+public enum QwenVoiceWireSchema {
+    public static let currentVersion = 1
+
+    public static func validate(version: Int, codingPath: [CodingKey]) throws {
+        guard version == currentVersion else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: codingPath,
+                    debugDescription: "Unsupported QwenVoice wire schema version \(version)."
+                )
+            )
+        }
+    }
 }
 
 public enum QwenVoiceWireCodec {

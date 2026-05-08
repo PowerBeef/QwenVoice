@@ -88,11 +88,8 @@ private enum Qwen3CustomVoicePrewarmDepth: String, Sendable {
     case skipDecoderBucket = "skip-decoder-bucket"
     case skipStreamStep = "skip-stream-step"
 
-    static func resolve(
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> Qwen3CustomVoicePrewarmDepth {
-        guard environment["QWENVOICE_AUDIO_QC_LIVE"] == "1",
-              let rawValue = environment["QWENVOICE_QWEN3_CUSTOM_PREWARM_DEPTH"]?
+    static func resolve(rawValue: String?) -> Qwen3CustomVoicePrewarmDepth {
+        guard let rawValue = rawValue?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
               !rawValue.isEmpty else {
@@ -705,7 +702,7 @@ private final class Qwen3TTSStreamingDecoderBucketCache: @unchecked Sendable {
 
 // MARK: - Qwen3TTS Model
 
-public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedSpeechGenerationModel, SpeechGenerationModelDiagnosticsProvider, @unchecked Sendable {
+public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedSpeechGenerationModel, Qwen3CustomVoicePrewarmDepthControlling, SpeechGenerationModelDiagnosticsProvider, @unchecked Sendable {
     private static let productionMinimumGeneratedCodeTokensBeforeEOS = 2
     private static let productionFullResultMemoryClearCadence = 0
 
@@ -1300,7 +1297,25 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         language: String,
         speaker: String,
         instruct: String?,
-        generationParameters _: GenerateParameters
+        generationParameters: GenerateParameters
+    ) async throws {
+        try await prepareCustomVoice(
+            text: text,
+            language: language,
+            speaker: speaker,
+            instruct: instruct,
+            generationParameters: generationParameters,
+            customPrewarmDepth: nil
+        )
+    }
+
+    public func prepareCustomVoice(
+        text: String,
+        language: String,
+        speaker: String,
+        instruct: String?,
+        generationParameters _: GenerateParameters,
+        customPrewarmDepth: String?
     ) async throws {
         guard speechTokenizer != nil else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
@@ -1316,7 +1331,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             speaker: speaker,
             instruct: instruct
         )
-        let prewarmDepth = Qwen3CustomVoicePrewarmDepth.resolve()
+        let prewarmDepth = Qwen3CustomVoicePrewarmDepth.resolve(rawValue: customPrewarmDepth)
         try await warmPreparedInputs(
             inputEmbedsInit,
             trailingTextHidden: trailingTextHidden,

@@ -13,6 +13,10 @@ import Foundation
 public enum AudioPreparationError: LocalizedError, Equatable {
     case missingInputFile(String)
     case unsupportedInput(String)
+    case inputFileTooLarge(path: String, maxBytes: Int64, actualBytes: Int64)
+    case inputDurationTooLong(maxSeconds: Double, actualSeconds: Double)
+    case decodeTimedOut(seconds: Double)
+    case cancelled
     case missingOutputDirectory
     case failedToCreateOutputDirectory(String)
     case failedToReadAudio(String)
@@ -25,6 +29,14 @@ public enum AudioPreparationError: LocalizedError, Equatable {
             return "Audio file not found: \(path)"
         case .unsupportedInput(let message):
             return message
+        case .inputFileTooLarge(let path, let maxBytes, let actualBytes):
+            return "Audio file is too large to prepare safely: \(path) is \(actualBytes) bytes; the limit is \(maxBytes) bytes."
+        case .inputDurationTooLong(let maxSeconds, let actualSeconds):
+            return "Audio file is too long to prepare safely: \(String(format: "%.1f", actualSeconds)) seconds; the limit is \(String(format: "%.1f", maxSeconds)) seconds."
+        case .decodeTimedOut(let seconds):
+            return "Audio preparation timed out after \(String(format: "%.1f", seconds)) seconds."
+        case .cancelled:
+            return "Audio preparation was cancelled."
         case .missingOutputDirectory:
             return "Audio preparation needs an output directory when the source is not already canonical."
         case .failedToCreateOutputDirectory(let path):
@@ -85,38 +97,60 @@ public protocol AudioPreparationService: Sendable {
     func normalizeAudio(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult
 }
 
+public struct AudioPreparationLimits: Hashable, Sendable {
+    public static let defaults = AudioPreparationLimits(
+        maxInputFileSizeBytes: 250 * 1_024 * 1_024,
+        maxDecodedDurationSeconds: 120,
+        trackLoadTimeoutSeconds: 60
+    )
+
+    public let maxInputFileSizeBytes: Int64
+    public let maxDecodedDurationSeconds: Double
+    public let trackLoadTimeoutSeconds: Double
+
+    public init(
+        maxInputFileSizeBytes: Int64,
+        maxDecodedDurationSeconds: Double,
+        trackLoadTimeoutSeconds: Double
+    ) {
+        self.maxInputFileSizeBytes = maxInputFileSizeBytes
+        self.maxDecodedDurationSeconds = maxDecodedDurationSeconds
+        self.trackLoadTimeoutSeconds = trackLoadTimeoutSeconds
+    }
+}
+
+private actor NativeAudioPreparationWorkQueue {
+    static let shared = NativeAudioPreparationWorkQueue()
+
+    func run<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
+        try await operation()
+    }
+}
+
 public struct NativeAudioPreparationService: AudioPreparationService, Hashable, Sendable {
     public static let canonicalSampleRate: Double = 24_000
     public static let canonicalChannelCount: AVAudioChannelCount = 1
     public static let canonicalBitDepth = 16
-    private static let normalizationQueue = DispatchQueue(
-        label: "com.qvoice.core.audio-preparation",
-        qos: .utility
-    )
 
     public let preparedAudioDirectory: URL?
+    public let limits: AudioPreparationLimits
 
-    public init(preparedAudioDirectory: URL? = nil) {
+    public init(
+        preparedAudioDirectory: URL? = nil,
+        limits: AudioPreparationLimits = .defaults
+    ) {
         self.preparedAudioDirectory = preparedAudioDirectory
+        self.limits = limits
     }
 
     public func normalizeAudio(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
-        try await withCheckedThrowingContinuation { continuation in
-            Self.normalizationQueue.async {
-                // Tier 6: skip the CPU-bound normalization pass if the caller
-                // was already cancelled while the dispatch-queue hop was in
-                // flight. The normalization work itself does not observe
-                // cancellation, so this up-front check prevents wasted work.
-                if Task.isCancelled {
-                    continuation.resume(throwing: CancellationError())
-                    return
-                }
-                do {
-                    continuation.resume(returning: try normalizeAudioSynchronously(request))
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+        do {
+            return try await NativeAudioPreparationWorkQueue.shared.run {
+                try Task.checkCancellation()
+                return try await normalizeAudioAsynchronously(request)
             }
+        } catch is CancellationError {
+            throw AudioPreparationError.cancelled
         }
     }
 
@@ -146,11 +180,20 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         return isCanonicalWAV(at: outputURL)
     }
 
-    private func normalizeAudioSynchronously(_ request: AudioPreparationRequest) throws -> AudioNormalizationResult {
+    private func normalizeAudioAsynchronously(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
         let fileManager = FileManager.default
         let sourceURL = request.inputURL
         guard fileManager.fileExists(atPath: sourceURL.path) else {
             throw AudioPreparationError.missingInputFile(sourceURL.path)
+        }
+        let sourceByteSize = try Self.fileSize(at: sourceURL)
+        if limits.maxInputFileSizeBytes > 0,
+           sourceByteSize > limits.maxInputFileSizeBytes {
+            throw AudioPreparationError.inputFileTooLarge(
+                path: sourceURL.path,
+                maxBytes: limits.maxInputFileSizeBytes,
+                actualBytes: sourceByteSize
+            )
         }
 
         let fingerprint = Self.fileFingerprint(for: sourceURL)
@@ -163,6 +206,16 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         guard inputFile.length > 0 else {
             throw AudioPreparationError.unsupportedInput(
                 "The selected audio file does not contain readable audio frames."
+            )
+        }
+        let inputDurationSeconds = inputFile.fileFormat.sampleRate > 0
+            ? Double(inputFile.length) / inputFile.fileFormat.sampleRate
+            : 0
+        if limits.maxDecodedDurationSeconds > 0,
+           inputDurationSeconds > limits.maxDecodedDurationSeconds {
+            throw AudioPreparationError.inputDurationTooLong(
+                maxSeconds: limits.maxDecodedDurationSeconds,
+                actualSeconds: inputDurationSeconds
             )
         }
 
@@ -209,10 +262,25 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
 
         let writtenFrameCount: Int64
         do {
-            writtenFrameCount = try Self.convertAudio(inputURL: sourceURL, outputURL: outputURL)
+            writtenFrameCount = try await Self.convertAudio(
+                inputURL: sourceURL,
+                outputURL: outputURL,
+                limits: limits
+            )
+        } catch is CancellationError {
+            if outputURL != sourceURL {
+                try? fileManager.removeItem(at: outputURL)
+            }
+            throw AudioPreparationError.cancelled
         } catch let error as AudioPreparationError {
+            if outputURL != sourceURL {
+                try? fileManager.removeItem(at: outputURL)
+            }
             throw error
         } catch {
+            if outputURL != sourceURL {
+                try? fileManager.removeItem(at: outputURL)
+            }
             throw AudioPreparationError.conversionFailed(error.localizedDescription)
         }
 
@@ -247,7 +315,11 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         return preparedAudioDirectory.appendingPathComponent("\(stem)_\(fingerprint).wav")
     }
 
-    private static func convertAudio(inputURL: URL, outputURL: URL) throws -> Int64 {
+    private static func convertAudio(
+        inputURL: URL,
+        outputURL: URL,
+        limits: AudioPreparationLimits
+    ) async throws -> Int64 {
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: canonicalSampleRate,
@@ -261,7 +333,12 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         let asset = AVURLAsset(url: inputURL)
         let track: AVAssetTrack
         do {
-            track = try firstAudioTrack(from: asset)
+            track = try await firstAudioTrack(
+                from: asset,
+                timeoutSeconds: limits.trackLoadTimeoutSeconds
+            )
+        } catch is CancellationError {
+            throw AudioPreparationError.cancelled
         } catch let error as AudioPreparationError {
             throw error
         } catch {
@@ -299,7 +376,16 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         }
 
         var totalWrittenFrames: Int64 = 0
+        let maxOutputFrames = limits.maxDecodedDurationSeconds > 0
+            ? Int64((limits.maxDecodedDurationSeconds * canonicalSampleRate).rounded(.up))
+            : Int64.max
         while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+            do {
+                try Task.checkCancellation()
+            } catch {
+                reader.cancelReading()
+                throw AudioPreparationError.cancelled
+            }
             let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
             guard frameCount > 0 else { continue }
 
@@ -337,6 +423,13 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
             }
 
             totalWrittenFrames += Int64(frameCount)
+            if totalWrittenFrames > maxOutputFrames {
+                reader.cancelReading()
+                throw AudioPreparationError.inputDurationTooLong(
+                    maxSeconds: limits.maxDecodedDurationSeconds,
+                    actualSeconds: Double(totalWrittenFrames) / canonicalSampleRate
+                )
+            }
         }
 
         switch reader.status {
@@ -363,40 +456,36 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         return totalWrittenFrames
     }
 
-    private static func firstAudioTrack(from asset: AVURLAsset) throws -> AVAssetTrack {
-        final class TrackLoadBox: @unchecked Sendable {
-            var result: Result<AVAssetTrack, Error>?
+    private static func firstAudioTrack(
+        from asset: AVURLAsset,
+        timeoutSeconds: Double
+    ) async throws -> AVAssetTrack {
+        guard timeoutSeconds > 0 else {
+            throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
         }
-
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = TrackLoadBox()
-
-        Task.detached {
-            do {
+        return try await withThrowingTaskGroup(of: AVAssetTrack.self) { group in
+            group.addTask {
                 let resolvedTrack = try await asset.loadTracks(withMediaType: .audio).first
                 guard let resolvedTrack else {
-                    box.result = .failure(
-                        AudioPreparationError.unsupportedInput(
-                            "No readable audio track was found in the selected file."
-                        )
+                    throw AudioPreparationError.unsupportedInput(
+                        "No readable audio track was found in the selected file."
                     )
-                    semaphore.signal()
-                    return
                 }
-                box.result = .success(resolvedTrack)
-            } catch {
-                box.result = .failure(error)
+                return resolvedTrack
             }
-            semaphore.signal()
-        }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
+            }
 
-        semaphore.wait()
-        guard let result = box.result else {
-            throw AudioPreparationError.unsupportedInput(
-                "No readable audio track was found in the selected file."
-            )
+            guard let first = try await group.next() else {
+                throw AudioPreparationError.unsupportedInput(
+                    "No readable audio track was found in the selected file."
+                )
+            }
+            group.cancelAll()
+            return first
         }
-        return try result.get()
     }
 
     private static func makeResult(
@@ -476,6 +565,11 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         let data = Data("\(resolvedPath)|\(size)|\(mtime)".utf8)
         let digest = SHA256.hash(data: data)
         return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func fileSize(at url: URL) throws -> Int64 {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        return Int64(values.fileSize ?? 0)
     }
 
     private static func sanitizedStem(for url: URL) -> String {

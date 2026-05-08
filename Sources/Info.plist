@@ -28,5 +28,7 @@
     <string>NSApplication</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.music</string>
+    <key>QwenVoiceTeamIdentifier</key>
+    <string>$(QWENVOICE_DEVELOPMENT_TEAM)</string>
 </dict>
 </plist>

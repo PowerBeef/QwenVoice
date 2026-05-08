@@ -23,7 +23,7 @@
       "engineCapabilities": {
         "supportsBatchGeneration": true,
         "supportsAudioPreparation": false,
-        "supportsInteractivePrefetch": false,
+        "supportsInteractivePrefetch": true,
         "supportsMemoryTrim": false,
         "supportsPreparedVoiceManagement": true
       }

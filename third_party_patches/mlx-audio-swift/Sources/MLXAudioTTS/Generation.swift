@@ -157,6 +157,17 @@ public protocol Qwen3OptimizedSpeechGenerationModel: AnyObject {
     ) async throws -> AudioGenerationCompletion
 }
 
+public protocol Qwen3CustomVoicePrewarmDepthControlling: AnyObject {
+    func prepareCustomVoice(
+        text: String,
+        language: String,
+        speaker: String,
+        instruct: String?,
+        generationParameters: GenerateParameters,
+        customPrewarmDepth: String?
+    ) async throws
+}
+
 public extension SpeechGenerationModel {
     func prepareForGeneration(
         text: String,

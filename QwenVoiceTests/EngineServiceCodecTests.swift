@@ -35,6 +35,13 @@ final class EngineServiceCodecTests: XCTestCase {
         )
     }
 
+    func testEngineServiceTrustPolicyTreatsUnresolvedBuildSettingAsDevelopmentFallback() {
+        XCTAssertEqual(
+            EngineServiceTrustPolicy.serviceRequirement(teamIdentifier: "$(QWENVOICE_DEVELOPMENT_TEAM)"),
+            "identifier \"com.qwenvoice.app.engine-service\""
+        )
+    }
+
     func testRemoteErrorPayloadMakeMapsCancellationErrorToCancelledCode() {
         let payload = RemoteErrorPayload.make(for: CancellationError())
 
@@ -53,6 +60,23 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(RemoteErrorPayload.self, from: encoded)
 
         XCTAssertEqual(decoded, payload)
+    }
+
+    func testRemoteErrorPayloadRedactsSensitiveDetails() {
+        let error = NSError(
+            domain: "QwenVoiceTests",
+            code: 7,
+            userInfo: [
+                "prompt": "Say the private customer sentence",
+                "sourcePath": "/Users/example/Private/reference.wav",
+                NSLocalizedFailureReasonErrorKey: "Failed while reading /tmp/private-reference.wav",
+            ]
+        )
+
+        let payload = RemoteErrorPayload.make(for: error)
+        XCTAssertEqual(payload.details?["prompt"], "<redacted>")
+        XCTAssertFalse(payload.details?["sourcePath"]?.contains("/Users/example") ?? true)
+        XCTAssertFalse(payload.details?["NSLocalizedFailureReason"]?.contains("/tmp/private-reference.wav") ?? true)
     }
 
     func testRequestEnvelopeRoundTripsThroughCodec() throws {
@@ -77,6 +101,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: encoded)
 
         XCTAssertEqual(decoded, request)
+        XCTAssertEqual(decoded.schemaVersion, EngineRequestEnvelope.currentSchemaVersion)
     }
 
     func testRequestEnvelopeRoundTripsInteractivePrefetchCommand() throws {
@@ -99,6 +124,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: encoded)
 
         XCTAssertEqual(decoded, request)
+        XCTAssertEqual(decoded.schemaVersion, EngineRequestEnvelope.currentSchemaVersion)
     }
 
     func testReplyEnvelopeRoundTripsGenerationResult() throws {
@@ -126,6 +152,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(EngineReplyEnvelope.self, from: encoded)
 
         XCTAssertEqual(decoded, reply)
+        XCTAssertEqual(decoded.schemaVersion, EngineReplyEnvelope.currentSchemaVersion)
     }
 
     func testReplyEnvelopeRoundTripsCapabilities() throws {
@@ -138,6 +165,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(EngineReplyEnvelope.self, from: encoded)
 
         XCTAssertEqual(decoded, reply)
+        XCTAssertEqual(decoded.schemaVersion, EngineReplyEnvelope.currentSchemaVersion)
     }
 
     func testReplyEnvelopeRoundTripsInteractivePrefetchDiagnostics() throws {
@@ -162,6 +190,7 @@ final class EngineServiceCodecTests: XCTestCase {
         let decoded = try EngineServiceCodec.decode(EngineReplyEnvelope.self, from: encoded)
 
         XCTAssertEqual(decoded, reply)
+        XCTAssertEqual(decoded.schemaVersion, EngineReplyEnvelope.currentSchemaVersion)
     }
 
     func testEventEnvelopeRoundTripsChunkAndProgressPayloads() throws {
@@ -193,6 +222,7 @@ final class EngineServiceCodecTests: XCTestCase {
             ),
             event
         )
+        XCTAssertEqual(event.schemaVersion, EngineEventEnvelope.currentSchemaVersion)
         XCTAssertEqual(
             try EngineServiceCodec.decode(
                 EngineEventEnvelope.self,
@@ -224,6 +254,7 @@ final class EngineServiceCodecTests: XCTestCase {
         )
 
         XCTAssertEqual(decoded, request)
+        XCTAssertEqual(decoded.schemaVersion, QwenVoiceCore.ExtensionEngineRequestEnvelope.currentSchemaVersion)
     }
 
     func testExtensionEventEnvelopeRoundTripsSnapshotAndChunkPayloads() throws {
@@ -256,12 +287,45 @@ final class EngineServiceCodecTests: XCTestCase {
             ),
             snapshotEvent
         )
+        XCTAssertEqual(snapshotEvent.schemaVersion, QwenVoiceCore.ExtensionEngineEventEnvelope.currentSchemaVersion)
         XCTAssertEqual(
             try QwenVoiceCore.ExtensionEngineCodec.decode(
                 QwenVoiceCore.ExtensionEngineEventEnvelope.self,
                 from: QwenVoiceCore.ExtensionEngineCodec.encode(chunkEvent)
             ),
             chunkEvent
+        )
+    }
+
+    func testWireEnvelopeDecodesLegacyMissingSchemaVersionAsVersionOne() throws {
+        let request = EngineRequestEnvelope(
+            id: UUID(uuidString: "99999999-8888-7777-6666-555555555555")!,
+            command: .ping
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: EngineServiceCodec.encode(request)) as? [String: Any]
+        )
+        object.removeValue(forKey: "schemaVersion")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: legacyData)
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.command, .ping)
+    }
+
+    func testWireEnvelopeRejectsFutureSchemaVersion() throws {
+        let request = EngineRequestEnvelope(
+            id: UUID(uuidString: "99999999-8888-7777-6666-555555555555")!,
+            command: .ping
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: EngineServiceCodec.encode(request)) as? [String: Any]
+        )
+        object["schemaVersion"] = 99
+        let futureData = try JSONSerialization.data(withJSONObject: object)
+
+        XCTAssertThrowsError(
+            try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: futureData)
         )
     }
 }

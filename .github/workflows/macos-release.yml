@@ -138,6 +138,7 @@ jobs:
 
       - name: Build signed release DMG
         env:
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
           APPLE_CODESIGN_IDENTITY: ${{ env.APPLE_CODESIGN_IDENTITY }}
           QWENVOICE_SIGNING_KEYCHAIN: ${{ env.QWENVOICE_SIGNING_KEYCHAIN }}
         run: |
