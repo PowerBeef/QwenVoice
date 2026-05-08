@@ -98,7 +98,7 @@ Static model metadata comes from [`Sources/Resources/qwenvoice_contract.json`](S
 
 On macOS, the Models screen exposes both `Speed / 4-bit` and `Quality / 8-bit` rows for each generation mode, for six downloadable rows total. The app marks the hardware-recommended row and the currently active row separately: 8 GB/floor Macs recommend and default to Speed, while mid/high-memory Macs recommend and default to Quality. Users can install both folders side by side and switch the active installed variant per mode with **Use**.
 
-Downloads come directly from the Hugging Face repos listed above through the contract metadata. iPhone remains Speed-only and exposes the 4-bit rows for its supported model catalog.
+Downloads come directly from the Hugging Face repos listed above through immutable revisions pinned in the contract metadata. iPhone remains Speed-only and exposes the 4-bit rows for its supported model catalog.
 
 ## Building from Source
 

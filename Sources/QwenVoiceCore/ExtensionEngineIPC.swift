@@ -28,6 +28,7 @@ public enum ExtensionEngineCommand: Codable, Equatable, Sendable {
     )
     case ensureCloneReferencePrimed(modelID: String, reference: CloneReference)
     case cancelClonePreparationIfNeeded
+    case cancelActiveGeneration
     case generate(request: GenerationRequest)
     case listPreparedVoices
     case enrollPreparedVoice(name: String, audioPath: String, transcript: String?)

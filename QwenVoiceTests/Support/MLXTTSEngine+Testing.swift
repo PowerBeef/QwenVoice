@@ -16,8 +16,6 @@ extension UnsafeSpeechGenerationModel {
     /// `streamingSessionFactory`: the prewarm and stream handlers below
     /// satisfy the runtime's pre-streaming calls but their stream output
     /// is never consumed (the mock session takes over).
-    ///
-    /// Built for Session 5c of the QwenVoiceNativeRuntime retirement.
     static func makeFullySupportingForTesting(sampleRate: Int = 24_000) -> UnsafeSpeechGenerationModel {
         // The prime/prewarm paths in `NativeEngineRuntime` (clone prime,
         // design conditioning warm-up) consume a single chunk from the
@@ -61,8 +59,6 @@ extension NativeModelLoadResult {
     /// initialized `UnsafeSpeechGenerationModel`. Suitable for tests that
     /// don't actually exercise generation — load-state, prewarm, and
     /// snapshot-state tests.
-    ///
-    /// Built for Session 5c of the QwenVoiceNativeRuntime retirement.
     @MainActor
     static func makeForTesting(
         model: UnsafeSpeechGenerationModel = UnsafeSpeechGenerationModel(),
@@ -95,8 +91,6 @@ extension MLXTTSEngine {
     /// `fatalError`s if a generation is invoked — tests that don't
     /// exercise generation can ignore it; tests that do should pass a
     /// `MockNativeStreamingSession`-backed factory.
-    ///
-    /// Built for Session 5b of the QwenVoiceNativeRuntime retirement.
     @MainActor
     static func makeForTesting(
         modelRegistry: any ModelRegistry,

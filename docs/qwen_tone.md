@@ -8,7 +8,7 @@ For current repo truth about app structure, workflows, or supported behavior, tr
 
 1. `README.md`
 2. `docs/reference/current-state.md`
-3. `CLAUDE.md` for repository and agent workflow rules
+3. `AGENTS.md` for repository and agent workflow rules
 
 ## What the App Exposes
 

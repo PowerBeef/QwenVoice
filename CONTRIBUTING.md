@@ -12,9 +12,9 @@ When facts disagree, trust:
 4. maintained docs under `docs/reference/`
 5. other prose docs
 
-`Sources/Resources/qwenvoice_contract.json` is the source of truth for model, speaker, variant, output, and required-file metadata.
+`Sources/Resources/qwenvoice_contract.json` is the source of truth for model, speaker, variant, output, Hugging Face revision, and required-file metadata.
 
-`CLAUDE.md` is the canonical repository operating guide for coding agents working in this checkout.
+`AGENTS.md` is the canonical repository operating guide for coding agents working in this checkout.
 
 Current model-selection policy:
 

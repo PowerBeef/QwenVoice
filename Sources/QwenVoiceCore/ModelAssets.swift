@@ -198,7 +198,7 @@ public struct LocalModelAssetStore: ModelAssetStore, Hashable, Sendable {
     private static func makeVersion(seed: String, model: ModelDescriptor) -> String {
         let digest = SHA256.hash(
             data: Data(
-                "\(seed)|\(model.id)|\(model.folder)|\(model.artifactVersion)|\(model.huggingFaceRepo)".utf8
+                "\(seed)|\(model.id)|\(model.folder)|\(model.artifactVersion)|\(model.huggingFaceRepo)|\(model.huggingFaceRevision ?? "")".utf8
             )
         )
         return "store-\(digest.prefix(8).map { String(format: "%02x", $0) }.joined())"

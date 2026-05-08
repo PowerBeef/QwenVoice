@@ -45,6 +45,7 @@ final class ModelManagerViewModel: ObservableObject {
         let schemaVersion: Int
         let modelID: String
         let huggingFaceRepo: String
+        let huggingFaceRevision: String?
         let completedAtUTC: String
         let resolvedPath: String
         let sizeBytes: Int
@@ -56,6 +57,7 @@ final class ModelManagerViewModel: ObservableObject {
             case schemaVersion = "schema_version"
             case modelID = "model_id"
             case huggingFaceRepo = "hugging_face_repo"
+            case huggingFaceRevision = "hugging_face_revision"
             case completedAtUTC = "completed_at_utc"
             case resolvedPath = "resolved_path"
             case sizeBytes = "size_bytes"
@@ -257,7 +259,11 @@ final class ModelManagerViewModel: ObservableObject {
 
         let task = Task {
             do {
-                try await downloader.downloadRepo(repo: model.huggingFaceRepo, to: targetDir)
+                try await downloader.downloadRepo(
+                    repo: model.huggingFaceRepo,
+                    revision: model.huggingFaceRevision ?? "main",
+                    to: targetDir
+                )
                 guard isCurrentEpoch(epoch, for: model.id) else { return }
                 let postDownloadSnapshot = localModelInfo(for: model)
                 if !postDownloadSnapshot.complete {
@@ -485,6 +491,7 @@ final class ModelManagerViewModel: ObservableObject {
             schemaVersion: 1,
             modelID: model.id,
             huggingFaceRepo: model.huggingFaceRepo,
+            huggingFaceRevision: model.huggingFaceRevision,
             completedAtUTC: ISO8601DateFormatter().string(from: Date()),
             resolvedPath: resolvedPath,
             sizeBytes: snapshot.sizeBytes,

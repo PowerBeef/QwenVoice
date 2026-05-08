@@ -9,8 +9,6 @@ import os
 /// Tests configure `events` (delivered to the event sink in order before
 /// returning) and `result` (the value that `run` returns), or supply
 /// `error` to make `run` throw after emitting any pre-error events.
-///
-/// Built for Session 5b of the QwenVoiceNativeRuntime retirement.
 final class MockNativeStreamingSession: NativeStreamingSessionRunning, @unchecked Sendable {
     private struct State {
         var events: [GenerationEvent]

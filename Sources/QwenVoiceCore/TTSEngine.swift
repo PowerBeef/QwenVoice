@@ -134,3 +134,8 @@ public protocol TTSEngineRuntimeControlling: TTSEngine {
     func setAllowsProactiveWarmOperations(_ allow: Bool)
     func trimMemory(level: NativeMemoryTrimLevel, reason: String) async
 }
+
+@MainActor
+public protocol ActiveGenerationCancellable: AnyObject {
+    func cancelActiveGeneration() async throws
+}

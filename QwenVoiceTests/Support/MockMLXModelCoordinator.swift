@@ -10,11 +10,9 @@ import os
 /// `loadHandler` when they need a non-trivial result. Tracks invocation
 /// history so tests can assert on call counts and arguments.
 ///
-/// Built for Session 5b of the QwenVoiceNativeRuntime retirement (see
-/// the migration recipe at the top of
-/// `Sources/QwenVoiceNativeRuntime/NativeMLXMacEngine.swift`). Future
-/// Session 5c test ports will widen this mock as needed (e.g. variant-
-/// aware loaders, prewarm-aware capability profiles).
+/// Test double for `MLXModelCoordinating`. Widen this mock alongside
+/// `MLXModelLoadCoordinator` behavior when runtime tests need variant-aware
+/// loaders, prewarm-aware capability profiles, or additional load diagnostics.
 final class MockMLXModelCoordinator: MLXModelCoordinating, @unchecked Sendable {
     enum MockError: Error, LocalizedError {
         case loadHandlerNotConfigured(modelID: String)

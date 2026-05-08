@@ -172,10 +172,10 @@ struct QVoiceiOSApp: App {
             break
         case .execute(let executeReason, let cancelActiveGeneration):
             if cancelActiveGeneration {
-                audioPlayer.abortLivePreviewIfNeeded()
-                deps.engine?.clearGenerationActivity()
+                performMemoryPressureReliefAfterCancellingGeneration(reason: executeReason)
+            } else {
+                performMemoryPressureRelief(reason: executeReason)
             }
-            performMemoryPressureRelief(reason: executeReason)
         }
     }
 
@@ -189,6 +189,24 @@ struct QVoiceiOSApp: App {
         }
 
         performMemoryPressureRelief(reason: reason)
+    }
+
+    private func performMemoryPressureReliefAfterCancellingGeneration(reason: String) {
+        guard let engine = deps.engine else {
+            performMemoryPressureRelief(reason: reason)
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                try await engine.cancelActiveGeneration()
+            } catch {
+                engine.clearVisibleError()
+            }
+            audioPlayer.abortLivePreviewIfNeeded()
+            engine.clearGenerationActivity()
+            performMemoryPressureRelief(reason: reason)
+        }
     }
 
     private func performMemoryPressureRelief(reason: String) {
@@ -244,6 +262,13 @@ struct QVoiceiOSApp: App {
             }
 
             await engine.cancelClonePreparationIfNeeded()
+            if engine.hasActiveGeneration {
+                do {
+                    try await engine.cancelActiveGeneration()
+                } catch {
+                    engine.clearVisibleError()
+                }
+            }
             do {
                 try await engine.unloadModel()
             } catch {

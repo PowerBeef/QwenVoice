@@ -14,6 +14,20 @@ final class ExtensionEngineContractTests: XCTestCase {
         XCTAssertEqual(decoded, envelope)
     }
 
+    func testExtensionRequestEnvelopeRoundTripsCancelActiveGeneration() throws {
+        let envelope = ExtensionEngineRequestEnvelope(
+            id: UUID(uuidString: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff")!,
+            command: .cancelActiveGeneration
+        )
+
+        let encoded = try ExtensionEngineCodec.encode(envelope)
+        let decoded = try ExtensionEngineCodec.decode(ExtensionEngineRequestEnvelope.self, from: encoded)
+
+        XCTAssertEqual(decoded, envelope)
+        XCTAssertEqual(decoded.command.transportName, "cancelActiveGeneration")
+        XCTAssertEqual(decoded.command.transportTimeout, .seconds(10))
+    }
+
     func testLifecycleStateMatchesFoundationReconnectVocabulary() {
         XCTAssertEqual(EngineLifecycleState.idle.rawValue, "idle")
         XCTAssertEqual(EngineLifecycleState.launching.rawValue, "launching")

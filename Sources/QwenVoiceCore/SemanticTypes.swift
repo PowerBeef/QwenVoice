@@ -100,6 +100,7 @@ public struct ModelVariantDescriptor: Identifiable, Hashable, Codable, Sendable 
     public let platforms: Set<ModelArtifactPlatform>
     public let folder: String
     public let huggingFaceRepo: String
+    public let huggingFaceRevision: String?
     public let artifactVersion: String
     public let iosDownloadEligible: Bool
     public let estimatedDownloadBytes: Int64?
@@ -112,6 +113,7 @@ public struct ModelVariantDescriptor: Identifiable, Hashable, Codable, Sendable 
         platforms: Set<ModelArtifactPlatform>,
         folder: String,
         huggingFaceRepo: String,
+        huggingFaceRevision: String? = nil,
         artifactVersion: String,
         iosDownloadEligible: Bool,
         estimatedDownloadBytes: Int64?,
@@ -123,6 +125,7 @@ public struct ModelVariantDescriptor: Identifiable, Hashable, Codable, Sendable 
         self.platforms = platforms
         self.folder = folder
         self.huggingFaceRepo = huggingFaceRepo
+        self.huggingFaceRevision = huggingFaceRevision
         self.artifactVersion = artifactVersion
         self.iosDownloadEligible = iosDownloadEligible
         self.estimatedDownloadBytes = estimatedDownloadBytes
@@ -137,6 +140,7 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
     public let folder: String
     public let mode: GenerationMode
     public let huggingFaceRepo: String
+    public let huggingFaceRevision: String?
     public let artifactVersion: String
     public let iosDownloadEligible: Bool
     public let estimatedDownloadBytes: Int64?
@@ -151,6 +155,7 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
         folder: String,
         mode: GenerationMode,
         huggingFaceRepo: String,
+        huggingFaceRevision: String? = nil,
         artifactVersion: String,
         iosDownloadEligible: Bool,
         estimatedDownloadBytes: Int64?,
@@ -164,6 +169,7 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
         self.folder = folder
         self.mode = mode
         self.huggingFaceRepo = huggingFaceRepo
+        self.huggingFaceRevision = huggingFaceRevision
         self.artifactVersion = artifactVersion
         self.iosDownloadEligible = iosDownloadEligible
         self.estimatedDownloadBytes = estimatedDownloadBytes
@@ -236,6 +242,7 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
             folder: variant.folder,
             mode: mode,
             huggingFaceRepo: variant.huggingFaceRepo,
+            huggingFaceRevision: variant.huggingFaceRevision,
             artifactVersion: variant.artifactVersion,
             iosDownloadEligible: variant.iosDownloadEligible,
             estimatedDownloadBytes: variant.estimatedDownloadBytes,

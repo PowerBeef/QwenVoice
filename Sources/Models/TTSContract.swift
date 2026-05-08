@@ -184,6 +184,7 @@ enum TTSContract {
             folder: descriptor.folder,
             mode: mode,
             huggingFaceRepo: descriptor.huggingFaceRepo,
+            huggingFaceRevision: descriptor.huggingFaceRevision,
             outputSubfolder: descriptor.outputSubfolder,
             requiredRelativePaths: descriptor.requiredRelativePaths,
             baseModelID: baseModelID,

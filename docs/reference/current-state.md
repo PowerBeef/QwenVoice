@@ -14,7 +14,8 @@ This document is the shared factual reference for the current QwenVoice reposito
   - `Mac mini M1, 8 GB RAM`
   - `iPhone 15 Pro`
 - Version source: `project.yml`
-- Current version/build: `1.2.3` / `15`
+- Current RC1 workspace version/build: `2.0.0` / `16`
+- Shipped public stable version/build: `1.2.3` / `15`
 
 The iPhone app target is Vocello-branded. The next macOS release ships as `Vocello.app` inside `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum — completing the public rebrand on macOS. The supporting framework/service/runtime modules (`QwenVoiceCore`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`, `QwenVoiceNative`) keep their `QwenVoice` names internally for continuity.
 
@@ -74,7 +75,7 @@ That manifest is the source of truth for:
 - grouped speakers
 - output subfolders
 - required model files
-- Hugging Face repos
+- Hugging Face repos and immutable revisions
 
 The shared logical mode families remain:
 
@@ -151,7 +152,7 @@ xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic
 ./scripts/release_ios_testflight.sh
 ```
 
-Visual and interaction verification is covered first by the `e2e` qa.sh smoke lane. Manual local app launches remain useful after project-input checks, QA layers, and builds are green. UI benchmark validation drives the visible app via the `macos-ax-applescript` driver (osascript / System Events / AppleScript / `screencapture` / shell process probes / optional `cliclick` fallback); the scripts preserve timing, trace, process/memory, screenshot, audio-QC, and macOS Accessibility/AppleScript probe artifacts. Visual review of completed runs is fine via Claude Code's screenshotting tooling, but never drive a benchmark interactively from a heavy agent host.
+Visual and interaction verification is covered first by the `e2e` qa.sh smoke lane. Manual local app launches remain useful after project-input checks, QA layers, and builds are green. UI benchmark validation drives the visible app via the `macos-ax-applescript` driver (osascript / System Events / AppleScript / `screencapture` / shell process probes / optional `cliclick` fallback); the scripts preserve timing, trace, process/memory, screenshot, audio-QC, and macOS Accessibility/AppleScript probe artifacts. Visual review of completed runs is fine via agent screenshotting tooling, but never drive a benchmark interactively from a heavy agent host.
 
 For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The deterministic script uses isolated derived-data and `.xcresult` roots so stale hosted-test bundles cannot pollute app codesigning.
 
@@ -163,7 +164,7 @@ The maintained qa.sh and foundation paths now use:
 
 ## Current Documentation Boundaries
 
-- `CLAUDE.md` is the canonical repository operating guide for coding agents.
+- `AGENTS.md` is the canonical repository operating guide for coding agents.
 - `docs/README.md` is the index of the maintained documentation set.
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, `docs/reference/live-testing.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `docs/reference/privacy-storage.md` records local storage, deletion paths, and voice-cloning consent posture.

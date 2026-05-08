@@ -11,6 +11,32 @@ private final class ExtensionReplyHandlerBox: @unchecked Sendable {
     }
 }
 
+private actor ExtensionActiveGenerationCoordinator {
+    private struct ActiveGeneration {
+        let id: UUID
+        let cancel: @Sendable () -> Void
+    }
+
+    private var activeGeneration: ActiveGeneration?
+
+    func register(cancel: @escaping @Sendable () -> Void) -> UUID {
+        let id = UUID()
+        activeGeneration = ActiveGeneration(id: id, cancel: cancel)
+        return id
+    }
+
+    func finish(id: UUID) {
+        guard activeGeneration?.id == id else { return }
+        activeGeneration = nil
+    }
+
+    func cancelCurrent() {
+        let cancel = activeGeneration?.cancel
+        activeGeneration = nil
+        cancel?()
+    }
+}
+
 @MainActor
 private final class RuntimeContext: @unchecked Sendable {
     let appSupportDirectory: URL
@@ -66,6 +92,7 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
     }()
 
     private let sessionLock = NSLock()
+    private let activeGenerationCoordinator = ExtensionActiveGenerationCoordinator()
     private var activeSession: ActiveSession?
     private var runtimeContext: RuntimeContext?
 
@@ -188,7 +215,23 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
             try await requireRuntimeContext().engine.cancelClonePreparationIfNeeded()
             return .void
         case .generate(let request):
-            return .generationResult(try await requireRuntimeContext().engine.generate(request))
+            let runtimeContext = try requireRuntimeContext()
+            let generationTask = Task { @MainActor in
+                try await runtimeContext.engine.generate(request)
+            }
+            let generationID = await activeGenerationCoordinator.register {
+                generationTask.cancel()
+            }
+            defer {
+                Task {
+                    await self.activeGenerationCoordinator.finish(id: generationID)
+                }
+            }
+            return .generationResult(try await generationTask.value)
+        case .cancelActiveGeneration:
+            await activeGenerationCoordinator.cancelCurrent()
+            try requireRuntimeContext().engine.clearGenerationActivity()
+            return .void
         case .listPreparedVoices:
             return .preparedVoices(try await requireRuntimeContext().engine.listPreparedVoices())
         case .enrollPreparedVoice(let name, let audioPath, let transcript):
@@ -317,11 +360,16 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
         }
 
         Self.logger.error("\(message, privacy: .public)")
-        Task { @MainActor in
-            await self.runtimeContext?.engine.cancelClonePreparationIfNeeded()
-            self.runtimeContext?.engine.clearGenerationActivity()
-            try? await self.runtimeContext?.engine.unloadModel()
-            self.runtimeContext = nil
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let contextAtSessionEnd = self.runtimeContext
+            await self.activeGenerationCoordinator.cancelCurrent()
+            await contextAtSessionEnd?.engine.cancelClonePreparationIfNeeded()
+            contextAtSessionEnd?.engine.clearGenerationActivity()
+            try? await contextAtSessionEnd?.engine.unloadModel()
+            if self.runtimeContext === contextAtSessionEnd {
+                self.runtimeContext = nil
+            }
         }
     }
 

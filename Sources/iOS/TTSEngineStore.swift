@@ -171,6 +171,16 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         notifyMemoryContextDidChange()
     }
 
+    func cancelActiveGeneration() async throws {
+        defer {
+            activeGenerationDepth = 0
+            hasActiveGeneration = false
+            syncFromBackend()
+            notifyMemoryContextDidChange()
+        }
+        try await backend.cancelActiveGeneration()
+    }
+
     func generate(_ request: GenerationRequest) async throws -> GenerationResult {
         if case .unsupported(let reason) = supportDecision(for: request) {
             throw MLXTTSEngineError.unsupportedRequest(reason)
@@ -367,6 +377,7 @@ final class AnyTTSEngineBackend {
     private let prefetchInteractiveReadinessIfNeededBlock: (GenerationRequest) async -> InteractivePrefetchDiagnostics?
     private let ensureCloneReferencePrimedBlock: (String, CloneReference) async throws -> Void
     private let cancelClonePreparationIfNeededBlock: () async -> Void
+    private let cancelActiveGenerationBlock: () async throws -> Void
     private let generateBlock: (GenerationRequest) async throws -> GenerationResult
     private let listPreparedVoicesBlock: () async throws -> [PreparedVoice]
     private let enrollPreparedVoiceBlock: (String, String, String?) async throws -> PreparedVoice
@@ -420,6 +431,11 @@ final class AnyTTSEngineBackend {
         }
         self.ensureCloneReferencePrimedBlock = { try await engine.ensureCloneReferencePrimed(modelID: $0, reference: $1) }
         self.cancelClonePreparationIfNeededBlock = { await engine.cancelClonePreparationIfNeeded() }
+        if let engine = engine as? any ActiveGenerationCancellable {
+            self.cancelActiveGenerationBlock = { try await engine.cancelActiveGeneration() }
+        } else {
+            self.cancelActiveGenerationBlock = {}
+        }
         self.generateBlock = { try await engine.generate($0) }
         self.listPreparedVoicesBlock = { try await engine.listPreparedVoices() }
         self.enrollPreparedVoiceBlock = { try await engine.enrollPreparedVoice(name: $0, audioPath: $1, transcript: $2) }
@@ -472,6 +488,7 @@ final class AnyTTSEngineBackend {
         try await ensureCloneReferencePrimedBlock(modelID, reference)
     }
     func cancelClonePreparationIfNeeded() async { await cancelClonePreparationIfNeededBlock() }
+    func cancelActiveGeneration() async throws { try await cancelActiveGenerationBlock() }
     func generate(_ request: GenerationRequest) async throws -> GenerationResult { try await generateBlock(request) }
     func listPreparedVoices() async throws -> [PreparedVoice] { try await listPreparedVoicesBlock() }
     func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice {

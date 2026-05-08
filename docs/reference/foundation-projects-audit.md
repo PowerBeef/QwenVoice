@@ -25,7 +25,7 @@ The healthiest dependencies are `GRDB.swift`, `swift-huggingface`, `swift-jinja`
 
 | Foundation | Current source | Still used? | Currentness | Customized locally? | Recommendation |
 | --- | --- | --- | --- | --- | --- |
-| Qwen3-TTS / mlx-community models | `Sources/Resources/qwenvoice_contract.json` | Yes, all three modes | Model repos are live, but not pinned to immutable revisions | No local model files are tracked; app contract customizes mode/variant mapping | Add optional immutable revision pins in a future stability pass |
+| Qwen3-TTS / mlx-community models | `Sources/Resources/qwenvoice_contract.json` | Yes, all three modes | Model repos are pinned to immutable revisions in the contract | No local model files are tracked; app contract customizes mode/variant mapping | Keep repo IDs, artifact versions, and revision pins aligned |
 | `mlx-audio-swift` | `third_party_patches/mlx-audio-swift/` | Yes, central runtime foundation | Unknown exact snapshot; upstream SHA is not recorded | Yes, intentionally vendored and adapted | Record upstream SHA before further backend work |
 | MLX Swift | `project.yml`, Package.resolved | Yes, native tensor/runtime dependency | Pinned `0.30.6`; latest observed tag `0.31.3` | No | Defer update to vendor refresh benchmark |
 | MLX Swift LM | Vendored package dependency | Yes, via MLXAudio TTS internals | Pinned `2.30.6`; latest observed tag `3.31.3` | No | Defer update to vendor refresh benchmark |
@@ -42,7 +42,7 @@ Qwen3-TTS remains the model foundation for the current product. The root README 
 | Voice Design | `mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit` | `2026.04.05.2` |
 | Voice Cloning | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit` | `2026.04.05.2` |
 
-macOS treats both variant repos as first-class downloadable rows, with the active default and recommendation derived from hardware class. iPhone remains Speed-only. The live Hugging Face checks recorded during this 2026-04-28 audit found the referenced model repos and repository SHAs below; they were not refreshed for the model-selection documentation update.
+macOS treats both variant repos as first-class downloadable rows, with the active default and recommendation derived from hardware class. iPhone remains Speed-only. The live Hugging Face checks recorded during the 2026-05-08 RC1 remediation found the referenced model repos and repository SHAs below; these SHAs are now pinned in the contract as `huggingFaceRevision`.
 
 | Model repo | Last modified | Current SHA |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ macOS treats both variant repos as first-class downloadable rows, with the activ
 | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` | 2026-01-25 | `e7dd0585652209fa0d7783659aad4e8a324de11c` |
 | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit` | 2026-01-25 | `37e955a1deb861c088ae5f3a67043185f3d1a60c` |
 
-The app does not currently pin those remote SHAs in the contract. The `artifactVersion` field is a repo contract/delivery marker, not an immutable Hugging Face revision lock. That is acceptable for development, but release hardening would benefit from a revision field so the model catalog can prove exactly which remote artifacts it expects.
+The app now pins those remote SHAs in the contract. The `artifactVersion` field remains a repo contract/delivery marker; `huggingFaceRevision` is the immutable Hugging Face revision lock used by macOS downloads.
 
 ### Vendored `mlx-audio-swift`
 
@@ -148,7 +148,7 @@ The behind transitive packages are not urgent by themselves. Updating them shoul
 ## Actionable Recommendations
 
 1. Record the exact upstream `mlx-audio-swift` commit SHA and snapshot date before any further backend or vendor work. This is the largest provenance gap.
-2. Add optional immutable Hugging Face revision pins to the model contract in a future release-hardening pass, while keeping the existing repo IDs and artifact versions.
+2. Keep immutable Hugging Face revision pins current only when the maintainer intentionally changes the model artifact set.
 3. Defer MLX Swift, MLX Swift LM, and Swift Transformers upgrades until a dedicated vendor refresh can run source tests, macOS/iOS foundation builds, autonomous audio QC, and cold/warm generation timing.
 4. Keep `GRDB.swift` and `swift-huggingface` unchanged for now because their pinned versions match the latest observed release tags.
 5. Keep `third_party_patches/mlx-audio-swift/` narrow and readable; do not mass-format or fold unrelated upstream products into app targets.

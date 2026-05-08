@@ -11,9 +11,7 @@ private struct ContractManifest: Decodable {
 /// that are missing under the install directory so callers can surface a
 /// precise download/repair prompt without re-running the file walk.
 ///
-/// Mirrors the legacy `QwenVoiceNativeRuntime.NativeModelAvailability` enum.
-/// Once the NativeRuntime retirement lands, this becomes the only Apple-
-/// platform availability surface.
+/// Apple-platform availability surface for contract-backed model descriptors.
 public enum ModelAvailability: Equatable, Sendable {
     case unknown
     case unavailable(descriptor: ModelDescriptor, missingRequiredPaths: [String])
@@ -231,6 +229,7 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
         guard !model.artifactVersion.isEmpty else {
             throw Error.invalidModel(id: context, reason: "missing artifactVersion")
         }
+        try validateHuggingFaceRevision(model.huggingFaceRevision, context: context)
         guard !model.outputSubfolder.isEmpty else {
             throw Error.invalidModel(id: context, reason: "missing outputSubfolder")
         }
@@ -246,6 +245,10 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
             guard !variant.artifactVersion.isEmpty else {
                 throw Error.invalidModel(id: context, reason: "variant '\(variant.id)' missing artifactVersion")
             }
+            try validateHuggingFaceRevision(
+                variant.huggingFaceRevision,
+                context: "\(context) variant '\(variant.id)'"
+            )
             guard !variant.requiredRelativePaths.isEmpty else {
                 throw Error.invalidModel(id: context, reason: "variant '\(variant.id)' missing requiredRelativePaths")
             }
@@ -253,6 +256,18 @@ public struct ContractBackedModelRegistry: ModelRegistry, Hashable, Sendable {
                estimatedDownloadBytes < 0 {
                 throw Error.invalidModel(id: context, reason: "variant '\(variant.id)' estimatedDownloadBytes must be non-negative")
             }
+        }
+    }
+
+    private static func validateHuggingFaceRevision(_ revision: String?, context: String) throws {
+        guard let revision,
+              !revision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw Error.invalidModel(id: context, reason: "missing huggingFaceRevision")
+        }
+        let lowercaseHex = CharacterSet(charactersIn: "0123456789abcdef")
+        guard revision.count == 40,
+              revision.unicodeScalars.allSatisfy({ lowercaseHex.contains($0) }) else {
+            throw Error.invalidModel(id: context, reason: "huggingFaceRevision must be a 40-character lowercase hex commit SHA")
         }
     }
 

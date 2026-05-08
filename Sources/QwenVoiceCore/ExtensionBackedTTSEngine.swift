@@ -5,7 +5,7 @@ import Foundation
 public typealias ExtensionEngineLifecycleState = EngineLifecycleState
 
 @MainActor
-public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
+public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling, ActiveGenerationCancellable {
     public let modelRegistry: any ModelRegistry
 
     @Published public private(set) var loadState: EngineLoadState = .idle
@@ -178,6 +178,13 @@ public final class ExtensionBackedTTSEngine: TTSEngineRuntimeControlling {
 
     public func cancelClonePreparationIfNeeded() async {
         await coordinator.fireAndForget(.cancelClonePreparationIfNeeded)
+    }
+
+    public func cancelActiveGeneration() async throws {
+        let reply = try await coordinator.send(.cancelActiveGeneration)
+        guard case .void = reply else {
+            throw ExtensionEngineTransportError.invalidReply
+        }
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {

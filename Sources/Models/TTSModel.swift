@@ -31,6 +31,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
     let folder: String      // e.g. "Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
     let mode: GenerationMode
     let huggingFaceRepo: String
+    let huggingFaceRevision: String?
     let outputSubfolder: String
     let requiredRelativePaths: [String]
     let baseModelID: String
@@ -46,6 +47,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
         folder: String,
         mode: GenerationMode,
         huggingFaceRepo: String,
+        huggingFaceRevision: String? = nil,
         outputSubfolder: String,
         requiredRelativePaths: [String],
         baseModelID: String? = nil,
@@ -60,6 +62,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
         self.folder = folder
         self.mode = mode
         self.huggingFaceRepo = huggingFaceRepo
+        self.huggingFaceRevision = huggingFaceRevision
         self.outputSubfolder = outputSubfolder
         self.requiredRelativePaths = requiredRelativePaths
         self.baseModelID = baseModelID ?? id

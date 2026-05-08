@@ -2,12 +2,12 @@
 # scripts/bench_ui_generation.sh — timing primitives for the desktop-UI
 # Vocello generation benchmark.
 #
-# This is the timing helper called by Claude (or you) AFTER each
+# This is the timing helper called by an automation agent (or you) AFTER each
 # Cmd+Return to a foreground Vocello window. It does not drive the UI
 # itself — it only times the post-trigger pipeline (file appears →
 # size stable → audio decodable) and computes wall_secs / audio_secs /
 # RTF. Driving the UI (paste brief, paste script, click Generate / hit
-# Cmd+Return) lives in Claude's computer-control session because
+# Cmd+Return) lives in the automation driver's computer-control session because
 # Vocello's GenerationDraft state isn't surfaced via CLI.
 #
 # NO SWAP / RAM PREFLIGHT (by policy). The desktop-UI bench
@@ -35,7 +35,7 @@
 #
 # CSV columns: mode,length,state,sample,wall_secs,audio_secs,rtf,filename
 #
-# This is the **default** benchmark method per CLAUDE.md "Performance
+# This is the **default** benchmark method per AGENTS.md "Common Commands"
 # benchmarking" — it captures the full user-perceived pipeline (paste,
 # UI activation, generation, file write, autoplay handoff, live preview
 # behavior). For tighter engine-only regression checks, see

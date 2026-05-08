@@ -27,10 +27,8 @@ import XCTest
 /// The production code paths covered by this technique live in:
 ///   - `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift`
 ///     (`PCM16ChunkFileWriter.write`)
-///   - `Sources/QwenVoiceNativeRuntime/NativeStreamingSynthesisSession.swift`
-///     (same pattern in the retained-compat copy)
 ///
-/// If either copy regresses to the old `let file = … write … <implicit scope exit>`
+/// If this writer regresses to the old `let file = … write … <implicit scope exit>`
 /// pattern without `synchronize`, the decoded-back `audioFile.length == 0`
 /// failure mode can return.
 final class StreamingChunkFinalizationTests: XCTestCase {

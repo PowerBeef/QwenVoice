@@ -60,6 +60,7 @@ final class ModelManagerViewModelTests: XCTestCase {
         )
         XCTAssertEqual(metadata["model_id"] as? String, installedModel.id)
         XCTAssertEqual(metadata["hugging_face_repo"] as? String, installedModel.huggingFaceRepo)
+        XCTAssertEqual(metadata["hugging_face_revision"] as? String, installedModel.huggingFaceRevision)
     }
 
     @MainActor
@@ -341,6 +342,8 @@ final class ModelManagerViewModelTests: XCTestCase {
 }
 
 final class HuggingFaceDownloaderPathValidationTests: XCTestCase {
+    private let pinnedRevision = "0123456789abcdef0123456789abcdef01234567"
+
     func testValidatedRelativeRepoPathRejectsTraversal() {
         XCTAssertThrowsError(try HuggingFaceDownloader.validatedRelativeRepoPath("../model.safetensors")) { error in
             guard case HuggingFaceDownloader.DownloadError.invalidRemotePath(let path) = error else {
@@ -373,5 +376,30 @@ final class HuggingFaceDownloaderPathValidationTests: XCTestCase {
         XCTAssertTrue(destination.path.hasPrefix(root.path + "/"))
         XCTAssertEqual(destination.lastPathComponent, "model.safetensors")
         XCTAssertEqual(destination.deletingLastPathComponent().lastPathComponent, "speech_tokenizer")
+    }
+
+    func testRepositoryTreeURLUsesPinnedRevision() {
+        let url = HuggingFaceDownloader.repositoryTreeURL(
+            apiBaseURL: URL(string: "https://huggingface.co/api/models")!,
+            repo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+            revision: pinnedRevision
+        )
+
+        XCTAssertTrue(url.path.hasSuffix("/tree/\(pinnedRevision)"))
+        XCTAssertFalse(url.path.contains("/tree/main"))
+        XCTAssertEqual(url.query, "recursive=true")
+    }
+
+    func testFileResolveURLUsesPinnedRevision() throws {
+        let url = try HuggingFaceDownloader.fileResolveURL(
+            resolveBaseURL: URL(string: "https://huggingface.co")!,
+            repo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+            revision: pinnedRevision,
+            relativePath: "speech_tokenizer/model.safetensors"
+        )
+
+        XCTAssertTrue(url.path.contains("/resolve/\(pinnedRevision)/"))
+        XCTAssertFalse(url.path.contains("/resolve/main/"))
+        XCTAssertTrue(url.path.hasSuffix("/speech_tokenizer/model.safetensors"))
     }
 }

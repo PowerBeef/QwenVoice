@@ -39,8 +39,8 @@ Apple-native craftsmanship with a warm golden brand color (Vocello gold). Local-
 
 - **ElevenLabs and SaaS-TTS dashboards.** Cream / light backgrounds, dense sidebars with too many dropdowns, busy "studio" panels, oversized gradient CTAs, "Try a sample" prompts, credit-meter chrome. Vocello is not a cloud TTS competitor and must not look like one.
 - **Generic dev-tool dark mode.** Neon-on-near-black terminal palette, monospace headlines, GitHub-shaped chrome, "DevTools" affect. The saturated category reflex for "serious tool" — Vocello's seriousness comes from craft, not from looking like a CLI.
-- **Marketing-style hero shells inside the app.** Big headline + screenshot + gradient + "Get started" CTAs, scroll-driven sections. Already explicitly banned in CLAUDE.md; the app surface is not a landing page.
-- **Desktop-studio shell with inspector + oversized hero chrome.** Explicitly retired in CLAUDE.md. Do not propose reintroducing it under any name (workbench, console, inspector, console-pane, etc.).
+- **Marketing-style hero shells inside the app.** Big headline + screenshot + gradient + "Get started" CTAs, scroll-driven sections. Already explicitly banned in AGENTS.md; the app surface is not a landing page.
+- **Desktop-studio shell with inspector + oversized hero chrome.** Explicitly retired in AGENTS.md. Do not propose reintroducing it under any name (workbench, console, inspector, console-pane, etc.).
 
 ## Design Principles
 

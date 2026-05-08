@@ -22,6 +22,6 @@ QwenVoice/Vocello keeps this snapshot in-tree so the native Apple-platform runti
 
 ## Current Upstream Revision
 
-The exact upstream source revision for the vendored tree still cannot be recovered from nested git history. Treat the tree committed in the root QwenVoice repository at `9696157` as the local baseline snapshot before the 2026-04-28 dependency-refresh experiment.
+The exact upstream source revision for the vendored tree still cannot be recovered from nested git history and must not be guessed. Treat the tree committed in the root QwenVoice repository at `9696157` as the local baseline snapshot before the 2026-04-28 dependency-refresh experiment.
 
-The next full vendor refresh should replace this section with the exact upstream commit SHA and snapshot date.
+The next full vendor refresh must replace this section with the exact upstream commit SHA, snapshot date, and a short summary of retained QwenVoice/Vocello deltas before any package pins or generated project inputs are changed.

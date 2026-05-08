@@ -25,6 +25,33 @@ final class TTSContractTests: XCTestCase {
         }
     }
 
+    func testContractPinsHuggingFaceRevisions() throws {
+        for model in TTSContract.models {
+            assertPinnedHuggingFaceRevision(model.huggingFaceRevision, label: model.id)
+        }
+
+        let manifestURL = try XCTUnwrap(TTSContract.manifestURL)
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let rawModels = try XCTUnwrap(manifest["models"] as? [[String: Any]])
+        for rawModel in rawModels {
+            let modelID = rawModel["id"] as? String ?? "unknown"
+            assertPinnedHuggingFaceRevision(
+                rawModel["huggingFaceRevision"] as? String,
+                label: modelID
+            )
+            for rawVariant in rawModel["variants"] as? [[String: Any]] ?? [] {
+                let variantID = rawVariant["id"] as? String ?? "unknown"
+                assertPinnedHuggingFaceRevision(
+                    rawVariant["huggingFaceRevision"] as? String,
+                    label: "\(modelID).\(variantID)"
+                )
+            }
+        }
+    }
+
     func testModelForModeReturnsCorrectModel() {
         for mode in QwenVoice.GenerationMode.allCases {
             let model = TTSModel.model(for: mode)
@@ -133,6 +160,15 @@ final class TTSContractTests: XCTestCase {
         XCTAssertTrue(
             requiredRelativePaths.contains("speech_tokenizer/model.safetensors"),
             "\(label) must include the Qwen3-TTS speech tokenizer weights."
+        )
+    }
+
+    private func assertPinnedHuggingFaceRevision(_ revision: String?, label: String) {
+        let value = revision ?? ""
+        let pattern = #"^[0-9a-f]{40}$"#
+        XCTAssertNotNil(
+            value.range(of: pattern, options: .regularExpression),
+            "\(label) must pin a 40-character lowercase Hugging Face commit SHA."
         )
     }
 

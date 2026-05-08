@@ -60,6 +60,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     struct DownloadStateManifest: Codable, Equatable {
         let schemaVersion: Int
         let repo: String
+        let revision: String
         let targetFolder: String
         let updatedAtUTC: String
         let files: [FileEntry]
@@ -67,6 +68,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         enum CodingKeys: String, CodingKey {
             case schemaVersion = "schema_version"
             case repo
+            case revision
             case targetFolder = "target_folder"
             case updatedAtUTC = "updated_at_utc"
             case files
@@ -483,10 +485,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     // MARK: - Public API
 
     /// Download all files from a HuggingFace repo into `targetDir`.
-    func downloadRepo(repo: String, to targetDir: URL) async throws {
+    func downloadRepo(repo: String, revision: String = "main", to targetDir: URL) async throws {
         await state.resetForNewRepositoryDownload()
 
-        let files = try await listFiles(repo: repo)
+        let files = try await listFiles(repo: repo, revision: revision)
         let totalBytes = files.reduce(Int64(0)) { $0 + $1.size }
         await state.beginRepositoryDownload(totalBytes: totalBytes, totalFiles: files.count)
 
@@ -497,11 +499,12 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         try fileManager.createDirectory(at: filesRoot, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: partialRoot, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: resumeRoot, withIntermediateDirectories: true)
-        try persistDownloadState(
-            repo: repo,
-            targetDir: targetDir,
-            files: files,
-            stagingRoot: stagingRoot
+            try persistDownloadState(
+                repo: repo,
+                revision: revision,
+                targetDir: targetDir,
+                files: files,
+                stagingRoot: stagingRoot
         )
 
         var completedBytes: Int64 = 0
@@ -542,11 +545,12 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
                     await state.setPhase(.downloading)
                 }
 
-                let downloadURL = resolveBaseURL
-                    .appendingPathComponent(repo)
-                    .appendingPathComponent("resolve")
-                    .appendingPathComponent("main")
-                    .appendingPathComponent(relativePath)
+                let downloadURL = try Self.fileResolveURL(
+                    resolveBaseURL: resolveBaseURL,
+                    repo: repo,
+                    revision: revision,
+                    relativePath: relativePath
+                )
                 let baseCompletedBytes = completedBytes
                 let baseCompletedFiles = completedFiles
 
@@ -595,12 +599,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
 
     // MARK: - Private: List Files
 
-    private func listFiles(repo: String) async throws -> [RepoFile] {
-        let url = apiBaseURL
-            .appendingPathComponent(repo)
-            .appendingPathComponent("tree")
-            .appendingPathComponent("main")
-            .appending(queryItems: [URLQueryItem(name: "recursive", value: "true")])
+    private func listFiles(repo: String, revision: String) async throws -> [RepoFile] {
+        let url = Self.repositoryTreeURL(apiBaseURL: apiBaseURL, repo: repo, revision: revision)
 
         let (data, response) = try await session.data(from: url)
 
@@ -609,6 +609,28 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         }
 
         return try Self.repoFiles(fromAPIData: data)
+    }
+
+    static func repositoryTreeURL(apiBaseURL: URL, repo: String, revision: String) -> URL {
+        apiBaseURL
+            .appendingPathComponent(repo)
+            .appendingPathComponent("tree")
+            .appendingPathComponent(revision)
+            .appending(queryItems: [URLQueryItem(name: "recursive", value: "true")])
+    }
+
+    static func fileResolveURL(
+        resolveBaseURL: URL,
+        repo: String,
+        revision: String,
+        relativePath: String
+    ) throws -> URL {
+        let validatedRelativePath = try validatedRelativeRepoPath(relativePath)
+        return resolveBaseURL
+            .appendingPathComponent(repo)
+            .appendingPathComponent("resolve")
+            .appendingPathComponent(revision)
+            .appendingPathComponent(validatedRelativePath)
     }
 
     // MARK: - Private: Download Single File
@@ -780,6 +802,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
 
     private func persistDownloadState(
         repo: String,
+        revision: String,
         targetDir: URL,
         files: [RepoFile],
         stagingRoot: URL
@@ -787,6 +810,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         let manifest = DownloadStateManifest(
             schemaVersion: 1,
             repo: repo,
+            revision: revision,
             targetFolder: targetDir.lastPathComponent,
             updatedAtUTC: ISO8601DateFormatter().string(from: Date()),
             files: files.map {

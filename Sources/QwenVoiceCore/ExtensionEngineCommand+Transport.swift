@@ -23,6 +23,8 @@ extension ExtensionEngineCommand {
             "ensureCloneReferencePrimed"
         case .cancelClonePreparationIfNeeded:
             "cancelClonePreparationIfNeeded"
+        case .cancelActiveGeneration:
+            "cancelActiveGeneration"
         case .generate:
             "generate"
         case .listPreparedVoices:
@@ -52,7 +54,7 @@ extension ExtensionEngineCommand {
              .prefetchInteractiveReadinessIfNeeded, .ensureCloneReferencePrimed,
              .trimMemory:
             .seconds(180)
-        case .ping, .cancelClonePreparationIfNeeded, .listPreparedVoices,
+        case .ping, .cancelClonePreparationIfNeeded, .cancelActiveGeneration, .listPreparedVoices,
              .enrollPreparedVoice, .deletePreparedVoice,
              .clearGenerationActivity, .clearVisibleError:
             .seconds(10)

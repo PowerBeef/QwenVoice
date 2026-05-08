@@ -6,13 +6,6 @@ import XCTest
 
 /// Direct unit tests for `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift`.
 ///
-/// Constructed for Session 5c batch 7 of the QwenVoiceNativeRuntime
-/// retirement. Until this file landed, the session's retention-flag
-/// cleanup path (Tier 1.5 / 4.3) was only covered by
-/// `NativeMLXMacEngineTests.testNativeMLXMacEngineCancellationCleansUp
-/// StreamSessionArtifacts` driving the legacy NativeMLXMacEngine — when
-/// the legacy module retires, that coverage moves here.
-///
 /// Tests construct a real `NativeStreamingSynthesisSession` (no mocks
 /// of the session itself — those would prove nothing about the actual
 /// cleanup invariants), drive it with a slow-streaming
@@ -41,10 +34,8 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
     /// WAV must both be removed before the error propagates out of
     /// `session.run`.
     ///
-    /// This is the deterministic equivalent of the legacy
-    /// `NativeMLXMacEngineTests.testNativeMLXMacEngineCancellationCleans
-    /// UpStreamSessionArtifacts` regression. Cancellation propagation
-    /// from outer-Task to the detached `execution.run` consumer is
+    /// Cancellation propagation from outer-Task to the detached
+    /// `execution.run` consumer is
     /// timing-sensitive (the for-await iterator only checkpoints after
     /// each event arrives, not while blocked on a producer sleep), so
     /// driving the same cleanup defer via a producer-side error gives

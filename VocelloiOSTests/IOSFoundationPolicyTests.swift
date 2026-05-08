@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import QVoiceiOS
 @testable import QwenVoiceCore
@@ -45,6 +46,48 @@ final class IOSFoundationPolicyTests: XCTestCase {
             matrix.iOS.extension.engineCapabilities,
             EngineCapabilities.iOSExtensionDefault
         )
+    }
+
+    @MainActor
+    func testTTSEngineStoreForwardsActiveGenerationCancellationAndResetsState() async throws {
+        let engine = IOSCancellableEngineFixture()
+        let store = TTSEngineStore(
+            backend: AnyTTSEngineBackend(
+                engine: engine,
+                supportsSavedVoiceMutation: true,
+                supportsModelManagementMutation: true,
+                supportedModes: [.custom]
+            ),
+            memorySnapshotProvider: { healthyIOSMemorySnapshot() }
+        )
+        let request = GenerationRequest(
+            mode: .custom,
+            modelID: "pro_custom_speed",
+            text: "Cancel this iPhone generation.",
+            outputPath: "/tmp/ios-cancel.wav",
+            shouldStream: true,
+            payload: .custom(speakerID: "vivian", deliveryStyle: nil)
+        )
+
+        let generationTask = Task {
+            try await store.generate(request)
+        }
+        await engine.waitForGenerationStart()
+        XCTAssertTrue(store.hasActiveGeneration)
+
+        try await store.cancelActiveGeneration()
+
+        XCTAssertEqual(engine.cancelActiveGenerationCallCount, 1)
+        XCTAssertFalse(store.hasActiveGeneration)
+
+        engine.finishGeneration(throwing: CancellationError())
+        do {
+            _ = try await generationTask.value
+            XCTFail("Expected suspended generation to finish with cancellation.")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
     }
 
     func testIOSMemoryBudgetPolicyBandsAdmissionAndTrimLevels() {
@@ -178,5 +221,139 @@ private struct PlatformCapabilityMatrix: Decodable {
     struct RuntimeSurface: Decodable {
         let applicationGroups: [String]
         let engineCapabilities: EngineCapabilities
+    }
+}
+
+private func healthyIOSMemorySnapshot() -> IOSMemorySnapshot {
+    IOSMemorySnapshot(
+        totalDeviceRAMBytes: 8 * 1_073_741_824,
+        availableHeadroomBytes: 3 * 1_073_741_824,
+        residentBytes: nil,
+        physFootprintBytes: nil,
+        compressedBytes: nil,
+        gpuAllocatedBytes: 128 * 1_048_576,
+        gpuRecommendedWorkingSetBytes: 2 * 1_073_741_824,
+        hasUnifiedMemory: true
+    )
+}
+
+private struct IOSPolicyStubModelRegistry: ModelRegistry {
+    let models = [
+        ModelDescriptor(
+            id: "pro_custom_speed",
+            name: "Custom Voice Speed",
+            tier: "pro",
+            folder: "Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+            mode: .custom,
+            huggingFaceRepo: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+            huggingFaceRevision: "0123456789abcdef0123456789abcdef01234567",
+            artifactVersion: "2026.04.05.2",
+            iosDownloadEligible: true,
+            estimatedDownloadBytes: 1,
+            outputSubfolder: "CustomVoice",
+            requiredRelativePaths: ["model.safetensors"]
+        ),
+    ]
+
+    let defaultSpeaker = SpeakerDescriptor(group: "English", id: "vivian")
+    let groupedSpeakers = ["English": [SpeakerDescriptor(group: "English", id: "vivian")]]
+    let allSpeakers = [SpeakerDescriptor(group: "English", id: "vivian")]
+
+    func model(for mode: GenerationMode) -> ModelDescriptor? {
+        models.first { $0.mode == mode }
+    }
+
+    func model(id: String) -> ModelDescriptor? {
+        models.first { $0.id == id }
+    }
+}
+
+@MainActor
+private final class IOSCancellableEngineFixture: TTSEngine, ActiveGenerationCancellable {
+    let objectWillChange = ObservableObjectPublisher()
+    let modelRegistry: any ModelRegistry = IOSPolicyStubModelRegistry()
+    var loadState: EngineLoadState = .loaded(modelID: "pro_custom_speed")
+    var clonePreparationState: ClonePreparationState = .idle
+    var latestEvent: GenerationEvent?
+    var isReady = true
+    var visibleErrorMessage: String?
+    private(set) var cancelActiveGenerationCallCount = 0
+
+    private var didStartGeneration = false
+    private var generationStartedContinuation: CheckedContinuation<Void, Never>?
+    private var generationContinuation: CheckedContinuation<GenerationResult, Error>?
+
+    func waitForGenerationStart() async {
+        if didStartGeneration { return }
+        await withCheckedContinuation { continuation in
+            generationStartedContinuation = continuation
+        }
+    }
+
+    func finishGeneration(throwing error: Error) {
+        generationContinuation?.resume(throwing: error)
+        generationContinuation = nil
+    }
+
+    func supportDecision(for request: GenerationRequest) -> GenerationSupportDecision {
+        .supported(.nativeMLX)
+    }
+
+    func start() {}
+    func stop() {}
+    func initialize(appSupportDirectory: URL) async throws {}
+    func ping() async throws -> Bool { true }
+    func loadModel(id: String) async throws {}
+    func unloadModel() async throws {}
+
+    func prepareAudio(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
+        throw MLXTTSEngineError.unsupportedRequest("Audio preparation is not used by this fixture.")
+    }
+
+    func ensureModelLoadedIfNeeded(id: String) async {}
+    func prewarmModelIfNeeded(for request: GenerationRequest) async {}
+    func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws {}
+    func cancelClonePreparationIfNeeded() async {}
+
+    func cancelActiveGeneration() async throws {
+        cancelActiveGenerationCallCount += 1
+    }
+
+    func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        didStartGeneration = true
+        generationStartedContinuation?.resume()
+        generationStartedContinuation = nil
+        return try await withCheckedThrowingContinuation { continuation in
+            generationContinuation = continuation
+        }
+    }
+
+    func listPreparedVoices() async throws -> [PreparedVoice] { [] }
+
+    func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice {
+        PreparedVoice(id: name, name: name, audioPath: audioPath, hasTranscript: !(transcript?.isEmpty ?? true))
+    }
+
+    func deletePreparedVoice(id: String) async throws {}
+
+    func importReferenceAudio(from sourceURL: URL) throws -> ImportedReferenceAudio {
+        ImportedReferenceAudio(
+            originalPath: sourceURL.path,
+            materializedPath: sourceURL.path,
+            transcriptSidecarPath: nil,
+            fingerprint: "fixture"
+        )
+    }
+
+    func exportGeneratedAudio(from sourceURL: URL, to destinationURL: URL) throws -> ExportedDocument {
+        ExportedDocument(sourcePath: sourceURL.path, destinationPath: destinationURL.path)
+    }
+
+    func clearGenerationActivity() {
+        latestEvent = nil
+    }
+
+    func clearVisibleError() {
+        visibleErrorMessage = nil
     }
 }

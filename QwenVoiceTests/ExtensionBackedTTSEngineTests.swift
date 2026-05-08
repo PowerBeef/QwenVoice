@@ -200,6 +200,95 @@ final class ExtensionBackedTTSEngineTests: XCTestCase {
         }
     }
 
+    func testExtensionBackedEngineSendsCancelActiveGeneration() async throws {
+        let transport = ExtensionEngineTestTransport()
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let engine = ExtensionBackedTTSEngine(
+            modelRegistry: StubModelRegistry(),
+            documentIO: LocalDocumentIO(importedReferenceDirectory: root.appendingPathComponent("imports", isDirectory: true)),
+            transportFactory: { _ in transport }
+        )
+
+        let initializeTask = Task { try await engine.initialize(appSupportDirectory: root) }
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .snapshot(
+                    TTSEngineSnapshot(
+                        isReady: true,
+                        loadState: .idle,
+                        clonePreparationState: .idle,
+                        visibleErrorMessage: nil
+                    )
+                )
+            )
+        )
+        try await initializeTask.value
+
+        let cancelTask = Task { try await engine.cancelActiveGeneration() }
+        try await waitForPerformCallCount(2, transport: transport)
+        XCTAssertEqual(transport.command(at: 1), .cancelActiveGeneration)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.requestID(at: 1)),
+                reply: .void
+            )
+        )
+
+        try await cancelTask.value
+    }
+
+    func testExtensionBackedEngineRejectsInvalidCancelActiveGenerationReply() async throws {
+        let transport = ExtensionEngineTestTransport()
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let engine = ExtensionBackedTTSEngine(
+            modelRegistry: StubModelRegistry(),
+            documentIO: LocalDocumentIO(importedReferenceDirectory: root.appendingPathComponent("imports", isDirectory: true)),
+            transportFactory: { _ in transport }
+        )
+
+        let initializeTask = Task { try await engine.initialize(appSupportDirectory: root) }
+        try await waitForPerformCallCount(1, transport: transport)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.lastRequestID),
+                reply: .snapshot(
+                    TTSEngineSnapshot(
+                        isReady: true,
+                        loadState: .idle,
+                        clonePreparationState: .idle,
+                        visibleErrorMessage: nil
+                    )
+                )
+            )
+        )
+        try await initializeTask.value
+
+        let cancelTask = Task { try await engine.cancelActiveGeneration() }
+        try await waitForPerformCallCount(2, transport: transport)
+        XCTAssertEqual(transport.command(at: 1), .cancelActiveGeneration)
+        transport.reply(
+            with: ExtensionEngineReplyEnvelope(
+                id: try XCTUnwrap(transport.requestID(at: 1)),
+                reply: .bool(true)
+            )
+        )
+
+        do {
+            try await cancelTask.value
+            XCTFail("Expected invalid cancel reply to throw.")
+        } catch let error as ExtensionEngineTransportError {
+            XCTAssertEqual(error, .invalidReply)
+        } catch {
+            XCTFail("Expected invalidReply, got \(error)")
+        }
+    }
+
     func testExtensionBackedEngineReconnectsAfterInterrupt() async throws {
         let transportBox = ExtensionEngineTestTransportBox()
         let root = try makeTemporaryRoot()
@@ -453,6 +542,7 @@ private final class ExtensionEngineTestTransport: ExtensionEngineTransporting, @
     private(set) var performCallCount = 0
     private(set) var lastRequestID: UUID?
     private var requestIDs: [UUID] = []
+    private var commands: [ExtensionEngineCommand] = []
     private var replyHandlers: [(@Sendable (Data) -> Void)] = []
 
     init(handlers: ExtensionEngineTransportHandlers? = nil) {
@@ -465,9 +555,10 @@ private final class ExtensionEngineTestTransport: ExtensionEngineTransporting, @
 
     func perform(_ payload: Data, reply: @escaping @Sendable (Data) -> Void) {
         performCallCount += 1
-        lastRequestID = try? ExtensionEngineCodec.decode(ExtensionEngineRequestEnvelope.self, from: payload).id
-        if let lastRequestID {
-            requestIDs.append(lastRequestID)
+        if let envelope = try? ExtensionEngineCodec.decode(ExtensionEngineRequestEnvelope.self, from: payload) {
+            lastRequestID = envelope.id
+            requestIDs.append(envelope.id)
+            commands.append(envelope.command)
         }
         replyHandlers.append(reply)
     }
@@ -482,6 +573,11 @@ private final class ExtensionEngineTestTransport: ExtensionEngineTransporting, @
     func requestID(at index: Int) -> UUID? {
         guard requestIDs.indices.contains(index) else { return nil }
         return requestIDs[index]
+    }
+
+    func command(at index: Int) -> ExtensionEngineCommand? {
+        guard commands.indices.contains(index) else { return nil }
+        return commands[index]
     }
 
     func triggerInterrupted() {
