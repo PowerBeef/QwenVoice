@@ -285,7 +285,13 @@ run_codesign "$APP_PATH" \
     --options runtime \
     --entitlements "$PROJECT_DIR/Sources/QwenVoice.entitlements"
 codesign --verify --deep --strict "$APP_PATH"
-"$SCRIPT_DIR/verify_release_bundle.sh" "$APP_PATH"
+if [ "$SIGNING_MODE" = "developer-id" ]; then
+    QWENVOICE_EXPECT_SIGNED_RELEASE=1 \
+    QWENVOICE_EXPECT_TEAM_ID="$RELEASE_TEAM_ID" \
+        "$SCRIPT_DIR/verify_release_bundle.sh" "$APP_PATH"
+else
+    "$SCRIPT_DIR/verify_release_bundle.sh" "$APP_PATH"
+fi
 echo "[5/7] Final app bundle verified ($(step_time "$STEP_START"))"
 echo ""
 

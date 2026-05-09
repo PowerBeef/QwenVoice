@@ -71,6 +71,7 @@ final class AudioPreparationHardeningTests: XCTestCase {
     func testDecodeTimeoutRemovesPartialOutput() async throws {
         let input = temporaryRoot.appendingPathComponent("timeout-source.wav")
         let output = temporaryRoot.appendingPathComponent("timeout-output.wav")
+        try Data("stale output".utf8).write(to: output)
         try Self.writeCanonicalWAV(to: input, durationSeconds: 0.2)
         let service = NativeAudioPreparationService(
             preparedAudioDirectory: temporaryRoot,
@@ -92,14 +93,55 @@ final class AudioPreparationHardeningTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
 
-    func testCancelledTaskReportsCancellation() async throws {
-        let input = temporaryRoot.appendingPathComponent("cancel-source.wav")
+    func testNormalizationDeadlineRemovesPartialOutput() async throws {
+        let input = temporaryRoot.appendingPathComponent("deadline-source.wav")
+        let output = temporaryRoot.appendingPathComponent("deadline-output.wav")
         try Self.writeCanonicalWAV(to: input, durationSeconds: 0.2)
-        let service = NativeAudioPreparationService(preparedAudioDirectory: temporaryRoot)
-        let task = Task<AudioNormalizationResult, Error> {
-            try await service.normalizeAudio(AudioPreparationRequest(inputURL: input))
+        let service = NativeAudioPreparationService(
+            preparedAudioDirectory: temporaryRoot,
+            limits: AudioPreparationLimits(
+                maxInputFileSizeBytes: 250 * 1_024 * 1_024,
+                maxDecodedDurationSeconds: 120,
+                trackLoadTimeoutSeconds: 60,
+                normalizationTimeoutSeconds: 0.01
+            ),
+            testingHooks: AudioPreparationTestingHooks(
+                beforeConversionLoop: {
+                    try await Task.sleep(nanoseconds: 30_000_000)
+                }
+            )
+        )
+
+        do {
+            _ = try await service.normalizeAudio(AudioPreparationRequest(inputURL: input, outputURL: output))
+            XCTFail("Expired normalization deadline should reject conversion.")
+        } catch let error as AudioPreparationError {
+            guard case .decodeTimedOut = error else {
+                return XCTFail("Expected decodeTimedOut, got \(error).")
+            }
         }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testCancelledTaskReportsCancellationAndRemovesPartialOutput() async throws {
+        let input = temporaryRoot.appendingPathComponent("cancel-source.wav")
+        let output = temporaryRoot.appendingPathComponent("cancel-output.wav")
+        try Self.writeCanonicalWAV(to: input, durationSeconds: 0.2)
+        let gate = ConversionHookGate()
+        let service = NativeAudioPreparationService(
+            preparedAudioDirectory: temporaryRoot,
+            testingHooks: AudioPreparationTestingHooks(
+                beforeConversionLoop: {
+                    await gate.enterAndWait()
+                }
+            )
+        )
+        let task = Task<AudioNormalizationResult, Error> {
+            try await service.normalizeAudio(AudioPreparationRequest(inputURL: input, outputURL: output))
+        }
+        await gate.waitForEntries(1)
         task.cancel()
+        await gate.releaseOne()
 
         do {
             _ = try await task.value
@@ -110,6 +152,43 @@ final class AudioPreparationHardeningTests: XCTestCase {
             // Accept the raw task cancellation shape if the cancellation wins
             // before the service can map it.
         }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    func testAudioPreparationWorkQueueRunsOneNormalizationAtATime() async throws {
+        let firstInput = temporaryRoot.appendingPathComponent("serial-first.wav")
+        let secondInput = temporaryRoot.appendingPathComponent("serial-second.wav")
+        let firstOutput = temporaryRoot.appendingPathComponent("serial-first-output.wav")
+        let secondOutput = temporaryRoot.appendingPathComponent("serial-second-output.wav")
+        try Self.writeCanonicalWAV(to: firstInput, durationSeconds: 0.2)
+        try Self.writeCanonicalWAV(to: secondInput, durationSeconds: 0.2)
+        let gate = ConversionHookGate()
+        let service = NativeAudioPreparationService(
+            preparedAudioDirectory: temporaryRoot,
+            testingHooks: AudioPreparationTestingHooks(
+                beforeConversionLoop: {
+                    await gate.enterAndWait()
+                }
+            )
+        )
+
+        let firstTask = Task {
+            try await service.normalizeAudio(AudioPreparationRequest(inputURL: firstInput, outputURL: firstOutput))
+        }
+        await gate.waitForEntries(1)
+
+        let secondTask = Task {
+            try await service.normalizeAudio(AudioPreparationRequest(inputURL: secondInput, outputURL: secondOutput))
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let entryCountWhileFirstIsBlocked = await gate.entryCount
+        XCTAssertEqual(entryCountWhileFirstIsBlocked, 1)
+
+        await gate.releaseOne()
+        _ = try await firstTask.value
+        await gate.waitForEntries(2)
+        await gate.releaseOne()
+        _ = try await secondTask.value
     }
 
     private static func writeCanonicalWAV(to url: URL, durationSeconds: Double) throws {
@@ -132,6 +211,52 @@ final class AudioPreparationHardeningTests: XCTestCase {
         data.appendLittleEndian(UInt32(pcmByteCount))
         data.append(Data(repeating: 0, count: pcmByteCount))
         try data.write(to: url)
+    }
+}
+
+private actor ConversionHookGate {
+    private var entries = 0
+    private var entryWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    var entryCount: Int {
+        entries
+    }
+
+    func enterAndWait() async {
+        entries += 1
+        resumeSatisfiedEntryWaiters()
+        await withCheckedContinuation { continuation in
+            releaseWaiters.append(continuation)
+        }
+    }
+
+    func waitForEntries(_ count: Int) async {
+        if entries >= count {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            entryWaiters.append((count, continuation))
+        }
+    }
+
+    func releaseOne() {
+        guard !releaseWaiters.isEmpty else {
+            return
+        }
+        releaseWaiters.removeFirst().resume()
+    }
+
+    private func resumeSatisfiedEntryWaiters() {
+        var remaining: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+        for waiter in entryWaiters {
+            if entries >= waiter.count {
+                waiter.continuation.resume()
+            } else {
+                remaining.append(waiter)
+            }
+        }
+        entryWaiters = remaining
     }
 }
 

@@ -101,29 +101,89 @@ public struct AudioPreparationLimits: Hashable, Sendable {
     public static let defaults = AudioPreparationLimits(
         maxInputFileSizeBytes: 250 * 1_024 * 1_024,
         maxDecodedDurationSeconds: 120,
-        trackLoadTimeoutSeconds: 60
+        trackLoadTimeoutSeconds: 60,
+        normalizationTimeoutSeconds: 60
     )
 
     public let maxInputFileSizeBytes: Int64
     public let maxDecodedDurationSeconds: Double
     public let trackLoadTimeoutSeconds: Double
+    public let normalizationTimeoutSeconds: Double
 
     public init(
         maxInputFileSizeBytes: Int64,
         maxDecodedDurationSeconds: Double,
-        trackLoadTimeoutSeconds: Double
+        trackLoadTimeoutSeconds: Double,
+        normalizationTimeoutSeconds: Double = 60
     ) {
         self.maxInputFileSizeBytes = maxInputFileSizeBytes
         self.maxDecodedDurationSeconds = maxDecodedDurationSeconds
         self.trackLoadTimeoutSeconds = trackLoadTimeoutSeconds
+        self.normalizationTimeoutSeconds = normalizationTimeoutSeconds
     }
 }
 
 private actor NativeAudioPreparationWorkQueue {
     static let shared = NativeAudioPreparationWorkQueue()
+    private var isRunning = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     func run<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
-        try await operation()
+        await acquire()
+        do {
+            let result = try await operation()
+            release()
+            return result
+        } catch {
+            release()
+            throw error
+        }
+    }
+
+    private func acquire() async {
+        if !isRunning {
+            isRunning = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isRunning = false
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
+struct AudioPreparationTestingHooks: Sendable {
+    var beforeConversionLoop: (@Sendable () async throws -> Void)?
+
+    static let none = AudioPreparationTestingHooks()
+}
+
+private struct AudioPreparationDeadline: Sendable {
+    let timeoutSeconds: Double
+    let startedAt: Date
+
+    init(timeoutSeconds: Double) {
+        self.timeoutSeconds = timeoutSeconds
+        self.startedAt = Date()
+    }
+
+    func check() throws {
+        if Task.isCancelled {
+            throw AudioPreparationError.cancelled
+        }
+        if timeoutSeconds <= 0 {
+            throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
+        }
+        if Date().timeIntervalSince(startedAt) > timeoutSeconds {
+            throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
+        }
     }
 }
 
@@ -134,6 +194,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
 
     public let preparedAudioDirectory: URL?
     public let limits: AudioPreparationLimits
+    let testingHooks: AudioPreparationTestingHooks
 
     public init(
         preparedAudioDirectory: URL? = nil,
@@ -141,6 +202,30 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
     ) {
         self.preparedAudioDirectory = preparedAudioDirectory
         self.limits = limits
+        self.testingHooks = .none
+    }
+
+    init(
+        preparedAudioDirectory: URL? = nil,
+        limits: AudioPreparationLimits = .defaults,
+        testingHooks: AudioPreparationTestingHooks
+    ) {
+        self.preparedAudioDirectory = preparedAudioDirectory
+        self.limits = limits
+        self.testingHooks = testingHooks
+    }
+
+    public static func == (
+        lhs: NativeAudioPreparationService,
+        rhs: NativeAudioPreparationService
+    ) -> Bool {
+        lhs.preparedAudioDirectory == rhs.preparedAudioDirectory
+            && lhs.limits == rhs.limits
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preparedAudioDirectory)
+        hasher.combine(limits)
     }
 
     public func normalizeAudio(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
@@ -181,8 +266,10 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
     }
 
     private func normalizeAudioAsynchronously(_ request: AudioPreparationRequest) async throws -> AudioNormalizationResult {
+        let deadline = AudioPreparationDeadline(timeoutSeconds: limits.normalizationTimeoutSeconds)
         let fileManager = FileManager.default
         let sourceURL = request.inputURL
+        try deadline.check()
         guard fileManager.fileExists(atPath: sourceURL.path) else {
             throw AudioPreparationError.missingInputFile(sourceURL.path)
         }
@@ -195,6 +282,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
                 actualBytes: sourceByteSize
             )
         }
+        try deadline.check()
 
         let fingerprint = Self.fileFingerprint(for: sourceURL)
         let inputFile: AVAudioFile
@@ -203,6 +291,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         } catch {
             throw AudioPreparationError.failedToReadAudio(sourceURL.path)
         }
+        try deadline.check()
         guard inputFile.length > 0 else {
             throw AudioPreparationError.unsupportedInput(
                 "The selected audio file does not contain readable audio frames."
@@ -240,7 +329,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
            Self.canReuseExistingNormalizedOutput(
                 at: outputURL,
                 fingerprint: fingerprint
-           ) {
+            ) {
             return try Self.makeResult(
                 sourceURL: sourceURL,
                 normalizedURL: outputURL,
@@ -248,6 +337,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
                 wasAlreadyCanonical: false
             )
         }
+        try deadline.check()
 
         let parentDirectory = outputURL.deletingLastPathComponent()
         do {
@@ -265,7 +355,9 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
             writtenFrameCount = try await Self.convertAudio(
                 inputURL: sourceURL,
                 outputURL: outputURL,
-                limits: limits
+                limits: limits,
+                deadline: deadline,
+                testingHooks: testingHooks
             )
         } catch is CancellationError {
             if outputURL != sourceURL {
@@ -318,8 +410,11 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
     private static func convertAudio(
         inputURL: URL,
         outputURL: URL,
-        limits: AudioPreparationLimits
+        limits: AudioPreparationLimits,
+        deadline: AudioPreparationDeadline,
+        testingHooks: AudioPreparationTestingHooks
     ) async throws -> Int64 {
+        try deadline.check()
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: canonicalSampleRate,
@@ -333,10 +428,12 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         let asset = AVURLAsset(url: inputURL)
         let track: AVAssetTrack
         do {
+            try deadline.check()
             track = try await firstAudioTrack(
                 from: asset,
                 timeoutSeconds: limits.trackLoadTimeoutSeconds
             )
+            try deadline.check()
         } catch is CancellationError {
             throw AudioPreparationError.cancelled
         } catch let error as AudioPreparationError {
@@ -347,6 +444,7 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
 
         let reader: AVAssetReader
         do {
+            try deadline.check()
             reader = try AVAssetReader(asset: asset)
         } catch {
             throw AudioPreparationError.conversionFailed("Couldn't create the native audio reader.")
@@ -359,12 +457,14 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         }
         reader.add(readerOutput)
 
+        try deadline.check()
         guard reader.startReading() else {
             throw AudioPreparationError.conversionFailed(reader.error?.localizedDescription ?? "Native audio decoding could not start.")
         }
 
         let writer: AVAudioFile
         do {
+            try deadline.check()
             writer = try AVAudioFile(
                 forWriting: outputURL,
                 settings: outputSettings,
@@ -379,57 +479,61 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         let maxOutputFrames = limits.maxDecodedDurationSeconds > 0
             ? Int64((limits.maxDecodedDurationSeconds * canonicalSampleRate).rounded(.up))
             : Int64.max
-        while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
-            do {
-                try Task.checkCancellation()
-            } catch {
-                reader.cancelReading()
-                throw AudioPreparationError.cancelled
-            }
-            let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
-            guard frameCount > 0 else { continue }
+        do {
+            try await testingHooks.beforeConversionLoop?()
+            try deadline.check()
+            while let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+                try deadline.check()
+                let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
+                guard frameCount > 0 else { continue }
 
-            guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: writer.processingFormat,
-                frameCapacity: AVAudioFrameCount(frameCount)
-            ) else {
-                throw AudioPreparationError.conversionFailed("Couldn't allocate the decoded audio buffer.")
-            }
-            outputBuffer.frameLength = AVAudioFrameCount(frameCount)
+                guard let outputBuffer = AVAudioPCMBuffer(
+                    pcmFormat: writer.processingFormat,
+                    frameCapacity: AVAudioFrameCount(frameCount)
+                ) else {
+                    throw AudioPreparationError.conversionFailed("Couldn't allocate the decoded audio buffer.")
+                }
+                outputBuffer.frameLength = AVAudioFrameCount(frameCount)
 
-            guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
-                throw AudioPreparationError.conversionFailed("Decoded audio data was unavailable.")
-            }
+                guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+                    throw AudioPreparationError.conversionFailed("Decoded audio data was unavailable.")
+                }
 
-            let dataLength = CMBlockBufferGetDataLength(blockBuffer)
-            guard let channelData = outputBuffer.int16ChannelData else {
-                throw AudioPreparationError.conversionFailed("Decoded audio data could not be mapped into PCM channels.")
-            }
+                let dataLength = CMBlockBufferGetDataLength(blockBuffer)
+                guard let channelData = outputBuffer.int16ChannelData else {
+                    throw AudioPreparationError.conversionFailed("Decoded audio data could not be mapped into PCM channels.")
+                }
 
-            let status = CMBlockBufferCopyDataBytes(
-                blockBuffer,
-                atOffset: 0,
-                dataLength: dataLength,
-                destination: UnsafeMutableRawPointer(channelData[0])
-            )
-            guard status == noErr else {
-                throw AudioPreparationError.conversionFailed("Decoded audio bytes could not be copied into the canonical buffer.")
-            }
-
-            do {
-                try writer.write(from: outputBuffer)
-            } catch {
-                throw AudioPreparationError.conversionFailed("Audio write failed: \(error.localizedDescription)")
-            }
-
-            totalWrittenFrames += Int64(frameCount)
-            if totalWrittenFrames > maxOutputFrames {
-                reader.cancelReading()
-                throw AudioPreparationError.inputDurationTooLong(
-                    maxSeconds: limits.maxDecodedDurationSeconds,
-                    actualSeconds: Double(totalWrittenFrames) / canonicalSampleRate
+                let status = CMBlockBufferCopyDataBytes(
+                    blockBuffer,
+                    atOffset: 0,
+                    dataLength: dataLength,
+                    destination: UnsafeMutableRawPointer(channelData[0])
                 )
+                guard status == noErr else {
+                    throw AudioPreparationError.conversionFailed("Decoded audio bytes could not be copied into the canonical buffer.")
+                }
+
+                try deadline.check()
+                do {
+                    try writer.write(from: outputBuffer)
+                } catch {
+                    throw AudioPreparationError.conversionFailed("Audio write failed: \(error.localizedDescription)")
+                }
+
+                totalWrittenFrames += Int64(frameCount)
+                if totalWrittenFrames > maxOutputFrames {
+                    throw AudioPreparationError.inputDurationTooLong(
+                        maxSeconds: limits.maxDecodedDurationSeconds,
+                        actualSeconds: Double(totalWrittenFrames) / canonicalSampleRate
+                    )
+                }
             }
+        } catch {
+            if reader.status == .reading {
+                reader.cancelReading()
+            }
+            throw error
         }
 
         switch reader.status {

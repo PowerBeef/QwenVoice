@@ -79,6 +79,21 @@ final class EngineServiceCodecTests: XCTestCase {
         XCTAssertFalse(payload.details?["NSLocalizedFailureReason"]?.contains("/tmp/private-reference.wav") ?? true)
     }
 
+    func testRemoteErrorPayloadRedactsPrimaryMessage() {
+        let error = NSError(
+            domain: "QwenVoiceTests",
+            code: 8,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Failed reference: /Users/example/Private/reference.wav prompt: Say the private phrase"
+            ]
+        )
+
+        let payload = RemoteErrorPayload.make(for: error)
+        XCTAssertFalse(payload.message.contains("/Users/example"))
+        XCTAssertFalse(payload.message.contains("Say the private phrase"))
+        XCTAssertTrue(payload.message.contains("<redacted"))
+    }
+
     func testRequestEnvelopeRoundTripsThroughCodec() throws {
         let request = EngineRequestEnvelope(
             id: UUID(uuidString: "99999999-8888-7777-6666-555555555555")!,
@@ -309,7 +324,26 @@ final class EngineServiceCodecTests: XCTestCase {
         let legacyData = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try EngineServiceCodec.decode(EngineRequestEnvelope.self, from: legacyData)
-        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.schemaVersion, QwenVoiceWireSchema.legacyMissingVersion)
+        XCTAssertEqual(decoded.command, .ping)
+    }
+
+    func testExtensionWireEnvelopeDecodesLegacyMissingSchemaVersionAsVersionOne() throws {
+        let request = QwenVoiceCore.ExtensionEngineRequestEnvelope(
+            id: UUID(uuidString: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff")!,
+            command: .ping
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: QwenVoiceCore.ExtensionEngineCodec.encode(request)) as? [String: Any]
+        )
+        object.removeValue(forKey: "schemaVersion")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try QwenVoiceCore.ExtensionEngineCodec.decode(
+            QwenVoiceCore.ExtensionEngineRequestEnvelope.self,
+            from: legacyData
+        )
+        XCTAssertEqual(decoded.schemaVersion, QwenVoiceWireSchema.legacyMissingVersion)
         XCTAssertEqual(decoded.command, .ping)
     }
 

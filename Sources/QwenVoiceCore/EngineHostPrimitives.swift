@@ -21,7 +21,7 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
         code: RemoteErrorCode = .generic,
         details: [String: String]? = nil
     ) {
-        self.message = message
+        self.message = Self.redactedMessage(message)
         self.domain = domain
         self.code = code
         self.details = details
@@ -39,7 +39,7 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
         let nsError = error as NSError
         let code: RemoteErrorCode = error is CancellationError ? .cancelled : .generic
         return RemoteErrorPayload(
-            message: nsError.localizedDescription,
+            message: redactedMessage(nsError.localizedDescription),
             domain: nsError.domain,
             code: code,
             details: capturedDetails(from: nsError)
@@ -83,12 +83,28 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
         if ["prompt", "transcript", "reference"].contains(where: key.contains) {
             return "<redacted>"
         }
-        let pathRedacted = value.replacingOccurrences(
+        return bounded(redactPaths(in: value))
+    }
+
+    private static func redactedMessage(_ value: String) -> String {
+        let promptRedacted = value.replacingOccurrences(
+            of: #"(?i)\b(prompt|transcript|reference)\b\s*[:=]\s*["“]?[^.,;\n]+"#,
+            with: "<redacted>",
+            options: .regularExpression
+        )
+        return bounded(redactPaths(in: promptRedacted))
+    }
+
+    private static func redactPaths(in value: String) -> String {
+        value.replacingOccurrences(
             of: #"(?<!\S)(?:file://)?/(?:Users|private|var|tmp|Volumes)/[^\s,;:]+"#,
             with: "<redacted-path>",
             options: .regularExpression
         )
-        return String(pathRedacted.prefix(512))
+    }
+
+    private static func bounded(_ value: String) -> String {
+        String(value.prefix(512))
     }
 }
 
@@ -142,6 +158,7 @@ public struct EngineCapabilities: Codable, Equatable, Sendable {
 
 public enum QwenVoiceWireSchema {
     public static let currentVersion = 1
+    public static let legacyMissingVersion = 1
 
     public static func validate(version: Int, codingPath: [CodingKey]) throws {
         guard version == currentVersion else {

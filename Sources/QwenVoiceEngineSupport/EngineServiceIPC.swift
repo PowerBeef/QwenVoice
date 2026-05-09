@@ -34,7 +34,8 @@ public struct EngineRequestEnvelope: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Self.currentSchemaVersion
+        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? QwenVoiceWireSchema.legacyMissingVersion
         try QwenVoiceWireSchema.validate(version: version, codingPath: decoder.codingPath)
         self.schemaVersion = version
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -89,7 +90,8 @@ public struct EngineReplyEnvelope: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Self.currentSchemaVersion
+        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? QwenVoiceWireSchema.legacyMissingVersion
         try QwenVoiceWireSchema.validate(version: version, codingPath: decoder.codingPath)
         self.schemaVersion = version
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -147,7 +149,8 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Self.currentSchemaVersion
+        let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
+            ?? QwenVoiceWireSchema.legacyMissingVersion
         try QwenVoiceWireSchema.validate(version: version, codingPath: decoder.codingPath)
 
         do {

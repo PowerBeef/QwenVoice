@@ -8,7 +8,7 @@ final class PlatformCapabilityMatrixTests: XCTestCase {
 
         XCTAssertEqual(
             matrix.macOS.xpcService.codeSigningRequirement,
-            EngineServiceTrustPolicy.serviceRequirement()
+            "debug/ad-hoc: \(EngineServiceTrustPolicy.serviceRequirement()); signed release: \(EngineServiceTrustPolicy.serviceRequirement(teamIdentifier: "QwenVoiceTeamIdentifier"))"
         )
         XCTAssertEqual(
             matrix.macOS.xpcService.engineCapabilities,
@@ -18,6 +18,20 @@ final class PlatformCapabilityMatrixTests: XCTestCase {
             matrix.iOS.extension.engineCapabilities,
             EngineCapabilities.iOSExtensionDefault
         )
+    }
+
+    func testDeveloperIDReleasePathRunsStrictSignedBundleVerification() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let releaseScriptURL = repoRoot
+            .appendingPathComponent("scripts", isDirectory: true)
+            .appendingPathComponent("release.sh", isDirectory: false)
+        let script = try String(contentsOf: releaseScriptURL)
+
+        XCTAssertTrue(script.contains("QWENVOICE_EXPECT_SIGNED_RELEASE=1"))
+        XCTAssertTrue(script.contains("QWENVOICE_EXPECT_TEAM_ID=\"$RELEASE_TEAM_ID\""))
+        XCTAssertTrue(script.contains("if [ \"$SIGNING_MODE\" = \"developer-id\" ]; then"))
     }
 
     private func loadMatrix() throws -> PlatformCapabilityMatrix {

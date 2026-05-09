@@ -19,7 +19,7 @@
     },
     "xpcService": {
       "bundleIdentifier": "com.qwenvoice.app.engine-service",
-      "codeSigningRequirement": "identifier \"com.qwenvoice.app.engine-service\"",
+      "codeSigningRequirement": "debug/ad-hoc: identifier \"com.qwenvoice.app.engine-service\"; signed release: identifier \"com.qwenvoice.app.engine-service\" and certificate leaf[subject.OU] = \"QwenVoiceTeamIdentifier\"",
       "engineCapabilities": {
         "supportsBatchGeneration": true,
         "supportsAudioPreparation": false,
