@@ -94,6 +94,25 @@ final class EngineServiceCodecTests: XCTestCase {
         XCTAssertTrue(payload.message.contains("<redacted"))
     }
 
+    func testRemoteErrorPayloadRedactsPathsAfterPunctuation() {
+        let error = NSError(
+            domain: "QwenVoiceTests",
+            code: 9,
+            userInfo: [
+                NSLocalizedDescriptionKey: "source=/Users/alice/private.wav path:'/tmp/reference.wav' file=(file:///Volumes/Drive/voice.wav)",
+                "source": "source=/Users/alice/private.wav path:'/tmp/reference.wav' file=(file:///Volumes/Drive/voice.wav)",
+            ]
+        )
+
+        let payload = RemoteErrorPayload.make(for: error)
+        XCTAssertFalse(payload.message.contains("/Users/alice"))
+        XCTAssertFalse(payload.message.contains("/tmp/reference.wav"))
+        XCTAssertFalse(payload.message.contains("file:///Volumes"))
+        XCTAssertFalse(payload.details?["source"]?.contains("/Users/alice") ?? true)
+        XCTAssertFalse(payload.details?["source"]?.contains("/tmp/reference.wav") ?? true)
+        XCTAssertFalse(payload.details?["source"]?.contains("file:///Volumes") ?? true)
+    }
+
     func testRequestEnvelopeRoundTripsThroughCodec() throws {
         let request = EngineRequestEnvelope(
             id: UUID(uuidString: "99999999-8888-7777-6666-555555555555")!,

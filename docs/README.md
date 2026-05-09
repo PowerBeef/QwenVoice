@@ -8,6 +8,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
 - [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — rebuilt QA gate for static validation, source/native/UI QA layers, builds, and unsigned release proof
+- [`reference/backend-hardening-validation-evidence.md`](reference/backend-hardening-validation-evidence.md) — local proof checklist for backend hardening patches touching trust, transport, audio prep, or runtime boundaries
 - [`reference/frontend-backend-contract.md`](reference/frontend-backend-contract.md) — app-facing backend state, delivery state, and QA gate
 - [`reference/live-testing.md`](reference/live-testing.md) — local QA lanes, strict e2e behavior, result paths, and xcresult triage commands
 - [`reference/release-readiness.md`](reference/release-readiness.md) — macOS-first release-track policy, proof status, public-homepage freeze rules, and the tier→workflow mapping table

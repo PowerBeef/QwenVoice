@@ -167,11 +167,13 @@ struct AudioPreparationTestingHooks: Sendable {
 
 private struct AudioPreparationDeadline: Sendable {
     let timeoutSeconds: Double
-    let startedAt: Date
+    let timeoutDuration: Duration
+    let startedAt: ContinuousClock.Instant
 
     init(timeoutSeconds: Double) {
         self.timeoutSeconds = timeoutSeconds
-        self.startedAt = Date()
+        self.timeoutDuration = .nanoseconds(Int64((max(timeoutSeconds, 0) * 1_000_000_000).rounded(.up)))
+        self.startedAt = .now
     }
 
     func check() throws {
@@ -181,7 +183,10 @@ private struct AudioPreparationDeadline: Sendable {
         if timeoutSeconds <= 0 {
             throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
         }
-        if Date().timeIntervalSince(startedAt) > timeoutSeconds {
+        // The timeout is cooperative: AVFoundation may still block inside a
+        // synchronous decode call, but every boundary we control checks a
+        // monotonic deadline before continuing.
+        if startedAt.duration(to: .now) > timeoutDuration {
             throw AudioPreparationError.decodeTimedOut(seconds: timeoutSeconds)
         }
     }

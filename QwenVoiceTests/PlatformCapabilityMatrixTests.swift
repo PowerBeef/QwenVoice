@@ -7,8 +7,13 @@ final class PlatformCapabilityMatrixTests: XCTestCase {
         let matrix = try loadMatrix()
 
         XCTAssertEqual(
-            matrix.macOS.xpcService.codeSigningRequirement,
-            "debug/ad-hoc: \(EngineServiceTrustPolicy.serviceRequirement()); signed release: \(EngineServiceTrustPolicy.serviceRequirement(teamIdentifier: "QwenVoiceTeamIdentifier"))"
+            matrix.macOS.xpcService.codeSigningRequirement?.debugAdHocRequirement,
+            EngineServiceTrustPolicy.serviceRequirement()
+        )
+        XCTAssertEqual(
+            matrix.macOS.xpcService.codeSigningRequirement?.signedReleaseRequirementTemplate
+                .replacingOccurrences(of: "${TEAM_ID}", with: "QwenVoiceTeamIdentifier"),
+            EngineServiceTrustPolicy.serviceRequirement(teamIdentifier: "QwenVoiceTeamIdentifier")
         )
         XCTAssertEqual(
             matrix.macOS.xpcService.engineCapabilities,
@@ -64,7 +69,12 @@ private struct PlatformCapabilityMatrix: Decodable {
     }
 
     struct RuntimeSurface: Decodable {
-        let codeSigningRequirement: String?
+        let codeSigningRequirement: CodeSigningRequirement?
         let engineCapabilities: EngineCapabilities
+    }
+
+    struct CodeSigningRequirement: Decodable {
+        let debugAdHocRequirement: String
+        let signedReleaseRequirementTemplate: String
     }
 }

@@ -97,8 +97,8 @@ public struct RemoteErrorPayload: Error, Codable, Equatable, Sendable, Localized
 
     private static func redactPaths(in value: String) -> String {
         value.replacingOccurrences(
-            of: #"(?<!\S)(?:file://)?/(?:Users|private|var|tmp|Volumes)/[^\s,;:]+"#,
-            with: "<redacted-path>",
+            of: #"(^|[\s=:'"“(])(?:file://)?/(?:Users|private|var|tmp|Volumes)/[^\s,;)'"”]+"#,
+            with: "$1<redacted-path>",
             options: .regularExpression
         )
     }

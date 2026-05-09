@@ -191,6 +191,25 @@ final class AudioPreparationHardeningTests: XCTestCase {
         _ = try await secondTask.value
     }
 
+    func testAudioPreparationDeadlineUsesMonotonicClock() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repoRoot
+            .appendingPathComponent("Sources", isDirectory: true)
+            .appendingPathComponent("QwenVoiceCore", isDirectory: true)
+            .appendingPathComponent("AudioPreparation.swift", isDirectory: false)
+        let source = try String(contentsOf: sourceURL)
+        guard let deadlineRange = source.range(of: "private struct AudioPreparationDeadline"),
+              let serviceRange = source.range(of: "public struct NativeAudioPreparationService") else {
+            return XCTFail("Could not locate AudioPreparationDeadline source.")
+        }
+        let deadlineSource = String(source[deadlineRange.lowerBound..<serviceRange.lowerBound])
+        XCTAssertTrue(deadlineSource.contains("ContinuousClock.Instant"))
+        XCTAssertTrue(deadlineSource.contains("startedAt.duration(to: .now)"))
+        XCTAssertFalse(deadlineSource.contains("Date()"))
+    }
+
     private static func writeCanonicalWAV(to url: URL, durationSeconds: Double) throws {
         let sampleRate = 24_000
         let frameCount = Int(durationSeconds * Double(sampleRate))
