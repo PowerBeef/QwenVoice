@@ -221,22 +221,34 @@ jobs:
         run: |
           TAG="${{ inputs.release_tag }}"
           NOTES_PATH="${{ inputs.release_notes_path }}"
-          TITLE="Vocello ${TAG#v}"
+          VERSION="${TAG#v}"
+          TITLE="Vocello $VERSION"
+          RELEASE_FLAGS=()
+          EDIT_FLAGS=()
+          if [[ "$VERSION" =~ ^(.+)-beta\.([0-9]+)$ ]]; then
+            TITLE="Vocello ${BASH_REMATCH[1]} beta ${BASH_REMATCH[2]}"
+            RELEASE_FLAGS+=(--prerelease)
+            EDIT_FLAGS+=(--prerelease)
+          elif [[ "$VERSION" =~ ^(.+)-rc\.([0-9]+)$ ]]; then
+            TITLE="Vocello ${BASH_REMATCH[1]} RC ${BASH_REMATCH[2]}"
+            RELEASE_FLAGS+=(--prerelease)
+            EDIT_FLAGS+=(--prerelease)
+          fi
           if [ -n "$NOTES_PATH" ] && [ ! -f "$NOTES_PATH" ]; then
             echo "::error::Release notes file not found: $NOTES_PATH"
             exit 1
           fi
           if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             if [ -n "$NOTES_PATH" ]; then
-              gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file "$NOTES_PATH"
+              gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file "$NOTES_PATH" "${EDIT_FLAGS[@]}"
             else
-              gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE"
+              gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" "${EDIT_FLAGS[@]}"
             fi
           else
             if [ -n "$NOTES_PATH" ]; then
-              gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file "$NOTES_PATH"
+              gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TITLE" --notes-file "$NOTES_PATH" "${RELEASE_FLAGS[@]}"
             else
-              gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --generate-notes
+              gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TITLE" --generate-notes "${RELEASE_FLAGS[@]}"
             fi
           fi
 
