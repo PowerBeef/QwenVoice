@@ -1,85 +1,107 @@
 # Vocello Beta 1 for macOS 26
 
-Vocello is a local, private voice-generation app for Apple Silicon Macs. It turns text into natural speech on your Mac, with Custom Voice, Voice Design, and Voice Cloning built around a native macOS experience.
+Vocello is a local, private AI voice-generation app for Apple Silicon Macs. Write a script, choose how the voice should sound, and generate speech on your Mac with no cloud credit meter.
 
-Vocello 2.0.0 beta 1 is now available as a public macOS 26 beta. QwenVoice v1.2.3 remains the stable fallback for users who need macOS 15 support or do not want beta software.
+**Public beta:** [Download Vocello 2.0.0 beta 1](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0-beta.1) for macOS 26.
 
-> **Public beta:** download [Vocello 2.0.0 beta 1](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0-beta.1) for macOS 26.
->
-> **Stable fallback:** need macOS 15 support or a non-beta build? Download [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3).
+**Stable fallback:** need macOS 15 support or a non-beta build? [Get QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3).
 
-## Preview
+<p align="center">
+  <img src="docs/screenshots/vocello-custom-voice.png" alt="Vocello Custom Voice screen showing speaker, delivery, model, and script controls" width="920">
+</p>
 
-<img width="1868" height="1676" alt="QwenVoice screenshot" src="https://github.com/user-attachments/assets/311ea30b-9196-4f36-93f4-5db439c5a2ba" />
+## Why Try Vocello
 
-## Project Status
+- **Create voices three ways.** Use a built-in speaker, describe a new voice, or clone from a reference clip you own or have permission to use.
+- **Keep generation local.** After models are installed, speech generation runs on your Mac and your generated audio stays in local app storage.
+- **Choose Speed or Quality.** Pick compact 4-bit models for faster startup, or larger 8-bit models when your Mac has the headroom.
+- **Stay in a native Mac workflow.** Model downloads, playback, history, saved voices, and output folders live inside one quiet macOS app.
 
-| Status | What it means for you |
-|---|---|
-| **Public beta: Vocello 2.0.0 beta 1 for macOS 26** | This is the new Vocello beta for Apple Silicon Macs on macOS 26. Use it if you want to test the next local-first generation stack. |
-| **Stable fallback: QwenVoice v1.2.3 for Mac** | This remains the stable public download, especially for macOS 15 users. |
-| **In development: Vocello for iPhone** | The iPhone app is maintained in this repository, but it is not a public download yet. When ready, it will ship through the App Store or TestFlight, not GitHub Releases. |
+## Screenshots
 
-## Download Vocello Beta 1
-
-Download the public beta from [Vocello 2.0.0 beta 1](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0-beta.1).
-
-Choose:
-
-- `Vocello-macos26.dmg` for the macOS 26 public beta
-- `Vocello-macos26.dmg.sha256` if you want to verify the download checksum
-
-Then open the DMG, drag `Vocello.app` to `/Applications`, open the app, install the voice models you want from Settings -> Model downloads, and generate speech.
-
-If you need macOS 15 support, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3) instead.
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/vocello-custom-voice.png" alt="Custom Voice screen">
+      <br>
+      <strong>Custom Voice</strong><br>
+      Pick a built-in speaker, set delivery, and generate a clean spoken line.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/vocello-voice-design.png" alt="Voice Design screen">
+      <br>
+      <strong>Voice Design</strong><br>
+      Describe the voice you want in natural language, then write the script.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/vocello-voice-cloning.png" alt="Voice Cloning screen">
+      <br>
+      <strong>Voice Cloning</strong><br>
+      Use a saved voice or import a permitted reference clip with an optional transcript.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/vocello-model-downloads.png" alt="Model downloads settings screen">
+      <br>
+      <strong>Model Downloads</strong><br>
+      Install and manage Speed and Quality packages for each voice mode.
+    </td>
+  </tr>
+</table>
 
 ## What You Can Do
 
 ### Custom Voice
 
-Pick a built-in speaker and choose the delivery style. This is the fastest way to turn a script into speech with a consistent voice.
+Choose one of the built-in speakers, pick a delivery style, and turn a script into speech quickly. This is the simplest path when you want a consistent voice right away.
 
 ### Voice Design
 
-Describe the voice you want in natural language. For example, you can ask for a warm narrator, a calm guide, or an energetic presenter, then generate your text in that designed voice.
+Describe a voice in plain language: a calm narrator, an energetic host, a warm documentary voice, or something more specific. Vocello uses that description to shape the generated voice.
 
 ### Voice Cloning
 
-Create speech from a short reference clip. Voice Cloning can use WAV, MP3, AIFF, M4A, FLAC, or OGG input, plus an optional transcript for better accuracy. Only clone voices you own or have permission to use.
+Generate speech from a short reference clip. Vocello supports WAV, MP3, AIFF, M4A, FLAC, and OGG reference audio, plus an optional transcript for better accuracy. Only clone voices you own or have permission to use.
 
-## Why Local-First Matters
+### Model Downloads
 
-QwenVoice and Vocello are built for people who want voice generation to happen on their own Mac.
+Settings is focused on model packages: download, repair, reveal, or delete Speed and Quality models for each voice mode. Generation screens own the Speed/Quality choice so model management stays out of the way while you write.
 
-- Speech generation runs on-device after models are installed.
-- Your generated audio and history stay in local app storage.
-- There is no cloud credit meter for generation.
-- You can choose where generated audio files are saved.
+## Install The Beta
 
-Model downloads come from Hugging Face when you install a voice model, but the generation workflow itself is local.
+1. Download [`Vocello-macos26.dmg`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0-beta.1).
+2. Open the DMG and drag `Vocello.app` to `/Applications`.
+3. Open Vocello.
+4. Go to Settings -> Model downloads and install the voice models you want.
+5. Generate from Custom Voice, Voice Design, or Voice Cloning.
 
-## Beta Notes
-
-Vocello 2.0.0 beta 1 is public beta software. It is suitable for testers who want the new macOS 26 app and understand that voice quality, tone control, model downloads, and performance may still be refined before a stable 2.0 release.
-
-The withdrawn 2.0 RC1 build is not restored or advertised. Beta 1 is a newer public beta with backend hardening, clearer model management, Speed/Quality selection on generation screens, and targeted delivery-control fixes.
-
-QwenVoice v1.2.3 remains available for people who prefer the stable macOS 15-compatible line.
+You can verify the download with `Vocello-macos26.dmg.sha256` from the same release.
 
 ## Requirements
 
 For Vocello 2.0.0 beta 1:
 
 - macOS 26.0+
-- Apple Silicon
-- voice models installed from Settings -> Model downloads
+- Apple Silicon Mac
+- Voice models installed from Settings -> Model downloads
 
-For the stable QwenVoice v1.2.3 release, use the release notes and DMG names on the [v1.2.3 release page](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3) as the source of truth.
+For macOS 15 or a stable non-beta build, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3).
 
-For source builds on `main`:
+## Beta Notes
 
-- Xcode 26.0
-- XcodeGen
+Vocello 2.0.0 beta 1 is public beta software. Voice quality, tone control, model downloads, and performance may still be refined before a stable 2.0 release.
+
+The withdrawn 2.0 RC1 build is not restored or advertised. Beta 1 is a newer public beta with backend hardening, clearer model management, Speed/Quality selection on generation screens, and targeted delivery-control fixes.
+
+The iPhone app is maintained in this repository, but it is not a public download yet. When ready, it will ship through the App Store or TestFlight, not GitHub Releases.
+
+## Local-First Privacy
+
+- Speech generation runs on-device after models are installed.
+- Generated audio and history stay in local app storage unless you export them.
+- Model downloads come from Hugging Face when you install a voice model.
+- Voice cloning should only be used with voices you own or have permission to use.
 
 ## For Developers
 
