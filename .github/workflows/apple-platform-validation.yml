@@ -10,6 +10,7 @@ permissions:
 
 env:
   CI_RESULT_ROOT: build/ci-results
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   validate-apple-platforms:

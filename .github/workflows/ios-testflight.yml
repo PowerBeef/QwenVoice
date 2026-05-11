@@ -17,6 +17,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: vocello-ios-testflight-${{ inputs.git_ref }}
   cancel-in-progress: false
