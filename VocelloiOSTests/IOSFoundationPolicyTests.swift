@@ -60,6 +60,30 @@ final class IOSFoundationPolicyTests: XCTestCase {
         }
     }
 
+    func testIOSExcitedStrongPresetUsesSaferControlledPacingInstruction() {
+        XCTAssertEqual(
+            EmotionPreset.preset(id: "excited")?.instruction(for: .strong),
+            "Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation."
+        )
+    }
+
+    func testIOSWhisperPresetUsesExplicitWhisperInstructions() {
+        let whisper = EmotionPreset.preset(id: "whisper")
+
+        XCTAssertEqual(
+            whisper?.instruction(for: .subtle),
+            "Subtle audible whisper, close-mic and quiet, with gentle breath, hushed tone, and clear words."
+        )
+        XCTAssertEqual(
+            whisper?.instruction(for: .normal),
+            "Hushed whisper, intimate and quiet, with breathy texture, clear articulation, and soft pacing."
+        )
+        XCTAssertEqual(
+            whisper?.instruction(for: .strong),
+            "Very soft and breathy whisper, intimate and intense, with clear pronunciation and enough audibility to understand every word."
+        )
+    }
+
     func testIOSCustomVoicePrefetchRequestUsesFinalResultSemantics() throws {
         let model = try XCTUnwrap(TTSModel.model(for: .custom))
         let draft = CustomVoiceDraft(
@@ -78,13 +102,18 @@ final class IOSFoundationPolicyTests: XCTestCase {
         XCTAssertEqual(request.mode, .custom)
         XCTAssertEqual(request.text, draft.text)
         XCTAssertEqual(request.streamingInterval, GenerationSemantics.appStreamingInterval)
+        guard case .custom(let speakerID, let deliveryStyle) = request.payload else {
+            return XCTFail("Expected Custom Voice prefetch payload")
+        }
+        XCTAssertEqual(speakerID, "aiden")
+        XCTAssertEqual(deliveryStyle, DeliveryProfile.neutralInstruction)
     }
 
     func testIOSVoiceDesignPrefetchRequestUsesFinalResultSemantics() throws {
         let model = try XCTUnwrap(TTSModel.model(for: .design))
         let draft = VoiceDesignDraft(
             voiceDescription: "A clear, grounded English narrator.",
-            delivery: DeliveryInputState(),
+            delivery: DeliveryInputState(mode: .custom, customText: "Calm and reassuring."),
             text: "Warm this final-result design path."
         )
 
@@ -99,6 +128,11 @@ final class IOSFoundationPolicyTests: XCTestCase {
         XCTAssertEqual(request.mode, .design)
         XCTAssertEqual(request.text, draft.text)
         XCTAssertEqual(request.streamingInterval, GenerationSemantics.appStreamingInterval)
+        guard case .design(let voiceDescription, let deliveryStyle) = request.payload else {
+            return XCTFail("Expected Voice Design prefetch payload")
+        }
+        XCTAssertEqual(voiceDescription, "A clear, grounded English narrator.")
+        XCTAssertEqual(deliveryStyle, "Calm and reassuring.")
     }
 
     @MainActor

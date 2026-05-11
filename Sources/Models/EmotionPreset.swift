@@ -155,9 +155,9 @@ struct EmotionPreset: Identifiable {
             label: "Whisper",
             sfSymbol: "ear",
             instructions: [
-                .subtle: "Soft and quiet, close-mic delivery with reduced volume and gentle breath.",
-                .normal: "Hushed whisper, intimate and quiet, with clear articulation and soft pacing.",
-                .strong: "Barely audible intimate whisper, very soft and breathy while preserving clarity.",
+                .subtle: "Subtle audible whisper, close-mic and quiet, with gentle breath, hushed tone, and clear words.",
+                .normal: "Hushed whisper, intimate and quiet, with breathy texture, clear articulation, and soft pacing.",
+                .strong: "Very soft and breathy whisper, intimate and intense, with clear pronunciation and enough audibility to understand every word.",
             ]
         ),
         EmotionPreset(
@@ -187,7 +187,7 @@ struct EmotionPreset: Identifiable {
             instructions: [
                 .subtle: "Slightly energetic and engaged, with a touch of enthusiasm and natural pace.",
                 .normal: "Excited and energetic, enthusiastic and bright, with quick but clear delivery.",
-                .strong: "Extremely excited and animated, fast-paced and brimming with anticipation while keeping pronunciation clear.",
+                .strong: "Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation.",
             ]
         ),
     ]

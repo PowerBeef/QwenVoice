@@ -107,7 +107,7 @@ final class GenerationSemanticsTests: XCTestCase {
         XCTAssertTrue(GenerationSemantics.hasMeaningfulDeliveryInstruction("Calm and reassuring"))
     }
 
-    func testEnglishCustomVoicePreservesUserDeliveryInstruction() {
+    func testEnglishCustomVoicePreservesUserDeliveryInstruction() throws {
         let request = GenerationRequest(
             modelID: "pro_custom",
             text: "Please read this sentence with native English diction.",
@@ -115,10 +115,68 @@ final class GenerationSemanticsTests: XCTestCase {
             payload: .custom(speakerID: "aiden", deliveryStyle: "Warm and conversational")
         )
 
-        let instruction = GenerationSemantics.customInstruction(for: request)
-        XCTAssertTrue(instruction?.contains(GenerationSemantics.englishDictionReinforcement) == true)
-        XCTAssertTrue(instruction?.contains("Delivery style:") == true)
-        XCTAssertTrue(instruction?.contains("Warm and conversational") == true)
+        let instruction = try XCTUnwrap(GenerationSemantics.customInstruction(for: request))
+        XCTAssertEqual(
+            instruction,
+            "Warm and conversational \(GenerationSemantics.englishDictionReinforcement)"
+        )
+        XCTAssertFalse(instruction.contains("Delivery style:"))
+        XCTAssertTrue(instruction.hasPrefix("Warm and conversational"))
+    }
+
+    func testEnglishCustomVoiceStrongPresetKeepsEmotionFirst() {
+        let delivery = EmotionPreset.preset(id: "happy")!.instruction(for: .strong)
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "This product launch should sound genuinely excited.",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "aiden", deliveryStyle: delivery)
+        )
+
+        XCTAssertEqual(
+            GenerationSemantics.customInstruction(for: request),
+            "\(delivery) \(GenerationSemantics.englishDictionReinforcement)"
+        )
+    }
+
+    func testExcitedStrongPresetUsesSaferControlledPacingInstruction() {
+        XCTAssertEqual(
+            EmotionPreset.preset(id: "excited")?.instruction(for: .strong),
+            "Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation."
+        )
+    }
+
+    func testWhisperPresetUsesExplicitWhisperInstructions() {
+        let whisper = EmotionPreset.preset(id: "whisper")
+
+        XCTAssertEqual(
+            whisper?.instruction(for: .subtle),
+            "Subtle audible whisper, close-mic and quiet, with gentle breath, hushed tone, and clear words."
+        )
+        XCTAssertEqual(
+            whisper?.instruction(for: .normal),
+            "Hushed whisper, intimate and quiet, with breathy texture, clear articulation, and soft pacing."
+        )
+        XCTAssertEqual(
+            whisper?.instruction(for: .strong),
+            "Very soft and breathy whisper, intimate and intense, with clear pronunciation and enough audibility to understand every word."
+        )
+    }
+
+    func testEnglishCustomVoiceWhisperPresetKeepsWhisperBeforeDictionReinforcement() {
+        let delivery = EmotionPreset.preset(id: "whisper")!.instruction(for: .subtle)
+        let request = GenerationRequest(
+            modelID: "pro_custom",
+            text: "This line should be delivered in a real whisper.",
+            outputPath: "/tmp/out.wav",
+            payload: .custom(speakerID: "vivian", deliveryStyle: delivery)
+        )
+
+        XCTAssertEqual(
+            GenerationSemantics.customInstruction(for: request),
+            "\(delivery) \(GenerationSemantics.englishDictionReinforcement)"
+        )
+        XCTAssertTrue(GenerationSemantics.customInstruction(for: request)?.hasPrefix("Subtle audible whisper") == true)
     }
 
     func testNonEnglishCustomVoiceDoesNotAddEnglishDictionInstruction() {
@@ -143,9 +201,12 @@ final class GenerationSemanticsTests: XCTestCase {
 
         let instruction = GenerationSemantics.voiceDesignInstruction(for: request)
         XCTAssertEqual(GenerationSemantics.qwenLanguageHint(for: request), "english")
-        XCTAssertTrue(instruction?.contains(GenerationSemantics.englishDictionReinforcement) == true)
-        XCTAssertTrue(instruction?.contains("A relaxed product narrator") == true)
-        XCTAssertTrue(instruction?.contains("Calm") == true)
+        XCTAssertEqual(
+            instruction,
+            "Calm A relaxed product narrator \(GenerationSemantics.englishDictionReinforcement)"
+        )
+        XCTAssertFalse(instruction?.contains("Delivery style:") == true)
+        XCTAssertFalse(instruction?.contains("Voice description:") == true)
     }
 
     func testNeutralVoiceDesignDoesNotEmitDeliveryStyleLine() {
@@ -160,6 +221,46 @@ final class GenerationSemanticsTests: XCTestCase {
         XCTAssertTrue(instruction?.contains(GenerationSemantics.englishDictionReinforcement) == true)
         XCTAssertTrue(instruction?.contains("A clear product narrator") == true)
         XCTAssertFalse(instruction?.contains("Delivery style:") == true)
+    }
+
+    func testDesignInstructionUsesNaturalLanguageAndHandlesMissingBrief() {
+        XCTAssertEqual(
+            GenerationSemantics.designInstruction(
+                voiceDescription: "A crisp documentary narrator.",
+                emotion: "Dramatic and expressive."
+            ),
+            "Dramatic and expressive. A crisp documentary narrator."
+        )
+        XCTAssertEqual(
+            GenerationSemantics.designInstruction(
+                voiceDescription: "   ",
+                emotion: "Very happy."
+            ),
+            "Very happy."
+        )
+    }
+
+    func testSpeedAndQualityVariantsResolveSameDeliveryInstruction() throws {
+        let speedModel = try XCTUnwrap(TTSModel.model(id: "pro_custom_speed"))
+        let qualityModel = try XCTUnwrap(TTSModel.model(id: "pro_custom_quality"))
+        let delivery = EmotionPreset.preset(id: "sad")!.instruction(for: .normal)
+        let speedRequest = GenerationRequest(
+            modelID: speedModel.id,
+            text: "This line should sound reflective and subdued.",
+            outputPath: "/tmp/speed.wav",
+            payload: .custom(speakerID: "aiden", deliveryStyle: delivery)
+        )
+        let qualityRequest = GenerationRequest(
+            modelID: qualityModel.id,
+            text: speedRequest.text,
+            outputPath: "/tmp/quality.wav",
+            payload: .custom(speakerID: "aiden", deliveryStyle: delivery)
+        )
+
+        XCTAssertEqual(
+            GenerationSemantics.customInstruction(for: speedRequest),
+            GenerationSemantics.customInstruction(for: qualityRequest)
+        )
     }
 
     func testCloneRequestsDoNotReceiveHiddenDictionInstruction() {
@@ -362,20 +463,30 @@ final class GenerationSemanticsTests: XCTestCase {
     // MARK: - ChunkProbeMetadata round-trip
 
     func testGenerationChunkRoundTripsThroughCodableWithProbeMetadata() throws {
+        let sequenceNumber: Int = 7
+        let emittedAtMilliseconds: Double = 1_777_944_000_000.0
+        let inferenceMilliseconds: Double = 482.5
         let probe = ChunkProbeMetadata(
-            seq: 7,
-            engineEmittedAtMS: 1_777_944_000_000.0,
-            inferMS: 482.5
+            seq: sequenceNumber,
+            engineEmittedAtMS: emittedAtMilliseconds,
+            inferMS: inferenceMilliseconds
         )
+        let requestID: Int = 42
+        let mode = "custom"
+        let title = "probe round-trip"
+        let chunkPath = "/tmp/chunk_007.wav"
+        let chunkDurationSeconds: Double = 1.12
+        let cumulativeDurationSeconds: Double = 7.84
+        let streamSessionDirectory = "/tmp/session-x"
         let chunk = GenerationChunk(
-            requestID: 42,
-            mode: "custom",
-            title: "probe round-trip",
-            chunkPath: "/tmp/chunk_007.wav",
+            requestID: requestID,
+            mode: mode,
+            title: title,
+            chunkPath: chunkPath,
             isFinal: false,
-            chunkDurationSeconds: 1.12,
-            cumulativeDurationSeconds: 7.84,
-            streamSessionDirectory: "/tmp/session-x",
+            chunkDurationSeconds: chunkDurationSeconds,
+            cumulativeDurationSeconds: cumulativeDurationSeconds,
+            streamSessionDirectory: streamSessionDirectory,
             previewAudio: nil,
             probeMetadata: probe
         )

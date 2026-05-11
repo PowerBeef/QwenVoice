@@ -232,24 +232,30 @@ final class MLXTTSEngineEventStreamTests: XCTestCase {
         })
 
         let chunkCount = 96
-        let chunks: [GenerationEvent] = (0 ..< chunkCount).map { i in
-            GenerationEvent(
+        var chunks: [GenerationEvent] = []
+        chunks.reserveCapacity(chunkCount)
+        for index in 0..<chunkCount {
+            let frameOffset = Int64(index * 4)
+            let pcm = Data(repeating: UInt8(index % 255), count: 4_096)
+            let previewAudio = StreamingAudioChunk(
+                requestID: 1,
+                sampleRate: 24_000,
+                frameOffset: frameOffset,
+                frameCount: 4,
+                pcm16LE: pcm,
+                isFinal: false
+            )
+            let event = GenerationEvent(
                 kind: .streamChunk,
                 requestID: 1,
                 mode: "custom",
                 title: "Bounded Event Buffer",
-                isFinal: i == chunkCount - 1,
+                isFinal: index == chunkCount - 1,
                 chunkDurationSeconds: 0.05,
-                cumulativeDurationSeconds: 0.05 * Double(i + 1),
-                previewAudio: StreamingAudioChunk(
-                    requestID: 1,
-                    sampleRate: 24_000,
-                    frameOffset: Int64(i * 4),
-                    frameCount: 4,
-                    pcm16LE: Data(repeating: UInt8(i % 255), count: 4_096),
-                    isFinal: false
-                )
+                cumulativeDurationSeconds: 0.05 * Double(index + 1),
+                previewAudio: previewAudio
             )
+            chunks.append(event)
         }
         let cannedOutputPath = temporaryRoot
             .appendingPathComponent("bounded-event-buffer.wav")

@@ -38,7 +38,11 @@ Environment:
   QWENVOICE_AUDIO_QC_OUTPUT_DIR         perf-lane artifact root (default build/audio-qc/qa-perf)
   QWENVOICE_AUDIO_QC_MODELS_ROOT        perf-lane models root (default ~/Library/Application Support/QwenVoice/models)
   QWENVOICE_AUDIO_QC_MODES              perf-lane modes (default CustomVoice,VoiceDesign; VoiceCloning supported)
-  QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE  perf-lane profile (default repeat)
+  QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE  perf-lane profile (repeat|cold-warm|warm-focus|custom-ui-cold|exhaustive|delivery-matrix; default repeat)
+  QWENVOICE_AUDIO_QC_VARIANTS           delivery-matrix variants (speed,quality; default both)
+  QWENVOICE_AUDIO_QC_DELIVERY_SCOPE     delivery matrix scope (standard|full|known-risk|whisper-risk; default standard)
+  QWENVOICE_AUDIO_QC_CLONE_REFERENCES   optional pipe-separated clone reference WAVs for delivery-matrix full scope
+  QWENVOICE_AUDIO_QC_CLONE_TONE_LABEL   optional label for the clone reference tone in delivery-matrix reports
   QWENVOICE_AUDIO_QC_REPEAT_COUNT       perf-lane repeats (default 1)
   QWENVOICE_AUDIO_QC_COLD_RUNS          perf-lane cold runs per mode (default 2)
   QWENVOICE_AUDIO_QC_WARM_RUNS          perf-lane warm runs per mode (default 3)
@@ -216,7 +220,27 @@ run_contract_layer() {
 
 run_swift_layer() {
   echo "==> Running Swift source tests..."
+  local request_path="$PROJECT_DIR/build/audio-qc/live-request.json"
+  local held_request_path=""
+  if [[ -f "$request_path" ]]; then
+    held_request_path="$request_path.swift-source-tests-held.$$"
+    echo "==> Hiding live audio-QC request during Swift source tests: $request_path"
+    mv "$request_path" "$held_request_path"
+  fi
+
+  set +e
   run_xcodebuild_suite "swift_source_tests" "QwenVoice Foundation" "platform=macOS"
+  local status=$?
+  set -e
+
+  if [[ -n "$held_request_path" ]]; then
+    if [[ -f "$request_path" ]]; then
+      echo "qa.sh: live audio-QC request was recreated during Swift source tests; preserving held request at $held_request_path." >&2
+    else
+      mv "$held_request_path" "$request_path"
+    fi
+  fi
+  return "$status"
 }
 
 run_native_layer() {
@@ -314,6 +338,8 @@ run_perf_layer() {
   : "${QWENVOICE_AUDIO_QC_REPEAT_COUNT:=1}"
   : "${QWENVOICE_AUDIO_QC_COLD_RUNS:=2}"
   : "${QWENVOICE_AUDIO_QC_WARM_RUNS:=3}"
+  : "${QWENVOICE_AUDIO_QC_VARIANTS:=speed,quality}"
+  : "${QWENVOICE_AUDIO_QC_DELIVERY_SCOPE:=standard}"
   : "${QWENVOICE_AUDIO_REVIEW_ENABLED:=0}"
   : "${QWENVOICE_AUDIO_REVIEW_STRICTNESS:=balanced}"
   : "${QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB:=4.0}"
@@ -331,7 +357,9 @@ run_perf_layer() {
   export QWENVOICE_AUDIO_QC_OUTPUT_DIR QWENVOICE_AUDIO_QC_MODELS_ROOT \
     QWENVOICE_AUDIO_QC_MODES QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE \
     QWENVOICE_AUDIO_QC_REPEAT_COUNT QWENVOICE_AUDIO_QC_COLD_RUNS \
-    QWENVOICE_AUDIO_QC_WARM_RUNS QWENVOICE_AUDIO_REVIEW_ENABLED \
+    QWENVOICE_AUDIO_QC_WARM_RUNS QWENVOICE_AUDIO_QC_VARIANTS \
+    QWENVOICE_AUDIO_QC_DELIVERY_SCOPE QWENVOICE_AUDIO_QC_CLONE_REFERENCES \
+    QWENVOICE_AUDIO_QC_CLONE_TONE_LABEL QWENVOICE_AUDIO_REVIEW_ENABLED \
     QWENVOICE_AUDIO_REVIEW_STRICTNESS QWENVOICE_AUDIO_REVIEW_MIN_AVAILABLE_GB \
     QWENVOICE_AUDIO_REVIEW_MEMORY_SETTLE_SECONDS
 
@@ -366,6 +394,10 @@ run_perf_layer() {
   echo "==> Models root:   $QWENVOICE_AUDIO_QC_MODELS_ROOT"
   echo "==> Modes:         $QWENVOICE_AUDIO_QC_MODES"
   echo "==> Profile:       $QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE (repeat=${QWENVOICE_AUDIO_QC_REPEAT_COUNT}, cold=${QWENVOICE_AUDIO_QC_COLD_RUNS}, warm=${QWENVOICE_AUDIO_QC_WARM_RUNS})"
+  if [[ "$QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE" == "delivery-matrix" ]]; then
+    echo "==> Variants:      $QWENVOICE_AUDIO_QC_VARIANTS"
+    echo "==> Scope:         $QWENVOICE_AUDIO_QC_DELIVERY_SCOPE"
+  fi
   if [[ "$QWENVOICE_AUDIO_REVIEW_ENABLED" =~ ^(1|true|yes|on)$ ]]; then
     echo "==> Audio review:  enabled (${QWENVOICE_AUDIO_REVIEW_STRICTNESS})"
     echo "==> Review models: $QWENVOICE_AUDIO_REVIEW_MODELS_ROOT"
@@ -396,11 +428,17 @@ write_live_audit_request() {
   local modes_json
   modes_json="$(printf '%s' "$QWENVOICE_AUDIO_QC_MODES" \
     | jq -R 'split(",") | map(select(length > 0))')"
+  local variants_json
+  variants_json="$(printf '%s' "${QWENVOICE_AUDIO_QC_VARIANTS:-speed,quality}" \
+    | jq -R 'split(",") | map(select(length > 0))')"
   local expires_at
   expires_at="$(date -u -v+12H +"%Y-%m-%dT%H:%M:%SZ")"
 
   jq -n \
     --argjson modes "$modes_json" \
+    --argjson variants "$variants_json" \
+    --arg deliveryScope "${QWENVOICE_AUDIO_QC_DELIVERY_SCOPE:-standard}" \
+    --arg cloneRefs "${QWENVOICE_AUDIO_QC_CLONE_REFERENCES:-}" \
     --arg output "$QWENVOICE_AUDIO_QC_OUTPUT_DIR" \
     --arg models "$QWENVOICE_AUDIO_QC_MODELS_ROOT" \
     --arg profile "$QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE" \
@@ -417,6 +455,7 @@ write_live_audit_request() {
     --arg speedProfile "${QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE:-}" \
     --arg memCadence "${QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE:-}" \
     --arg cachePolicy "${QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY:-}" \
+    --arg cloneToneLabel "${QWENVOICE_AUDIO_QC_CLONE_TONE_LABEL:-}" \
     --arg audioReviewEnabled "${QWENVOICE_AUDIO_REVIEW_ENABLED:-0}" \
     --arg audioReviewModels "${QWENVOICE_AUDIO_REVIEW_MODELS_ROOT:-}" \
     --arg audioReviewStrictness "${QWENVOICE_AUDIO_REVIEW_STRICTNESS:-balanced}" \
@@ -442,6 +481,10 @@ write_live_audit_request() {
       generationSpeedProfile: (if $speedProfile == "" then null else $speedProfile end),
       memoryClearCadence: (if $memCadence == "" then null else ($memCadence | tonumber) end),
       postRequestCachePolicy: (if $cachePolicy == "" then null else $cachePolicy end),
+      deliveryAuditVariants: $variants,
+      deliveryAuditScope: (if $deliveryScope == "" then "standard" else $deliveryScope end),
+      cloneReferences: (if $cloneRefs == "" then null else ($cloneRefs | split("|") | map(select(length > 0))) end),
+      cloneToneLabel: (if $cloneToneLabel == "" then null else $cloneToneLabel end),
       audioReviewEnabled: ($audioReviewEnabled | test("^(1|true|yes|on)$"; "i")),
       audioReviewModelsRoot: (if $audioReviewModels == "" then null else $audioReviewModels end),
       audioReviewStrictness: (if $audioReviewStrictness == "" then "balanced" else $audioReviewStrictness end),

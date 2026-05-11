@@ -42,10 +42,10 @@ public enum GenerationSemantics {
             return trimmedDescription
         }
 
-        return """
-        Voice description: \(trimmedDescription)
-        Delivery style: \(trimmedEmotion)
-        """
+        guard !trimmedDescription.isEmpty else {
+            return trimmedEmotion
+        }
+        return "\(trimmedEmotion) \(trimmedDescription)"
     }
 
     public static func normalizedConditioningCacheKeyText(_ text: String) -> String {
@@ -86,12 +86,8 @@ public enum GenerationSemantics {
         }
         let language = qwenLanguageHint(for: request)
         let baseInstruction = customInstruction(deliveryStyle: deliveryStyle)
-        let resolvedBaseInstruction =
-            Qwen3TTSRuntimeProfile.normalizedLanguage(language) == "english"
-            ? baseInstruction.map { "Delivery style: \($0)" }
-            : baseInstruction
         return englishDictionReinforcedInstruction(
-            baseInstruction: resolvedBaseInstruction,
+            baseInstruction: baseInstruction,
             language: language
         )
     }
@@ -130,7 +126,7 @@ public enum GenerationSemantics {
             .contains(normalizedConditioningCacheKeyText(reinforcement)) {
             return trimmedBase
         }
-        return "\(reinforcement)\n\(trimmedBase)"
+        return "\(trimmedBase) \(reinforcement)"
     }
 
     public static func qwenLanguageHint(

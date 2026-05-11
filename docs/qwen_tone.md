@@ -20,7 +20,7 @@ Current app behavior:
 - **Voice Design** has its own generation screen and prompt flow using a natural-language voice/design instruction
 - **Voice Cloning** uses reference audio and can optionally use a transcript for better preparation quality, but it does not expose a separate instruction-only tone surface
 - single generations produce a complete final take, and the app does not expose temperature or max-token controls
-- **Neutral** delivery is intentionally treated as no meaningful style instruction, so it does not add a `Delivery style:` line to Qwen prompts
+- **Neutral** delivery is intentionally treated as no meaningful style instruction. Custom Voice and Voice Design prompts use direct natural language rather than `Delivery style:` fields.
 
 Useful instruction patterns:
 
@@ -35,6 +35,7 @@ Useful instruction patterns:
 - Keep requests concrete: `calm middle-aged narrator with steady pacing` works better than `make it better`.
 - Prefer short, direct performance direction over one-word labels; Qwen3-TTS follows natural-language delivery instructions.
 - Keep strong emotions intelligible: add constraints like `while keeping words clear`, `without shouting`, or `still understandable`.
+- For whisper delivery, say `whisper` explicitly. Generic `soft and quiet` wording can produce soft-spoken delivery instead of an actual whisper.
 - Iterate wording: instruction following is probabilistic, so small prompt changes can materially change the result.
 - Use Voice Design when you want a reusable prompt-driven voice shape, and use Voice Cloning when you want a specific reference identity from audio.
 
@@ -63,7 +64,11 @@ Custom Voice:
 
 Custom Voice, strong emotion:
 
-> Very happy and joyful, energetic and expressive, with lively stress while keeping words clear.
+> Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation.
+
+Custom Voice, whisper:
+
+> Subtle audible whisper, close-mic and quiet, with gentle breath, hushed tone, and clear words.
 
 Voice Design:
 

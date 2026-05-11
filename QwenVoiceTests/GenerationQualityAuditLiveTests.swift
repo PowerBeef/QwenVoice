@@ -1,4 +1,5 @@
 import QwenVoiceCore
+import AVFoundation
 import Foundation
 import Dispatch
 import XCTest
@@ -47,6 +48,17 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 "voice-clone"
             }
         }
+
+        var generationMode: QwenVoiceCore.GenerationMode {
+            switch self {
+            case .customVoice:
+                .custom
+            case .voiceDesign:
+                .design
+            case .clones:
+                .clone
+            }
+        }
     }
 
     private enum BenchmarkProfile: String {
@@ -55,6 +67,43 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         case warmFocus = "warm-focus"
         case customUICold = "custom-ui-cold"
         case exhaustive
+        case deliveryMatrix = "delivery-matrix"
+    }
+
+    private enum AuditVariant: String, CaseIterable, Codable {
+        case speed
+        case quality
+
+        var displayName: String {
+            switch self {
+            case .speed:
+                "Speed"
+            case .quality:
+                "Quality"
+            }
+        }
+
+        var bitDepthLabel: String {
+            switch self {
+            case .speed:
+                "4-bit"
+            case .quality:
+                "8-bit"
+            }
+        }
+    }
+
+    private enum DeliveryAuditScope: String {
+        case standard
+        case full
+        case knownRisk = "known-risk"
+        case whisperRisk = "whisper-risk"
+    }
+
+    private struct CloneAuditReference: Codable, Equatable {
+        let path: String
+        let transcript: String?
+        let label: String
     }
 
     private enum AuditPhase: String {
@@ -66,6 +115,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         case direct900 = "direct-900"
         case direct2700 = "direct-2700"
         case batchLongForm = "batch-long-form"
+        case deliveryMatrix = "delivery-matrix"
     }
 
     private struct AuditManifest: Codable {
@@ -77,6 +127,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let modelsRoot: String
         let artifacts: [AuditArtifact]
         let longText: LongTextManifest?
+        let deliveryMatrix: DeliveryAuditManifest?
         let audioReview: AudioReview.RunManifest?
     }
 
@@ -96,16 +147,63 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let batchTotal: Int?
         let speakerID: String?
         let deliveryInstruction: String?
+        let resolvedQwenInstruction: String?
+        let deliveryAuditCaseID: String?
+        let deliveryPresetID: String?
+        let deliveryIntensity: String?
+        let deliveryVoiceDescription: String?
+        let deliveryReferenceToneLabel: String?
+        let modelVariantKind: String?
+        let modelBitDepth: String?
         let appSupportDirectory: String
         let outputPath: String
         let streamSessionDirectory: String?
         let durationSeconds: Double
+        let audioFeatures: AudioFeatureSummary?
         let wallClockMS: Int
         let realTimeFactor: Double?
         let streamingUsed: Bool
         let timingsMS: [String: Int]
         let booleanFlags: [String: Bool]
         let stringFlags: [String: String]
+    }
+
+    private struct AudioFeatureSummary: Codable, Equatable {
+        let durationSeconds: Double
+        let rmsAmplitude: Double?
+        let peakAmplitude: Double?
+        let clippingSampleCount: Int
+        let estimatedWordsPerMinute: Double?
+    }
+
+    private struct DeliveryAuditCase: Codable, Equatable {
+        let id: String
+        let presetID: String?
+        let intensity: String?
+        let customText: String?
+        let deliveryInstruction: String?
+        let voiceDescription: String?
+        let speakerID: String?
+        let cloneReferencePath: String?
+        let cloneTranscript: String?
+        let text: String
+        let referenceToneLabel: String?
+    }
+
+    private struct DeliveryAuditManifest: Codable, Equatable {
+        let schemaVersion: Int
+        let generatedAt: String
+        let variants: [String]
+        let scope: String
+        let artifacts: [String]
+        let skippedRows: [SkippedRow]
+
+        struct SkippedRow: Codable, Equatable {
+            let mode: String
+            let variant: String
+            let caseID: String?
+            let reason: String
+        }
     }
 
     private struct SelectedPrefetchDiagnostics {
@@ -153,6 +251,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
     private struct AuditRunResult {
         var artifacts: [AuditArtifact]
         var longText: LongTextManifest?
+        var deliveryMatrix: DeliveryAuditManifest? = nil
     }
 
     private struct InitializedAuditClient {
@@ -179,6 +278,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let generationSpeedProfile: String?
         let memoryClearCadence: Int?
         let postRequestCachePolicy: String?
+        let deliveryAuditVariants: [String]?
+        let deliveryAuditScope: String?
+        let cloneReferences: [String]?
+        let cloneToneLabel: String?
         let expiresAt: String?
         let audioReviewEnabled: Bool?
         let audioReviewModelsRoot: String?
@@ -204,6 +307,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         let generationSpeedProfile: String?
         let memoryClearCadence: Int?
         let postRequestCachePolicy: String?
+        let deliveryAuditVariants: [AuditVariant]
+        let deliveryAuditScope: DeliveryAuditScope
+        let cloneReferences: [CloneAuditReference]
+        let cloneToneLabel: String?
         let audioReview: AudioReview.RunConfiguration?
     }
 
@@ -230,6 +337,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             generationSpeedProfile: nil,
             memoryClearCadence: nil,
             postRequestCachePolicy: nil,
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .standard,
+            cloneReferences: [],
+            cloneToneLabel: nil,
             audioReview: nil
         )
 
@@ -271,6 +382,12 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             generationSpeedProfile: nil,
             memoryClearCadence: nil,
             postRequestCachePolicy: nil,
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .standard,
+            cloneReferences: [
+                CloneAuditReference(path: "/tmp/reference.wav", transcript: "Reference speech", label: "reference"),
+            ],
+            cloneToneLabel: nil,
             audioReview: nil
         )
 
@@ -312,6 +429,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             generationSpeedProfile: "balanced-all-modes",
             memoryClearCadence: 50,
             postRequestCachePolicy: "failure-only",
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .standard,
+            cloneReferences: [],
+            cloneToneLabel: nil,
             audioReview: nil
         )
 
@@ -368,10 +489,193 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         )
     }
 
+    func testDeliveryMatrixProfileDefaultsToBothMacVariants() throws {
+        let profile = try parseBenchmarkProfile("delivery-matrix")
+
+        XCTAssertEqual(profile, .deliveryMatrix)
+        XCTAssertEqual(
+            try parseAuditVariants(nil, benchmarkProfile: profile),
+            [.speed, .quality]
+        )
+        XCTAssertEqual(
+            try parseAuditVariants("quality,speed,quality", benchmarkProfile: profile),
+            [.quality, .speed]
+        )
+    }
+
+    func testDeliveryAuditCasesCoverBuiltInPresetsAndCustomText() {
+        let cases = deliveryAuditCases(for: .customVoice, cloneToneLabel: nil)
+
+        XCTAssertEqual(cases.map(\.id), [
+            "speaker-aiden-neutral-normal",
+            "speaker-aiden-happy-normal",
+            "speaker-aiden-sad-normal",
+            "speaker-aiden-angry-normal",
+            "speaker-aiden-calm-normal",
+            "speaker-aiden-whisper-normal",
+            "speaker-aiden-dramatic-normal",
+            "speaker-aiden-excited-normal",
+            "speaker-aiden-custom-controlled-urgency",
+        ])
+        XCTAssertEqual(cases.first?.deliveryInstruction, DeliveryProfile.neutralInstruction)
+        XCTAssertEqual(cases.last?.customText, "Controlled urgency with quick pacing, focused stress, and clear pronunciation.")
+    }
+
+    func testFullDeliveryAuditCasesCoverSpeakersIntensitiesAndDesignBriefs() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("qwenvoice-full-delivery-test", isDirectory: true)
+        let configuration = LiveAuditConfiguration(
+            outputRoot: root,
+            modelsRoot: root.appendingPathComponent("models", isDirectory: true),
+            modes: [.customVoice, .voiceDesign, .clones],
+            cloneReference: "/tmp/reference.wav",
+            cloneTranscript: "Reference speech",
+            repeatCount: 1,
+            benchmarkProfile: .deliveryMatrix,
+            coldRuns: 2,
+            warmRuns: 3,
+            streamingIntervalOverride: nil,
+            customPrewarmDepth: nil,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            postRequestCachePolicy: nil,
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .full,
+            cloneReferences: [
+                CloneAuditReference(path: "/tmp/reference.wav", transcript: "Reference speech", label: "Warm Reference"),
+            ],
+            cloneToneLabel: nil,
+            audioReview: nil
+        )
+
+        let customCases = deliveryAuditCases(for: .customVoice, configuration: configuration)
+        XCTAssertTrue(customCases.contains { $0.id == "speaker-ryan-excited-strong" })
+        XCTAssertTrue(customCases.contains { $0.id == "speaker-serena-excited-strong" })
+        XCTAssertTrue(customCases.contains { $0.id == "speaker-aiden-fearful-subtle" })
+        XCTAssertTrue(customCases.contains { $0.id == "speaker-vivian-whisper-subtle" })
+        XCTAssertEqual(Set(customCases.compactMap(\.speakerID)), ["aiden", "ryan", "vivian", "serena"])
+
+        let designCases = deliveryAuditCases(for: .voiceDesign, configuration: configuration)
+        XCTAssertTrue(designCases.contains { $0.id == "brief-warm-british-dramatic-strong" })
+        XCTAssertTrue(designCases.contains { $0.voiceDescription?.contains("British") == true })
+
+        let cloneCases = deliveryAuditCases(for: .clones, configuration: configuration)
+        XCTAssertEqual(cloneCases.map(\.referenceToneLabel), ["Warm Reference"])
+        XCTAssertEqual(cloneCases.first?.cloneReferencePath, "/tmp/reference.wav")
+    }
+
+    func testKnownRiskDeliveryScopeTargetsRyanSpeedExcitedStrongCluster() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("qwenvoice-known-risk-delivery-test", isDirectory: true)
+        let configuration = LiveAuditConfiguration(
+            outputRoot: root,
+            modelsRoot: root.appendingPathComponent("models", isDirectory: true),
+            modes: [.customVoice, .voiceDesign, .clones],
+            cloneReference: nil,
+            cloneTranscript: nil,
+            repeatCount: 1,
+            benchmarkProfile: .deliveryMatrix,
+            coldRuns: 2,
+            warmRuns: 3,
+            streamingIntervalOverride: nil,
+            customPrewarmDepth: nil,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            postRequestCachePolicy: nil,
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .knownRisk,
+            cloneReferences: [],
+            cloneToneLabel: nil,
+            audioReview: nil
+        )
+
+        XCTAssertEqual(try parseDeliveryAuditScope("known-risk"), .knownRisk)
+
+        let customCases = deliveryAuditCases(for: .customVoice, configuration: configuration)
+        XCTAssertEqual(customCases.map(\.id), [
+            "speaker-ryan-neutral-normal",
+            "speaker-ryan-excited-strong",
+            "speaker-aiden-excited-strong",
+        ])
+        XCTAssertTrue(deliveryAuditCases(for: .voiceDesign, configuration: configuration).isEmpty)
+        XCTAssertTrue(deliveryAuditCases(for: .clones, configuration: configuration).isEmpty)
+        XCTAssertEqual(
+            deliveryAuditCases(customCases, for: .speed, scope: .knownRisk).map(\.id),
+            [
+                "speaker-ryan-neutral-normal",
+                "speaker-ryan-excited-strong",
+                "speaker-aiden-excited-strong",
+            ]
+        )
+        XCTAssertEqual(
+            deliveryAuditCases(customCases, for: .quality, scope: .knownRisk).map(\.id),
+            ["speaker-ryan-excited-strong"]
+        )
+    }
+
+    func testWhisperRiskDeliveryScopeTargetsVivianWhisperSubtleCluster() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("qwenvoice-whisper-risk-delivery-test", isDirectory: true)
+        let configuration = LiveAuditConfiguration(
+            outputRoot: root,
+            modelsRoot: root.appendingPathComponent("models", isDirectory: true),
+            modes: [.customVoice, .voiceDesign, .clones],
+            cloneReference: nil,
+            cloneTranscript: nil,
+            repeatCount: 1,
+            benchmarkProfile: .deliveryMatrix,
+            coldRuns: 2,
+            warmRuns: 3,
+            streamingIntervalOverride: nil,
+            customPrewarmDepth: nil,
+            customVoiceProfile: nil,
+            streamStepEvalPolicy: nil,
+            generationSpeedProfile: nil,
+            memoryClearCadence: nil,
+            postRequestCachePolicy: nil,
+            deliveryAuditVariants: [.speed, .quality],
+            deliveryAuditScope: .whisperRisk,
+            cloneReferences: [],
+            cloneToneLabel: nil,
+            audioReview: nil
+        )
+
+        XCTAssertEqual(try parseDeliveryAuditScope("whisper-risk"), .whisperRisk)
+
+        let customCases = deliveryAuditCases(for: .customVoice, configuration: configuration)
+        XCTAssertEqual(customCases.map(\.id), [
+            "speaker-vivian-whisper-subtle",
+            "speaker-vivian-whisper-normal",
+            "speaker-vivian-whisper-strong",
+            "speaker-ryan-whisper-subtle",
+            "speaker-aiden-whisper-subtle",
+        ])
+        XCTAssertTrue(deliveryAuditCases(for: .voiceDesign, configuration: configuration).isEmpty)
+        XCTAssertTrue(deliveryAuditCases(for: .clones, configuration: configuration).isEmpty)
+        XCTAssertEqual(
+            deliveryAuditCases(customCases, for: .speed, scope: .whisperRisk).map(\.id),
+            [
+                "speaker-vivian-whisper-subtle",
+                "speaker-vivian-whisper-normal",
+                "speaker-vivian-whisper-strong",
+                "speaker-ryan-whisper-subtle",
+                "speaker-aiden-whisper-subtle",
+            ]
+        )
+        XCTAssertEqual(
+            deliveryAuditCases(customCases, for: .quality, scope: .whisperRisk).map(\.id),
+            ["speaker-vivian-whisper-subtle"]
+        )
+    }
+
     func testLiveXPCGenerationQualityAuditArtifacts() async throws {
         let environment = ProcessInfo.processInfo.environment
         let configuration = try loadLiveAuditConfiguration(environment: environment)
-        executionTimeAllowance = configuration.benchmarkProfile == .exhaustive ? 7_200 : 1_800
+        executionTimeAllowance = [.exhaustive, .deliveryMatrix].contains(configuration.benchmarkProfile) ? 7_200 : 1_800
         let outputRoot = configuration.outputRoot
         let modelsRoot = configuration.modelsRoot
         let modes = configuration.modes
@@ -436,6 +740,14 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 appSupportBase: appSupportRoot,
                 generatedRoot: generatedRoot
             )
+        case .deliveryMatrix:
+            runResult = try await runDeliveryMatrixAudit(
+                configuration: configuration,
+                modes: modes,
+                modelsRoot: modelsRoot,
+                appSupportBase: appSupportRoot,
+                generatedRoot: generatedRoot
+            )
         }
 
         let audioReviewManifest = try await runAudioReviewIfEnabled(
@@ -452,6 +764,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             modelsRoot: modelsRoot.path,
             artifacts: runResult.artifacts,
             longText: runResult.longText,
+            deliveryMatrix: runResult.deliveryMatrix,
             audioReview: audioReviewManifest
         )
         let data = try JSONEncoder.audioQCEncoder.encode(manifest)
@@ -459,6 +772,10 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         if let longText = runResult.longText {
             let longTextData = try JSONEncoder.audioQCEncoder.encode(longText)
             try longTextData.write(to: outputRoot.appendingPathComponent("long-text-manifest.json"))
+        }
+        if let deliveryMatrix = runResult.deliveryMatrix {
+            let deliveryData = try JSONEncoder.audioQCEncoder.encode(deliveryMatrix)
+            try deliveryData.write(to: outputRoot.appendingPathComponent("delivery-matrix-manifest.json"))
         }
     }
 
@@ -1166,12 +1483,170 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         return batchResult
     }
 
+    private func runDeliveryMatrixAudit(
+        configuration: LiveAuditConfiguration,
+        modes: [AuditMode],
+        modelsRoot: URL,
+        appSupportBase: URL,
+        generatedRoot: URL
+    ) async throws -> AuditRunResult {
+        var artifacts: [AuditArtifact] = []
+        var skippedRows: [DeliveryAuditManifest.SkippedRow] = []
+
+        for mode in modes {
+            let cases = deliveryAuditCases(for: mode, configuration: configuration)
+            if mode == .clones,
+               configuration.cloneReference?.nonEmpty == nil,
+               configuration.cloneReferences.isEmpty {
+                skippedRows.append(contentsOf: cases.map {
+                    DeliveryAuditManifest.SkippedRow(
+                        mode: mode.rawValue,
+                        variant: "all",
+                        caseID: $0.id,
+                        reason: "Voice Cloning delivery audit requires QWENVOICE_AUDIO_QC_CLONE_REFERENCE."
+                    )
+                })
+                continue
+            }
+
+            for variant in configuration.deliveryAuditVariants {
+                let variantCases = deliveryAuditCases(
+                    cases,
+                    for: variant,
+                    scope: configuration.deliveryAuditScope
+                )
+                guard !variantCases.isEmpty else {
+                    continue
+                }
+
+                guard let model = auditModel(mode: mode, variant: variant) else {
+                    skippedRows.append(contentsOf: variantCases.map {
+                        DeliveryAuditManifest.SkippedRow(
+                            mode: mode.rawValue,
+                            variant: variant.rawValue,
+                            caseID: $0.id,
+                            reason: "No \(variant.displayName) model descriptor exists for \(mode.rawValue)."
+                        )
+                    })
+                    continue
+                }
+
+                do {
+                    let entry = try resolvedAuditModelEntry(id: model.id)
+                    try validateInstalledModel(
+                        entry,
+                        at: modelsRoot.appendingPathComponent(model.folder, isDirectory: true)
+                    )
+                } catch {
+                    skippedRows.append(contentsOf: variantCases.map {
+                        DeliveryAuditManifest.SkippedRow(
+                            mode: mode.rawValue,
+                            variant: variant.rawValue,
+                            caseID: $0.id,
+                            reason: String(describing: error)
+                        )
+                    })
+                    continue
+                }
+
+                let appSupportRoot = appSupportBase
+                    .appendingPathComponent("delivery-matrix", isDirectory: true)
+                    .appendingPathComponent(mode.rawValue, isDirectory: true)
+                    .appendingPathComponent(variant.rawValue, isDirectory: true)
+                let initialized = try await makeInitializedClient(
+                    modelIDs: [model.id],
+                    modelsRoot: modelsRoot,
+                    appSupportRoot: appSupportRoot
+                )
+                let client = initialized.client
+                var pendingTimings = initialized.timingsMS
+                do {
+                    for (index, auditCase) in variantCases.enumerated() {
+                        let request = try makeDeliveryAuditRequest(
+                            mode: mode,
+                            model: model,
+                            variant: variant,
+                            auditCase: auditCase,
+                            index: index + 1,
+                            generatedRoot: generatedRoot,
+                            configuration: configuration
+                        )
+                        let started = DispatchTime.now().uptimeNanoseconds
+                        let result = try await client.generate(request)
+                        let artifact = try makeArtifact(
+                            mode: mode,
+                            request: request,
+                            result: result,
+                            iteration: index + 1,
+                            phase: .deliveryMatrix,
+                            runIndex: index + 1,
+                            measured: true,
+                            qcEligible: true,
+                            appSupportRoot: appSupportRoot,
+                            wallClockMS: elapsedMilliseconds(since: started),
+                            extraTimingsMS: pendingTimings,
+                            deliveryAuditCase: auditCase
+                        )
+                        pendingTimings = [:]
+                        artifacts.append(artifact)
+                    }
+                    await shutdownBenchmarkClient(client)
+                } catch {
+                    await shutdownBenchmarkClient(client)
+                    throw error
+                }
+            }
+        }
+
+        let deliveryMatrix = DeliveryAuditManifest(
+            schemaVersion: 1,
+            generatedAt: ISO8601DateFormatter().string(from: Date()),
+            variants: configuration.deliveryAuditVariants.map(\.rawValue),
+            scope: configuration.deliveryAuditScope.rawValue,
+            artifacts: artifacts.map(\.outputPath),
+            skippedRows: skippedRows
+        )
+        return AuditRunResult(
+            artifacts: artifacts,
+            longText: nil,
+            deliveryMatrix: deliveryMatrix
+        )
+    }
+
+    private func auditModel(mode: AuditMode, variant: AuditVariant) -> TTSModel? {
+        TTSModel.all.first {
+            $0.mode.rawValue == mode.generationMode.rawValue && $0.variantKind?.rawValue == variant.rawValue
+        }
+    }
+
     private func makeInitializedClient(
         modes: [AuditMode],
         modelsRoot: URL,
         appSupportRoot: URL
     ) async throws -> InitializedAuditClient {
         let modelMirrorMS = try mirrorRequiredModels(for: modes, from: modelsRoot, into: appSupportRoot)
+        return try await makeInitializedClient(
+            modelMirrorMS: modelMirrorMS,
+            appSupportRoot: appSupportRoot
+        )
+    }
+
+    private func makeInitializedClient(
+        modelIDs: [String],
+        modelsRoot: URL,
+        appSupportRoot: URL
+    ) async throws -> InitializedAuditClient {
+        let modelMirrorMS = try mirrorRequiredModels(forModelIDs: modelIDs, from: modelsRoot, into: appSupportRoot)
+        return try await makeInitializedClient(
+            modelMirrorMS: modelMirrorMS,
+            appSupportRoot: appSupportRoot
+        )
+    }
+
+    private func makeInitializedClient(
+        modelMirrorMS: Int,
+        appSupportRoot: URL
+    ) async throws -> InitializedAuditClient {
         let chunkRecorder = LiveChunkArtifactRecorder()
         let client = XPCNativeEngineClient(onChunk: { event in
             chunkRecorder.record(event)
@@ -1373,7 +1848,8 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         extraBooleanFlags: [String: Bool] = [:],
         segmentCount: Int? = nil,
         segmentIndex: Int? = nil,
-        batchTotal: Int? = nil
+        batchTotal: Int? = nil,
+        deliveryAuditCase: DeliveryAuditCase? = nil
     ) throws -> AuditArtifact {
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: result.audioPath),
@@ -1407,10 +1883,19 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             batchTotal: batchTotal ?? request.batchTotal,
             speakerID: speakerID(from: request.payload),
             deliveryInstruction: deliveryInstruction(from: request.payload),
+            resolvedQwenInstruction: resolvedQwenInstruction(for: request),
+            deliveryAuditCaseID: deliveryAuditCase?.id,
+            deliveryPresetID: deliveryAuditCase?.presetID,
+            deliveryIntensity: deliveryAuditCase?.intensity,
+            deliveryVoiceDescription: deliveryAuditCase?.voiceDescription,
+            deliveryReferenceToneLabel: deliveryAuditCase?.referenceToneLabel,
+            modelVariantKind: TTSModel.model(id: request.modelID)?.variantKind?.rawValue,
+            modelBitDepth: TTSModel.model(id: request.modelID)?.variantKind?.bitDepthLabel,
             appSupportDirectory: appSupportRoot.path,
             outputPath: result.audioPath,
             streamSessionDirectory: result.streamSessionDirectory,
             durationSeconds: result.durationSeconds,
+            audioFeatures: audioFeatures(for: result.audioPath, expectedText: request.text),
             wallClockMS: wallClockMS,
             realTimeFactor: realTimeFactor,
             streamingUsed: result.benchmarkSample?.streamingUsed ?? request.shouldStream,
@@ -1446,6 +1931,99 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         }
     }
 
+    private func resolvedQwenInstruction(for request: GenerationRequest) -> String? {
+        switch request.payload {
+        case .custom:
+            return GenerationSemantics.customInstruction(for: request)
+        case .design:
+            return GenerationSemantics.voiceDesignInstruction(for: request)
+        case .clone:
+            return nil
+        }
+    }
+
+    private func audioFeatures(
+        for path: String,
+        expectedText: String
+    ) -> AudioFeatureSummary? {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        let durationSeconds = Double(file.length) / file.processingFormat.sampleRate
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: file.processingFormat,
+            frameCapacity: AVAudioFrameCount(file.length)
+        ) else {
+            return AudioFeatureSummary(
+                durationSeconds: durationSeconds,
+                rmsAmplitude: nil,
+                peakAmplitude: nil,
+                clippingSampleCount: 0,
+                estimatedWordsPerMinute: wordsPerMinute(text: expectedText, durationSeconds: durationSeconds)
+            )
+        }
+        do {
+            try file.read(into: buffer)
+        } catch {
+            return AudioFeatureSummary(
+                durationSeconds: durationSeconds,
+                rmsAmplitude: nil,
+                peakAmplitude: nil,
+                clippingSampleCount: 0,
+                estimatedWordsPerMinute: wordsPerMinute(text: expectedText, durationSeconds: durationSeconds)
+            )
+        }
+
+        let frameCount = Int(buffer.frameLength)
+        guard frameCount > 0 else {
+            return AudioFeatureSummary(
+                durationSeconds: durationSeconds,
+                rmsAmplitude: 0,
+                peakAmplitude: 0,
+                clippingSampleCount: 0,
+                estimatedWordsPerMinute: wordsPerMinute(text: expectedText, durationSeconds: durationSeconds)
+            )
+        }
+
+        var sumSquares = 0.0
+        var peak = 0.0
+        var clippingCount = 0
+        if let channel = buffer.floatChannelData?[0] {
+            for index in 0..<frameCount {
+                let value = Double(channel[index])
+                let magnitude = Swift.abs(value)
+                sumSquares += value * value
+                peak = Swift.max(peak, magnitude)
+                if magnitude >= 0.999 {
+                    clippingCount += 1
+                }
+            }
+        } else if let channel = buffer.int16ChannelData?[0] {
+            for index in 0..<frameCount {
+                let value = Double(channel[index]) / Double(Int16.max)
+                let magnitude = Swift.abs(value)
+                sumSquares += value * value
+                peak = Swift.max(peak, magnitude)
+                if magnitude >= 0.999 {
+                    clippingCount += 1
+                }
+            }
+        }
+
+        return AudioFeatureSummary(
+            durationSeconds: durationSeconds,
+            rmsAmplitude: sqrt(sumSquares / Double(frameCount)),
+            peakAmplitude: peak,
+            clippingSampleCount: clippingCount,
+            estimatedWordsPerMinute: wordsPerMinute(text: expectedText, durationSeconds: durationSeconds)
+        )
+    }
+
+    private func wordsPerMinute(text: String, durationSeconds: Double) -> Double? {
+        guard durationSeconds > 0 else { return nil }
+        return Double(Self.wordCount(text)) / durationSeconds * 60.0
+    }
+
     private func loadLiveAuditConfiguration(environment: [String: String]) throws -> LiveAuditConfiguration {
         if environment["QWENVOICE_AUDIO_QC_LIVE"] == "1" {
             try XCTSkipUnless(
@@ -1462,6 +2040,13 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                     .nonEmpty ?? defaultModelsRoot().path,
                 isDirectory: true
             )
+            let benchmarkProfile = try parseBenchmarkProfile(environment["QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE"])
+            let cloneReferences = parseCloneReferences(
+                environment["QWENVOICE_AUDIO_QC_CLONE_REFERENCES"],
+                fallbackReference: environment["QWENVOICE_AUDIO_QC_CLONE_REFERENCE"]?.nonEmpty,
+                fallbackTranscript: environment["QWENVOICE_AUDIO_QC_CLONE_TRANSCRIPT"]?.nonEmpty,
+                fallbackLabel: environment["QWENVOICE_AUDIO_QC_CLONE_TONE_LABEL"]?.nonEmpty
+            )
             return LiveAuditConfiguration(
                 outputRoot: outputRoot,
                 modelsRoot: modelsRoot,
@@ -1469,7 +2054,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 cloneReference: environment["QWENVOICE_AUDIO_QC_CLONE_REFERENCE"]?.nonEmpty,
                 cloneTranscript: environment["QWENVOICE_AUDIO_QC_CLONE_TRANSCRIPT"]?.nonEmpty,
                 repeatCount: try parseRepeatCount(environment["QWENVOICE_AUDIO_QC_REPEAT_COUNT"]),
-                benchmarkProfile: try parseBenchmarkProfile(environment["QWENVOICE_AUDIO_QC_BENCHMARK_PROFILE"]),
+                benchmarkProfile: benchmarkProfile,
                 coldRuns: try parseBenchmarkRunCount(
                     environment["QWENVOICE_AUDIO_QC_COLD_RUNS"],
                     name: "cold"
@@ -1487,6 +2072,13 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 generationSpeedProfile: environment["QWENVOICE_QWEN3_GENERATION_SPEED_PROFILE"]?.nonEmpty,
                 memoryClearCadence: environment["QWENVOICE_QWEN3_MEMORY_CLEAR_CADENCE"].flatMap(Int.init),
                 postRequestCachePolicy: environment["QWENVOICE_QWEN3_POST_REQUEST_CACHE_POLICY"]?.nonEmpty,
+                deliveryAuditVariants: try parseAuditVariants(
+                    environment["QWENVOICE_AUDIO_QC_VARIANTS"],
+                    benchmarkProfile: benchmarkProfile
+                ),
+                deliveryAuditScope: try parseDeliveryAuditScope(environment["QWENVOICE_AUDIO_QC_DELIVERY_SCOPE"]),
+                cloneReferences: cloneReferences,
+                cloneToneLabel: environment["QWENVOICE_AUDIO_QC_CLONE_TONE_LABEL"]?.nonEmpty,
                 audioReview: try parseAudioReviewConfiguration(
                     enabledRawValue: environment["QWENVOICE_AUDIO_REVIEW_ENABLED"],
                     modelsRootRawValue: environment["QWENVOICE_AUDIO_REVIEW_MODELS_ROOT"],
@@ -1514,6 +2106,13 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
               expiry >= Date() else {
             throw XCTSkip("Live audio QC request file expired or was written by an older perf harness.")
         }
+        let benchmarkProfile = try parseBenchmarkProfile(request.benchmarkProfile)
+        let cloneReferences = parseCloneReferences(
+            request.cloneReferences?.joined(separator: "|"),
+            fallbackReference: request.cloneReference?.nonEmpty,
+            fallbackTranscript: request.cloneTranscript?.nonEmpty,
+            fallbackLabel: request.cloneToneLabel?.nonEmpty
+        )
         return LiveAuditConfiguration(
             outputRoot: URL(fileURLWithPath: request.outputDirectory, isDirectory: true),
             modelsRoot: URL(fileURLWithPath: request.modelsRoot, isDirectory: true),
@@ -1521,7 +2120,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             cloneReference: request.cloneReference?.nonEmpty,
             cloneTranscript: request.cloneTranscript?.nonEmpty,
             repeatCount: try parseRepeatCount(request.repeatCount.map { String($0) }),
-            benchmarkProfile: try parseBenchmarkProfile(request.benchmarkProfile),
+            benchmarkProfile: benchmarkProfile,
             coldRuns: try parseBenchmarkRunCount(request.coldRuns.map { String($0) }, name: "cold"),
             warmRuns: try parseBenchmarkRunCount(request.warmRuns.map { String($0) }, name: "warm"),
             streamingIntervalOverride: try parseStreamingIntervalOverride(
@@ -1533,6 +2132,13 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
             generationSpeedProfile: request.generationSpeedProfile?.nonEmpty,
             memoryClearCadence: request.memoryClearCadence,
             postRequestCachePolicy: request.postRequestCachePolicy?.nonEmpty,
+            deliveryAuditVariants: try parseAuditVariants(
+                request.deliveryAuditVariants?.joined(separator: ","),
+                benchmarkProfile: benchmarkProfile
+            ),
+            deliveryAuditScope: try parseDeliveryAuditScope(request.deliveryAuditScope),
+            cloneReferences: cloneReferences,
+            cloneToneLabel: request.cloneToneLabel?.nonEmpty,
             audioReview: try parseAudioReviewConfiguration(
                 enabledRawValue: request.audioReviewEnabled.map { $0 ? "1" : "0" },
                 modelsRootRawValue: request.audioReviewModelsRoot,
@@ -1659,6 +2265,93 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         return profile
     }
 
+    private func parseAuditVariants(
+        _ rawValue: String?,
+        benchmarkProfile: BenchmarkProfile
+    ) throws -> [AuditVariant] {
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            return benchmarkProfile == .deliveryMatrix ? AuditVariant.allCases : [.speed, .quality]
+        }
+        let requested = trimmed
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        let variants = try requested.map { rawVariant in
+            guard let variant = AuditVariant(rawValue: rawVariant) else {
+                throw NSError(
+                    domain: "GenerationQualityAuditLiveTests",
+                    code: 18,
+                    userInfo: [NSLocalizedDescriptionKey: "Unsupported audio QC variant '\(rawVariant)'."]
+                )
+            }
+            return variant
+        }
+        var seen = Set<AuditVariant>()
+        return variants.filter { seen.insert($0).inserted }
+    }
+
+    private func parseDeliveryAuditScope(_ rawValue: String?) throws -> DeliveryAuditScope {
+        let trimmed = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        guard !trimmed.isEmpty else { return .standard }
+        guard let scope = DeliveryAuditScope(rawValue: trimmed) else {
+            throw NSError(
+                domain: "GenerationQualityAuditLiveTests",
+                code: 19,
+                userInfo: [NSLocalizedDescriptionKey: "Unsupported delivery audit scope '\(trimmed)'."]
+            )
+        }
+        return scope
+    }
+
+    private func parseCloneReferences(
+        _ rawValue: String?,
+        fallbackReference: String?,
+        fallbackTranscript: String?,
+        fallbackLabel: String?
+    ) -> [CloneAuditReference] {
+        let references = rawValue?
+            .split(separator: "|")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        let rawReferences = references.isEmpty ? fallbackReference.map { [$0] } ?? [] : references
+        return rawReferences.map { path in
+            CloneAuditReference(
+                path: path,
+                transcript: transcriptForCloneReference(path, fallbackTranscript: rawReferences.count == 1 ? fallbackTranscript : nil),
+                label: labelForCloneReference(path, fallbackLabel: rawReferences.count == 1 ? fallbackLabel : nil)
+            )
+        }
+    }
+
+    private func transcriptForCloneReference(_ path: String, fallbackTranscript: String?) -> String? {
+        if let fallbackTranscript = fallbackTranscript?.nonEmpty {
+            return fallbackTranscript
+        }
+        let url = URL(fileURLWithPath: path)
+        let sidecar = url.deletingPathExtension().appendingPathExtension("txt")
+        guard let rawTranscript = try? String(contentsOf: sidecar, encoding: .utf8) else {
+            return nil
+        }
+        let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transcript.isEmpty else {
+            return nil
+        }
+        return transcript
+    }
+
+    private func labelForCloneReference(_ path: String, fallbackLabel: String?) -> String {
+        if let fallbackLabel = fallbackLabel?.nonEmpty {
+            return fallbackLabel
+        }
+        return URL(fileURLWithPath: path)
+            .deletingPathExtension()
+            .lastPathComponent
+            .replacingOccurrences(of: "_", with: " ")
+    }
+
     private func parseBenchmarkRunCount(_ rawValue: String?, name: String) throws -> Int {
         let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let defaultValue = name == "cold" ? 2 : 3
@@ -1691,12 +2384,24 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
         from modelsRoot: URL,
         into appSupportRoot: URL
     ) throws -> Int {
+        try mirrorRequiredModels(
+            forModelIDs: modes.map(\.modelID),
+            from: modelsRoot,
+            into: appSupportRoot
+        )
+    }
+
+    private func mirrorRequiredModels(
+        forModelIDs modelIDs: [String],
+        from modelsRoot: URL,
+        into appSupportRoot: URL
+    ) throws -> Int {
         let started = DispatchTime.now().uptimeNanoseconds
         let destinationRoot = appSupportRoot.appendingPathComponent("models", isDirectory: true)
         try FileManager.default.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
 
-        for mode in modes {
-            let model = try resolvedAuditModelEntry(id: mode.modelID)
+        for modelID in modelIDs {
+            let model = try resolvedAuditModelEntry(id: modelID)
             let source = modelsRoot.appendingPathComponent(model.folder, isDirectory: true)
             try validateInstalledModel(model, at: source)
 
@@ -1788,6 +2493,433 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                     userInfo: [NSLocalizedDescriptionKey: "Installed model '\(model.id)' is incomplete; missing \(requiredURL.path)."]
                 )
             }
+        }
+    }
+
+    private func deliveryAuditCases(
+        for mode: AuditMode,
+        configuration: LiveAuditConfiguration? = nil,
+        cloneToneLabel: String? = nil
+    ) -> [DeliveryAuditCase] {
+        if configuration?.deliveryAuditScope == .knownRisk {
+            return knownRiskDeliveryAuditCases(for: mode)
+        }
+        if configuration?.deliveryAuditScope == .whisperRisk {
+            return whisperRiskDeliveryAuditCases(for: mode)
+        }
+
+        if mode == .clones {
+            let references = configuration?.cloneReferences ?? []
+            guard !references.isEmpty else {
+                return [
+                    DeliveryAuditCase(
+                        id: "reference-tone-transfer",
+                        presetID: nil,
+                        intensity: nil,
+                        customText: nil,
+                        deliveryInstruction: nil,
+                        voiceDescription: nil,
+                        speakerID: nil,
+                        cloneReferencePath: nil,
+                        cloneTranscript: nil,
+                        text: "This cloned voice audit checks whether the reference tone carries through clearly.",
+                        referenceToneLabel: cloneToneLabel?.nonEmpty ?? "reference"
+                    ),
+                ]
+            }
+            return references.map { reference in
+                DeliveryAuditCase(
+                    id: "reference-tone-transfer-\(slug(reference.label))",
+                    presetID: nil,
+                    intensity: nil,
+                    customText: nil,
+                    deliveryInstruction: nil,
+                    voiceDescription: nil,
+                    speakerID: nil,
+                    cloneReferencePath: reference.path,
+                    cloneTranscript: reference.transcript,
+                    text: "This cloned voice audit checks whether the reference tone carries through clearly.",
+                    referenceToneLabel: reference.label
+                )
+            }
+        }
+
+        let deliveryCases = deliveryControlCases(scope: configuration?.deliveryAuditScope ?? .standard)
+        switch mode {
+        case .customVoice:
+            let speakers = configuration?.deliveryAuditScope == .full
+                ? ["aiden", "ryan", "vivian", "serena"]
+                : ["aiden"]
+            return speakers.flatMap { speakerID in
+                deliveryCases.map { base in
+                    DeliveryAuditCase(
+                        id: "speaker-\(speakerID)-\(base.id)",
+                        presetID: base.presetID,
+                        intensity: base.intensity,
+                        customText: base.customText,
+                        deliveryInstruction: base.deliveryInstruction,
+                        voiceDescription: nil,
+                        speakerID: speakerID,
+                        cloneReferencePath: nil,
+                        cloneTranscript: nil,
+                        text: base.text,
+                        referenceToneLabel: nil
+                    )
+                }
+            }
+        case .voiceDesign:
+            let voiceBriefs: [(String, String)] = configuration?.deliveryAuditScope == .full
+                ? [
+                    ("studio-narrator", "A flexible English narrator with clean diction and a natural studio sound."),
+                    ("warm-british", "A warm, deep narrator with a subtle British accent and polished audiobook delivery."),
+                    ("bright-storyteller", "A bright, expressive storyteller with youthful energy and crisp pronunciation."),
+                ]
+                : [("studio-narrator", "A flexible English narrator with clean diction and a natural studio sound.")]
+            return voiceBriefs.flatMap { briefID, voiceDescription in
+                deliveryCases.map { base in
+                    DeliveryAuditCase(
+                        id: "brief-\(briefID)-\(base.id)",
+                        presetID: base.presetID,
+                        intensity: base.intensity,
+                        customText: base.customText,
+                        deliveryInstruction: base.deliveryInstruction,
+                        voiceDescription: voiceDescription,
+                        speakerID: nil,
+                        cloneReferencePath: nil,
+                        cloneTranscript: nil,
+                        text: base.text,
+                        referenceToneLabel: nil
+                    )
+                }
+            }
+        case .clones:
+            return []
+        }
+    }
+
+    private func knownRiskDeliveryAuditCases(for mode: AuditMode) -> [DeliveryAuditCase] {
+        guard mode == .customVoice else { return [] }
+
+        let neutral = DeliveryProfile.neutralInstruction
+        let excitedStrong = EmotionPreset.preset(id: "excited")!.instruction(for: .strong)
+        let text = "The delivery audit sentence is short, complete, and easy to compare across emotional styles."
+        return [
+            DeliveryAuditCase(
+                id: "speaker-ryan-neutral-normal",
+                presetID: "neutral",
+                intensity: EmotionIntensity.normal.rpcValue,
+                customText: nil,
+                deliveryInstruction: neutral,
+                voiceDescription: nil,
+                speakerID: "ryan",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-ryan-excited-strong",
+                presetID: "excited",
+                intensity: EmotionIntensity.strong.rpcValue,
+                customText: nil,
+                deliveryInstruction: excitedStrong,
+                voiceDescription: nil,
+                speakerID: "ryan",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-aiden-excited-strong",
+                presetID: "excited",
+                intensity: EmotionIntensity.strong.rpcValue,
+                customText: nil,
+                deliveryInstruction: excitedStrong,
+                voiceDescription: nil,
+                speakerID: "aiden",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+        ]
+    }
+
+    private func whisperRiskDeliveryAuditCases(for mode: AuditMode) -> [DeliveryAuditCase] {
+        guard mode == .customVoice else { return [] }
+
+        let whisperSubtle = EmotionPreset.preset(id: "whisper")!.instruction(for: .subtle)
+        let whisperNormal = EmotionPreset.preset(id: "whisper")!.instruction(for: .normal)
+        let whisperStrong = EmotionPreset.preset(id: "whisper")!.instruction(for: .strong)
+        let text = "The delivery audit sentence is short, complete, and easy to compare across emotional styles."
+        return [
+            DeliveryAuditCase(
+                id: "speaker-vivian-whisper-subtle",
+                presetID: "whisper",
+                intensity: EmotionIntensity.subtle.rpcValue,
+                customText: nil,
+                deliveryInstruction: whisperSubtle,
+                voiceDescription: nil,
+                speakerID: "vivian",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-vivian-whisper-normal",
+                presetID: "whisper",
+                intensity: EmotionIntensity.normal.rpcValue,
+                customText: nil,
+                deliveryInstruction: whisperNormal,
+                voiceDescription: nil,
+                speakerID: "vivian",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-vivian-whisper-strong",
+                presetID: "whisper",
+                intensity: EmotionIntensity.strong.rpcValue,
+                customText: nil,
+                deliveryInstruction: whisperStrong,
+                voiceDescription: nil,
+                speakerID: "vivian",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-ryan-whisper-subtle",
+                presetID: "whisper",
+                intensity: EmotionIntensity.subtle.rpcValue,
+                customText: nil,
+                deliveryInstruction: whisperSubtle,
+                voiceDescription: nil,
+                speakerID: "ryan",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "speaker-aiden-whisper-subtle",
+                presetID: "whisper",
+                intensity: EmotionIntensity.subtle.rpcValue,
+                customText: nil,
+                deliveryInstruction: whisperSubtle,
+                voiceDescription: nil,
+                speakerID: "aiden",
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: text,
+                referenceToneLabel: nil
+            ),
+        ]
+    }
+
+    private func deliveryAuditCases(
+        _ cases: [DeliveryAuditCase],
+        for variant: AuditVariant,
+        scope: DeliveryAuditScope
+    ) -> [DeliveryAuditCase] {
+        switch scope {
+        case .standard, .full:
+            return cases
+        case .knownRisk:
+            return cases.filter { auditCase in
+                switch (auditCase.speakerID, auditCase.presetID, auditCase.intensity, variant) {
+                case ("ryan", "neutral", EmotionIntensity.normal.rpcValue, .speed),
+                     ("ryan", "excited", EmotionIntensity.strong.rpcValue, .speed),
+                     ("ryan", "excited", EmotionIntensity.strong.rpcValue, .quality),
+                     ("aiden", "excited", EmotionIntensity.strong.rpcValue, .speed):
+                    true
+                default:
+                    false
+                }
+            }
+        case .whisperRisk:
+            return cases.filter { auditCase in
+                switch (auditCase.speakerID, auditCase.presetID, auditCase.intensity, variant) {
+                case ("vivian", "whisper", EmotionIntensity.subtle.rpcValue, .speed),
+                     ("vivian", "whisper", EmotionIntensity.normal.rpcValue, .speed),
+                     ("vivian", "whisper", EmotionIntensity.strong.rpcValue, .speed),
+                     ("ryan", "whisper", EmotionIntensity.subtle.rpcValue, .speed),
+                     ("aiden", "whisper", EmotionIntensity.subtle.rpcValue, .speed),
+                     ("vivian", "whisper", EmotionIntensity.subtle.rpcValue, .quality):
+                    true
+                default:
+                    false
+                }
+            }
+        }
+    }
+
+    private func deliveryControlCases(scope: DeliveryAuditScope) -> [DeliveryAuditCase] {
+        let presets: [(String, [EmotionIntensity])] = scope == .full
+            ? EmotionPreset.all.map { preset in
+                preset.id == "neutral" ? (preset.id, [.normal]) : (preset.id, EmotionIntensity.allCases)
+            }
+            : [
+                ("neutral", [.normal]),
+                ("happy", [.normal]),
+                ("sad", [.normal]),
+                ("angry", [.normal]),
+                ("calm", [.normal]),
+                ("whisper", [.normal]),
+                ("dramatic", [.normal]),
+                ("excited", [.normal]),
+            ]
+
+        let presetCases = presets.flatMap { presetID, intensities in
+            intensities.compactMap { intensity -> DeliveryAuditCase? in
+                guard let preset = EmotionPreset.preset(id: presetID) else { return nil }
+                return DeliveryAuditCase(
+                    id: "\(presetID)-\(intensity.rpcValue)",
+                    presetID: presetID,
+                    intensity: intensity.rpcValue,
+                    customText: nil,
+                    deliveryInstruction: preset.instruction(for: intensity),
+                    voiceDescription: nil,
+                    speakerID: nil,
+                    cloneReferencePath: nil,
+                    cloneTranscript: nil,
+                    text: "The delivery audit sentence is short, complete, and easy to compare across emotional styles.",
+                    referenceToneLabel: nil
+                )
+            }
+        }
+
+        let customCases = [
+            DeliveryAuditCase(
+                id: "custom-controlled-urgency",
+                presetID: nil,
+                intensity: EmotionIntensity.normal.rpcValue,
+                customText: "Controlled urgency with quick pacing, focused stress, and clear pronunciation.",
+                deliveryInstruction: "Controlled urgency with quick pacing, focused stress, and clear pronunciation.",
+                voiceDescription: nil,
+                speakerID: nil,
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: "The delivery audit sentence is short, complete, and easy to compare across emotional styles.",
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "custom-playful-conspiratorial",
+                presetID: nil,
+                intensity: EmotionIntensity.normal.rpcValue,
+                customText: "Playful and conspiratorial, with a quiet smile, lively timing, and clear articulation.",
+                deliveryInstruction: "Playful and conspiratorial, with a quiet smile, lively timing, and clear articulation.",
+                voiceDescription: nil,
+                speakerID: nil,
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: "The delivery audit sentence is short, complete, and easy to compare across emotional styles.",
+                referenceToneLabel: nil
+            ),
+            DeliveryAuditCase(
+                id: "custom-formal-authoritative",
+                presetID: nil,
+                intensity: EmotionIntensity.normal.rpcValue,
+                customText: "Formal and authoritative, steady and precise, with confident emphasis and no melodrama.",
+                deliveryInstruction: "Formal and authoritative, steady and precise, with confident emphasis and no melodrama.",
+                voiceDescription: nil,
+                speakerID: nil,
+                cloneReferencePath: nil,
+                cloneTranscript: nil,
+                text: "The delivery audit sentence is short, complete, and easy to compare across emotional styles.",
+                referenceToneLabel: nil
+            ),
+        ]
+        return scope == .full ? presetCases + customCases : presetCases + [customCases[0]]
+    }
+
+    private func slug(_ value: String) -> String {
+        let lowercased = value.lowercased()
+        let parts = lowercased.unicodeScalars.map { scalar -> String in
+            CharacterSet.alphanumerics.contains(scalar) ? String(scalar) : "-"
+        }
+        return parts.joined()
+            .split(separator: "-")
+            .joined(separator: "-")
+            .nonEmpty ?? "reference"
+    }
+
+    private func makeDeliveryAuditRequest(
+        mode: AuditMode,
+        model: TTSModel,
+        variant: AuditVariant,
+        auditCase: DeliveryAuditCase,
+        index: Int,
+        generatedRoot: URL,
+        configuration: LiveAuditConfiguration
+    ) throws -> GenerationRequest {
+        let runRoot = generatedRoot
+            .appendingPathComponent(AuditPhase.deliveryMatrix.rawValue, isDirectory: true)
+            .appendingPathComponent(mode.rawValue, isDirectory: true)
+            .appendingPathComponent(variant.rawValue, isDirectory: true)
+            .appendingPathComponent(auditCase.id, isDirectory: true)
+        try FileManager.default.createDirectory(at: runRoot, withIntermediateDirectories: true)
+        let outputURL = runRoot.appendingPathComponent("\(mode.fileStem)-\(String(format: "%03d", index)).wav")
+        let streamingInterval = configuration.streamingIntervalOverride
+            ?? GenerationSemantics.appStreamingInterval
+
+        switch mode {
+        case .customVoice:
+            return GenerationRequest(
+                modelID: model.id,
+                text: auditCase.text,
+                outputPath: outputURL.path,
+                shouldStream: false,
+                streamingInterval: streamingInterval,
+                streamingTitle: "Delivery Audit Custom Voice",
+                benchmarkOptions: benchmarkOptions(for: mode, configuration: configuration),
+                payload: .custom(
+                    speakerID: auditCase.speakerID ?? "aiden",
+                    deliveryStyle: auditCase.deliveryInstruction
+                )
+            )
+        case .voiceDesign:
+            return GenerationRequest(
+                modelID: model.id,
+                text: auditCase.text,
+                outputPath: outputURL.path,
+                shouldStream: false,
+                streamingInterval: streamingInterval,
+                streamingTitle: "Delivery Audit Voice Design",
+                benchmarkOptions: benchmarkOptions(for: mode, configuration: configuration),
+                payload: .design(
+                    voiceDescription: auditCase.voiceDescription ?? "",
+                    deliveryStyle: auditCase.deliveryInstruction
+                )
+            )
+        case .clones:
+            let referencePath: String
+            if let cloneReferencePath = auditCase.cloneReferencePath {
+                referencePath = cloneReferencePath
+            } else {
+                referencePath = try requireCloneReference(configuration)
+            }
+            return GenerationRequest(
+                modelID: model.id,
+                text: auditCase.text,
+                outputPath: outputURL.path,
+                shouldStream: false,
+                streamingInterval: streamingInterval,
+                streamingTitle: "Delivery Audit Voice Clone",
+                benchmarkOptions: benchmarkOptions(for: mode, configuration: configuration),
+                payload: .clone(
+                    reference: CloneReference(
+                        audioPath: referencePath,
+                        transcript: auditCase.cloneTranscript ?? configuration.cloneTranscript,
+                        preparedVoiceID: nil
+                    )
+                )
+            )
         }
     }
 
@@ -1944,7 +3076,7 @@ final class GenerationQualityAuditLiveTests: XCTestCase {
                 ? outputRoot.appendingPathComponent(String(format: "run_%03d", iteration), isDirectory: true)
                 : outputRoot
             return runRoot.appendingPathComponent(mode.rawValue, isDirectory: true)
-        case .coldWarm, .customUICold, .warmFocus, .exhaustive:
+        case .coldWarm, .customUICold, .warmFocus, .exhaustive, .deliveryMatrix:
             return outputRoot
                 .appendingPathComponent(phase.rawValue, isDirectory: true)
                 .appendingPathComponent(mode.rawValue, isDirectory: true)

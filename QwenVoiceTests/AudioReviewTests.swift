@@ -21,8 +21,8 @@ final class AudioReviewTests: XCTestCase {
 
     func testBalancedGateKeepsToneAndPacingAdvisory() throws {
         let input = clipInput(
-            expectedText: "This delivery should stay extremely excited and animated while keeping pronunciation clear.",
-            deliveryInstruction: "Extremely excited and animated, fast-paced and bright."
+            expectedText: "This delivery should stay very excited and animated while keeping pronunciation clear.",
+            deliveryInstruction: "Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation."
         )
         let report = AudioReview.evaluate(
             input: input,

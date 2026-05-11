@@ -99,6 +99,52 @@ private final class MockGenerationStore: GenerationPersisting {
 }
 
 final class BatchGenerationRunnerTests: XCTestCase {
+    func testBatchGenerationRequestsPreserveCustomAndDesignDeliveryProfiles() throws {
+        let customModel = try XCTUnwrap(TTSModel.model(for: .custom))
+        let customRequest = BatchGenerationRequest(
+            mode: .custom,
+            model: customModel,
+            lines: ["Custom line"],
+            voice: "aiden",
+            emotion: "Happy and upbeat, with bright energy.",
+            voiceDescription: nil,
+            refAudio: nil,
+            refText: nil
+        ).makeGenerationRequest(
+            for: "Custom line",
+            outputPath: "/tmp/custom.wav",
+            batchIndex: 1,
+            batchTotal: 1
+        )
+        guard case .custom(let speakerID, let customDelivery) = customRequest.payload else {
+            return XCTFail("Expected Custom Voice payload")
+        }
+        XCTAssertEqual(speakerID, "aiden")
+        XCTAssertEqual(customDelivery, "Happy and upbeat, with bright energy.")
+
+        let designModel = try XCTUnwrap(TTSModel.model(for: .design))
+        let designRequest = BatchGenerationRequest(
+            mode: .design,
+            model: designModel,
+            lines: ["Design line"],
+            voice: nil,
+            emotion: "Calm, soothing, and reassuring.",
+            voiceDescription: "A warm documentary narrator.",
+            refAudio: nil,
+            refText: nil
+        ).makeGenerationRequest(
+            for: "Design line",
+            outputPath: "/tmp/design.wav",
+            batchIndex: 1,
+            batchTotal: 1
+        )
+        guard case .design(let voiceDescription, let designDelivery) = designRequest.payload else {
+            return XCTFail("Expected Voice Design payload")
+        }
+        XCTAssertEqual(voiceDescription, "A warm documentary narrator.")
+        XCTAssertEqual(designDelivery, "Calm, soothing, and reassuring.")
+    }
+
     func testLongFormManifestIncludesAudioStatsAndSummary() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("long_form_manifest_\(UUID().uuidString)", isDirectory: true)
