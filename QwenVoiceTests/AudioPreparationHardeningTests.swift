@@ -123,6 +123,37 @@ final class AudioPreparationHardeningTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
     }
 
+    func testNormalizationDeadlineBeforeWriterCreationPreservesTimeoutAndRemovesPartialOutput() async throws {
+        let input = temporaryRoot.appendingPathComponent("writer-deadline-source.wav")
+        let output = temporaryRoot.appendingPathComponent("writer-deadline-output.wav")
+        try Self.writeCanonicalWAV(to: input, durationSeconds: 0.2)
+        try Data("stale output".utf8).write(to: output)
+        let service = NativeAudioPreparationService(
+            preparedAudioDirectory: temporaryRoot,
+            limits: AudioPreparationLimits(
+                maxInputFileSizeBytes: 250 * 1_024 * 1_024,
+                maxDecodedDurationSeconds: 120,
+                trackLoadTimeoutSeconds: 60,
+                normalizationTimeoutSeconds: 0.01
+            ),
+            testingHooks: AudioPreparationTestingHooks(
+                beforeWriterCreation: {
+                    try await Task.sleep(nanoseconds: 30_000_000)
+                }
+            )
+        )
+
+        do {
+            _ = try await service.normalizeAudio(AudioPreparationRequest(inputURL: input, outputURL: output))
+            XCTFail("Expired normalization deadline should reject writer setup.")
+        } catch let error as AudioPreparationError {
+            guard case .decodeTimedOut = error else {
+                return XCTFail("Expected decodeTimedOut, got \(error).")
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: output.path))
+    }
+
     func testCancelledTaskReportsCancellationAndRemovesPartialOutput() async throws {
         let input = temporaryRoot.appendingPathComponent("cancel-source.wav")
         let output = temporaryRoot.appendingPathComponent("cancel-output.wav")

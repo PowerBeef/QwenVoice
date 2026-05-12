@@ -160,6 +160,7 @@ private actor NativeAudioPreparationWorkQueue {
 }
 
 struct AudioPreparationTestingHooks: Sendable {
+    var beforeWriterCreation: (@Sendable () async throws -> Void)?
     var beforeConversionLoop: (@Sendable () async throws -> Void)?
 
     static let none = AudioPreparationTestingHooks()
@@ -448,9 +449,11 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         }
 
         let reader: AVAssetReader
+        try deadline.check()
         do {
-            try deadline.check()
             reader = try AVAssetReader(asset: asset)
+        } catch let error as AudioPreparationError {
+            throw error
         } catch {
             throw AudioPreparationError.conversionFailed("Couldn't create the native audio reader.")
         }
@@ -468,14 +471,17 @@ public struct NativeAudioPreparationService: AudioPreparationService, Hashable, 
         }
 
         let writer: AVAudioFile
+        try await testingHooks.beforeWriterCreation?()
+        try deadline.check()
         do {
-            try deadline.check()
             writer = try AVAudioFile(
                 forWriting: outputURL,
                 settings: outputSettings,
                 commonFormat: .pcmFormatInt16,
                 interleaved: false
             )
+        } catch let error as AudioPreparationError {
+            throw error
         } catch {
             throw AudioPreparationError.failedToCreateOutput(outputURL.path)
         }
