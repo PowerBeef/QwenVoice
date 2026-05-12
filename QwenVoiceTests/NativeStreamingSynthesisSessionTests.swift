@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import XCTest
 @preconcurrency import MLX
 @preconcurrency import MLXAudioCore
@@ -260,6 +261,61 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
         }
     }
 
+    func testQualityFirstOutputIsReadablePCM16WAV() async throws {
+        let samples: [Float32] = [0, 0.1, -0.1, 0.25, -0.25, 0]
+        let result = try await runQualityFirstSession(
+            finishReason: .eos,
+            samples: samples
+        )
+
+        let outputURL = URL(fileURLWithPath: result.audioPath)
+        let file = try AVAudioFile(forReading: outputURL)
+        XCTAssertEqual(file.processingFormat.sampleRate, 24_000, accuracy: 0.001)
+        XCTAssertEqual(file.length, AVAudioFramePosition(samples.count))
+
+        let data = try Data(contentsOf: outputURL)
+        XCTAssertEqual(String(data: data[0..<4], encoding: .ascii), "RIFF")
+        XCTAssertEqual(String(data: data[8..<12], encoding: .ascii), "WAVE")
+        let chunks = Self.riffChunks(in: data)
+        let formatChunk = try XCTUnwrap(chunks["fmt "])
+        let dataChunk = try XCTUnwrap(chunks["data"])
+        XCTAssertEqual(Self.littleEndianUInt16(in: data, at: formatChunk.offset), 1)
+        XCTAssertEqual(Self.littleEndianUInt16(in: data, at: formatChunk.offset + 2), 1)
+        XCTAssertEqual(Self.littleEndianUInt32(in: data, at: formatChunk.offset + 4), 24_000)
+        XCTAssertEqual(Self.littleEndianUInt32(in: data, at: formatChunk.offset + 8), 48_000)
+        XCTAssertEqual(Self.littleEndianUInt16(in: data, at: formatChunk.offset + 12), 2)
+        XCTAssertEqual(Self.littleEndianUInt16(in: data, at: formatChunk.offset + 14), 16)
+        XCTAssertEqual(dataChunk.size, samples.count * 2)
+        XCTAssertEqual(data.count, 44 + samples.count * 2)
+        XCTAssertEqual(formatChunk.offset, 20)
+        XCTAssertEqual(dataChunk.offset, 44)
+    }
+
+    func testQualityFirstAtomicWAVWriteReplacesRequestedOutputURL() async throws {
+        let outputURL = temporaryRoot.appendingPathComponent("replace-quality-output.wav")
+        try Data("stale".utf8).write(to: outputURL)
+
+        let result = try await runQualityFirstSession(
+            finishReason: .eos,
+            samples: [0, 0.125, -0.125, 0],
+            outputURL: outputURL
+        )
+
+        XCTAssertEqual(result.audioPath, outputURL.path)
+        let data = try Data(contentsOf: outputURL)
+        XCTAssertEqual(String(data: data[0..<4], encoding: .ascii), "RIFF")
+        XCTAssertEqual(String(data: data[8..<12], encoding: .ascii), "WAVE")
+        _ = try AVAudioFile(forReading: outputURL)
+
+        let leftovers = (try? FileManager.default.contentsOfDirectory(
+            atPath: temporaryRoot.path
+        )) ?? []
+        XCTAssertFalse(
+            leftovers.contains { $0.contains(".replace-quality-output.wav.") && $0.hasSuffix(".tmp") },
+            "Atomic WAV writer must not leave sibling temporary files behind: \(leftovers)"
+        )
+    }
+
     // MARK: - Helpers
 
     private func runSingleChunkSession(
@@ -292,11 +348,13 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
 
     private func runQualityFirstSession(
         finishReason: AudioGenerationFinishReason,
+        samples: [Float32] = [0.0, 0.1, -0.1],
         benchmarkOptions: GenerationRequest.BenchmarkOptions? = nil,
-        memoryPolicy: NativeMemoryPolicy? = nil
+        memoryPolicy: NativeMemoryPolicy? = nil,
+        outputURL requestedOutputURL: URL? = nil
     ) async throws -> GenerationResult {
         let sessionsRoot = temporaryRoot.appendingPathComponent("stream_sessions", isDirectory: true)
-        let outputURL = temporaryRoot
+        let outputURL = requestedOutputURL ?? temporaryRoot
             .appendingPathComponent("quality-\(finishReason.rawValue)-\(UUID().uuidString).wav")
         let model = UnsafeSpeechGenerationModel(
             sampleRate: 24_000,
@@ -308,7 +366,7 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
             },
             customGenerateHandler: { _, _, _, _ in
                 AudioGenerationCompletion(
-                    audio: MLXArray([Float32(0.0), Float32(0.1), Float32(-0.1)]),
+                    audio: MLXArray(samples),
                     info: nil,
                     finishReason: finishReason
                 )
@@ -332,6 +390,36 @@ final class NativeStreamingSynthesisSessionTests: XCTestCase {
             mlxMemorySnapshots: [:]
         )
         return try await session.run { _ in }
+    }
+
+    private static func littleEndianUInt16(in data: Data, at offset: Int) -> UInt16 {
+        UInt16(data[offset])
+            | (UInt16(data[offset + 1]) << 8)
+    }
+
+    private static func littleEndianUInt32(in data: Data, at offset: Int) -> UInt32 {
+        UInt32(data[offset])
+            | (UInt32(data[offset + 1]) << 8)
+            | (UInt32(data[offset + 2]) << 16)
+            | (UInt32(data[offset + 3]) << 24)
+    }
+
+    private static func riffChunks(in data: Data) -> [String: (offset: Int, size: Int)] {
+        var chunks: [String: (offset: Int, size: Int)] = [:]
+        var cursor = 12
+        while cursor + 8 <= data.count {
+            guard let id = String(data: data[cursor..<(cursor + 4)], encoding: .ascii) else {
+                break
+            }
+            let size = Int(littleEndianUInt32(in: data, at: cursor + 4))
+            let payloadOffset = cursor + 8
+            guard payloadOffset + size <= data.count else {
+                break
+            }
+            chunks[id] = (offset: payloadOffset, size: size)
+            cursor = payloadOffset + size + (size.isMultiple(of: 2) ? 0 : 1)
+        }
+        return chunks
     }
 
     private func streamingRequest(

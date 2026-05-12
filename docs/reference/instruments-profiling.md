@@ -23,23 +23,45 @@ GPU-kernel-level visibility.
 
 ## Signposts In Place
 
-Five `os_signpost` intervals fire on every per-token iteration of the
+Nine `os_signpost` intervals fire on every per-token iteration of the
 streaming generation, all under subsystem `com.qwenvoice.engine.qwen3`,
 category `generation`:
 
 | Signpost | What it brackets | Source |
 |---|---|---|
 | `Talker Forward` | `talker(inputEmbeds, cache: cache)` — the LLM forward pass per token | `Qwen3TTS.swift` per-token loop |
+| `Sample First Codebook` | first-codebook token sampling after the talker forward pass | same |
 | `Code Predictor Loop` | The 7-iteration multi-codebook prediction loop | same |
+| `Code Predictor Step` | one sequential codebook predictor forward step | same |
+| `Sample Predicted Codebook` | token sampling for one predicted codebook group | same |
+| `Codec Embedding Assembly` | codebook embedding lookup and sum for the next token step | same |
 | `Step Eval Flush` | The `eval(inputEmbeds, isEOS)` synchronous flush at policy `.full` | same |
+| `EOS Read` | `isEOS.item(Bool.self)` readback after the eval policy boundary | same |
 | `Audio Decoder` | `speechTokenizer.decoder.streamingStep(...)` | same |
 | `Audio Chunk Eval` | The `eval(audioChunk)` after each streaming decoder run | same |
 
 Coarser intervals already exist in `NativeStreamingSynthesisSession.swift`
 under subsystem `com.qwenvoice.engine` (category `generation`):
-`Native Generation Stream`, `Native First Audio Chunk`,
-`Native Final WAV Finish`. Both subsystems show up together when the
-"os_signpost" instrument is added in Instruments.
+
+| Signpost | What it brackets |
+|---|---|
+| `Native Generation Stream` | Streaming generation lifecycle wrapper |
+| `Native First Audio Chunk` | First emitted streaming chunk |
+| `Native Final WAV Finish` | Streaming final WAV finalization |
+| `Native Quality-First Generation` | Quality-first full-result generation wrapper |
+| `Native Final Audio Materialize` | Quality-first lazy MLX audio materialization into host floats |
+| `Native PCM Limiter Convert` | Quality-first limiter and PCM16 conversion |
+| `Native Final WAV Write` | Quality-first atomic PCM16 WAV write and publish |
+| `Native Final WAV Manual Header Build` | RIFF/WAVE PCM16 header construction |
+| `Native Final WAV Manual File Write` | Header and PCM16 payload write to the sibling temp file |
+| `Native Final WAV Manual Publish` | Atomic temp-file publish to the final output URL |
+| `Native Final WAV Writer Create` | Streaming final `AVAudioFile` writer setup |
+| `Native Final WAV Buffer Build` | Streaming final PCM16 `AVAudioPCMBuffer` construction |
+| `Native Final WAV AVAudioFile Write` | Streaming final `AVAudioFile.write(from:)` call |
+| `Native Final WAV AVAudioFile Finalize` | Streaming final writer buffer release and `AVAudioFile` teardown |
+
+Both subsystems show up together when the "os_signpost" instrument is
+added in Instruments.
 
 ## Capture A Trace
 
@@ -48,11 +70,19 @@ under subsystem `com.qwenvoice.engine` (category `generation`):
 ```
 
 Default: 30-second System Trace (CPU + Metal + signposts), output to
-`build/instruments-traces/vocello-YYYYMMDD-HHMMSS.trace`. Override:
+`build/instruments-traces/vocello-YYYYMMDD-HHMMSS.trace`. On storage
+constrained machines, prefer a one-trace-at-a-time capture with compact
+summary export and raw-trace cleanup:
 
 ```sh
 ./scripts/bench_instruments_trace.sh --seconds 60 \
-    --output /tmp/long-vc-trace.trace
+    --template "Time Profiler" \
+    --output build/instruments-traces/custom-speed-medium.trace \
+    --summary-output build/instruments-traces/custom-speed-medium-summary.md \
+    --summary-json build/instruments-traces/custom-speed-medium-summary.json \
+    --cleanup-raw \
+    --no-open \
+    --min-free-gb 10
 ```
 
 Workflow:
@@ -60,15 +90,21 @@ Workflow:
 1. The script kills any running Vocello, resets defaults to land on
    Custom Voice, and relaunches a fresh debug build.
 2. After the engine is Ready, the script starts `xctrace record` with
-   the `System Trace` template and your chosen time window.
+   the selected template and your chosen time window.
 3. While recording, the operator triggers ONE generation in the
    Vocello UI: paste a script, hit Cmd+Return.
-4. When the trace stops, the script `open`s the `.trace` bundle in
-   Instruments.
+4. When the trace stops, the script exports a compact signpost summary
+   when requested. With `--cleanup-raw`, it deletes the raw `.trace`,
+   exported XML, and temporary xctrace logs immediately after summary
+   extraction.
 
 The trace captures the entire system, so the bundled
 `QwenVoiceEngineService.xpc` helper (where the engine actually runs)
 is captured alongside the Vocello main process.
+
+Use the heavier `System Trace` template only when you need Metal/GPU
+tracks and have enough free disk space. `Time Profiler` or `Logging`
+templates are safer for quick signpost smoke checks.
 
 ## Reading The Trace
 

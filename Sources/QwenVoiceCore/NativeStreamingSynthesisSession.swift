@@ -281,6 +281,160 @@ private enum PCM16WAVWriter {
     }
 }
 
+private enum AtomicFilePublisher {
+    static func temporaryURL(for finalURL: URL) -> URL {
+        let filename = finalURL.lastPathComponent
+        return finalURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
+    }
+
+    static func publishAtomically(temporaryURL: URL, finalURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: finalURL.path) {
+            _ = try fileManager.replaceItemAt(
+                finalURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: []
+            )
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: finalURL)
+        }
+    }
+}
+
+private enum AtomicPCM16WAVWriter {
+    static func write(
+        pcmSamples: [Int16],
+        sampleRate: Int,
+        outputURL: URL
+    ) throws {
+        let temporaryURL = AtomicFilePublisher.temporaryURL(for: outputURL)
+        try? FileManager.default.removeItem(at: temporaryURL)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+
+        let header: Data = try {
+            let headerSignpost = NativeStreamingSignposts.signposter.beginInterval(
+                "Native Final WAV Manual Header Build"
+            )
+            defer {
+                NativeStreamingSignposts.signposter.endInterval(
+                    "Native Final WAV Manual Header Build",
+                    headerSignpost
+                )
+            }
+            return try makeHeader(sampleRate: sampleRate, frameCount: pcmSamples.count)
+        }()
+
+        try {
+            let fileWriteSignpost = NativeStreamingSignposts.signposter.beginInterval(
+                "Native Final WAV Manual File Write",
+            )
+            defer {
+                NativeStreamingSignposts.signposter.endInterval(
+                    "Native Final WAV Manual File Write",
+                    fileWriteSignpost
+                )
+            }
+            try write(header: header, pcmSamples: pcmSamples, to: temporaryURL)
+        }()
+
+        try {
+            let publishSignpost = NativeStreamingSignposts.signposter.beginInterval(
+                "Native Final WAV Manual Publish",
+            )
+            defer {
+                NativeStreamingSignposts.signposter.endInterval(
+                    "Native Final WAV Manual Publish",
+                    publishSignpost
+                )
+            }
+            try AtomicFilePublisher.publishAtomically(
+                temporaryURL: temporaryURL,
+                finalURL: outputURL
+            )
+        }()
+    }
+
+    private static func makeHeader(sampleRate: Int, frameCount: Int) throws -> Data {
+        guard sampleRate > 0 else {
+            throw MLXTTSEngineError.generationFailed("The native WAV writer received an invalid sample rate.")
+        }
+        let bytesPerSample = 2
+        let dataByteCount = frameCount * bytesPerSample
+        guard dataByteCount <= Int(UInt32.max) - 36 else {
+            throw MLXTTSEngineError.generationFailed("The native WAV writer output is too large for RIFF/WAVE.")
+        }
+
+        var data = Data()
+        data.reserveCapacity(44)
+        appendASCII("RIFF", to: &data)
+        appendUInt32LE(UInt32(36 + dataByteCount), to: &data)
+        appendASCII("WAVE", to: &data)
+        appendASCII("fmt ", to: &data)
+        appendUInt32LE(16, to: &data)
+        appendUInt16LE(1, to: &data) // PCM
+        appendUInt16LE(1, to: &data) // mono
+        appendUInt32LE(UInt32(sampleRate), to: &data)
+        appendUInt32LE(UInt32(sampleRate * bytesPerSample), to: &data)
+        appendUInt16LE(UInt16(bytesPerSample), to: &data)
+        appendUInt16LE(16, to: &data)
+        appendASCII("data", to: &data)
+        appendUInt32LE(UInt32(dataByteCount), to: &data)
+        return data
+    }
+
+    private static func write(
+        header: Data,
+        pcmSamples: [Int16],
+        to url: URL
+    ) throws {
+        guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+            throw MLXTTSEngineError.generationFailed("Could not create the native WAV output file.")
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        do {
+            try handle.write(contentsOf: header)
+            let pcmData = pcmSamples.withUnsafeBufferPointer { pointer -> Data in
+                guard let baseAddress = pointer.baseAddress else { return Data() }
+                return Data(
+                    bytes: UnsafeRawPointer(baseAddress),
+                    count: pointer.count * MemoryLayout<Int16>.stride
+                )
+            }
+            try handle.write(contentsOf: pcmData)
+            try handle.synchronize()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            throw error
+        }
+    }
+
+    private static func appendASCII(_ value: String, to data: inout Data) {
+        data.append(contentsOf: value.utf8)
+    }
+
+    private static func appendUInt16LE(_ value: UInt16, to data: inout Data) {
+        data.append(contentsOf: [
+            UInt8(value & 0xff),
+            UInt8((value >> 8) & 0xff),
+        ])
+    }
+
+    private static func appendUInt32LE(_ value: UInt32, to data: inout Data) {
+        data.append(contentsOf: [
+            UInt8(value & 0xff),
+            UInt8((value >> 8) & 0xff),
+            UInt8((value >> 16) & 0xff),
+            UInt8((value >> 24) & 0xff),
+        ])
+    }
+}
+
 private final class PCM16ScratchBuffer {
     private var storage: [Int16] = []
     private var limiter = PCM16StreamLimiter()
@@ -431,33 +585,32 @@ private final class PCM16ChunkFileWriter {
     }
 
     private static func temporaryURL(for finalURL: URL) -> URL {
-        let filename = finalURL.lastPathComponent
-        return finalURL
-            .deletingLastPathComponent()
-            .appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
+        AtomicFilePublisher.temporaryURL(for: finalURL)
     }
 
     private static func publishAtomically(temporaryURL: URL, finalURL: URL) throws {
-        let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: finalURL.path) {
-            _ = try fileManager.replaceItemAt(
-                finalURL,
-                withItemAt: temporaryURL,
-                backupItemName: nil,
-                options: []
-            )
-        } else {
-            try fileManager.moveItem(at: temporaryURL, to: finalURL)
-        }
+        try AtomicFilePublisher.publishAtomically(
+            temporaryURL: temporaryURL,
+            finalURL: finalURL
+        )
     }
 }
 
 private final class IncrementalPCM16WAVFileWriter {
-    private let file: AVAudioFile
+    private var file: AVAudioFile?
     private let format: AVAudioFormat
     private var reusableBuffer: AVAudioPCMBuffer?
 
     init(sampleRate: Int, outputURL: URL) throws {
+        let createSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native Final WAV Writer Create"
+        )
+        defer {
+            NativeStreamingSignposts.signposter.endInterval(
+                "Native Final WAV Writer Create",
+                createSignpost
+            )
+        }
         self.format = try PCM16WAVWriter.makeFormat(sampleRate: sampleRate)
         self.file = try AVAudioFile(
             forWriting: outputURL,
@@ -468,16 +621,42 @@ private final class IncrementalPCM16WAVFileWriter {
     }
 
     func append(pcmSamples: [Int16]) throws {
+        let bufferSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native Final WAV Buffer Build"
+        )
         let buffer = try PCM16WAVWriter.makePCMBuffer(
             pcmSamples: pcmSamples,
             format: format,
             reusableBuffer: &reusableBuffer
         )
+        NativeStreamingSignposts.signposter.endInterval(
+            "Native Final WAV Buffer Build",
+            bufferSignpost
+        )
+
+        guard let file else {
+            throw MLXTTSEngineError.generationFailed("The native WAV writer was already finalized.")
+        }
+        let writeSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native Final WAV AVAudioFile Write"
+        )
         try file.write(from: buffer)
+        NativeStreamingSignposts.signposter.endInterval(
+            "Native Final WAV AVAudioFile Write",
+            writeSignpost
+        )
     }
 
     func finish() {
+        let finalizeSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native Final WAV AVAudioFile Finalize"
+        )
         reusableBuffer = nil
+        file = nil
+        NativeStreamingSignposts.signposter.endInterval(
+            "Native Final WAV AVAudioFile Finalize",
+            finalizeSignpost
+        )
     }
 }
 
@@ -627,7 +806,14 @@ private struct StreamingExecutionContext: Sendable {
             throw Self.error(for: finishReason)
         }
 
+        let materializeSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native Final Audio Materialize"
+        )
         let samples = completion.audio.asArray(Float.self)
+        NativeStreamingSignposts.signposter.endInterval(
+            "Native Final Audio Materialize",
+            materializeSignpost
+        )
         guard !samples.isEmpty else {
             if postRequestCachePolicy.clearsAfterFailure {
                 Memory.clearCache()
@@ -636,16 +822,31 @@ private struct StreamingExecutionContext: Sendable {
         }
 
         let scratchBuffer = PCM16ScratchBuffer()
+        let limiterSignpost = NativeStreamingSignposts.signposter.beginInterval(
+            "Native PCM Limiter Convert"
+        )
         let pcmSamples = scratchBuffer.convertLimited(samples)
+        NativeStreamingSignposts.signposter.endInterval(
+            "Native PCM Limiter Convert",
+            limiterSignpost
+        )
         let finalWriteMS: Int
         do {
-            let finalWriter = try IncrementalPCM16WAVFileWriter(
+            let finalWriteSignpost = NativeStreamingSignposts.signposter.beginInterval(
+                "Native Final WAV Write"
+            )
+            defer {
+                NativeStreamingSignposts.signposter.endInterval(
+                    "Native Final WAV Write",
+                    finalWriteSignpost
+                )
+            }
+            let finalWriteStartedAt = ContinuousClock.now
+            try AtomicPCM16WAVWriter.write(
+                pcmSamples: pcmSamples,
                 sampleRate: sampleRate,
                 outputURL: outputURL
             )
-            let finalWriteStartedAt = ContinuousClock.now
-            try finalWriter.append(pcmSamples: pcmSamples)
-            finalWriter.finish()
             finalWriteMS = finalWriteStartedAt.elapsedMilliseconds
         } catch {
             if postRequestCachePolicy.clearsAfterFailure {

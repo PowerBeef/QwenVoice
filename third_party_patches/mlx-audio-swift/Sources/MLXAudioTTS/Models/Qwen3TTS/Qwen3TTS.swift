@@ -2245,6 +2245,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             let activeSuppressTokens = allowsEOS ? suppressTokens : suppressTokens + [eosTokenId]
 
             // Sample first codebook token
+            let sampleFirstCodebookSignpost =
+                Qwen3Signposts.signposter.beginInterval("Sample First Codebook")
             let nextToken = sampleToken(
                 logits,
                 temperature: temperature,
@@ -2255,6 +2257,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 suppressTokens: activeSuppressTokens,
                 eosTokenId: allowsEOS ? eosTokenId : nil,
                 minP: minP
+            )
+            Qwen3Signposts.signposter.endInterval(
+                "Sample First Codebook",
+                sampleFirstCodebookSignpost
             )
 
             // Defer sync to the eval boundary with inputEmbeds.
@@ -2270,6 +2276,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             let codePredictorStartedAt = ContinuousClock.now
             let codePredictorSignpost = Qwen3Signposts.signposter.beginInterval("Code Predictor Loop")
             for codeIdx in 0 ..< talkerConfig.numCodeGroups - 1 {
+                let codePredictorStepSignpost =
+                    Qwen3Signposts.signposter.beginInterval("Code Predictor Step")
                 let codeInput: MLXArray
                 if codeIdx == 0 {
                     let code0Embed = talker.getInputEmbeddings()(nextToken)
@@ -2281,13 +2289,23 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 let (codeLogits, _, _) = talker.codePredictor(
                     codeInput, cache: codeCache, generationStep: codeIdx
                 )
+                Qwen3Signposts.signposter.endInterval(
+                    "Code Predictor Step",
+                    codePredictorStepSignpost
+                )
 
+                let samplePredictedCodebookSignpost =
+                    Qwen3Signposts.signposter.beginInterval("Sample Predicted Codebook")
                 let nextCode = sampleToken(
                     codeLogits,
                     temperature: temperature,
                     topP: topP,
                     topK: topK,
                     minP: minP
+                )
+                Qwen3Signposts.signposter.endInterval(
+                    "Sample Predicted Codebook",
+                    samplePredictedCodebookSignpost
                 )
                 codeTokens.append(nextCode)
             }
@@ -2306,12 +2324,18 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             }
 
             // Sum all code embeddings for next step
+            let codecEmbeddingSignpost =
+                Qwen3Signposts.signposter.beginInterval("Codec Embedding Assembly")
             var codecEmbed = talker.getInputEmbeddings()(nextToken)
             for (i, code) in codeTokens.dropFirst().enumerated() {
                 codecEmbed = codecEmbed + talker.codePredictor.codecEmbedding[i](code)
             }
 
             inputEmbeds = textEmbed + codecEmbed
+            Qwen3Signposts.signposter.endInterval(
+                "Codec Embedding Assembly",
+                codecEmbeddingSignpost
+            )
             let streamStepEvalStartedAt = ContinuousClock.now
             let stepEvalSignpost = Qwen3Signposts.signposter.beginInterval("Step Eval Flush")
             switch streamStepEvalPolicy {
@@ -2336,7 +2360,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             let tokenId = Int(nextToken[0, 0].item(Int32.self))
             onToken?(tokenId)
             let eosReadStartedAt = ContinuousClock.now
+            let eosReadSignpost = Qwen3Signposts.signposter.beginInterval("EOS Read")
             let reachedEOS = isEOS.item(Bool.self)
+            Qwen3Signposts.signposter.endInterval("EOS Read", eosReadSignpost)
             let eosReadElapsed = eosReadStartedAt.elapsedMilliseconds
             streamStepEOSReadTotalMS += eosReadElapsed
             if isPureVoiceDesign {
