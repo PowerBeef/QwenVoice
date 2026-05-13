@@ -90,8 +90,13 @@ jobs:
         if: steps.cache-models.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$QWENVOICE_AUDIO_QC_MODELS_ROOT"
-          python3 -m pip install --user --quiet huggingface_hub
-          python3 - <<'PY'
+          # macos-26 ships system Python 3 with PEP 668 "externally-managed"
+          # protection, so `pip install --user` is rejected. Use an
+          # ephemeral venv to install huggingface_hub cleanly without
+          # fighting the protection or polluting the runner.
+          python3 -m venv /tmp/perf-nightly-venv
+          /tmp/perf-nightly-venv/bin/pip install --quiet huggingface_hub
+          /tmp/perf-nightly-venv/bin/python - <<'PY'
           from huggingface_hub import snapshot_download
           import os, pathlib
           root = pathlib.Path(os.environ["QWENVOICE_AUDIO_QC_MODELS_ROOT"])
