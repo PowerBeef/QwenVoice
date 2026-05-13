@@ -300,14 +300,24 @@ swap_preflight() {
     return 0
   fi
   # Format example: "total = 1024.00M  used = 161.75M  free = 862.25M  (encrypted)"
+  local total_segment="${out#*total = }"
+  local total_str="${total_segment%%M*}"
   local used_segment="${out#*used = }"
   local used_str="${used_segment%%M*}"
   local free_segment="${out#*free = }"
   local free_str="${free_segment%%M*}"
+  local total_mb="${total_str%.*}"
   local used_mb="${used_str%.*}"
   local free_mb="${free_str%.*}"
-  if ! [[ "$used_mb" =~ ^[0-9]+$ ]] || ! [[ "$free_mb" =~ ^[0-9]+$ ]]; then
+  if ! [[ "$total_mb" =~ ^[0-9]+$ ]] || ! [[ "$used_mb" =~ ^[0-9]+$ ]] || ! [[ "$free_mb" =~ ^[0-9]+$ ]]; then
     echo "==> swap preflight: vm.swapusage unparseable; skipping check."
+    return 0
+  fi
+  # Hosts with no swap configured (some CI runners) report total=0.
+  # The preflight protects against swap-pressure-induced bench noise;
+  # if there's no swap at all, there's no pressure to protect against.
+  if (( total_mb == 0 )); then
+    echo "==> swap preflight: no swap configured on this host — skipping check."
     return 0
   fi
   if (( used_mb >= hard_stop )); then
