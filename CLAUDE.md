@@ -178,6 +178,17 @@ QWENVOICE_AUDIO_QC_MODES=CustomVoice ./scripts/qa.sh test --layer perf
 ./scripts/compare_perf_manifest.sh
 ```
 
+Pin a specific variant for the `repeat` profile (overrides the engine's hardware-recommendation policy, which picks Speed on the 8 GB floor):
+
+```sh
+QWENVOICE_AUDIO_QC_REPEAT_VARIANT=quality \
+  QWENVOICE_AUDIO_QC_MODES=CustomVoice \
+  ./scripts/qa.sh test --layer perf
+./scripts/compare_perf_manifest.sh --baseline scripts/perf-baseline-manifest-quality.json
+```
+
+`scripts/perf-baseline-manifest.json` (Speed/4bit) is the comparator's default; pass `--baseline scripts/perf-baseline-manifest-quality.json` for the Quality/8bit lane. Both are tracked independently by the `Perf Nightly` workflow.
+
 Desktop UI benchmark (user-perceived timing, paste latency, sheet routing, playback handoff) — this is the default benchmark method:
 
 ```sh
@@ -225,6 +236,22 @@ Shell pipeline exit codes: when piping `qa.sh`, `bench_ui_generation.sh`, or `co
 - `.github/workflows/ios-testflight.yml` → `Vocello iOS TestFlight` (maintained but deferred)
 - `.github/workflows/perf-nightly.yml` → `Perf Nightly` (advisory monitoring; nightly cron + manual dispatch; runs `qa.sh test --layer perf` with both CustomVoice variants pinned via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT` and compares against the committed Speed + Quality baselines)
 
+## PR Workflow
+
+`main` is protected: direct pushes are rejected unless the commit has passing `validate-apple-platforms` (Apple Platform QA Gate) **and** `validate-project-inputs` (Project Inputs) checks. Force-push and branch deletion are blocked. Admins are not exempt (`enforce_admins=true`). All work targeting `main` goes through a PR.
+
+Canonical agent flow:
+
+```sh
+git checkout -b <branch>
+# edit + commit
+git push -u origin <branch>
+gh pr create --title "…" --body "…"
+gh pr merge --auto --rebase --delete-branch  # queues auto-merge once required checks go green
+```
+
+Auto-merge waits for both required checks to complete before rebasing onto `main`. Feature branches auto-delete remotely on merge (`delete_branch_on_merge=true`); clean up your local copy via `git branch -D <branch>` after `git pull origin main`.
+
 ## Edit-Coupling Rules
 
 When changing model registry, speakers, output folders, required files, Hugging Face repos, or platform variants:
@@ -235,6 +262,9 @@ When adding, removing, or renaming source files:
 
 When changing shared engine semantics:
 - review `Sources/QwenVoiceCore/`, both engine stores, and extension adapters → update the frontend-backend contract doc if frontend-visible state changes → run at least `contract`, `swift`, and `native` layers.
+
+When changing engine perf characteristics (timings, cache policy, prewarm, chunk emission cadence, attribution counters):
+- expect drift in `scripts/perf-baseline-manifest.json` (Speed) and `scripts/perf-baseline-manifest-quality.json` (Quality) → refresh whichever variant your change exercises via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT={speed,quality}` → run `compare_perf_manifest.sh --baseline <matching-baseline>` to confirm the new numbers are inside ±15 % wall / ±25 % per-key timing tolerance.
 
 When changing macOS XPC engine behavior:
 - review `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineSupport/`, `Sources/QwenVoiceEngineService/` → keep app-facing state mapped through `TTSEngineFrontendState`.
@@ -269,7 +299,7 @@ Phase 2c closure (May 2026) on **Mac mini M1, 8 GB RAM** found that the Qwen3 ho
 
 The project owner's current testing machine is **Mac mini M2, 8 GB RAM** (wider memory bandwidth, more capable GPU cores). The M1 saturation conclusion may not transfer cleanly to M2 and should be re-verified via Instruments before being cited as M2-bound. Wall-clock perf is baselined on M2 in `scripts/perf-baseline-manifest.json` (CustomVoice/Speed) and `scripts/perf-baseline-manifest-quality.json` (CustomVoice/Quality); the `Perf Nightly` workflow tracks drift against those baselines. Saturation profiles are not yet captured for M2.
 
-**Don't try to optimize what these findings flag as irreducible** without first re-running Instruments on M2 and presenting evidence that the saturation profile has changed. The natural M2 perf-optimization tracks are quantization choice (already at 4-bit Speed) and finalization / cold-start paths that don't fight the per-token loop — not Step Eval Flush itself.
+**Optimization tracks worth pursuing on M2** when a refreshed baseline justifies action: quantization choice (currently 4-bit Speed for the 8 GB floor; 8-bit Quality available via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT=quality`), finalization / cold-start, and inter-chunk delivery. The per-token loop's Step Eval Flush stays M1-saturation-bound until Instruments evidence on M2 says otherwise — don't optimize it speculatively.
 
 ## UI And Product Discipline
 
