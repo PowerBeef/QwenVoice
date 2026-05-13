@@ -11,7 +11,7 @@ import OSLog
 // `NativeStreamingSynthesisSession` is now owned by `QwenVoiceCore` and is
 // shared by the active macOS XPC service and iPhone engine-extension paths.
 // Keep behavior changes here aligned with the shared runtime tests and the
-// platform host adapters described in `AGENTS.md`.
+// platform host adapters described in `CLAUDE.md`.
 
 protocol NativeStreamingSessionRunning {
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult

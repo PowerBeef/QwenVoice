@@ -166,7 +166,7 @@ The maintained qa.sh and foundation paths now use:
 
 ## Current Documentation Boundaries
 
-- `AGENTS.md` is the canonical repository operating guide for coding agents.
+- `CLAUDE.md` is the canonical repository operating guide for coding agents.
 - `docs/README.md` is the index of the maintained documentation set.
 - `docs/reference/current-state.md`, `docs/reference/engineering-status.md`, `docs/reference/backend-freeze-gate.md`, `docs/reference/frontend-backend-contract.md`, `docs/reference/live-testing.md`, and `docs/reference/vendoring-runtime.md` are the maintained reference docs.
 - `docs/reference/privacy-storage.md` records local storage, deletion paths, and voice-cloning consent posture.

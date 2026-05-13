@@ -14,7 +14,7 @@ When facts disagree, trust:
 
 `Sources/Resources/qwenvoice_contract.json` is the source of truth for model, speaker, variant, output, Hugging Face revision, and required-file metadata.
 
-`AGENTS.md` is the canonical repository operating guide for coding agents working in this checkout.
+`CLAUDE.md` is the canonical repository operating guide for coding agents working in this checkout.
 
 Current model-selection policy:
 
