@@ -38,6 +38,7 @@
       "Bash(git stash list:*)",
       "Bash(git stash show:*)",
       "Bash(git config --get:*)",
+      "Bash(git push:*)",
 
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
