@@ -48,7 +48,7 @@ Public messaging rules:
 
 Two-track macOS hardware proof:
 
-- `Mac mini M2, 8 GB RAM` is the active development and bench-capture host. Wall-clock perf baselines (`scripts/perf-baseline-manifest.json`, `scripts/perf-baseline-manifest-quality.json`) and the `Perf Nightly` workflow track regressions against this hardware.
+- `Mac mini M2, 8 GB RAM` is the active development and bench-capture host. Wall-clock perf baselines (`scripts/perf-baseline-manifest.json`, `scripts/perf-baseline-manifest-quality.json`) are captured on this hardware and regression tracking is **local-only** via `./scripts/qa.sh test --layer perf` + `./scripts/compare_perf_manifest.sh`. There is no CI mirror for the perf lane.
 - `Mac mini M1, 8 GB RAM` remains the documented official minimum, but engine-level findings captured on M1 have not been re-verified on M2. The M1-saturation conclusion in `docs/reference/instruments-profiling.md` (Step Eval Flush ≈62 % of generation, irreducible without quantization or hardware change) was reached on M1; M2's wider memory bandwidth and more capable GPU cores mean the saturation profile may differ. Re-verify via Instruments on M2 before citing the finding as M2-bound.
 - Do not claim the M1 floor is fully verified as of the dual-variant catalog (`d5b3c61`, 2026-05-05); the current bench evidence reflects M2 8 GB. See [`CLAUDE.md`'s Performance Findings section](../../CLAUDE.md#performance-findings) for the agent-discoverable form.
 
@@ -73,7 +73,7 @@ Two-track proof policy:
 - Current public beta release milestone: macOS only
 - iPhone owned-device proof: `iPhone 17 Pro` path is the active validation target
 - iPhone official minimum-device proof: pending until `iPhone 15 Pro` evidence is recorded
-- Rescue baseline: `main` commit `63a5e02` passed GitHub `Project Inputs` and `Apple Platform QA Gate` on April 26, 2026 local time
+- Rescue baseline: `main` commit `63a5e02` passed GitHub `Project Inputs` and `Apple Platform QA Gate` (since renamed to `Apple Platform Build Gate`) on April 26, 2026 local time
 - Latest local release proof: unsigned `Vocello.app` and `Vocello-macos26.dmg` built and verified from `c6beacd`; GitHub re-proved the unsigned macOS release-artifact lane for `63a5e02`
 - Latest local manual macOS smoke: launched `build/Vocello.app`, switched generation modes, generated and played a short Custom Voice preview, and confirmed the output was written to the app-support outputs folder
 
@@ -93,10 +93,10 @@ Release-facing metadata and docs should record:
 
 The current `macOS-first release track` uses three proof tiers:
 
-1. QA and build proof
-   - `Project Inputs`
-   - `Apple Platform QA Gate`
-   - local `check_project_inputs`, `qa.sh validate`, `contract`, `swift`, `native`, `build_foundation_targets.sh macos`, and `build_foundation_targets.sh ios`
+1. Build and validation proof
+   - `Project Inputs` (CI — runs `qa.sh validate`)
+   - `Apple Platform Build Gate` (CI — project regen + `qa.sh validate` + generic macOS/iPhone builds + unsigned release verify)
+   - local `check_project_inputs`, `qa.sh validate`, `contract`, `swift`, `native`, `build_foundation_targets.sh macos`, and `build_foundation_targets.sh ios` (behavioral test layers are local-only — CI does not run them)
 2. macOS ship gate
    - local unsigned macOS packaging and verification
    - `Vocello macOS Release` for the signed/notarized public artifact
@@ -113,14 +113,13 @@ workflow is renamed, split, or retired so prose and YAML do not drift.
 
 | Tier | Workflow file | Workflow display name | Primary validation step |
 |---|---|---|---|
-| 1. QA and build proof | `.github/workflows/project-inputs.yml` | `Project Inputs` | `./scripts/qa.sh validate` |
-| 1. QA and build proof | `.github/workflows/apple-platform-validation.yml` | `Apple Platform QA Gate` | qa.sh validate/contract/source/native/UI smoke + generic macOS and iPhone builds + unsigned release verification |
+| 1. Build and validation proof | `.github/workflows/project-inputs.yml` | `Project Inputs` | `./scripts/qa.sh validate` |
+| 1. Build and validation proof | `.github/workflows/apple-platform-validation.yml` | `Apple Platform Build Gate` | project regen + `qa.sh validate` + generic macOS and iPhone builds + unsigned macOS release verification |
 | 2. macOS ship gate (local) | — | — | `./scripts/release.sh` + `./scripts/verify_release_bundle.sh` + `./scripts/verify_packaged_dmg.sh` |
 | 2. macOS ship gate (CI) | `.github/workflows/macos-release.yml` | `Vocello macOS Release` | signed + notarized `Vocello-macos26.dmg` build + `stapler validate` + post-notarization verify |
 | 3. Deferred iPhone release | `.github/workflows/ios-testflight.yml` | `Vocello iOS TestFlight` | `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` |
-| Monitoring (advisory) | `.github/workflows/perf-nightly.yml` | `Perf Nightly` | scheduled `qa.sh test --layer perf` for CustomVoice/Speed + CustomVoice/Quality + `compare_perf_manifest.sh` against the committed Speed and Quality baselines |
 
-Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met. The `Perf Nightly` monitoring workflow is advisory — a red run signals engine-level drift past the comparator's tolerance and warrants investigation before the next release cut, but does not gate per-PR or per-push merges.
+Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met. Behavioral test layers (`contract`, `swift`, `native`, `e2e`, `perf-static`, `perf`) and UI benches (`bench_ui_generation.sh`) run **locally on Mac mini M2** — they are not gated by CI. See the "Default Local macOS Signoff Loop" section below for the local matrix.
 
 ## Program Priorities
 
@@ -157,7 +156,7 @@ QWENVOICE_E2E_STRICT=1 ./scripts/qa.sh test --layer e2e
 
 ## CI Proof Surface
 
-- `Apple Platform QA Gate` is the maintained gate for project inputs, qa.sh validation, contract/source/native/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts.
+- `Apple Platform Build Gate` is the maintained CI gate for project regeneration, `qa.sh validate` (static project-input check), generic macOS/iPhone builds, unsigned macOS release verification, and uploaded `.xcresult` artifacts. It does **not** run behavioral test layers — those are local-only on Mac mini M2.
 - `Vocello macOS Release` is the only CI-owned signed/public release proof path required for the current milestone.
 - `Vocello iOS TestFlight` remains maintained as the deferred iPhone archive/export/upload-prep proof path and is not required for current macOS release signoff.
 - Local release scripts remain deterministic unsigned/source-validation tools; they are not the repo’s signing or notarization source of truth.
@@ -165,7 +164,7 @@ QWENVOICE_E2E_STRICT=1 ./scripts/qa.sh test --layer e2e
 Current automated rescue evidence:
 
 - GitHub `Project Inputs`: passed for `63a5e02`, run `24973916220`
-- GitHub `Apple Platform QA Gate`: passed for `63a5e02`, run `24973916195`
+- GitHub `Apple Platform QA Gate` (now `Apple Platform Build Gate`): passed for `63a5e02`, run `24973916195`
 - Local unsigned release proof: `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`
 
 ## iPhone Re-entry Conditions
@@ -174,7 +173,7 @@ Do not treat iPhone as a public release target again until all of the following 
 
 - the macOS-first milestone has shipped successfully
 - no critical shared-core macOS regressions remain open from the release cycle
-- the QA/build gate stays green after post-release fixes
+- the build gate stays green after post-release fixes
 - owned-device iPhone validation is current
 - official `iPhone 15 Pro` minimum-device proof is recorded before claiming full iPhone release readiness
 - `Vocello iOS TestFlight` succeeds from the intended release ref

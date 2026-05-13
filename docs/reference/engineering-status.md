@@ -10,7 +10,7 @@ As of `main` commit `63a5e02` (`Guard macOS UI observation boundaries`), the rep
 
 - local `main` and `origin/main` are aligned at the same commit
 - GitHub `Project Inputs` passed for `63a5e02` in run `24973916220`
-- GitHub `Apple Platform QA Gate` passed for `63a5e02` in run `24973916195`, including contract, Swift, native runtime, hosted UI smoke, macOS build, iPhone build, and unsigned macOS release-artifact verification
+- GitHub `Apple Platform QA Gate` (since renamed to `Apple Platform Build Gate` and scoped to build + packaging only) passed for `63a5e02` in run `24973916195`. That historical run included contract/Swift/native/hosted UI smoke layers, macOS + iPhone builds, and unsigned macOS release-artifact verification. After May 2026 the workflow no longer runs the behavioral test layers — those moved to local-only on Mac mini M2.
 - local pre-push proof for `63a5e02` passed `./scripts/check_project_inputs.sh`, `./scripts/qa.sh validate`, `git diff --check`, `./scripts/qa.sh test --layer swift`, and `./scripts/build_foundation_targets.sh macos`
 - prior local full release proof passed from `c6beacd` with `./scripts/release.sh`, `./scripts/verify_release_bundle.sh build/Vocello.app`, and `./scripts/verify_packaged_dmg.sh build/Vocello-macos26.dmg build/release-metadata.txt`; the hosted QA gate re-proved the unsigned release-artifact lane for `63a5e02`
 - controlled local macOS acceptance on April 26, 2026 launched `build/Vocello.app`, switched Custom Voice / Voice Design / Voice Cloning, typed a Custom Voice script, generated a 2-second preview, played it through the sidebar player, and persisted the output under `~/Library/Application Support/QwenVoice/outputs/CustomVoice/`
@@ -33,7 +33,7 @@ The next recovery work should keep this baseline stable: native SwiftUI only, no
 - Rebuilt `scripts/qa.sh` as the repo-owned QA orchestrator for validation, contract/source/native/iOS/UI test layers, diagnostics, and opt-in benchmarks
 - Maintained release scripts for signed/notarized macOS DMGs and iPhone archive/export flows
 - Deterministic local foundation paths now separate package resolution, build, archive, and export work into explicit roots with `.xcresult` evidence
-- `Apple Platform QA Gate` now treats `.xcresult` bundles as first-class artifacts for maintained build and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
+- `Apple Platform Build Gate` (renamed from `Apple Platform QA Gate` in May 2026) treats `.xcresult` bundles as first-class artifacts for maintained build and archive/release lanes instead of depending on raw `xcodebuild` log tails alone
 - An explicit public-homepage posture that keeps GitHub landing-page messaging aligned with the currently shipped `QwenVoice v1.2.3` build, with `Vocello` framed as the forward rebrand that lands with the next macOS release
 
 ## Current Caveats

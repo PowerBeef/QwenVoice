@@ -170,10 +170,8 @@ Frontend work should treat the backend as frozen only when these maintained proo
 
 Maintained CI proof also includes:
 
-- `Apple Platform QA Gate`
-- `.xcresult` artifact upload for qa.sh and platform build lanes
-- soft-skippable hosted UI smoke for known macOS automation environment failures
-- unsigned release verification in CI
+- `Apple Platform Build Gate` (project regen + `qa.sh validate` + generic macOS/iPhone builds + unsigned macOS release verification — no behavioral test layers; those are local-only)
+- `.xcresult` artifact upload for platform build lanes
 - signed macOS release proof in its dedicated CI workflow
 - deferred iPhone release proof in its dedicated CI workflow
 

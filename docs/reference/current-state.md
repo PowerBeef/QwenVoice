@@ -128,10 +128,10 @@ Project and automation source of truth:
 - `.github/workflows/`
 - `config/apple-platform-capability-matrix.json`
 
-Active GitHub workflows:
+Active GitHub workflows (scoped to building and packaging validations only — behavioral test layers run locally on Mac mini M2):
 
-- `Project Inputs`
-- `Apple Platform QA Gate` for qa.sh validation, contract/source/native/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification, and `.xcresult` artifact upload
+- `Project Inputs` (runs `qa.sh validate`)
+- `Apple Platform Build Gate` (project regeneration + `qa.sh validate` + generic macOS/iPhone builds + unsigned macOS release verification + `.xcresult` artifact upload)
 - `Vocello macOS Release` as the only signed/public release workflow required for the current milestone
 - `Vocello iOS TestFlight` as the maintained but deferred iPhone release workflow
 

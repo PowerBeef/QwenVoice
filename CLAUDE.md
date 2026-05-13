@@ -187,7 +187,7 @@ QWENVOICE_AUDIO_QC_REPEAT_VARIANT=quality \
 ./scripts/compare_perf_manifest.sh --baseline scripts/perf-baseline-manifest-quality.json
 ```
 
-`scripts/perf-baseline-manifest.json` (Speed/4bit) is the comparator's default; pass `--baseline scripts/perf-baseline-manifest-quality.json` for the Quality/8bit lane. Both are tracked independently by the `Perf Nightly` workflow.
+`scripts/perf-baseline-manifest.json` (Speed/4bit) is the comparator's default; pass `--baseline scripts/perf-baseline-manifest-quality.json` for the Quality/8bit lane. Both baselines are captured on Mac mini M2, 8 GB RAM, and refreshed manually when engine perf characteristics shift. There is no CI mirror — the comparator is a developer-facing tool, not a CI gate.
 
 Desktop UI benchmark (user-perceived timing, paste latency, sheet routing, playback handoff) — this is the default benchmark method:
 
@@ -230,15 +230,16 @@ Shell pipeline exit codes: when piping `qa.sh`, `bench_ui_generation.sh`, or `co
 
 ## CI Workflows
 
-- `.github/workflows/project-inputs.yml` → `Project Inputs`
-- `.github/workflows/apple-platform-validation.yml` → `Apple Platform QA Gate` (project regeneration, `qa.sh validate`, contract/source/native/perf-static/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification)
+GitHub workflows are scoped to **building and packaging validations only**. App debugging, benchmarking, and behavioral test layers all run locally on Mac mini M2. CI is not a behavioral-test gate.
+
+- `.github/workflows/project-inputs.yml` → `Project Inputs` (runs `qa.sh validate` — static project-input check: schema, contract presence, paths)
+- `.github/workflows/apple-platform-validation.yml` → `Apple Platform Build Gate` (project regeneration, `qa.sh validate`, generic macOS/iPhone builds, unsigned macOS release verification)
 - `.github/workflows/macos-release.yml` → `Vocello macOS Release` (signed public macOS release path)
 - `.github/workflows/ios-testflight.yml` → `Vocello iOS TestFlight` (maintained but deferred)
-- `.github/workflows/perf-nightly.yml` → `Perf Nightly` (advisory monitoring; nightly cron + manual dispatch; runs `qa.sh test --layer perf` with both CustomVoice variants pinned via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT` and compares against the committed Speed + Quality baselines)
 
 ## PR Workflow
 
-`main` is protected: direct pushes are rejected unless the commit has passing `validate-apple-platforms` (Apple Platform QA Gate) **and** `validate-project-inputs` (Project Inputs) checks. Force-push and branch deletion are blocked. Admins are not exempt (`enforce_admins=true`). All work targeting `main` goes through a PR.
+`main` is protected: direct pushes are rejected unless the commit has passing `validate-apple-platforms` (Apple Platform Build Gate) **and** `validate-project-inputs` (Project Inputs) checks. Force-push and branch deletion are blocked. Admins are not exempt (`enforce_admins=true`). All work targeting `main` goes through a PR.
 
 Canonical agent flow:
 
@@ -297,7 +298,7 @@ When changing broad repo facts:
 
 Phase 2c closure (May 2026) on **Mac mini M1, 8 GB RAM** found that the Qwen3 hot-loop's `Step Eval Flush` stage accounts for ≈62 % of generation time and is **irreducible without model quantization or hardware change**. The autoregressive code-predictor loop is also not parallelizable. Full Instruments analysis lives in [`docs/reference/instruments-profiling.md`](docs/reference/instruments-profiling.md).
 
-The project owner's current testing machine is **Mac mini M2, 8 GB RAM** (wider memory bandwidth, more capable GPU cores). The M1 saturation conclusion may not transfer cleanly to M2 and should be re-verified via Instruments before being cited as M2-bound. Wall-clock perf is baselined on M2 in `scripts/perf-baseline-manifest.json` (CustomVoice/Speed) and `scripts/perf-baseline-manifest-quality.json` (CustomVoice/Quality); the `Perf Nightly` workflow tracks drift against those baselines. Saturation profiles are not yet captured for M2.
+The project owner's current testing machine is **Mac mini M2, 8 GB RAM** (wider memory bandwidth, more capable GPU cores). The M1 saturation conclusion may not transfer cleanly to M2 and should be re-verified via Instruments before being cited as M2-bound. Wall-clock perf is baselined on M2 in `scripts/perf-baseline-manifest.json` (CustomVoice/Speed) and `scripts/perf-baseline-manifest-quality.json` (CustomVoice/Quality); regression tracking is **local-only** via `./scripts/qa.sh test --layer perf` + `./scripts/compare_perf_manifest.sh [--baseline <path>]`. CI does not run the perf lane (hardware-pinned baselines vs hosted-runner hardware made hosted bench monitoring fragile and noisy). Saturation profiles are not yet captured for M2.
 
 **Optimization tracks worth pursuing on M2** when a refreshed baseline justifies action: quantization choice (currently 4-bit Speed for the 8 GB floor; 8-bit Quality available via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT=quality`), finalization / cold-start, and inter-chunk delivery. The per-token loop's Step Eval Flush stays M1-saturation-bound until Instruments evidence on M2 says otherwise — don't optimize it speculatively.
 

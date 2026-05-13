@@ -7,7 +7,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 - [`../CLAUDE.md`](../CLAUDE.md) — canonical repository operating guide for coding agents
 - [`reference/current-state.md`](reference/current-state.md) — shared current repo facts
 - [`reference/engineering-status.md`](reference/engineering-status.md) — current strengths, caveats, and validation posture
-- [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — rebuilt QA gate for static validation, source/native/UI QA layers, builds, and unsigned release proof
+- [`reference/backend-freeze-gate.md`](reference/backend-freeze-gate.md) — release-readiness gate composed of local behavioral proof (test layers on Mac mini M2) + CI build proof (`Apple Platform Build Gate` + `Project Inputs`) + signed-release proof
 - [`reference/backend-hardening-validation-evidence.md`](reference/backend-hardening-validation-evidence.md) — local proof checklist for backend hardening patches touching trust, transport, audio prep, or runtime boundaries
 - [`reference/frontend-backend-contract.md`](reference/frontend-backend-contract.md) — app-facing backend state, delivery state, and QA gate
 - [`reference/live-testing.md`](reference/live-testing.md) — local QA lanes, strict e2e behavior, result paths, and xcresult triage commands
@@ -47,5 +47,5 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 - Maintained contributor guidance in this checkout lives in `CLAUDE.md`, `CONTRIBUTING.md`, and the maintained reference docs listed above.
 - This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
-- Current automation surfaces live in `scripts/` and `.github/workflows/`, including `scripts/qa.sh`, project-input validation, source/native/UI QA layers, build proof, macOS release packaging, and the deferred iPhone TestFlight workflow.
+- Current automation surfaces live in `scripts/` and `.github/workflows/`. GitHub workflows are scoped to **building and packaging validations only** (`Project Inputs`, `Apple Platform Build Gate`, `Vocello macOS Release`, `Vocello iOS TestFlight`). Behavioral test layers, benchmarks, and app debugging run **locally on Mac mini M2** via `scripts/qa.sh`, `scripts/bench_ui_generation.sh`, and `scripts/compare_perf_manifest.sh`.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.

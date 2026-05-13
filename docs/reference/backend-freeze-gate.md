@@ -1,6 +1,11 @@
-# Apple Platform QA Gate
+# Apple Platform Release-Readiness Gate
 
 This document defines the source, integration, build, and unsigned-release gate that must stay green before release-hardening work is treated as reviewable.
+
+The "gate" is composed of two parts:
+
+- **Local proof** (the source of truth for behavioral validation) — `qa.sh validate`, contract/swift/native/e2e/perf-static test layers, foundation builds, unsigned release packaging on Mac mini M2.
+- **CI proof** (build + packaging only) — `Project Inputs` + `Apple Platform Build Gate` + `Vocello macOS Release` for signed/notarized DMGs. Behavioral test layers do **not** run on CI; they are local-only.
 
 ## Purpose
 
@@ -85,17 +90,18 @@ QWENVOICE_E2E_STRICT=1 ./scripts/qa.sh test --layer e2e
 
 ### Maintained CI Proof
 
-- `Project Inputs`
-- `Apple Platform QA Gate`
-- `Vocello macOS Release`
+- `Project Inputs` (runs `qa.sh validate` only)
+- `Apple Platform Build Gate` (project regen + `qa.sh validate` + generic macOS/iPhone builds + unsigned macOS release verification)
+- `Vocello macOS Release` (signed/notarized DMG)
 
 The maintained CI evidence includes:
 
-- uploaded `.xcresult` bundles for QA layers, platform builds, and release packaging
-- hosted macOS UI smoke that may soft-skip only known TCC/window-activation environment failures
+- uploaded `.xcresult` bundles for platform builds and release packaging
 - unsigned macOS release verification artifacts
 - dedicated signed macOS notarization proof
 - generic iPhone compile proof to protect shared-core integration
+
+CI does **not** run behavioral test layers (`contract`, `swift`, `native`, `e2e`, `perf-static`, `perf`) or UI benches. Those are local-only on Mac mini M2 — see Local Harness And Build Proof above.
 
 Deferred but still maintained CI proof:
 

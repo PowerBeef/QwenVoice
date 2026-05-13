@@ -1,4 +1,4 @@
-name: Apple Platform QA Gate
+name: Apple Platform Build Gate
 
 on:
   pull_request:
@@ -14,12 +14,12 @@ env:
 
 # Newer pushes to the same ref supersede older in-flight runs. A rapid
 # sequence of commits to `main` (e.g. an agent-driven session) otherwise
-# triggers one full ~28-minute run per commit with no cancellation. The
-# release workflows serialize per-ref with cancel-in-progress: false
-# because they ship build artifacts; this is a validation gate, so it's
-# safe (and cheaper) to cancel the older run.
+# triggers one full run per commit with no cancellation. The release
+# workflows serialize per-ref with cancel-in-progress: false because
+# they ship build artifacts; this is a build gate, so it's safe (and
+# cheaper) to cancel the older run.
 concurrency:
-  group: apple-platform-qa-${{ github.ref }}
+  group: apple-platform-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -59,21 +59,6 @@ jobs:
       - name: Validate checked-in project inputs
         run: ./scripts/qa.sh validate
 
-      - name: Run contract QA layer
-        run: ./scripts/qa.sh test --layer contract
-
-      - name: Run macOS Swift foundation QA layer
-        run: ./scripts/qa.sh test --layer swift
-
-      - name: Run native runtime QA layer
-        run: ./scripts/qa.sh test --layer native
-
-      - name: Run perf-lane static QA layer
-        run: ./scripts/qa.sh test --layer perf-static
-
-      - name: Run macOS UI smoke QA layer
-        run: ./scripts/qa.sh test --layer e2e
-
       - name: Build macOS app
         run: |
           xcodebuild \
@@ -101,13 +86,14 @@ jobs:
           ./scripts/release.sh --output-name Vocello-macos26-ci
           ./scripts/verify_packaged_dmg.sh build/Vocello-macos26-ci.dmg build/release-metadata.txt
 
-      - name: Publish QA gate summary
+      - name: Publish build gate summary
         if: always()
         run: |
           {
-            echo "## Apple Platform QA Gate"
+            echo "## Apple Platform Build Gate"
             echo
-            echo "- Harness validation, contract/source/native/UI smoke test layers, generic macOS/iPhone compile proof, and unsigned macOS release verification ran here."
+            echo "- Project regeneration, qa.sh validate (static project-input check), generic macOS/iPhone compile proof, and unsigned macOS release verification ran here."
+            echo "- App debugging, benchmarking, and behavioral test layers run locally on Mac mini M2; they are not gated by CI."
             echo "- The current public milestone remains macOS-first; iPhone distribution proof stays in the dedicated TestFlight workflow."
             echo "- Signed public release proof is owned by the dedicated Vocello macOS Release workflow."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -120,7 +106,6 @@ jobs:
           if-no-files-found: warn
           path: |
             build/ci-results
-            build/harness/results
             build/foundation/*.xcresult
 
       - name: Upload release verification artifacts
