@@ -20,6 +20,11 @@
 #   1  — at least one comparison drifted beyond tolerance OR flags diverged
 #   2  — usage error / missing files / malformed JSON
 #
+# Note: piping this script's output through `tee`, `head`, etc. swallows
+# the non-zero exit code unless your shell has `set -o pipefail` (or
+# you read `${PIPESTATUS[0]}` instead of `$?`). See CLAUDE.md →
+# "Shell pipeline exit codes" for the full discipline note.
+#
 # Headline metrics compared (top-level per artifact):
 #   wallClockMS, realTimeFactor, durationSeconds
 # Headline timingsMS keys compared (subset; full set is ~70 noisy keys):
