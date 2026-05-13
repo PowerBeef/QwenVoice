@@ -12,6 +12,12 @@
 # driver's computer-control session because Vocello's GenerationDraft state
 # isn't surfaced via CLI.
 #
+# AGENT NOTE: agents should always pass --external-trigger. The default
+# (non-external) mode shells out to `osascript`, which is not in the
+# Claude Code Bash allowlist (.claude/settings.local.json), so an
+# unattended agent run would stall on a permission prompt. Per CLAUDE.md,
+# computer-use is the canonical UI-op channel for agents.
+#
 # NO SWAP / RAM PREFLIGHT (by policy). The desktop-UI bench
 # characterises behaviour at the hardware floor including memory-
 # pressure regimes; aborting on high swap would defeat the purpose.
@@ -38,7 +44,7 @@
 #
 # CSV columns: mode,length,state,sample,wall_secs,audio_secs,rtf,filename
 #
-# This is the **default** benchmark method per AGENTS.md "Common Commands"
+# This is the **default** benchmark method per CLAUDE.md "Common Commands"
 # benchmarking" — it captures the full user-perceived pipeline (paste,
 # UI activation, generation, file write, and final playback handoff).
 # Optional `[LivePreview]` log parsing remains diagnostics-only for
@@ -125,6 +131,25 @@ fi
 
 [ -d "$OUT" ] || { echo "output dir not found: $OUT" >&2; exit 3; }
 
+# Single-instance preflight. The header's pkill rule (line 18) only matters
+# if it is actually enforced; otherwise overlapping Vocellos silently
+# corrupt the RSS baselines captured at lines 164–165.
+# pgrep exits 1 when no match. Tolerate that explicitly so `set -o pipefail`
+# doesn't kill the script before the case statement below can run.
+VOCELLO_COUNT=$( (pgrep -x Vocello 2>/dev/null || true) | wc -l | tr -d ' ')
+case "$STATE:$VOCELLO_COUNT" in
+    cold:0|cold:1|warm:1) : ;;
+    warm:0)
+        echo "STATE=warm requires a running Vocello; none found." >&2
+        echo "Either launch Vocello and wait for 'Engine ready' before retrying," >&2
+        echo "or call this script with STATE=cold so a relaunch is expected." >&2
+        exit 6 ;;
+    *:*)
+        echo "Found $VOCELLO_COUNT Vocello processes; expected ≤ 1." >&2
+        echo "Run \`pkill -x Vocello\` (and any helper processes) before retrying." >&2
+        exit 6 ;;
+esac
+
 rss_mb_for_pids() {
     local pids="$1"
     local total_kb=0
@@ -200,7 +225,12 @@ if [ "$EXTERNAL_TRIGGER" != "true" ]; then
 fi
 
 if [ "$EXTERNAL_TRIGGER" = "true" ]; then
-    echo "READY_FOR_TRIGGER"
+    # Emit on both channels: stderr is unbuffered by default on macOS, so
+    # an agent reading the script's stderr stream sees READY_FOR_TRIGGER
+    # immediately even when stdout is block-buffered through a pipe.
+    # stdout stays for back-compat with existing recipes that grep stdout.
+    printf 'READY_FOR_TRIGGER\n'
+    printf 'READY_FOR_TRIGGER\n' >&2
 fi
 
 T0=$(date +%s.%N)

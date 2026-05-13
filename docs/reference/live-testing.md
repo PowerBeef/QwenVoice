@@ -49,7 +49,16 @@ QWENVOICE_E2E_STRICT=1 ./scripts/qa.sh test --layer e2e
 
 In strict mode, TCC and window-registration failures fail the lane instead of being treated as skipped passes.
 
-For agent-driven local UI checks, use the Computer Use plugin to operate the built app directly. The XCUITest `e2e` lane remains useful for CI and explicitly requested controlled-machine proof, but it is not the default agent-operated UI validation path.
+For agent-driven local UI checks, use the Computer Use plugin to operate the built app directly. The XCUITest `e2e` lane remains useful for CI and explicitly requested controlled-machine proof, but it is not the default agent-operated UI validation path. For timing measurements, pair Computer Use with `./scripts/bench_ui_generation.sh ... --external-trigger`, which prints `READY_FOR_TRIGGER` (on both stdout and stderr) and lets the agent drive the UI action while the script times the post-trigger pipeline. XcodeBuildMCP's UI tools (`screenshot`, `tap`, `type_text`, `snapshot_ui`) target iOS Simulator and do not apply to the macOS `Vocello.app` flows.
+
+## Agent vs CI Test Paths
+
+The two macOS UI-control surfaces in this repo are complementary, not interchangeable. Pick the one that matches what you are doing.
+
+- **XCUITest (`--layer e2e`)** owns deterministic stub-backed flows for CI and controlled-machine signoff. It can inject `QWENVOICE_UI_TEST_*` launch env vars to swap in the stub backend, an isolated fixture root, and a fresh defaults suite, and it attaches the full accessibility hierarchy to the xcresult bundle on failure. It cannot reliably drive SwiftUI sheets (Voice Design description) or `NSOpenPanel` (Voice Cloning reference clip) on macOS 26, which is why those modes have screen-load smokes only.
+- **Computer Use (`mcp__computer-use__*`)** owns sheet flows, file pickers, and real-app interactions against the shipped `Vocello.app`. It drives the host input subsystem directly, so the macOS 26 "Disabled hierarchy" regime that the XCUITest smoke skips around does not apply. Combine it with `bench_ui_generation.sh --external-trigger` for timing. The shared accessibility identifiers under `Sources/Views/` (e.g. `textInput_textEditor`, `sidebarPlayer_bar`) are usable from either path.
+- **XcodeBuildMCP UI tools** target iOS Simulator. They are not applicable to the macOS `Vocello.app` flows and there is currently no iOS UI test target in this repo. They remain useful for iOS simulator build/run workflows.
+- **AppleScript MCP (`mcp__applescript_execute__*`)** is allowlisted and can send `tell application` events or keystrokes when Computer Use is not a fit. The bench's default mode duplicates this via shell `osascript`, which is *not* allowlisted, so agents should prefer `--external-trigger` rather than running the bench's default trigger path.
 
 ## Test Support Code
 
