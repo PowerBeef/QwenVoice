@@ -263,6 +263,14 @@ When changing broad repo facts:
 - Avoid broad environment-object invalidation during generation, prewarm, or playback.
 - Prefer manifest-backed data over duplicated constants. XCTest naming: test files named for behavior, methods prefixed with `test`.
 
+## Performance Findings
+
+Phase 2c closure (May 2026) on **Mac mini M1, 8 GB RAM** found that the Qwen3 hot-loop's `Step Eval Flush` stage accounts for ≈62 % of generation time and is **irreducible without model quantization or hardware change**. The autoregressive code-predictor loop is also not parallelizable. Full Instruments analysis lives in [`docs/reference/instruments-profiling.md`](docs/reference/instruments-profiling.md).
+
+The project owner's current testing machine is **Mac mini M2, 8 GB RAM** (wider memory bandwidth, more capable GPU cores). The M1 saturation conclusion may not transfer cleanly to M2 and should be re-verified via Instruments before being cited as M2-bound. Wall-clock perf is baselined on M2 in `scripts/perf-baseline-manifest.json` (CustomVoice/Speed) and `scripts/perf-baseline-manifest-quality.json` (CustomVoice/Quality); the `Perf Nightly` workflow tracks drift against those baselines. Saturation profiles are not yet captured for M2.
+
+**Don't try to optimize what these findings flag as irreducible** without first re-running Instruments on M2 and presenting evidence that the saturation profile has changed. The natural M2 perf-optimization tracks are quantization choice (already at 4-bit Speed) and finalization / cold-start paths that don't fight the per-token loop — not Step Eval Flush itself.
+
 ## UI And Product Discipline
 
 Vocello should feel warm, premium, native, and quiet — local-first text-to-speech, not a SaaS dashboard.
