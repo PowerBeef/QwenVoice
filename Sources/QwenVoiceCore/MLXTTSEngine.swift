@@ -4,7 +4,17 @@ import Foundation
 @preconcurrency import MLX
 @preconcurrency import MLXAudioTTS
 
-public enum MLXTTSEngineError: LocalizedError, Equatable {
+/// Engine-protocol-level error type. Adopted by every conformer of
+/// `TTSEngine` and by every throwing function on that protocol once the
+/// typed-throws sweep is complete. Conformers catch downstream typed
+/// errors (e.g. `AudioPreparationError`, `DocumentIOError`,
+/// `ExtensionEngineHostManagerError`) and rethrow them as
+/// `.generationFailed(<localized description>)`. The cross-process
+/// transports (`Sources/QwenVoiceNative/XPCNativeEngineClient.swift`,
+/// `Sources/QwenVoiceCore/ExtensionBackedTTSEngine.swift`) carry
+/// instances of this type across `NSXPCConnection` and `AppExtension`
+/// boundaries.
+public enum TTSEngineError: LocalizedError, Equatable {
     case notInitialized
     case unknownModel(String)
     case modelUnavailable(String)
@@ -24,6 +34,12 @@ public enum MLXTTSEngineError: LocalizedError, Equatable {
         }
     }
 }
+
+/// Source-compatibility alias for the prior name. Existing call sites
+/// that reference `MLXTTSEngineError.<case>` continue to work; the type
+/// they see is now `TTSEngineError`. Retained for the duration of the
+/// typed-throws sweep so individual files can migrate incrementally.
+public typealias MLXTTSEngineError = TTSEngineError
 
 @MainActor
 public final class MLXTTSEngine: TTSEngineRuntimeControlling {
