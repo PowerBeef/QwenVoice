@@ -223,6 +223,7 @@ Shell pipeline exit codes: when piping `qa.sh`, `bench_ui_generation.sh`, or `co
 - `.github/workflows/apple-platform-validation.yml` → `Apple Platform QA Gate` (project regeneration, `qa.sh validate`, contract/source/native/perf-static/UI smoke layers, generic macOS/iPhone builds, unsigned macOS release verification)
 - `.github/workflows/macos-release.yml` → `Vocello macOS Release` (signed public macOS release path)
 - `.github/workflows/ios-testflight.yml` → `Vocello iOS TestFlight` (maintained but deferred)
+- `.github/workflows/perf-nightly.yml` → `Perf Nightly` (advisory monitoring; nightly cron + manual dispatch; runs `qa.sh test --layer perf` with both CustomVoice variants pinned via `QWENVOICE_AUDIO_QC_REPEAT_VARIANT` and compares against the committed Speed + Quality baselines)
 
 ## Edit-Coupling Rules
 

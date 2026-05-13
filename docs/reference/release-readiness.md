@@ -111,8 +111,9 @@ workflow is renamed, split, or retired so prose and YAML do not drift.
 | 2. macOS ship gate (local) | — | — | `./scripts/release.sh` + `./scripts/verify_release_bundle.sh` + `./scripts/verify_packaged_dmg.sh` |
 | 2. macOS ship gate (CI) | `.github/workflows/macos-release.yml` | `Vocello macOS Release` | signed + notarized `Vocello-macos26.dmg` build + `stapler validate` + post-notarization verify |
 | 3. Deferred iPhone release | `.github/workflows/ios-testflight.yml` | `Vocello iOS TestFlight` | `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` |
+| Monitoring (advisory) | `.github/workflows/perf-nightly.yml` | `Perf Nightly` | scheduled `qa.sh test --layer perf` for CustomVoice/Speed + CustomVoice/Quality + `compare_perf_manifest.sh` against the committed Speed and Quality baselines |
 
-Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met.
+Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met. The `Perf Nightly` monitoring workflow is advisory — a red run signals engine-level drift past the comparator's tolerance and warrants investigation before the next release cut, but does not gate per-PR or per-push merges.
 
 ## Program Priorities
 
