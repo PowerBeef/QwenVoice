@@ -38,12 +38,19 @@ Public messaging rules:
 ### macOS
 
 - Official minimum hardware: `Mac mini M1, 8 GB RAM`
+- Currently used testing machine: `Mac mini M2, 8 GB RAM` (project owner)
 - Supported default path on minimum hardware: 4-bit `Speed`
 - Model catalog proof: six macOS rows, covering `Speed / 4-bit` and `Quality / 8-bit` for Custom Voice, Voice Design, and Voice Cloning
 - Active/recommended behavior: floor Macs default to and recommend Speed; mid/high-memory Macs default to and recommend Quality
 - Current local source gates: maintained
 - Current hosted release path: signed and notarized DMG on GitHub Releases
 - Current public release target: yes
+
+Two-track macOS hardware proof:
+
+- `Mac mini M2, 8 GB RAM` is the active development and bench-capture host. Wall-clock perf baselines (`scripts/perf-baseline-manifest.json`, `scripts/perf-baseline-manifest-quality.json`) and the `Perf Nightly` workflow track regressions against this hardware.
+- `Mac mini M1, 8 GB RAM` remains the documented official minimum, but engine-level findings captured on M1 have not been re-verified on M2. The M1-saturation conclusion in `docs/reference/instruments-profiling.md` (Step Eval Flush ≈62 % of generation, irreducible without quantization or hardware change) was reached on M1; M2's wider memory bandwidth and more capable GPU cores mean the saturation profile may differ. Re-verify via Instruments on M2 before citing the finding as M2-bound.
+- Do not claim the M1 floor is fully verified as of the dual-variant catalog (`d5b3c61`, 2026-05-05); the current bench evidence reflects M2 8 GB. See [`CLAUDE.md`'s Performance Findings section](../../CLAUDE.md#performance-findings) for the agent-discoverable form.
 
 ### iPhone
 
