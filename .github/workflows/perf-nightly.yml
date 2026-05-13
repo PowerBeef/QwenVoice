@@ -48,7 +48,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.git_ref || 'main' }}
 
@@ -68,7 +68,7 @@ jobs:
         run: ./scripts/qa.sh validate
 
       - name: Cache SPM
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: |
             build/foundation/source-packages
@@ -77,7 +77,7 @@ jobs:
 
       - name: Cache Hugging Face TTS models
         id: cache-models
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: ${{ github.workspace }}/.qwenvoice-models
           # Bump the suffix when model sources/revisions change so the
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload perf-nightly artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: perf-nightly-results
           path: |
