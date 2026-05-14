@@ -776,7 +776,7 @@ except Exception:
     cpu = platform.processor() or platform.machine()
 
 out = {
-    "schema_version": 1,
+    "schema_version": current.get("schema_version", 2),
     "machine": cpu,
     "generated_at_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "source": str(src),

@@ -1,7 +1,1129 @@
 {
   "schema_version": 2,
-  "machine": null,
-  "generated_at_utc": null,
-  "source": null,
-  "results": {}
+  "machine": "Apple M2",
+  "generated_at_utc": "2026-05-14T23:22:50Z",
+  "source": "/Users/patricedery/Coding_Projects/QwenVoice/build/uitest/20260514-184742/bench-result.json",
+  "results": {
+    "custom": {
+      "speed": {
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 8731,
+              "median": 8731,
+              "p95": 8731,
+              "min": 8731,
+              "max": 8731,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 9413,
+              "median": 9413,
+              "p95": 9413,
+              "min": 9413,
+              "max": 9413,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 5.68,
+              "median": 5.68,
+              "p95": 5.68,
+              "min": 5.68,
+              "max": 5.68,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.6506,
+              "median": 0.6506,
+              "p95": 0.6506,
+              "min": 0.6506,
+              "max": 0.6506,
+              "stdev": 0.0
+            }
+          }
+        },
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 1886.3333,
+              "median": 1710,
+              "p95": 2456,
+              "min": 1493,
+              "max": 2456,
+              "stdev": 505.136
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 2024.6667,
+              "median": 1825,
+              "p95": 2711,
+              "min": 1538,
+              "max": 2711,
+              "stdev": 611.4592
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 1.12,
+              "median": 1.12,
+              "p95": 1.28,
+              "min": 0.96,
+              "max": 1.28,
+              "stdev": 0.16
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.6064,
+              "median": 0.643,
+              "p95": 0.655,
+              "min": 0.5212,
+              "max": 0.655,
+              "stdev": 0.074
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 7496.3333,
+              "median": 7059,
+              "p95": 8860,
+              "min": 6570,
+              "max": 8860,
+              "stdev": 1206.0142
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 7784,
+              "median": 7342,
+              "p95": 9105,
+              "min": 6905,
+              "max": 9105,
+              "stdev": 1164.6987
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 5.3333,
+              "median": 5.2,
+              "p95": 6.16,
+              "min": 4.64,
+              "max": 6.16,
+              "stdev": 0.7687
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.7127,
+              "median": 0.7062,
+              "p95": 0.7366,
+              "min": 0.6953,
+              "max": 0.7366,
+              "stdev": 0.0214
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 30280.6667,
+              "median": 29326,
+              "p95": 33301,
+              "min": 28215,
+              "max": 33301,
+              "stdev": 2674.0214
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 30532,
+              "median": 29668,
+              "p95": 33473,
+              "min": 28455,
+              "max": 33473,
+              "stdev": 2618.1965
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 20.7733,
+              "median": 20.08,
+              "p95": 22.16,
+              "min": 20.08,
+              "max": 22.16,
+              "stdev": 1.2009
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.6873,
+              "median": 0.6847,
+              "p95": 0.7117,
+              "min": 0.6654,
+              "max": 0.7117,
+              "stdev": 0.0233
+            }
+          }
+        }
+      },
+      "quality": {
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 9477,
+              "median": 9477,
+              "p95": 9477,
+              "min": 9477,
+              "max": 9477,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 10331,
+              "median": 10331,
+              "p95": 10331,
+              "min": 10331,
+              "max": 10331,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 5.28,
+              "median": 5.28,
+              "p95": 5.28,
+              "min": 5.28,
+              "max": 5.28,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.5571,
+              "median": 0.5571,
+              "p95": 0.5571,
+              "min": 0.5571,
+              "max": 0.5571,
+              "stdev": 0.0
+            }
+          }
+        },
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 1608.3333,
+              "median": 1614,
+              "p95": 1655,
+              "min": 1556,
+              "max": 1655,
+              "stdev": 49.7427
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 1772.6667,
+              "median": 1786,
+              "p95": 1904,
+              "min": 1628,
+              "max": 1904,
+              "stdev": 138.4822
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 0.88,
+              "median": 0.88,
+              "p95": 0.96,
+              "min": 0.8,
+              "max": 0.96,
+              "stdev": 0.08
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.5471,
+              "median": 0.5656,
+              "p95": 0.5801,
+              "min": 0.4957,
+              "max": 0.5801,
+              "stdev": 0.0451
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 8138,
+              "median": 8252,
+              "p95": 8412,
+              "min": 7750,
+              "max": 8412,
+              "stdev": 345.4099
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 8312,
+              "median": 8395,
+              "p95": 8526,
+              "min": 8015,
+              "max": 8526,
+              "stdev": 265.4185
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 5.2,
+              "median": 5.36,
+              "p95": 5.44,
+              "min": 4.8,
+              "max": 5.44,
+              "stdev": 0.3487
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.6386,
+              "median": 0.6372,
+              "p95": 0.6592,
+              "min": 0.6194,
+              "max": 0.6592,
+              "stdev": 0.0199
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 35947.3333,
+              "median": 36186,
+              "p95": 37509,
+              "min": 34147,
+              "max": 37509,
+              "stdev": 1693.6595
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 36174.3333,
+              "median": 36417,
+              "p95": 37673,
+              "min": 34433,
+              "max": 37673,
+              "stdev": 1633.5744
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 20.5867,
+              "median": 20.64,
+              "p95": 20.96,
+              "min": 20.16,
+              "max": 20.96,
+              "stdev": 0.4027
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.5737,
+              "median": 0.5571,
+              "p95": 0.6138,
+              "min": 0.5503,
+              "max": 0.6138,
+              "stdev": 0.0349
+            }
+          }
+        }
+      }
+    },
+    "design": {
+      "speed": {
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 9053,
+              "median": 9053,
+              "p95": 9053,
+              "min": 9053,
+              "max": 9053,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 10211,
+              "median": 10211,
+              "p95": 10211,
+              "min": 10211,
+              "max": 10211,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 6.4,
+              "median": 6.4,
+              "p95": 6.4,
+              "min": 6.4,
+              "max": 6.4,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.7069,
+              "median": 0.7069,
+              "p95": 0.7069,
+              "min": 0.7069,
+              "max": 0.7069,
+              "stdev": 0.0
+            }
+          }
+        },
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 2371.6667,
+              "median": 2503,
+              "p95": 2504,
+              "min": 2108,
+              "max": 2504,
+              "stdev": 228.3426
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 2490.3333,
+              "median": 2646,
+              "p95": 2690,
+              "min": 2135,
+              "max": 2690,
+              "stdev": 308.5131
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 1.4933,
+              "median": 1.6,
+              "p95": 1.68,
+              "min": 1.2,
+              "max": 1.68,
+              "stdev": 0.2572
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.6265,
+              "median": 0.6392,
+              "p95": 0.6709,
+              "min": 0.5693,
+              "max": 0.6709,
+              "stdev": 0.052
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 7594,
+              "median": 7621,
+              "p95": 7719,
+              "min": 7442,
+              "max": 7719,
+              "stdev": 140.46
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 7795.3333,
+              "median": 7801,
+              "p95": 7898,
+              "min": 7687,
+              "max": 7898,
+              "stdev": 105.6141
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 5.4133,
+              "median": 5.44,
+              "p95": 5.52,
+              "min": 5.28,
+              "max": 5.52,
+              "stdev": 0.1222
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.7129,
+              "median": 0.7095,
+              "p95": 0.7243,
+              "min": 0.7048,
+              "max": 0.7243,
+              "stdev": 0.0102
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 34634.3333,
+              "median": 36380,
+              "p95": 39055,
+              "min": 28468,
+              "max": 39055,
+              "stdev": 5505.1482
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 34797,
+              "median": 36535,
+              "p95": 39295,
+              "min": 28561,
+              "max": 39295,
+              "stdev": 5574.0624
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 24.2933,
+              "median": 25.04,
+              "p95": 26.4,
+              "min": 21.44,
+              "max": 26.4,
+              "stdev": 2.5629
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.7058,
+              "median": 0.6883,
+              "p95": 0.7531,
+              "min": 0.676,
+              "max": 0.7531,
+              "stdev": 0.0414
+            }
+          }
+        }
+      },
+      "quality": {
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 2073,
+              "median": 2175,
+              "p95": 2408,
+              "min": 1636,
+              "max": 2408,
+              "stdev": 395.9785
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 2362.3333,
+              "median": 2448,
+              "p95": 2476,
+              "min": 2163,
+              "max": 2476,
+              "stdev": 173.1945
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 0.9867,
+              "median": 0.96,
+              "p95": 1.2,
+              "min": 0.8,
+              "max": 1.2,
+              "stdev": 0.2013
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.4762,
+              "median": 0.489,
+              "p95": 0.4983,
+              "min": 0.4414,
+              "max": 0.4983,
+              "stdev": 0.0305
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 8762,
+              "median": 8516,
+              "p95": 10086,
+              "min": 7684,
+              "max": 10086,
+              "stdev": 1219.7492
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 8974,
+              "median": 8828,
+              "p95": 10273,
+              "min": 7821,
+              "max": 10273,
+              "stdev": 1232.5027
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 5.2,
+              "median": 4.96,
+              "p95": 6.08,
+              "min": 4.56,
+              "max": 6.08,
+              "stdev": 0.7879
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.5929,
+              "median": 0.5934,
+              "p95": 0.6028,
+              "min": 0.5824,
+              "max": 0.6028,
+              "stdev": 0.0102
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 34830.6667,
+              "median": 33426,
+              "p95": 39055,
+              "min": 32011,
+              "max": 39055,
+              "stdev": 3726.1643
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 35038,
+              "median": 33629,
+              "p95": 39229,
+              "min": 32256,
+              "max": 39229,
+              "stdev": 3693.8656
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 21.6,
+              "median": 21.76,
+              "p95": 22.96,
+              "min": 20.08,
+              "max": 22.96,
+              "stdev": 1.4467
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.6221,
+              "median": 0.6273,
+              "p95": 0.651,
+              "min": 0.5879,
+              "max": 0.651,
+              "stdev": 0.0319
+            }
+          }
+        }
+      }
+    },
+    "clone": {
+      "speed": {
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 13595,
+              "median": 13595,
+              "p95": 13595,
+              "min": 13595,
+              "max": 13595,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 14292,
+              "median": 14292,
+              "p95": 14292,
+              "min": 14292,
+              "max": 14292,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 5.6,
+              "median": 5.6,
+              "p95": 5.6,
+              "min": 5.6,
+              "max": 5.6,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.4119,
+              "median": 0.4119,
+              "p95": 0.4119,
+              "min": 0.4119,
+              "max": 0.4119,
+              "stdev": 0.0
+            }
+          }
+        },
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 5144.3333,
+              "median": 4565,
+              "p95": 6638,
+              "min": 4230,
+              "max": 6638,
+              "stdev": 1304.3528
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 5351.6667,
+              "median": 4671,
+              "p95": 6904,
+              "min": 4480,
+              "max": 6904,
+              "stdev": 1347.7479
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 1.4667,
+              "median": 1.44,
+              "p95": 1.92,
+              "min": 1.04,
+              "max": 1.92,
+              "stdev": 0.4406
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.2835,
+              "median": 0.2892,
+              "p95": 0.3154,
+              "min": 0.2459,
+              "max": 0.3154,
+              "stdev": 0.0351
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 14571.3333,
+              "median": 14600,
+              "p95": 15206,
+              "min": 13908,
+              "max": 15206,
+              "stdev": 649.4747
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 14853.6667,
+              "median": 14999,
+              "p95": 15427,
+              "min": 14135,
+              "max": 15427,
+              "stdev": 658.1469
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 6.1867,
+              "median": 6.32,
+              "p95": 6.4,
+              "min": 5.84,
+              "max": 6.4,
+              "stdev": 0.3029
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.4246,
+              "median": 0.4199,
+              "p95": 0.4384,
+              "min": 0.4156,
+              "max": 0.4384,
+              "stdev": 0.0121
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 41425.3333,
+              "median": 41361,
+              "p95": 42133,
+              "min": 40782,
+              "max": 42133,
+              "stdev": 677.7937
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 41688,
+              "median": 41699,
+              "p95": 42316,
+              "min": 41049,
+              "max": 42316,
+              "stdev": 633.5716
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 19.3067,
+              "median": 19.36,
+              "p95": 20.08,
+              "min": 18.48,
+              "max": 20.08,
+              "stdev": 0.8013
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.4662,
+              "median": 0.4595,
+              "p95": 0.4924,
+              "min": 0.4468,
+              "max": 0.4924,
+              "stdev": 0.0235
+            }
+          }
+        }
+      },
+      "quality": {
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 15750,
+              "median": 15750,
+              "p95": 15750,
+              "min": 15750,
+              "max": 15750,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 16624,
+              "median": 16624,
+              "p95": 16624,
+              "min": 16624,
+              "max": 16624,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 6.24,
+              "median": 6.24,
+              "p95": 6.24,
+              "min": 6.24,
+              "max": 6.24,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.3962,
+              "median": 0.3962,
+              "p95": 0.3962,
+              "min": 0.3962,
+              "max": 0.3962,
+              "stdev": 0.0
+            }
+          }
+        },
+        "warm": {
+          "short": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 5618.3333,
+              "median": 5279,
+              "p95": 6677,
+              "min": 4899,
+              "max": 6677,
+              "stdev": 936.3126
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 5874.3333,
+              "median": 5624,
+              "p95": 6790,
+              "min": 5209,
+              "max": 6790,
+              "stdev": 819.6892
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 1.2,
+              "median": 1.2,
+              "p95": 1.36,
+              "min": 1.04,
+              "max": 1.36,
+              "stdev": 0.16
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.2152,
+              "median": 0.2037,
+              "p95": 0.2449,
+              "min": 0.197,
+              "max": 0.2449,
+              "stdev": 0.0259
+            }
+          },
+          "medium": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 15151.6667,
+              "median": 15319,
+              "p95": 16207,
+              "min": 13929,
+              "max": 16207,
+              "stdev": 1148.1818
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 15430,
+              "median": 15696,
+              "p95": 16444,
+              "min": 14150,
+              "max": 16444,
+              "stdev": 1169.9043
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 5.6533,
+              "median": 5.6,
+              "p95": 6.24,
+              "min": 5.12,
+              "max": 6.24,
+              "stdev": 0.5619
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.3727,
+              "median": 0.3676,
+              "p95": 0.385,
+              "min": 0.3656,
+              "max": 0.385,
+              "stdev": 0.0107
+            }
+          },
+          "long": {
+            "ms_engine_start_to_first_chunk": {
+              "n": 0,
+              "mean": null,
+              "median": null,
+              "p95": null,
+              "min": null,
+              "max": null,
+              "stdev": null
+            },
+            "ms_engine_start_to_final": {
+              "n": 3,
+              "mean": 45703.3333,
+              "median": 46932,
+              "p95": 47351,
+              "min": 42827,
+              "max": 47351,
+              "stdev": 2499.7721
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 3,
+              "mean": 45959.3333,
+              "median": 47184,
+              "p95": 47519,
+              "min": 43175,
+              "max": 47519,
+              "stdev": 2417.1141
+            },
+            "audio_duration_s": {
+              "n": 3,
+              "mean": 18.8,
+              "median": 18.72,
+              "p95": 19.12,
+              "min": 18.56,
+              "max": 19.12,
+              "stdev": 0.2885
+            },
+            "rtf": {
+              "n": 3,
+              "mean": 0.4121,
+              "median": 0.4038,
+              "p95": 0.4371,
+              "min": 0.3955,
+              "max": 0.4371,
+              "stdev": 0.022
+            }
+          }
+        }
+      }
+    }
+  }
 }
