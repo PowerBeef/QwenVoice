@@ -61,22 +61,25 @@ commands:
 
   artifacts-dir         Create build/uitest/<timestamp>/ and print its absolute path.
 
-  smoke-check           Confirm at least one Custom Voice model variant is installed.
-                        Exit 0 if ready, 1 with a clear message otherwise.
+  smoke-check [<mode>]  Confirm prerequisites for generation. mode ∈ {custom, design,
+                        clone}; defaults to custom. Custom/Design checks for installed
+                        model variants; Clone additionally requires at least one saved
+                        voice. Exit 0 if ready, 1 with a clear message otherwise.
 
   bench-wait [--since <ts>] [--timeout <sec>]
                         Block until a Final File Ready signpost appears after <ts>
                         (defaults: now; 90 s). Prints the matching event timestamp.
 
-  bench-record <variant> <coldwarm> <bucket> --artifacts-dir <dir>
+  bench-record <mode> <variant> <coldwarm> <bucket> --artifacts-dir <dir>
                         Append one sample's signpost timings + DB row + audio file
-                        size to <dir>/bench-samples.jsonl. variant ∈ {speed, quality},
-                        coldwarm ∈ {cold, warm}, bucket ∈ {short, medium, long}.
+                        size to <dir>/bench-samples.jsonl. mode ∈ {custom, design,
+                        clone}, variant ∈ {speed, quality}, coldwarm ∈ {cold, warm},
+                        bucket ∈ {short, medium, long}.
 
   bench-summarize <artifacts-dir>
-                        Group <dir>/bench-samples.jsonl by (variant, coldwarm, bucket),
-                        compute count/mean/median/p95/min/max/stdev per metric, write
-                        <dir>/bench-result.json.
+                        Group <dir>/bench-samples.jsonl by (mode, variant, coldwarm,
+                        bucket), compute count/mean/median/p95/min/max/stdev per
+                        metric, write <dir>/bench-result.json.
 
   bench-compare <artifacts-dir> [--baseline <path>]
                         Diff <dir>/bench-result.json against the committed baseline
@@ -265,35 +268,42 @@ cmd_artifacts_dir() {
 }
 
 cmd_smoke_check() {
+    local mode="${1:-custom}"
+    case "$mode" in
+        custom|design|clone) ;;
+        *) echo "error: unknown mode '$mode' (expected custom|design|clone)" >&2; exit 2 ;;
+    esac
+
     if [ ! -f "$CONTRACT_JSON" ]; then
         echo "error: contract not found at $CONTRACT_JSON" >&2
         exit 1
     fi
     if [ ! -d "$DEBUG_DATA_DIR/models" ]; then
         echo "smoke-check FAIL: no models directory at $DEBUG_DATA_DIR/models" >&2
-        echo "                 launch the app and install Custom Voice models in Settings." >&2
+        echo "                 launch the app and install models in Settings." >&2
         exit 1
     fi
 
     local installed
-    installed="$(/usr/bin/python3 - "$CONTRACT_JSON" "$DEBUG_DATA_DIR/models" <<'PY'
+    installed="$(/usr/bin/python3 - "$CONTRACT_JSON" "$DEBUG_DATA_DIR/models" "$mode" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 contract = json.loads(Path(sys.argv[1]).read_text())
 models_dir = Path(sys.argv[2])
+mode = sys.argv[3]
 
-custom = next((m for m in contract["models"] if m.get("mode") == "custom"), None)
-if custom is None:
-    print("CONTRACT_MISSING_CUSTOM", file=sys.stderr)
-    sys.exit(1)
+model = next((m for m in contract["models"] if m.get("mode") == mode), None)
+if model is None:
+    print("CONTRACT_MISSING")
+    sys.exit(0)
 
 candidates = []
-base_folder = custom.get("folder")
+base_folder = model.get("folder")
 if base_folder:
     candidates.append((base_folder, "base"))
-for variant in custom.get("variants", []):
+for variant in model.get("variants", []):
     folder = variant.get("folder")
     if folder:
         candidates.append((folder, variant.get("id", "variant")))
@@ -316,15 +326,50 @@ PY
             echo "smoke-check FAIL: contract inspection failed" >&2
             exit 1
             ;;
+        CONTRACT_MISSING)
+            echo "smoke-check FAIL: no model with mode='$mode' in $CONTRACT_JSON" >&2
+            exit 1
+            ;;
         NONE_INSTALLED)
-            echo "smoke-check FAIL: no Custom Voice model variant is installed under $DEBUG_DATA_DIR/models" >&2
-            echo "                 launch the app and install at least one (Settings -> Model Downloads -> Custom Voice)." >&2
+            echo "smoke-check FAIL: no $mode model variant is installed under $DEBUG_DATA_DIR/models" >&2
+            echo "                 launch the app and install at least one in Settings -> Model Downloads." >&2
             exit 1
             ;;
         *)
-            echo "smoke-check OK: Custom Voice variant(s) installed: $installed"
+            echo "smoke-check OK: $mode variant(s) installed: $installed"
             ;;
     esac
+
+    # Voice Cloning additionally requires at least one saved voice.
+    if [ "$mode" = "clone" ]; then
+        if [ ! -f "$HISTORY_DB" ]; then
+            echo "smoke-check FAIL: clone mode requires a saved voice; history.sqlite not found" >&2
+            echo "                 launch the app once and enroll a saved voice in the Saved Voices library." >&2
+            exit 1
+        fi
+        # Saved voices table varies in name across releases; try a couple.
+        local n
+        n="$(/usr/bin/sqlite3 -readonly "$HISTORY_DB" "
+            SELECT COALESCE(
+                (SELECT count(*) FROM sqlite_master WHERE type='table' AND name='savedVoices'),
+                0
+            )
+        " 2>/dev/null)"
+        if [ "${n:-0}" != "0" ]; then
+            n="$(/usr/bin/sqlite3 -readonly "$HISTORY_DB" "SELECT count(*) FROM savedVoices" 2>/dev/null || echo 0)"
+        else
+            n="$(/usr/bin/sqlite3 -readonly "$HISTORY_DB" "SELECT count(*) FROM saved_voices" 2>/dev/null || echo 0)"
+        fi
+        local voices_dir_count
+        voices_dir_count="$(/usr/bin/find "$DEBUG_DATA_DIR/voices" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+        if [ "${n:-0}" -gt 0 ] || [ "${voices_dir_count:-0}" -gt 0 ]; then
+            echo "smoke-check OK: clone has $n saved voice DB row(s), $voices_dir_count voice dir(s)"
+        else
+            echo "smoke-check FAIL: clone mode requires at least one saved voice." >&2
+            echo "                 Open the app -> Saved Voices -> Add a Voice Sample, supply a clean reference clip, then retry." >&2
+            exit 1
+        fi
+    fi
 }
 
 cmd_bench_wait() {
@@ -373,10 +418,12 @@ sys.exit(1)
 }
 
 cmd_bench_record() {
-    local variant="" coldwarm="" bucket="" artifacts_dir=""
+    local mode="" variant="" coldwarm="" bucket="" artifacts_dir=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --artifacts-dir) artifacts_dir="$2"; shift 2 ;;
+            custom|design|clone)
+                if [ -z "$mode" ]; then mode="$1"; else echo "error: mode set twice" >&2; exit 2; fi; shift ;;
             speed|quality)
                 if [ -z "$variant" ]; then variant="$1"; else echo "error: variant set twice" >&2; exit 2; fi; shift ;;
             cold|warm)
@@ -386,6 +433,7 @@ cmd_bench_record() {
             *) echo "error: unknown arg '$1'" >&2; exit 2 ;;
         esac
     done
+    [ -n "$mode" ] || { echo "error: mode required (custom|design|clone)" >&2; exit 2; }
     [ -n "$variant" ] || { echo "error: variant required (speed|quality)" >&2; exit 2; }
     [ -n "$coldwarm" ] || { echo "error: cold|warm required" >&2; exit 2; }
     [ -n "$bucket" ] || { echo "error: bucket required (short|medium|long)" >&2; exit 2; }
@@ -404,7 +452,7 @@ cmd_bench_record() {
         sleep 0.25
     done
 
-    VARIANT="$variant" COLDWARM="$coldwarm" BUCKET="$bucket" \
+    MODE="$mode" VARIANT="$variant" COLDWARM="$coldwarm" BUCKET="$bucket" \
         ARTIFACTS_DIR="$artifacts_dir" DB_ROW="$db_row" LOG_BUF="$log_buf" \
         /usr/bin/python3 - <<'PY'
 import json
@@ -414,6 +462,7 @@ import sys
 import datetime as dt
 from pathlib import Path
 
+mode = os.environ["MODE"]
 variant = os.environ["VARIANT"]
 coldwarm = os.environ["COLDWARM"]
 bucket = os.environ["BUCKET"]
@@ -510,6 +559,7 @@ if db_row:
             rtf = round(audio_duration_s / (ms_engine_to_final / 1000.0), 4)
 
 sample = {
+    "mode": mode,
     "variant": variant,
     "cold_or_warm": coldwarm,
     "bucket": bucket,
@@ -597,22 +647,24 @@ if samples_path.exists():
         samples.append(json.loads(line))
 
 for s in samples:
+    mo = s.get("mode") or "custom"   # back-compat with element-2 sample files
     v = s["variant"]; cw = s["cold_or_warm"]; b = s["bucket"]
-    results.setdefault(v, {}).setdefault(cw, {}).setdefault(b, {})
-    bucket_node = results[v][cw][b]
+    results.setdefault(mo, {}).setdefault(v, {}).setdefault(cw, {}).setdefault(b, {})
+    bucket_node = results[mo][v][cw][b]
     bucket_node.setdefault("_raw", []).append({m: s.get(m) for m in METRICS})
 
-for v in results:
-    for cw in results[v]:
-        for b in results[v][cw]:
-            raw = results[v][cw][b].pop("_raw")
-            summary = {}
-            for m in METRICS:
-                summary[m] = stat_block([row[m] for row in raw])
-            results[v][cw][b] = summary
+for mo in results:
+    for v in results[mo]:
+        for cw in results[mo][v]:
+            for b in results[mo][v][cw]:
+                raw = results[mo][v][cw][b].pop("_raw")
+                summary = {}
+                for m in METRICS:
+                    summary[m] = stat_block([row[m] for row in raw])
+                results[mo][v][cw][b] = summary
 
 out = {
-    "schema_version": 1,
+    "schema_version": 2,
     "generated_at_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "sample_count": len(samples),
     "results": results,
@@ -668,24 +720,25 @@ if not base_results:
 
 breaches = 0
 rows = []
-rows.append(("Variant", "Phase", "Bucket", "Metric", "Baseline mean", "Current mean", "Δ %", "Flag"))
+rows.append(("Mode", "Variant", "Phase", "Bucket", "Metric", "Baseline mean", "Current mean", "Δ %", "Flag"))
 
-for v in sorted(cur_results):
-    for cw in sorted(cur_results[v]):
-        for b in sorted(cur_results[v][cw]):
-            for m in PRIMARY_METRICS:
-                cur_node = cur_results[v][cw][b].get(m) or {}
-                base_node = (base_results.get(v) or {}).get(cw, {}).get(b, {}).get(m) or {}
-                cur_mean = cur_node.get("mean")
-                base_mean = base_node.get("mean")
-                if cur_mean is None or base_mean is None or base_mean == 0:
-                    rows.append((v, cw, b, m, str(base_mean), str(cur_mean), "—", "—"))
-                    continue
-                pct = (cur_mean - base_mean) / base_mean * 100.0
-                flag = "⚠" if abs(pct) > THRESHOLD_PCT else ""
-                if flag:
-                    breaches += 1
-                rows.append((v, cw, b, m, f"{base_mean}", f"{cur_mean}", f"{pct:+.1f}", flag))
+for mo in sorted(cur_results):
+    for v in sorted(cur_results[mo]):
+        for cw in sorted(cur_results[mo][v]):
+            for b in sorted(cur_results[mo][v][cw]):
+                for m in PRIMARY_METRICS:
+                    cur_node = cur_results[mo][v][cw][b].get(m) or {}
+                    base_node = ((((base_results.get(mo) or {}).get(v) or {}).get(cw) or {}).get(b) or {}).get(m) or {}
+                    cur_mean = cur_node.get("mean")
+                    base_mean = base_node.get("mean")
+                    if cur_mean is None or base_mean is None or base_mean == 0:
+                        rows.append((mo, v, cw, b, m, str(base_mean), str(cur_mean), "—", "—"))
+                        continue
+                    pct = (cur_mean - base_mean) / base_mean * 100.0
+                    flag = "⚠" if abs(pct) > THRESHOLD_PCT else ""
+                    if flag:
+                        breaches += 1
+                    rows.append((mo, v, cw, b, m, f"{base_mean}", f"{cur_mean}", f"{pct:+.1f}", flag))
 
 # Markdown table
 widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
@@ -762,7 +815,7 @@ main() {
         logs)            cmd_logs "$@" ;;
         db)              cmd_db "$@" ;;
         artifacts-dir)   cmd_artifacts_dir ;;
-        smoke-check)     cmd_smoke_check ;;
+        smoke-check)     cmd_smoke_check "$@" ;;
         bench-wait)              cmd_bench_wait "$@" ;;
         bench-record)            cmd_bench_record "$@" ;;
         bench-summarize)         cmd_bench_summarize "$@" ;;

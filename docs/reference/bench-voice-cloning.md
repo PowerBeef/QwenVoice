@@ -1,0 +1,120 @@
+# Bench Runbook: Voice Cloning across cold/warm × variant × prompt-length
+
+Multi-sample timing harness for Voice Cloning. Same structure as the other two bench runbooks, passing `clone` as the mode argument.
+
+Companion docs: [`ui-test-surface.md`](ui-test-surface.md), [`smoke-voice-cloning.md`](smoke-voice-cloning.md), [`bench-custom-voice.md`](bench-custom-voice.md).
+
+## Prerequisites — important
+
+Same saved-voice prerequisite as the smoke runbook — see [`smoke-voice-cloning.md`](smoke-voice-cloning.md) for the one-time bootstrap. `scripts/uitest.sh smoke-check clone` enforces this.
+
+Voice Cloning has an extra subtlety for benchmarking: when the **reference clip changes**, the engine re-primes (`VoiceCloningCoordinator.ensureCloneReferencePrimed`). The cold sample for each variant captures this priming cost; warm samples reuse the primed reference. **Do not change the saved-voice selection between warm samples** — that would make every warm sample look cold.
+
+## Run plan
+
+```
+for variant in [speed, quality]:
+    cold sample       (medium prompt, after a fresh launch + reference selection)
+    3 × warm short
+    3 × warm medium
+    3 × warm long
+```
+
+20 samples per variant pass.
+
+## Fixed inputs
+
+| Field | Value |
+|---|---|
+| Saved voice | First entry in the Saved Voices picker, same one used for the smoke test |
+| Transcript | leave empty |
+
+Prompts:
+
+| Bucket | Length | Text |
+|---|---|---|
+| `short` | 12 chars | `Hello world.` |
+| `medium` | 74 chars | `This is a Vocello smoke test. The quick brown fox jumps over the lazy dog.` |
+| `long` | ~300 chars | `The MLX framework lets local language and speech models run efficiently on Apple silicon, which is exactly what Vocello uses for its native Qwen3-TTS pipeline. This longer paragraph exercises the streaming synthesis path across a larger token budget and gives the steady-state real-time factor a chance to settle.` |
+
+## Steps
+
+### 0. Setup
+
+```sh
+ART=$(scripts/uitest.sh artifacts-dir)
+mcp__computer-use__request_access(applications: ["Vocello"])
+read SW SH < <(scripts/uitest.sh screen-size)
+```
+
+### 1. Variant loop
+
+For each `variant` in `[speed, quality]`:
+
+#### 1a. Fresh launch
+
+```sh
+scripts/uitest.sh reset
+scripts/uitest.sh prep
+scripts/uitest.sh activate
+```
+
+#### 1b. Navigate, select variant, bind saved voice
+
+- Locate + click `sidebar_voiceCloning`.
+- Verify with `locate screen_voiceCloning`.
+- Select variant via the segmented control. First contact:
+  1. Try `scripts/uitest.sh locate voiceCloning_variant_speed` / `voiceCloning_variant_quality`. Record what works.
+  2. Otherwise click visually.
+- Locate + click `voiceCloning_savedVoicePicker`, screenshot to see the open menu, click the first menu item.
+- Verify with `locate voiceCloning_activeReference` (exit 0 means a reference is bound).
+
+#### 1c. Cold sample (medium prompt)
+
+```sh
+T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
+```
+
+`computer_batch`: click `textInput_textEditor` → type medium prompt → `cmd+return`.
+
+```sh
+scripts/uitest.sh bench-wait --since "$T0" --timeout 150   # clone cold can include priming
+scripts/uitest.sh bench-record clone "$variant" cold medium --artifacts-dir "$ART"
+```
+
+#### 1d. Warm samples
+
+For each `bucket` in `[short, medium, long]`, repeat 3 times:
+
+```sh
+T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
+```
+
+`computer_batch`: click `textInput_textEditor` → `cmd+a` → `delete` → type bucket prompt → `cmd+return`. **Don't touch the saved-voice picker** between warm samples.
+
+```sh
+scripts/uitest.sh bench-wait --since "$T0" --timeout 90
+scripts/uitest.sh bench-record clone "$variant" warm "$bucket" --artifacts-dir "$ART"
+```
+
+### 2. Summarize + compare
+
+```sh
+scripts/uitest.sh bench-summarize "$ART"
+scripts/uitest.sh bench-compare "$ART"
+```
+
+### 3. Promote to baseline (only when deliberate)
+
+```sh
+scripts/uitest.sh bench-update-baselines
+git diff docs/reference/benchmark-baselines.json
+git commit -m "Update bench baselines: <reason>"
+```
+
+## Failure handling
+
+- **Saved-voice picker had no items**: `smoke-check clone` should have caught this. If it slipped through, abort the run and bootstrap a saved voice.
+- **Warm sample looks unexpectedly slow**: the saved-voice selection may have been re-touched (re-primes the reference). Don't click the picker between warm samples.
+- **Quality warning badge on the active reference**: degraded audio possible but doesn't affect bench timings. Note in `result.json` for awareness.
+- Everything else is identical to `bench-custom-voice.md` — see there for `bench-wait` timeouts, missing `Final File Ready`, DB row lag.

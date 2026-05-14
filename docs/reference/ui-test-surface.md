@@ -48,7 +48,62 @@ Every interactive element in the macOS UI has a stable `accessibilityIdentifier`
 | `screen_voiceDesign` | container | Confirms Voice Design screen is up |
 | `screen_voiceCloning` | container | Confirms Voice Cloning screen is up |
 
-Field-level identifiers for the script text area, voice/emotion pickers, and Generate button vary per generation mode and are not all catalogued here yet — when a specific control isn't found via `locate`, fall back to a screenshot-driven click and add the discovered identifier to this table.
+#### Shared script composer (all three modes)
+
+All three generation screens embed `TextInputView`, which exposes the same identifiers:
+
+| Identifier | Kind | Purpose |
+|---|---|---|
+| `textInput_textEditor` | text field | The script text area. Click center, then `type` to populate. |
+| `textInput_generateButton` | button | Generate (also bound to `Cmd+Return`). |
+| `textInput_batchButton` | button | Batch generation mode toggle. |
+| `textInput_charCount` | label | Character count display. |
+
+This is the most useful identifier for autonomous driving — the script field finally has an AX id (it was the visual-fallback gap in element 1's smoke test).
+
+#### Custom Voice fields
+
+| Identifier | Kind | Purpose |
+|---|---|---|
+| `screen_customVoice` | container | Custom Voice screen container |
+
+Variant toggle and speaker/delivery pickers don't have unique AX ids catalogued yet; use `customVoice_*` guesses with `locate` on first contact and add what you find.
+
+#### Voice Design fields
+
+| Identifier | Kind | Purpose |
+|---|---|---|
+| `screen_voiceDesign` | container | Voice Design screen container |
+| `voiceDesign_configuration` | container | Top configuration panel (description, delivery, variant) |
+| `voiceDesign_voiceDescriptionField` | text field | "Voice brief" / description input |
+| `voiceDesign_voiceDescriptionValue` | value anchor | Read-only accessibility value reflecting the typed description |
+| `voiceDesign_toneSpeed` | container | Delivery controls (emotion / intensity) |
+| `voiceDesign_script` | container | Script composer panel (embeds `textInput_*`) |
+| `voiceDesign_readiness` | status | "Ready to generate" / blocker text |
+| `voiceDesign_saveVoiceButton` | button | "Save to Saved Voices" after a successful generation |
+| `voiceDesign_saveVoiceCompleted` | badge | Replaces the save button once enrollment succeeds |
+
+Variant toggle uses `GenerationVariantSelector` with prefix `voiceDesign` — likely `voiceDesign_variant_speed` / `voiceDesign_variant_quality`. Confirm on first contact.
+
+#### Voice Cloning fields
+
+| Identifier | Kind | Purpose |
+|---|---|---|
+| `screen_voiceCloning` | container | Voice Cloning screen container |
+| `voiceCloning_voiceSetup` | container | Reference source section |
+| `voiceCloning_savedVoicePicker` | picker | Saved-voice dropdown (primary path) |
+| `voiceCloning_importButton` | button | Import a reference audio file (NSOpenPanel — avoid in autonomous runs) |
+| `voiceCloning_consentNotice` | label | Cloning consent notice |
+| `voiceCloning_activeReference` | container | Selected reference display ("Saved voice ready" / "Imported file ready") |
+| `voiceCloning_referenceWarning` | badge | Quality warning on the active reference |
+| `voiceCloning_transcriptField` | container | Transcript section |
+| `voiceCloning_transcriptInput` | text field | Optional reference transcript |
+| `voiceCloning_readiness` | status | "Ready to generate" once reference + script are present |
+| `voiceCloning_savedVoicesWarning` | label | Inline error if saved voices failed to load |
+| `voiceCloning_savedVoicesRetry` | button | Retry loading saved voices |
+| `voiceCloning_transcriptWarning` | label | Inline error on transcript load |
+
+Voice Cloning requires a pre-existing saved voice for autonomous runs (the alternative is the file-picker dialog, which can't be driven through `type`). The Saved Voices enrollment fields (`voicesEnroll_*`) are documented in the Saved Voices section above.
 
 ### History
 

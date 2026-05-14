@@ -54,12 +54,9 @@ The runbook does not adjust pickers — it tests the minimum-effort generate pat
    - `scripts/uitest.sh locate screen_customVoice` — exit code 0 means the screen is up. If non-zero, screenshot, wait 500 ms, retry once.
 
 8. **Enter the script text.**
-   - The script-text field's accessibility identifier is not in `ui-test-surface.md` yet. Approach:
-     - Screenshot the Custom Voice screen.
-     - Visually find the multi-line text area (large dark editor area under the Script header, placeholder reads "Type or paste your script").
-     - Click into it via `mcp__computer-use__left_click` at the center of the text area.
-     - `mcp__computer-use__type` with the fixed script text.
-   - Once you identify the actual `accessibilityIdentifier` for this field, add it to the Custom Voice section of `ui-test-surface.md` so future runs can `locate` it instead.
+   - The script-text field has accessibility identifier `textInput_textEditor` (shared across all three generation modes via `TextInputView`).
+   - `scripts/uitest.sh locate textInput_textEditor` → scale → `mcp__computer-use__left_click`.
+   - `mcp__computer-use__type` with the fixed script text.
 
 9. **Trigger Generate.**
    - The app accepts **Cmd+Return** while the script field is focused — that's the simplest reliable trigger and matches the SwiftUI convention. There is no dedicated "Generate" button visible in the default Custom Voice viewport on a 1280×720 display.

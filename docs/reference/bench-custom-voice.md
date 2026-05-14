@@ -81,7 +81,7 @@ Then issue ONE `computer_batch` containing: click into the script field (visual 
 
 ```sh
 scripts/uitest.sh bench-wait --since "$T0" --timeout 120   # cold can be slow
-scripts/uitest.sh bench-record "$variant" cold medium --artifacts-dir "$ART"
+scripts/uitest.sh bench-record custom "$variant" cold medium --artifacts-dir "$ART"
 ```
 
 `bench-record` prints the recorded sample as JSON to stdout (for the agent to inspect) and appends to `$ART/bench-samples.jsonl`.
@@ -98,7 +98,7 @@ Then `computer_batch`: click script field → `cmd+a` → `delete` → type buck
 
 ```sh
 scripts/uitest.sh bench-wait --since "$T0" --timeout 90
-scripts/uitest.sh bench-record "$variant" warm "$bucket" --artifacts-dir "$ART"
+scripts/uitest.sh bench-record custom "$variant" warm "$bucket" --artifacts-dir "$ART"
 ```
 
 ### 2. Summarize + compare
@@ -128,22 +128,26 @@ The baseline file is committed source-of-truth. Update it only when the new numb
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at_utc": "...",
   "sample_count": 20,
   "results": {
-    "speed": {
-      "cold": { "medium": { "ms_engine_start_to_final": {"n":1, "mean":..., ...}, "rtf": {...}, ... } },
-      "warm": {
-        "short":  { "ms_engine_start_to_final": {"n":3, ...}, ... },
-        "medium": { ... },
-        "long":   { ... }
-      }
-    },
-    "quality": { ... }
+    "custom": {
+      "speed": {
+        "cold": { "medium": { "ms_engine_start_to_final": {"n":1, "mean":..., ...}, "rtf": {...}, ... } },
+        "warm": {
+          "short":  { "ms_engine_start_to_final": {"n":3, ...}, ... },
+          "medium": { ... },
+          "long":   { ... }
+        }
+      },
+      "quality": { ... }
+    }
   }
 }
 ```
+
+Other generation modes (`design`, `clone`) populate sibling top-level keys when their own runbooks run.
 
 Per-bucket metrics: `ms_engine_start_to_first_chunk`, `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf` (real-time factor = audio_seconds / generation_seconds — higher is better, >1 means faster than real-time).
 

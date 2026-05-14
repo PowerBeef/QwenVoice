@@ -68,9 +68,21 @@ Release builds therefore start with an empty `QwenVoice/` after the first Debug 
 
 ### Autonomous UI testing
 
-The Debug build is drivable by a Claude Code session via the computer-use MCP. Entry point is `scripts/uitest.sh` (subcommands: `prep`, `reset [--include-voices|--full]`, `locate <ax-id>`, `screen-size`, `activate`, `logs`, `db <sql>`, `artifacts-dir`, `smoke-check`, plus the bench-* family). The agent's reference for what's clickable and how to verify generation completion lives at `docs/reference/ui-test-surface.md`; the first end-to-end runbook is `docs/reference/smoke-custom-voice.md`. Test artifacts land in `build/uitest/<timestamp>/` and are wiped by `scripts/build.sh clean`.
+The Debug build is drivable by a Claude Code session via the computer-use MCP. Entry point is `scripts/uitest.sh` (subcommands: `prep`, `reset [--include-voices|--full]`, `locate <ax-id>`, `screen-size`, `activate`, `logs`, `db <sql>`, `artifacts-dir`, `smoke-check [<mode>]`, plus the bench-* family). The agent's reference for what's clickable and how to verify generation completion lives at `docs/reference/ui-test-surface.md`. Test artifacts land in `build/uitest/<timestamp>/` and are wiped by `scripts/build.sh clean`.
 
-Benchmarking uses `bench-wait`, `bench-record`, `bench-summarize`, `bench-compare`, `bench-update-baselines` to measure Custom Voice generation across cold/warm × Speed/Quality × prompt-length (runbook: `docs/reference/bench-custom-voice.md`). Committed baselines live at `docs/reference/benchmark-baselines.json` so regressions show up in `git diff`.
+Smoke runbooks (one per generation mode):
+
+- `docs/reference/smoke-custom-voice.md`
+- `docs/reference/smoke-voice-design.md`
+- `docs/reference/smoke-voice-cloning.md` (requires at least one saved voice; bootstrap once manually)
+
+Benchmark runbooks share the bench-* harness (`bench-wait`, `bench-record <mode> <variant> <coldwarm> <bucket>`, `bench-summarize`, `bench-compare`, `bench-update-baselines`):
+
+- `docs/reference/bench-custom-voice.md`
+- `docs/reference/bench-voice-design.md`
+- `docs/reference/bench-voice-cloning.md`
+
+Committed baselines live at `docs/reference/benchmark-baselines.json` (schema v2, keyed by mode) so regressions show up in `git diff`.
 
 ## Testing policy — important
 
