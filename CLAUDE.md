@@ -76,6 +76,12 @@ Smoke runbooks (one per generation mode):
 - `docs/reference/smoke-voice-design.md`
 - `docs/reference/smoke-voice-cloning.md` (requires the `UITestRef` saved-voice fixture — see bootstrap below)
 
+Smoke runbooks for non-generation surfaces:
+
+- `docs/reference/smoke-settings.md` — Settings screen renders + Custom Voice model packages show "Ready"
+- `docs/reference/smoke-history.md` — History list renders + search filters + row plays
+- `docs/reference/smoke-saved-voices.md` — Saved Voices lists the `UITestRef` fixture + row plays
+
 Saved-voice fixture bootstrap (one-time, autonomous):
 
 - `docs/reference/bootstrap-saved-voice.md` — generates `voices/UITestRef.wav` via Voice Design → Save to Saved Voices, no file picker needed
