@@ -35,25 +35,24 @@ Companion reference: [`ui-test-surface.md`](ui-test-surface.md).
    - Verify with `scripts/uitest.sh locate screen_voices` (exit 0).
    - `/usr/sbin/screencapture -x "$ART/pre.png"`.
 7. **Verify the `UITestRef` row is present**:
-   - The row's accessibility id is keyed by voice ID — `voicesRow_<uuid>` per the surface doc. The bootstrap doesn't expose the uuid externally, so the agent locates the row visually by reading the row text in the screenshot. Confirm `UITestRef` text is visible.
-   - Optionally try `locate voicesRow_UITestRef` (if the id is keyed by name rather than uuid — possible variation across builds). Record what works.
-   - The list MAY show a quality-warning badge (short reference clip; expected for the bootstrap fixture).
+   - `scripts/uitest.sh locate voicesRow_UITestRef` — must return non-empty. The voice id is the (sanitized) display name, not a uuid, so the fixture's id is literally `UITestRef`.
+   - The list MAY show a quality-warning badge (short reference clip; expected for the bootstrap fixture). If present, it carries id `voicesRow_UITestRef_qualityWarning`.
 8. **Click the row's play affordance**:
-   - Per the surface doc, the per-row play button uses id `voicesRow_<id>_play`. Try `locate voicesRow_UITestRef_play` first; fall back to visual click on the play icon adjacent to the `UITestRef` row.
+   - `scripts/uitest.sh locate voicesRow_play_UITestRef` → `mcp__computer-use__left_click(coordinate=[cx,cy])`.
    - Confirm playback by inspecting the sidebar Player section (the reference audio should start playing; takes ~1 s to render).
 9. **Use the voice in cloning** (optional bonus check):
-   - The row's "Use" affordance routes to Voice Cloning with the reference bound. Try `locate voicesRow_UITestRef_use`. If clicking it switches the sidebar selection to Voice Cloning AND `voiceCloning_savedVoicePicker` shows `UITestRef`, that confirms the "use" flow.
+   - `scripts/uitest.sh locate voicesRow_use_UITestRef` → click. If this switches the sidebar selection to Voice Cloning AND `voiceCloning_savedVoicePicker` shows `UITestRef`, that confirms the "use" flow.
 10. **Post-screenshot + tear down**: `/usr/sbin/screencapture -x "$ART/post.png"`, then `kill "$LOG_PID" 2>/dev/null || true`.
 11. **Write `$ART/result.json`** with:
-    - `pass`: true if (a) `UITestRef` row visible, (b) row's play affordance can be located/clicked, (c) playback started
+    - `pass`: true if (a) `voicesRow_UITestRef` resolves, (b) `voicesRow_play_UITestRef` resolves and the click starts playback
     - `screen`: `voices`
     - `rows_visible`: count of saved-voice rows visible
     - `quality_warning_present`: bool
-    - `discovered_ax_ids`: any concrete row/play/use identifiers observed
     - `timestamp`
-12. **Report** $ART/, pass/fail, and any new AX IDs.
+12. **Report** $ART/ and pass/fail to the user.
 
 ## Notes
 
 - This runbook does NOT enroll a new voice or delete the fixture — both would corrupt the test fixture used by Voice Cloning. Those flows can be exercised by separate runbooks if needed.
 - The "quality warning" present on `UITestRef` is expected — the bootstrap reference is shorter than the 10-second recommendation. This isn't a failure; it's a warning the saved-voice library surfaces and we acknowledge.
+- Row + per-row-action AX ids are canonical (`voicesRow_<voiceID>`, `voicesRow_play_<voiceID>`, `voicesRow_use_<voiceID>`, `voicesRow_delete_<voiceID>`). Visual fallback is no longer expected — if `locate` fails for a known id, treat that as a regression.
