@@ -47,6 +47,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
     private let loadCapabilityProfile: NativeLoadCapabilityProfile
     private let memoryPolicy: NativeMemoryPolicy
     private let initialMLXMemorySnapshots: [String: NativeMLXMemorySnapshot]
+    private let pcmScratchBuffer: PCM16ScratchBuffer?
 
     init(
         requestID: Int,
@@ -62,7 +63,8 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
         telemetryRecorder: NativeTelemetryRecorder? = nil,
         loadCapabilityProfile: NativeLoadCapabilityProfile,
         memoryPolicy: NativeMemoryPolicy,
-        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot]
+        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot],
+        pcmScratchBuffer: PCM16ScratchBuffer? = nil
     ) {
         self.requestID = requestID
         self.request = request
@@ -78,6 +80,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
         self.loadCapabilityProfile = loadCapabilityProfile
         self.memoryPolicy = memoryPolicy
         self.initialMLXMemorySnapshots = mlxMemorySnapshots
+        self.pcmScratchBuffer = pcmScratchBuffer
     }
 
     func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
@@ -97,7 +100,8 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
                 telemetryRecorder: telemetryRecorder,
                 loadCapabilityProfile: loadCapabilityProfile,
                 memoryPolicy: memoryPolicy,
-                initialMLXMemorySnapshots: initialMLXMemorySnapshots
+                initialMLXMemorySnapshots: initialMLXMemorySnapshots,
+                pcmScratchBuffer: pcmScratchBuffer
             )
             let task = Task.detached(priority: .userInitiated) {
                 try await execution.runQualityFirstFinalAudio()
@@ -126,7 +130,8 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
             telemetryRecorder: telemetryRecorder,
             loadCapabilityProfile: loadCapabilityProfile,
             memoryPolicy: memoryPolicy,
-            initialMLXMemorySnapshots: initialMLXMemorySnapshots
+            initialMLXMemorySnapshots: initialMLXMemorySnapshots,
+            pcmScratchBuffer: pcmScratchBuffer
         )
         // `Task.detached` does not inherit the parent's cancellation, so we
         // explicitly forward cancellation through `withTaskCancellationHandler`.
@@ -446,9 +451,24 @@ private enum AtomicPCM16WAVWriter {
     }
 }
 
-private final class PCM16ScratchBuffer {
+/// Per-session PCM16 conversion scratch space + limiter state. Lives as a
+/// reference type so callers higher up the stack can choose to pool it
+/// across generations (the underlying `[Int16]` capacity is the largest
+/// per-generation allocation). Within a single session, `convertLimited`
+/// reuses `storage` via `removeAll(keepingCapacity: true)`. `reset()` is
+/// what pool callers should invoke between leases — it clears storage AND
+/// the limiter so two different audio streams don't inherit each other's
+/// gain state.
+/// `@unchecked Sendable`: this is a reference type with mutable state, but
+/// the contract is that a single session/execution owns it at a time —
+/// callers serialize access via the session lifecycle. When pooled across
+/// sessions, the pool itself (e.g. the engine) is responsible for
+/// returning a buffer to the pool only after the lease has finished.
+final class PCM16ScratchBuffer: @unchecked Sendable {
     private var storage: [Int16] = []
     private var limiter = PCM16StreamLimiter()
+
+    init() {}
 
     var limiterMetrics: PCM16StreamLimiter.Metrics {
         limiter.metrics
@@ -469,6 +489,17 @@ private final class PCM16ScratchBuffer {
                 count: pointer.count * MemoryLayout<Int16>.stride
             )
         }
+    }
+
+    /// Clear storage length-to-zero (preserving capacity) and rebuild the
+    /// limiter from scratch. Callers pooling this buffer across sessions
+    /// must call this before each new lease — otherwise the limiter's
+    /// `currentGain` / `previousOutput` from the previous generation
+    /// would carry into the next, producing audible discontinuities at
+    /// the start of the new audio.
+    func reset() {
+        storage.removeAll(keepingCapacity: true)
+        limiter = PCM16StreamLimiter()
     }
 }
 
@@ -691,6 +722,21 @@ private struct StreamingExecutionContext: Sendable {
     let loadCapabilityProfile: NativeLoadCapabilityProfile
     let memoryPolicy: NativeMemoryPolicy
     let initialMLXMemorySnapshots: [String: NativeMLXMemorySnapshot]
+    /// Optional pooled scratch buffer shared with the parent session.
+    /// When provided, the execution context calls `reset()` and reuses
+    /// it instead of allocating a fresh `PCM16ScratchBuffer`. Saves the
+    /// per-generation Int16-array allocation (~1-2 MB for a typical
+    /// medium-length output) and lets the underlying capacity grow once
+    /// to high-water mark and stay there across generations.
+    let pcmScratchBuffer: PCM16ScratchBuffer?
+
+    private func scratchBuffer() -> PCM16ScratchBuffer {
+        if let pooled = pcmScratchBuffer {
+            pooled.reset()
+            return pooled
+        }
+        return PCM16ScratchBuffer()
+    }
 
     var previewTitle: String {
         String(request.text.prefix(40))
@@ -772,7 +818,7 @@ private struct StreamingExecutionContext: Sendable {
             throw MLXTTSEngineError.generationFailed("The native engine did not produce final audio.")
         }
 
-        let scratchBuffer = PCM16ScratchBuffer()
+        let scratchBuffer = self.scratchBuffer()
         let limiterSignpost = NativeStreamingSignposts.signposter.beginInterval(
             "Native PCM Limiter Convert"
         )
@@ -960,7 +1006,7 @@ private struct StreamingExecutionContext: Sendable {
         let chunkWriter = streamingOutputPolicy == .pcmPreviewAndFileArtifacts
             ? try PCM16ChunkFileWriter(sampleRate: sampleRate)
             : nil
-        let scratchBuffer = PCM16ScratchBuffer()
+        let scratchBuffer = self.scratchBuffer()
         let finalWriter = try IncrementalPCM16WAVFileWriter(
             sampleRate: sampleRate,
             outputURL: outputURL
