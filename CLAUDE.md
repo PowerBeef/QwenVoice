@@ -92,7 +92,7 @@ Benchmark runbooks share the bench-* harness (`bench-wait`, `bench-step <mode> <
 - `docs/reference/bench-voice-design.md`
 - `docs/reference/bench-voice-cloning.md`
 
-Committed baselines live at `docs/reference/benchmark-baselines.json` (schema v3 — adds per-sample audio quality `audio_rms_dbfs` / `audio_peak_dbfs` and combined Vocello+XPC `peak_rss_mb` on top of v2's timing tree; keyed by mode at the top level) so regressions show up in `git diff`. Existing v2 baselines compare cleanly against v3 results — the new metrics are additive and `bench-compare`'s ±15 % flagging still uses `ms_engine_start_to_final` and `rtf` only.
+Committed baselines live at `docs/reference/benchmark-baselines.json` (schema v3, regression-ready, 24 cells × n=3 on Apple M2 — full coverage of the 3 modes × 2 variants × cold/medium + warm/{short,medium,long} matrix as of May 2026). Every cell carries `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf`, `audio_rms_dbfs`, `audio_peak_dbfs`, `peak_rss_mb` (combined Vocello + XPC), and the `peak_rss_mb_app` / `peak_rss_mb_xpc` split. `bench-compare` flags drift on `ms_engine_start_to_final` and `rtf` at ±15 %; depth metrics are recorded in the baseline for forensic comparison but not gated on directly.
 
 ## Testing policy — important
 

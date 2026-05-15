@@ -31,7 +31,7 @@ The Debug build is drivable by a Claude Code session via the computer-use MCP. T
   - [`reference/bench-custom-voice.md`](reference/bench-custom-voice.md)
   - [`reference/bench-voice-design.md`](reference/bench-voice-design.md)
   - [`reference/bench-voice-cloning.md`](reference/bench-voice-cloning.md)
-- [`reference/benchmark-baselines.json`](reference/benchmark-baselines.json) — committed regression baselines (schema v3 once a fresh bench run promotes it; v2 today after the seeding run)
+- [`reference/benchmark-baselines.json`](reference/benchmark-baselines.json) — committed regression baselines, schema v3, regression-ready (24 cells × n=3 on Apple M2, May 2026). `bench-compare` flags timing/RTF drift past ±15 %; depth metrics (audio RMS/peak dBFS, peak RSS combined + app/XPC split) are stored for forensic comparison.
 
 Useful local diagnostics can be exported with:
 
