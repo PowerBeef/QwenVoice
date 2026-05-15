@@ -1,22 +1,13 @@
 {
   "schema_version": 2,
   "machine": "Apple M2",
-  "generated_at_utc": "2026-05-14T23:22:50Z",
-  "source": "/Users/patricedery/Coding_Projects/QwenVoice/build/uitest/20260514-184742/bench-result.json",
+  "generated_at_utc": "2026-05-15T12:33:03Z",
+  "source": "build/uitest/20260514-184742/bench-result.json",
   "results": {
     "custom": {
       "speed": {
         "cold": {
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 1,
               "mean": 8731,
@@ -57,15 +48,6 @@
         },
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 1886.3333,
@@ -104,15 +86,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 7496.3333,
@@ -151,15 +124,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 30280.6667,
@@ -202,15 +166,6 @@
       "quality": {
         "cold": {
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 1,
               "mean": 9477,
@@ -251,15 +206,6 @@
         },
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 1608.3333,
@@ -298,15 +244,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 8138,
@@ -345,15 +282,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 35947.3333,
@@ -398,15 +326,6 @@
       "speed": {
         "cold": {
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 1,
               "mean": 9053,
@@ -447,15 +366,6 @@
         },
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 2371.6667,
@@ -494,15 +404,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 7594,
@@ -541,15 +442,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 34634.3333,
@@ -592,15 +484,6 @@
       "quality": {
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 2073,
@@ -639,15 +522,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 8762,
@@ -686,15 +560,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 34830.6667,
@@ -732,6 +597,46 @@
               "stdev": 0.0319
             }
           }
+        },
+        "cold": {
+          "medium": {
+            "ms_engine_start_to_final": {
+              "n": 1,
+              "mean": 8555,
+              "median": 8555,
+              "p95": 8555,
+              "min": 8555,
+              "max": 8555,
+              "stdev": 0.0
+            },
+            "ms_engine_start_to_autoplay": {
+              "n": 1,
+              "mean": 11915,
+              "median": 11915,
+              "p95": 11915,
+              "min": 11915,
+              "max": 11915,
+              "stdev": 0.0
+            },
+            "audio_duration_s": {
+              "n": 1,
+              "mean": 5.76,
+              "median": 5.76,
+              "p95": 5.76,
+              "min": 5.76,
+              "max": 5.76,
+              "stdev": 0.0
+            },
+            "rtf": {
+              "n": 1,
+              "mean": 0.6733,
+              "median": 0.6733,
+              "p95": 0.6733,
+              "min": 0.6733,
+              "max": 0.6733,
+              "stdev": 0.0
+            }
+          }
         }
       }
     },
@@ -739,15 +644,6 @@
       "speed": {
         "cold": {
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 1,
               "mean": 13595,
@@ -788,15 +684,6 @@
         },
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 5144.3333,
@@ -835,15 +722,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 14571.3333,
@@ -882,15 +760,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 41425.3333,
@@ -933,15 +802,6 @@
       "quality": {
         "cold": {
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 1,
               "mean": 15750,
@@ -982,15 +842,6 @@
         },
         "warm": {
           "short": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 5618.3333,
@@ -1029,15 +880,6 @@
             }
           },
           "medium": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 15151.6667,
@@ -1076,15 +918,6 @@
             }
           },
           "long": {
-            "ms_engine_start_to_first_chunk": {
-              "n": 0,
-              "mean": null,
-              "median": null,
-              "p95": null,
-              "min": null,
-              "max": null,
-              "stdev": null
-            },
             "ms_engine_start_to_final": {
               "n": 3,
               "mean": 45703.3333,

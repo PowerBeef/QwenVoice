@@ -78,7 +78,7 @@ T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
 `computer_batch`: click `textInput_textEditor` → type medium prompt → `cmd+return`.
 
 ```sh
-scripts/uitest.sh bench-wait --since "$T0" --timeout 150   # clone cold can include priming
+scripts/uitest.sh bench-wait --since "$T0" --timeout 180   # clone cold includes reference priming; first live run saw ~13.6-15.8 s
 scripts/uitest.sh bench-record clone "$variant" cold medium --artifacts-dir "$ART"
 ```
 

@@ -79,7 +79,7 @@ T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
 `computer_batch`: click `textInput_textEditor` → type medium prompt → `cmd+return`.
 
 ```sh
-scripts/uitest.sh bench-wait --since "$T0" --timeout 120
+scripts/uitest.sh bench-wait --since "$T0" --timeout 240   # VD/Quality cold has been seen >180s on M2; pad the budget
 scripts/uitest.sh bench-record design "$variant" cold medium --artifacts-dir "$ART"
 ```
 

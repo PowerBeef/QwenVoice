@@ -80,7 +80,7 @@ T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
 Then issue ONE `computer_batch` containing: click into the script field (visual click — also not in the AX vocabulary), type the medium prompt, send `cmd+return`.
 
 ```sh
-scripts/uitest.sh bench-wait --since "$T0" --timeout 120   # cold can be slow
+scripts/uitest.sh bench-wait --since "$T0" --timeout 180   # cold includes model load; first live run saw ~8.7-9.5 s
 scripts/uitest.sh bench-record custom "$variant" cold medium --artifacts-dir "$ART"
 ```
 

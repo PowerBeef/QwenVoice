@@ -49,6 +49,12 @@ commands:
   screen-size           Print the screen's logical-point dimensions as "W H". Use with
                         the locate output to scale to your screenshot's image pixels.
 
+  scaled-locate <ax-id> <image-w> <image-h>
+                        Like locate but pre-scaled. Takes the screenshot's pixel
+                        dimensions from your most recent mcp__computer-use__screenshot
+                        and emits "cx cy w h" already in screenshot-image space —
+                        ready to pass directly to left_click without manual math.
+
   activate              Bring Vocello to the front. Use as a mid-test recovery step when
                         a system dialog or notification has stolen focus, or before a
                         click sequence to guarantee Vocello receives the input.
@@ -248,6 +254,41 @@ cmd_activate() {
         exit 1
     fi
     /usr/bin/osascript -e 'tell application "Vocello" to activate' >/dev/null 2>&1
+}
+
+cmd_scaled_locate() {
+    local ax_id="${1:-}"
+    local image_w="${2:-}"
+    local image_h="${3:-}"
+    if [ -z "$ax_id" ] || [ -z "$image_w" ] || [ -z "$image_h" ]; then
+        echo "error: scaled-locate requires <ax-id> <image-w> <image-h>" >&2
+        echo "usage: scripts/uitest.sh scaled-locate <ax-id> <screenshot-width> <screenshot-height>" >&2
+        echo "       <image-w/h> are the pixel dimensions of your most recent computer-use screenshot" >&2
+        exit 2
+    fi
+    local raw
+    raw="$(cmd_locate "$ax_id")" || return $?
+    local screen
+    screen="$(cmd_screen_size)" || return $?
+    SCALED_RAW="$raw" SCALED_SCREEN="$screen" \
+        SCALED_W="$image_w" SCALED_H="$image_h" \
+        /usr/bin/python3 -c '
+import os, sys
+raw = os.environ["SCALED_RAW"].split()
+screen = os.environ["SCALED_SCREEN"].split()
+if len(raw) != 4 or len(screen) != 2:
+    print(f"error: bad locate/screen output: raw={raw} screen={screen}", file=sys.stderr)
+    sys.exit(1)
+cx, cy, w, h = (int(x) for x in raw)
+sw, sh = (int(x) for x in screen)
+iw = int(os.environ["SCALED_W"])
+ih = int(os.environ["SCALED_H"])
+sx = int(round(cx * iw / sw))
+sy = int(round(cy * ih / sh))
+sxw = int(round(w * iw / sw))
+sxh = int(round(h * ih / sh))
+print(f"{sx} {sy} {sxw} {sxh}")
+'
 }
 
 cmd_screen_size() {
@@ -590,7 +631,11 @@ samples_path = artifacts_dir / "bench-samples.jsonl"
 result_path = artifacts_dir / "bench-result.json"
 
 METRICS = [
-    "ms_engine_start_to_first_chunk",
+    # ms_engine_start_to_first_chunk intentionally dropped — its
+    # underlying `Preview To First Chunk` signpost only fires on the
+    # live-streaming preview path (AudioPlayerViewModel.completeStreamingPreview),
+    # which the macOS app's default generation path doesn't currently take.
+    # The first_chunk_ts anchor is still captured per-sample for forensics.
     "ms_engine_start_to_final",
     "ms_engine_start_to_autoplay",
     "audio_duration_s",
@@ -796,6 +841,7 @@ main() {
         prep)            cmd_prep "$@" ;;
         reset)           cmd_reset "$@" ;;
         locate)          cmd_locate "$@" ;;
+        scaled-locate)   cmd_scaled_locate "$@" ;;
         screen-size)     cmd_screen_size ;;
         activate)        cmd_activate ;;
         logs)            cmd_logs "$@" ;;

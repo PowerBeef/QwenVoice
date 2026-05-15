@@ -180,29 +180,36 @@ Voice Cloning requires a pre-existing saved voice for autonomous runs (the alter
 
 ## Locating an element
 
+Preferred: `scaled-locate` does the scaling for you in one shot.
+
+```sh
+# Pass the pixel dimensions of your most recent computer-use screenshot.
+scripts/uitest.sh scaled-locate sidebar_customVoice 1456 816
+# returns coords already in screenshot-image space:
+# 470 250 230 39
+```
+
+Click directly: `mcp__computer-use__left_click(x=470, y=250)`. Bring Vocello to the front first if a notification or another app may have stolen focus (`mcp__computer-use__open_application("Vocello")` or `scripts/uitest.sh activate`).
+
+For reference, the raw `locate` form remains:
+
 ```sh
 scripts/uitest.sh locate sidebar_customVoice
-# example output (logical-points coordinate space, see caveat below):
+# returns "cx cy w h" in macOS logical-points space (what System Events reports):
 # 413 221 202 34
 ```
 
-The output is `cx cy w h` — center already computed — in **macOS logical-points space** (what `osascript` System Events reports). The computer-use screenshot you see may use a **different image pixel space**: on this Mac the screen is 1280×720 logical points but the captured screenshot renders at ~1456×816 image pixels, a ratio of ~1.138×. `mcp__computer-use__left_click` expects coordinates in screenshot-image pixels.
+`screen-size` returns the logical screen dimensions (`1280 720` on this Mac); `scaled-locate` internally does `cx * image_w / screen_w` and the equivalent for y.
 
-Two ways to handle this:
+### When `locate` won't find an element
 
-1. **Scale before clicking** (preferred when you know both sizes):
-   ```
-   image_width  = <from your most recent screenshot>
-   image_height = <from your most recent screenshot>
-   screen_w_h   = `scripts/uitest.sh screen-size`   # "1280 720" on this Mac
-   sx = locate_cx * image_width  / screen_logical_w
-   sy = locate_cy * image_height / screen_logical_h
-   ```
-2. **Visual-fallback click**: take a screenshot, find the target visually, and click the center of its visible rectangle. Use this when scaling is awkward (e.g., elements whose `accessibilityIdentifier` isn't yet catalogued in the click vocabulary).
+Some elements aren't queryable even though they have `accessibilityIdentifier(...)` in source:
 
-The smoke runbook uses (2) for the script text area and Generate trigger (Cmd+Return), and (1) for the sidebar navigation.
+- The Speed/Quality variant toggle buttons (`<mode>_speedVariantButton`, `<mode>_qualityVariantButton`) are inside a `GenerationVariantSelector` that uses `.accessibilityElement(children: .contain)`, which collapses the inner buttons from external accessibility queries. Only the outer container `<mode>_modelVariantPicker` is exposed, with non-spanning bounds that don't cover both segments. **Variant toggling must be done by visual click.** On a 1456×816 screenshot the Speed button is at approximately (1023, 170) and Quality at (1091, 170), stable across Custom Voice / Voice Design / Voice Cloning since they share the same Configuration card layout.
 
-If `locate` exits non-zero ("accessibility identifier not found"), either the screen isn't mounted yet (give SwiftUI another half-second and retry) or the identifier doesn't exist on the current screen. A screenshot will tell you which.
+- Saved-voice dropdown menu items (`UITestRef` etc.) similarly aren't exposed once the dropdown is open — click visually.
+
+If `locate` exits non-zero ("accessibility identifier not found"), either the screen isn't mounted yet (give SwiftUI another half-second and retry), the identifier doesn't exist on the current screen, or the element is hidden behind one of the AX-tree-collapsing modifiers above.
 
 ## Completion signals
 
@@ -223,7 +230,7 @@ Stable substrings emitted by `AppPerformanceSignposts` (`Sources/Services/AppPer
 | Substring | Meaning |
 |---|---|
 | `XPC Engine Command` begin/end | One round-trip to the engine XPC service (begin/end pair, category `xpc`) |
-| `Preview To First Chunk` | First audio chunk decoded — TTS pipeline has started producing audio |
+| `Preview To First Chunk` | First audio chunk decoded. **Streaming path only** — emitted from `AudioPlayerViewModel.completeStreamingPreview` (`Sources/SharedSupport/ViewModels/AudioPlayerViewModel.swift:475`), which is only invoked when `result.usedStreaming == true`. The macOS app's default generation path didn't take that branch in the first live bench run, so this signpost wasn't a reliable timing anchor. Bench `bench-record` still captures `first_chunk_ts` in `signpost_anchors` for forensics but `ms_engine_start_to_first_chunk` has been dropped from `bench-summarize`'s metric set. |
 | `Final File Ready` | The on-disk `.wav` is fully written (emitted in `Sources/SharedSupport/Services/GenerationPersistence.swift`) |
 | `Autoplay Start` | Playback has begun |
 
