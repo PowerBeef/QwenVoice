@@ -201,6 +201,15 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     private var idleUnloadTask: Task<Void, Never>?
     private var idleUnloadToken: UUID?
 
+    /// macOS-side memory pressure monitor. On 8 GB and 16 GB Macs this
+    /// subscribes to kernel pressure events and forwards them as trim
+    /// levels to `runtime.trimMemory(...)`. On high-memory Macs the
+    /// monitor is created but never started — there's no value in
+    /// reacting on machines that aren't pressure-bound. On iOS the
+    /// monitor is a no-op (the iOS host has its own infrastructure).
+    private let memoryPressureMonitor: NativeMemoryPressureMonitor
+    private var memoryPressureTask: Task<Void, Never>?
+
     public convenience init(
         modelRegistry: any ModelRegistry,
         modelAssetStore: any ModelAssetStore,
@@ -335,6 +344,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             }
         )
         self.streamingSessionFactory = streamingSessionFactory
+        self.memoryPressureMonitor = NativeMemoryPressureMonitor()
     }
 
     public func supportDecision(for request: GenerationRequest) -> GenerationSupportDecision {
@@ -352,6 +362,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
     public func stop() {
         cancelIdleUnload()
+        memoryPressureTask?.cancel()
+        memoryPressureTask = nil
+        memoryPressureMonitor.stop()
         let runtime = runtime
         Task.detached(priority: .utility) {
             await runtime.configure(normalizedCloneReferenceDirectory: nil, voicesDirectory: nil)
@@ -365,6 +378,28 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         loadState = .idle
         visibleErrorMessage = nil
         clonePreparationState = .idle
+    }
+
+    /// Subscribe to kernel memory-pressure events on macOS so the engine
+    /// can softTrim / hardTrim ahead of allocation failures. Idempotent —
+    /// safe to call multiple times. Skipped on `.highMemoryMac` where
+    /// there's no value in reacting, and a no-op on iOS where the
+    /// IOS-side host (`Sources/iOS/IOSShellPrimitives.swift`) drives its
+    /// own monitor with finer per-frame headroom data.
+    private func startMemoryPressureMonitorIfNeeded() {
+        guard memoryPressureTask == nil else { return }
+        let deviceClass = NativeMemoryPolicyResolver.deviceClass()
+        guard deviceClass == .floor8GBMac || deviceClass == .mid16GBMac else { return }
+        memoryPressureMonitor.start()
+        let runtime = runtime
+        memoryPressureTask = Task { [memoryPressureMonitor] in
+            for await level in memoryPressureMonitor.events {
+                await runtime.trimMemory(
+                    level: level,
+                    reason: "macos_memory_pressure_\(level.rawValue)"
+                )
+            }
+        }
     }
 
     public func initialize(appSupportDirectory: URL) async throws {
@@ -393,6 +428,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
             normalizedCloneReferenceDirectory: normalizedCloneReferenceDirectory,
             voicesDirectory: voicesDirectory
         )
+        startMemoryPressureMonitorIfNeeded()
         isInitialized = true
         loadState = .idle
         clonePreparationState = .idle

@@ -704,6 +704,11 @@ actor NativeEngineRuntime {
         }
 
         guard !(await loadCoordinator.isPrewarmed(identityKey: identityKey)) else {
+            // Already prewarmed — record the hit so bench traces can
+            // distinguish "warm cell really skipped prewarm" from "warm
+            // cell paid a fast prewarm." Pairs with the analogous event
+            // in `ensureDesignConditioningWarmStateIfNeeded`.
+            Self.signposter.emitEvent("Native Prewarm Cache Hit")
             return [:]
         }
 
@@ -981,6 +986,10 @@ actor NativeEngineRuntime {
         }
         let reused = activeDesignConditioningWarmKey == conditioningWarmKey
         if reused {
+            // Cache hit — the active design conditioning matches what
+            // this request needs. Emit a signpost so bench traces can
+            // count hits vs misses, and skip the prewarm work below.
+            Self.signposter.emitEvent("Native Design Conditioning Reuse")
             await markDesignWarmSatisfied(
                 for: request,
                 conditioningWarmKey: conditioningWarmKey
@@ -995,6 +1004,23 @@ actor NativeEngineRuntime {
                 streamStepPrefetchHit: activeDesignStreamStepWarmKey == conditioningWarmKey
                     && activeDesignStreamStepWarmSource == .prefetch
             )
+        }
+
+        // The incoming voice description doesn't match the active warm
+        // key. Before re-prewarming for the new key, release the old
+        // conditioning state explicitly so MLX can free its tensors.
+        // Without this clear, the old design tensors stay resident
+        // alongside the new ones during the prewarm window — peak RSS
+        // briefly holds both. On `floor8GBMac` that overhead can push
+        // the runtime into pressure. The actual MLX free still happens
+        // when `clearCacheAfterGeneration` fires post-generation, but
+        // *also* doing it here narrows the high-water window.
+        if activeDesignConditioningWarmKey != nil {
+            activeDesignConditioningWarmKey = nil
+            activeDesignConditioningWarmSource = nil
+            activeDesignStreamStepWarmKey = nil
+            activeDesignStreamStepWarmSource = nil
+            Memory.clearCache()
         }
 
         let warmText = GenerationSemantics.canonicalDesignWarmText(for: warmBucket)
