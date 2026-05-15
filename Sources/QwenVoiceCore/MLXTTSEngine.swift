@@ -47,6 +47,17 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
     public static let eventStreamBufferLimit = 64
     public static var lightweightWarmupTextForUI: String { lightweightWarmupText }
 
+    /// Audio extensions the saved-voice store accepts on disk. Mirrors the
+    /// UTType allowlist exposed by the file pickers in
+    /// `SavedVoiceSheet.swift` (macOS) and `IOSGenerationModeViews.swift`
+    /// (iOS). Used by `enrollPreparedVoice` to keep the source extension
+    /// (so MP3/M4A bytes don't get a `.wav` filename slapped on), and by
+    /// the list/delete paths to find each voice's audio file regardless
+    /// of which format the user imported. `wav` stays the fallback for
+    /// inputs whose extension is empty or unrecognized — preserves the
+    /// pre-existing behavior for the seed/bootstrap fixtures.
+    static let supportedSavedVoiceAudioExtensions: Set<String> = ["wav", "mp3", "aiff", "m4a"]
+
     typealias StreamingSessionFactory = (
         Int,
         GenerationRequest,
@@ -802,7 +813,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
 
         var voices: [PreparedVoice] = []
         for fileURL in (enumerator.allObjects as? [URL]) ?? [] {
-            guard fileURL.pathExtension.lowercased() == "wav" else { continue }
+            guard Self.supportedSavedVoiceAudioExtensions.contains(fileURL.pathExtension.lowercased()) else {
+                continue
+            }
             let transcriptURL = fileURL.deletingPathExtension().appendingPathExtension("txt")
             voices.append(
                 PreparedVoice(
@@ -872,11 +885,29 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         }
 
         try fileManager.createDirectory(at: voicesDirectory, withIntermediateDirectories: true)
-        let audioDestinationURL = voicesDirectory.appendingPathComponent("\(safeName).wav")
+
+        // Preserve the source extension so MP3 / AIFF / M4A bytes don't
+        // end up stored under a `.wav` filename. Falls back to `wav` for
+        // inputs whose extension is empty or outside the supported set —
+        // this preserves the pre-existing behavior for the seed/bootstrap
+        // fixtures and matches the fallback the UI pickers expose.
+        let sourceExtension = sourceURL.pathExtension.lowercased()
+        let destinationExtension = Self.supportedSavedVoiceAudioExtensions.contains(sourceExtension)
+            ? sourceExtension
+            : "wav"
+        let audioDestinationURL = voicesDirectory.appendingPathComponent("\(safeName).\(destinationExtension)")
         let transcriptDestinationURL = voicesDirectory.appendingPathComponent("\(safeName).txt")
 
-        if fileManager.fileExists(atPath: audioDestinationURL.path)
-            || fileManager.fileExists(atPath: transcriptDestinationURL.path) {
+        // Disallow the new save if a voice with this `safeName` already
+        // exists in ANY supported audio format — otherwise the user could
+        // double-up an entry that the list path would render as a single
+        // ambiguous row.
+        let nameConflictExists = Self.supportedSavedVoiceAudioExtensions.contains { ext in
+            fileManager.fileExists(
+                atPath: voicesDirectory.appendingPathComponent("\(safeName).\(ext)").path
+            )
+        } || fileManager.fileExists(atPath: transcriptDestinationURL.path)
+        if nameConflictExists {
             throw MLXTTSEngineError.generationFailed(
                 "A saved voice named \"\(safeName)\" already exists. Choose a different name."
             )
@@ -953,14 +984,26 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling {
         try ensureInitialized()
         let voicesDirectory = try requireVoicesDirectory()
         let fileManager = FileManager.default
-        let audioURL = voicesDirectory.appendingPathComponent("\(id).wav")
+
+        // Voices may now be stored under any supported audio extension
+        // (see `supportedSavedVoiceAudioExtensions`). Find whichever
+        // extension this voice's file uses on disk; if no audio file
+        // exists in any supported format, the voice doesn't exist.
+        let candidateAudioURLs = Self.supportedSavedVoiceAudioExtensions.map { ext in
+            voicesDirectory.appendingPathComponent("\(id).\(ext)")
+        }
+        let existingAudioURLs = candidateAudioURLs.filter {
+            fileManager.fileExists(atPath: $0.path)
+        }
         let transcriptURL = voicesDirectory.appendingPathComponent("\(id).txt")
 
-        guard fileManager.fileExists(atPath: audioURL.path) else {
+        guard !existingAudioURLs.isEmpty else {
             throw MLXTTSEngineError.generationFailed("Voice '\(id)' does not exist.")
         }
 
-        try fileManager.removeItem(at: audioURL)
+        for audioURL in existingAudioURLs {
+            try fileManager.removeItem(at: audioURL)
+        }
         if fileManager.fileExists(atPath: transcriptURL.path) {
             try? fileManager.removeItem(at: transcriptURL)
         }
