@@ -14,13 +14,13 @@ Voice Cloning has an extra subtlety for benchmarking: when the **reference clip 
 
 ```
 for variant in [speed, quality]:
-    cold sample       (medium prompt, after a fresh launch + reference selection)
+    3 × cold sample   (medium prompt, fresh-launch + re-prime between each)
     3 × warm short
     3 × warm medium
     3 × warm long
 ```
 
-20 samples per variant pass.
+24 samples total (12 per variant). See `bench-custom-voice.md`'s "Cold sample count" note for the n=1 → n=3 rationale. For cloning specifically, each cold sample requires re-priming the reference clip, so the cold-cohort budget is closer to ~4 minutes per sample.
 
 ## Fixed inputs
 

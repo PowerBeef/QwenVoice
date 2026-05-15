@@ -6,17 +6,19 @@ Companion docs: [`ui-test-surface.md`](ui-test-surface.md), [`smoke-custom-voice
 
 ## Run plan
 
-20 samples total, generated in this order within one session:
+24 samples total, generated in this order within one session:
 
 ```
 for variant in [speed, quality]:
-    cold sample       (medium prompt, after a fresh launch)
+    3 × cold sample   (medium prompt, fresh-launch between each)
     3 × warm short
     3 × warm medium
     3 × warm long
 ```
 
 Cold runs capture model-load + first-generation latency. Warm runs hit the steady-state model-in-memory path.
+
+**Cold sample count.** Three cold samples per `(mode, variant)` is the minimum that supports any statistical claim — a single cold sample matches itself within ±15 % by construction, so the baseline can't flag a regression. Each cold sample requires a fresh launch (quit Vocello, reset, prep), so plan for ~3 minutes per cold sample.
 
 ## Prerequisites
 
@@ -76,15 +78,16 @@ scripts/uitest.sh activate         # ensure frontmost
 python3 -c "import datetime as dt; d=dt.datetime.now(); print(d.strftime('%Y-%m-%d %H:%M:%S.')+d.strftime('%f')[:3])" > /tmp/uitest_bench_t0
 ```
 
-#### 1c. Cold sample (medium prompt)
+#### 1c. Cold samples (medium prompt, n=3)
 
-The first generation after launch hits the model-load path. Treat it as one cold sample.
+The first generation after a fresh launch hits the model-load path. Repeat three times per variant — quit + relaunch between samples — so the cold cell has enough samples to support regression detection.
 
-Issue ONE `computer_batch` containing: click the script field (`textInput_textEditor`), type the medium prompt, send `cmd+return`.
+For each of three cold samples:
 
-```sh
-scripts/uitest.sh bench-step custom "$variant" cold medium --artifacts-dir "$ART" --timeout 180
-```
+1. (Skip on the first iteration; the fresh launch from step 1a counts.) `scripts/uitest.sh reset && scripts/uitest.sh prep && scripts/uitest.sh activate` — quit, wipe state, relaunch.
+2. Re-navigate to Custom Voice + re-select variant per step 1b (visual verification still required).
+3. Issue ONE `computer_batch` containing: click the script field (`textInput_textEditor`), type the medium prompt, send `cmd+return`.
+4. `scripts/uitest.sh bench-step custom "$variant" cold medium --artifacts-dir "$ART" --timeout 180`.
 
 `bench-step` reads `/tmp/uitest_bench_t0` for the previous T0, waits for `Final File Ready`, records the sample, and writes a fresh T0 for the next call. No manual `date` capture between samples.
 
@@ -102,7 +105,7 @@ scripts/uitest.sh bench-step custom "$variant" warm "$bucket" --artifacts-dir "$
 
 ### 2. Summarize + compare
 
-After the loop completes (10 samples per variant × 2 = 20 in `bench-samples.jsonl`):
+After the loop completes (12 samples per variant × 2 = 24 in `bench-samples.jsonl`):
 
 ```sh
 scripts/uitest.sh bench-summarize "$ART"          # writes $ART/bench-result.json
@@ -127,13 +130,13 @@ The baseline file is committed source-of-truth. Update it only when the new numb
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "generated_at_utc": "...",
-  "sample_count": 20,
+  "sample_count": 24,
   "results": {
     "custom": {
       "speed": {
-        "cold": { "medium": { "ms_engine_start_to_final": {"n":1, "mean":..., ...}, "rtf": {...}, ... } },
+        "cold": { "medium": { "ms_engine_start_to_final": {"n":3, "mean":..., ...}, "rtf": {...}, "audio_rms_dbfs": {...}, "audio_peak_dbfs": {...}, "peak_rss_mb": {...} } },
         "warm": {
           "short":  { "ms_engine_start_to_final": {"n":3, ...}, ... },
           "medium": { ... },
@@ -148,7 +151,7 @@ The baseline file is committed source-of-truth. Update it only when the new numb
 
 Other generation modes (`design`, `clone`) populate sibling top-level keys when their own runbooks run.
 
-Per-bucket metrics: `ms_engine_start_to_first_chunk`, `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf` (real-time factor = audio_seconds / generation_seconds — higher is better, >1 means faster than real-time).
+Per-bucket metrics: `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf` (real-time factor = audio_seconds / generation_seconds — higher is better, >1 means faster than real-time), plus the schema-v3 depth metrics `audio_rms_dbfs`, `audio_peak_dbfs`, `peak_rss_mb` (combined Vocello + XPC peak RSS) along with the per-process split `peak_rss_mb_app` and `peak_rss_mb_xpc`.
 
 ## Failure handling
 
@@ -159,6 +162,5 @@ Per-bucket metrics: `ms_engine_start_to_first_chunk`, `ms_engine_start_to_final`
 
 ## Notes
 
-- This is the first benchmark scenario. Element 3 of the rollout will add Voice Design and Voice Cloning runbooks at the same depth.
 - 3 warm samples per bucket gives noisy statistics (p95 is barely meaningful at n=3). It's enough to detect order-of-magnitude regressions. Future work can raise the sample count via flags.
-- The cold sample is intentionally a single measurement per variant — repeating cold is expensive (each cold sample requires a fresh launch) and not currently in scope.
+- 3 cold samples per variant — the previous version of this runbook recorded a single cold sample, which left the cold cell unable to bound regressions (any single future cold run matches the baseline within ±15 % by construction). Three is the minimum that supports any statistical claim; each cold sample requires a fresh launch (~3 minutes), so plan ~10 minutes per variant for the cold work alone.

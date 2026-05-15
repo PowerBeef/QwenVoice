@@ -8,13 +8,13 @@ Companion docs: [`ui-test-surface.md`](ui-test-surface.md), [`smoke-voice-design
 
 ```
 for variant in [speed, quality]:
-    cold sample       (medium prompt, after a fresh launch)
+    3 × cold sample   (medium prompt, fresh-launch between each)
     3 × warm short
     3 × warm medium
     3 × warm long
 ```
 
-20 samples total per variant pass.
+24 samples total (12 per variant). See `bench-custom-voice.md`'s "Cold sample count" note for why cold is now n=3 instead of n=1.
 
 ## Prerequisites
 
