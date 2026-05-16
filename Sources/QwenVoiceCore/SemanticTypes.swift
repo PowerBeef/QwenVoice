@@ -582,6 +582,32 @@ public enum NativeStreamingOutputPolicy: String, Hashable, Codable, Sendable {
     }
 }
 
+/// Opt-out switch for the per-chunk PCM preview Data materialization.
+/// The streaming generator always builds a `Data` from the per-chunk
+/// Int16 samples (and ships it through the chunk event) so the UI can
+/// play audio live. For headless workloads — bench runs, CI, batch
+/// generation where nobody is listening to the in-flight preview —
+/// emitting an empty `Data` for the preview saves ~50-100 KB of
+/// allocation churn per chunk. Audio files on disk are unaffected;
+/// only the in-flight preview data carried by `GenerationEvent.chunk`
+/// is suppressed.
+///
+/// Set `QWENVOICE_STREAMING_PREVIEW_DATA=off` (case-insensitive) to
+/// opt out. Default is "on" — preserves existing live-streaming UX.
+public enum NativeStreamingPreviewDataPolicy: String, Hashable, Codable, Sendable {
+    case emit
+    case skip
+
+    public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeStreamingPreviewDataPolicy {
+        switch environment["QWENVOICE_STREAMING_PREVIEW_DATA"]?.lowercased() {
+        case "off", "skip", "false", "0", "no":
+            return .skip
+        default:
+            return .emit
+        }
+    }
+}
+
 public struct StreamingAudioChunk: Hashable, Codable, Sendable {
     public let requestID: Int?
     public let sampleRate: Int

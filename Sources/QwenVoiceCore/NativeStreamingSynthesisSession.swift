@@ -1003,6 +1003,7 @@ private struct StreamingExecutionContext: Sendable {
         var mlxMemorySnapshots = initialMLXMemorySnapshots
         mlxMemorySnapshots["before_stream"] = NativeMemoryPolicyResolver.snapshot()
         let streamingOutputPolicy = NativeStreamingOutputPolicy.current()
+        let previewDataPolicy = NativeStreamingPreviewDataPolicy.current()
         let chunkWriter = streamingOutputPolicy == .pcmPreviewAndFileArtifacts
             ? try PCM16ChunkFileWriter(sampleRate: sampleRate)
             : nil
@@ -1058,7 +1059,14 @@ private struct StreamingExecutionContext: Sendable {
 
                     let pcmSamples = scratchBuffer.convertLimited(chunkSamples)
                     let frameOffset = totalFramesWritten
-                    let previewData = scratchBuffer.pcm16LittleEndianData(from: pcmSamples)
+                    // Skip the Data materialization on headless workloads
+                    // (env: QWENVOICE_STREAMING_PREVIEW_DATA=off). Default
+                    // path preserves the live-streaming preview the UI
+                    // consumes; opt-out path saves the per-chunk byte
+                    // copy.
+                    let previewData: Data = previewDataPolicy == .skip
+                        ? Data()
+                        : scratchBuffer.pcm16LittleEndianData(from: pcmSamples)
                     var chunkPath: String?
 
                     if let chunkWriter {
