@@ -418,9 +418,23 @@ actor NativeEngineRuntime {
                     request: request
                 )
             } else {
+                // For short Custom Voice prompts (~one sentence or less),
+                // skip the decoder-bucket precompile inside prewarm. The
+                // vendor exposes three depths — `.full`,
+                // `.skipDecoderBucket`, `.skipStreamStep` — and the
+                // bucket precompile is the largest cost in the prewarm
+                // pass. For long prompts it's worth doing up front (we
+                // amortize it across many tokens); for short prompts the
+                // decoder compiles on first decode without measurable
+                // user-visible delay. Same audio output either way —
+                // only WHERE the compile cost lands changes. Threshold
+                // is the warm-short bucket cutoff (~30 chars) so it
+                // matches the bench harness's warm-short cell.
+                let customPrewarmDepth = Self.customPrewarmDepth(for: request)
                 let prewarmTimings = try await ensureWarmStateIfNeeded(
                     for: request,
-                    model: model
+                    model: model,
+                    customPrewarmDepth: customPrewarmDepth
                 )
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
                 booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
@@ -817,6 +831,38 @@ actor NativeEngineRuntime {
         }
         return customPrewarmPolicy == .skipDedicatedCustomPrewarm
     }
+
+    /// Picks a prewarm depth based on prompt length. The vendor's
+    /// `Qwen3CustomVoicePrewarmDepth` enum has three options
+    /// (`.full`, `.skipDecoderBucket`, `.skipStreamStep`) and accepts
+    /// the raw string. `nil` resolves to `.full` (the default — used
+    /// for medium / long prompts that benefit from the decoder bucket
+    /// precompile being done up front).
+    ///
+    /// For short prompts (≤ shortPromptCharacterThreshold), return
+    /// `"skip-decoder-bucket"` — the decoder will compile on first
+    /// decode instead. Output is identical; only the latency
+    /// distribution changes. Worth doing for short prompts because
+    /// the prewarm cost matters more relative to the total generation
+    /// time at that scale (warm-short bench cell has ~0.9 s of
+    /// fixed overhead per the May 2026 baseline).
+    ///
+    /// Only Custom Voice today; Voice Design and Voice Cloning use a
+    /// different prewarm entry point that doesn't surface this depth
+    /// parameter to the public API.
+    private static func customPrewarmDepth(for request: GenerationRequest) -> String? {
+        guard case .custom = request.payload else { return nil }
+        let trimmed = request.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= shortPromptCharacterThreshold {
+            return "skip-decoder-bucket"
+        }
+        return nil
+    }
+
+    /// Roughly the warm-short bucket cutoff used in the bench
+    /// runbooks. Prompts at or below this length are eligible for
+    /// the lighter prewarm depth.
+    private static let shortPromptCharacterThreshold = 30
 
     private var customPrewarmPolicyLabel: String {
         switch customPrewarmPolicy {
