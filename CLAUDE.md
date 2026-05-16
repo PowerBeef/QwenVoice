@@ -121,6 +121,63 @@ Two-platform Swift codebase with an out-of-process engine on each platform.
 
 **Entitlements:** App sandbox is **disabled** (`com.apple.security.app-sandbox = false` in `Sources/QwenVoice.entitlements`) — required for MLX. Hardened runtime is on with allow-unsigned-memory and disable-library-validation flags.
 
+## Performance + memory adaptation (May 2026)
+
+Non-obvious runtime behavior added across the May 2026 Phase 1+2+3 rollout. Future agents modifying engine code should know about these.
+
+### Per-tier memory policy
+
+`NativeMemoryPolicyResolver` picks a policy per `NativeDeviceMemoryClass` (floor8GBMac, mid16GBMac, highMemoryMac, iPhonePro). Key tier-specific behaviors:
+
+- **floor8GBMac**: `clearCacheAfterGeneration: true`, `unloadAfterIdleSeconds: 120` (adaptive — see below), clone cache capacity = 1, `customPrewarmPolicy: .skipDedicatedCustomPrewarm` (`EngineServiceHost.swift` sets this conditionally). Custom Voice doesn't run a dedicated prewarm — the work moves into the first generation proper.
+- **mid16GBMac / highMemoryMac**: `customPrewarmPolicy: .eager`, longer idle windows, larger clone caches.
+- **iPhonePro**: tightest tier — cache 128 MB, unload after 30 s, clone cache = 1.
+
+### macOS runtime memory-pressure monitor
+
+`Sources/QwenVoiceCore/NativeMemoryPressureMonitor.swift` wraps `DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical])` on macOS. `MLXTTSEngine.initialize(...)` starts it on floor8GBMac and mid16GBMac. Kernel pressure events map to `NativeMemoryTrimLevel` and route to `runtime.trimMemory(level:reason:)` — softTrim clears MLX cache + clone soft-trim; hardTrim clears all warm state. iOS has its own host-side monitor (`IOSShellPrimitives.swift`) — don't add a second on iOS.
+
+### Adaptive idle-unload on floor8GBMac
+
+`MLXTTSEngine.adaptiveIdleUnloadDelay(...)` consults `memoryPressureMonitor.currentLevel` and shortens the 120 s default to 30 s under softTrim or 10 s under hardTrim. mid16GBMac and higher keep their baseline. The model reloads on the next generation (~500–700 ms cost) but peak RSS stays bounded.
+
+### Prewarm reentrancy gate (CRITICAL)
+
+`NativeEngineRuntime` is a Swift actor, but actors don't prevent reentrancy across suspension points. Both `ensureWarmStateIfNeeded` (Custom + Design + Clone path) and `ensureDesignConditioningWarmStateIfNeeded` call `try await model.prewarm*(...)`, which releases actor exclusivity while MLX work runs. Without protection, two callers (typically `prefetchInteractiveReadinessIfNeeded` + `prepareGeneration` racing on launch) reach MLX's KV cache slice updates concurrently and trip an assertion (crashed the engine in May 2026 — see `~/Library/Logs/DiagnosticReports/QwenVoiceEngineService-2026-05-15-162429.ips`).
+
+The fix is a monitor-style gate: `prewarmInFlight: Bool` + `prewarmWaiters: [CheckedContinuation<Void, Never>]` with `acquirePrewarmSlot()` / `releasePrewarmSlot()` helpers. Both ensure* methods call `await acquirePrewarmSlot()` first and `defer { releasePrewarmSlot() }`. **Do not remove the gate or restructure the prewarm path without preserving this serialization.**
+
+### Quality → Speed OOM fallback on floor8GBMac
+
+`MLXTTSEngine.loadModel(id:)` catches load failures on floor8GBMac. If the failed model was a Quality variant AND the error matches OOM heuristics (NSError localizedDescription contains "memory" / "allocate" / "allocation", or NSPOSIXErrorDomain ENOMEM), the engine retries with the Speed sibling derived via the registry. `visibleErrorMessage` surfaces "Switched to Speed (4-bit) — Quality didn't fit in memory." If the fallback ALSO fails, the original error propagates (no cascade).
+
+### Settings → Performance → "Always use Speed (4-bit) models"
+
+Global UserDefaults override at key `QwenVoice.PreferSpeedEverywhere`. When set, `TTSContract.activeModel(...)` short-circuits the per-mode preference and returns the Speed variant for every mode. Default false (preserves existing per-mode behavior). UI in `SettingsView.swift` with `accessibilityIdentifier("settings_preferSpeedEverywhere")`.
+
+### Prewarm signposts for bench traces
+
+Two OSSignposter events in `NativeEngineRuntime` for bench/forensics: `"Native Prewarm Cache Hit"` (fires when `loadCoordinator.isPrewarmed(...)` returns true) and `"Native Design Conditioning Reuse"` (fires on the `reused: true` branch of `ensureDesignConditioningWarmStateIfNeeded`). Future bench-* tooling can count hits vs misses.
+
+### Short-prompt Custom Voice prewarm depth
+
+`NativeEngineRuntime.customPrewarmDepth(for:)` returns `"skip-decoder-bucket"` for `.custom` requests with `text.count <= 30`. The vendor's `Qwen3CustomVoicePrewarmDepth` enum (in `third_party_patches/mlx-audio-swift`) accepts that string and skips the decoder-bucket precompile during prewarm — the decoder compiles on first decode instead. Same output audio, only latency distribution changes. Only fires on tiers where `customPrewarmPolicy: .eager` (mid16GBMac + highMemoryMac); floor8GBMac skips the whole dedicated prewarm anyway.
+
+### Headless-workload env vars
+
+- `QWENVOICE_STREAMING_PREVIEW_DATA=off` (or `skip` / `false` / `0` / `no`) — skips per-chunk `previewAudio.pcm16LE` Data allocation. Default emits. For bench/CI/batch where nobody is listening to live preview.
+- `QWENVOICE_STREAMING_OUTPUT_POLICY=file` — adds per-chunk file artifacts alongside the PCM preview. Default `pcm_preview` (PCM preview only, no per-chunk files).
+
+## Known traps
+
+### `shouldStream: true` is NOT acoustically identical to `shouldStream: false`
+
+The streaming-preview infrastructure exists end-to-end and looks like a transparent perceived-speed win (autoplay would fire on the first chunk ~1–2 s into generation instead of after the full WAV completes). Every coordinator (`CustomVoiceCoordinator.swift:106`, `VoiceDesignCoordinator.swift:191`, `VoiceCloningCoordinator.swift:214`, `IOSGenerationModeViews.swift:181,520,875`, `IOSGenerateFlowViews.swift:24,48`) pins `shouldStream: false`. **Do not flip this without bench-validating audio identity.**
+
+A May 2026 attempt to enable streaming was bench-rejected: all 6 cells (3 modes × cold/warm) showed `audio_rms_dbfs` and `audio_peak_dbfs` outside ±0.1 dB of the committed v3 baselines, with several cells exceeding ±1 dB peak deviation. The streaming path produces measurably different audio — likely model-side sampling/RNG divergence between `model.generate(streaming: true)` and `streaming: false`, not the limiter math (which is sequential and bit-identical). Until the divergence root cause is fixed in `mlx-audio-swift`, streaming is not a drop-in replacement.
+
+If a future agent wants to revisit streaming: the test is the existing bench harness — `bench-summarize` produces per-cell `audio_rms_dbfs` / `audio_peak_dbfs`; comparison against `fa94cc7` baselines is the quality gate.
+
 ## SPM dependencies (pinned in `project.yml`)
 
 - `MLXSwift` 0.30.6 (`https://github.com/ml-explore/mlx-swift.git`)
