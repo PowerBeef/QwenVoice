@@ -235,14 +235,62 @@ Sample line:
 2026-05-13 21:33:06.295 Sp Vocello[93368:53c81] [com.qwenvoice.app:performance] [spid excl, process, event] Final File Ready
 ```
 
-Stable substrings emitted by `AppPerformanceSignposts` (`Sources/Services/AppPerformanceSignposts.swift`):
+Stable substrings emitted by `AppPerformanceSignposts` (`Sources/Services/AppPerformanceSignposts.swift`) plus the engine-side signposter (`NativeStreamingSignposts`, different subsystem):
+
+**XPC layer (`com.qwenvoice.app:xpc`):**
 
 | Substring | Meaning |
 |---|---|
-| `XPC Engine Command` begin/end | One round-trip to the engine XPC service (begin/end pair, category `xpc`) |
-| `Preview To First Chunk` | First audio chunk decoded. **Streaming path only** — emitted from `AudioPlayerViewModel.completeStreamingPreview` (`Sources/SharedSupport/ViewModels/AudioPlayerViewModel.swift:475`), which is only invoked when `result.usedStreaming == true`. The macOS app's default generation path didn't take that branch in the first live bench run, so this signpost wasn't a reliable timing anchor. Bench `bench-record` still captures `first_chunk_ts` in `signpost_anchors` for forensics but `ms_engine_start_to_first_chunk` has been dropped from `bench-summarize`'s metric set. |
-| `Final File Ready` | The on-disk `.wav` is fully written (emitted in `Sources/SharedSupport/Services/GenerationPersistence.swift`) |
-| `Autoplay Start` | Playback has begun |
+| `XPC Engine Command` begin/end | One round-trip to the engine XPC service (begin/end pair) |
+
+**Engine-side streaming (`com.qwenvoice.engine:generation` — a DIFFERENT subsystem than the app's; query separately):**
+
+| Substring | Meaning |
+|---|---|
+| `Native Generation Stream` begin/end | Outer interval wrapping one streaming generation in the XPC service |
+| `Native First Audio Chunk` | First audio chunk emitted by the engine (`NativeStreamingSynthesisSession.swift:1052`) — measure cold-start engine latency by diffing this against the surrounding `Native Generation Stream` begin |
+
+**App-side streaming state machine (`com.qwenvoice.app:performance`)** — Phase 4 + 5 instrumentation. Each event lands in `Sources/SharedSupport/ViewModels/AudioPlayerViewModel.swift`. Reading them in chronological order reconstructs the streaming-preview state machine for any generation:
+
+| Substring | Meaning | Source |
+|---|---|---|
+| `Chunk Received` | Engine chunk arrived at `handleGenerationChunk` (broker delivery confirmed) | line 657 |
+| `Chunk Dropped Completed` | Chunk rejected because its sessionID is in `completedLiveSessionIDs` (stale-session guard) | line 659 |
+| `Live Session Start` | `startLiveSession` ran — new live-preview session is being set up | line 704 |
+| `Chunk Decoded` | `AVAudioPCMBuffer` decoded successfully from a chunk; buffer is about to be scheduled | line 772 / 826 (URL + StreamingAudioChunk variants) |
+| `Should Start Reject Autoplay` | `shouldStartLivePlayback` returned false because `autoplayEnabled == false` | line 142 |
+| `Should Start Reject Buffer` | `shouldStartLivePlayback` returned false because Policy 2's threshold (3 chunks AND 2.25 s queued duration) wasn't met | line 234 |
+| `Live Engine Play` | `livePlayerNode.play()` fired — live engine actually started playing buffered audio. **Key streaming-engagement signal** | line 891 |
+| `Stale Completion Dropped` | Buffer-completion callback from a previous session rejected by the `Phase 5 sessionID` guard (`be4dbcf`) | line 970 |
+| `Session Completed Recorded` | Session ID burnt to `completedLiveSessionIDs` (preview ended, stragglers will now be dropped) | line 693 |
+| `Switch To File Playback` | Live→file handoff: `switchToFinalFilePlayback` ran (preview's done; playing the final WAV instead) | line 1028 |
+| `Autoplay Start` | Playback actually began. Fires from BOTH paths — streaming live engine (line 891 region, after the `play()` call) AND file playback (line 1306). In streaming, this fires **before** `Final File Ready`; in file playback, **after** | line 1306 / via `consumeAutoplaySignpostIfNeeded` |
+
+**Dead-code signposts (defined but currently unreachable in production):**
+
+| Substring | Notes |
+|---|---|
+| `Preview To First Chunk` (interval), `First Chunk Received` (event) | Both gated on `prepareStreamingPreview` running, which has no production caller. Streaming auto-init via `handleGenerationChunk`'s call to `startLiveSession` bypasses these. Bench `bench-record` still captures `first_chunk_ts` for forensics if it fires, but `ms_engine_start_to_first_chunk` is consequently always `None` in current bench output. |
+
+**Final completion:**
+
+| Substring | Meaning |
+|---|---|
+| `Final File Ready` | The on-disk `.wav` is fully written (emitted in `Sources/SharedSupport/Services/GenerationPersistence.swift`) — canonical "generation complete" marker for both streaming and non-streaming paths |
+
+**Querying engine-side signposts requires a separate `log show` invocation** with a different predicate. The app subsystem `com.qwenvoice.app` does NOT see engine signposts:
+
+```sh
+# App-side state machine:
+/usr/bin/log show --signpost --predicate 'subsystem == "com.qwenvoice.app"' \
+    --last 5m --style compact
+
+# Engine-side timing anchors (Native First Audio Chunk, etc.):
+/usr/bin/log show --signpost --predicate 'subsystem CONTAINS "qwenvoice"' \
+    --last 5m --style compact
+```
+
+**Streaming-engagement diagnostic recipe.** When triaging a failed streaming sample (autoplay fires AFTER `Final File Ready` instead of before), capture the app-side trace and read it as a state-machine narrative. The healthy trace for a streaming sample is approximately: `Chunk Received` (×N) ∪ `Chunk Decoded` (×N) ∪ `Live Session Start` (×1, first chunk only) → `Live Engine Play` (×1, after Policy 2 threshold is met) → `Autoplay Start` (×1) → … more chunks … → `Final File Ready` → `Session Completed Recorded` → `Switch To File Playback`. Any deviation (e.g., `Live Engine Play` never firing despite many `Chunk Decoded` events; `Stale Completion Dropped` firing during a fresh session) pins down the failure mode. See the Phase 5 forensic narrative in CLAUDE.md's "Known traps" entry for worked examples.
 
 `Final File Ready` is the canonical "generation complete" marker. Poll for that substring in the log capture file. Note that `[Performance][...] autoplay_start_wall_ms=...` and similar lines go through `print()` (stderr), not OSLog — they only appear when the app's stderr is captured (e.g., launching the binary directly from a terminal), not from `log stream`.
 
