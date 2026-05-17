@@ -28,7 +28,7 @@ struct QwenVoiceApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "mainWindow") {
             mainWindowContent
         }
         .defaultSize(width: 720, height: 560)

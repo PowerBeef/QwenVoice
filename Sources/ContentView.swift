@@ -624,7 +624,6 @@ private struct HiddenWindowMarkers: View {
             .opacity(0.01)
             .frame(width: 1, height: 1)
             .allowsHitTesting(false)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(value)
             .accessibilityValue(value)
             .accessibilityIdentifier(identifier)

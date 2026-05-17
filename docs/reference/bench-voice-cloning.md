@@ -43,8 +43,7 @@ Prompts:
 
 ```sh
 ART=$(scripts/uitest.sh artifacts-dir)
-mcp__computer-use__request_access(applications: ["Vocello"])
-read SW SH < <(scripts/uitest.sh screen-size)
+mcp__computer_use__get_app_state(app: "Vocello")
 ```
 
 ### 1. Variant loop
@@ -61,12 +60,13 @@ scripts/uitest.sh activate
 
 #### 1b. Navigate, select variant, bind saved voice
 
-- Locate + click `sidebar_voiceCloning`.
+- `scripts/uitest.sh window-locate sidebar_voiceCloning` → `mcp__computer_use__click`.
 - Verify with `locate screen_voiceCloning`.
 - Select variant via the segmented control. First contact:
-  1. Try `scripts/uitest.sh locate voiceCloning_variant_speed` / `voiceCloning_variant_quality`. Record what works.
-  2. Otherwise click visually.
-- Locate + click `voiceCloning_savedVoicePicker`, screenshot to see the open menu, click the `UITestRef` menu item.
+  1. Try `scripts/uitest.sh window-locate voiceCloning_speedVariantButton` / `voiceCloning_qualityVariantButton`.
+  2. If direct button IDs fail, try `voiceCloning_modelVariantPicker` and `voiceCloning_modelVariantSelector` as anchors.
+  3. Otherwise click visually.
+- `scripts/uitest.sh window-locate voiceCloning_savedVoicePicker` → `mcp__computer_use__click`, screenshot to see the open menu, click the `UITestRef` menu item.
 - Verify with `locate voiceCloning_activeReference` (exit 0 means a reference is bound).
 
 **Verify variant first** via screenshot (see `bench-custom-voice.md` — same caveat).
@@ -79,7 +79,7 @@ python3 -c "import datetime as dt; d=dt.datetime.now(); print(d.strftime('%Y-%m-
 
 #### 1c. Cold sample (medium prompt)
 
-`computer_batch`: click `textInput_textEditor` → type medium prompt → `cmd+return`.
+In order: click `textInput_textEditor` → type medium prompt → `super+Return`.
 
 ```sh
 scripts/uitest.sh bench-step clone "$variant" cold medium --artifacts-dir "$ART" --timeout 180
@@ -89,7 +89,7 @@ scripts/uitest.sh bench-step clone "$variant" cold medium --artifacts-dir "$ART"
 
 For each `bucket` in `[short, medium, long]`, repeat 3 times:
 
-`computer_batch`: click `textInput_textEditor` → `cmd+a` → `delete` → type bucket prompt → `cmd+return`. **Don't touch the saved-voice picker** between warm samples.
+In order: click `textInput_textEditor` → `super+a` → `BackSpace` → type bucket prompt → `super+Return`. **Don't touch the saved-voice picker** between warm samples.
 
 ```sh
 scripts/uitest.sh bench-step clone "$variant" warm "$bucket" --artifacts-dir "$ART"

@@ -156,6 +156,13 @@ struct ScriptTextEditor: NSViewRepresentable {
         textView.onFocusChange = { focused in
             DispatchQueue.main.async { isFocused = focused }
         }
+        #if DEBUG
+        // Codex Computer Use build 793 crashes while transforming the
+        // AppKit NSTextView AXTextArea subtree. Keep the outer scroll view
+        // discoverable via textInput_textEditor and let UI tests click it
+        // by coordinates, but hide the nested text area in Debug builds.
+        textView.setAccessibilityElement(false)
+        #endif
 
         scrollView.hasVerticalScroller = true
         scrollView.scrollerStyle = .overlay

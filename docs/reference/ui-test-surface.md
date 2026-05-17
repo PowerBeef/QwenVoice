@@ -1,15 +1,24 @@
 # UI Test Surface
 
-Reference for a Claude Code session driving the **Debug build** of Vocello via the computer-use MCP. Pair this with [`smoke-custom-voice.md`](smoke-custom-voice.md) for the first end-to-end runbook.
+Reference for a Codex session driving the **Debug build** of Vocello via the computer-use MCP. Pair this with [`smoke-custom-voice.md`](smoke-custom-voice.md) for the first end-to-end runbook.
 
 ## Permissions
 
-Computer-use access is granted per session and is not persisted. At the top of any session that drives the app:
+Computer Use access is initialized per assistant turn. At the top of any turn that drives Vocello:
 
-1. Call `mcp__computer-use__request_access` with `applications: ["Vocello"]`. Vocello is a normal native app — tier "full" — so clicks, typing, modifier keys all work.
-2. System-wide: macOS Accessibility permission must already be granted to the controlling app (Claude). If `osascript` System Events calls return permission errors, the user grants in *System Settings → Privacy & Security → Accessibility*.
+1. Call `mcp__computer_use__get_app_state(app: "Vocello")`. This starts or refreshes the app-use session and returns the current key-window screenshot plus accessibility tree.
+2. System-wide: macOS Accessibility permission must already be granted to the controlling app (Codex). If `osascript` System Events calls return permission errors, the user grants in *System Settings → Privacy & Security → Accessibility*.
 
 The `osascript` calls inside `scripts/uitest.sh locate` rely on the same Accessibility permission and will surface the OS prompt the first time if not yet granted.
+
+Current Codex Computer Use tool mapping:
+
+| Action | Tool |
+|---|---|
+| Refresh visual state | `mcp__computer_use__get_app_state(app: "Vocello")` |
+| Click coordinates | `mcp__computer_use__click(app: "Vocello", x: <x>, y: <y>)` |
+| Type text | `mcp__computer_use__type_text(app: "Vocello", text: "...")` |
+| Press shortcut / key | `mcp__computer_use__press_key(app: "Vocello", key: "...")` |
 
 ## Keyboard shortcuts
 
@@ -17,10 +26,12 @@ Some actions don't have an obvious visible button on the default macOS window si
 
 | Shortcut | Effect | Context |
 |---|---|---|
-| `cmd+return` | Trigger Generate on the current generation screen | Custom Voice (confirmed). Likely Voice Design and Voice Cloning too — verify when first used. |
-| `cmd+,` | Open Settings window | Standard macOS convention; the app uses it. |
+| `super+Return` | Trigger Generate on the current generation screen | Custom Voice (confirmed). Likely Voice Design and Voice Cloning too — verify when first used. |
+| `super+a` | Select text in the focused field | Useful before replacing prompt text between samples. |
+| `BackSpace` | Delete selected text | Use after `super+a`; Codex key syntax uses `BackSpace`, not `delete`. |
+| `super+comma` | Open Settings window | Standard macOS convention; the app uses it. |
 
-The runbook prefers `cmd+return` over hunting for a Generate button.
+The runbook prefers `super+Return` over hunting for a Generate button.
 
 ## Click vocabulary
 
@@ -54,8 +65,8 @@ All three generation screens embed `TextInputView`, which exposes the same ident
 
 | Identifier | Kind | Purpose |
 |---|---|---|
-| `textInput_textEditor` | text field | The script text area. Click center, then `type` to populate. |
-| `textInput_generateButton` | button | Generate (also bound to `Cmd+Return`). |
+| `textInput_textEditor` | text field | The script text area. Click center, then `type_text` to populate. |
+| `textInput_generateButton` | button | Generate (Computer Use key: `super+Return`; macOS shortcut: Cmd+Return). |
 | `textInput_batchButton` | button | Batch generation mode toggle. |
 | `textInput_charCount` | label | Character count display. |
 
@@ -67,7 +78,7 @@ This is the most useful identifier for autonomous driving — the script field f
 |---|---|---|
 | `screen_customVoice` | container | Custom Voice screen container |
 
-Variant toggle and speaker/delivery pickers don't have unique AX ids catalogued yet; use `customVoice_*` guesses with `locate` on first contact and add what you find.
+Variant toggle IDs in source are `customVoice_speedVariantButton`, `customVoice_qualityVariantButton`, `customVoice_modelVariantPicker`, and `customVoice_modelVariantSelector`.
 
 #### Voice Design fields
 
@@ -83,7 +94,7 @@ Variant toggle and speaker/delivery pickers don't have unique AX ids catalogued 
 | `voiceDesign_saveVoiceButton` | button | "Save to Saved Voices" after a successful generation |
 | `voiceDesign_saveVoiceCompleted` | badge | Replaces the save button once enrollment succeeds |
 
-Variant toggle uses `GenerationVariantSelector` with prefix `voiceDesign` — likely `voiceDesign_variant_speed` / `voiceDesign_variant_quality`. Confirm on first contact.
+Variant toggle uses `GenerationVariantSelector` with prefix `voiceDesign`: `voiceDesign_speedVariantButton`, `voiceDesign_qualityVariantButton`, `voiceDesign_modelVariantPicker`, and `voiceDesign_modelVariantSelector`.
 
 #### Voice Cloning fields
 
@@ -190,18 +201,22 @@ Voice Cloning requires a pre-existing saved voice for autonomous runs (the alter
 
 ## Locating an element
 
-Preferred: `scaled-locate` does the scaling for you in one shot.
+Preferred for Codex Computer Use: `window-locate` returns coordinates relative to Vocello's front window, which matches `get_app_state` screenshots and `click` coordinates.
 
 ```sh
-# Pass the pixel dimensions of your most recent computer-use screenshot.
-scripts/uitest.sh scaled-locate sidebar_customVoice 1456 816
-# returns coords already in screenshot-image space:
-# 470 250 230 39
+# With no dimensions, returns front-window logical coordinates:
+scripts/uitest.sh window-locate sidebar_customVoice
+# 206 156 202 34
+
+# If the get_app_state screenshot dimensions differ from the AX window size,
+# pass that screenshot's pixel width and height to scale in one shot:
+scripts/uitest.sh window-locate sidebar_customVoice 1280 690
+# returns coords already in screenshot-image space.
 ```
 
-Click directly: `mcp__computer-use__left_click(x=470, y=250)`. Bring Vocello to the front first if a notification or another app may have stolen focus (`mcp__computer-use__open_application("Vocello")` or `scripts/uitest.sh activate`).
+Click directly: `mcp__computer_use__click(app: "Vocello", x: 206, y: 156)`. Bring Vocello to the front first if a notification or another app may have stolen focus (`scripts/uitest.sh activate`, then refresh with `get_app_state`).
 
-For reference, the raw `locate` form remains:
+For reference, the raw legacy `locate` form remains:
 
 ```sh
 scripts/uitest.sh locate sidebar_customVoice
@@ -209,13 +224,13 @@ scripts/uitest.sh locate sidebar_customVoice
 # 413 221 202 34
 ```
 
-`screen-size` returns the logical screen dimensions (`1280 720` on this Mac); `scaled-locate` internally does `cx * image_w / screen_w` and the equivalent for y.
+`screen-size` returns the logical screen dimensions (`1280 720` on this Mac); `scaled-locate` internally does `cx * image_w / screen_w` and the equivalent for y. Keep it only for full-screen screenshots or older runbooks.
 
 ### When `locate` won't find an element
 
 Some elements aren't queryable even though they have `accessibilityIdentifier(...)` in source:
 
-- The Speed/Quality variant toggle buttons (`<mode>_speedVariantButton`, `<mode>_qualityVariantButton`) are inside a `GenerationVariantSelector` that uses `.accessibilityElement(children: .contain)`, which collapses the inner buttons from external accessibility queries. Only the outer container `<mode>_modelVariantPicker` is exposed, with non-spanning bounds that don't cover both segments. **Variant toggling must be done by visual click.** On a 1456×816 screenshot the Speed button is at approximately (1023, 170) and Quality at (1091, 170), stable across Custom Voice / Voice Design / Voice Cloning since they share the same Configuration card layout.
+- The Speed/Quality variant toggle buttons are `customVoice_speedVariantButton`, `customVoice_qualityVariantButton`, `voiceDesign_speedVariantButton`, `voiceDesign_qualityVariantButton`, `voiceCloning_speedVariantButton`, and `voiceCloning_qualityVariantButton`. Try `window-locate` on those exact IDs first. If the current SwiftUI accessibility tree still hides them, use the outer `<mode>_modelVariantPicker` / `<mode>_modelVariantSelector` as an anchor and click visually within that control.
 
 - Saved-voice dropdown menu items (`UITestRef` etc.) similarly aren't exposed once the dropdown is open — click visually.
 
@@ -290,7 +305,7 @@ Stable substrings emitted by `AppPerformanceSignposts` (`Sources/Services/AppPer
     --last 5m --style compact
 ```
 
-**Streaming-engagement diagnostic recipe.** When triaging a failed streaming sample (autoplay fires AFTER `Final File Ready` instead of before), capture the app-side trace and read it as a state-machine narrative. The healthy trace for a streaming sample is approximately: `Chunk Received` (×N) ∪ `Chunk Decoded` (×N) ∪ `Live Session Start` (×1, first chunk only) → `Live Engine Play` (×1, after Policy 2 threshold is met) → `Autoplay Start` (×1) → … more chunks … → `Final File Ready` → `Session Completed Recorded` → `Switch To File Playback`. Any deviation (e.g., `Live Engine Play` never firing despite many `Chunk Decoded` events; `Stale Completion Dropped` firing during a fresh session) pins down the failure mode. See the Phase 5 forensic narrative in CLAUDE.md's "Known traps" entry for worked examples.
+**Streaming-engagement diagnostic recipe.** When triaging a failed streaming sample (autoplay fires AFTER `Final File Ready` instead of before), capture the app-side trace and read it as a state-machine narrative. The healthy trace for a streaming sample is approximately: `Chunk Received` (×N) ∪ `Chunk Decoded` (×N) ∪ `Live Session Start` (×1, first chunk only) → `Live Engine Play` (×1, after Policy 2 threshold is met) → `Autoplay Start` (×1) → … more chunks … → `Final File Ready` → `Session Completed Recorded` → `Switch To File Playback`. Any deviation (e.g., `Live Engine Play` never firing despite many `Chunk Decoded` events; `Stale Completion Dropped` firing during a fresh session) pins down the failure mode. See the Phase 5 forensic narrative in AGENTS.md's "Known traps" entry for worked examples.
 
 `Final File Ready` is the canonical "generation complete" marker. Poll for that substring in the log capture file. Note that `[Performance][...] autoplay_start_wall_ms=...` and similar lines go through `print()` (stderr), not OSLog — they only appear when the app's stderr is captured (e.g., launching the binary directly from a terminal), not from `log stream`.
 
@@ -362,7 +377,7 @@ The `build/uitest/` parent is wiped by `scripts/build.sh clean` along with the r
 ## Session flow (typical)
 
 ```
-1. mcp__computer-use__request_access(["Vocello"])
+1. mcp__computer_use__get_app_state(app: "Vocello")
 2. scripts/build.sh debug                 # if Debug build is stale or missing
 3. scripts/uitest.sh smoke-check          # confirm prerequisites
 4. scripts/uitest.sh reset                # known-clean baseline
@@ -370,10 +385,10 @@ The `build/uitest/` parent is wiped by `scripts/build.sh clean` along with the r
 6. ART=$(scripts/uitest.sh artifacts-dir)
 7. (scripts/uitest.sh logs > "$ART/log.txt" 2>&1 &)   # background, signpost-aware
 8. scripts/uitest.sh prep                 # launch app
-9. mcp__computer-use__open_application(app: "Vocello")   # ensure frontmost
+9. scripts/uitest.sh activate             # ensure frontmost
 10. /usr/sbin/screencapture -x "$ART/pre.png"
-11. mcp__computer-use__screenshot         # for the agent's reasoning
-12. <drive UI: locate → scale by (IW/SW, IH/SH) → left_click → type → cmd+return>
+11. mcp__computer_use__get_app_state(app: "Vocello")   # for the agent's reasoning
+12. <drive UI: window-locate → click → type_text → super+Return>
 13. <poll $ART/log.txt for "Final File Ready">
 14. scripts/uitest.sh db "SELECT ..."     # verify DB row
 15. /usr/sbin/screencapture -x "$ART/post.png"
@@ -387,9 +402,10 @@ That flow is the structure every future test runbook should follow.
 
 Real macOS sessions throw curve balls. Handle them, don't fight them.
 
-- **macOS notification appeared and stole focus.** `mcp__computer-use__left_click` returns an error naming `UserNotificationCenter` (or another non-allowed app) as frontmost. Recovery: take a fresh screenshot to confirm the notification has self-dismissed, then run `scripts/uitest.sh activate` to re-front Vocello, and retry the click.
+- **macOS notification appeared and stole focus.** `mcp__computer_use__click` returns an error naming `UserNotificationCenter` (or another non-allowed app) as frontmost. Recovery: take a fresh `get_app_state` to confirm the notification has self-dismissed, then run `scripts/uitest.sh activate` to re-front Vocello, and retry the click.
+- **`get_app_state` returns only `remoteConnection`, then `click` says Computer Use is not active.** This is a Codex tool-session issue, not a Vocello AX lookup failure. Re-run `scripts/uitest.sh activate`, retry `get_app_state`, and if it still happens, record the failure in the run notes and use the shell helpers (`locate`, `window-locate`, `bench-wait`, `bench-record`) for diagnosis instead of updating baselines.
 - **Click landed but nothing happened.** Usually means Vocello wasn't frontmost (gray traffic lights in the screenshot are the giveaway — focused windows show red/yellow/green). Run `scripts/uitest.sh activate` and retry.
-- **`locate` returns coords but the click misses by ~15%.** You forgot to scale from logical-points to screenshot-pixels. See the *Locating an element* section.
+- **`locate` returns coords but the click misses.** You used legacy screen coordinates against a window screenshot. Prefer `window-locate` for Codex Computer Use clicks.
 - **App opened to the wrong tab (Settings instead of Custom Voice).** Expected — Vocello restores the last-selected sidebar tab from a previous session. Just `locate sidebar_customVoice` and click; the smoke runbook already handles this.
 - **`locate` itself fails with "no front window for Vocello".** Either the app hasn't laid out its window yet (wait 500 ms, retry), or Vocello is hidden behind another window (run `activate` first).
 
@@ -406,7 +422,7 @@ Element 2 added five subcommands to `scripts/uitest.sh` that build on the same s
 | Subcommand | Purpose |
 |---|---|
 | `bench-wait [--since <ts>] [--timeout <sec>]` | Block until the next `Final File Ready` signpost after `<ts>`. |
-| `bench-record <variant> <coldwarm> <bucket> --artifacts-dir <dir>` | Append one sample (timings, audio file, DB row, RTF) to `<dir>/bench-samples.jsonl`. |
+| `bench-record <mode> <variant> <coldwarm> <bucket> --artifacts-dir <dir>` | Append one sample (timings, audio file, DB row, RTF) to `<dir>/bench-samples.jsonl`. |
 | `bench-summarize <artifacts-dir>` | Group samples and emit `<dir>/bench-result.json` with count/mean/median/p95/min/max/stdev per (variant, phase, bucket, metric). |
 | `bench-compare <artifacts-dir> [--baseline <path>]` | Diff a result against `docs/reference/benchmark-baselines.json`; emit a Markdown table; exit 1 on ±15 % breach. |
 | `bench-update-baselines [--from <path>]` | Overwrite the committed baseline with the latest summary (review `git diff` before committing). |

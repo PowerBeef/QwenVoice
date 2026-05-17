@@ -16,7 +16,7 @@ This folder contains the current repo-authored documentation for QwenVoice.
 
 ### Autonomous UI testing & bench
 
-The Debug build is drivable by a Claude Code session via the computer-use MCP. The harness lives in `scripts/uitest.sh`; runbooks under `reference/` capture the per-scenario flow:
+The Debug build is drivable by a Codex session via the computer-use MCP. The harness lives in `scripts/uitest.sh`; runbooks under `reference/` capture the per-scenario flow:
 
 - [`reference/ui-test-surface.md`](reference/ui-test-surface.md) — agent's reference: accessibility-identifier vocabulary by screen, completion signals (signposts + DB + file), per-sample bench metrics, scaling caveats
 - [`reference/bootstrap-saved-voice.md`](reference/bootstrap-saved-voice.md) — one-time autonomous setup of the `UITestRef` saved-voice fixture via Voice Design (no file picker required)
@@ -62,5 +62,5 @@ Supplemental guides are useful, but they are not the primary source of truth for
 
 - Maintained contributor guidance in this checkout lives in `CONTRIBUTING.md` and the maintained reference docs listed above.
 - This repo does not maintain project-scoped QwenVoice skills; contributor guidance lives in the maintained docs above.
-- Current automation surfaces live in `scripts/`. There are no GitHub workflows and no XCTest target — both were retired in May 2026. Builds, packaging, signing, notarization, and TestFlight prep run **locally on Mac mini M2** via `scripts/check_project_inputs.sh`, `scripts/build_foundation_targets.sh`, `scripts/release.sh`, and `scripts/release_ios_testflight.sh`. Behavioral verification is twofold: (a) manual — launch the app and exercise the affected paths by hand, and (b) agent-driven — a Claude Code session can drive `Vocello.app` via the computer-use MCP, following the smoke and bench runbooks above. The agent-driven harness lives in `scripts/uitest.sh` plus the runbooks under `reference/`; it's distinct from the XCTest / CI / Python-benchmark harnesses `check_project_inputs.sh` actively bans.
+- Current automation surfaces live in `scripts/`. There are no GitHub workflows and no XCTest target — both were retired in May 2026. Builds, packaging, signing, notarization, and TestFlight prep run **locally on Mac mini M2** via `scripts/check_project_inputs.sh`, `scripts/build_foundation_targets.sh`, `scripts/release.sh`, and `scripts/release_ios_testflight.sh`. Behavioral verification is twofold: (a) manual — launch the app and exercise the affected paths by hand, and (b) agent-driven — a Codex session can drive `Vocello.app` via the computer-use MCP, following the smoke and bench runbooks above. The agent-driven harness lives in `scripts/uitest.sh` plus the runbooks under `reference/`; it's distinct from the XCTest / CI / Python-benchmark harnesses `check_project_inputs.sh` actively bans.
 - Generated or vendored dependency documentation is intentionally out of scope for the repo docs.

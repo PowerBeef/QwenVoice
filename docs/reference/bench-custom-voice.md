@@ -24,7 +24,7 @@ Cold runs capture model-load + first-generation latency. Warm runs hit the stead
 
 - Debug build present (`scripts/build.sh debug` if missing).
 - `scripts/uitest.sh smoke-check` exits 0 (Custom Voice model variants installed).
-- macOS Accessibility permission granted to Claude.
+- macOS Accessibility permission granted to Codex.
 - 5–10 minutes of uninterrupted Vocello time.
 
 ## Fixed prompts
@@ -44,11 +44,10 @@ Speaker stays at the app default (Aiden); Delivery stays `Neutral` / `Subtle`. D
 ```sh
 ART=$(scripts/uitest.sh artifacts-dir)
 echo "$ART"
-mcp__computer-use__request_access(applications: ["Vocello"])
-read SW SH < <(scripts/uitest.sh screen-size)
+mcp__computer_use__get_app_state(app: "Vocello")
 ```
 
-Record `$ART`, `$SW`, `$SH` — you'll reuse them throughout.
+Record `$ART` — you'll reuse it throughout.
 
 ### 1. Variant loop
 
@@ -64,13 +63,14 @@ scripts/uitest.sh activate         # ensure frontmost
 
 #### 1b. Navigate to Custom Voice + select variant
 
-- `scripts/uitest.sh locate sidebar_customVoice` → click center (after scaling by `IW/SW, IH/SH`).
+- `scripts/uitest.sh window-locate sidebar_customVoice` → `mcp__computer_use__click`.
 - Verify with `scripts/uitest.sh locate screen_customVoice` (exit 0 = on the right screen).
-- Select the variant via the segmented control at the top-right of the Configuration card. It does **not** have a catalogued accessibility identifier yet — first time you do this, try:
-  1. `scripts/uitest.sh locate customVoice_variantSpeed` and `customVoice_variantQuality`. If either succeeds, record both in `ui-test-surface.md` and reuse.
-  2. Otherwise screenshot, find the Speed / Quality buttons visually (top-right of the Configuration card), and click. Note the coordinates in the run's `result.json` notes so a future calibration step can codify them.
+- Select the variant via the segmented control at the top-right of the Configuration card:
+  1. Use `scripts/uitest.sh window-locate customVoice_speedVariantButton` and `customVoice_qualityVariantButton` first; these are the canonical button IDs.
+  2. If direct button IDs fail, try the container IDs `customVoice_modelVariantPicker` and `customVoice_modelVariantSelector` as anchors.
+  3. Otherwise screenshot, find the Speed / Quality buttons visually (top-right of the Configuration card), and click. Note the coordinates in the run's `result.json` notes so a future calibration step can codify them.
 
-**Verify variant first.** After clicking Speed or Quality, take a screenshot and confirm the desired button is gold-highlighted. There is no programmatic way to query the selected variant — `GenerationVariantSelector` uses `.accessibilityElement(children: .contain)` which collapses the segment buttons from external accessibility queries (see `ui-test-surface.md`). If the visual doesn't match what the runbook expects, abort and re-click.
+**Verify variant first.** After clicking Speed or Quality, take a screenshot and confirm the desired button is gold-highlighted. If the visual doesn't match what the runbook expects, abort and re-click.
 
 **Initial T0.** Before the first generation in a `(mode, variant)` pass, prime the T0 file:
 
@@ -86,7 +86,7 @@ For each of three cold samples:
 
 1. (Skip on the first iteration; the fresh launch from step 1a counts.) `scripts/uitest.sh reset && scripts/uitest.sh prep && scripts/uitest.sh activate` — quit, wipe state, relaunch.
 2. Re-navigate to Custom Voice + re-select variant per step 1b (visual verification still required).
-3. Issue ONE `computer_batch` containing: click the script field (`textInput_textEditor`), type the medium prompt, send `cmd+return`.
+3. In order: `window-locate textInput_textEditor` → `mcp__computer_use__click`; `mcp__computer_use__type_text(app: "Vocello", text: "<medium prompt>")`; `mcp__computer_use__press_key(app: "Vocello", key: "super+Return")`.
 4. `scripts/uitest.sh bench-step custom "$variant" cold medium --artifacts-dir "$ART" --timeout 180`.
 
 `bench-step` reads `/tmp/uitest_bench_t0` for the previous T0, waits for `Final File Ready`, records the sample, and writes a fresh T0 for the next call. No manual `date` capture between samples.
@@ -95,7 +95,7 @@ For each of three cold samples:
 
 For each `bucket` in `[short, medium, long]`, repeat 3 times:
 
-`computer_batch`: click `textInput_textEditor` → `cmd+a` → `delete` → type bucket prompt → `cmd+return`.
+In order: click `textInput_textEditor` → `super+a` → `BackSpace` → type bucket prompt → `super+Return`.
 
 ```sh
 scripts/uitest.sh bench-step custom "$variant" warm "$bucket" --artifacts-dir "$ART"

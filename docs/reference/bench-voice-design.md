@@ -45,8 +45,7 @@ Prompts:
 
 ```sh
 ART=$(scripts/uitest.sh artifacts-dir)
-mcp__computer-use__request_access(applications: ["Vocello"])
-read SW SH < <(scripts/uitest.sh screen-size)
+mcp__computer_use__get_app_state(app: "Vocello")
 ```
 
 ### 1. Variant loop
@@ -63,14 +62,15 @@ scripts/uitest.sh activate
 
 #### 1b. Navigate to Voice Design + select variant + fill description
 
-- Locate + click `sidebar_voiceDesign` (scale coords).
+- `scripts/uitest.sh window-locate sidebar_voiceDesign` → `mcp__computer_use__click`.
 - Verify with `locate screen_voiceDesign` (exit 0).
-- Select variant via the segmented control. First contact:
-  1. Try `scripts/uitest.sh locate voiceDesign_variant_speed` and `voiceDesign_variant_quality`. Record what works in `ui-test-surface.md`.
-  2. Otherwise click visually (top-right of the configuration card) and note the coordinates.
-- Locate + click `voiceDesign_voiceDescriptionField`, then `mcp__computer-use__type` the fixed description.
+- Select variant via the segmented control:
+  1. Use `scripts/uitest.sh window-locate voiceDesign_speedVariantButton` and `voiceDesign_qualityVariantButton` first; these are the canonical button IDs.
+  2. If direct button IDs fail, try `voiceDesign_modelVariantPicker` and `voiceDesign_modelVariantSelector` as anchors.
+  3. Otherwise click visually (top-right of the configuration card) and note the coordinates.
+- `scripts/uitest.sh window-locate voiceDesign_voiceDescriptionField` → `mcp__computer_use__click`, then `mcp__computer_use__type_text(app: "Vocello", text: "<fixed description>")`.
 
-**Verify variant first** via screenshot (see `bench-custom-voice.md` — same caveat applies; `GenerationVariantSelector` button-level AX ids aren't queryable).
+**Verify variant first** via screenshot (see `bench-custom-voice.md`).
 
 **Initial T0.** Before the first generation in a `(mode, variant)` pass:
 
@@ -80,7 +80,7 @@ python3 -c "import datetime as dt; d=dt.datetime.now(); print(d.strftime('%Y-%m-
 
 #### 1c. Cold sample (medium prompt)
 
-`computer_batch`: click `textInput_textEditor` → type medium prompt → `cmd+return`.
+In order: click `textInput_textEditor` → type medium prompt → `super+Return`.
 
 ```sh
 scripts/uitest.sh bench-step design "$variant" cold medium --artifacts-dir "$ART" --timeout 240
@@ -92,7 +92,7 @@ VD/Quality cold has been seen taking >180 s on Apple M2 — the 240 s timeout gi
 
 For each `bucket` in `[short, medium, long]`, repeat 3 times:
 
-`computer_batch`: click `textInput_textEditor` → `cmd+a` → `delete` → type bucket prompt → `cmd+return`. **Do not** clear or re-type the voice description; it persists between samples and we want to bench the steady-state generate path.
+In order: click `textInput_textEditor` → `super+a` → `BackSpace` → type bucket prompt → `super+Return`. **Do not** clear or re-type the voice description; it persists between samples and we want to bench the steady-state generate path.
 
 ```sh
 scripts/uitest.sh bench-step design "$variant" warm "$bucket" --artifacts-dir "$ART"

@@ -1,166 +1,72 @@
 # Gemini Voice Review (runbook)
 
-Reusable procedure for getting a structured, human-comparable review of a Vocello-generated audio sample by piping it through Google's Gemini multimodal LLM via the web app. The bench harness measures timing + audio RMS/peak; this procedure adds the **subjective dimensions** (naturalness, emotion match, pronunciation, artifacts) that only ear-on-output evaluation can confirm.
+Reusable procedure for getting a structured, human-comparable review of a Vocello-generated audio sample through Gemini. The bench harness measures timing, RMS/peak, and memory; this procedure adds subjective dimensions such as naturalness, emotion match, pronunciation, and artifacts.
 
 Use this when:
 
-- You changed something in the audio path (decoder, limiter, WAV writer) and want a second-opinion read on whether the audio still sounds right, beyond what RMS/peak gates can detect.
-- You want comparable cross-sample reviews (same prompt template → same Markdown sections → trivially diff-able).
-- You don't want to recruit a human listener for every regression check.
+- Audio-path code changed and RMS/peak alone cannot prove the sample still sounds right.
+- You want comparable cross-sample reviews with one fixed prompt template.
+- You want Gemini to act as the multimodal/audio reviewer while Codex prepares context and records the result.
 
-Use the **Réflexion / Thinking** model (not Pro — overkill for this task; not Rapide — too shallow). Réflexion gives the best speed/quality balance for nuanced perceptual review.
+## Policy
 
----
+Uploading a generated WAV to Gemini transmits local data to Google. Codex must get explicit user confirmation at action time before uploading a file through Chrome. If upload automation is flaky, stop and use the manual fallback instead of spending a long session fighting the web UI.
+
+Do not make any repo workflow depend on a Claude subscription or a Claude-specific browser MCP. Codex may prepare the review prompt, locate the WAV, open Gemini, and save the returned review, but the upload/review step must remain explicit and reproducible.
 
 ## Prerequisites
 
 | Requirement | How to satisfy |
 |---|---|
-| Chrome + Claude-in-Chrome MCP extension connected | `mcp__Claude_in_Chrome__list_connected_browsers` returns ≥ 1 entry. Install via the Claude.ai Chrome extension if absent. |
-| Gemini account signed in | The Gemini tab shows the user's avatar (not "Sign in"). Already done if `gemini.google.com/app` opens directly to the prompt UI. |
-| **One-time file-upload consent accepted** | On first upload attempt, Gemini shows a "Création de contenu à partir d'images et de fichiers" / "Content generation from images and files" dialog. Accept it once per profile — the click is `mcp__Claude_in_Chrome__computer left_click` at the **Accepter / Accept** button. Subsequent reviews don't see it. |
-| Vocello WAV file present on disk | Defaults under `~/Library/Application Support/QwenVoice-Debug/outputs/<Mode>/<timestamp>_<text-prefix>.wav` (mode = `CustomVoice`, `VoiceDesign`, `Clones`). Pick a recent file. |
+| Chrome signed into Gemini | `https://gemini.google.com/app` opens to the prompt UI. |
+| Codex Chrome control available | Use the Chrome plugin / `mcp__chrome_devtools__*` tools when browser automation is needed. |
+| Vocello WAV file present on disk | Defaults under `~/Library/Application Support/QwenVoice-Debug/outputs/<Mode>/<timestamp>_<text-prefix>.wav`. |
+| Sample context known | Mode, exact script text, delivery, speaker/voice description, and commit hash. |
 
----
+## Recommended Flow
 
-## Why this is semi-automated (not fully)
+1. **Create a review bundle.**
+   - Make `build/voice-reviews/<UTC-timestamp>-<mode>-<wav-basename>/`.
+   - Copy or reference the source WAV.
+   - Write `review_prompt.md` using the prompt template below.
+   - Record metadata: mode, prompt text, delivery, speaker/voice context, audio duration, `git rev-parse --short HEAD`.
 
-Gemini's web app uses the **File System Access API** (`window.showOpenFilePicker`) for "Téléverser des fichiers". This opens a native OS file picker dialog and never creates a persistent `<input type="file">` element in the DOM. Two consequences:
+2. **Open Gemini in Chrome.**
+   - Use `mcp__chrome_devtools__new_page(url: "https://gemini.google.com/app")` or select an existing Gemini tab.
+   - Use `mcp__chrome_devtools__take_snapshot()` to find the prompt field, model selector, upload affordance, and send button.
+   - Prefer a Gemini model that accepts audio and gives thoughtful multimodal review. If the product renames models, record the visible model name in the saved review.
 
-- `mcp__Claude_in_Chrome__file_upload` **cannot be used** — it requires a ref to an `<input type="file">` element, which Gemini doesn't expose.
-- The OS file picker is a separate Chrome dialog window. macOS computer-use grants Chrome at tier "read" (clicks/typing blocked), so the picker can't be driven by `mcp__computer-use__*` either.
+3. **Upload the WAV only after confirmation.**
+   - Ask the user to confirm the exact file path and Gemini destination immediately before upload.
+   - First try `mcp__chrome_devtools__upload_file(filePath: "<absolute WAV path>", uid: "<upload control uid>")` if the snapshot exposes an upload control.
+   - If Gemini uses a native picker or the upload control is not automatable, use the manual fallback: ask the user to drag the WAV from Finder onto Gemini's prompt bar, then confirm when the file chip appears.
 
-The workable path is **drag-and-drop from Finder**: the user drags the WAV from a Finder window onto Gemini's prompt area. That's one ~2-second gesture; everything else (find textarea, type prompt, submit, wait, capture, save) is fully automated. A future fully-automated path is described in "Advanced: fully automated mode" below — it works in principle but is fragile.
+4. **Submit the review prompt.**
+   - Fill the prompt text with `mcp__chrome_devtools__fill(...)` or focus the prompt field and use `mcp__chrome_devtools__type_text(...)`.
+   - Click the send button with `mcp__chrome_devtools__click(...)`.
+   - Wait until the response stops changing and any thinking/progress indicator is gone.
 
----
+5. **Save the review.**
+   - Capture Gemini's response text.
+   - Write `review.md` in the bundle directory using the storage convention below.
+   - Include whether upload was automated or manual.
 
-## Procedure
+## Manual Upload Fallback
 
-### Step 1 — Set up the session (once)
+Use this whenever Chrome upload automation cannot see a real file input or reliable upload control:
 
-```
-# 1a. Confirm the extension is connected.
-mcp__Claude_in_Chrome__list_connected_browsers
+1. Codex opens Gemini and prepares the prompt.
+2. Codex prints the exact WAV path.
+3. The user drags the WAV from Finder onto Gemini's prompt bar.
+4. Codex waits for the visible uploaded-file chip, then fills and submits the prompt.
 
-# 1b. Pick the browser (the deviceId from above).
-mcp__Claude_in_Chrome__select_browser(deviceId: "<deviceId>")
+This is the preferred fallback. It is faster and safer than trying to force native picker automation.
 
-# 1c. Make sure an MCP tab group exists; create one if not.
-mcp__Claude_in_Chrome__tabs_context_mcp(createIfEmpty: true)
+## Prompt Template
 
-# 1d. Navigate the MCP tab to Gemini.
-mcp__Claude_in_Chrome__navigate(tabId, "https://gemini.google.com/app")
-```
+Fill in `<...>` placeholders. The Markdown structure is rigid so reviews diff cleanly across runs.
 
-### Step 2 — Confirm Réflexion mode is selected
-
-```
-mcp__Claude_in_Chrome__find(tabId, "model selector button showing Réflexion or Pro or Rapide")
-```
-
-Returns the model selector button ref. Visual inspection of the screenshot confirms which mode is active (the label inside the button is the current selection). If "Pro" or "Rapide", click the button → click the "Réflexion" menu item.
-
-### Step 3 — (Once per Gemini profile) Accept the upload consent
-
-On a fresh account, the first attempt to upload triggers Gemini's "Content from images and files" consent dialog. To get it out of the way at setup time so it doesn't interrupt review batches:
-
-```
-# Open the "+" menu, click "Téléverser des fichiers". 
-# A native file picker opens (invisible to MCP) — just hit Escape on the page
-# to dismiss it (it doesn't have to be a valid upload). The consent dialog
-# then appears as an HTML overlay in the page (NOT a native dialog) and IS
-# clickable via the MCP.
-mcp__Claude_in_Chrome__computer left_click on "+" button
-mcp__Claude_in_Chrome__computer left_click on "Téléverser des fichiers" item
-mcp__Claude_in_Chrome__computer key("Escape")  # closes the OS picker
-mcp__Claude_in_Chrome__computer left_click on "Accepter" button in consent overlay
-```
-
-After this, Gemini accepts drag-and-drop uploads without further dialogs.
-
-### Step 4 — User drags the WAV onto the prompt area
-
-The agent prints to the user:
-
-```
-Please drag this file onto Gemini's prompt bar:
-  /Users/.../QwenVoice-Debug/outputs/CustomVoice/<filename>.wav
-
-(Open Finder → navigate to that path → drag the WAV onto the dark prompt bar at the bottom of the Gemini page.)
-```
-
-Wait for the user to confirm or detect via polling.
-
-### Step 5 — Detect that the upload completed
-
-Poll `mcp__Claude_in_Chrome__find` for a file chip / preview pill in the prompt area:
-
-```
-mcp__Claude_in_Chrome__find(tabId, "uploaded audio file chip on the prompt bar")
-```
-
-Poll every 2 seconds, timeout 60 seconds. The chip's text contains the filename, confirming the upload succeeded.
-
-### Step 6 — Type the review prompt
-
-Fill in the template (full text below in "Prompt template") with the per-sample context, then:
-
-```
-mcp__Claude_in_Chrome__form_input(tabId, ref: <textarea-ref>, value: <prompt>)
-```
-
-The textarea ref comes from `mcp__Claude_in_Chrome__find(tabId, "main message textarea where users type to Gemini")`.
-
-### Step 7 — Submit
-
-```
-mcp__Claude_in_Chrome__find(tabId, "send message button")
-mcp__Claude_in_Chrome__computer left_click on that ref
-```
-
-### Step 8 — Wait for completion
-
-Gemini Réflexion mode shows a "Thinking" / "Réflexion" badge while the model is reasoning, then streams the response. Poll until both conditions hold:
-
-1. The page text stops growing for ≥ 5 seconds (response stream completed).
-2. The "Thinking" indicator is gone.
-
-```
-while True:
-  text = mcp__Claude_in_Chrome__get_page_text(tabId)
-  if text_unchanged_for_5s and "Thinking" not in screenshot:
-    break
-  sleep(5)
-# hard cap: 180 s
-```
-
-### Step 9 — Capture the response
-
-```
-mcp__Claude_in_Chrome__get_page_text(tabId)
-```
-
-Extract the last assistant turn — it starts at the most recent `## Voice Quality Review` heading and ends at the bottom of the conversation. The Markdown structure is fixed by the prompt template, so this is straightforward.
-
-### Step 10 — Save to disk
-
-Write to:
-
-```
-build/voice-reviews/<UTC-timestamp>-<mode>-<wav-basename>.md
-```
-
-Example: `build/voice-reviews/2026-05-16T16-22-30Z-custom-20260516_15-52-17-612_Plan_mode_is_active.md`
-
-Use the file structure shown in "Storage convention" below.
-
----
-
-## Prompt template
-
-Fill in `<...>` placeholders. The Markdown structure is **rigid** — Gemini is instructed to emit exactly these sections so reviews diff cleanly across runs.
-
-```
+```markdown
 You are evaluating a text-to-speech audio sample produced by a local on-device TTS model on macOS (Vocello / Qwen3-TTS). I have attached the audio file. Listen carefully (the full clip) and provide a structured review.
 
 Generation context:
@@ -217,15 +123,19 @@ Respond in English, in this EXACT Markdown format (do not add additional section
 <one sentence — e.g., "Pronunciation of 'X' was unclear, worth checking the tokenizer's handling of that word." Or "None — sample is clean.">
 ```
 
----
+## Storage Convention
 
-## Storage convention
+Reviews land under `build/voice-reviews/` (already under ignored `build/`).
 
-Reviews land under `build/voice-reviews/` (which falls under `build/` → already gitignored).
+Bundle directory: `<UTC-timestamp>-<mode>-<wav-basename>/`
 
-File naming: `<UTC-timestamp>-<mode>-<wav-basename>.md`
+Files:
 
-File body:
+- `review_prompt.md` — exact prompt sent to Gemini.
+- `review.md` — Gemini response plus metadata.
+- `metadata.json` — source WAV path, mode, delivery, speaker/voice context, text, audio duration, commit, reviewer model, upload method, reviewed timestamp.
+
+`review.md` body:
 
 ```markdown
 # Voice review
@@ -238,88 +148,26 @@ File body:
 **Audio duration**: X.X s
 **Vocello commit**: <git short hash at time of generation>
 
-**Reviewer**: Gemini Réflexion (thinking mode)
+**Reviewer**: Gemini <visible model name>
+**Upload method**: <Codex Chrome upload | manual drag-drop>
 **Reviewed at**: 2026-MM-DDTHH:MM:SSZ
-**Procedure version**: 1.0 (docs/reference/gemini-voice-review.md)
+**Procedure version**: 2.0 (docs/reference/gemini-voice-review.md)
 
 ---
 
 <Gemini's response verbatim — the structured Markdown from the prompt template>
-
----
-
-## Procedure metadata
-
-- Chrome MCP: mcp__Claude_in_Chrome__*
-- Gemini tab ID: <N>
-- Wall-clock time to capture: <seconds>
 ```
 
----
+## Caveats
 
-## Tool reference
-
-The agent uses these `mcp__Claude_in_Chrome__*` tools, in roughly the order they're called per review:
-
-| Tool | What it's used for here |
-|---|---|
-| `list_connected_browsers` | Setup — confirm extension connected. |
-| `select_browser` | Setup — pick the browser deviceId. |
-| `tabs_context_mcp` (createIfEmpty: true) | Setup — ensure an MCP tab group exists. |
-| `navigate` | Setup — open the Gemini tab. |
-| `find` | Locate textarea, model selector, send button, file chip, consent dialog buttons. |
-| `read_page` (filter: "interactive") | When `find` can't pin down an element, the a11y tree dump is the fallback. |
-| `computer` (action: `left_click` / `key` / `screenshot`) | All in-page interactions: clicks on buttons, Escape to dismiss menus, periodic screenshots for visual verification. |
-| `form_input` | Type the prompt into the textarea. |
-| `get_page_text` | Capture Gemini's response. |
-| `javascript_tool` | Debug + state inspection (e.g., `document.querySelectorAll('input[type=file]')`). Useful for advanced workflows; not strictly required. |
-| `browser_batch` | Group multiple steps into one round-trip — faster than serial calls. |
-
----
-
-## Advanced: fully-automated mode (drag-drop via DataTransfer)
-
-The semi-automated workflow above requires a 2-second user gesture (drag-drop). For unattended batch reviews, the file can be injected programmatically:
-
-1. Read the WAV bytes from disk (Bash `base64 -i <path>`).
-2. Inject the base64 string into the page via `javascript_tool` (sets `window.__VOCELLO_AUDIO_B64`).
-3. In a second `javascript_tool` call, run:
-   ```js
-   const res = await fetch('data:audio/wav;base64,' + window.__VOCELLO_AUDIO_B64);
-   const blob = await res.blob();
-   const file = new File([blob], 'vocello-test.wav', { type: 'audio/wav' });
-   const dt = new DataTransfer();
-   dt.items.add(file);
-   const target = document.querySelector('.input-area');
-   for (const t of ['dragenter','dragover','drop']) {
-     target.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
-   }
-   ```
-4. Poll for the file chip the same way Step 5 does.
-
-**Caveats**:
-
-- The base64 payload for a typical 5-second WAV is ~400 KB. The `javascript_tool` `text` parameter handles it but watch for tool-level limits.
-- Gemini's React component may validate the dispatched event's `isTrusted` flag. Synthetic `DragEvent` instances have `isTrusted = false`, which can cause Gemini to silently drop the upload. Status unknown — needs validation.
-- This bypasses the consent dialog only if it was already accepted via a real upload.
-
-**Recommendation**: don't bother with this unless you're running ≥ 20 reviews back-to-back. The drag-drop manual step is cheaper than maintaining a fragile JS injection.
-
----
-
-## Caveats and known limitations
-
-- **File size**: Gemini's web app caps file uploads at ~25 MB per file. Vocello WAVs are typically 200–500 KB — well under.
-- **Audio length**: longer than ~10 minutes may exceed Gemini's input window. Vocello generates short clips so this isn't a current concern.
-- **Model variants change**: if Réflexion is renamed or removed, update the model-selector check (Step 2). The procedure isn't tied to a specific underlying model — any Gemini variant that accepts audio multimodal input + thinking-mode reasoning works.
-- **Conversation accumulation**: reviews in the same conversation share context. After ~10 reviews in one thread, Gemini's context window starts to fill and reviews may degrade. Mitigation: start a new chat (`find` "New chat button" → click) between batches.
-- **Language**: the prompt template asks for English responses, which Gemini honors even when the web UI is in French (or any other locale).
-- **Determinism**: Réflexion mode is **not** deterministic — same input can produce slightly different scores across runs. For regression detection, use median over n=3 reviews per sample.
-
----
+- Gemini's web UI may use a native file picker or change upload markup; if upload automation fails, use manual drag/drop.
+- Reviews in one Gemini conversation share context. Start a new chat between large batches.
+- The prompt requests English output, which Gemini generally honors even when the UI is localized.
+- Gemini model names and capabilities can change. Record the visible model name and avoid hard-coding assumptions beyond audio support.
+- Scores are subjective and not deterministic. For regression detection, review at least n=3 representative samples and compare medians.
 
 ## Cross-references
 
-- `CLAUDE.md` — Vocello project root, including `shouldStream: true` enable status and bench-baseline conventions.
-- `docs/reference/ui-test-surface.md` — how to know what text was generated for a given WAV (so the prompt's `<EXACT TEXT VERBATIM>` field is filled correctly), per-mode AX-ids, and the streaming-state signposts that complement quality review.
+- `AGENTS.md` — Vocello project root, including `shouldStream: true` enable status and bench-baseline conventions.
+- `docs/reference/ui-test-surface.md` — how to know what text was generated for a given WAV, per-mode AX ids, and streaming-state signposts.
 - `docs/reference/benchmark-baselines.json` — the timing/RMS/peak baselines this review pairs with.

@@ -7,7 +7,7 @@ Companion reference: [`ui-test-surface.md`](ui-test-surface.md).
 ## Prerequisites
 
 - Debug build present.
-- macOS Accessibility permission granted to Claude.
+- macOS Accessibility permission granted to Codex.
 - The `UITestRef` saved-voice fixture exists. `scripts/uitest.sh smoke-check clone` should exit 0. If not, run [`bootstrap-saved-voice.md`](bootstrap-saved-voice.md) first.
 
 ## Fixed inputs
@@ -28,20 +28,19 @@ Companion reference: [`ui-test-surface.md`](ui-test-surface.md).
    LOG_PID=$!
    ```
 4. **Launch**: `scripts/uitest.sh prep`.
-5. **Access**: `mcp__computer-use__request_access(applications: ["Vocello"])`.
+5. **Access**: `mcp__computer_use__get_app_state(app: "Vocello")`.
 6. **Navigate to Saved Voices**:
-   - `read SW SH < <(scripts/uitest.sh screen-size)`.
-   - `scaled-locate sidebar_voices 1456 816` → `mcp__computer-use__left_click`.
+   - `scripts/uitest.sh window-locate sidebar_voices` → `mcp__computer_use__click`.
    - Verify with `scripts/uitest.sh locate screen_voices` (exit 0).
    - `/usr/sbin/screencapture -x "$ART/pre.png"`.
 7. **Verify the `UITestRef` row is present**:
    - `scripts/uitest.sh locate voicesRow_UITestRef` — must return non-empty. The voice id is the (sanitized) display name, not a uuid, so the fixture's id is literally `UITestRef`.
    - The list MAY show a quality-warning badge (short reference clip; expected for the bootstrap fixture). If present, it carries id `voicesRow_UITestRef_qualityWarning`.
 8. **Click the row's play affordance**:
-   - `scripts/uitest.sh locate voicesRow_play_UITestRef` → `mcp__computer-use__left_click(coordinate=[cx,cy])`.
+   - `scripts/uitest.sh window-locate voicesRow_play_UITestRef` → `mcp__computer_use__click`.
    - Confirm playback by inspecting the sidebar Player section (the reference audio should start playing; takes ~1 s to render).
 9. **Use the voice in cloning** (optional bonus check):
-   - `scripts/uitest.sh locate voicesRow_use_UITestRef` → click. If this switches the sidebar selection to Voice Cloning AND `voiceCloning_savedVoicePicker` shows `UITestRef`, that confirms the "use" flow.
+   - `scripts/uitest.sh window-locate voicesRow_use_UITestRef` → click. If this switches the sidebar selection to Voice Cloning AND `voiceCloning_savedVoicePicker` shows `UITestRef`, that confirms the "use" flow.
 10. **Post-screenshot + tear down**: `/usr/sbin/screencapture -x "$ART/post.png"`, then `kill "$LOG_PID" 2>/dev/null || true`.
 11. **Write `$ART/result.json`** with:
     - `pass`: true if (a) `voicesRow_UITestRef` resolves, (b) `voicesRow_play_UITestRef` resolves and the click starts playback

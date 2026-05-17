@@ -128,8 +128,7 @@ private extension VoiceDesignView {
             trailingAccessory: AnyView(variantSelector),
             rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
             panelPadding: LayoutConstants.generationConfigurationPanelPadding,
-            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
-            accessibilityIdentifier: "voiceDesign_configuration"
+            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 briefSettings

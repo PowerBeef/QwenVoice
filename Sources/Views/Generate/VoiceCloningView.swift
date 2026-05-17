@@ -299,8 +299,7 @@ private extension VoiceCloningView {
             trailingAccessory: AnyView(variantSelector),
             rowSpacing: LayoutConstants.generationConfigurationRowSpacing,
             panelPadding: LayoutConstants.generationConfigurationPanelPadding,
-            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight,
-            accessibilityIdentifier: "voiceCloning_configuration"
+            contentSlotHeight: LayoutConstants.generationConfigurationSlotHeight
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 VoiceCloningReferenceSettings(

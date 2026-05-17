@@ -154,6 +154,9 @@ struct WorkflowReadinessNote: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(detail)
         .optionalAccessibilityIdentifier(accessibilityIdentifier)
     }
 }
@@ -206,6 +209,9 @@ enum StudioCardStyle {
 }
 
 struct StudioSectionCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.cardGlassTint) private var cardGlassTint
+
     let title: String
     var detail: String? = nil
     var iconName: String? = nil
@@ -219,24 +225,14 @@ struct StudioSectionCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: contentAlignment, spacing: style == .inline ? 8 : 10) {
-                if let detail {
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+        styledCard
+            .frame(maxHeight: fillsAvailableHeight ? .infinity : nil, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+            .optionalAccessibilityIdentifier(accessibilityIdentifier)
+    }
 
-                content()
-            }
-            .frame(
-                maxWidth: .infinity,
-                minHeight: minHeight,
-                maxHeight: fillsAvailableHeight ? .infinity : nil,
-                alignment: .topLeading
-            )
-        } label: {
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 if let iconName {
                     Image(systemName: iconName)
@@ -254,10 +250,78 @@ struct StudioSectionCard<Content: View>: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            VStack(alignment: contentAlignment, spacing: style == .inline ? 8 : 10) {
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                content()
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: minHeight,
+                maxHeight: fillsAvailableHeight ? .infinity : nil,
+                alignment: .topLeading
+            )
         }
-        .profileGroupBoxStyle()
-        .frame(maxHeight: fillsAvailableHeight ? .infinity : nil, alignment: .topLeading)
-        .optionalAccessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    @ViewBuilder
+    private var styledCard: some View {
+        #if QW_UI_LIQUID
+        if #available(macOS 26, *) {
+            cardContent
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppTheme.cardFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(
+                                    cardGlassTint.map {
+                                        AppTheme.accentStroke($0, for: colorScheme).opacity(0.55)
+                                    } ?? AppTheme.cardStroke.opacity(AppTheme.surfaceStrokeOpacity(for: colorScheme)),
+                                    lineWidth: AppTheme.surfaceStrokeWidth(for: colorScheme)
+                                )
+                        )
+                )
+                .glassEffect(
+                    .regular.tint(
+                        cardGlassTint.map {
+                            AppTheme.surfaceGlassTint($0, for: colorScheme)
+                        } ?? AppTheme.smokedGlassTint
+                    ),
+                    in: .rect(cornerRadius: 16)
+                )
+                .glass3DDepth(radius: 16, intensity: cardGlassTint == nil ? 1.0 : 1.15)
+        } else {
+            legacyStyledCard
+        }
+        #else
+        legacyStyledCard
+        #endif
+    }
+
+    private var legacyStyledCard: some View {
+        cardContent
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppTheme.cardFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(
+                        AppTheme.cardStroke.opacity(
+                            colorScheme == .dark ? 0.20 : AppTheme.surfaceStrokeOpacity(for: colorScheme)
+                        ),
+                        lineWidth: colorScheme == .dark ? 0.5 : 1
+                    )
+            )
     }
 }
 
@@ -445,13 +509,20 @@ struct GenerationVariantSelector: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(Color.secondary.opacity(0.15))
             )
-            .accessibilityIdentifier("\(accessibilityPrefix)_modelVariantPicker")
+            .overlay(alignment: .topLeading) {
+                HiddenAccessibilityMarker(
+                    value: "\(mode.displayName) model variant picker",
+                    identifier: "\(accessibilityPrefix)_modelVariantPicker"
+                )
+            }
         }
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(mode.displayName) model variant")
-        .accessibilityValue(accessibilityValue)
-        .accessibilityIdentifier("\(accessibilityPrefix)_modelVariantSelector")
+        .overlay(alignment: .topLeading) {
+            HiddenAccessibilityMarker(
+                value: "\(mode.displayName) model variant: \(accessibilityValue)",
+                identifier: "\(accessibilityPrefix)_modelVariantSelector"
+            )
+        }
         .help("Choose whether \(mode.displayName) uses the Speed or Quality model package. Current status: \(statusCaption).")
     }
 

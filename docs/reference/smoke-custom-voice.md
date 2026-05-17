@@ -8,7 +8,7 @@ Companion reference: [`ui-test-surface.md`](ui-test-surface.md).
 
 - Vocello Debug build exists at `build/DerivedData/Build/Products/Debug/Vocello.app`. If not, run `scripts/build.sh debug`.
 - At least one Custom Voice model variant is installed (the runbook checks via `scripts/uitest.sh smoke-check`).
-- macOS Accessibility permission granted to Claude.
+- macOS Accessibility permission granted to Codex.
 
 ## Fixed inputs
 
@@ -38,33 +38,33 @@ The runbook does not adjust pickers — it tests the minimum-effort generate pat
 4. **Launch the app.**
    - `scripts/uitest.sh prep` — prints the Vocello PID once the window is up.
 
-5. **Computer-use: grant access and screenshot.**
-   - `mcp__computer-use__request_access(applications: ["Vocello"])`
-   - `mcp__computer-use__screenshot` — save bytes to `$ART/pre.png`.
+5. **Computer Use: refresh app state and screenshot.**
+   - `mcp__computer_use__get_app_state(app: "Vocello")`
+   - `/usr/sbin/screencapture -x "$ART/pre.png"` for the artifact bundle.
 
 6. **Navigate to Custom Voice.**
-   - `scripts/uitest.sh locate sidebar_customVoice` → parse `cx cy w h` (logical-points).
-   - `read SW SH < <(scripts/uitest.sh screen-size)`.
-   - From the most recent screenshot, get its image width `IW` and height `IH`.
-   - Compute `sx = cx * IW / SW`, `sy = cy * IH / SH`.
-   - `mcp__computer-use__left_click(x=sx, y=sy)`.
-   - If Vocello isn't frontmost, the click won't dispatch — call `mcp__computer-use__open_application(app: "Vocello")` first, then retry.
+   - `scripts/uitest.sh window-locate sidebar_customVoice` → parse `cx cy w h`.
+   - `mcp__computer_use__click(app: "Vocello", x: cx, y: cy)`.
+   - If Vocello isn't frontmost, the click won't dispatch — run `scripts/uitest.sh activate`, refresh with `get_app_state`, then retry.
 
 7. **Confirm Custom Voice screen is mounted.**
    - `scripts/uitest.sh locate screen_customVoice` — exit code 0 means the screen is up. If non-zero, screenshot, wait 500 ms, retry once.
 
 8. **Enter the script text.**
    - The script-text field has accessibility identifier `textInput_textEditor` (shared across all three generation modes via `TextInputView`).
-   - `scripts/uitest.sh locate textInput_textEditor` → scale → `mcp__computer-use__left_click`.
-   - `mcp__computer-use__type` with the fixed script text.
+   - `scripts/uitest.sh window-locate textInput_textEditor` → `mcp__computer_use__click`.
+   - `mcp__computer_use__type_text(app: "Vocello", text: "<fixed script text>")`.
 
 9. **Trigger Generate.**
-   - The app accepts **Cmd+Return** while the script field is focused — that's the simplest reliable trigger and matches the SwiftUI convention. There is no dedicated "Generate" button visible in the default Custom Voice viewport on a 1280×720 display.
-   - Record `T_CLICK=$(date +%s%3N)` immediately before sending `mcp__computer-use__key(text: "cmd+return")`.
+   - Send `mcp__computer_use__press_key(app: "Vocello", key: "super+Return")` while the script field is focused. `super+Return` maps to the macOS Cmd+Return shortcut. There is no dedicated "Generate" button visible in the default Custom Voice viewport on a 1280×720 display.
+   - Immediately before pressing the key, record `T0` in the signpost timestamp format:
+     ```sh
+     T0="$(/usr/bin/python3 -c 'import datetime; print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])')"
+     ```
 
 10. **Wait for `Final File Ready`.**
-    - Poll `$ART/log.txt` (up to 60 s, 250 ms interval) for the substring `Final File Ready`. As soon as it appears, record `T_DONE=$(date +%s%3N)` and compute `MS_CLICK_TO_FINAL=$((T_DONE - T_CLICK))`.
-    - The log capture must include `--signpost` for these events to show; `scripts/uitest.sh logs` does this. The signpost line format is:
+    - Run `scripts/uitest.sh bench-wait --since "$T0" --timeout 90`; the printed timestamp is the matching `Final File Ready` event.
+    - The log stream must include `--signpost` for these events to show; `scripts/uitest.sh logs` and `bench-wait` both use signpost-aware log queries. The signpost line format is:
       `<ts> Sp Vocello[pid:tid] [com.qwenvoice.app:performance] [...] Final File Ready`.
     - On timeout: stop the log capture, save the post-state screenshot, write `result.json` with `pass=false` and reason `"timeout waiting for Final File Ready"`, and abort.
 
@@ -76,7 +76,7 @@ The runbook does not adjust pickers — it tests the minimum-effort generate pat
     - `scripts/uitest.sh db "SELECT id, audioPath, duration FROM generations ORDER BY createdAt DESC LIMIT 1"` should print one CSV line. Parse `DB_ID` (first field), `DB_AUDIO_PATH` (second), `DB_DURATION` (third). Assert `DB_AUDIO_PATH == AUDIO_PATH` and `DB_DURATION > 0`.
 
 13. **Final screenshot, stop log capture.**
-    - `mcp__computer-use__screenshot` → save bytes to `$ART/post.png`.
+    - `mcp__computer_use__get_app_state(app: "Vocello")` for visual inspection, then `/usr/sbin/screencapture -x "$ART/post.png"`.
     - `kill "$LOG_PID" 2>/dev/null || true`.
 
 14. **Write the result file.**
@@ -84,7 +84,7 @@ The runbook does not adjust pickers — it tests the minimum-effort generate pat
       ```json
       {
         "pass": true,
-        "ms_click_to_final": <number>,
+        "final_file_ready_ts": "<timestamp printed by bench-wait>",
         "audio_path": "<path>",
         "audio_bytes": <number>,
         "db_id": "<uuid>",

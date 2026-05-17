@@ -53,24 +53,23 @@ LOG_PID=$!
 scripts/uitest.sh reset
 scripts/uitest.sh prep
 scripts/uitest.sh activate
-mcp__computer-use__request_access(applications: ["Vocello"])
-read SW SH < <(scripts/uitest.sh screen-size)
+mcp__computer_use__get_app_state(app: "Vocello")
 ```
 
 ### 4. Navigate to Voice Design
 
-- `scripts/uitest.sh locate sidebar_voiceDesign` → scale by `(IW/SW, IH/SH)` from the latest screenshot → `mcp__computer-use__left_click`.
+- `scripts/uitest.sh window-locate sidebar_voiceDesign` → `mcp__computer_use__click`.
 - Verify with `scripts/uitest.sh locate screen_voiceDesign` (exit 0 = on the right screen).
 
 ### 5. Fill voice description
 
-- `scripts/uitest.sh locate voiceDesign_voiceDescriptionField` → scale → `left_click` to focus.
-- `mcp__computer-use__type` with the fixed description string from above.
+- `scripts/uitest.sh window-locate voiceDesign_voiceDescriptionField` → `mcp__computer_use__click` to focus.
+- `mcp__computer_use__type_text(app: "Vocello", text: "<fixed description>")` with the fixed description string from above.
 
 ### 6. Fill the script
 
-- `scripts/uitest.sh locate textInput_textEditor` → scale → `left_click` to focus.
-- `mcp__computer-use__type` with the fixed script string from above.
+- `scripts/uitest.sh window-locate textInput_textEditor` → `mcp__computer_use__click` to focus.
+- `mcp__computer_use__type_text(app: "Vocello", text: "<fixed script>")` with the fixed script string from above.
 
 ### 7. Trigger generate
 
@@ -78,7 +77,7 @@ read SW SH < <(scripts/uitest.sh screen-size)
 T0=$(date +"%Y-%m-%d %H:%M:%S.%3N")
 ```
 
-`mcp__computer-use__key(text: "cmd+return")`.
+`mcp__computer_use__press_key(app: "Vocello", key: "super+Return")`.
 
 ### 8. Wait for Final File Ready
 
@@ -88,26 +87,26 @@ scripts/uitest.sh bench-wait --since "$T0" --timeout 120
 
 ### 9. Click "Save to Saved Voices"
 
-- `scripts/uitest.sh locate voiceDesign_saveVoiceButton` → scale → `left_click`.
+- `scripts/uitest.sh window-locate voiceDesign_saveVoiceButton` → `mcp__computer_use__click`.
 - The `SavedVoiceSheet` opens with `audioPath`, `nameField`, and `transcriptField` all pre-filled by the app — no file picker.
 
 ### 10. Replace the suggested name with `UITestRef`
 
-- `scripts/uitest.sh locate voicesEnroll_nameField` → scale → `left_click` (focus the field).
-- `mcp__computer-use__key(text: "cmd+a")` (select the pre-filled name).
-- `mcp__computer-use__key(text: "delete")`.
-- `mcp__computer-use__type(text: "UITestRef")`.
+- `scripts/uitest.sh window-locate voicesEnroll_nameField` → `mcp__computer_use__click` (focus the field).
+- `mcp__computer_use__press_key(app: "Vocello", key: "super+a")` (select the pre-filled name).
+- `mcp__computer_use__press_key(app: "Vocello", key: "BackSpace")`.
+- `mcp__computer_use__type_text(app: "Vocello", text: "UITestRef")`.
 
 ### 11. Submit
 
-- `scripts/uitest.sh locate voicesEnroll_confirmButton` → scale → `left_click`.
+- `scripts/uitest.sh window-locate voicesEnroll_confirmButton` → `mcp__computer_use__click`.
 
 ### 12. Handle the quality-warning fallback (if it appears)
 
 The engine runs a quality heuristic on the saved reference. For test-fixture purposes we accept either outcome:
 
 - If the sheet just closes and `scripts/uitest.sh locate voiceDesign_saveVoiceCompleted` eventually returns exit 0 → done.
-- If `scripts/uitest.sh locate voicesEnroll_keepDespiteWarning` returns exit 0 → scale → `left_click`. The sheet then closes.
+- If `scripts/uitest.sh window-locate voicesEnroll_keepDespiteWarning` returns exit 0 → `mcp__computer_use__click`. The sheet then closes.
 
 Poll either of those AX ids on a 250 ms interval, up to 10 s.
 

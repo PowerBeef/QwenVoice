@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Foundation for autonomous UI-driven testing of the Vocello Debug build.
 #
-# A Claude Code session uses the computer-use MCP to drive Vocello like a
+# A Codex session uses the computer-use MCP to drive Vocello like a
 # person; this script provides the deterministic pieces that don't make
 # sense to do via screenshots — launch, state reset, AXIdentifier lookup,
 # log tailing, DB queries, artifact directory creation.
@@ -50,10 +50,16 @@ commands:
                         the locate output to scale to your screenshot's image pixels.
 
   scaled-locate <ax-id> <image-w> <image-h>
-                        Like locate but pre-scaled. Takes the screenshot's pixel
-                        dimensions from your most recent mcp__computer-use__screenshot
-                        and emits "cx cy w h" already in screenshot-image space —
-                        ready to pass directly to left_click without manual math.
+                        Legacy full-screen coordinate helper. Like locate but
+                        pre-scaled against the full screen. Takes screenshot pixel
+                        dimensions and emits "cx cy w h" in screenshot-image space.
+
+  window-locate <ax-id> [image-w image-h]
+                        Codex Computer Use coordinate helper. Look up an AX id,
+                        subtract Vocello's front-window origin, and print
+                        "cx cy w h" relative to the window. If image dimensions
+                        are provided, scale against the front-window size so the
+                        result can be passed directly to mcp__computer_use__click.
 
   bench-step <mode> <variant> <coldwarm> <bucket> --artifacts-dir <dir> [--timeout <s>]
                         One-shot wrapper for the per-sample loop. Reads the previous
@@ -270,7 +276,7 @@ cmd_scaled_locate() {
     if [ -z "$ax_id" ] || [ -z "$image_w" ] || [ -z "$image_h" ]; then
         echo "error: scaled-locate requires <ax-id> <image-w> <image-h>" >&2
         echo "usage: scripts/uitest.sh scaled-locate <ax-id> <screenshot-width> <screenshot-height>" >&2
-        echo "       <image-w/h> are the pixel dimensions of your most recent computer-use screenshot" >&2
+        echo "       <image-w/h> are the pixel dimensions of your full-screen screenshot" >&2
         exit 2
     fi
     local raw
@@ -294,6 +300,81 @@ sx = int(round(cx * iw / sw))
 sy = int(round(cy * ih / sh))
 sxw = int(round(w * iw / sw))
 sxh = int(round(h * ih / sh))
+print(f"{sx} {sy} {sxw} {sxh}")
+'
+}
+
+cmd_window_locate() {
+    local ax_id="${1:-}"
+    local image_w="${2:-}"
+    local image_h="${3:-}"
+    if [ -z "$ax_id" ]; then
+        echo "error: window-locate requires an accessibility identifier" >&2
+        echo "usage: scripts/uitest.sh window-locate <ax-id> [screenshot-width screenshot-height]" >&2
+        exit 2
+    fi
+    if { [ -n "$image_w" ] && [ -z "$image_h" ]; } || { [ -z "$image_w" ] && [ -n "$image_h" ]; }; then
+        echo "error: window-locate image dimensions must be provided together" >&2
+        echo "usage: scripts/uitest.sh window-locate <ax-id> [screenshot-width screenshot-height]" >&2
+        exit 2
+    fi
+
+    if ! pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+        echo "error: $APP_NAME is not running — run \`scripts/uitest.sh prep\` first" >&2
+        exit 1
+    fi
+
+    local raw
+    raw="$(/usr/bin/osascript - "$ax_id" <<'APPLESCRIPT'
+on run argv
+    set targetID to item 1 of argv
+    tell application "System Events"
+        tell process "Vocello"
+            try
+                set frontWin to front window
+            on error
+                error "no front window for Vocello" number 2
+            end try
+            set winPos to position of frontWin
+            set winSize to size of frontWin
+            set everything to entire contents of frontWin
+            repeat with itm in everything
+                try
+                    if (value of attribute "AXIdentifier" of itm) is targetID then
+                        set itemPos to position of itm
+                        set itemSize to size of itm
+                        set cx to ((item 1 of itemPos) + ((item 1 of itemSize) div 2)) - (item 1 of winPos)
+                        set cy to ((item 2 of itemPos) + ((item 2 of itemSize) div 2)) - (item 2 of winPos)
+                        return (cx as text) & " " & (cy as text) & " " & ((item 1 of itemSize) as text) & " " & ((item 2 of itemSize) as text) & " " & ((item 1 of winSize) as text) & " " & ((item 2 of winSize) as text)
+                    end if
+                end try
+            end repeat
+            error ("accessibility identifier not found: " & targetID) number 3
+        end tell
+    end tell
+end run
+APPLESCRIPT
+)" || return $?
+
+    if [ -z "$image_w" ] && [ -z "$image_h" ]; then
+        /usr/bin/awk '{print $1, $2, $3, $4}' <<<"$raw"
+        return 0
+    fi
+
+    WINDOW_LOCATE_RAW="$raw" WINDOW_LOCATE_W="$image_w" WINDOW_LOCATE_H="$image_h" \
+        /usr/bin/python3 -c '
+import os, sys
+raw = os.environ["WINDOW_LOCATE_RAW"].split()
+if len(raw) != 6:
+    print(f"error: bad window-locate output: {raw}", file=sys.stderr)
+    sys.exit(1)
+cx, cy, w, h, ww, wh = (int(x) for x in raw)
+iw = int(os.environ["WINDOW_LOCATE_W"])
+ih = int(os.environ["WINDOW_LOCATE_H"])
+sx = int(round(cx * iw / ww))
+sy = int(round(cy * ih / wh))
+sxw = int(round(w * iw / ww))
+sxh = int(round(h * ih / wh))
 print(f"{sx} {sy} {sxw} {sxh}")
 '
 }
@@ -1009,6 +1090,7 @@ main() {
         reset)           cmd_reset "$@" ;;
         locate)          cmd_locate "$@" ;;
         scaled-locate)   cmd_scaled_locate "$@" ;;
+        window-locate)   cmd_window_locate "$@" ;;
         bench-step)      cmd_bench_step "$@" ;;
         screen-size)     cmd_screen_size ;;
         activate)        cmd_activate ;;
