@@ -88,3 +88,4 @@ Voice Cloning support text:
 
 - [`../README.md`](../README.md)
 - [`reference/current-state.md`](reference/current-state.md)
+- [`reference/emotion-delivery-improvements.md`](reference/emotion-delivery-improvements.md) — rationale and rewrite table for the shipped 9 × 3 preset instruction strings (`Sources/Models/EmotionPreset.swift`), plus the Voice Design "Voice character / Delivery" framing in `GenerationSemantics.designInstruction(...)`.

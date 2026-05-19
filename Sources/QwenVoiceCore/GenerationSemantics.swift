@@ -45,7 +45,11 @@ public enum GenerationSemantics {
         guard !trimmedDescription.isEmpty else {
             return trimmedEmotion
         }
-        return "\(trimmedEmotion) \(trimmedDescription)"
+        // Explicit labeled framing so the chat-format-trained model parses two
+        // named sub-instructions, not a fused run-on. Description-first so the
+        // persistent voice identity is established before the per-take delivery
+        // direction. See docs/reference/emotion-delivery-improvements.md.
+        return "Voice character: \(trimmedDescription) Delivery: \(trimmedEmotion)"
     }
 
     public static func normalizedConditioningCacheKeyText(_ text: String) -> String {
@@ -124,6 +128,20 @@ public enum GenerationSemantics {
         }
         if normalizedConditioningCacheKeyText(trimmedBase)
             .contains(normalizedConditioningCacheKeyText(reinforcement)) {
+            return trimmedBase
+        }
+        // Skip the reinforcement append when the base instruction already
+        // contains any diction/clarity tokens. Stops the model from receiving
+        // "…with clear articulation… Native English pronunciation with clear
+        // English diction and natural stress." which is redundant and can
+        // crowd out the dominant emotion signal. See
+        // docs/reference/emotion-delivery-improvements.md.
+        let baseLowercased = trimmedBase.lowercased()
+        let dictionTokens = [
+            "clear", "clearly", "diction", "articulation",
+            "pronunciation", "clarity", "intelligible", "understandable",
+        ]
+        if dictionTokens.contains(where: { baseLowercased.contains($0) }) {
             return trimmedBase
         }
         return "\(trimmedBase) \(reinforcement)"

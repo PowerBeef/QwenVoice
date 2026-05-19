@@ -50,6 +50,24 @@ Some actions don't have an obvious visible button on the default macOS window si
 
 The runbook prefers `cmd+Return` over hunting for a Generate button.
 
+### Driving SwiftUI `Picker` menus
+
+**Gotcha:** SwiftUI `Picker` menus open **anchored to the currently-selected item**, not to a fixed top position. Fixed menu-item click coordinates only work for the *first* selection in a session; every subsequent open re-anchors the menu around whatever was just selected, so fixed coordinates land on the wrong item.
+
+Two reliable patterns:
+
+1. **Keyboard navigation (preferred).**
+   - Click the picker once to open the menu (focus the dropdown).
+   - Press `key(text: "down")` N times (or `"up"` N times) to step from the currently-selected item to the target. The selection highlight moves with each press, and there's no menu-geometry dependency.
+   - Press `key(text: "return")` to commit.
+   - Track the *currently-selected* item in shell state so you can compute N for the next change.
+
+2. **Screenshot-verify-after.** Take a fresh `screenshot()` after each pick and confirm the picker's displayed value matches the target before continuing. Slower per cell but useful for one-off picks.
+
+The fixed-coordinate approach is only reliable for the very first menu open after a fresh launch (because the initial selection — usually the first item — anchors the menu at a known position). Anything beyond that needs the keyboard pattern.
+
+This affects every Picker in the app today: the Delivery preset (`delivery_tonePicker`), Delivery intensity (`delivery_intensityPicker`), Voice Cloning saved-voice picker (`voiceCloning_savedVoicePicker`), and the model-variant pickers. The saved-voice picker happens to work with the visual-click pattern in `bench-voice-cloning.md` because it gets clicked exactly once per cold sample; pickers that get changed multiple times per session must use keyboard navigation.
+
 ## Standard smoke skeleton
 
 Every smoke runbook follows the same five-phase flow. The per-mode runbooks only document **deltas** (sidebar AX id, output subfolder, fixed inputs, extra steps before generate). Everything below is the universal scaffolding — keep it in your head once and don't re-read the per-mode files looking for it.

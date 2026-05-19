@@ -115,9 +115,9 @@ struct EmotionPreset: Identifiable {
             label: "Happy",
             sfSymbol: "face.smiling",
             instructions: [
-                .subtle: "Slightly cheerful and warm, with a gentle smile in the voice and natural pacing.",
-                .normal: "Happy and upbeat, with bright energy, clear articulation, and natural conversational pacing.",
-                .strong: "Very happy and joyful, energetic and expressive, with lively stress while keeping words clear.",
+                .subtle: "Speaks with a hint of warmth and a faint smile in the voice.",
+                .normal: "Speaks happily and upbeat, smiling through the words with bright energy.",
+                .strong: "Speaks joyfully and exuberantly, lighting up every word with bouncy, beaming enthusiasm.",
             ]
         ),
         EmotionPreset(
@@ -125,9 +125,9 @@ struct EmotionPreset: Identifiable {
             label: "Sad",
             sfSymbol: "cloud.rain",
             instructions: [
-                .subtle: "Slightly sad and reflective, subdued but clear, with slower natural pacing.",
-                .normal: "Sad and somber, with a restrained heavy tone and gentle pauses.",
-                .strong: "Deeply sad and tearful, with fragile emotion, slow pacing, and soft intensity while staying intelligible.",
+                .subtle: "Speaks with quiet, reflective sadness, slower and a little subdued.",
+                .normal: "Speaks sadly and somberly, with a heavy, restrained tone and small gentle pauses.",
+                .strong: "Speaks through deep sorrow, fragile and tearful, words slow and weighted with grief.",
             ]
         ),
         EmotionPreset(
@@ -135,9 +135,9 @@ struct EmotionPreset: Identifiable {
             label: "Angry",
             sfSymbol: "flame",
             instructions: [
-                .subtle: "Slightly irritated and tense, controlled and clipped without shouting.",
-                .normal: "Angry and frustrated, with firm stress, sharper consonants, and controlled intensity.",
-                .strong: "Furious but intelligible, forceful and tense, with sharp emphasis and no screaming.",
+                .subtle: "Speaks with quiet irritation, controlled and clipped, holding back the bigger feeling.",
+                .normal: "Speaks angrily and frustrated, firm and pushed, with sharp consonants and tight stress.",
+                .strong: "Speaks furiously, biting every word with forceful tension, never breaking into a scream.",
             ]
         ),
         EmotionPreset(
@@ -145,9 +145,9 @@ struct EmotionPreset: Identifiable {
             label: "Fearful",
             sfSymbol: "exclamationmark.triangle",
             instructions: [
-                .subtle: "Slightly nervous and uneasy, cautious and quiet with natural hesitation.",
-                .normal: "Fearful and anxious, with tense breath, uncertain pacing, and clear words.",
-                .strong: "Terrified and urgent, trembling and panicked but still understandable.",
+                .subtle: "Speaks with quiet unease, cautious and hesitant, voice a little smaller than usual.",
+                .normal: "Speaks fearfully and anxiously, breath caught, pacing uncertain, words pushed out shakily.",
+                .strong: "Speaks in trembling panic, voice quavering and urgent, but still keeps every word audible.",
             ]
         ),
         EmotionPreset(
@@ -155,9 +155,9 @@ struct EmotionPreset: Identifiable {
             label: "Whisper",
             sfSymbol: "ear",
             instructions: [
-                .subtle: "Subtle audible whisper, close-mic and quiet, with gentle breath, hushed tone, and clear words.",
-                .normal: "Hushed whisper, intimate and quiet, with breathy texture, clear articulation, and soft pacing.",
-                .strong: "Very soft and breathy whisper, intimate and intense, with clear pronunciation and enough audibility to understand every word.",
+                .subtle: "Whispers gently, close-mic and quiet, with soft breath and easy pacing.",
+                .normal: "Whispers throughout, hushed and breathy, every word voiced just above breath, close and confidential.",
+                .strong: "Whispers urgently and barely voiced, secretive close-mic breath, audible but never lifted into normal speech.",
             ]
         ),
         EmotionPreset(
@@ -165,9 +165,9 @@ struct EmotionPreset: Identifiable {
             label: "Dramatic",
             sfSymbol: "theatermasks",
             instructions: [
-                .subtle: "Slightly theatrical, with measured emphasis and tasteful pauses.",
-                .normal: "Dramatic and expressive, with heightened intonation, deliberate pacing, and clear emphasis.",
-                .strong: "Highly dramatic and theatrical, with bold emphasis, sweeping intensity, and well-timed pauses.",
+                .subtle: "Speaks with measured theatrical weight, leaning into key beats without overdoing it.",
+                .normal: "Speaks dramatically and expressively, lifting key phrases with heightened inflection and deliberate pacing.",
+                .strong: "Speaks with sweeping theatrical grandeur, bold stress on key words, generous well-timed pauses that command attention.",
             ]
         ),
         EmotionPreset(
@@ -175,9 +175,9 @@ struct EmotionPreset: Identifiable {
             label: "Calm",
             sfSymbol: "leaf",
             instructions: [
-                .subtle: "Relaxed and easy-going, steady and warm with unhurried pacing.",
-                .normal: "Calm, soothing, and reassuring, with smooth pacing and gentle confidence.",
-                .strong: "Deeply serene and meditative, slow and deliberate, with soft warmth and long steady phrasing.",
+                .subtle: "Speaks easily and unhurriedly, relaxed and warm throughout.",
+                .normal: "Speaks calmly and soothingly, smooth pacing with reassuring warmth and gentle confidence.",
+                .strong: "Speaks with serene, meditative stillness, slow and softly grounded, each phrase fully landed.",
             ]
         ),
         EmotionPreset(
@@ -185,9 +185,9 @@ struct EmotionPreset: Identifiable {
             label: "Excited",
             sfSymbol: "sparkles",
             instructions: [
-                .subtle: "Slightly energetic and engaged, with a touch of enthusiasm and natural pace.",
-                .normal: "Excited and energetic, enthusiastic and bright, with quick but clear delivery.",
-                .strong: "Very excited and animated, energetic and anticipatory, with lively emphasis, controlled pacing, and clear pronunciation.",
+                .subtle: "Speaks with a touch of enthusiasm, slightly energized and engaged.",
+                .normal: "Speaks energetically and enthusiastically, bright and animated, picking up the pace just slightly.",
+                .strong: "Speaks with bursting, lively excitement, animated and bright, can hardly contain the eager energy.",
             ]
         ),
     ]
