@@ -80,9 +80,17 @@ extension QVoiceiOSApp {
                 rootDirectory: AppPaths.modelsDir,
                 storeVersionSeed: modelAssetStoreSeed()
             )
+            // Wrap the real status provider so refresh queries overlay the
+            // Simulator-only fake-installed registry. The fake installer
+            // writes to that registry; every subsequent modelManager.refresh
+            // returns `.installed` for those IDs instead of the on-disk
+            // `.notInstalled` the real provider would otherwise report.
+            let fakeStatusProvider = IOSSimulatorFakeStatusProvider(
+                wrapping: LocalModelStatusProvider(modelAssetStore: modelAssetStore)
+            )
             let modelManager = ModelManagerViewModel(
                 modelRegistry: registry,
-                modelAssetStore: modelAssetStore
+                statusProvider: fakeStatusProvider
             )
             let engineStore = TTSEngineStore(
                 backend: AnyTTSEngineBackend(

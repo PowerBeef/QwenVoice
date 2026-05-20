@@ -16,6 +16,7 @@
 		0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */; };
 		0CF0F58510A8660B4271B74E /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 15E10159D190CE71E25388FE /* MLXAudioTTS */; };
 		0D54E198EE173129C4A2B771 /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B703DF8A07FC4F83D3202F /* ModelInfo.swift */; };
+		0DBD4126D6783119602B2DB3 /* IOSSimulatorFakeInstallRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87264D972026F10185EC34F6 /* IOSSimulatorFakeInstallRegistry.swift */; };
 		0EFABC078A628F459E6E62F7 /* IOSSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3837D18DB04238E5D9200B5E /* IOSSettingsViews.swift */; };
 		102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */; };
 		12543458CF8FCB9C38524A9B /* EngineServiceTrustPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 940DC33B01DA7425CEB5E2FF /* EngineServiceTrustPolicy.swift */; };
@@ -415,6 +416,7 @@
 		802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSModel.swift; sourceTree = "<group>"; };
 		8265666E168A61818AB382C1 /* IOSGenerationInputControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerationInputControls.swift; sourceTree = "<group>"; };
 		82A05DAF95ECD80C6A42AD1F /* TTSEngineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSEngineStore.swift; sourceTree = "<group>"; };
+		87264D972026F10185EC34F6 /* IOSSimulatorFakeInstallRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSSimulatorFakeInstallRegistry.swift; sourceTree = "<group>"; };
 		874E704E40B3589D4AD3D45F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		890E011F57EAC237416DDF0F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		89331D74C7D33B5E0DF54415 /* LivePreviewDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePreviewDiagnostics.swift; sourceTree = "<group>"; };
@@ -879,6 +881,7 @@
 				C4A51A054EBF03C0D4E010A6 /* IOSRootNavigationModels.swift */,
 				3837D18DB04238E5D9200B5E /* IOSSettingsViews.swift */,
 				FA28E2DF284402995B080598 /* IOSShellPrimitives.swift */,
+				87264D972026F10185EC34F6 /* IOSSimulatorFakeInstallRegistry.swift */,
 				AE7201D32EDE24172A957BE8 /* IOSSimulatorTTSEngine.swift */,
 				EA27F5C2D0BF5784B054202E /* IOSStudioShellViews.swift */,
 				2EC6F0D89B4220E1F3A6CA71 /* LaunchScreen.storyboard */,
@@ -1345,6 +1348,7 @@
 				344EA1CECA3F8F8B111BC547 /* IOSRootNavigationModels.swift in Sources */,
 				0EFABC078A628F459E6E62F7 /* IOSSettingsViews.swift in Sources */,
 				2652AA780375CA68D2A076C9 /* IOSShellPrimitives.swift in Sources */,
+				0DBD4126D6783119602B2DB3 /* IOSSimulatorFakeInstallRegistry.swift in Sources */,
 				98AF262A3789109DF8DDAD46 /* IOSSimulatorTTSEngine.swift in Sources */,
 				E88C8734CDB1D90E10235D62 /* IOSStudioShellViews.swift in Sources */,
 				447FCAF92871DDEB0C8E164A /* LivePreviewDiagnostics.swift in Sources */,

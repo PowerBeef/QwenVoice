@@ -53,6 +53,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
         }
     }
 
+
     func state(for model: TTSModel) -> OperationState {
         // Honor explicit operation-state writes first so the Simulator
         // fake installer can render its downloading/verifying/installing
@@ -209,6 +210,10 @@ final class IOSModelInstallerViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: stepNanos)
             if Task.isCancelled { return }
             states[modelID] = .installed
+            // Register with the Simulator fake-install registry so any
+            // subsequent modelManager.refresh() returns .installed for
+            // this ID via IOSSimulatorFakeStatusProvider.
+            IOSSimulatorFakeInstallRegistry.shared.markInstalled(modelID, sizeBytes: Int(totalBytes))
             modelManager.statuses[modelID] = .installed(sizeBytes: Int(totalBytes))
             fakeInstallTasks[modelID] = nil
             onModelInstalled?(modelID)
@@ -219,6 +224,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
         guard IOSSimulatorRuntimeSupport.isSimulator else { return }
         fakeInstallTasks[model.id]?.cancel()
         fakeInstallTasks[model.id] = nil
+        IOSSimulatorFakeInstallRegistry.shared.clear(model.id)
         states[model.id] = .available(estimatedBytes: model.estimatedDownloadBytes)
         modelManager.statuses[model.id] = .notInstalled
     }
@@ -230,6 +236,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
             states[modelID] = .deleting
             try? await Task.sleep(nanoseconds: 700_000_000)
             states.removeValue(forKey: modelID)
+            IOSSimulatorFakeInstallRegistry.shared.clear(modelID)
             modelManager.statuses[modelID] = .notInstalled
         }
     }
