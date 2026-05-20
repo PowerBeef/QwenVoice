@@ -377,10 +377,13 @@ struct IOSCapsuleSelector<Item: Identifiable & Hashable>: View {
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        // Selected text now rides on a flat accentWash fill
+                        // (B.4), so textPrimary reads better than the
+                        // accentForeground that targeted the prior gradient.
                         .foregroundStyle(
                             item == selection
-                                ? IOSAppTheme.accentForeground
-                                : IOSAppTheme.textPrimary
+                                ? IOSAppTheme.textPrimary
+                                : IOSAppTheme.textSecondary
                         )
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 36)

@@ -78,7 +78,7 @@ struct IOSEngineLifecycleToast: View {
         case .interrupted:
             return ToastDescriptor(
                 identifier: "interrupted",
-                message: "Engine paused — generation will resume shortly.",
+                message: "Engine paused. Generation will resume shortly.",
                 symbol: "pause.circle",
                 tint: .yellow
             )
@@ -99,7 +99,7 @@ struct IOSEngineLifecycleToast: View {
         case .failed:
             return ToastDescriptor(
                 identifier: "failed",
-                message: "Engine error — try again, or check Settings → Model Downloads.",
+                message: "Engine error. Try again, or open Settings → Model Downloads.",
                 symbol: "exclamationmark.triangle",
                 tint: .red
             )

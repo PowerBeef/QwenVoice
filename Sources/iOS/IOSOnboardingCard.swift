@@ -33,9 +33,11 @@ struct IOSFirstRunOnboardingCard: View {
             .accessibilityIdentifier("onboarding_openSettings")
         }
         .padding(16)
+        // Neutral surface — gold appears on the CTA only. Mirrors macOS
+        // "warm without volume" pattern (PRODUCT.md design principle 5).
         .iosSubtleGlassSurface(
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous),
-            tint: IOSBrandTheme.accent
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous),
+            tint: nil
         )
         .accessibilityIdentifier("onboarding_firstRunCard")
     }

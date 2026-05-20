@@ -121,8 +121,11 @@ enum IOSBrandTheme {
     static let primaryTextUIColor = UIColor(red: 0.95, green: 0.94, blue: 0.92, alpha: 1)
     static let placeholderUIColor = UIColor(red: 0.50, green: 0.53, blue: 0.58, alpha: 1)
     static let primaryText = Color(uiColor: primaryTextUIColor)
-    static let secondaryText = Color(dark: UIColor(red: 0.73, green: 0.76, blue: 0.80, alpha: 1))
-    static let mutedText = Color(dark: UIColor(red: 0.55, green: 0.58, blue: 0.63, alpha: 1))
+    // Warm-neutral secondary text. Drops the prior cool blue chroma so the
+    // palette tints toward the Vocello gold hue per the impeccable shared
+    // design law and PRODUCT.md "Warm without volume".
+    static let secondaryText = Color(dark: UIColor(red: 0.78, green: 0.76, blue: 0.72, alpha: 1))
+    static let mutedText = Color(dark: UIColor(red: 0.62, green: 0.60, blue: 0.55, alpha: 1))
     static let inputStroke = Color(dark: UIColor(red: 0.96, green: 0.92, blue: 0.82, alpha: 0.12))
     static let bannerFill = Color(dark: UIColor(red: 0.18, green: 0.19, blue: 0.22, alpha: 0.92))
     static let tabBarBackground = Color(dark: UIColor(red: 0.075, green: 0.083, blue: 0.102, alpha: 0.93))
@@ -199,7 +202,7 @@ enum IOSAppTheme {
     static let glassFloatingFill = IOSBrandTheme.tabBarBackground.opacity(0.66)
     static let glassOuterStroke = Color.white.opacity(0.12)
     static let glassInnerStroke = Color.white.opacity(0.04)
-    static let cardCornerRadius: CGFloat = 22
+    static let cardCornerRadius: CGFloat = 16
     static let cardShadowRadius: CGFloat = 8
     static let cardShadowOffset: CGFloat = 3
 
@@ -213,8 +216,16 @@ enum IOSAppTheme {
         tint.opacity(0.10)
     }
 
+    // Strong mode-tinted stroke. Matches macOS accentStroke (34% dark / 28%
+    // light); iOS is dark-only so we land at 34%.
     static func accentStroke(_ tint: Color) -> Color {
-        tint.opacity(0.18)
+        tint.opacity(0.34)
+    }
+
+    // Whisper accent wash for selected chips and pills. Matches macOS
+    // accentWash (20% dark). Used by the mode selector and emotion chips.
+    static func accentWash(_ tint: Color) -> Color {
+        tint.opacity(0.20)
     }
 
     static func accentFill(_ tint: Color) -> LinearGradient {
@@ -229,8 +240,13 @@ enum IOSAppTheme {
         Color.white.opacity(0.05)
     }
 
+    // Mode-aware glass tint. Matches macOS surfaceGlassTint (14% dark) when
+    // a tint is supplied; falls back to a neutral smoked glass at 10% dark
+    // when nil. Tunes "warm without volume" per PRODUCT.md.
     static func subtleGlassTint(_ tint: Color? = nil, intensity: Double = 1.0) -> Color {
-        (tint ?? IOSBrandTheme.silver).opacity(0.055 * intensity)
+        let base = tint ?? IOSBrandTheme.silver
+        let opacity = (tint == nil) ? 0.10 : 0.14
+        return base.opacity(opacity * intensity)
     }
 }
 
@@ -350,17 +366,20 @@ struct IOSStatusBadge: View {
     var body: some View {
         let shape = Capsule(style: .continuous)
 
+        // Flat fill + stroke. Chips on iOS now mirror the macOS chip audit
+        // (May 2026): no glass on badges, so they contrast with the glassy
+        // cards behind them and don't collapse the hierarchy.
         Text(text)
             .font(.caption.weight(.semibold))
             .foregroundStyle(tone.foreground)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
-            .iosSubtleGlassSurface(
-                in: shape,
-                tint: tone.foreground,
-                fill: IOSAppTheme.glassSurfaceFillMuted.opacity(0.58),
-                strokeOpacity: 0.16
-            )
+            .background {
+                shape.fill(tone.fill)
+            }
+            .overlay {
+                shape.stroke(tone.foreground.opacity(0.30), lineWidth: 0.75)
+            }
     }
 }
 
@@ -686,7 +705,10 @@ struct IOSStudioUtilityHeader: View {
     private var titleFont: Font {
         switch titleRole {
         case .productBrand:
-            return .system(.title3, design: .serif, weight: .semibold)
+            // Mirror macOS sidebar wordmark (Sources/Views/Sidebar/SidebarView.swift):
+            // SF Rounded semibold. Was .serif previously — drifted from the
+            // macOS lockup. Aligning here so iPhone and Mac read as the same brand.
+            return .system(.title3, design: .rounded, weight: .semibold)
         case .section:
             return .system(.title3, design: .default, weight: .bold)
         }
@@ -695,7 +717,7 @@ struct IOSStudioUtilityHeader: View {
     private var titleTracking: CGFloat {
         switch titleRole {
         case .productBrand:
-            return 0.15
+            return 0
         case .section:
             return 0
         }
@@ -721,10 +743,10 @@ struct IOSProductTitleLockup: View {
                 .accessibilityHidden(true)
 
             Text(title)
-                .font(.system(.title3, design: .serif, weight: .semibold))
+                .font(.system(.title3, design: .rounded, weight: .semibold))
                 .foregroundStyle(IOSAppTheme.textPrimary)
                 .lineLimit(1)
-                .tracking(0.15)
+                .tracking(0)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
@@ -1003,7 +1025,30 @@ struct IOSMemoryHeaderAccessory: View {
 
     let state: IOSMemoryIndicatorState
 
+    // PRODUCT.md design principle 2: "Output is the hero. Chrome supports
+    // them." A live memory chip on every screen pulls attention from the
+    // user's script and waveform. Collapse to a small colored dot when
+    // healthy; only expand to the full chip during guarded/critical
+    // pressure events.
     var body: some View {
+        switch state.band {
+        case .healthy:
+            collapsedDot
+        case .guarded, .critical:
+            expandedChip
+        }
+    }
+
+    private var collapsedDot: some View {
+        Circle()
+            .fill(state.tint)
+            .frame(width: 6, height: 6)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(state.accessibilityLabel)
+            .accessibilityIdentifier("generate_memoryHeaderAccessory")
+    }
+
+    private var expandedChip: some View {
         HStack(alignment: .center, spacing: iconSpacing) {
             Image(systemName: "memorychip.fill")
                 .font(.system(size: symbolSize, weight: .semibold))
@@ -1564,19 +1609,19 @@ extension View {
         )
     }
 
+    // Selected-pill chip treatment. Flat by design — mirrors the macOS chip
+    // audit (May 2026, AppTheme.swift studioChip) which keeps chips flat so
+    // they contrast with the glassy cards behind them. Was previously a
+    // glassy gradient capsule, which collapsed the cards/chips hierarchy.
     func iosSelectorPillGlass(tint: Color) -> some View {
         let shape = Capsule(style: .continuous)
         return self
             .background {
-                shape.fill(IOSAppTheme.accentFill(tint))
+                shape.fill(IOSAppTheme.accentWash(tint))
             }
-            .iosSubtleGlassSurface(
-                in: shape,
-                tint: tint,
-                fill: Color.clear,
-                strokeOpacity: 0.14,
-                interactive: true
-            )
+            .overlay {
+                shape.stroke(tint.opacity(0.32), lineWidth: 1)
+            }
     }
 
     func iosSelectorRailGlass(tint: Color) -> some View {

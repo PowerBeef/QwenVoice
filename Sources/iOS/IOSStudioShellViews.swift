@@ -218,26 +218,31 @@ private struct IOSAccessibleAccentTabBackground<S: InsettableShape>: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
+    // Mirrors the macOS sidebar selection treatment
+    // (Sources/Views/Sidebar/SidebarView.swift): neutral smoked glass
+    // background plus a single mode-tinted accent ring. Replaces the prior
+    // full-gradient gold capsule, which read too loud relative to PRODUCT.md
+    // "Warm without volume".
     var body: some View {
         if reduceTransparency {
             shape
-                .fill(IOSAppTheme.accentFill(tint))
+                .fill(IOSAppTheme.subtleGlassTint(nil))
                 .overlay {
                     shape
-                        .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
+                        .stroke(tint.opacity(0.42), lineWidth: 1)
                 }
         } else {
             shape
-                .fill(IOSAppTheme.accentFill(tint))
+                .fill(IOSAppTheme.subtleGlassTint(nil))
                 .glassEffect(
                     .regular
-                        .tint(IOSAppTheme.subtleGlassTint(tint, intensity: 1.0))
+                        .tint(IOSAppTheme.subtleGlassTint(tint, intensity: 0.9))
                         .interactive(),
                     in: shape
                 )
                 .overlay {
                     shape
-                        .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
+                        .stroke(tint.opacity(0.42), lineWidth: 1)
                 }
         }
     }
@@ -261,9 +266,13 @@ private struct IOSStudioRootDockButton: View {
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
             }
+            // Selected state pairs with the new neutral-glass background, so
+            // the label rides on a quiet smoked surface and only the mode-
+            // tinted ring carries the accent signal. accentForeground was
+            // too dark to read on the post-B.3 background.
             .foregroundStyle(
                 isSelected
-                    ? IOSAppTheme.accentForeground
+                    ? IOSAppTheme.textPrimary
                     : IOSAppTheme.textSecondary
             )
             .frame(maxWidth: .infinity)

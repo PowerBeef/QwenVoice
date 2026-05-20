@@ -750,7 +750,7 @@ struct IOSVoiceCloningView: View {
             return "Install \(cloneModel.name) in Settings."
         }
         if draft.referenceAudioPath == nil {
-            return "Choose a saved voice or import a recording. Imported clips are session-only — Save to Saved Voices to keep one for next time."
+            return "Choose a saved voice or import a recording. Imported clips are session-only. Tap Save to Saved Voices to keep one for next time."
         }
         if let cloneContextStatus {
             switch cloneContextStatus {

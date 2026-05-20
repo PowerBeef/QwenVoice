@@ -41,6 +41,7 @@
 		2EA6BDC67DBC9CF242C64949 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 197C02DEBAE4CD7083953F31 /* MLX */; };
 		30609C65E67479598357E64F /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C7D6BE8A8364773C069202 /* WaveformService.swift */; };
 		30FB7ACB9FAA05EA35B76940 /* QwenVoiceBackendCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 305B82987DE76A718A67DE36 /* QwenVoiceBackendCore.swift */; };
+		325EFF9597E749D7B54D8C9A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9B899A22B7619F15A40FC99C /* Assets.xcassets */; };
 		344EA1CECA3F8F8B111BC547 /* IOSRootNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A51A054EBF03C0D4E010A6 /* IOSRootNavigationModels.swift */; };
 		369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B84E7EAC8760A09DC87915DD /* CustomVoiceView.swift */; };
 		38A34F6DB741EEB45DFC0699 /* QwenVoiceCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1CD42CBFA3E0E68EDA48DEA /* QwenVoiceCore.framework */; };
@@ -83,6 +84,7 @@
 		64632D36BB7D5B179743C1C5 /* VocelloEngineExtensionHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 981847F3339656A6F41E95FA /* VocelloEngineExtensionHost.swift */; };
 		64DBE2E5558AB9BCEBD09D2E /* ContractBackedModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75ED7320DEC606B571AB6E14 /* ContractBackedModelRegistry.swift */; };
 		6911F6DF40E40078CDE91DA0 /* TTSEngineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E7AE4ADBE28C15D463E8CC /* TTSEngineStore.swift */; };
+		696D108B695D096D5C44E494 /* qwenvoice_contract.json in Resources */ = {isa = PBXBuildFile; fileRef = 617BE72142511CD5043C341E /* qwenvoice_contract.json */; };
 		6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */; };
 		6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9B0840026EFF26202877BF /* EmotionPickerView.swift */; };
 		6D89F84D9EB637ED63D386B2 /* VocelloEngineExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED82B18D9F24B4F02123281 /* VocelloEngineExtension.swift */; };
@@ -1244,7 +1246,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				325EFF9597E749D7B54D8C9A /* Assets.xcassets in Resources */,
 				82B95BB3F61F41F3BB882283 /* LaunchScreen.storyboard in Resources */,
+				696D108B695D096D5C44E494 /* qwenvoice_contract.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

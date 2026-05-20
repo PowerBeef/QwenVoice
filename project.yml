@@ -288,12 +288,12 @@ targets:
       - path: Sources/iOS
       - path: Sources/iOSSupport
       - path: Sources/SharedSupport
-    resources:
-      - path: Sources/iOS/LaunchScreen.storyboard
-        buildPhase: resources
       - path: Sources/Resources/qwenvoice_contract.json
         buildPhase: resources
       - path: Sources/Assets.xcassets
+        buildPhase: resources
+    resources:
+      - path: Sources/iOS/LaunchScreen.storyboard
         buildPhase: resources
     settings:
       base:
