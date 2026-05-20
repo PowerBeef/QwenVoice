@@ -150,6 +150,19 @@ Two-platform Swift codebase with an out-of-process engine on each platform.
 
 **iOS design tokens align to macOS** (May 2026, commit `287c969`). `IOSAppTheme.subtleGlassTint` is 14% opacity (matches macOS `surfaceGlassTint` dark); `accentStroke` is 34%; `accentWash` is 20%. Neutral palette is warm-tinted (`textSecondary` ~`#C5BFAE`, `textTertiary` ~`#7E7868`) rather than cool blue-gray. Card corner radii unify at 16 pt; chips and badges are flat (no glass) per the macOS May 2026 chip audit. Brand wordmark uses SF Rounded semibold, mirroring `Sources/Views/Sidebar/SidebarView.swift`. When changing iOS colors, check the macOS values first — these are intentionally locked together.
 
+**iOS Claude Design redesign** (May 2026, commits `51d8dce` through `68fda10`). The iOS app moved to a 4-tab IA (**Studio / Voices / History / Settings**) sourced from `design_references/Vocello iOS/` (React + CSS prototype) and `design_references/Vocello Design System/`. Key files introduced:
+
+- `Sources/iOS/IOSDesignSystemPrimitives.swift` — shared building blocks: `IOSCornerRadius` (8 chip / 10 input / 16 card / 22 stage), `IOSDesignMotion` (220/360/420 ms ease-out curves, cubic-bezier 0.22, 1, 0.36, 1), `IOSModeBackdrop` (radial mode-tinted wash), `IOSWaveformBars` (deterministic seed-based bars used by History thumbnails + Player sheet), `IOSVoiceAvatar` (hue-by-id gradient circle), `IOSBottomSheet` (drag-to-dismiss chrome with grabber + title), `IOSStudioSetupChip`, `IOSFilterChipRow`, `IOSSearchField`, `IOSPrimaryCTAButton`.
+- `Sources/iOS/IOSOnboardingFlow.swift` — first-launch 3-step welcome (Welcome, Install hint, You're set). Gated by `IOSAppDefaults.hasCompletedOnboarding`.
+- `Sources/iOS/IOSPlayerSheet.swift` + `IOSWordTimingPlanner.swift` — full-screen Player sheet with 38-bar waveform scrubber and karaoke transcript that follows playback under linear word-timing (engine doesn't emit per-token timestamps; transcript split evenly across audio duration).
+- `Sources/iOS/IOSBottomSheets.swift` — five sheets in one file: `IOSDeliveryPickerSheet` (preset grid + intensity + optional custom-tone escape), `IOSVoicePickerSheet`, `IOSReferenceClipSheet`, `IOSModelInstallSheet`, `IOSDeleteModelSheet`.
+- `Sources/iOS/IOSRecordingOverlay.swift` — clone-reference capture via `AVAudioRecorder` at 24 kHz mono Int16 PCM, live amplitude meter, 10-20 s validation gate. Wired into Voice Cloning's "Record reference clip…" button. Requires `NSMicrophoneUsageDescription` in `Sources/iOS/Info.plist`.
+- `Sources/iOS/IOSVoicesView.swift` — unified Voices tab combining built-in speakers (`TTSContract.allSpeakerDescriptors`) with saved voices (`SavedVoicesViewModel`). Tapping a built-in speaker presets `customVoiceDraft.selectedSpeaker` and jumps to Studio Custom; tapping a saved voice stages `PendingVoiceCloningHandoff` and jumps to Studio Clone.
+
+The Studio screen still uses the legacy per-mode views (`IOSCustomVoiceView` / `IOSVoiceDesignView` / `IOSVoiceCloningView`) inside the mode-segmented control. The delivery picker inside those views now opens `IOSDeliveryPickerSheet` instead of a system Menu. The full setup-chip + inline-player completion pattern from the design prototype is not yet wired into the per-mode views; lifting the per-mode setup into the new chip layout is a follow-up track.
+
+`Sources/iOSSupport/Services/IOSAppDefaults.swift` owns iOS user-defaults keys (`hasCompletedOnboarding`, `autoplayCompletions`).
+
 **Entitlements:** App sandbox is **disabled** (`com.apple.security.app-sandbox = false` in `Sources/QwenVoice.entitlements`) — required for MLX. Hardened runtime is on with allow-unsigned-memory and disable-library-validation flags.
 
 ## Performance + memory adaptation (May 2026)
