@@ -12,6 +12,18 @@ name: Release
 #     DMG, uploads as workflow artifact only. Useful for re-runs and dry
 #     packaging without creating a Release.
 #
+# Jobs:
+#   - package: macOS DMG production (signed + notarized + stapled).
+#   - compile-ios: iOS compile-safety only. Runs in parallel with
+#     `package` and does NOT block macOS publishing if it fails.
+#     A signed iOS IPA / TestFlight job is intentionally NOT here yet
+#     — it requires the iOS Distribution certificate, a provisioning
+#     profile bound to com.qvoice.ios, and Apple's approval of the
+#     com.apple.developer.kernel.increased-memory-limit entitlement,
+#     none of which are in place as of v2.0.0. See the iOS shipping
+#     plan in docs/reference/release-readiness.md for the rollout
+#     sequence.
+#
 # Toolchain pinning mirrors the local setup documented in CLAUDE.md:
 #   - Xcode 26.0 (project.yml `xcodeVersion: "26.0"`)
 #   - macOS 26.0 deployment target, Apple Silicon (`arch=arm64`)
@@ -269,3 +281,72 @@ jobs:
           if [ -n "${APPLE_API_KEY_PATH:-}" ] && [ -f "$APPLE_API_KEY_PATH" ]; then
             rm -f "$APPLE_API_KEY_PATH"
           fi
+
+  compile-ios:
+    # iOS compile-safety check. Runs in parallel with the macOS package
+    # job and is intentionally NOT a `needs:` dependency — if iOS source
+    # regresses, the macOS DMG still ships.
+    #
+    # This job does NOT produce a TestFlight-ready IPA. The real archive
+    # + export + upload pipeline lives in scripts/release_ios_testflight.sh
+    # and needs three Apple-side prereqs that don't exist as of v2.0.0:
+    #   1. com.apple.developer.kernel.increased-memory-limit entitlement
+    #      approved by Apple Developer Support for com.qvoice.ios.
+    #   2. iOS Distribution certificate enrolled in team FK2D8X36G2.
+    #   3. Provisioning profile for com.qvoice.ios + the engine extension
+    #      bundle that includes the increased-memory-limit entitlement.
+    # Once those are in place, add a sibling `archive-ios` job that
+    # imports the iOS dist cert + profile, runs
+    # `scripts/release_ios_testflight.sh --export`, validates with
+    # scripts/verify_ios_release_archive.sh, and uploads the IPA as a
+    # workflow artifact. TestFlight `--upload` mode stays manual until
+    # the export path has been proven end-to-end at least once.
+    name: iOS compile-safety
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.0
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.0.app
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen + xcbeautify
+        run: |
+          brew install xcodegen xcbeautify
+          xcodegen --version
+          xcbeautify --version
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            build/Debug/foundation/local-builds/ios-derived-data/SourcePackages
+          key: spm-ios-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-ios-${{ runner.os }}-xcode26-
+
+      - name: Regenerate Xcode project
+        # build_foundation_targets.sh assumes the .xcodeproj exists; the
+        # repo doesn't check it in, only project.yml. Same setup the
+        # macOS job does inside release.sh.
+        run: ./scripts/regenerate_project.sh
+
+      - name: Compile iOS targets (no code signing)
+        # CODE_SIGNING_ALLOWED=NO inside the script — produces an unsigned
+        # .app + .appex under build/Debug/foundation/local-builds/.
+        # Purely a "does this still compile" gate.
+        run: ./scripts/build_foundation_targets.sh ios
+
+      - name: Upload iOS xcresult bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-compile-xcresult
+          path: build/Debug/foundation/local-builds/vocello-ios-generic-build.xcresult
+          if-no-files-found: warn
+          retention-days: 14

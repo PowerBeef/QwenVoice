@@ -172,3 +172,37 @@ Minimum-device re-entry evidence should explicitly cover:
 - TestFlight archive/export verification and, when applicable, App Store Connect upload proof
 
 The iPhone track remains compile-safe during the current macOS milestone, but the checklist above is not a macOS release blocker.
+
+## iPhone Shipping Plan (post-2.0.0)
+
+With macOS 2.0.0 stable shipped, the iPhone track is being re-opened on a TestFlight-first path. The full plan lives at `~/.claude/plans/convert-agents-md-into-claude-md-parallel-hennessy.md` (6 phases, organized into 3 tracks). The two user-facing prerequisites that are not derivable from code:
+
+### Apple entitlement request (critical-path blocker, ~1–3 weeks Apple-side)
+
+MLX models exceed iOS's default per-process memory cap (~5–6 GB). The app already declares `com.apple.developer.kernel.increased-memory-limit` in `Sources/iOS/VocelloiOS.entitlements` and `Sources/iOSEngineExtension/VocelloEngineExtension.entitlements`, but Apple must approve the entitlement before it takes effect at runtime.
+
+File at https://developer.apple.com/contact/ → "Programs and Enrollment" → "Request resource entitlement":
+
+- Team ID: `FK2D8X36G2`
+- App name + bundle ID: Vocello, `com.qvoice.ios`
+- Entitlement: `com.apple.developer.kernel.increased-memory-limit`
+- Justification: cite the on-device Qwen3-TTS / MLX workload, the iPhone 15 Pro deployment-target floor, the `iPhonePro` memory policy (`NativeMemoryPolicyResolver` tier with 128 MB cache + 30 s idle unload), the engine extension's process-isolation role, and the macOS counterpart at https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0 as proof the app exists in production. Full template in the plan file.
+
+Pass criterion: Apple replies with a tracking case number. Re-check the App Store Connect "Capabilities" tab for `com.qvoice.ios` to confirm grant.
+
+### App Store Connect setup (parallel to entitlement wait, ~30 min)
+
+Manual prep that does not require the entitlement and can happen immediately:
+
+1. **Create app record** at App Store Connect → My Apps → +. Platform iOS, name "Vocello", bundle ID `com.qvoice.ios` (must match `project.yml`), SKU `vocello-ios-2026`, primary language English (US).
+2. **Set primary category**: Productivity (or Utilities). Multimedia would also fit.
+3. **Confirm API key scope**: the existing `APPLE_NOTARY_KEY_ID` (used for macOS notarization) needs "App Manager" role to enable IPA upload via `xcodebuild -exportArchive ... destination upload`. Verify at Users and Access → Integrations → API. Same issuer ID works for any number of keys.
+4. **Seed internal-tester list**: create a group "Maintainer & devs" in TestFlight → Internal Testing. Add `patricedery02@gmail.com` as first tester. External testers come later as a separate Apple-review process.
+
+### Pipeline state after Phase 4
+
+`.github/workflows/release.yml` now runs `compile-ios` in parallel with the macOS `package` job. The iOS job runs `scripts/build_foundation_targets.sh ios` (compile-safety only, no signing). A signed-IPA `archive-ios` job is intentionally NOT in the workflow yet — it requires the entitlement approval + an iOS Distribution certificate + a provisioning profile for `com.qvoice.ios` to exist, none of which are in place as of v2.0.0. Once those prereqs are met, extend the workflow with a sibling job that imports the iOS dist cert, runs `scripts/release_ios_testflight.sh --export`, and uploads the IPA + `release-metadata-ios.txt` as workflow artifacts. TestFlight `--upload` mode stays manual until the export path is proven end-to-end at least once.
+
+### Hosted model catalog
+
+`scripts/check_ios_catalog.sh` validates the hosted catalog at `https://downloads.qvoice.app/ios/catalog/v1/models.json` against `Sources/Resources/qwenvoice_contract.json`. That URL does not resolve as of v2.0.0; hosting the catalog (S3 / Cloudflare R2 / GitHub Pages mirror) is a Phase 5 prerequisite — without it, the iPhone app cannot complete Settings → Model Downloads on a real device. The override env var `QVOICE_IOS_MODEL_CATALOG_URL` lets local testing point at a staging mirror.
