@@ -114,7 +114,7 @@ enum IOSPreviewRuntime {
                 variant: "default",
                 title: "Generate / Custom",
                 initialState: IOSPreviewInitialState(
-                    selectedTab: .generate,
+                    selectedTab: .studio,
                     selectedGenerationSection: .custom,
                     customDraft: customDraft,
                     designDraft: VoiceDesignDraft(),
@@ -127,7 +127,7 @@ enum IOSPreviewRuntime {
                 variant: "default",
                 title: "Generate / Design",
                 initialState: IOSPreviewInitialState(
-                    selectedTab: .generate,
+                    selectedTab: .studio,
                     selectedGenerationSection: .design,
                     customDraft: CustomVoiceDraft(selectedSpeaker: TTSModel.defaultSpeaker),
                     designDraft: designDraft,
@@ -140,7 +140,7 @@ enum IOSPreviewRuntime {
                 variant: "default",
                 title: "Generate / Clone",
                 initialState: IOSPreviewInitialState(
-                    selectedTab: .generate,
+                    selectedTab: .studio,
                     selectedGenerationSection: .clone,
                     customDraft: CustomVoiceDraft(selectedSpeaker: TTSModel.defaultSpeaker),
                     designDraft: VoiceDesignDraft(),

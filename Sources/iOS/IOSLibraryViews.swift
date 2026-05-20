@@ -6,10 +6,17 @@ struct IOSLibraryContainerView: View {
     @Binding var selectedSection: IOSLibrarySection
     let onUseVoiceInClone: (Voice) -> Void
 
+    private var activeTab: IOSAppTab {
+        switch selectedSection {
+        case .voices: return .voices
+        case .history: return .history
+        }
+    }
+
     var body: some View {
         IOSStudioShellScreen(
             selectedTab: $selectedTab,
-            activeTab: .library,
+            activeTab: activeTab,
             tint: IOSBrandTheme.library
         ) {
             VStack(alignment: .leading, spacing: 14) {

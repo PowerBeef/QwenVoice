@@ -332,10 +332,12 @@ struct IOSStudioSectionGroup<Content: View>: View {
 private extension IOSAppTab {
     var title: String {
         switch self {
-        case .generate:
-            return "Generate"
-        case .library:
-            return "Library"
+        case .studio:
+            return "Studio"
+        case .voices:
+            return "Voices"
+        case .history:
+            return "History"
         case .settings:
             return "Settings"
         }
@@ -343,10 +345,12 @@ private extension IOSAppTab {
 
     var systemImage: String {
         switch self {
-        case .generate:
-            return "sparkles"
-        case .library:
-            return "square.stack.3d.up"
+        case .studio:
+            return "waveform.badge.mic"
+        case .voices:
+            return "person.wave.2.fill"
+        case .history:
+            return "clock.arrow.circlepath"
         case .settings:
             return "gearshape"
         }
@@ -354,9 +358,11 @@ private extension IOSAppTab {
 
     var tint: Color {
         switch self {
-        case .generate:
+        case .studio:
             return IOSBrandTheme.accent
-        case .library:
+        case .voices:
+            return IOSBrandTheme.library
+        case .history:
             return IOSBrandTheme.library
         case .settings:
             return IOSBrandTheme.settings

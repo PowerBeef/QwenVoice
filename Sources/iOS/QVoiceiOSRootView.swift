@@ -4,7 +4,7 @@ import QwenVoiceCore
 struct QVoiceiOSRootView: View {
     let modelRegistry: ContractBackedModelRegistry
 
-    @State private var selectedTab: IOSAppTab = .generate
+    @State private var selectedTab: IOSAppTab = .studio
     @State private var selectedLibrarySection: IOSLibrarySection = .history
     @State private var selectedGenerationSection: IOSGenerationSection = .custom
     @State private var customVoiceDraft: CustomVoiceDraft
@@ -34,7 +34,7 @@ struct QVoiceiOSRootView: View {
             cloneDraft = previewCloneDraft
         }
 
-        _selectedTab = State(initialValue: previewInitialState?.selectedTab ?? .generate)
+        _selectedTab = State(initialValue: previewInitialState?.selectedTab ?? .studio)
         _selectedGenerationSection = State(
             initialValue: previewInitialState?.selectedGenerationSection ?? .custom
         )
@@ -63,7 +63,7 @@ struct QVoiceiOSRootView: View {
     @ViewBuilder
     private var activeRootScreen: some View {
         switch selectedTab {
-        case .generate:
+        case .studio:
             NavigationStack {
                 IOSGenerateContainerView(
                     selectedTab: $selectedTab,
@@ -80,11 +80,14 @@ struct QVoiceiOSRootView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
 
-        case .library:
+        case .voices:
             NavigationStack {
                 IOSLibraryContainerView(
                     selectedTab: $selectedTab,
-                    selectedSection: $selectedLibrarySection,
+                    selectedSection: Binding(
+                        get: { .voices },
+                        set: { _ in }
+                    ),
                     onUseVoiceInClone: { voice in
                         pendingVoiceCloningHandoff = PendingVoiceCloningHandoff(
                             savedVoiceID: voice.id,
@@ -93,7 +96,29 @@ struct QVoiceiOSRootView: View {
                             transcriptLoadError: nil
                         )
                         selectedGenerationSection = .clone
-                        selectedTab = .generate
+                        selectedTab = .studio
+                    }
+                )
+            }
+            .toolbar(.hidden, for: .navigationBar)
+
+        case .history:
+            NavigationStack {
+                IOSLibraryContainerView(
+                    selectedTab: $selectedTab,
+                    selectedSection: Binding(
+                        get: { .history },
+                        set: { _ in }
+                    ),
+                    onUseVoiceInClone: { voice in
+                        pendingVoiceCloningHandoff = PendingVoiceCloningHandoff(
+                            savedVoiceID: voice.id,
+                            wavPath: voice.wavPath,
+                            transcript: (try? voice.loadTranscript()) ?? "",
+                            transcriptLoadError: nil
+                        )
+                        selectedGenerationSection = .clone
+                        selectedTab = .studio
                     }
                 )
             }

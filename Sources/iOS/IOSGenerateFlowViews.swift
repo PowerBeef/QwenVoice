@@ -95,7 +95,7 @@ struct IOSGenerateContainerView: View {
     var body: some View {
         IOSStudioShellScreen(
             selectedTab: $selectedTab,
-            activeTab: .generate,
+            activeTab: .studio,
             tint: selectedSection.primaryActionTint
         ) {
             IOSMemoryHeaderAccessory(state: memoryIndicatorStore.state)

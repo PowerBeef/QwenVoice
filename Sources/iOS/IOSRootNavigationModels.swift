@@ -2,8 +2,9 @@ import SwiftUI
 import QwenVoiceCore
 
 enum IOSAppTab: String, CaseIterable, Identifiable {
-    case generate
-    case library
+    case studio
+    case voices
+    case history
     case settings
 
     var id: String { rawValue }
