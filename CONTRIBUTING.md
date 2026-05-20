@@ -2,6 +2,10 @@
 
 Thanks for helping with QwenVoice/Vocello. This repo is in a macOS-first release track, so contributor work should keep the next public macOS release clean while keeping iPhone compile-safe.
 
+## Agent Guide
+
+`CLAUDE.md` at the repo root is the single source of truth for repo conventions, build commands, generation-flow architecture, performance + memory adaptation, known traps, and the "no tests on CI" stance. Read it first; this file is the contributor-facing summary, `CLAUDE.md` has the depth.
+
 ## Source Of Truth
 
 When facts disagree, trust:
@@ -45,9 +49,21 @@ Then run the relevant build proof:
 ./scripts/build_foundation_targets.sh ios
 ```
 
-Behavioral testing is local-only. The repo has no CI and no XCTest targets as of May 2026, but it does maintain a Claude Code–driven smoke/bench harness in `scripts/uitest.sh` plus the runbooks under `docs/reference/`. For Debug behavior, launch with `./scripts/build.sh run` or `scripts/uitest.sh prep`; Debug uses the persistent `QwenVoice-Debug` store so models and history survive rebuilds. For fresh local release behavior, launch `build/Release/Vocello.app` only after `./scripts/release.sh`; each packaged local Release app receives its own clean app-support folder and preferences suite. Any new test framework, CI workflow, QA shell surface, or parallel benchmark harness should be a deliberate, scoped decision.
+Behavioral testing is local-only. CI is scoped to release packaging only via the single `.github/workflows/release.yml` workflow that fires on `release.published` — no tests, no benches, no smoke runs on CI. Local behavioral validation lives in the Claude Code–driven smoke/bench harness in `scripts/uitest.sh` plus the runbooks under `docs/reference/`. For Debug behavior, launch with `./scripts/build.sh run` or `scripts/uitest.sh prep`; Debug uses the persistent `QwenVoice-Debug` store so models and history survive rebuilds. For fresh local release behavior, launch `build/Release/Vocello.app` only after `./scripts/release.sh`; each packaged local Release app receives its own clean app-support folder and preferences suite. Any new test framework, additional CI workflow beyond `release.yml`, QA shell surface, or parallel benchmark harness should be a deliberate, scoped decision.
+
+The `scripts/build.sh` script is the canonical local entrypoint (`debug`, `run`, `release`, `clean`); the lower-level scripts remain available but route through it. At most one Debug `.app` and one Release `.app/.dmg` live under `build/` at a time — the build script prunes stale products automatically.
 
 For current macOS release signoff, the maintained local loop is documented in `docs/reference/release-readiness.md`.
+
+### Runtime Data Folders
+
+Three tiers, configuration-aware, never overlap:
+
+- **Debug** (`#if DEBUG` Xcode build): `~/Library/Application Support/QwenVoice-Debug/` — persistent across rebuilds.
+- **Repo-local Release** (built via `scripts/release.sh` and run from `build/Release/Vocello.app`): `~/Library/Application Support/QwenVoice-Release-Local/<release-data-id>/` — fresh per packaging.
+- **Installed/public Release** (the `.app` copied to `/Applications/`): `~/Library/Application Support/QwenVoice/` — normal end-user storage.
+
+The `QWENVOICE_APP_SUPPORT_DIR` env var overrides the root in any configuration.
 
 ## Runtime Boundaries
 
