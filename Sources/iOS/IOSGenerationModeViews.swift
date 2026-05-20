@@ -657,6 +657,7 @@ struct IOSVoiceCloningView: View {
     @State private var isTranscriptExpanded = false
     @State private var isScriptFocused = false
     @State private var isBatchSheetPresented = false
+    @State private var isRecorderPresented = false
 
     private var cloneModel: TTSModel? {
         TTSModel.model(for: .clone)
@@ -857,6 +858,30 @@ struct IOSVoiceCloningView: View {
                     }
                 )
             }
+            .fullScreenCover(isPresented: $isRecorderPresented) {
+                IOSRecordingOverlay(
+                    onComplete: { url in
+                        isRecorderPresented = false
+                        applyRecordedReferenceAudio(at: url)
+                    },
+                    onCancel: { isRecorderPresented = false }
+                )
+            }
+    }
+
+    /// Track H landing point for freshly-recorded reference clips. The
+    /// recording overlay writes a 24 kHz mono Int16 WAV to a tmp path
+    /// that's already inside the app sandbox, so we don't need to route
+    /// through `ttsEngine.importReferenceAudio(from:)`'s security-scope
+    /// path (that's for files arriving from the file importer / iCloud).
+    private func applyRecordedReferenceAudio(at url: URL) {
+        // Clear any previously-selected saved voice — we're switching
+        // sources, just like the file importer does.
+        draft.selectedSavedVoiceID = nil
+        hydratedSavedVoiceID = nil
+        transcriptLoadError = nil
+        draft.referenceAudioPath = url.path
+        draft.referenceTranscript = ""
     }
 
     @ViewBuilder
@@ -906,6 +931,22 @@ struct IOSVoiceCloningView: View {
                     isTranscriptExpanded: $isTranscriptExpanded
                 )
             }
+
+            // Track H wiring: record a fresh reference clip on-device via
+            // the new IOSRecordingOverlay. Always available so the user has
+            // a third source alongside saved voices + import.
+            Button {
+                IOSHaptics.selection()
+                isRecorderPresented = true
+            } label: {
+                Label("Record reference clip…", systemImage: "mic.fill")
+                    .font(.footnote.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.bordered)
+            .tint(IOSGenerationSection.clone.primaryActionTint)
+            .accessibilityIdentifier("textInput_recordReferenceButton")
 
             if isBatchTriggerEnabled {
                 Button {
