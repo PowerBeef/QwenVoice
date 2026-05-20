@@ -86,13 +86,14 @@ struct QVoiceiOSRootView: View {
 
         case .voices:
             NavigationStack {
-                IOSLibraryContainerView(
+                IOSVoicesView(
                     selectedTab: $selectedTab,
-                    selectedSection: Binding(
-                        get: { .voices },
-                        set: { _ in }
-                    ),
-                    onUseVoiceInClone: { voice in
+                    onSelectBuiltInSpeaker: { speaker in
+                        customVoiceDraft.selectedSpeaker = speaker.id
+                        selectedGenerationSection = .custom
+                        selectedTab = .studio
+                    },
+                    onSelectSavedVoice: { voice in
                         pendingVoiceCloningHandoff = PendingVoiceCloningHandoff(
                             savedVoiceID: voice.id,
                             wavPath: voice.wavPath,
