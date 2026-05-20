@@ -342,16 +342,31 @@ private struct IOSHistoryItemCard: View {
         return String(format: "%.1fs", duration)
     }
 
+    private var thumbnailSeed: Int {
+        // Deterministic waveform: same row renders the same bars across
+        // launches. Use the database row id when present, fall back to a
+        // stable hash of the audio path.
+        if let id = item.id { return Int(truncatingIfNeeded: id) }
+        var hasher = Hasher()
+        hasher.combine(item.audioPath)
+        return hasher.finalize()
+    }
+
     var body: some View {
         IOSSurfaceCard(tint: modeTint) {
             HStack(alignment: .center, spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(IOSAppTheme.accentSurface(modeTint))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "waveform")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(modeTint)
+                        .frame(width: 48, height: 48)
+                    IOSWaveformBars(
+                        seed: thumbnailSeed,
+                        barCount: 12,
+                        tint: modeTint,
+                        progress: 1.0,
+                        isAnimating: false
+                    )
+                    .frame(width: 36, height: 24)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
