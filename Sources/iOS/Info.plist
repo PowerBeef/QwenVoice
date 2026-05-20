@@ -34,5 +34,7 @@
 	<array>
 		<string>arm64</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Vocello records reference clips you use to clone voices on-device. Recordings stay on this iPhone.</string>
 </dict>
 </plist>
