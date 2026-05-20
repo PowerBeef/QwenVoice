@@ -4,6 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MATRIX_PATH="$SCRIPT_DIR/../config/apple-platform-capability-matrix.json"
 EXPECT_SIGNED_RELEASE="${QWENVOICE_EXPECT_SIGNED_RELEASE:-0}"
+# Skip step [3/4] (launch the packaged app and confirm it stays running)
+# when the host OS can't actually run the app — most importantly the
+# GitHub Actions macOS runners, which ship Xcode 26 on a macOS-15 image
+# and therefore can launch nothing built against the macOS 26 SDK. The
+# build, sign, and bundle-content checks still run; only the GUI smoke
+# is suppressed. Set QWENVOICE_SKIP_LAUNCH_SMOKE=1 in the CI environment.
+SKIP_LAUNCH_SMOKE="${QWENVOICE_SKIP_LAUNCH_SMOKE:-0}"
 TEAM_ID_INFO_KEY="QwenVoiceTeamIdentifier"
 
 # shellcheck source=./lib/shared.sh
@@ -118,6 +125,13 @@ else
     echo "[2/4] Signature checks skipped (set QWENVOICE_EXPECT_SIGNED_RELEASE=1 for release verification)"
 fi
 echo ""
+
+if [ "$SKIP_LAUNCH_SMOKE" = "1" ]; then
+    echo "[3/4] Launch smoke skipped (QWENVOICE_SKIP_LAUNCH_SMOKE=1)."
+    echo ""
+    echo "[4/4] Release bundle verification passed (launch smoke skipped)."
+    exit 0
+fi
 
 echo "[3/4] Launching packaged app in isolated native mode..."
 TMP_UI_HOME="$(mktemp -d)"

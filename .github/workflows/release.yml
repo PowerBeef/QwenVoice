@@ -83,6 +83,12 @@ jobs:
           # QWENVOICE_SIGNING_MODE=developer-id + the related secrets and
           # pass --signing-mode developer-id below.
           QWENVOICE_SIGNING_MODE: ad-hoc
+          # Skip the [3/4] launch smoke in verify_release_bundle.sh. The
+          # GitHub Actions macOS runner ships Xcode 26 on a macOS-15 image,
+          # so it can build an Apple-Silicon macOS-26 app but cannot
+          # launch one (LSMinimumSystemVersion blocks it). Bundle, signing,
+          # and DMG checks still run.
+          QWENVOICE_SKIP_LAUNCH_SMOKE: "1"
         run: |
           if [ -n "${{ inputs.output_name }}" ]; then
             ./scripts/release.sh --preflight none --output-name "${{ inputs.output_name }}"
