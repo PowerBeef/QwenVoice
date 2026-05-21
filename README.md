@@ -2,6 +2,7 @@
 
 Vocello is the next-generation version of QwenVoice, rebranded as the 2.0 macOS 26 release line.
 
+[![Website](https://img.shields.io/badge/Website-vocello.vercel.app-7b61ff?style=flat-square&logo=vercel)](https://vocello.vercel.app/)
 [![Vocello 2.0.0](https://img.shields.io/badge/Vocello-2.0.0-7b61ff?style=flat-square)](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0)
 ![macOS 26+](https://img.shields.io/badge/macOS-26%2B-111827?style=flat-square&logo=apple)
 ![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-111827?style=flat-square&logo=apple)
@@ -10,7 +11,7 @@ Vocello is the next-generation version of QwenVoice, rebranded as the 2.0 macOS 
 
 **The easiest way to generate private, high-quality AI voices entirely on your Mac.**
 
-Vocello is a local, private AI voice-generation app for Apple Silicon Macs. Write a script, choose how the voice should sound, and generate speech without a subscription or cloud credit meter.
+Vocello is a local, private AI voice-generation app for Apple Silicon Macs. Write a script, choose how the voice should sound, and generate speech without a subscription or cloud credit meter. Visit the official site at [vocello.vercel.app](https://vocello.vercel.app/) for the full product overview.
 
 | If you want... | Get this build | Notes |
 | --- | --- | --- |
