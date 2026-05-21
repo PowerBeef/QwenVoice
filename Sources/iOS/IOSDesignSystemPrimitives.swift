@@ -559,7 +559,7 @@ struct IOSPrimaryCTAButton: View {
             }
             .foregroundStyle(IOSAppTheme.accentForeground)
             .frame(maxWidth: .infinity)
-            .frame(height: 52)
+            .frame(height: 56)
             .background {
                 if reduceTransparency || !isEnabled {
                     Capsule(style: .continuous)
@@ -576,10 +576,25 @@ struct IOSPrimaryCTAButton: View {
                 }
             }
             .overlay {
+                // border: 0.5px solid rgba(255,255,255,0.18) per .vc-cta
                 Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.9)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
             }
-            .shadow(color: tint.opacity(isEnabled ? 0.30 : 0), radius: 14, x: 0, y: 4)
+            .overlay(alignment: .top) {
+                // inset 0 1px 0 rgba(255,255,255,0.25) — top-edge sheen
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 0.6)
+                    .mask(
+                        LinearGradient(
+                            colors: [.white, .clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            }
+            // box-shadow 0 6px 18px rgba(0,0,0,0.30) per .vc-cta
+            // (SwiftUI radius ≈ CSS blur / 2 → 9)
+            .shadow(color: .black.opacity(isEnabled ? 0.30 : 0), radius: 9, x: 0, y: 6)
         }
         .buttonStyle(.plain)
         .opacity(isEnabled ? 1.0 : 0.55)
