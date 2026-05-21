@@ -58,18 +58,7 @@ struct RootView: View {
         switch appModel.tab {
         case .studio:
             NavigationStack {
-                IOSGenerateContainerView(
-                    selectedTab: $appModel.tab,
-                    isTabActive: true,
-                    selectedSection: $appModel.studioMode,
-                    customVoiceDraft: $appModel.customVoiceDraft,
-                    voiceDesignDraft: $appModel.voiceDesignDraft,
-                    voiceCloningDraft: $appModel.voiceCloningDraft,
-                    pendingVoiceCloningHandoff: $appModel.pendingVoiceCloningHandoff,
-                    customPrimaryAction: $appModel.customPrimaryAction,
-                    designPrimaryAction: $appModel.designPrimaryAction,
-                    clonePrimaryAction: $appModel.clonePrimaryAction
-                )
+                StudioScreen()
             }
             .toolbar(.hidden, for: .navigationBar)
 
