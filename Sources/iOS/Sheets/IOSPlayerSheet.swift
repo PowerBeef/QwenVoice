@@ -79,7 +79,10 @@ struct IOSPlayerSheet: View {
             Button {
                 controller.shareCurrent()
             } label: {
-                Image(systemName: "square.and.arrow.up")
+                // Per design: download icon (arrow.down.to.line) replaces
+                // the share-up icon in the Player sheet header for
+                // consistency with the inline-player.
+                Image(systemName: "arrow.down.to.line")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(IOSAppTheme.textPrimary)
                     .frame(width: 36, height: 36)
@@ -89,7 +92,7 @@ struct IOSPlayerSheet: View {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Share")
+            .accessibilityLabel("Download")
         }
         .padding(.top, 8)
     }

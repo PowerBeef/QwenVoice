@@ -52,6 +52,10 @@ struct IOSStudioInlinePlayerCard: View {
             RoundedRectangle(cornerRadius: IOSCornerRadius.card, style: .continuous)
                 .stroke(tint.opacity(0.30), lineWidth: 0.9)
         }
+        // Softer shadow per the design notes: dropped from `0 12 32 / 0.45`
+        // to `0 2 10 / 0.22` so the player floats lightly above the canvas
+        // instead of bleeding into the space below the tab dock.
+        .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 1)
         .task {
             await controller.load(url: item.audioURL, autoplay: true)
         }
@@ -133,10 +137,12 @@ struct IOSStudioInlinePlayerCard: View {
 
             Spacer(minLength: 0)
 
-            if let onSave {
-                iconButton(symbol: "bookmark", label: "Save", action: onSave)
-            }
-            iconButton(symbol: "square.and.arrow.up", label: "Download") {
+            // Per design (Vocello iOS chat panel notes): the inline player
+            // exposes Download + Dismiss only; the take is auto-persisted
+            // to History so a separate Save button is redundant. Download
+            // icon is SF Symbol `arrow.down.to.line` (clean down-arrow
+            // pointing to a tray line) with no circle wrapper.
+            iconButton(symbol: "arrow.down.to.line", label: "Download") {
                 shareWAV()
             }
             iconButton(symbol: "xmark", label: "Dismiss") {
@@ -148,12 +154,9 @@ struct IOSStudioInlinePlayerCard: View {
     private func iconButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(IOSAppTheme.textSecondary)
                 .frame(width: 34, height: 34)
-                .background {
-                    Circle().fill(IOSAppTheme.glassSurfaceFillMuted.opacity(0.55))
-                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

@@ -106,9 +106,10 @@ struct IOSGenerateContainerView: View {
             // Vocello iOS/studio.jsx (vc-dock-area). No shell bottomAccessory.
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
-                    if !hasAnyInstalledModel {
-                        IOSFirstRunOnboardingCard(selectedTab: $selectedTab)
-                    }
+                    // Per design (design_references/Vocello iOS/app.jsx line
+                    // 82+): Studio has no first-run banner; the dock-area CTA
+                    // inside IOSStudioCanvas reads "Install [Mode] Model"
+                    // when the active model isn't installed.
 
                     IOSGenerationModeSelector(selectedSection: $selectedSection)
                         .frame(height: selectorRailHeight)
@@ -116,18 +117,21 @@ struct IOSGenerateContainerView: View {
                     IOSGenerateModeViewport(selection: selectedSection) {
                         IOSCustomVoiceView(
                             isActive: selectedSection == .custom,
+                            selectedTab: $selectedTab,
                             draft: $customVoiceDraft,
                             primaryAction: $customPrimaryAction
                         )
                     } design: {
                         IOSVoiceDesignView(
                             isActive: selectedSection == .design,
+                            selectedTab: $selectedTab,
                             draft: $voiceDesignDraft,
                             primaryAction: $designPrimaryAction
                         )
                     } clone: {
                         IOSVoiceCloningView(
                             isActive: selectedSection == .clone,
+                            selectedTab: $selectedTab,
                             draft: $voiceCloningDraft,
                             primaryAction: $clonePrimaryAction,
                             pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff
