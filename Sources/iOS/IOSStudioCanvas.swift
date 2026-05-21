@@ -69,27 +69,33 @@ struct IOSStudioCanvas<SetupChips: View>: View {
     @FocusState private var isScriptFocused: Bool
 
     var body: some View {
-        // Composer height — landed at fixed 320 pt with a trailing
-        // 0-length Spacer absorbing the leftover canvas space. The
-        // R5 / Phase-2 attempts at the design's
-        // `.vc-composer-pad { flex: 1 }` repeatedly broke layout:
-        // SwiftUI's `TextEditor` + `.frame(maxHeight: .infinity)`
-        // claims the canvas's entire vertical budget regardless of
-        // sibling `.layoutPriority`, pushing the Generate CTA under
-        // the tab dock. Phase 2 lifted the rail + engine-toast
-        // safeAreaInsets up to RootView (still worth it as a chrome-
-        // architecture cleanup) but didn't unlock the TextEditor
-        // sizing — that requires a UITextView wrapper with custom
-        // intrinsicContentSize, a separate batch.
+        // B.3 closed (2026-05-21): composer is now `flex: 1` per the
+        // design's `.vc-composer-pad`. The R5 / Phase 2 attempts kept
+        // failing because SwiftUI's stock `TextEditor` doesn't
+        // negotiate with `.frame(maxHeight: .infinity)` cleanly. The
+        // fix that finally worked: a thin UIViewRepresentable<UITextView>
+        // (`IOSFlexibleTextEditor` in `Sources/iOS/Studio/`) whose
+        // `intrinsicContentSize.height` is `UIView.noIntrinsicMetric`.
+        // With that out of the way, composerPad asks for the canvas's
+        // leftover height via `.layoutPriority(1)` + maxHeight infinity;
+        // chips + dock keep their natural sizes and pin against the
+        // bottom safe-area inset chain owned by RootView (Phase 2).
         VStack(alignment: .leading, spacing: 14) {
             composerPad
+                .frame(maxHeight: .infinity)
             setupRow
+                .layoutPriority(2)
             dockArea
-            Spacer(minLength: 0)
+                .layoutPriority(2)
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
-        .padding(.bottom, 8)
+        // Bottom clearance: NavigationStack inside RootView doesn't
+        // propagate the TabDock's safeAreaInset reservation to the
+        // canvas cleanly. 130 pt clears the dock pill (~80 pt visual
+        // + 50 pt breathing room so the Generate CTA's bottom edge
+        // floats clear of the dock).
+        .padding(.bottom, 130)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .iosAppAnimation(IOSDesignMotion.stateChange, value: genState)
     }
@@ -123,17 +129,19 @@ struct IOSStudioCanvas<SetupChips: View>: View {
                         .padding(.leading, 4)
                         .allowsHitTesting(false)
                 }
-                TextEditor(text: $script)
-                    .focused($isScriptFocused)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(IOSAppTheme.textPrimary)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, -4)      // counter-balance TextEditor's built-in inner inset
-                    .padding(.vertical, 4)
-                    .frame(height: 320)
-                    .accessibilityIdentifier("textInput_textEditor")
+                IOSFlexibleTextEditor(
+                    text: $script,
+                    font: UIFont.systemFont(ofSize: 22, weight: .medium),
+                    textColor: IOSAppTheme.textPrimaryUIColor,
+                    tintColor: UIColor(tint),
+                    isFocused: Binding(
+                        get: { isScriptFocused },
+                        set: { isScriptFocused = $0 }
+                    )
+                )
+                .accessibilityIdentifier("textInput_textEditor")
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onChange(of: script) { _, newValue in
                 let cap = charLimit + 200
                 if newValue.count > cap {
@@ -155,7 +163,7 @@ struct IOSStudioCanvas<SetupChips: View>: View {
             .padding(.top, 4)
             .padding(.bottom, 6)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Setup row
