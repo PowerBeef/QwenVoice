@@ -6,6 +6,28 @@ import QwenVoiceCore
 // picker / confirmation surface. Sheets are independent — call sites
 // present them via `.sheet(isPresented:)` and bind the relevant state.
 
+// MARK: - Emotion preset palette
+
+/// Shared dot-color palette for `EmotionPreset`s, matching `tokens.css`
+/// `--emotion-{name}`. Used by `IOSDeliveryPickerSheet` for per-cell
+/// dots AND by the Studio's delivery setup chip so the chip's avatar
+/// reflects the currently-selected preset's color identity.
+enum IOSEmotionPresetPalette {
+    static func dotColor(forID id: String?) -> Color {
+        switch id {
+        case "happy":    return Color(red: 0.95, green: 0.78, blue: 0.30)  // #F2C74D
+        case "sad":      return Color(red: 0.55, green: 0.62, blue: 0.78)  // #8C9EC7
+        case "angry":    return Color(red: 0.78, green: 0.32, blue: 0.20)  // #C75233
+        case "fearful":  return Color(red: 0.62, green: 0.50, blue: 0.78)  // #9E80C7
+        case "whisper":  return Color(red: 0.62, green: 0.62, blue: 0.66)  // #9E9EA8
+        case "dramatic": return Color(red: 0.78, green: 0.52, blue: 0.66)  // #C785A8
+        case "calm":     return Color(red: 0.62, green: 0.74, blue: 0.62)  // #9EBD9E
+        case "excited":  return Color(red: 0.92, green: 0.58, blue: 0.32)  // #EB9452
+        default:         return .white.opacity(0.55)                       // neutral / unknown
+        }
+    }
+}
+
 // MARK: - Delivery picker
 
 /// 9-cell preset grid + intensity row. Drives a `DeliveryInputState`-shaped
@@ -109,20 +131,11 @@ struct IOSDeliveryPickerSheet: View {
         }
     }
 
-    /// Mode-tinted dot color per preset, matching `tokens.css`
-    /// `--emotion-{name}` palette.
+    /// Mode-tinted dot color per preset. Delegates to the shared
+    /// `IOSEmotionPresetPalette` so the Studio's delivery chip can pick
+    /// up the same color identity.
     private func dotColor(for preset: EmotionPreset) -> Color {
-        switch preset.id {
-        case "happy":    return Color(red: 0.95, green: 0.78, blue: 0.30)  // #F2C74D
-        case "sad":      return Color(red: 0.55, green: 0.62, blue: 0.78)  // #8C9EC7
-        case "angry":    return Color(red: 0.78, green: 0.32, blue: 0.20)  // #C75233
-        case "fearful":  return Color(red: 0.62, green: 0.50, blue: 0.78)  // #9E80C7
-        case "whisper":  return Color(red: 0.62, green: 0.62, blue: 0.66)  // #9E9EA8
-        case "dramatic": return Color(red: 0.78, green: 0.52, blue: 0.66)  // #C785A8
-        case "calm":     return Color(red: 0.62, green: 0.74, blue: 0.62)  // #9EBD9E
-        case "excited":  return Color(red: 0.92, green: 0.58, blue: 0.32)  // #EB9452
-        default:         return .white.opacity(0.55)                       // neutral
-        }
+        IOSEmotionPresetPalette.dotColor(forID: preset.id)
     }
 
     /// Per-preset 2-column delivery cell.

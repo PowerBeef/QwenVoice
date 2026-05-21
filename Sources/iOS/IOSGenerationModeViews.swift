@@ -210,7 +210,7 @@ struct IOSCustomVoiceView: View {
             eyebrow: "Delivery",
             value: deliveryChipLabel,
             leadingSymbol: "waveform",
-            tint: IOSBrandTheme.custom,
+            tint: IOSEmotionPresetPalette.dotColor(forID: draft.delivery.selectedPresetID),
             action: { isDeliveryPickerPresented = true }
         )
     }
@@ -632,7 +632,7 @@ struct IOSVoiceDesignView: View {
             eyebrow: "Delivery",
             value: deliveryChipLabel,
             leadingSymbol: "waveform",
-            tint: IOSBrandTheme.design,
+            tint: IOSEmotionPresetPalette.dotColor(forID: draft.delivery.selectedPresetID),
             action: { isDeliveryPickerPresented = true }
         )
     }
