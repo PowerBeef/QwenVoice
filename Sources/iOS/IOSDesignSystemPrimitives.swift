@@ -273,13 +273,19 @@ struct IOSBottomSheet<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(IOSModeBackdrop(tint: tint, intensity: .whisper))
+        // R3 G.0 (2026-05-21): the per-sheet `IOSModeBackdrop` was a
+        // whisper-intensity radial wash that added a hue to every
+        // bottom sheet. Design's `.vc-sheet { background: rgba(20,22,
+        // 30,0.92) + blur 32 }` is flat translucent dark with no
+        // tint — the sheets read cleaner that way and the dock above
+        // already carries the mode hue.
     }
 
     private var grabber: some View {
+        // 36 × 5 pt per app.css `.vc-sheet-grabber`.
         Capsule(style: .continuous)
             .fill(IOSAppTheme.textTertiary.opacity(0.45))
-            .frame(width: 38, height: 5)
+            .frame(width: 36, height: 5)
     }
 
     private var header: some View {

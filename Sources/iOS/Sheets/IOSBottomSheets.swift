@@ -24,7 +24,10 @@ struct IOSDeliveryPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+        // 2-column grid per design_references/Vocello iOS/sheets.jsx
+        // DeliverySheet ("gridTemplateColumns: 'repeat(2, 1fr)'"). Each
+        // cell is wide enough to carry name + description text.
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
     }
 
     private var canChooseIntensity: Bool {
@@ -87,29 +90,92 @@ struct IOSDeliveryPickerSheet: View {
         }
     }
 
+    /// Two-line description per delivery preset, lifted from
+    /// `design_references/Vocello iOS/data.js` `deliveries[]`. Hand-wired
+    /// here instead of as a `description` field on `EmotionPreset` to
+    /// keep the iOSSupport model layer untouched.
+    private func description(for preset: EmotionPreset) -> String {
+        switch preset.id {
+        case "neutral":  return "Default, even pacing"
+        case "happy":    return "Warm, bright, smiling"
+        case "sad":      return "Quiet, slower, somber"
+        case "angry":    return "Tense, sharp"
+        case "fearful":  return "Quiet, hesitant"
+        case "whisper":  return "Soft, close-mic breath"
+        case "dramatic": return "Theatrical, projected"
+        case "calm":     return "Slower, reassuring"
+        case "excited":  return "Energetic, faster"
+        default:         return ""
+        }
+    }
+
+    /// Mode-tinted dot color per preset, matching `tokens.css`
+    /// `--emotion-{name}` palette.
+    private func dotColor(for preset: EmotionPreset) -> Color {
+        switch preset.id {
+        case "happy":    return Color(red: 0.95, green: 0.78, blue: 0.30)  // #F2C74D
+        case "sad":      return Color(red: 0.55, green: 0.62, blue: 0.78)  // #8C9EC7
+        case "angry":    return Color(red: 0.78, green: 0.32, blue: 0.20)  // #C75233
+        case "fearful":  return Color(red: 0.62, green: 0.50, blue: 0.78)  // #9E80C7
+        case "whisper":  return Color(red: 0.62, green: 0.62, blue: 0.66)  // #9E9EA8
+        case "dramatic": return Color(red: 0.78, green: 0.52, blue: 0.66)  // #C785A8
+        case "calm":     return Color(red: 0.62, green: 0.74, blue: 0.62)  // #9EBD9E
+        case "excited":  return Color(red: 0.92, green: 0.58, blue: 0.32)  // #EB9452
+        default:         return .white.opacity(0.55)                       // neutral
+        }
+    }
+
+    /// Per-preset 2-column delivery cell.
+    /// Per `design_references/Vocello iOS/sheets.jsx` lines 124-147 +
+    /// `app.css`: borderless rounded square, colored dot + name on the
+    /// first line, small description text below.
     private func cell(for preset: EmotionPreset) -> some View {
         let isSelected = preset.id == selectedPresetID
+        let dot = dotColor(for: preset)
         return Button {
             selectedPresetID = preset.id
             IOSHaptics.selection()
         } label: {
-            VStack(spacing: 8) {
-                Image(systemName: preset.sfSymbol)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(isSelected ? tint : IOSAppTheme.textSecondary)
-                Text(preset.label)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(IOSAppTheme.textPrimary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(dot)
+                        .frame(width: 8, height: 8)
+                    Text(preset.label)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                    Spacer(minLength: 0)
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(dot)
+                    }
+                }
+
+                Text(description(for: preset))
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 80)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
             .background {
-                RoundedRectangle(cornerRadius: IOSCornerRadius.card, style: .continuous)
-                    .fill(isSelected ? IOSAppTheme.accentWash(tint) : IOSAppTheme.glassSurfaceFillMuted.opacity(0.55))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? dot.opacity(0.14)
+                            : Color.white.opacity(0.03)
+                    )
             }
             .overlay {
-                RoundedRectangle(cornerRadius: IOSCornerRadius.card, style: .continuous)
-                    .stroke(isSelected ? tint.opacity(0.34) : Color.white.opacity(0.08), lineWidth: 0.9)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(
+                        isSelected ? dot.opacity(0.60) : Color.white.opacity(0.10),
+                        lineWidth: 0.5
+                    )
             }
         }
         .buttonStyle(.plain)
@@ -236,10 +302,29 @@ struct IOSVoicePickerSheet: View {
                         Text(subtitle)
                             .font(.caption)
                             .foregroundStyle(IOSAppTheme.textSecondary)
+                            .lineLimit(1)
                     }
                 }
 
                 Spacer(minLength: 8)
+
+                // R3 G.2 (2026-05-21): per design_references/Vocello iOS/
+                // sheets.jsx VoicePickerSheet row, the trailing cluster
+                // carries a small uppercase language pill so users can
+                // tell English / British / Japanese voices apart at a
+                // glance. Nil tag hides the pill.
+                if let tag = option.languageTag, !tag.isEmpty {
+                    Text(tag.uppercased())
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.4)
+                        .foregroundStyle(IOSAppTheme.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.08))
+                        }
+                }
 
                 if isSelected {
                     Image(systemName: "checkmark")
@@ -258,10 +343,47 @@ struct IOSVoicePickerSheet: View {
     }
 }
 
+/// Maps the contract's `nativeLanguage` strings ("English", "Chinese", …)
+/// to the short uppercase tags the picker pill renders. Adding a new
+/// language to the contract should add a case here.
+enum IOSVoicePickerLanguage {
+    static func tag(for nativeLanguage: String?) -> String? {
+        guard let nativeLanguage, !nativeLanguage.isEmpty else { return nil }
+        switch nativeLanguage.lowercased() {
+        case "english":       return "EN"
+        case "british":       return "EN-UK"
+        case "japanese":      return "JA"
+        case "chinese":       return "ZH"
+        case "korean":        return "KO"
+        case "spanish":       return "ES"
+        case "french":        return "FR"
+        case "german":        return "DE"
+        case "italian":       return "IT"
+        case "portuguese":    return "PT"
+        default:
+            // Fall back: first 2 letters uppercased ("Hindi" → "HI").
+            return String(nativeLanguage.prefix(2)).uppercased()
+        }
+    }
+}
+
 struct IOSVoicePickerOption: Identifiable, Equatable {
     let id: String
     let name: String
     let subtitle: String?
+    /// Optional 2-3 character language tag rendered as a pill in the row's
+    /// trailing cluster. Per `design_references/Vocello iOS/sheets.jsx`
+    /// VoicePickerSheet row: `<span class="vc-pill">{v.lang}</span>`.
+    /// Caller passes "EN" / "EN-UK" / "JA" / "ZH" / "Saved" etc. Nil hides
+    /// the pill.
+    let languageTag: String?
+
+    init(id: String, name: String, subtitle: String?, languageTag: String? = nil) {
+        self.id = id
+        self.name = name
+        self.subtitle = subtitle
+        self.languageTag = languageTag
+    }
 
     var initials: String {
         let words = name.split(separator: " ")
@@ -439,9 +561,10 @@ struct IOSModelInstallSheet: View {
 
     var body: some View {
         IOSBottomSheet(title: "Install model", tint: item.tint, onDismiss: onDismiss) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 18) {
                 header
                 description
+                privacyCallout
                 progressView
                 Spacer(minLength: 0)
                 cta
@@ -452,34 +575,93 @@ struct IOSModelInstallSheet: View {
         }
     }
 
+    /// R3 G.4 (2026-05-21): header rewritten to match
+    /// `design_references/Vocello iOS/sheets.jsx` ModelInstallSheet:
+    ///   - Icon block 56×56pt (was 44×44pt) with bolt glyph in a
+    ///     rounded square tinted by the mode color.
+    ///   - Title + description stack to the right, ending in two pills:
+    ///     size + green "On-device" status badge.
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .top, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(item.tint.opacity(0.2))
-                Image(systemName: item.symbol)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(item.tint)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(item.tint.opacity(0.88))
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.05, green: 0.05, blue: 0.07))
             }
-            .frame(width: 44, height: 44)
+            .frame(width: 56, height: 56)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(item.name)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(IOSAppTheme.textPrimary)
-                Text(item.sizeLabel)
-                    .font(.subheadline)
-                    .foregroundStyle(IOSAppTheme.textSecondary)
+
+                HStack(spacing: 8) {
+                    pill(text: item.sizeLabel, tint: IOSAppTheme.textSecondary, background: Color.white.opacity(0.08))
+                    pill(
+                        text: "On-device",
+                        tint: Color(red: 0.19, green: 0.82, blue: 0.35),
+                        background: Color(red: 0.19, green: 0.82, blue: 0.35).opacity(0.12)
+                    )
+                }
             }
-            Spacer()
+
+            Spacer(minLength: 0)
         }
+    }
+
+    private func pill(text: String, tint: Color, background: Color) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .semibold))
+            .tracking(0.4)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background {
+                Capsule(style: .continuous).fill(background)
+            }
     }
 
     private var description: some View {
         Text(item.description)
-            .font(.subheadline)
+            .font(.system(size: 14))
             .foregroundStyle(IOSAppTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// "Stays on your iPhone" privacy callout, lifted from the design.
+    /// Mirrors Vocello's local-only value prop (PRODUCT.md) and gives
+    /// users a single-glance reassurance before downloading a model
+    /// from Hugging Face.
+    private var privacyCallout: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(red: 0.19, green: 0.82, blue: 0.35))
+                .frame(width: 16, alignment: .center)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Stays on your iPhone")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(IOSAppTheme.textPrimary)
+                Text("Downloaded from Hugging Face once. Generation, audio, and history never leave the device.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.03))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        }
     }
 
     @ViewBuilder

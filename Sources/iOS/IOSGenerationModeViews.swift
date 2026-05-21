@@ -164,7 +164,8 @@ struct IOSCustomVoiceView: View {
                     IOSVoicePickerOption(
                         id: spec.id,
                         name: spec.displayName,
-                        subtitle: spec.shortDescription ?? spec.nativeLanguage
+                        subtitle: spec.shortDescription ?? spec.nativeLanguage,
+                        languageTag: IOSVoicePickerLanguage.tag(for: spec.nativeLanguage)
                     )
                 },
                 recents: [],

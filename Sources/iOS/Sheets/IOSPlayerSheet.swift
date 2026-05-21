@@ -24,16 +24,16 @@ struct IOSPlayerSheet: View {
 
             VStack(spacing: 0) {
                 topBar
-                Spacer(minLength: 16)
-                header
-                    .padding(.bottom, 20)
+                Spacer(minLength: 12)
                 waveform
-                    .padding(.bottom, 8)
-                scrubRow
-                    .padding(.bottom, 24)
-                transcript
+                    .padding(.bottom, 14)
+                header
                     .padding(.bottom, 22)
+                transcript
+                    .padding(.bottom, 18)
                 Spacer(minLength: 0)
+                scrubber
+                    .padding(.bottom, 18)
                 controls
             }
             .padding(.horizontal, 24)
@@ -99,73 +99,126 @@ struct IOSPlayerSheet: View {
 
     // MARK: - Header
 
+    /// Centered voice name + "Just now · 0:06" timestamp.
+    ///
+    /// R3 G.6.1 (2026-05-21): rewritten to match
+    /// `design_references/Vocello iOS/player.jsx` `.vc-player-sheet-meta`:
+    /// no avatar, voice name as 22pt SF Pro Display semibold on top,
+    /// "{timeLabel} · {duration}" in 13pt grey below. The previous
+    /// left-aligned avatar+name HStack didn't read as the marquee the
+    /// design wants.
     private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
-            IOSVoiceAvatar(seed: item.avatarSeed, initials: item.avatarInitials, diameter: 52)
+        VStack(spacing: 4) {
+            Text(item.voiceName)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(IOSAppTheme.textPrimary)
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.voiceName)
-                    .font(.system(.title3, design: .default, weight: .semibold))
-                    .foregroundStyle(IOSAppTheme.textPrimary)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    IOSModeDot(tint: item.modeTint)
-                    Text(item.modeLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(IOSAppTheme.textSecondary)
-                    if let detail = item.subtitle {
-                        Text("·")
-                            .font(.subheadline)
-                            .foregroundStyle(IOSAppTheme.textTertiary)
-                        Text(detail)
-                            .font(.subheadline)
-                            .foregroundStyle(IOSAppTheme.textSecondary)
-                            .lineLimit(1)
-                    }
+            HStack(spacing: 6) {
+                IOSModeDot(tint: item.modeTint)
+                Text(item.modeLabel)
+                if let detail = item.subtitle {
+                    Text("·")
+                        .foregroundStyle(IOSAppTheme.textTertiary)
+                    Text(detail)
+                        .lineLimit(1)
                 }
+                Text("·")
+                    .foregroundStyle(IOSAppTheme.textTertiary)
+                Text(controller.formatted(time: controller.duration))
+                    .monospacedDigit()
             }
-
-            Spacer(minLength: 0)
+            .font(.system(size: 13))
+            .foregroundStyle(IOSAppTheme.textSecondary)
         }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Waveform
 
+    /// R3 G.6.2 (2026-05-21): 42 bars at 96pt height per
+    /// `app.css .vc-big-wave { height: 96px }` + `player.jsx
+    /// <BigWaveform bars={42} />`. Was 38 bars at 72pt — too small to
+    /// read as the "art" of the player sheet.
     private var waveform: some View {
         IOSWaveformBars(
             seed: item.waveformSeed,
-            barCount: 38,
+            barCount: 42,
             tint: item.modeTint,
             progress: controller.progress,
             isAnimating: false
         )
-        .frame(height: 72)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 4)
-                .onChanged { value in
-                    let width = UIScreen.main.bounds.width - 48
-                    let ratio = max(0, min(1, value.location.x / width))
-                    controller.scrub(to: ratio)
-                }
-        )
+        .frame(height: 96)
     }
 
-    // MARK: - Scrub row
+    // MARK: - Scrubber
 
-    private var scrubRow: some View {
-        HStack {
-            Text(controller.formatted(time: controller.currentTime))
-            Spacer()
-            Text(controller.formatted(time: controller.duration))
+    /// R3 G.6.3 (2026-05-21): explicit scrubber track + progress fill +
+    /// draggable thumb, matching `app.css` `.vc-player-scrub*`. The
+    /// previous version showed only "0:00 / 0:00" labels and made
+    /// scrubbing depend on dragging the waveform — undiscoverable.
+    private var scrubber: some View {
+        VStack(spacing: 8) {
+            GeometryReader { geo in
+                let width = geo.size.width
+                let progress = CGFloat(controller.progress)
+                let thumbX = max(0, min(width, width * progress))
+
+                ZStack(alignment: .leading) {
+                    // Track
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                        .frame(height: 4)
+
+                    // Fill
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [item.modeTint.opacity(0.85), item.modeTint],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: thumbX, height: 4)
+
+                    // Thumb
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 16, height: 16)
+                        .overlay {
+                            Circle().stroke(item.modeTint, lineWidth: 2)
+                        }
+                        .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+                        .offset(x: thumbX - 8)
+                }
+                .frame(height: 24)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let ratio = max(0, min(1, value.location.x / width))
+                            controller.scrub(to: ratio)
+                        }
+                )
+            }
+            .frame(height: 24)
+
+            HStack {
+                Text(controller.formatted(time: controller.currentTime))
+                Spacer()
+                Text(controller.formatted(time: controller.duration))
+            }
+            .font(.system(.caption, design: .monospaced).monospacedDigit())
+            .foregroundStyle(IOSAppTheme.textSecondary)
         }
-        .font(.system(.caption, design: .rounded).monospacedDigit())
-        .foregroundStyle(IOSAppTheme.textSecondary)
     }
 
     // MARK: - Transcript
 
+    /// Centered karaoke transcript per
+    /// `app.css .vc-player-sheet-transcript { text-align: center }`.
+    /// Wrapping card removed so the transcript reads as flowing prose
+    /// like the design — the player sheet itself is the surface.
     private var transcript: some View {
         ScrollView(.vertical, showsIndicators: false) {
             IOSPlayerKaraokeText(
@@ -173,18 +226,10 @@ struct IOSPlayerSheet: View {
                 currentTime: controller.currentTime,
                 tint: item.modeTint,
                 isPlaying: controller.isPlaying,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                alignment: .center
             )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background {
-                RoundedRectangle(cornerRadius: IOSCornerRadius.card, style: .continuous)
-                    .fill(IOSAppTheme.glassSurfaceFillMuted.opacity(0.5))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: IOSCornerRadius.card, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-            }
+            .frame(maxWidth: .infinity)
         }
         .frame(maxHeight: 220)
     }
@@ -311,12 +356,13 @@ struct IOSPlayerKaraokeText: View {
     let tint: Color
     let isPlaying: Bool
     let reduceMotion: Bool
+    var alignment: TextAlignment = .leading
 
     var body: some View {
         Text(attributedTranscript)
             .font(.system(.title3, design: .default, weight: .regular))
             .lineSpacing(4)
-            .multilineTextAlignment(.leading)
+            .multilineTextAlignment(alignment)
             .fixedSize(horizontal: false, vertical: true)
     }
 
