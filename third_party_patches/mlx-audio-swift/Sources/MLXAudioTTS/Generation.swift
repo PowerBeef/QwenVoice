@@ -252,10 +252,12 @@ public extension SpeechGenerationModel {
         let (stream, continuation) = AsyncThrowingStream<AVAudioPCMBuffer, Error>.makeStream()
         let sampleRate = self.sampleRate
 
-        Task { @MainActor in
+        let producerTask = Task { @MainActor in
             do {
                 for try await samples in sampleStream {
+                    try Task.checkCancellation()
                     let buffer = try makePCMBuffer(samples: samples, sampleRate: sampleRate)
+                    try Task.checkCancellation()
                     continuation.yield(buffer)
                 }
                 continuation.finish()
@@ -265,6 +267,7 @@ public extension SpeechGenerationModel {
                 continuation.finish(throwing: error)
             }
         }
+        continuation.onTermination = { @Sendable _ in producerTask.cancel() }
 
         return stream
     }

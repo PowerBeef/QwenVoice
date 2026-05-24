@@ -66,7 +66,8 @@ public enum TTS {
         modelRepo: String,
         textProcessor _: TextProcessor? = nil,
         hfToken: String? = nil,
-        cache: HubCache = .default
+        cache: HubCache = .default,
+        revision: String = "main"
     ) async throws -> SpeechGenerationModel {
         guard let repoID = Repo.ID(rawValue: modelRepo) else {
             throw TTSModelError.invalidRepositoryID(modelRepo)
@@ -74,10 +75,16 @@ public enum TTS {
 
         let modelType = try await ModelUtils.resolveModelType(
             repoID: repoID,
+            revision: revision,
             hfToken: hfToken,
             cache: cache
         )
-        return try await loadModel(modelRepo: modelRepo, modelType: modelType, cache: cache)
+        return try await loadModel(
+            modelRepo: modelRepo,
+            modelType: modelType,
+            cache: cache,
+            revision: revision
+        )
     }
 
     public static func loadModel(
@@ -138,13 +145,18 @@ public enum TTS {
         modelRepo: String,
         modelType: String?,
         textProcessor _: TextProcessor? = nil,
-        cache: HubCache = .default
+        cache: HubCache = .default,
+        revision: String = "main"
     ) async throws -> SpeechGenerationModel {
         let resolvedType = normalizedModelType(modelType) ?? inferModelType(from: modelRepo)
         guard let resolvedType, resolvedType == "qwen3_tts" else {
             throw TTSModelError.unsupportedModelType(modelType ?? resolvedType)
         }
-        return try await Qwen3TTSModel.fromPretrained(modelRepo, cache: cache)
+        return try await Qwen3TTSModel.fromPretrained(
+            modelRepo,
+            cache: cache,
+            revision: revision
+        )
     }
 
     private static func normalizedModelType(_ modelType: String?) -> String? {

@@ -718,6 +718,66 @@ public enum Qwen3TTSMemoryCaches {
     }
 }
 
+private actor Qwen3TTSGenerationGate {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Error>
+    }
+
+    private var isHeld = false
+    private var waiters: [Waiter] = []
+
+    func acquire() async throws {
+        let id = UUID()
+        try Task.checkCancellation()
+
+        if !isHeld {
+            isHeld = true
+            return
+        }
+
+        try await withTaskCancellationHandler {
+            try await waitForTurn(id: id)
+        } onCancel: {
+            Task { await self.cancelWaiter(id: id) }
+        }
+
+        if Task.isCancelled {
+            release()
+            throw CancellationError()
+        }
+    }
+
+    func release() {
+        guard !waiters.isEmpty else {
+            isHeld = false
+            return
+        }
+
+        let waiter = waiters.removeFirst()
+        waiter.continuation.resume()
+    }
+
+    private func waitForTurn(id: UUID) async throws {
+        try Task.checkCancellation()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            guard !Task.isCancelled else {
+                continuation.resume(throwing: CancellationError())
+                return
+            }
+            waiters.append(Waiter(id: id, continuation: continuation))
+        }
+    }
+
+    private func cancelWaiter(id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let waiter = waiters.remove(at: index)
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+}
+
 // MARK: - Qwen3TTS Model
 
 public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedSpeechGenerationModel, Qwen3CustomVoicePrewarmDepthControlling, SpeechGenerationModelDiagnosticsProvider, @unchecked Sendable {
@@ -736,6 +796,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
     private var storedPreparationTimingsMS: [String: Int] = [:]
     private var storedPreparationBooleanFlags: [String: Bool] = [:]
     private var storedPreparationStringFlags: [String: String] = [:]
+    private let generationGate = Qwen3TTSGenerationGate()
 
     public var sampleRate: Int { config.sampleRate }
     public var loadTimingsMS: [String: Int] {
@@ -1335,6 +1396,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         generationParameters _: GenerateParameters,
         customPrewarmDepth: String?
     ) async throws {
+        try await withGenerationGate {
         guard speechTokenizer != nil else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -1366,6 +1428,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             streamStepWarmBooleanFlag: "custom_stream_step_prewarmed",
             precompileDecoderBuckets: prewarmDepth.precompileDecoderBuckets
         )
+        }
     }
 
     public func prepareVoiceDesign(
@@ -1374,6 +1437,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceDescription: String,
         generationParameters _: GenerateParameters
     ) async throws {
+        try await withGenerationGate {
         guard speechTokenizer != nil else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -1401,6 +1465,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             streamStepEvalTimingKey: "design_stream_step_warm_ms",
             streamStepWarmBooleanFlag: "design_stream_step_prewarmed"
         )
+        }
     }
 
     public func createVoiceClonePrompt(
@@ -1436,7 +1501,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             } else if refAudio.ndim == 2 {
                 refAudioForEncoder = refAudio.reshaped(1, refAudio.dim(0), refAudio.dim(1))
             }
-            refCodes = speechTokenizer.encode(refAudioForEncoder)
+            refCodes = try speechTokenizer.encode(refAudioForEncoder)
         } else {
             refCodes = nil
         }
@@ -1456,6 +1521,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
         generationParameters _: GenerateParameters
     ) async throws {
+        try await withGenerationGate {
         guard speechTokenizer != nil else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -1476,6 +1542,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 "clone_prompt_used": true,
             ]
         )
+        }
     }
 
     public func prepareForGeneration(
@@ -1486,6 +1553,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         language: String?,
         generationParameters: GenerateParameters
     ) async throws {
+        try await withGenerationGate {
         guard let speechTokenizer else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -1537,6 +1605,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 ? "design_prewarm_eval_ms"
                 : nil
         )
+        }
     }
 
     convenience init(config: Qwen3TTSModelConfig) {
@@ -1563,6 +1632,21 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         self.speakerEncoder = speakerEncoder
     }
 
+    private func withGenerationGate<T>(
+        _ operation: () async throws -> T
+    ) async throws -> T {
+        try await generationGate.acquire()
+        do {
+            try Task.checkCancellation()
+            let result = try await operation()
+            await generationGate.release()
+            return result
+        } catch {
+            await generationGate.release()
+            throw error
+        }
+    }
+
     // MARK: - SpeechGenerationModel protocol
 
     public func generate(
@@ -1573,6 +1657,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         language: String?,
         generationParameters: GenerateParameters
     ) async throws -> MLXArray {
+        try await withGenerationGate {
         guard speechTokenizer != nil else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -1598,6 +1683,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             memoryClearCadence: Self.productionFullResultMemoryClearCadence
         )
         return audio
+        }
     }
 
     public func generateStream(
@@ -1632,6 +1718,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let producerTask = Task { @Sendable [weak self] in
             guard let self else { return }
             do {
+                try await withGenerationGate {
                 try Task.checkCancellation()
                 guard speechTokenizer != nil else {
                     throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
@@ -1681,6 +1768,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                         continuation.yield(.chunkTimings(timings))
                     }
                 )
+                }
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: error)
@@ -1699,6 +1787,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         instruct: String?,
         generationParameters: GenerateParameters
     ) async throws -> AudioGenerationCompletion {
+        try await withGenerationGate {
         var generationInfo: AudioGenerationInfo?
         let audio = try generateVoiceDesign(
             text: text,
@@ -1725,6 +1814,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             info: generationInfo,
             finishReason: latestAudioGenerationFinishReason()
         )
+        }
     }
 
     public func generateVoiceDesign(
@@ -1733,6 +1823,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceDescription: String,
         generationParameters: GenerateParameters
     ) async throws -> AudioGenerationCompletion {
+        try await withGenerationGate {
         var generationInfo: AudioGenerationInfo?
         let audio = try generateVoiceDesign(
             text: text,
@@ -1758,6 +1849,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             info: generationInfo,
             finishReason: latestAudioGenerationFinishReason()
         )
+        }
     }
 
     public func generateVoiceClone(
@@ -1766,6 +1858,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
         generationParameters: GenerateParameters
     ) async throws -> AudioGenerationCompletion {
+        try await withGenerationGate {
         var generationInfo: AudioGenerationInfo?
         let audio = try generateVoiceDesign(
             text: text,
@@ -1793,6 +1886,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             info: generationInfo,
             finishReason: latestAudioGenerationFinishReason()
         )
+        }
     }
 
     private func latestAudioGenerationFinishReason() -> AudioGenerationFinishReason {
@@ -1824,6 +1918,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let producerTask = Task { @Sendable [weak self] in
             guard let self else { return }
             do {
+                try await withGenerationGate {
                 try Task.checkCancellation()
                 _ = try generateVoiceDesign(
                     text: text,
@@ -1860,6 +1955,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                         continuation.yield(.chunkTimings($0))
                     }
                 )
+                }
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: error)
@@ -1885,6 +1981,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let producerTask = Task { @Sendable [weak self] in
             guard let self else { return }
             do {
+                try await withGenerationGate {
                 try Task.checkCancellation()
                 _ = try generateVoiceDesign(
                     text: text,
@@ -1919,6 +2016,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                         continuation.yield(.chunkTimings($0))
                     }
                 )
+                }
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: error)
@@ -1944,6 +2042,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let producerTask = Task { @Sendable [weak self] in
             guard let self else { return }
             do {
+                try await withGenerationGate {
                 try Task.checkCancellation()
                 _ = try generateVoiceDesign(
                     text: text,
@@ -1980,6 +2079,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                         continuation.yield(.chunkTimings($0))
                     }
                 )
+                }
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: error)
@@ -2842,7 +2942,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         } else if refAudio.ndim == 2 {
             refAudioForEncoder = refAudio.reshaped(1, refAudio.dim(0), refAudio.dim(1))
         }
-        let refCodes = speechTokenizer!.encode(refAudioForEncoder) // [1, num_code_groups, ref_time]
+        guard let speechTokenizer else {
+            throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
+        }
+        let refCodes = try speechTokenizer.encode(refAudioForEncoder) // [1, num_code_groups, ref_time]
         return try prepareICLGenerationInputs(
             text: text,
             refCodes: refCodes,
@@ -3401,12 +3504,14 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
 
     public static func fromPretrained(
         _ modelRepo: String,
-        cache: HubCache = .default
+        cache: HubCache = .default,
+        revision: String = "main"
     ) async throws -> Qwen3TTSModel {
         let repoID = Repo.ID(rawValue: modelRepo)!
         let modelDir = try await ModelUtils.resolveOrDownloadModel(
             repoID: repoID,
             requiredExtension: "safetensors",
+            revision: revision,
             cache: cache
         )
         return try await fromPreparedDirectory(modelDir, modelRepo: modelRepo)

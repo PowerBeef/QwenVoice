@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import MLX
 import MLXAudioCodecs
+import MLXAudioCore
 @preconcurrency import MLXLMCommon
 import MLXNN
 
@@ -1084,9 +1085,11 @@ final class Qwen3TTSSpeechTokenizer: Module {
         encoderModel != nil
     }
 
-    func encode(_ audio: MLXArray) -> MLXArray {
+    func encode(_ audio: MLXArray) throws -> MLXArray {
         guard let encoderModel else {
-            fatalError("Encoder not available for this speech tokenizer")
+            throw AudioGenerationError.modelNotInitialized(
+                "Speech tokenizer encoder not loaded"
+            )
         }
         return encoderModel.encode(audio)
     }

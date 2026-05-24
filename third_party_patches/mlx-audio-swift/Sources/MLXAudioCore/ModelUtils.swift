@@ -4,6 +4,7 @@ import HuggingFace
 public enum ModelUtils {
     public static func resolveModelType(
         repoID: Repo.ID,
+        revision: String = "main",
         hfToken: String? = nil,
         cache: HubCache = .default
     ) async throws -> String? {
@@ -11,6 +12,7 @@ public enum ModelUtils {
         let modelURL = try await resolveOrDownloadModel(
             repoID: repoID,
             requiredExtension: "safetensors",
+            revision: revision,
             hfToken: hfToken,
             cache: cache
         )
@@ -31,6 +33,7 @@ public enum ModelUtils {
         repoID: Repo.ID,
         requiredExtension: String,
         additionalMatchingPatterns: [String] = [],
+        revision: String = "main",
         hfToken: String? = nil,
         cache: HubCache = .default
     ) async throws -> URL {
@@ -47,7 +50,8 @@ public enum ModelUtils {
             cache: resolvedCache,
             repoID: repoID,
             requiredExtension: requiredExtension,
-            additionalMatchingPatterns: additionalMatchingPatterns
+            additionalMatchingPatterns: additionalMatchingPatterns,
+            revision: revision
         )
     }
 
@@ -63,14 +67,20 @@ public enum ModelUtils {
         cache: HubCache = .default,
         repoID: Repo.ID,
         requiredExtension: String,
-        additionalMatchingPatterns: [String] = []
+        additionalMatchingPatterns: [String] = [],
+        revision: String = "main"
     ) async throws -> URL {
         let normalizedRequiredExtension = requiredExtension.hasPrefix(".")
             ? String(requiredExtension.dropFirst())
             : requiredExtension
 
         // Store downloaded model snapshots under the configured Hugging Face cache root.
-        let modelSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
+        let repoSubdir = repoID.description.replacingOccurrences(of: "/", with: "_")
+        let normalizedRevision = revision.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedRevision = normalizedRevision.isEmpty ? "main" : normalizedRevision
+        let modelSubdir = resolvedRevision == "main"
+            ? repoSubdir
+            : "\(repoSubdir)_rev_\(cacheSafeRevision(resolvedRevision))"
         let modelDir = cache.cacheDirectory
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(modelSubdir)
@@ -120,7 +130,7 @@ public enum ModelUtils {
             of: repoID,
             kind: .model,
             to: modelDir,
-            revision: "main",
+            revision: resolvedRevision,
             matching: Array(allowedExtensions),
             progressHandler: { progress in
                 print("\(progress.completedUnitCount)/\(progress.totalUnitCount) files")
@@ -153,6 +163,13 @@ public enum ModelUtils {
             print("Clearing Hub cache at: \(hubRepoDir.path)")
             try? FileManager.default.removeItem(at: hubRepoDir)
         }
+    }
+
+    private static func cacheSafeRevision(_ revision: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        return revision.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? String(scalar) : "_"
+        }.joined()
     }
 }
 

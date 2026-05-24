@@ -73,6 +73,17 @@ public class AudioSessionManager {
         #endif
     }
 
+    /// Unregister a target previously registered for memory warnings
+    public func unregisterForMemoryWarnings(target: Any) {
+        #if os(iOS)
+        NotificationCenter.default.removeObserver(
+            target,
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        #endif
+    }
+
     /// Deactivate the audio session
     public func deactivateAudioSession() {
         #if os(iOS)
