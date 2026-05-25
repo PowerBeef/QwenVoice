@@ -163,8 +163,13 @@ actor NativeEngineRuntime {
     /// cache isn't thread-safe and trips an MLX assertion. See crash
     /// report `~/Library/Logs/DiagnosticReports/QwenVoiceEngineService-2026-05-15-162429.ips`
     /// for the failing call stacks.
+    private struct PrewarmWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Error>
+    }
+
     private var prewarmInFlight = false
-    private var prewarmWaiters: [CheckedContinuation<Void, Never>] = []
+    private var prewarmWaiters: [PrewarmWaiter] = []
 
     init(
         loadCoordinator: any MLXModelCoordinating,
@@ -730,8 +735,9 @@ actor NativeEngineRuntime {
         // entire body including the `try await model.prewarm*(...)`
         // suspension — that's what makes it safe against actor
         // reentrancy.
-        await acquirePrewarmSlot()
+        try await acquirePrewarmSlot()
         defer { releasePrewarmSlot() }
+        try Task.checkCancellation()
 
         let prewarmSignpost = Self.signposter.beginInterval("Native Explicit Prewarm")
         defer {
@@ -835,26 +841,53 @@ actor NativeEngineRuntime {
     /// callers can both end up inside MLX's KV cache slice updates and
     /// trip the C++-side assertion that crashed the bench cycle at
     /// sample #38 (Voice Design / Quality cold 3).
-    private func acquirePrewarmSlot() async {
-        while prewarmInFlight {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                prewarmWaiters.append(continuation)
-            }
+    private func acquirePrewarmSlot() async throws {
+        try Task.checkCancellation()
+
+        guard prewarmInFlight else {
+            prewarmInFlight = true
+            return
         }
-        prewarmInFlight = true
+
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                prewarmWaiters.append(PrewarmWaiter(id: waiterID, continuation: continuation))
+            }
+        } onCancel: {
+            Task { await self.cancelPrewarmWaiter(id: waiterID) }
+        }
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            releasePrewarmSlot()
+            throw error
+        }
     }
 
-    /// Release the prewarm slot and wake every waiter. The first
-    /// waiter to be resumed will see `prewarmInFlight == false`, set
-    /// it back to `true`, and proceed; any remaining waiters will
-    /// loop and re-await. Drain-then-flip is intentional: it preserves
-    /// FIFO-ish wake order without holding extra state.
+    private func cancelPrewarmWaiter(id: UUID) {
+        guard let index = prewarmWaiters.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let waiter = prewarmWaiters.remove(at: index)
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+
+    /// Release the prewarm slot and wake exactly one queued waiter. When a
+    /// waiter is resumed, the slot remains logically held by that task so no
+    /// second caller can enter MLX prewarm work during actor reentrancy.
     private func releasePrewarmSlot() {
-        prewarmInFlight = false
-        let waiters = prewarmWaiters
-        prewarmWaiters.removeAll()
-        for waiter in waiters {
-            waiter.resume()
+        if prewarmWaiters.isEmpty {
+            prewarmInFlight = false
+        } else {
+            let waiter = prewarmWaiters.removeFirst()
+            prewarmInFlight = true
+            waiter.continuation.resume()
         }
     }
 
@@ -1038,8 +1071,9 @@ actor NativeEngineRuntime {
         // `activeDesignConditioningWarmKey` — which we'll have set
         // if we did real prewarm work — so the second caller takes
         // the cache-hit `reused` path instead of re-running prewarm.
-        await acquirePrewarmSlot()
+        try await acquirePrewarmSlot()
         defer { releasePrewarmSlot() }
+        try Task.checkCancellation()
 
         guard case .design(let voiceDescription, let deliveryStyle) = request.payload else {
             return DesignConditioningWarmState(

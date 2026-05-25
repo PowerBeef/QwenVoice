@@ -304,8 +304,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     /// reacting on machines that aren't pressure-bound. On iOS the
     /// engine-extension path starts the same monitor for the iPhonePro
     /// tier so the process running MLX can shed cache on kernel pressure.
-    private let memoryPressureMonitor: NativeMemoryPressureMonitor
+    private var memoryPressureMonitor: NativeMemoryPressureMonitor
     private var memoryPressureTask: Task<Void, Never>?
+    private var stopCleanupTask: Task<Void, Never>?
 
     public convenience init(
         modelRegistry: any ModelRegistry,
@@ -465,8 +466,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         memoryPressureTask?.cancel()
         memoryPressureTask = nil
         memoryPressureMonitor.stop()
+        memoryPressureMonitor = NativeMemoryPressureMonitor()
         let runtime = runtime
-        Task.detached(priority: .utility) {
+        let previousCleanupTask = stopCleanupTask
+        stopCleanupTask = Task.detached(priority: .utility) {
+            await previousCleanupTask?.value
             await runtime.configure(normalizedCloneReferenceDirectory: nil, voicesDirectory: nil)
             await runtime.stop()
         }
@@ -501,6 +505,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     }
 
     public func initialize(appSupportDirectory: URL) async throws {
+        if let stopCleanupTask {
+            await stopCleanupTask.value
+            self.stopCleanupTask = nil
+        }
+
         let voicesDirectory = appSupportDirectory.appendingPathComponent("voices", isDirectory: true)
         let normalizedCloneReferenceDirectory = appSupportDirectory.appendingPathComponent(
             "cache/normalized_clone_refs",

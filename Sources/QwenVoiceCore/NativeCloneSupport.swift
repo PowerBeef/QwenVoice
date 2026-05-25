@@ -678,9 +678,19 @@ actor NativePreparedCloneConditioningCache {
     }
 
     static func stableCloneReferenceFingerprint(for sourceURL: URL) throws -> String {
-        let resolvedPath = sourceURL.resolvingSymlinksInPath().path
-        let data = try Data(contentsOf: URL(fileURLWithPath: resolvedPath))
-        let digest = SHA256.hash(data: data)
+        let resolvedURL = URL(fileURLWithPath: sourceURL.resolvingSymlinksInPath().path)
+        let fileHandle = try FileHandle(forReadingFrom: resolvedURL)
+        defer { try? fileHandle.close() }
+
+        var hasher = SHA256()
+        while true {
+            guard let chunk = try fileHandle.read(upToCount: 1024 * 1024),
+                  !chunk.isEmpty else {
+                break
+            }
+            hasher.update(data: chunk)
+        }
+        let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 

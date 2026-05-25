@@ -282,30 +282,40 @@ actor ExtensionEngineCoordinator {
         print("[ExtensionEngineCoordinator] Sending engine-extension command '\(command.transportName)'")
 #endif
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let pendingRequest = PendingExtensionRequestBox(
-                commandName: command.transportName,
-                resume: { result in
-                    continuation.resume(with: result)
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
                 }
-            )
-            if let timeout = timeoutResolver(command) {
-                pendingRequest.timeoutTask = Task { [requestID = requestEnvelope.id] in
-                    do {
-                        try await Task.sleep(for: timeout)
-                    } catch {
-                        return
-                    }
-                    self.handleTimeout(for: requestID)
-                }
-            }
-            pendingRequests[requestEnvelope.id] = pendingRequest
 
-            transport.transport.perform(payload) { [weak self] replyData in
-                Task {
-                    await self?.handleReplyData(replyData, from: transport.id)
+                let pendingRequest = PendingExtensionRequestBox(
+                    commandName: command.transportName,
+                    resume: { result in
+                        continuation.resume(with: result)
+                    }
+                )
+                if let timeout = timeoutResolver(command) {
+                    pendingRequest.timeoutTask = Task { [requestID = requestEnvelope.id] in
+                        do {
+                            try await Task.sleep(for: timeout)
+                        } catch {
+                            return
+                        }
+                        self.handleTimeout(for: requestID)
+                    }
+                }
+                pendingRequests[requestEnvelope.id] = pendingRequest
+
+                transport.transport.perform(payload) { [weak self] replyData in
+                    Task {
+                        await self?.handleReplyData(replyData, from: transport.id)
+                    }
                 }
             }
+        } onCancel: {
+            Task { await self.cancelPendingRequest(id: requestEnvelope.id, command: command) }
         }
     }
 
@@ -359,6 +369,29 @@ actor ExtensionEngineCoordinator {
         pendingRequest.resume(.failure(error))
         if pendingRequest.commandName == "generate" {
             fireAndForget(.cancelActiveGeneration)
+        }
+    }
+
+    private func cancelPendingRequest(id requestID: UUID, command: ExtensionEngineCommand) {
+        guard let pendingRequest = pendingRequests.removeValue(forKey: requestID) else { return }
+        pendingRequest.timeoutTask?.cancel()
+        Self.logger.debug(
+            "Cancelled engine-extension command '\(pendingRequest.commandName, privacy: .public)' with id \(requestID.uuidString, privacy: .public)"
+        )
+        pendingRequest.resume(.failure(CancellationError()))
+        if let cleanupCommand = cancellationCleanupCommand(for: command) {
+            fireAndForget(cleanupCommand)
+        }
+    }
+
+    private func cancellationCleanupCommand(for command: ExtensionEngineCommand) -> ExtensionEngineCommand? {
+        switch command {
+        case .generate:
+            return .cancelActiveGeneration
+        case .ensureCloneReferencePrimed:
+            return .cancelClonePreparationIfNeeded
+        default:
+            return nil
         }
     }
 
