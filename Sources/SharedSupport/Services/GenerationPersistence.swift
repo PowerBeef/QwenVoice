@@ -43,6 +43,7 @@ enum GenerationPersistence {
         audioPlayer: AudioPlayerViewModel,
         caller: String
     ) {
+        emitClonePromptMetricsIfNeeded(result: result, caller: caller)
         AppPerformanceSignposts.emit("Final File Ready")
 
         if result.usedStreaming {
@@ -76,6 +77,52 @@ enum GenerationPersistence {
     ) {
         AppPerformanceSignposts.emit("Final File Ready")
         schedulePersistence(generation, caller: caller)
+    }
+
+    private static func emitClonePromptMetricsIfNeeded(
+        result: PersistenceGenerationResult,
+        caller: String
+    ) {
+        let timings = result.diagnosticTimingsMS
+        let booleans = result.diagnosticBooleanFlags
+        let strings = result.diagnosticStringFlags
+        let hasCloneMetrics = timings.keys.contains { $0.hasPrefix("clone_prompt_") }
+            || booleans.keys.contains { $0.hasPrefix("clone_prompt_") || $0 == "clone_transcript_backed" }
+            || strings.keys.contains { $0.hasPrefix("clone_") }
+        guard hasCloneMetrics else { return }
+
+        var fields: [String] = ["caller=\(caller)"]
+        for key in [
+            "clone_prompt_artifact_load",
+            "clone_prompt_build",
+            "clone_prompt_resolve",
+            "prime_clone_reference",
+        ] {
+            if let value = timings[key] {
+                fields.append("\(key)_ms=\(value)")
+            }
+        }
+        for key in [
+            "clone_prompt_artifact_hit",
+            "clone_prompt_memory_hit",
+            "clone_prompt_built",
+            "clone_transcript_backed",
+            "clone_reference_was_primed",
+            "clone_conditioning_reused",
+        ] {
+            if let value = booleans[key] {
+                fields.append("\(key)=\(value ? "true" : "false")")
+            }
+        }
+        for key in [
+            "clone_transcript_mode",
+            "clone_prompt_artifact_scope",
+        ] {
+            if let value = strings[key], !value.isEmpty {
+                fields.append("\(key)=\(value)")
+            }
+        }
+        AppPerformanceSignposts.emit("Clone Prompt Metrics", message: fields.joined(separator: " "))
     }
 
     private static func schedulePersistence(

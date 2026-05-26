@@ -10,6 +10,10 @@ enum AppPerformanceSignposts {
         subsystem: "com.patricedery.vocello",
         category: "performance"
     )
+    private static let log = OSLog(
+        subsystem: "com.patricedery.vocello",
+        category: "performance"
+    )
 
     static func begin(_ name: StaticString) -> Interval {
         Interval(name: name, state: signposter.beginInterval(name))
@@ -21,5 +25,9 @@ enum AppPerformanceSignposts {
 
     static func emit(_ name: StaticString) {
         signposter.emitEvent(name)
+    }
+
+    static func emit(_ name: StaticString, message: String) {
+        os_signpost(.event, log: log, name: name, "%{public}@", message)
     }
 }
