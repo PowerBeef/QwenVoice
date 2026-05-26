@@ -944,19 +944,51 @@ public struct GenerationResult: Hashable, Codable, Sendable {
     public let streamSessionDirectory: String?
     public let usedStreaming: Bool
     public let finishReason: GenerationFinishReason?
+    public let diagnosticTimingsMS: [String: Int]
+    public let diagnosticBooleanFlags: [String: Bool]
+    public let diagnosticStringFlags: [String: String]
 
     public init(
         audioPath: String,
         durationSeconds: Double,
         streamSessionDirectory: String?,
         usedStreaming: Bool,
-        finishReason: GenerationFinishReason? = nil
+        finishReason: GenerationFinishReason? = nil,
+        diagnosticTimingsMS: [String: Int] = [:],
+        diagnosticBooleanFlags: [String: Bool] = [:],
+        diagnosticStringFlags: [String: String] = [:]
     ) {
         self.audioPath = audioPath
         self.durationSeconds = durationSeconds
         self.streamSessionDirectory = streamSessionDirectory
         self.usedStreaming = usedStreaming
         self.finishReason = finishReason
+        self.diagnosticTimingsMS = diagnosticTimingsMS
+        self.diagnosticBooleanFlags = diagnosticBooleanFlags
+        self.diagnosticStringFlags = diagnosticStringFlags
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case audioPath
+        case durationSeconds
+        case streamSessionDirectory
+        case usedStreaming
+        case finishReason
+        case diagnosticTimingsMS
+        case diagnosticBooleanFlags
+        case diagnosticStringFlags
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        audioPath = try container.decode(String.self, forKey: .audioPath)
+        durationSeconds = try container.decode(Double.self, forKey: .durationSeconds)
+        streamSessionDirectory = try container.decodeIfPresent(String.self, forKey: .streamSessionDirectory)
+        usedStreaming = try container.decode(Bool.self, forKey: .usedStreaming)
+        finishReason = try container.decodeIfPresent(GenerationFinishReason.self, forKey: .finishReason)
+        diagnosticTimingsMS = try container.decodeIfPresent([String: Int].self, forKey: .diagnosticTimingsMS) ?? [:]
+        diagnosticBooleanFlags = try container.decodeIfPresent([String: Bool].self, forKey: .diagnosticBooleanFlags) ?? [:]
+        diagnosticStringFlags = try container.decodeIfPresent([String: String].self, forKey: .diagnosticStringFlags) ?? [:]
     }
 
     public var audioURL: URL {

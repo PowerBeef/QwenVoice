@@ -886,7 +886,10 @@ private struct StreamingExecutionContext: Sendable {
             durationSeconds: durationSeconds,
             streamSessionDirectory: nil,
             usedStreaming: false,
-            finishReason: finishReason
+            finishReason: finishReason,
+            diagnosticTimingsMS: timingOverridesMS,
+            diagnosticBooleanFlags: booleanFlags,
+            diagnosticStringFlags: stringFlags
         )
     }
 
@@ -1194,7 +1197,10 @@ private struct StreamingExecutionContext: Sendable {
             usedStreaming: true,
             finishReason: model.latestPreparationStringFlags["generation_end_reason"] == "token_cap"
                 ? .maxTokens
-                : .eos
+                : .eos,
+            diagnosticTimingsMS: timingOverridesMS,
+            diagnosticBooleanFlags: booleanFlags,
+            diagnosticStringFlags: stringFlags
         )
     }
 

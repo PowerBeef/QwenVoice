@@ -394,12 +394,23 @@ actor NativeEngineRuntime {
                 modelID: request.modelID,
                 model: model,
                 voicesDirectory: voicesDirectory,
-                language: cloneLanguage
+                language: cloneLanguage,
+                qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
             )
             cloneConditioning = conditioning
             mlxMemorySnapshots["after_clone_conditioning"] = NativeMemoryPolicyResolver.snapshot()
             wasPrimed = primedCloneReferenceKeys.contains(conditioning.internalIdentityKey)
             timingOverridesMS.merge(conditioning.timingsMS) { current, _ in current }
+            booleanFlags["clone_prompt_artifact_hit"] = conditioning.timingsMS["clone_prompt_artifact_load"] != nil
+            booleanFlags["clone_prompt_memory_hit"] = conditioning.clonePromptCacheHit == true
+                && conditioning.timingsMS["clone_prompt_artifact_load"] == nil
+            booleanFlags["clone_prompt_built"] = conditioning.timingsMS["clone_prompt_build"] != nil
+            booleanFlags["clone_transcript_backed"] = conditioning.resolvedTranscript != nil
+            booleanFlags["clone_reference_was_primed"] = wasPrimed
+            stringFlags["clone_transcript_mode"] = conditioning.transcriptMode.rawValue
+            stringFlags["clone_prompt_artifact_scope"] = conditioning.preparedVoiceID == nil
+                ? "transient_reference"
+                : "saved_voice"
             let cloneConditioningReused = conditioning.cloneConditioningReused
                 || activeCloneConditioningKey == conditioning.internalIdentityKey
             booleanFlags["clone_conditioning_reused"] = cloneConditioningReused
@@ -569,7 +580,8 @@ actor NativeEngineRuntime {
             modelID: modelID,
             model: model,
             voicesDirectory: voicesDirectory,
-            language: cloneLanguage
+            language: cloneLanguage,
+            qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
         )
         try ensureActiveClonePrimeToken(token)
 
@@ -636,7 +648,8 @@ actor NativeEngineRuntime {
                         payload: .clone(reference: reference)
                     ),
                     resolvedCloneTranscript: conditioning.resolvedTranscript
-                )
+                ),
+                qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
             )
         } catch {
             return
