@@ -20,6 +20,9 @@ Warm, clear, confident, and human. Vocello explains local AI generation plainly.
 - Avoid celebration copy, emoji, hype claims, and first-person plural.
 - Use sentence case. Reserve all caps for tiny labels only when they are truly needed.
 - Do not use em dashes in visible copy.
+- Keep public model messaging on the active 1.7B surface: Speed is 1.7B 4-bit, Quality is 1.7B 8-bit, and 0.6B remains inactive until explicitly re-enabled.
+- Do not publish third-party Vocello timing or clone-prompt performance claims unless they have been reproduced locally with the maintained QwenVoice benchmark harness.
+- Describe Voice Cloning as strongest when a Saved Voice is transcript-backed and can reuse a prepared Qwen3 clone prompt. Transcriptless or audio-only references are supported as lower-guidance fallbacks, not errors.
 
 ## Strategic Principles
 - Privacy is the architecture, not a badge.

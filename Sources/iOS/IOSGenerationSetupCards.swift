@@ -286,7 +286,8 @@ struct IOSVoiceCloningReferenceCard: View {
             Picker("Reference source", selection: selectedVoiceBinding) {
                 Text("Imported recording").tag(Optional<String>.none)
                 ForEach(savedVoices) { voice in
-                    Text(voice.name).tag(Optional(voice.id))
+                    Text(voice.hasTranscript ? "\(voice.name) · transcript" : "\(voice.name) · audio only")
+                        .tag(Optional(voice.id))
                 }
             }
             .pickerStyle(.menu)

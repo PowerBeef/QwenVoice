@@ -254,7 +254,6 @@ struct ContentView: View {
         } detail: {
             detailContent
         }
-        .navigationTitle(currentWindowTitle)
         .toolbar {
             MainWindowToolbar(
                 selectedItem: selectedItem,
@@ -337,7 +336,10 @@ struct ContentView: View {
                 }
             )
         case .settings:
-            SettingsView(highlightedMode: $pendingHighlightedMode)
+            SettingsView(
+                highlightedMode: $pendingHighlightedMode,
+                showsNavigationTitle: false
+            )
         }
     }
 

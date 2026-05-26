@@ -252,7 +252,7 @@ struct SavedVoiceSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Transcript (optional but recommended)")
+                    Text("Transcript (recommended for reusable clones)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -287,6 +287,11 @@ struct SavedVoiceSheet: View {
                         )
                         #endif
                         .accessibilityIdentifier("voicesEnroll_transcriptField")
+
+                    Text("Transcript-backed voices can reuse prepared Qwen3 clone prompts; audio-only voices remain available as a lower-guidance fallback.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

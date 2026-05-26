@@ -45,10 +45,10 @@ export const WORKFLOWS = [
     eyebrow: "From a saved voice or reference clip",
     headline: ["Clone from a clip", " you own."],
     accent: "you own.",
-    body: "Pick a voice you already designed in Saved Voices, or import a short reference clip. Add an optional transcript for accuracy, and Vocello mirrors the source voice for new lines. Only clone voices you have permission to use.",
+    body: "Pick a voice you already designed in Saved Voices, or import a short reference clip. Transcript-backed saved voices can reuse prepared Qwen3 clone prompts for cleaner repeat generations. Only clone voices you have permission to use.",
     points: [
-      ["Saved or imported", "Pick any voice from Saved Voices, or drop in a reference clip (WAV, MP3, AIFF, M4A, FLAC, or OGG). The composer treats both the same."],
-      ["Optional transcript", "Paste the words spoken in the clip to sharpen accuracy on a tricky reference."],
+      ["Saved or imported", "Pick any voice from Saved Voices, or drop in a reference clip (WAV, MP3, AIFF, M4A, FLAC, or OGG). Saved Voices are optimized for repeat use."],
+      ["Transcript-backed quality", "Paste the words spoken in the clip for the strongest reusable clone prompt. Audio-only references remain available as a lower-guidance fallback."],
       ["Source-led delivery", "Voice Cloning follows the reference clip. Delivery presets are not exposed for this path today."],
     ],
     shot: "assets/screens/voice-cloning.png",

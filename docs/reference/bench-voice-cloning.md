@@ -15,7 +15,7 @@ Voice Cloning has an extra subtlety: when the **reference clip changes**, the en
 | Field | Value |
 |---|---|
 | Saved voice | `UITestRef` (created by the bootstrap runbook) |
-| Transcript | leave empty |
+| Transcript | prefer transcript-backed for clone-prompt quality benches; transcriptless remains a lower-guidance fallback |
 | smoke-check arg | `clone` |
 
 ### Fixed prompts
@@ -41,6 +41,18 @@ scripts/uitest.sh bench-step clone "$variant" warm long   --artifacts-dir "$ART"
 ```
 
 Each cold sample requires fresh-launch + re-bind, so the cold-cohort budget is closer to ~4 minutes per sample (vs ~3 minutes for Custom Voice / Voice Design).
+
+## Clone-prompt reuse split
+
+The AivaLink optimization question is whether repeated Voice Cloning uses prepared Qwen3 clone-prompt artifacts instead of rebuilding reference conditioning every time. Keep the normal cold/warm matrix above, but annotate run notes with one of these phases:
+
+| Phase | How to produce it | Expected clone fields |
+|---|---|---|
+| Raw reference cold | Import a reference clip or use a saved voice whose clone-prompt folder has been removed before launch | `clone_prompt_built=true`, no artifact load hit |
+| Saved artifact cold load | Relaunch, select the same transcript-backed saved voice after a previous run created its artifact | `clone_prompt_artifact_hit=true`, `clone_prompt_artifact_load_ms` populated |
+| Warm artifact generation | Generate again without changing the selected reference | `clone_prompt_memory_hit=true` or `clone_reference_was_primed=true`, no artifact rebuild |
+
+Per-sample `bench-samples.jsonl` now records `clone_prompt_artifact_hit`, `clone_prompt_memory_hit`, `clone_prompt_built`, `clone_transcript_backed`, `clone_reference_was_primed`, `clone_conditioning_reused`, `clone_transcript_mode`, `clone_prompt_artifact_scope`, `clone_prompt_artifact_load_ms`, `clone_prompt_build_ms`, `clone_prompt_resolve_ms`, and `prime_clone_reference_ms`. `rtf` and `ms_engine_start_to_final` remain the gates; clone-prompt fields explain why a sample was slow or fast.
 
 ## Mode-specific failure handling
 

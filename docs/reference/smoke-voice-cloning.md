@@ -13,7 +13,7 @@ Voice Cloning requires the **`UITestRef`** saved-voice fixture. If `scripts/uite
 | Field | Value |
 |---|---|
 | Saved voice | `UITestRef` (created by the bootstrap runbook) |
-| Transcript | leave empty |
+| Transcript | fixture-dependent; transcript-backed fixtures are preferred, audio-only remains valid |
 | Script text | `Voice Cloning smoke test. This is a one-sentence sample to verify the path.` |
 | Variant | app default |
 | smoke-check arg | `clone` |

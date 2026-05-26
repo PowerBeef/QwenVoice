@@ -2,14 +2,6 @@ import React from "react";
 import { Icon } from "../components/Icon.jsx";
 import { RELEASE_LATEST } from "../data/credits.js";
 
-const TRUST_POINTS = [
-  { icon: "shield", text: "Signed + notarized" },
-  { icon: "github", text: "MIT app code" },
-  { icon: "cpu", text: "Generation runs locally after model download" },
-  { icon: "check", text: "No Python setup" },
-  { icon: "lock", text: "Voice cloning only for voices you own or have permission to use" },
-];
-
 export const Hero = () => (
   <section className="hero">
     <div className="container hero-split">
@@ -22,9 +14,8 @@ export const Hero = () => (
           A voice studio that <span className="accent-gold">never leaves</span> your Mac.
         </h1>
         <p className="hero-sub">
-          Vocello is a local AI voice studio for Mac and a Qwen3-TTS Mac app:
-          write a script, choose a preset or voice brief, then generate locally
-          after model download. No subscription, cloud meter, or upload.
+          Write a script, choose a preset or voice brief, and generate speech locally
+          on your Apple Silicon Mac after the model download.
         </p>
         <div className="hero-ctas">
           <a className="btn btn-primary" href={RELEASE_LATEST} target="_blank" rel="noreferrer">
@@ -37,19 +28,7 @@ export const Hero = () => (
             Listen to samples
           </a>
         </div>
-        <div className="trust-block" aria-label="Vocello trust and install details">
-          {TRUST_POINTS.map((point) => (
-            <span className="trust-chip" key={point.text}>
-              <Icon name={point.icon} size={12} />
-              {point.text}
-            </span>
-          ))}
-        </div>
-        <div className="hero-meta">
-          <span><Icon name="lock" size={12} /> Scripts stay local after setup</span>
-          <span><Icon name="cpu" size={12} /> Swift + MLX engine</span>
-          <span><Icon name="diamond" size={12} /> Stable 2.0.0 DMG</span>
-        </div>
+        <p className="hero-meta">Signed + notarized Mac download · MIT app code · Swift + MLX</p>
       </div>
       <div className="hero-stage">
         <div className="hero-stage-glow" aria-hidden="true" />

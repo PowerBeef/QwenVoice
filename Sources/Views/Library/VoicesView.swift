@@ -320,13 +320,13 @@ private struct VoiceRow: View {
     }
 
     private var transcriptStatus: String {
-        voice.hasTranscript ? "Transcript added" : "No transcript"
+        voice.hasTranscript ? "Transcript-backed" : "Audio-only fallback"
     }
 
     private var detailCopy: String {
         voice.hasTranscript
-            ? "Ready as a reusable cloning reference."
-            : "Add a transcript later for stronger cloning guidance."
+            ? "Reusable Qwen3 clone prompt can be prepared."
+            : "Add a transcript later for the strongest reusable clone prompt."
     }
 
     var body: some View {

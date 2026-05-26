@@ -293,7 +293,7 @@ Variant toggle uses `GenerationVariantSelector` with prefix `voiceDesign`: `voic
 | `voiceCloning_savedVoicePicker` | picker | Saved-voice dropdown (primary path) |
 | `voiceCloning_importButton` | button | Import a reference audio file (NSOpenPanel — avoid in autonomous runs) |
 | `voiceCloning_consentNotice` | label | Cloning consent notice |
-| `voiceCloning_activeReference` | container | Selected reference display ("Saved voice ready" / "Imported file ready") |
+| `voiceCloning_activeReference` | container | Selected reference display ("Transcript-backed saved voice", "Audio-only saved voice", or "Imported file ready") |
 | `voiceCloning_referenceWarning` | badge | Quality warning on the active reference |
 | `voiceCloning_transcriptField` | container | Transcript section |
 | `voiceCloning_transcriptInput` | text field | Optional reference transcript |
@@ -304,7 +304,7 @@ Variant toggle uses `GenerationVariantSelector` with prefix `voiceDesign`: `voic
 
 Voice Cloning requires a pre-existing saved voice for autonomous runs (the alternative is the file-picker dialog, which can't be driven through `type`). The Saved Voices enrollment fields (`voicesEnroll_*`) are documented in the Saved Voices section above.
 
-**Saved-voice store is filesystem-canonical**: `~/Library/Application Support/QwenVoice-Debug/voices/<name>.wav` (+ optional `<name>.txt`). There is no SQLite table — `MLXTTSEngine.listPreparedVoices` just enumerates the directory. The autonomous test rollout uses one well-known fixture named **`UITestRef`**, created by [`bootstrap-saved-voice.md`](bootstrap-saved-voice.md) via the Voice Design → Save to Saved Voices flow (no file picker). `scripts/uitest.sh smoke-check clone` verifies this exact file at `voices/UITestRef.wav`.
+**Saved-voice store is filesystem-canonical**: `~/Library/Application Support/QwenVoice-Debug/voices/<name>.wav` (+ optional `<name>.txt`). There is no SQLite table — `MLXTTSEngine.listPreparedVoices` just enumerates the directory. Prepared Qwen3 clone-prompt artifacts live next to the saved voice under `<voice-id>.clone_prompt/<model-id>/<digest>/`; transient imported references use `.qvoice_clone_prompts/<digest>/`. The autonomous test rollout uses one well-known fixture named **`UITestRef`**, created by [`bootstrap-saved-voice.md`](bootstrap-saved-voice.md) via the Voice Design → Save to Saved Voices flow (no file picker). `scripts/uitest.sh smoke-check clone` verifies this exact file at `voices/UITestRef.wav`.
 
 ### History
 
@@ -606,6 +606,7 @@ For multi-sample timing across cold/warm × variant × prompt-length, see [`benc
 
 - `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf` — timing and pipeline anchors. `bench-compare`'s ±15% flagging logic uses `ms_engine_start_to_final` and `rtf`.
 - `audio_rms_dbfs`, `audio_peak_dbfs` — loudness metrics computed from the WAV via stdlib `wave` + `audioop`. Catches clipping, silent-output, or major level regressions. Informational only — not auto-flagged.
+- `clone_prompt_artifact_hit`, `clone_prompt_memory_hit`, `clone_prompt_built`, `clone_transcript_backed`, `clone_reference_was_primed`, `clone_conditioning_reused`, `clone_transcript_mode`, `clone_prompt_artifact_scope`, `clone_prompt_artifact_load_ms`, `clone_prompt_build_ms`, `clone_prompt_resolve_ms`, `prime_clone_reference_ms` — Voice Cloning reuse diagnostics. These answer whether a sample built a raw prompt, loaded a saved artifact, or reused warm in-memory conditioning. Informational only.
 - `peak_rss_mb` — sum of resident-set-size for Vocello + the `QwenVoiceEngineService` XPC process at the moment `Final File Ready` fires. Captures the real footprint of an active generation (the model lives in the XPC service, not the main app). Per-process breakdown is also retained as `peak_rss_mb_app` and `peak_rss_mb_xpc` for forensics. Informational only.
 
 The harness includes signpost+DB helpers for both benchmark timing and streaming-preview health:

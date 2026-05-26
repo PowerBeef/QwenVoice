@@ -27,6 +27,7 @@ struct SettingsView: View {
     /// is mode-keyed; the missing variant might not be the
     /// current generation selection.
     @Binding var highlightedMode: GenerationMode?
+    private let showsNavigationTitle: Bool
 
     @AppStorage("autoPlay", store: AppDefaults.store) private var autoPlay = true
     @AppStorage("outputDirectory", store: AppDefaults.store) private var outputDirectory = ""
@@ -46,6 +47,11 @@ struct SettingsView: View {
     // the first-responder reset below, this keeps the page
     // ring-free until the user explicitly Tabs into a control.
     @FocusState private var settingsFieldFocus: String?
+
+    init(highlightedMode: Binding<GenerationMode?>, showsNavigationTitle: Bool = true) {
+        _highlightedMode = highlightedMode
+        self.showsNavigationTitle = showsNavigationTitle
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -139,7 +145,7 @@ struct SettingsView: View {
             // of the app's chrome.
             .scrollContentBackground(.hidden)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .navigationTitle("Settings")
+            .settingsNavigationTitle(showsNavigationTitle)
             .accessibilityIdentifier("screen_settings")
             .task {
                 await viewModel.refresh()
@@ -222,6 +228,17 @@ struct SettingsView: View {
             await MainActor.run {
                 if flashedMode == mode { flashedMode = nil }
             }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func settingsNavigationTitle(_ isVisible: Bool) -> some View {
+        if isVisible {
+            navigationTitle("Settings")
+        } else {
+            self
         }
     }
 }

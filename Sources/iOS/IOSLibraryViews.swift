@@ -688,6 +688,8 @@ private struct IOSSavedVoiceCard: View {
     }
 
     private var voiceMetadata: String {
-        voice.hasTranscript ? "Saved voice • Transcript ready" : "Saved voice"
+        voice.hasTranscript
+            ? "Saved voice • Transcript-backed"
+            : "Saved voice • Audio-only fallback"
     }
 }

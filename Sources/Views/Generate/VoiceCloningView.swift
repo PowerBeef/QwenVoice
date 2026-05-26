@@ -300,7 +300,7 @@ private extension VoiceCloningView {
     var configurationPanel: some View {
         CompactConfigurationSection(
             title: "Configuration",
-            detail: "Choose a saved voice or import a reference clip, then add an optional transcript.",
+            detail: "Transcript-backed saved voices give the strongest reusable clone prompts.",
             iconName: "slider.horizontal.3",
             accentColor: AppTheme.voiceCloning,
             trailingText: nil,
@@ -582,7 +582,7 @@ private struct CloneReferenceStatus: View {
 
                     // When a quality warning is present, the second
                     // line in this VStack becomes a tappable chip
-                    // instead of the "Saved voice ready" caption, so
+                    // instead of the reference-detail caption, so
                     // the saved-voice panel stays a single row and the
                     // Transcript field below it keeps its room inside
                     // the fixed 184 pt configuration slot. Popover-on-
@@ -593,7 +593,7 @@ private struct CloneReferenceStatus: View {
                        let shortLabel = PreparedVoiceQualityWarning.shortLabel(for: token) {
                         warningChip(token: token, shortLabel: shortLabel)
                     } else {
-                        Text(selectedVoice == nil ? "Imported file ready" : "Saved voice ready")
+                        Text(referenceDetail)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
@@ -622,6 +622,15 @@ private struct CloneReferenceStatus: View {
             }
             .padding(.vertical, 1)
         }
+    }
+
+    private var referenceDetail: String {
+        guard let selectedVoice else {
+            return "Imported file ready"
+        }
+        return selectedVoice.hasTranscript
+            ? "Transcript-backed saved voice"
+            : "Audio-only saved voice"
     }
 
     @ViewBuilder
@@ -701,7 +710,7 @@ private struct CloneSourceRow: View {
                     .tag(Optional<String>.none)
 
                 ForEach(savedVoices) { voice in
-                    Text(voice.name)
+                    Text(voice.hasTranscript ? "\(voice.name) · transcript" : "\(voice.name) · audio only")
                         .tag(Optional(voice.id))
                 }
             }

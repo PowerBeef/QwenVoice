@@ -1037,6 +1037,7 @@ final_ts = None
 autoplay_ts = None
 first_chunk_ts = None
 engine_begin_ts = None
+clone_metrics = {}
 
 # Final File Ready: take the latest occurrence.
 for line in reversed(lines):
@@ -1055,6 +1056,38 @@ for i in range(len(lines) - 1, -1, -1):
     if "Final File Ready" in lines[i]:
         final_idx = i
         break
+
+CLONE_METRIC_RE = re.compile(r"\b(clone_[a-z0-9_]+|prime_clone_reference_ms)=([^\s,]+)")
+for i in range(final_idx - 1, -1, -1):
+    line = lines[i]
+    if "Final File Ready" in line:
+        break
+    if "Clone Prompt Metrics" not in line:
+        continue
+    clone_metrics = {
+        key: value.strip()
+        for key, value in CLONE_METRIC_RE.findall(line)
+    }
+    break
+
+def clone_bool(key):
+    value = clone_metrics.get(key)
+    if value is None:
+        return None
+    return value.lower() == "true"
+
+def clone_int(key):
+    value = clone_metrics.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+def clone_str(key):
+    value = clone_metrics.get(key)
+    return value if value not in (None, "") else None
 
 for i in range(final_idx - 1, -1, -1):
     line = lines[i]
@@ -1178,6 +1211,18 @@ sample = {
     "ms_engine_start_to_autoplay": ms_engine_to_play,
     "audio_rms_dbfs": audio_rms_dbfs,
     "audio_peak_dbfs": audio_peak_dbfs,
+    "clone_prompt_artifact_hit": clone_bool("clone_prompt_artifact_hit"),
+    "clone_prompt_memory_hit": clone_bool("clone_prompt_memory_hit"),
+    "clone_prompt_built": clone_bool("clone_prompt_built"),
+    "clone_transcript_backed": clone_bool("clone_transcript_backed"),
+    "clone_reference_was_primed": clone_bool("clone_reference_was_primed"),
+    "clone_conditioning_reused": clone_bool("clone_conditioning_reused"),
+    "clone_transcript_mode": clone_str("clone_transcript_mode"),
+    "clone_prompt_artifact_scope": clone_str("clone_prompt_artifact_scope"),
+    "clone_prompt_artifact_load_ms": clone_int("clone_prompt_artifact_load_ms"),
+    "clone_prompt_build_ms": clone_int("clone_prompt_build_ms"),
+    "clone_prompt_resolve_ms": clone_int("clone_prompt_resolve_ms"),
+    "prime_clone_reference_ms": clone_int("prime_clone_reference_ms"),
     "peak_rss_mb": peak_rss_mb,
     "peak_rss_mb_app": peak_rss_mb_app,
     "peak_rss_mb_xpc": peak_rss_mb_xpc,
@@ -1231,6 +1276,11 @@ METRICS = [
     # Audio quality (informational; not auto-flagged by bench-compare)
     "audio_rms_dbfs",
     "audio_peak_dbfs",
+    # Clone-prompt reuse forensics (informational; not auto-flagged)
+    "clone_prompt_artifact_load_ms",
+    "clone_prompt_build_ms",
+    "clone_prompt_resolve_ms",
+    "prime_clone_reference_ms",
     # Memory (informational; not auto-flagged)
     "peak_rss_mb",
 ]
