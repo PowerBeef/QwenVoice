@@ -37,6 +37,7 @@ Retained QwenVoice deltas:
 - Cancellation and unload coordination owned by the app engine boundary.
 - Qwen3-TTS quality-first full-result generation using official sampling defaults and full-text nonstreaming conditioning for Custom Voice and Voice Design.
 - Final WAV/output integration and production diagnostic metadata.
+- Incremental `Set<Int>` maintenance for Qwen3 repetition-penalty token IDs in the hot generation loop (`Qwen3TTS.swift`), avoiding per-token `Array(Set(tokens))` rebuilds during streaming decode.
 
 Intentionally omitted from the owned production path:
 

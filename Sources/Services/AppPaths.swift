@@ -68,6 +68,13 @@ enum AppPaths {
         appSupportDir.appendingPathComponent("voices", isDirectory: true)
     }
 
+    static func excludeFromBackup(_ url: URL) {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableURL = url
+        try? mutableURL.setResourceValues(values)
+    }
+
     // One-shot: rename ~/Library/Application Support/QwenVoice ->
     // QwenVoice-Debug on first Debug launch so testing data survives the
     // policy switch. Idempotent; skipped when an env-var override is set.

@@ -112,6 +112,7 @@ enum IOSModelDeliveryError: LocalizedError, Equatable, Sendable {
     case missingRequiredFiles([String])
     case unexpectedFile(String)
     case fileHashMismatch(relativePath: String)
+    case httpError(statusCode: Int)
     case cancelled
 
     var errorDescription: String? {
@@ -134,6 +135,8 @@ enum IOSModelDeliveryError: LocalizedError, Equatable, Sendable {
             return "Catalog contains an invalid file path: \(path)."
         case .fileHashMismatch(let relativePath):
             return "Integrity check failed for \(relativePath)."
+        case .httpError(let statusCode):
+            return "Download returned HTTP \(statusCode)."
         case .cancelled:
             return "Download cancelled."
         }

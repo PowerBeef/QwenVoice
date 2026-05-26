@@ -27,5 +27,7 @@
     </dict>
     <key>MinimumOSVersion</key>
     <string>$(IPHONEOS_DEPLOYMENT_TARGET)</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>

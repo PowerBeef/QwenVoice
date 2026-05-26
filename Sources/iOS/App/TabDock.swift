@@ -11,9 +11,14 @@ import QwenVoiceCore
 /// dock accents from `design_references/Vocello iOS/chrome.jsx`.
 struct TabDock: View {
     @Environment(AppModel.self) private var appModel
+    @EnvironmentObject private var ttsEngine: TTSEngineStore
 
     private var dockTint: Color {
         appModel.tab.dockAccent(studioMode: appModel.studioMode.mode)
+    }
+
+    private var isTabSwitchingDisabled: Bool {
+        ttsEngine.hasActiveGeneration
     }
 
     var body: some View {
@@ -23,6 +28,7 @@ struct TabDock: View {
                     TabDockButton(
                         tab: tab,
                         isSelected: appModel.tab == tab,
+                        isDisabled: isTabSwitchingDisabled && appModel.tab != tab,
                         action: { select(tab) }
                     )
                 }
@@ -50,6 +56,7 @@ struct TabDock: View {
     }
 
     private func select(_ tab: IOSAppTab) {
+        guard !isTabSwitchingDisabled else { return }
         guard appModel.tab != tab else { return }
         withAnimation(Theme.Motion.stateChange) {
             appModel.tab = tab
@@ -62,6 +69,7 @@ struct TabDock: View {
 private struct TabDockButton: View {
     let tab: IOSAppTab
     let isSelected: Bool
+    let isDisabled: Bool
     let action: () -> Void
 
     @Environment(AppModel.self) private var appModel
@@ -92,6 +100,8 @@ private struct TabDockButton: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.42 : 1)
         .accessibilityIdentifier("rootTab_\(tab.rawValue)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

@@ -370,8 +370,9 @@ struct IOSCustomVoiceView: View {
                 IOSHaptics.success()
             } catch is CancellationError {
                 audioPlayer.abortLivePreviewIfNeeded()
-                coordinator.errorMessage = nil
-            } catch {
+            coordinator.errorMessage = nil
+            try? FileManager.default.removeItem(at: url)
+        } catch {
                 audioPlayer.abortLivePreviewIfNeeded()
                 await MainActor.run { coordinator.fail(error.localizedDescription) }
                 IOSHaptics.warning()
@@ -1114,19 +1115,26 @@ struct IOSVoiceCloningView: View {
             }
     }
 
-    /// Track H landing point for freshly-recorded reference clips. The
-    /// recording overlay writes a 24 kHz mono Int16 WAV to a tmp path
-    /// that's already inside the app sandbox, so we don't need to route
-    /// through `ttsEngine.importReferenceAudio(from:)`'s security-scope
-    /// path (that's for files arriving from the file importer / iCloud).
+    /// Track H landing point for freshly-recorded reference clips. Route
+    /// through `ttsEngine.importReferenceAudio(from:)` so recordings are
+    /// materialized under `AppPaths.importedReferenceAudioDir` instead of
+    /// staying in `tmp/`.
     private func applyRecordedReferenceAudio(at url: URL) {
-        // Clear any previously-selected saved voice — we're switching
-        // sources, just like the file importer does.
-        draft.selectedSavedVoiceID = nil
-        hydratedSavedVoiceID = nil
-        transcriptLoadError = nil
-        draft.referenceAudioPath = url.path
-        draft.referenceTranscript = ""
+        do {
+            let imported = try ttsEngine.importReferenceAudio(from: url)
+            draft.selectedSavedVoiceID = nil
+            hydratedSavedVoiceID = nil
+            transcriptLoadError = nil
+            draft.referenceAudioPath = imported.materializedPath
+            draft.referenceTranscript = ""
+            coordinator.errorMessage = nil
+            if let transcriptSidecarURL = imported.transcriptSidecarURL,
+               let transcript = try? String(contentsOf: transcriptSidecarURL, encoding: .utf8) {
+                draft.referenceTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        } catch {
+            coordinator.fail("Couldn't import the reference recording: \(error.localizedDescription)")
+        }
     }
 
     @ViewBuilder

@@ -104,6 +104,7 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
     private let activeGenerationCoordinator = ExtensionActiveGenerationCoordinator()
     private var activeSession: ActiveSession?
     private var runtimeContext: RuntimeContext?
+    private var droppedEncodeEventCount = 0
 
     func accept(connection: NSXPCConnection) -> Bool {
         let sessionID = UUID()
@@ -250,12 +251,14 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
                 generationTask.cancel()
                 throw error
             }
-            defer {
-                Task {
-                    await self.activeGenerationCoordinator.finish(id: generationID)
-                }
+            do {
+                let result = try await generationTask.value
+                await activeGenerationCoordinator.finish(id: generationID)
+                return .generationResult(result)
+            } catch {
+                await activeGenerationCoordinator.finish(id: generationID)
+                throw error
             }
-            return .generationResult(try await generationTask.value)
         case .cancelActiveGeneration:
             await activeGenerationCoordinator.cancelCurrent()
             try requireRuntimeContext().engine.clearGenerationActivity()
@@ -432,11 +435,63 @@ final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProto
         sessionLock.unlock()
 
         guard let session else { return }
-        guard let payload = try? ExtensionEngineCodec.encode(event) else {
-            Self.logger.error("Failed to encode engine-extension event payload.")
+        do {
+            let payload = try ExtensionEngineCodec.encode(event)
+            session.eventSink.handleEvent(payload)
+        } catch {
+            sessionLock.lock()
+            droppedEncodeEventCount += 1
+            let droppedCount = droppedEncodeEventCount
+            let diagnosticsDirectory = runtimeContext?.appSupportDirectory
+            sessionLock.unlock()
+
+            Self.logger.error(
+                "Failed to encode engine-extension event payload (droppedCount=\(droppedCount, privacy: .public)): \(error.localizedDescription, privacy: .public)"
+            )
+            Self.recordDroppedEncodeEvent(
+                error: error,
+                droppedCount: droppedCount,
+                appSupportDirectory: diagnosticsDirectory
+            )
+        }
+    }
+
+    private static func recordDroppedEncodeEvent(
+        error: Error,
+        droppedCount: Int,
+        appSupportDirectory: URL?
+    ) {
+        guard let appSupportDirectory else { return }
+        let diagnosticsDirectory = appSupportDirectory
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent("engine-extension", isDirectory: true)
+        let url = diagnosticsDirectory.appendingPathComponent("native-events.jsonl", isDirectory: false)
+        let record: [String: String] = [
+            "event": "engine_extension_encode_dropped",
+            "recordedAt": ISO8601DateFormatter().string(from: Date()),
+            "droppedCount": String(droppedCount),
+            "message": error.localizedDescription,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: record),
+              var line = String(data: data, encoding: .utf8) else {
             return
         }
-        session.eventSink.handleEvent(payload)
+        line.append("\n")
+        do {
+            try FileManager.default.createDirectory(at: diagnosticsDirectory, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: url.path) {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.seekToEnd()
+                if let encoded = line.data(using: .utf8) {
+                    try handle.write(contentsOf: encoded)
+                }
+                try handle.close()
+            } else {
+                try line.write(to: url, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            logger.error("Failed to record dropped encode event: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     @MainActor

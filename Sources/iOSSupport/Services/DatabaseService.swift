@@ -35,61 +35,7 @@ final class DatabaseService: @unchecked Sendable {
     }
 
     static func makeMigrator() -> DatabaseMigrator {
-        var migrator = DatabaseMigrator()
-
-        migrator.registerMigration("v1_create_generations") { db in
-            try db.create(table: "generations") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("text", .text).notNull()
-                t.column("mode", .text).notNull()
-                t.column("modelTier", .text).notNull()
-                t.column("voice", .text)
-                t.column("emotion", .text)
-                t.column("speed", .double)
-                t.column("audioPath", .text).notNull()
-                t.column("duration", .double)
-                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
-            }
-        }
-
-        migrator.registerMigration("v2_add_sortOrder") { db in
-            try db.alter(table: "generations") { t in
-                t.add(column: "sortOrder", .integer).defaults(to: 0)
-            }
-            // Backfill: assign sortOrder matching existing createdAt desc order
-            let rows = try Row.fetchAll(db, sql: "SELECT id FROM generations ORDER BY createdAt DESC")
-            for (index, row) in rows.enumerated() {
-                let id: Int64 = row["id"]
-                try db.execute(sql: "UPDATE generations SET sortOrder = ? WHERE id = ?", arguments: [index, id])
-            }
-        }
-
-        migrator.registerMigration("v3_drop_sortOrder") { db in
-            try db.create(table: "generations_v3") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("text", .text).notNull()
-                t.column("mode", .text).notNull()
-                t.column("modelTier", .text).notNull()
-                t.column("voice", .text)
-                t.column("emotion", .text)
-                t.column("speed", .double)
-                t.column("audioPath", .text).notNull()
-                t.column("duration", .double)
-                t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
-            }
-
-            try db.execute(sql: """
-                INSERT INTO generations_v3 (id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt)
-                SELECT id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
-                FROM generations
-                ORDER BY createdAt DESC
-                """)
-
-            try db.drop(table: "generations")
-            try db.rename(table: "generations_v3", to: "generations")
-        }
-
-        return migrator
+        GenerationMigrations.makeMigrator()
     }
 
     // MARK: - CRUD

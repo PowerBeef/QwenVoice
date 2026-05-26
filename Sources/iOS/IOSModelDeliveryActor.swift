@@ -221,6 +221,16 @@ private final class IOSModelDeliveryDownloadDelegate: NSObject, URLSessionDownlo
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
+        if let http = downloadTask.response as? HTTPURLResponse,
+           ![200, 206].contains(http.statusCode) {
+            onCompleted?(
+                downloadTask.taskIdentifier,
+                downloadTask.taskDescription,
+                IOSModelDeliveryError.httpError(statusCode: http.statusCode)
+            )
+            return
+        }
+
         let safeURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
         do {
             if FileManager.default.fileExists(atPath: safeURL.path) {

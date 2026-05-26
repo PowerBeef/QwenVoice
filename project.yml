@@ -81,6 +81,8 @@ targets:
           - "**/*.pyc"
       - path: Sources/Assets.xcassets
         buildPhase: resources
+      - path: Sources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app
@@ -225,6 +227,8 @@ targets:
       - path: Sources/QwenVoiceEngineService
       - path: Sources/Resources/qwenvoice_contract.json
         buildPhase: resources
+      - path: Sources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.engine-service
@@ -254,6 +258,8 @@ targets:
     sources:
       - path: Sources/iOSEngineExtension
       - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
+      - path: Sources/PrivacyInfo.xcprivacy
         buildPhase: resources
     settings:
       base:
@@ -304,6 +310,8 @@ targets:
         # `Sources/iOS/Sheets/IOSVoicePreviewPlayer.swift` for the
         # bundle lookup convention.
       - path: Sources/Assets.xcassets
+        buildPhase: resources
+      - path: Sources/PrivacyInfo.xcprivacy
         buildPhase: resources
     resources:
       - path: Sources/iOS/LaunchScreen.storyboard

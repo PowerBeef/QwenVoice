@@ -129,6 +129,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     }
 
     func stop() {
+        stopActiveGenerationMemoryGuard(reason: "store_stop")
         backend.stop()
         syncFromBackend()
     }

@@ -24,6 +24,9 @@ final class AppStartupCoordinator: ObservableObject {
         for dir in dirs {
             try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
+
+        AppPaths.excludeFromBackup(QwenVoiceApp.appSupportDir.appendingPathComponent("models", isDirectory: true))
+        AppPaths.excludeFromBackup(QwenVoiceApp.appSupportDir.appendingPathComponent("cache", isDirectory: true))
     }
 
     func refreshLaunchDiagnostics() {

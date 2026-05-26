@@ -314,6 +314,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 NotificationCenter.default.removeObserver(chunkObserver)
             }
             chunkCancellable?.cancel()
+            teardownLivePlayback(clearSession: true)
+            stopFilePlayback(clearPlayer: true)
         }
     }
 

@@ -116,6 +116,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
     private let activeGenerationCoordinator = ServiceActiveGenerationCoordinator()
     private var activeSession: ActiveSession?
     private var runtimeContext: RuntimeContext?
+    private var droppedEncodeEventCount = 0
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         let sessionID = UUID()
@@ -259,12 +260,14 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                 generationTask.cancel()
                 throw error
             }
-            defer {
-                Task {
-                    await self.activeGenerationCoordinator.finish(id: generationID)
-                }
+            do {
+                let result = try await generationTask.value
+                await activeGenerationCoordinator.finish(id: generationID)
+                return .generationResult(result)
+            } catch {
+                await activeGenerationCoordinator.finish(id: generationID)
+                throw error
             }
-            return .generationResult(try await generationTask.value)
         case .generateBatch(let commandID, let requests):
             guard !requests.isEmpty else {
                 return .generationResults([])
@@ -293,12 +296,14 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                 generationTask.cancel()
                 throw error
             }
-            defer {
-                Task {
-                    await self.activeGenerationCoordinator.finish(id: generationID)
-                }
+            do {
+                let results = try await generationTask.value
+                await activeGenerationCoordinator.finish(id: generationID)
+                return .generationResults(results)
+            } catch {
+                await activeGenerationCoordinator.finish(id: generationID)
+                throw error
             }
-            return .generationResults(try await generationTask.value)
         case .cancelActiveGeneration:
             await activeGenerationCoordinator.cancelCurrent()
             try requireRuntimeContext().engine.clearGenerationActivity()
@@ -485,11 +490,63 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         sessionLock.unlock()
 
         guard let eventSink else { return }
-        guard let payload = try? EngineServiceCodec.encode(event) else {
-            Self.logger.error("Failed to encode engine-service event payload.")
+        do {
+            let payload = try EngineServiceCodec.encode(event)
+            eventSink.handleEvent(payload)
+        } catch {
+            sessionLock.lock()
+            droppedEncodeEventCount += 1
+            let droppedCount = droppedEncodeEventCount
+            let diagnosticsDirectory = runtimeContext?.appSupportDirectory
+            sessionLock.unlock()
+
+            Self.logger.error(
+                "Failed to encode engine-service event payload (droppedCount=\(droppedCount, privacy: .public)): \(error.localizedDescription, privacy: .public)"
+            )
+            Self.recordDroppedEncodeEvent(
+                error: error,
+                droppedCount: droppedCount,
+                appSupportDirectory: diagnosticsDirectory
+            )
+        }
+    }
+
+    private static func recordDroppedEncodeEvent(
+        error: Error,
+        droppedCount: Int,
+        appSupportDirectory: URL?
+    ) {
+        guard let appSupportDirectory else { return }
+        let diagnosticsDirectory = appSupportDirectory
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent("engine-service", isDirectory: true)
+        let url = diagnosticsDirectory.appendingPathComponent("native-events.jsonl", isDirectory: false)
+        let record: [String: String] = [
+            "event": "engine_service_encode_dropped",
+            "recordedAt": ISO8601DateFormatter().string(from: Date()),
+            "droppedCount": String(droppedCount),
+            "message": error.localizedDescription,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: record),
+              var line = String(data: data, encoding: .utf8) else {
             return
         }
-        eventSink.handleEvent(payload)
+        line.append("\n")
+        do {
+            try FileManager.default.createDirectory(at: diagnosticsDirectory, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: url.path) {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.seekToEnd()
+                if let encoded = line.data(using: .utf8) {
+                    try handle.write(contentsOf: encoded)
+                }
+                try handle.close()
+            } else {
+                try line.write(to: url, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            logger.error("Failed to record dropped encode event: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     @MainActor

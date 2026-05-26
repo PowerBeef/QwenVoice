@@ -21,5 +21,7 @@
         <key>ServiceType</key>
         <string>Application</string>
     </dict>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>

@@ -394,31 +394,63 @@ actor XPCNativeEngineCoordinator {
         Self.signposter.emitEvent("XPC Engine Command Sent")
         Self.logger.debug("Sending engine command '\(command.transportName, privacy: .public)' with id \(requestEnvelope.id.uuidString, privacy: .public)")
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let pendingRequest = PendingRequestBox(
-                commandName: command.transportName,
-                resume: { result in
-                    continuation.resume(with: result)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
                 }
-            )
-            if let timeout = timeoutResolver(command) {
-                pendingRequest.timeoutTask = Task { [requestID = requestEnvelope.id] in
-                    do {
-                        try await Task.sleep(for: timeout)
-                    } catch {
-                        return
-                    }
-                    self.handleTimeout(for: requestID)
-                }
-            }
-            pendingRequests[requestEnvelope.id] = pendingRequest
 
-            transport.transport.perform(payload) { [weak self] replyData in
-                Task {
-                    Self.signposter.emitEvent("XPC Engine Reply Received")
-                    await self?.handleReplyData(replyData, from: transport.id)
+                let pendingRequest = PendingRequestBox(
+                    commandName: command.transportName,
+                    resume: { result in
+                        continuation.resume(with: result)
+                    }
+                )
+                if let timeout = timeoutResolver(command) {
+                    pendingRequest.timeoutTask = Task { [requestID = requestEnvelope.id] in
+                        do {
+                            try await Task.sleep(for: timeout)
+                        } catch {
+                            return
+                        }
+                        await self.handleTimeout(for: requestID)
+                    }
+                }
+                pendingRequests[requestEnvelope.id] = pendingRequest
+
+                transport.transport.perform(payload) { [weak self] replyData in
+                    Task {
+                        Self.signposter.emitEvent("XPC Engine Reply Received")
+                        await self?.handleReplyData(replyData, from: transport.id)
+                    }
                 }
             }
+        } onCancel: {
+            Task { await self.cancelPendingRequest(id: requestEnvelope.id, command: command) }
+        }
+    }
+
+    private func cancelPendingRequest(id requestID: UUID, command: EngineCommand) {
+        guard let pendingRequest = pendingRequests.removeValue(forKey: requestID) else { return }
+        pendingRequest.timeoutTask?.cancel()
+        Self.logger.debug(
+            "Cancelled engine-service command '\(pendingRequest.commandName, privacy: .public)' with id \(requestID.uuidString, privacy: .public)"
+        )
+        pendingRequest.resume(.failure(CancellationError()))
+        if let cleanupCommand = cancellationCleanupCommand(for: command) {
+            fireAndForget(cleanupCommand)
+        }
+    }
+
+    private func cancellationCleanupCommand(for command: EngineCommand) -> EngineCommand? {
+        switch command {
+        case .generate, .generateBatch:
+            return .cancelActiveGeneration
+        case .ensureCloneReferencePrimed:
+            return .cancelClonePreparationIfNeeded
+        default:
+            return nil
         }
     }
 

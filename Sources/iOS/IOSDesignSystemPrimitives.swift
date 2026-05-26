@@ -534,7 +534,6 @@ struct IOSBottomEdgeSheet<Content: View>: View {
             if reduceTransparency {
                 shape.fill(Color(red: 20 / 255, green: 22 / 255, blue: 30 / 255))
             } else {
-                shape.fill(.ultraThinMaterial)
                 shape.fill(IOSBottomSheetChrome.background)
             }
         }

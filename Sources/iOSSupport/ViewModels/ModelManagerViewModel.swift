@@ -98,7 +98,7 @@ final class ModelManagerViewModel: ObservableObject {
     private var refreshTask: Task<Void, Never>?
 
     init(
-        modelRegistry: ContractBackedModelRegistry = TTSContract.registry,
+        modelRegistry: ContractBackedModelRegistry,
         statusProvider: any ModelStatusProviding
     ) {
         self.modelRegistry = modelRegistry
@@ -107,7 +107,7 @@ final class ModelManagerViewModel: ObservableObject {
     }
 
     convenience init(
-        modelRegistry: ContractBackedModelRegistry = TTSContract.registry,
+        modelRegistry: ContractBackedModelRegistry,
         modelAssetStore: any ModelAssetStore
     ) {
         self.init(

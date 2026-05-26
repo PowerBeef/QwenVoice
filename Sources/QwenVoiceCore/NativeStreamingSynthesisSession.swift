@@ -13,7 +13,7 @@ import OSLog
 // Keep behavior changes here aligned with the platform host adapters.
 
 protocol NativeStreamingSessionRunning {
-    func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult
+    func run(chunkSink: @escaping @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult
 }
 
 private enum NativeStreamingSignposts {
@@ -89,7 +89,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
         self.pcmScratchBuffer = pcmScratchBuffer
     }
 
-    func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
+    func run(chunkSink: @escaping @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
         if !request.shouldStream {
             let sessionDirectory = try makeSessionDirectory()
             let execution = StreamingExecutionContext(
@@ -119,7 +119,7 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
             } onCancel: {
                 task.cancel()
             }
-            await eventSink(.completed(result))
+            chunkSink(.completed(result))
             return result
         }
 
@@ -149,14 +149,14 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
         // detached streaming task running and bypasses the retention-flag
         // `defer` cleanup (Tier 1.5).
         let task = Task.detached(priority: .userInitiated) {
-            try await execution.run(eventSink: eventSink)
+            try await execution.run(chunkSink: chunkSink)
         }
         let result = try await withTaskCancellationHandler {
             try await task.value
         } onCancel: {
             task.cancel()
         }
-        await eventSink(.completed(result))
+        chunkSink(.completed(result))
         return result
     }
 
@@ -492,6 +492,12 @@ final class PCM16ScratchBuffer: @unchecked Sendable {
         storage.reserveCapacity(samples.count)
         limiter.append(samples, into: &storage)
         return storage
+    }
+
+    func convertLimited(_ samples: [Float], into destination: inout [Int16]) {
+        destination.removeAll(keepingCapacity: true)
+        destination.reserveCapacity(samples.count)
+        limiter.append(samples, into: &destination)
     }
 
     func pcm16LittleEndianData(from pcmSamples: [Int16]) -> Data {
@@ -987,7 +993,7 @@ private struct StreamingExecutionContext: Sendable {
         )
     }
 
-    func run(eventSink: @escaping @MainActor @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
+    func run(chunkSink: @escaping @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
         let generationSignpost = NativeStreamingSignposts.signposter.beginInterval("Native Generation Stream")
         defer {
             NativeStreamingSignposts.signposter.endInterval("Native Generation Stream", generationSignpost)
@@ -1030,6 +1036,7 @@ private struct StreamingExecutionContext: Sendable {
             ? try PCM16ChunkFileWriter(sampleRate: sampleRate)
             : nil
         let scratchBuffer = self.scratchBuffer()
+        var pcmSamples = [Int16]()
         let finalWriter = try IncrementalPCM16WAVFileWriter(
             sampleRate: sampleRate,
             outputURL: outputURL
@@ -1080,7 +1087,7 @@ private struct StreamingExecutionContext: Sendable {
                         mlxMemorySnapshots["first_chunk"] = NativeMemoryPolicyResolver.snapshot()
                     }
 
-                    let pcmSamples = scratchBuffer.convertLimited(chunkSamples)
+                    scratchBuffer.convertLimited(chunkSamples, into: &pcmSamples)
                     let frameOffset = totalFramesWritten
                     let previewAudio: StreamingAudioChunk?
                     if previewDataPolicy == .skip {
@@ -1137,7 +1144,7 @@ private struct StreamingExecutionContext: Sendable {
                         )
                     )
 
-                    await eventSink(chunkEvent)
+                    chunkSink(chunkEvent)
                 }
             }
         } catch {

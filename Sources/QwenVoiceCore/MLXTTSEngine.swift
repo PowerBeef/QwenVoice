@@ -395,8 +395,36 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             telemetryRecorder: telemetryRecorder,
             customPrewarmPolicy: customPrewarmPolicy,
             diagnosticAppSupportBox: diagnosticAppSupportBox,
-            streamingSessionFactory: Self.defaultStreamingSessionFactory
+            streamingSessionFactory: Self.makeStreamingSessionFactory(
+                pcmScratchBuffer: PCM16ScratchBuffer()
+            )
         )
+    }
+
+    private static func makeStreamingSessionFactory(
+        pcmScratchBuffer: PCM16ScratchBuffer
+    ) -> StreamingSessionFactory {
+        { generationID, requestID, request, model, streamSessionsDirectory, warmState, timingOverridesMS, booleanFlags, stringFlags, cloneConditioning, wasPrimed, telemetryRecorder, loadCapabilityProfile, qwen3Capabilities, memoryPolicy, mlxMemorySnapshots in
+            NativeStreamingSynthesisSession(
+                generationID: generationID,
+                requestID: requestID,
+                request: request,
+                model: model,
+                streamSessionsDirectory: streamSessionsDirectory,
+                warmState: warmState,
+                timingOverridesMS: timingOverridesMS,
+                booleanFlags: booleanFlags,
+                stringFlags: stringFlags,
+                cloneConditioning: cloneConditioning,
+                wasPrimed: wasPrimed,
+                telemetryRecorder: telemetryRecorder,
+                loadCapabilityProfile: loadCapabilityProfile,
+                qwen3Capabilities: qwen3Capabilities,
+                memoryPolicy: memoryPolicy,
+                mlxMemorySnapshots: mlxMemorySnapshots,
+                pcmScratchBuffer: pcmScratchBuffer
+            )
+        }
     }
 
     init(
@@ -421,15 +449,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         self.diagnosticAppSupportBox = diagnosticAppSupportBox
         self.idleUnloadDelayOverride = idleUnloadDelayOverride
         var capturedContinuation: AsyncStream<GenerationEvent>.Continuation!
-#if os(iOS)
         self.events = AsyncStream(bufferingPolicy: .bufferingNewest(64)) { continuation in
             capturedContinuation = continuation
         }
-#else
-        self.events = AsyncStream(bufferingPolicy: .unbounded) { continuation in
-            capturedContinuation = continuation
-        }
-#endif
         self.eventStreamContinuation = capturedContinuation
         self.runtime = NativeEngineRuntime(
             loadCoordinator: loadCoordinator,
@@ -973,7 +995,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             // slot. The stream is the chunk-delivery transport; the
             // slot is for snapshot consumers.
             self?.eventStreamContinuation.yield(event)
-            self?.latestEvent = event.withoutPreviewAudioPayload()
+            Task { @MainActor [weak self] in
+                self?.latestEvent = event.withoutPreviewAudioPayload()
+            }
         }
     }
 
@@ -1351,44 +1375,6 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     private func handle(_ error: Error) {
         visibleErrorMessage = error.localizedDescription
         loadState = .failed(message: error.localizedDescription)
-    }
-
-    private static func defaultStreamingSessionFactory(
-        generationID: UUID,
-        requestID: Int,
-        request: GenerationRequest,
-        model: UnsafeSpeechGenerationModel,
-        streamSessionsDirectory: URL,
-        warmState: EngineWarmState,
-        timingOverridesMS: [String: Int],
-        booleanFlags: [String: Bool],
-        stringFlags: [String: String],
-        cloneConditioning: ResolvedCloneConditioning?,
-        wasPrimed: Bool,
-        telemetryRecorder: NativeTelemetryRecorder?,
-        loadCapabilityProfile: NativeLoadCapabilityProfile,
-        qwen3Capabilities: Qwen3TTSModelCapabilities,
-        memoryPolicy: NativeMemoryPolicy,
-        mlxMemorySnapshots: [String: NativeMLXMemorySnapshot]
-    ) -> any NativeStreamingSessionRunning {
-        NativeStreamingSynthesisSession(
-            generationID: generationID,
-            requestID: requestID,
-            request: request,
-            model: model,
-            streamSessionsDirectory: streamSessionsDirectory,
-            warmState: warmState,
-            timingOverridesMS: timingOverridesMS,
-            booleanFlags: booleanFlags,
-            stringFlags: stringFlags,
-            cloneConditioning: cloneConditioning,
-            wasPrimed: wasPrimed,
-            telemetryRecorder: telemetryRecorder,
-            loadCapabilityProfile: loadCapabilityProfile,
-            qwen3Capabilities: qwen3Capabilities,
-            memoryPolicy: memoryPolicy,
-            mlxMemorySnapshots: mlxMemorySnapshots
-        )
     }
 
     nonisolated private static func diagnosticDetailsString(from details: [String: String]) -> String {

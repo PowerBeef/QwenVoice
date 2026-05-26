@@ -331,6 +331,7 @@ private struct IOSGeneratePrefetchCoordinator: View {
 
 struct IOSGenerationModeSelector: View {
     @Binding var selectedSection: IOSGenerationSection
+    @EnvironmentObject private var ttsEngine: TTSEngineStore
 
     var body: some View {
         IOSCapsuleSelector(
@@ -338,6 +339,7 @@ struct IOSGenerationModeSelector: View {
             selection: $selectedSection,
             title: \.compactTitle,
             selectedTint: \.primaryActionTint,
+            isSelectionDisabled: ttsEngine.hasActiveGeneration,
             controlAccessibilityIdentifier: "generateSectionPicker",
             itemAccessibilityIdentifier: { "generateSection_\($0.rawValue)" }
         )
@@ -359,6 +361,7 @@ struct IOSCapsuleSelector<Item: Identifiable & Hashable>: View {
     @Binding var selection: Item
     let title: KeyPath<Item, String>
     let selectedTint: (Item) -> Color
+    var isSelectionDisabled = false
     let controlAccessibilityIdentifier: String
     let itemAccessibilityIdentifier: (Item) -> String
     @Namespace private var selectionPillNamespace
@@ -367,6 +370,7 @@ struct IOSCapsuleSelector<Item: Identifiable & Hashable>: View {
         HStack(spacing: 4) {
             ForEach(items) { item in
                 Button {
+                    guard !isSelectionDisabled else { return }
                     guard item != selection else { return }
                     selection = item
                 } label: {
@@ -389,6 +393,8 @@ struct IOSCapsuleSelector<Item: Identifiable & Hashable>: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .disabled(isSelectionDisabled && item != selection)
+                .opacity(isSelectionDisabled && item != selection ? 0.42 : 1)
                 .iosAppAnimation(IOSSelectionMotion.selectorLabel, value: selection)
                 .accessibilityIdentifier(itemAccessibilityIdentifier(item))
                 .accessibilityAddTraits(item == selection ? .isSelected : [])

@@ -69,8 +69,10 @@ struct IOSVoicesView: View {
                         voicesSectionHeading("Your saved voices")
 
                         VStack(spacing: 0) {
+                            LazyVStack(spacing: 0) {
                             ForEach(filteredSaved, id: \.id) { voice in
                                 savedRow(voice)
+                            }
                             }
                             saveACallCard
                         }
@@ -79,7 +81,7 @@ struct IOSVoicesView: View {
                     if filter != .saved {
                         voicesSectionHeading("Built-in speakers")
 
-                        VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
                             ForEach(filteredBuiltIn, id: \.id) { speaker in
                                 builtInRow(speaker)
                             }

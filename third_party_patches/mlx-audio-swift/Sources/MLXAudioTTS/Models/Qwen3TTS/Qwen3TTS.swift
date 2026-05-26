@@ -2421,6 +2421,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var pendingStreamCodes = [MLXArray]()
         var generatedCodebookTokens = [Int]()
         generatedCodebookTokens.reserveCapacity(effectiveMaxTokens)
+        var generatedCodebookTokenIDs = Set<Int>()
+        generatedCodebookTokenIDs.reserveCapacity(effectiveMaxTokens)
         var generatedCodeCount = 0
         let eosTokenId = talkerConfig.codecEosTokenId
 
@@ -2575,7 +2577,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 topP: topP,
                 topK: topK,
                 repetitionPenalty: repetitionPenalty,
-                generatedTokens: generatedCodebookTokens,
+                generatedTokenIDs: generatedCodebookTokenIDs,
                 suppressTokens: activeSuppressTokens,
                 eosTokenId: allowsEOS ? eosTokenId : nil,
                 minP: minP
@@ -2706,6 +2708,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 break
             }
             generatedCodebookTokens.append(tokenId)
+            generatedCodebookTokenIDs.insert(tokenId)
             generatedCodeCount += 1
             if isStreaming {
                 pendingStreamCodes.append(allCodes)
@@ -3493,7 +3496,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         topP: Float = 1.0,
         topK: Int = 50,
         repetitionPenalty: Float = 1.0,
-        generatedTokens: [Int]? = nil,
+        generatedTokenIDs: Set<Int>? = nil,
         suppressTokens: [Int]? = nil,
         eosTokenId: Int? = nil,
         minP: Float = 0.0
@@ -3508,8 +3511,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         }
 
         // Repetition penalty
-        if let tokens = generatedTokens, !tokens.isEmpty, repetitionPenalty != 1.0 {
-            let unique = Array(Set(tokens)).filter { $0 < logitsSlice.dim(-1) }
+        if let tokenIDs = generatedTokenIDs, !tokenIDs.isEmpty, repetitionPenalty != 1.0 {
+            let unique = tokenIDs.filter { $0 < logitsSlice.dim(-1) }
             if !unique.isEmpty {
                 let tokenIds = MLXArray(unique.map { Int32($0) }).reshaped(1, -1)
                 let selected = takeAlong(logitsSlice, tokenIds, axis: -1)
