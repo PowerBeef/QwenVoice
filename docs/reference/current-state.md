@@ -99,6 +99,7 @@ Platform-specific install policy:
 - iPhone memory policy lives in `Sources/QwenVoiceCore/IOSMemorySnapshot.swift` and the iPhone `TTSEngineStore` / app shell layers.
 - The shared memory bands are `healthy`, `guarded`, and `critical`.
 - iPhone shell code reacts to memory and thermal pressure and can trim or unload proactively.
+- On-device MLX generation on iPhone is **blocked at the product level** until Apple approves `com.apple.developer.kernel.increased-memory-limit` for the app and engine extension; the repo blocks model admission when extension headroom is low rather than risking Jetsam. Maintainer docs: [`ios-shipping.md`](ios-shipping.md).
 - The iPhone App Group surface is intentionally limited to the shared app-support subtree rooted by `Sources/iOSSupport/Services/AppPaths.swift` for models, downloads, outputs, voices, and required cache state; no parallel shared-user-defaults channel is maintained.
 - macOS active model-quality selection is stored as normal app preference state per generation mode; model files themselves remain folder-based under app support.
 - The repo’s supported minimum-hardware path is “smooth and reliable on the default path,” not “every optional quality mode is guaranteed on floor hardware.”

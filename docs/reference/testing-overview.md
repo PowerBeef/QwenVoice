@@ -8,7 +8,7 @@ Vocello's behavioral testing surface is local-only. macOS uses the maintained sm
 |---|---|---|---|
 | **Functional smoke** | Did the generate path produce a WAV + DB row? | ~1 min per scenario | [`smoke-*.md`](.) runbooks, `scripts/uitest.sh smoke-check / reset / prep / verify-generation` |
 | **Timing bench** | Is the latency, RTF, RMS, peak, and memory within ±15 % of the committed baseline across cold/warm × variant × prompt-length? | ~12 min per mode (24 samples) | [`bench-*.md`](.) runbooks, `scripts/uitest.sh bench-step / bench-summarize / bench-compare`, [`benchmark-baselines.json`](benchmark-baselines.json) |
-| **iPhone device proof** | Does the real iPhone app install, drive model delivery/extension transport, collect memory evidence, and run MLX when the increased-memory entitlement is available? | Manual, scenario-dependent | [`ios-device-screen-mirror-testing.md`](ios-device-screen-mirror-testing.md), `scripts/ios_device.sh` |
+| **iPhone device proof** | Does the real iPhone app install, drive model delivery/extension transport, collect memory evidence, and run MLX when the increased-memory entitlement is available? | Manual, scenario-dependent | [`ios-shipping.md`](ios-shipping.md), [`ios-device-screen-mirror-testing.md`](ios-device-screen-mirror-testing.md), `scripts/ios_device.sh`, `scripts/ios_device_proof_matrix.sh` |
 
 The layers complement each other:
 
@@ -27,7 +27,7 @@ The user is the final judge of subjective audio quality (naturalness, emotion ma
 | Audio-path code (`PCM16StreamLimiter`, `AudioPlayerViewModel`, `GenerationPersistence`, WAV writers) | ✅ | ✅ |
 | UI / view code (`Sources/Views/`, `Sources/iOS/`, coordinators, view models that don't touch audio) | ✅ | — |
 | iOS reference-parity UI (`Sources/iOS/` matching `design_references/Vocello iOS/`) | iOS Simulator + reference workflow | — |
-| iOS engine, model delivery, ExtensionKit IPC, or memory guardrails | iPhone device proof | targeted device run |
+| iOS engine, model delivery, ExtensionKit IPC, or memory guardrails | iPhone device proof ([`ios-shipping.md`](ios-shipping.md)) | `ios_device_proof_matrix.sh` + targeted UI run |
 | Prompt/tone configuration (`docs/qwen_tone.md`, voice-description handling) | — | — |
 | Generation pipeline plumbing (cancellation, gating, request ID) | ✅ | ✅ |
 | Saved-voice fixture changes (re-bootstrap UITestRef) | clone smoke + bootstrap | — |

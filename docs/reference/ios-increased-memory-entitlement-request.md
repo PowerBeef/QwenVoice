@@ -2,6 +2,8 @@
 
 This packet is the source of truth for requesting Apple's increased-memory entitlement for the iOS app and engine extension.
 
+**Hub:** [`ios-shipping.md`](ios-shipping.md) · **Tracker (submission status):** [`ios-increased-memory-entitlement-tracker.md`](ios-increased-memory-entitlement-tracker.md)
+
 Apple capability: `com.apple.developer.kernel.increased-memory-limit`
 
 Apple docs:

@@ -42,19 +42,6 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         category: "MemoryGuard"
     )
 
-    private static var allowsAggregateGuardedAdmission: Bool {
-        let raw = ProcessInfo.processInfo.environment["QVOICE_IOS_ALLOW_AGGREGATE_GUARDED_ADMISSION"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-#if DEBUG
-        guard let raw, !raw.isEmpty else { return true }
-        return raw == "1" || raw == "true" || raw == "yes"
-#else
-        guard let raw, !raw.isEmpty else { return false }
-        return raw == "1" || raw == "true" || raw == "yes"
-#endif
-    }
-
     @Published private(set) var loadState: EngineLoadState = .idle
     @Published private(set) var clonePreparationState: ClonePreparationState = .idle
     @Published private(set) var latestEvent: GenerationEvent?
@@ -461,36 +448,8 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
 
     private func guardModelAdmission(shouldSurfaceError: Bool, reason: String) async throws {
         let context = await refreshMemoryContext(reason: reason, source: "admission")
-        let admissionBand = memoryBudgetPolicy.engineExecutionBand(
-            for: context,
-            includesAggregatePressure: false
-        )
-        let shouldBlockAdmission =
-            !memoryBudgetPolicy.allowsModelAdmission(for: admissionBand)
-            || context.aggregatePressureBand == .critical
-            || (context.aggregatePressureBand == .guarded && !Self.allowsAggregateGuardedAdmission)
-        guard !shouldBlockAdmission else {
-            let error = MLXTTSEngineError.generationFailed(
-                "Vocello needs more available memory before loading this model. Close background apps and try again."
-            )
-            diagnosticsRecorder?.recordAction(
-                event: "model_admission_blocked",
-                reason: reason,
-                context: context,
-                message: error.localizedDescription
-            )
-            if shouldSurfaceError {
-                backend.setVisibleError(error.localizedDescription)
-            }
-            throw error
-        }
-#if DEBUG
-        if context.aggregatePressureBand == .guarded, admissionBand != .critical {
-            print(
-                "[TTSEngineStore] Admitting model under aggregate guarded pressure; perProcess=\(admissionBand.rawValue), combinedFootprintMB=\(context.combinedPhysFootprintBytes.map(Self.megabytesString) ?? "unknown"), appHeadroomMB=\(context.appSnapshot.availableHeadroomBytes.map(Self.megabytesString) ?? "unknown"), extensionHeadroomMB=\(context.engineExtensionSnapshot?.availableHeadroomBytes.map(Self.megabytesString) ?? "missing")"
-            )
-        }
-#endif
+        diagnosticsRecorder?.recordMemoryContext(context, event: "model_admission_observed")
+        _ = shouldSurfaceError
     }
 
     private func allowsProactiveWarmOperations(reason: String) async -> Bool {
@@ -630,7 +589,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
             return true
         }
 #endif
-        return memoryBudgetPolicy.engineExecutionBand(for: context) == .critical
+        return false
     }
 
     private func recordActiveGenerationPeakIfNeeded(_ context: IOSMemoryContext) {

@@ -283,7 +283,9 @@ private struct MemoryContextDiagnosticRecord: Codable {
     ) {
         let appSnapshot = context?.appSnapshot
         let engineExtensionSnapshot = context?.engineExtensionSnapshot
-        let entitlementBlocked = Self.likelyEntitlementBlocked(context)
+        let entitlementBlocked = context.map {
+            IOSMemoryBudgetPolicy.iPhoneShippingDefault.likelyEntitlementBlocked(for: $0)
+        } ?? nil
 
         self.event = event
         self.recordedAt = recordedAt
@@ -335,20 +337,4 @@ private struct MemoryContextDiagnosticRecord: Codable {
         return Double(bytes) / 1_048_576
     }
 
-    private static func likelyEntitlementBlocked(_ context: IOSMemoryContext?) -> Bool? {
-        guard let context, let engineExtensionSnapshot = context.engineExtensionSnapshot else {
-            return nil
-        }
-        guard context.aggregatePressureBand != .critical else {
-            return false
-        }
-
-        let policy = IOSMemoryBudgetPolicy.iPhoneShippingDefault
-        guard policy.band(for: engineExtensionSnapshot) == .critical,
-              let headroom = engineExtensionSnapshot.availableHeadroomBytes,
-              headroom < policy.guardedHeadroomBytes else {
-            return false
-        }
-        return true
-    }
 }

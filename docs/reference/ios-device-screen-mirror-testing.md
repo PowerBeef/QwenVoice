@@ -1,6 +1,8 @@
 # iOS Device Screen-Mirror Testing
 
-Validate the real iPhone app on owned hardware while controlling the UI through Apple's iPhone Mirroring app. This path covers model downloads, engine-extension behavior, memory guardrail evidence, and real MLX generation once Apple's increased-memory entitlement is available. Simulator review remains covered by [`ios-simulator-testing.md`](ios-simulator-testing.md).
+Validate the real iPhone app on owned hardware while controlling the UI through Apple's iPhone Mirroring app. This path covers model downloads, engine-extension behavior, memory guardrail evidence, and real MLX generation once Apple's increased-memory entitlement is available.
+
+**MLX / memory / entitlement hub:** [`ios-shipping.md`](ios-shipping.md). Simulator UI only: [`ios-simulator-testing.md`](ios-simulator-testing.md).
 
 ## Quick Start
 
@@ -8,6 +10,8 @@ Validate the real iPhone app on owned hardware while controlling the UI through 
 scripts/ios_device.sh doctor
 scripts/ios_device.sh start
 ```
+
+Phased MLX/memory validation: `scripts/ios_device_proof_matrix.sh` (see [`ios-device-proof-matrix.md`](ios-device-proof-matrix.md)).
 
 `doctor` and `start` first run the iOS readiness gate when available and save the raw result as `readiness.json` in the run directory. The script resolves the gate from `QVOICE_IOS_READINESS_GATE`, then `PATH`, then an optional repo-local helper. The gate is the source of truth for physical iPhone availability because it warms CoreDevice, retries `xctrace`, and checks the Xcode destination in order. Do not claim hardware profiling or performance readiness from `devicectl`, `xctrace`, or `xcodebuild -showdestinations` alone.
 
@@ -59,6 +63,8 @@ The same values can be supplied with environment variables for repeatable local 
 Aggregate-guarded iPhone memory admission is intentionally Debug-permissive for trace collection. Release/TestFlight builds block aggregate-guarded model admission by default unless `QVOICE_IOS_ALLOW_AGGREGATE_GUARDED_ADMISSION=1` is explicitly present in the launch environment.
 
 `QVOICE_IOS_MLX_MEMORY_LIMIT_MB` is a process-lifetime Debug experiment for the launched app/extension process. Relaunch the app with a different value when sweeping limits.
+
+Model admission blocking and in-flight critical cancel are **disabled by default** while measuring extension Jetsam without the increased-memory entitlement ([`ios-memory-admission-policy.md`](ios-memory-admission-policy.md)).
 
 ## Codex Control
 
@@ -152,6 +158,7 @@ Read the implied limit as `extension physical footprint + extension os_proc_avai
 ## Recovery
 
 - Device not found or readiness is `RED` / `NO_DEVICE`: unlock the iPhone, keep it on the same network or connected by cable, open Xcode's Devices and Simulators window if needed, and rerun `scripts/ios_device.sh doctor`.
+- `connected (no DDI)` or *developer disk image could not be mounted*: update Xcode to support the device iOS version, open Devices and Simulators and allow the DDI download, then rerun `scripts/ios_device_proof_matrix.sh --phase baseline`.
 - Mirroring window unavailable: open `/System/Applications/iPhone Mirroring.app` manually once, then rerun `scripts/ios_device.sh mirror`.
 - Signing failure: confirm the Apple Developer account for the selected team is available in Xcode Settings, then rerun `scripts/ios_device.sh build`.
 - Increased-memory entitlement failure: `scripts/ios_device.sh build --enable-increased-memory-limit` requires Apple approval for `com.apple.developer.kernel.increased-memory-limit` on both the app and engine-extension profiles. Without that entitlement, Debug installs remain useful for UI, downloads, ExtensionKit transport, and diagnostics, but real MLX generation is entitlement-blocked whenever extension headroom is below admission thresholds.

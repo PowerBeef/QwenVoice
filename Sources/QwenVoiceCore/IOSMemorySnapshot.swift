@@ -453,6 +453,45 @@ public struct IOSMemoryBudgetPolicy: Hashable, Codable, Sendable {
         }
     }
 
+    /// Extension process headroom is critically low while aggregate pressure is not —
+    /// typical when the engine extension lacks Apple's increased-memory entitlement.
+    /// Returns `nil` when the extension snapshot is missing.
+    public func likelyEntitlementBlocked(for context: IOSMemoryContext) -> Bool? {
+        guard let engineExtensionSnapshot = context.engineExtensionSnapshot else {
+            return nil
+        }
+        guard context.aggregatePressureBand != .critical else {
+            return false
+        }
+        guard band(for: engineExtensionSnapshot) == .critical,
+              let headroom = engineExtensionSnapshot.availableHeadroomBytes,
+              headroom < guardedHeadroomBytes else {
+            return false
+        }
+        return true
+    }
+
+    /// User-visible copy when `guardModelAdmission` blocks model load.
+    public func modelAdmissionBlockMessage(
+        for context: IOSMemoryContext,
+        perProcessAdmissionBand: IOSMemoryPressureBand,
+        allowsAggregateGuardedAdmission: Bool
+    ) -> String {
+        if context.aggregatePressureBand == .critical {
+            return "Close other apps — Vocello is critically low on combined memory with the voice engine."
+        }
+        if context.aggregatePressureBand == .guarded, !allowsAggregateGuardedAdmission {
+            return "Close apps using memory in the background. Vocello needs more combined memory for the app and voice engine before loading this model."
+        }
+        if !allowsModelAdmission(for: perProcessAdmissionBand) {
+            if likelyEntitlementBlocked(for: context) == true {
+                return "On-device generation needs more memory headroom for the voice engine. Close background apps and try again."
+            }
+            return "Vocello needs more available memory before loading this model. Close background apps and try again."
+        }
+        return "Vocello needs more available memory before loading this model. Close background apps and try again."
+    }
+
     private func maxBand(
         _ lhs: IOSMemoryPressureBand,
         _ rhs: IOSMemoryPressureBand

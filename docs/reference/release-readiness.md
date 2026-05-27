@@ -183,7 +183,15 @@ With macOS 2.0.0 stable shipped, the iPhone track is being re-opened on a TestFl
 
 MLX generation currently hits the iOS engine-extension process memory limit before real model admission. The app already declares `com.apple.developer.kernel.increased-memory-limit` in `Sources/iOS/VocelloiOS.entitlements` and `Sources/iOSEngineExtension/VocelloEngineExtension.entitlements`, but Apple must approve the managed capability before it can be enabled in provisioning profiles.
 
-Use the prepared request packet in [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md). The request must be submitted from Apple Developer → Certificates, Identifiers & Profiles → Identifiers → each App ID → Capability Requests:
+Maintained doc set (start at [`ios-shipping.md`](ios-shipping.md)):
+
+- [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md) — Apple request packet
+- [`ios-increased-memory-entitlement-tracker.md`](ios-increased-memory-entitlement-tracker.md) — submission status
+- [`ios-mlx-jetsam-feasibility.md`](ios-mlx-jetsam-feasibility.md) — feasibility and Jetsam posture
+- [`ios-memory-admission-policy.md`](ios-memory-admission-policy.md) — Release vs Debug admission
+- [`ios-device-proof-matrix.md`](ios-device-proof-matrix.md) — device validation (`scripts/ios_device_proof_matrix.sh`)
+
+The request must be submitted from Apple Developer → Certificates, Identifiers & Profiles → Identifiers → each App ID → Capability Requests:
 
 - Team ID: `FK2D8X36G2`
 - App name + bundle IDs: Vocello, `com.patricedery.vocello` and engine extension `com.patricedery.vocello.engine-extension`

@@ -11,6 +11,8 @@ scripts/uitest.sh smoke-check custom   # or design / clone
 
 ## iPhone 17 Pro device run
 
+Docs: [`ios-shipping.md`](ios-shipping.md) (hub) · phased MLX proof: `scripts/ios_device_proof_matrix.sh --phase preflight`
+
 ```sh
 scripts/ios_device.sh doctor
 scripts/ios_device.sh start

@@ -33,6 +33,7 @@ Current model-selection policy:
 - Do not reintroduce a repo-owned Python backend, Python setup path, or standalone CLI surface.
 - Keep macOS release behavior aligned with `Vocello.app` and `Vocello-macos26.dmg`.
 - Keep iPhone compile-safe, but do not treat iPhone release proof as blocking for the current milestone.
+- iPhone on-device MLX, memory admission, and Apple increased-memory entitlement work: start at [`docs/reference/ios-shipping.md`](docs/reference/ios-shipping.md).
 
 ## Useful Checks
 

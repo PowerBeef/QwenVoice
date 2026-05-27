@@ -105,10 +105,13 @@ options:
                           Debug-only QVOICE_IOS_MLX_MEMORY_LIMIT_MB active-allocation experiment.
   --mlx-cache-limit-mb <mb>
                           Debug-only QVOICE_IOS_MLX_CACHE_LIMIT_MB cache-limit experiment.
-
 env:
   QVOICE_IOS_READINESS_GATE points doctor/start at a local ios-device-readiness executable.
   QVOICE_IOS_ALLOW_AGGREGATE_GUARDED_ADMISSION=1 permits Release/TestFlight aggregate-guarded admission.
+
+related:
+  scripts/ios_device_proof_matrix.sh --phase preflight|baseline|entitled
+  docs/reference/ios-shipping.md
 
 examples:
   scripts/ios_device.sh doctor
