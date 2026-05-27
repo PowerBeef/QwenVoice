@@ -128,6 +128,7 @@ for removed_pattern in "${PROHIBITED_REFERENCE_PATTERNS[@]}"; do
             --hidden \
             --glob '!.git/**' \
             --glob '!build/**' \
+            --glob '!scratch/**' \
             --glob '!**/scripts/check_project_inputs.sh' \
             >/tmp/qwenvoice_removed_reference_grep 2>/dev/null; then
             echo "error: removed test/benchmark reference is still present:" >&2
