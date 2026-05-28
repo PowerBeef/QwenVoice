@@ -26,7 +26,7 @@ For each `variant` in `[speed, quality]`:
 
 - **Sidebar AX id**: `sidebar_customVoice`
 - **Screen mount check**: `scripts/uitest.sh locate screen_customVoice` (exit 0)
-- **Variant button AX ids**: `customVoice_speedVariantButton`, `customVoice_qualityVariantButton`. Fall back to `customVoice_modelVariantPicker` / `customVoice_modelVariantSelector` as anchors per the skeleton's three-fallback ladder.
+- **Variant buttons**: the Speed / Quality toggle at the top-right of the Configuration card (`customVoice_speedVariantButton` / `customVoice_qualityVariantButton` name them) — click by sight and verify the gold highlight in a follow-up screenshot.
 - **No saved-voice bind needed** (that's only Voice Cloning).
 
 `bench-step` invocations:

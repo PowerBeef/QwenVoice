@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Foundation for autonomous UI-driven testing of the Vocello Debug build.
 #
-# A Cursor agent uses the user-computer-use MCP (computer tool) to drive
-# Vocello like a person; this script provides the deterministic pieces that
-# don't make sense to do via screenshots — launch, state reset, AXIdentifier
-# lookup, log tailing, DB queries, artifact directory creation.
+# An agent drives Vocello like a person with the native computer-use MCP
+# (mcp__computer-use__*) plus vision — locating controls by sight from a
+# screenshot, not by AX-id coordinate resolution. This script provides the
+# deterministic pieces that don't make sense to do via screenshots — launch,
+# state reset, log tailing, DB queries, artifact directory creation, and the
+# signpost-based bench/verify timing core. The locate/screen-locate helpers
+# below remain only as an optional fallback for visually ambiguous controls.
 #
 # usage: scripts/uitest.sh <command> [options]   (see `help`)
 
@@ -41,29 +44,24 @@ commands:
                         --full rm -rfs the entire persistent Debug data folder
                           (exceptional; forces model re-download on next launch).
 
-  locate <ax-id>        Look up a SwiftUI accessibilityIdentifier in Vocello's front
-                        window and print "cx cy w h" — center coordinates and size —
-                        in macOS logical-points space. See docs/reference/ui-test-surface.md
-                        for the screenshot-pixel scaling caveat. Exits non-zero if not found.
+  locate <ax-id>        OPTIONAL FALLBACK. Look up a SwiftUI accessibilityIdentifier in
+                        Vocello's front window; exit 0 = present (a presence check). Prefer
+                        a screenshot for confirming state. Prints "cx cy w h" in macOS
+                        logical points. Requires System-Events Accessibility granted.
 
-  screen-size           Print the screen's logical-point dimensions as "W H". Use with
-                        the locate output to scale to your screenshot's image pixels.
+  screen-size           Print the screen's logical-point dimensions as "W H" (fallback).
 
   screen-locate <ax-id> [image-w image-h]
-                        Primary coordinate helper for user-computer-use MCP.
-                        Looks up an AX id and prints screen-global "cx cy w h"
-                        in macOS logical points. When image-w and image-h from
-                        get_screenshot (image_width/image_height) are supplied,
-                        scales into that screenshot's pixel space for left_click.
+                        OPTIONAL FALLBACK for visually ambiguous controls only — the
+                        vision-first flow clicks by sight and does not need this. Prints
+                        screen-global "cx cy w h" in logical points; with image-w/image-h
+                        supplied, scales into screenshot-pixel space for left_click.
 
   scaled-locate <ax-id> <image-w> <image-h>
-                        Legacy alias of screen-locate with required image dims.
-                        Prefer screen-locate for new agent workflows.
+                        Legacy alias of screen-locate. Deprecated.
 
   window-locate <ax-id> [image-w image-h]
-                        Deprecated key-window coordinate helper for the old
-                        Codex mcp__computer_use__ API. Prefer screen-locate
-                        with user-computer-use get_screenshot.
+                        Deprecated legacy coordinate helper; ignore.
 
   bench-step <mode> <variant> <coldwarm> <bucket> --artifacts-dir <dir> [--timeout <s>]
                         One-shot wrapper for the per-sample loop. Reads the previous

@@ -98,21 +98,19 @@ Use installed **skills** for workflow guidance and Axiom **subagents** (via the 
 
 ### UI testing and benchmarks — native computer-use
 
-**All UI-driven tests and benchmarks run through the native `computer-use` MCP** (`mcp__computer-use__*`), driving the real `Vocello.app` Debug build. The `scripts/uitest.sh` harness (build, reset, locate, bench-*) and the smoke/bench runbooks under `docs/reference/` are the workflow source of truth — only the MCP call shape differs from the Cursor-era runbooks (see "Runbook translation" below).
+**All UI-driven tests and benchmarks run through the native `computer-use` MCP** (`mcp__computer-use__*`) plus vision, driving the real `Vocello.app` Debug build. The driving model is vision-first: take a `screenshot`, find the control **by sight**, click its pixel directly — no AX-id→coordinate resolution, no logical-point scaling, no System-Events AppleScript. All *measurement* stays in the `scripts/uitest.sh` harness (OSSignpost + SQLite), so timing accuracy never depends on how the UI was driven. The harness and the smoke/bench runbooks under `docs/reference/` are the workflow source of truth; the canonical driving guide is [`docs/reference/computer-use-mcp.md`](docs/reference/computer-use-mcp.md).
 
-First call `mcp__computer-use__request_access` for `Vocello` (Vocello is a native app → full tier: clicks and typing both work). Run all shell commands (`scripts/uitest.sh ...`, builds, DB queries) through the **Bash tool**, not computer-use — Terminal/IDE apps are restricted tiers where typing is blocked.
+First call `mcp__computer-use__request_access` for `Vocello` (native app → full tier: clicks and typing both work). Run all shell commands (`scripts/uitest.sh ...`, builds, DB queries) through the **Bash tool**, not computer-use — Terminal/IDE apps are restricted tiers where typing is blocked.
 
-| Action | computer-use call |
+| Intent | computer-use call |
 |---|---|
-| Screenshot + image dims | `mcp__computer-use__screenshot` — read `image_width` / `image_height` from the result; export as `$IW` / `$IH` for the locate helpers |
+| Capture screen | `mcp__computer-use__screenshot` (locate elements by sight in the image) |
 | Re-front Vocello if focus is stale | `scripts/uitest.sh activate` (Bash), then `screenshot` again |
-| Click at screenshot coords | `mcp__computer-use__left_click`, `coordinate: [cx, cy]` |
+| Click at pixel | `mcp__computer-use__left_click`, `coordinate: [x, y]` (screenshot pixel space) |
 | Type into focused field | `mcp__computer-use__type`, `text: "..."` (click the field first) |
 | Press key / chord | `mcp__computer-use__key`, `text: "cmd+Return"`; common: `cmd+a`, `BackSpace`, `Down`, `Up`, `Return` |
 
-Coordinate helper: `mcp__computer-use__screenshot` returns a full-screen image — use `scripts/uitest.sh screen-locate <ax-id> $IW $IH` to map AX identifiers to screenshot-pixel coords for `left_click`. AX vocabulary and verification: [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md). Test artifacts land in `build/Debug/uitest/<timestamp>/` and are wiped by `scripts/build.sh clean`.
-
-**Runbook translation.** The canonical guides — [`docs/reference/computer-use-mcp.md`](docs/reference/computer-use-mcp.md), `ui-test-surface.md`, and the smoke-*/bench-* runbooks — are written for the Cursor `user-computer-use` MCP whose single `computer` tool dispatches on an `action` field. The harness shell commands are identical; translate the MCP call shape: `action: "get_screenshot"` → `mcp__computer-use__screenshot`; `action: "left_click"` → `mcp__computer-use__left_click`; `action: "type"` → `mcp__computer-use__type`; `action: "key"` → `mcp__computer-use__key`. The macOS Command modifier is `cmd` here (the Cursor docs write `super`). Do **not** use `osascript` `keystroke`/`click at` for Vocello UI — global coords hit whatever window has focus.
+Keyboard-first where possible (`cmd+Return` generate, `cmd+a`/`BackSpace` clear) to minimize clicks. AX identifiers in [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) are a **semantic reference for what to look for**, not a coordinate source; the `scripts/uitest.sh locate`/`screen-locate` helpers remain only as an optional fallback when two controls are visually indistinguishable. Test artifacts land in `build/Debug/uitest/<timestamp>/` and are wiped by `scripts/build.sh clean`.
 
 **Drive SwiftUI Picker menus by keyboard, not fixed click coordinates.** SwiftUI `Picker` menus open anchored to the currently-selected item, so a fixed-coordinate click only lands correctly on the first selection of a session. Reliable pattern: `left_click` to open the menu, then `key` `Down`/`Up` N times from the current index to the target, then `key` `Return`. Track current selection in agent state to compute N. Full pattern in `docs/reference/ui-test-surface.md` § "Driving SwiftUI Picker menus".
 

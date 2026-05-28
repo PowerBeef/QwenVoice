@@ -1,6 +1,6 @@
 # Smoke Runbook: Custom Voice generate → verify
 
-One-shot functional check: launch the Debug build, drive Custom Voice through one short generation via [`user-computer-use` MCP](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
+One-shot functional check: launch the Debug build, drive Custom Voice through one short generation via [native computer-use](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
 
 Follows the [Standard smoke skeleton](ui-test-surface.md#standard-smoke-skeleton). This file only documents the Custom Voice deltas. For when to run this vs. the bench, see [`testing-overview.md`](testing-overview.md).
 
@@ -18,7 +18,7 @@ Follows the [Standard smoke skeleton](ui-test-surface.md#standard-smoke-skeleton
 - **Sidebar AX id**: `sidebar_customVoice`
 - **Screen mount check**: `scripts/uitest.sh locate screen_customVoice` (exit 0)
 - **Output subfolder**: `outputs/CustomVoice/`
-- **Extra steps before generate**: none — the default speaker and delivery are correct. Just click `textInput_textEditor`, type the fixed script, fire `super+Return`.
+- **Extra steps before generate**: none — the default speaker and delivery are correct. Just click `textInput_textEditor`, type the fixed script, fire `cmd+Return`.
 
 ## Notes
 

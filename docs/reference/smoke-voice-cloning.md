@@ -1,6 +1,6 @@
 # Smoke Runbook: Voice Cloning generate → verify
 
-One-shot functional check: launch the Debug build, drive Voice Cloning with the `UITestRef` saved-voice fixture + a fixed script via [`user-computer-use` MCP](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
+One-shot functional check: launch the Debug build, drive Voice Cloning with the `UITestRef` saved-voice fixture + a fixed script via [native computer-use](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
 
 Follows the [Standard smoke skeleton](ui-test-surface.md#standard-smoke-skeleton). This file only documents the Voice Cloning deltas. For when to run this vs. the bench, see [`testing-overview.md`](testing-overview.md).
 
@@ -29,7 +29,7 @@ Voice Cloning requires the **`UITestRef`** saved-voice fixture. If `scripts/uite
   2. Screenshot to see the open menu; click the menu item labeled `UITestRef` visually (menu items don't have stable AX ids).
   3. Confirm reference is bound: `scripts/uitest.sh locate voiceCloning_activeReference` (exit 0).
   
-  Then proceed to `textInput_textEditor` + script + `super+Return`.
+  Then proceed to `textInput_textEditor` + script + `cmd+Return`.
 
 ## Notes
 

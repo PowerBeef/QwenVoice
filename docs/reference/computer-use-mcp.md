@@ -1,131 +1,131 @@
-# Computer-use MCP (Cursor)
+# Computer-use driving (native, vision-first)
 
-Canonical guide for a **Cursor agent** driving the Vocello **Debug build** via the **`user-computer-use`** MCP server. Pair with [`ui-test-surface.md`](ui-test-surface.md) for AX identifiers, smoke/bench skeletons, and verification commands.
+Canonical guide for driving the Vocello **Debug build** with the **native `computer-use` MCP** (`mcp__computer-use__*`) plus the agent's own vision. Pair with [`ui-test-surface.md`](ui-test-surface.md) for element labels, smoke/bench skeletons, and verification commands.
 
-## MCP invocation
+The driving model is deliberately thin: **the agent looks at a screenshot, finds the element by sight, and clicks its pixel — no AX-id resolution, no coordinate scaling, no System-Events AppleScript.** All *measurement* stays in the harness (OSSignpost + SQLite), so timing accuracy never depends on how the UI was driven.
 
-Use `CallMcpTool`:
+## What changed vs. the legacy flow
 
-| Field | Value |
+| Legacy (Cursor `user-computer-use` + osascript) | Native vision-first |
 |---|---|
-| `server` | `user-computer-use` |
-| `toolName` | `computer` |
+| `CallMcpTool` server `user-computer-use`, tool `computer`, `action:` dispatch | `mcp__computer-use__screenshot` / `left_click` / `type` / `key` |
+| `scripts/uitest.sh screen-locate <ax-id> $IW $IH` → scaled pixel coords | Look at the screenshot, click the element's pixel directly |
+| `scripts/uitest.sh locate <ax-id>` (System Events) for presence checks | Read the screenshot; the element is either visible or it isn't |
+| System Events Accessibility grant required for driving | Only the computer-use access grant for `Vocello` |
+| `super` = Command | `cmd` = Command |
 
-The tool accepts a single `action` plus optional `coordinate` and `text`. Coordinates are **(x, y) pixels from the top-left of the screenshot image** returned by `get_screenshot` — use the `image_width` and `image_height` from the JSON text part of that response as `$IW` / `$IH`.
+`locate` / `screen-locate` still exist in `scripts/uitest.sh` as an **optional fallback** (see "When vision is ambiguous"), but they are no longer on the happy path.
 
-The MCP scales agent-supplied coordinates from image space to logical screen space internally. Always pass coords in **screenshot image space**, not macOS logical points.
+## Access (once per session)
+
+`mcp__computer-use__request_access` for application `Vocello`. Vocello is a normal native app → **full tier** (clicks and typing both work). Run every shell command (`scripts/uitest.sh …`, builds, DB queries) through the **Bash tool**, never through computer-use — Terminal/IDE apps are restricted tiers where typing is blocked.
 
 ## Tool mapping
 
-| Intent | `computer` call |
+| Intent | Native call |
 |---|---|
-| Capture screen | `action: "get_screenshot"` → parse `image_width`, `image_height` from JSON text part |
-| Click | `action: "left_click"`, `coordinate: [cx, cy]` |
-| Type into focused field | `action: "type"`, `text: "..."` (click the field first) |
-| Key / chord | `action: "key"`, `text: "super+Return"` (`super` = Command on macOS) |
-| Move cursor | `action: "mouse_move"`, `coordinate: [x, y]` |
-| Scroll | `action: "scroll"`, `coordinate: [x, y]`, `text: "down"` or `"down:500"` |
+| Capture screen | `mcp__computer-use__screenshot` (you see the image; pick coordinates by sight) |
+| Click | `mcp__computer-use__left_click`, `coordinate: [x, y]` (screenshot pixel space) |
+| Type into focused field | `mcp__computer-use__type`, `text: "..."` (click the field first) |
+| Key / chord | `mcp__computer-use__key`, `text: "cmd+Return"` |
+| Scroll | `mcp__computer-use__scroll` |
 
-Common key chords: `super+Return` (Generate), `super+a` (select all), `BackSpace`, `Down`, `Up`, `Return`.
-
-Screenshots include a **red crosshair** at the current cursor position. After a click, take another screenshot to verify the crosshair landed on the target; adjust proportionally if it missed.
+Common chords: `cmd+Return` (Generate), `cmd+a` (select all), `BackSpace`, `Down`, `Up`, `Return`.
 
 ## Per-turn ritual
 
-Every interaction turn:
+1. `scripts/uitest.sh activate` (Bash) — bring Vocello to the front.
+2. `mcp__computer-use__screenshot` — look at the current state.
+3. Decide the target **by sight** and `left_click` its pixel; or skip straight to a keyboard chord when one exists (preferred — see below).
+4. Re-`screenshot` to confirm the result before the next step.
 
-1. `scripts/uitest.sh activate` — bring Vocello to the front.
-2. `get_screenshot` — record `$IW` / `$IH` from the response metadata.
-3. `scripts/uitest.sh screen-locate <ax-id> $IW $IH` — map AX identifier to screenshot coords.
-4. `left_click` / `type` / `key` as needed.
-5. Optional: second `get_screenshot` to confirm focus and crosshair placement.
+**Window focus:** clicking an unfocused window may only raise it. If an action had no visible effect in the verifying screenshot, click the same target once more — the window is now focused and the second click registers.
 
-**Window focus:** On macOS, clicking a window that is not focused may only raise it without triggering the element. If an action had no effect, click the same target again — the window should now be focused and the second click registers.
+## Keyboard-first driving (fewer clicks = faster + less flaky)
 
-## Coordinate recipe
+Prefer keys over hunting for buttons. The app exposes:
 
-```sh
-# After get_screenshot returns image_width=1512, image_height=982 (example):
-IW=1512
-IH=982
-read -r CX CY _ _ <<< "$(scripts/uitest.sh screen-locate textInput_textEditor "$IW" "$IH")"
-# Pass [CX, CY] to left_click via CallMcpTool
-```
+| Chord | Effect |
+|---|---|
+| `cmd+Return` | Generate on the current generation screen (Custom / Design / Cloning) |
+| `cmd+a` | Select all in the focused field |
+| `BackSpace` | Delete the selection (use after `cmd+a`) |
+| `cmd+comma` | Open Settings |
 
-Without image dimensions, `screen-locate` prints logical-point coords (`cx cy w h`). Always pass `$IW` / `$IH` when driving clicks through the MCP.
+The only unavoidable clicks are: switching the sidebar mode, selecting the Speed/Quality variant, and focusing the script field. Everything else is keyboard.
 
 ## Standard generate sequence
 
-For any mode that uses `textInput_textEditor`:
+For any mode that uses the script composer:
 
-1. `screen-locate textInput_textEditor $IW $IH` → `left_click` at `[CX, CY]`.
-2. Optional: `key` with `super+a`, then `BackSpace`, to clear existing text.
-3. `type` with the fixed prompt script.
-4. Capture `T0` **immediately before** Generate:
+1. `screenshot` → click the script text area (the large multi-line field).
+2. Optional clear: `key` `cmd+a` → `key` `BackSpace`.
+3. `type` the fixed prompt.
+4. Capture `T0` **immediately before** Generate (search anchor only — not the measured value):
    ```sh
    T0="$(/usr/bin/python3 -c 'import datetime; print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])')"
    ```
-5. `key` with `super+Return`.
-6. Verify: `scripts/uitest.sh verify-generation <mode> --artifacts-dir "$ART" --since "$T0" --text "..."`.
+5. `key` `cmd+Return`.
+6. Verify + record via the harness (`bench-step` for timing, or `verify-generation` for smoke). Timing comes from OSSignposts, so it is independent of your click/type latency.
 
 ## Driving SwiftUI Picker menus
 
-SwiftUI `Picker` menus anchor to the **currently-selected item**, not a fixed position. Fixed menu-item click coordinates fail after the first selection in a session.
+SwiftUI `Picker` menus open **anchored to the currently-selected item**, not a fixed position — so a remembered pixel only works for the first open in a session. Drive them by **keyboard**, which vision-verify confirms:
 
-**Preferred pattern:**
+1. Click the picker to open it.
+2. `key` `Down` (or `Up`) N times from the current selection to the target.
+3. `key` `Return` to commit.
+4. Re-`screenshot` and confirm the displayed value; track the current selection so you can compute N next time.
 
-1. `left_click` the picker to open the menu.
-2. `key` with `Down` or `Up` N times from the current selection to the target.
-3. `key` with `Return` to commit.
-4. Track the current selection in agent state to compute N.
+Affected pickers: delivery tone, delivery intensity, saved-voice picker, model-variant pickers.
 
-Affected pickers: delivery tone, delivery intensity, saved-voice picker, model-variant pickers. See [`ui-test-surface.md`](ui-test-surface.md) for AX ids.
+## When vision is ambiguous (optional fallback)
 
-## Harness commands (shell)
+Vision handles every element directly, including the ones the AX tree hides (variant Speed/Quality buttons, open picker rows) — those used to require a "pure visual" fallback anyway. If two controls are visually identical and you cannot disambiguate from the screenshot, you may fall back to:
 
-Agents run these in the terminal; the MCP handles mouse/keyboard only.
+- `scripts/uitest.sh locate <ax-id>` — exit 0 confirms the element is on the front window (a presence check; needs System-Events Accessibility granted to the terminal). Useful to assert "the right screen is mounted" before driving.
+- `scripts/uitest.sh screen-locate <ax-id> <img-w> <img-h>` — returns screenshot-pixel coords for that id. Only needed when sight genuinely can't separate two controls.
+
+Treat both as escape hatches, not the default.
+
+## Harness commands (shell — measurement & lifecycle)
+
+These are the accurate backend and stay exactly as-is. Run via Bash.
 
 | Command | Purpose |
 |---|---|
-| `scripts/uitest.sh prep` | Build launch + fresh window |
-| `scripts/uitest.sh reset` | Clear generations + outputs |
-| `scripts/uitest.sh activate` | Front Vocello before MCP actions |
-| `scripts/uitest.sh screen-locate <ax-id> [IW IH]` | Screenshot-space coords |
-| `scripts/uitest.sh locate <ax-id>` | Logical-point coords (debug) |
+| `scripts/uitest.sh prep` | Build-launch + fresh window |
+| `scripts/uitest.sh reset` | Clear generations + outputs (resets warm state for a cold sample) |
+| `scripts/uitest.sh activate` | Front Vocello |
 | `scripts/uitest.sh smoke-check <mode>` | Precondition gate |
-| `scripts/uitest.sh verify-generation` | Post-generate WAV + DB check |
-| `scripts/uitest.sh bench-step` | One bench sample (wait + record) |
-| `scripts/uitest.sh bench-compare` | Diff against baselines |
+| `scripts/uitest.sh verify-generation <mode> …` | Post-generate WAV + DB check |
+| `scripts/uitest.sh bench-step <mode> <variant> <coldwarm> <bucket> …` | One bench sample (wait on signpost + record) |
+| `scripts/uitest.sh bench-summarize <dir>` / `bench-compare <dir>` | Summarize / diff against baselines |
+| `scripts/uitest.sh db "<sql>"` | Read-only history query |
 
-Full command list: `scripts/uitest.sh help`.
+Full list: `scripts/uitest.sh help`.
 
 ## Forbidden paths
 
-Do **not** use these for Vocello UI driving:
+- **`user-automation-mcp`** and **osascript `keystroke` / `click at`** — global coords hit whatever window has focus; never use for Vocello UI.
+- **Remembered Picker menu-item coordinates** after the first open in a session — use the keyboard pattern above.
+- **`window-locate` / `scaled-locate`** — dead legacy coordinate helpers; ignore.
 
-- **`user-automation-mcp`** — global screen coords hit whatever window has focus (e.g. a browser tab).
-- **osascript `keystroke` / `click at`** — same focus risk; removed from repo gate scripts.
-- **Fixed Picker menu-item coordinates** after the first open in a session.
+## Permissions
 
-Deprecated coordinate helpers (old Codex key-window API only):
-
-- `window-locate` — key-window-relative scaling for `mcp__computer_use__.get_app_state`.
-- `scaled-locate` — legacy alias; use `screen-locate` instead.
-
-## macOS permissions
-
-- **Accessibility** — required for `scripts/uitest.sh locate` / `screen-locate` (System Events AppleScript). Grant to Terminal/Cursor in *System Settings → Privacy & Security → Accessibility*.
-- **Screen Recording** — may be required if `get_screenshot` fails (nut-js / `screencapture` fallback).
+- **computer-use access** — grant `Vocello` via `mcp__computer-use__request_access` (full tier).
+- **Screen Recording** — only if `screenshot` returns black/empty.
+- **System-Events Accessibility** — *only* needed if you use the optional `locate` / `screen-locate` fallback; the vision-first path does not require it.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Text typed into wrong app | `scripts/uitest.sh activate`, refocus editor with `left_click`, retry `type` |
-| Click had no effect | Window was unfocused — click same target again |
-| Crosshair far from target | Adjust coords proportionally; take fresh screenshot after each attempt |
-| `screen-locate` not found | Vocello not running — run `prep` first |
-| Readiness line unchanged after type | Editor not focused — click `textInput_textEditor` before `type` |
+| Text typed into wrong app | `scripts/uitest.sh activate`, re-`screenshot`, click the field, retry `type` |
+| Click had no effect | Window was unfocused — click the same target again |
+| Click landed off-target | Re-`screenshot`, pick the corrected pixel by sight |
+| Screen looks stale after an action | Re-`screenshot`; SwiftUI may need ~500 ms to settle, then retry |
+| Readiness line unchanged after type | Editor wasn't focused — click the script field before `type` |
 
 ## Agent bench gate (6-cell review)
 

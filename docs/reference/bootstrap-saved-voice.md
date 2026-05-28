@@ -45,7 +45,7 @@ Skeleton Phases 1–3 are unchanged.
 
 ### Phase 4 — Drive UI (extended)
 
-1. **Generate the source audio via Voice Design** (matches [`smoke-voice-design.md`](smoke-voice-design.md) — sidebar `sidebar_voiceDesign`, fill `voiceDesign_voiceDescriptionField`, fill `textInput_textEditor`, `super+Return`).
+1. **Generate the source audio via Voice Design** (matches [`smoke-voice-design.md`](smoke-voice-design.md) — sidebar `sidebar_voiceDesign`, fill `voiceDesign_voiceDescriptionField`, fill `textInput_textEditor`, `cmd+Return`).
 2. **Wait for `Final File Ready`**:
    ```sh
    scripts/uitest.sh bench-wait --since "$T0" --timeout 120
@@ -53,7 +53,7 @@ Skeleton Phases 1–3 are unchanged.
 3. **Click `voiceDesign_saveVoiceButton`** — the `SavedVoiceSheet` opens with `audioPath`, `nameField`, and `transcriptField` all pre-filled by the app (no file picker).
 4. **Replace the suggested name with `UITestRef`**:
    - Click `voicesEnroll_nameField` (focus the field).
-   - `super+a` (select pre-filled name) → `BackSpace` → `type_text(..., text: "UITestRef")`.
+   - `cmd+a` (select pre-filled name) → `BackSpace` → `type` "UITestRef".
 5. **Submit**: click `voicesEnroll_confirmButton`.
 6. **Handle the quality-warning fallback (if it appears)**:
    - If the sheet just closes and `scripts/uitest.sh locate voiceDesign_saveVoiceCompleted` returns 0 → done.

@@ -28,7 +28,7 @@ For each `variant` in `[speed, quality]`:
 
 - **Sidebar AX id**: `sidebar_voiceCloning`
 - **Screen mount check**: `scripts/uitest.sh locate screen_voiceCloning` (exit 0)
-- **Variant button AX ids**: `voiceCloning_speedVariantButton`, `voiceCloning_qualityVariantButton`. Container anchors: `voiceCloning_modelVariantPicker`, `voiceCloning_modelVariantSelector`.
+- **Variant buttons**: the Speed / Quality toggle at the top-right of the Configuration card (`voiceCloning_speedVariantButton` / `voiceCloning_qualityVariantButton` name them) — click by sight and verify the gold highlight in a follow-up screenshot.
 - **Extra step (saved-voice bind)**: click `voiceCloning_savedVoicePicker`, screenshot the open menu, click the `UITestRef` menu item visually. Confirm with `scripts/uitest.sh locate voiceCloning_activeReference` (exit 0).
 
 `bench-step` invocations:

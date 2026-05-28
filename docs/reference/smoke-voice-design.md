@@ -1,6 +1,6 @@
 # Smoke Runbook: Voice Design generate → verify
 
-One-shot functional check: launch the Debug build, drive Voice Design with a fixed description + script via [`user-computer-use` MCP](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
+One-shot functional check: launch the Debug build, drive Voice Design with a fixed description + script via [native computer-use](computer-use-mcp.md), confirm completion via signpost + WAV + DB row.
 
 Follows the [Standard smoke skeleton](ui-test-surface.md#standard-smoke-skeleton). This file only documents the Voice Design deltas. For when to run this vs. the bench, see [`testing-overview.md`](testing-overview.md).
 
@@ -18,7 +18,7 @@ Follows the [Standard smoke skeleton](ui-test-surface.md#standard-smoke-skeleton
 - **Sidebar AX id**: `sidebar_voiceDesign`
 - **Screen mount check**: `scripts/uitest.sh locate screen_voiceDesign` (exit 0)
 - **Output subfolder**: `outputs/VoiceDesign/`
-- **Extra step before generate**: click `voiceDesign_voiceDescriptionField`, type the fixed description, **then** proceed to `textInput_textEditor` + script + `super+Return`.
+- **Extra step before generate**: click `voiceDesign_voiceDescriptionField`, type the fixed description, **then** proceed to `textInput_textEditor` + script + `cmd+Return`.
 
 ## Notes
 

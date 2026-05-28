@@ -43,15 +43,14 @@ ART=$(scripts/uitest.sh artifacts-dir)
 scripts/uitest.sh reset
 scripts/uitest.sh prep
 
-# 2) Front the app (user-computer-use MCP)
+# 2) Front the app (native computer-use)
 #    scripts/uitest.sh activate
-#    get_screenshot → record image_width/image_height as IW × IH
-#    screen-locate <ax-id> $IW $IH for click coords
+#    mcp__computer-use__screenshot → locate elements by sight
 
-# 3) Drive UI (user-computer-use MCP)
-#    left_click sidebar_customVoice → left_click textInput_textEditor → type → key super+Return
+# 3) Drive UI (native computer-use, by sight)
+#    left_click Custom Voice row → left_click script field → type → key cmd+Return
 
-# 4) Record T0 just before super+Return:
+# 4) Record T0 just before cmd+Return:
 T0="$(/usr/bin/python3 -c 'import datetime; print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])')"
 
 # 5) Verify
@@ -70,21 +69,21 @@ Substitute `design` or `clone` for `custom` to run the other smokes. See [`smoke
 
 ```sh
 ART=$(scripts/uitest.sh artifacts-dir); echo "$ART"
-# Computer-use: scripts/uitest.sh activate + get_screenshot → record IW × IH
+# Computer-use: scripts/uitest.sh activate + mcp__computer-use__screenshot (locate by sight)
 
 for variant in speed quality; do
   # 1a — fresh launch
   scripts/uitest.sh reset && scripts/uitest.sh prep && scripts/uitest.sh activate
 
   # 1b — nav + variant select + (clone) saved-voice bind
-  #     Computer-use: click sidebar_<mode>, then variant button (3-fallback ladder)
+  #     Computer-use: click sidebar_<mode> row, then Speed/Quality button — all by sight
 
   # 1c — initial T0
   python3 -c "import datetime as dt; d=dt.datetime.now(); print(d.strftime('%Y-%m-%d %H:%M:%S.')+d.strftime('%f')[:3])" > /tmp/uitest_bench_t0
 
   # 1d — three cold/medium samples
   for i in 1 2 3; do
-    # Computer-use: left_click + type + key super+Return with medium prompt
+    # Computer-use: left_click + type + key cmd+Return with medium prompt
     scripts/uitest.sh bench-step <mode> "$variant" cold medium --artifacts-dir "$ART" --timeout 180
     # (between cold samples — quit/reset/prep/relaunch and re-do 1b)
   done
@@ -92,7 +91,7 @@ for variant in speed quality; do
   # 1e — warm samples
   for bucket in short medium long; do
     for i in 1 2 3; do
-      # Computer-use: key super+a → BackSpace → type bucket prompt → key super+Return
+      # Computer-use: key cmd+a → BackSpace → type bucket prompt → key cmd+Return
       scripts/uitest.sh bench-step <mode> "$variant" warm "$bucket" --artifacts-dir "$ART"
     done
   done
@@ -115,7 +114,7 @@ git diff docs/reference/benchmark-baselines.json
 scripts/uitest.sh activate                  # bring Vocello to front
 ```
 ```text
-get_screenshot  # re-record IW × IH; the window may have moved; click twice if first click only focused
+screenshot  # re-record IW × IH; the window may have moved; click twice if first click only focused
 ```
 
 Common causes: Notification Center stole focus, or another app got fronted. Re-fronting + fresh screenshot always recovers. See [`computer-use-mcp.md`](computer-use-mcp.md).

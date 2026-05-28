@@ -27,7 +27,7 @@ For each `variant` in `[speed, quality]`:
 
 - **Sidebar AX id**: `sidebar_voiceDesign`
 - **Screen mount check**: `scripts/uitest.sh locate screen_voiceDesign` (exit 0)
-- **Variant button AX ids**: `voiceDesign_speedVariantButton`, `voiceDesign_qualityVariantButton`. Container anchors: `voiceDesign_modelVariantPicker`, `voiceDesign_modelVariantSelector`.
+- **Variant buttons**: the Speed / Quality toggle at the top-right of the Configuration card (`voiceDesign_speedVariantButton` / `voiceDesign_qualityVariantButton` name them) — click by sight and verify the gold highlight in a follow-up screenshot.
 - **Extra step**: after variant select, click `voiceDesign_voiceDescriptionField` and type the fixed description. The description persists across warm samples — **do not** clear/re-type it between samples; we want steady-state generate-path numbers.
 
 `bench-step` invocations:

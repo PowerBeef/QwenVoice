@@ -45,13 +45,13 @@ For each `(mode, coldwarm)` pair:
 
 1. **Cold only:** `./scripts/uitest.sh reset && ./scripts/uitest.sh prep`
 2. `./scripts/uitest.sh activate`
-3. `get_screenshot` → record `$IW` / `$IH`
+3. `mcp__computer-use__screenshot` (locate elements by sight)
 4. Drive UI per mode (see per-mode bench runbooks + [`ui-test-surface.md`](ui-test-surface.md)):
-   - Navigate: `screen-locate sidebar_<mode> $IW $IH` → `left_click`
-   - Select speed variant if needed
+   - Navigate: click the `sidebar_<mode>` row by sight
+   - Select speed variant if needed (click Speed button by sight)
    - Voice Design: fill description field
    - Voice Cloning: pick `UITestRef` (keyboard picker pattern)
-   - `screen-locate textInput_textEditor $IW $IH` → `left_click` → `type` medium prompt → `key super+Return`
+   - Click the script field by sight → `type` medium prompt → `key cmd+Return`
 5. Record sample:
    ```sh
    ./scripts/uitest.sh bench-step <mode> speed <cold|warm> medium \
@@ -88,4 +88,5 @@ Expect **zero** `engine_service_encode_dropped` events after streaming fixes.
 
 - `scratch/run-mlx-review-bench-gate.sh` — removed; osascript automation failed to populate the SwiftUI editor.
 - `user-automation-mcp` — types into whatever window has focus.
-- Deprecated Codex `mcp__computer_use__` API — use `user-computer-use` only.
+- osascript `keystroke` / `click at` — same focus risk; not for Vocello UI.
+- Drive with the native `computer-use` MCP (`mcp__computer-use__*`) + vision; see [`computer-use-mcp.md`](computer-use-mcp.md).
