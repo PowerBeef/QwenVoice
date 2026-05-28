@@ -294,7 +294,7 @@ jobs:
     #   1. com.apple.developer.kernel.increased-memory-limit entitlement
     #      approved by Apple Developer Support for com.patricedery.vocello
     #      and com.patricedery.vocello.engine-extension.
-    #   2. iOS Distribution certificate enrolled in team FK2D8X36G2.
+    #   2. iOS Distribution certificate enrolled in the configured Apple Developer team.
     #   3. Provisioning profiles for the app + engine extension bundles
     #      that include the increased-memory-limit entitlement.
     # Once those are in place, add a sibling `archive-ios` job that

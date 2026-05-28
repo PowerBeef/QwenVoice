@@ -18,7 +18,7 @@ This document is the shared factual reference for the current QwenVoice reposito
 - Shipped public stable version/build: `2.0.0` / `16`
 - Legacy macOS 15 fallback version/build: `1.2.3` / `15`
 
-The iPhone app target is Vocello-branded. The public macOS release ships as `Vocello.app` inside `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum, signed by `Developer ID Application: PATRICE DERY` and Apple-notarized. The supporting framework/service/runtime modules (`QwenVoiceCore`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`, `QwenVoiceNative`) keep their `QwenVoice` names internally for continuity.
+The iPhone app target is Vocello-branded. The public macOS release ships as `Vocello.app` inside `Vocello-macos26.dmg` on a hard `macOS 26.0` minimum, signed with an Apple Developer ID certificate and Apple-notarized. The supporting framework/service/runtime modules (`QwenVoiceCore`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`, `QwenVoiceNative`) keep their `QwenVoice` names internally for continuity.
 
 ## Public Homepage Posture
 

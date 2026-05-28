@@ -193,7 +193,7 @@ Maintained doc set (start at [`ios-shipping.md`](ios-shipping.md)):
 
 The request must be submitted from Apple Developer → Certificates, Identifiers & Profiles → Identifiers → each App ID → Capability Requests:
 
-- Team ID: `FK2D8X36G2`
+- Team ID: your Apple Developer team (`APPLE_TEAM_ID` / `QWENVOICE_DEVELOPMENT_TEAM` — do not commit literals)
 - App name + bundle IDs: Vocello, `com.patricedery.vocello` and engine extension `com.patricedery.vocello.engine-extension`
 - App Group: `group.com.patricedery.vocello.shared`
 - Entitlement: `com.apple.developer.kernel.increased-memory-limit`
@@ -208,7 +208,7 @@ Manual prep that does not require the entitlement and can happen immediately:
 1. **Create app record** at App Store Connect → My Apps → +. Platform iOS, name "Vocello", bundle ID `com.patricedery.vocello` (must match `project.yml`), SKU `vocello-ios-2026`, primary language English (US). In Apple Developer, also create `com.patricedery.vocello.engine-extension` and attach both IDs to `group.com.patricedery.vocello.shared`.
 2. **Set primary category**: Productivity (or Utilities). Multimedia would also fit.
 3. **Confirm API key scope**: the existing `APPLE_NOTARY_KEY_ID` (used for macOS notarization) needs "App Manager" role to enable IPA upload via `xcodebuild -exportArchive ... destination upload`. Verify at Users and Access → Integrations → API. Same issuer ID works for any number of keys.
-4. **Seed internal-tester list**: create a group "Maintainer & devs" in TestFlight → Internal Testing. Add `patricedery02@gmail.com` as first tester. External testers come later as a separate Apple-review process.
+4. **Seed internal-tester list**: create a group "Maintainer & devs" in TestFlight → Internal Testing. Add the maintainer Apple ID email as the first internal tester. External testers come later as a separate Apple-review process.
 
 ### Pipeline state after Phase 4
 

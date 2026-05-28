@@ -10,7 +10,7 @@ Orchestration: `./scripts/ios_device_proof_matrix.sh`
 
 | Device | Role | Status |
 |---|---|---|
-| iPhone 17 Pro (owned, *iPhone de Patrice*) | Active development / first entitled proof | Baseline build OK 2026-05-27 (`iphone17pro-unentitled-baseline`, `entitlement-missing`); entitled runs blocked on Apple approval |
+| iPhone 17 Pro (owned) | Active development / first entitled proof | Baseline build OK 2026-05-27 (`iphone17pro-unentitled-baseline`, `entitlement-missing`); entitled runs blocked on Apple approval |
 | iPhone 15 Pro | Official minimum from shipping plan | **Not started** |
 
 ## Phases
@@ -24,9 +24,9 @@ Orchestration: `./scripts/ios_device_proof_matrix.sh`
 
 Record run under `build/Debug/ios-device/runs/<run-id>/`.
 
-**2026-05-27 notes (iPhone 17 Pro — *iPhone de Patrice*):**
+**2026-05-27 notes (iPhone 17 Pro):**
 
-- iOS 26.5 (23F77), UDID `00008150-00181D580ED8401C`, team `FK2D8X36G2`.
+- iOS 26.5 (23F77); signing team from `APPLE_TEAM_ID` / `QWENVOICE_DEVELOPMENT_TEAM` / `QVOICE_IOS_TEAM_ID`.
 - Baseline build + verify OK: run `iphone17pro-unentitled-baseline` → `entitlement-missing` in `entitlements-check.json`.
 - App installed/launched: run `iphone17pro-unentitled-ui` via `scripts/ios_device.sh start`.
 - iPhone 15 Pro: not paired — repeat phases 3–4 on minimum hardware when available.

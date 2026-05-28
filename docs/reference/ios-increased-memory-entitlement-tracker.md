@@ -32,7 +32,7 @@ Status board for Apple's managed capability `com.apple.developer.kernel.increase
 
 ## Portal checklist (Account Holder)
 
-1. [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) → Team `FK2D8X36G2`.
+1. [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) → your Apple Developer team.
 2. Identifier `com.patricedery.vocello` → **Capability Requests** → request **Increased Memory Limit**.
 3. Identifier `com.patricedery.vocello.engine-extension` → repeat.
 4. After approval: **Capabilities** tab on each ID → enable **Increased Memory Limit**.

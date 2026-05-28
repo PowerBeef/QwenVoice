@@ -90,7 +90,7 @@ Settings is focused on model packages: download, repair, reveal, or delete Speed
 
 No Python setup or local server is required. Install the app, download models from Settings, and generate locally.
 
-The DMG is signed by `Developer ID Application: PATRICE DERY` and Apple-notarized with a stapled ticket, so the first launch opens with a double-click — no right-click bypass needed. If you want to verify out of band:
+The DMG is signed with an Apple Developer ID certificate and notarized with a stapled ticket, so the first launch opens with a double-click — no right-click bypass needed. If you want to verify out of band:
 
 ```sh
 xcrun stapler validate Vocello-macos26.dmg     # "The validate action worked!"
@@ -116,7 +116,7 @@ For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/rele
 
 ## Release Status
 
-Vocello 2.0.0 is the first stable release of the macOS 26 line. Every GitHub Release from here on ships a notarized + stapled DMG, signed by Developer ID Application: PATRICE DERY — installing it is a normal double-click flow, no Gatekeeper workarounds.
+Vocello 2.0.0 is the first stable release of the macOS 26 line. Every GitHub Release from here on ships a notarized + stapled DMG signed with a Developer ID certificate — installing it is a normal double-click flow, no Gatekeeper workarounds.
 
 The iPhone app is maintained in this repository, but it is not a public download yet. When ready, it will ship through the App Store or TestFlight, not GitHub Releases.
 

@@ -13,7 +13,6 @@ LAST_RUN_FILE="$ARTIFACT_ROOT/.last-run"
 SCHEME="VocelloiOS"
 CONFIGURATION="Debug"
 SCREEN_MIRROR_BUNDLE_ID="com.apple.ScreenContinuity"
-DEFAULT_TEAM_ID="FK2D8X36G2"
 DEFAULT_IOS_CATALOG_URL="bundle://vocello/ios/catalog/v1/models.json"
 INCREASED_MEMORY_ENTITLEMENT="com.apple.developer.kernel.increased-memory-limit"
 READINESS_GATE_PATH="${QVOICE_IOS_READINESS_GATE:-}"
@@ -41,7 +40,7 @@ FORCE_CRITICAL_ONCE="${QVOICE_IOS_MEMORY_GUARD_FORCE_CRITICAL_ONCE:-}"
 ENABLE_PROACTIVE_PREFETCH="${QVOICE_IOS_ENABLE_PROACTIVE_PREFETCH:-0}"
 MLX_MEMORY_LIMIT_MB="${QVOICE_IOS_MLX_MEMORY_LIMIT_MB:-}"
 MLX_CACHE_LIMIT_MB="${QVOICE_IOS_MLX_CACHE_LIMIT_MB:-}"
-TEAM_ID="${QVOICE_IOS_TEAM_ID:-${QWENVOICE_DEVELOPMENT_TEAM:-${APPLE_TEAM_ID:-$DEFAULT_TEAM_ID}}}"
+TEAM_ID="${QVOICE_IOS_TEAM_ID:-${QWENVOICE_DEVELOPMENT_TEAM:-${APPLE_TEAM_ID:-}}}"
 APP_GROUP_OVERRIDE="${QVOICE_IOS_APP_GROUP_ID:-}"
 IOS_APP_GROUP="${APP_GROUP_OVERRIDE:-$DEFAULT_DEVICE_APP_GROUP}"
 ENABLE_INCREASED_MEMORY_LIMIT="${QVOICE_IOS_ENABLE_INCREASED_MEMORY_LIMIT:-0}"
@@ -91,7 +90,7 @@ options:
   --run-id <id>           Reuse or create a specific run id. Defaults to UTC timestamp.
   --catalog-url <url>     Launch-time QVOICE_IOS_MODEL_CATALOG_URL override.
   --allowed-hosts <csv>   Launch-time QVOICE_IOS_MODEL_ALLOWED_HOSTS override.
-  --team-id <id>          Signing team override. Defaults QVOICE_IOS_TEAM_ID, QWENVOICE_DEVELOPMENT_TEAM, APPLE_TEAM_ID, then $DEFAULT_TEAM_ID.
+  --team-id <id>          Signing team override. Required via env: QVOICE_IOS_TEAM_ID, QWENVOICE_DEVELOPMENT_TEAM, or APPLE_TEAM_ID.
   --app-group <id>        Debug device App Group. Defaults QVOICE_IOS_APP_GROUP_ID, then $DEFAULT_DEVICE_APP_GROUP.
   --enable-increased-memory-limit
                           Include the restricted increased-memory-limit entitlement. Requires an approved Apple profile.
@@ -251,7 +250,15 @@ is_truthy() {
     esac
 }
 
+ensure_team_id() {
+    if [ -z "$TEAM_ID" ]; then
+        echo "error: set APPLE_TEAM_ID, QWENVOICE_DEVELOPMENT_TEAM, or QVOICE_IOS_TEAM_ID (or pass --team-id)" >&2
+        exit 1
+    fi
+}
+
 configure_signing_inputs() {
+    ensure_team_id
     if is_truthy "$ENABLE_INCREASED_MEMORY_LIMIT"; then
         IOS_APP_ENTITLEMENTS="Sources/iOS/VocelloiOS.entitlements"
         IOS_EXTENSION_ENTITLEMENTS="Sources/iOSEngineExtension/VocelloEngineExtension.entitlements"

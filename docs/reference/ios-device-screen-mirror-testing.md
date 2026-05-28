@@ -20,16 +20,16 @@ Readiness status:
 - `GREEN`: CoreDevice, `xctrace`, and Xcode destinations agree. Real physical-device testing and profiling are allowed when the run itself succeeds.
 - `AMBER`: CoreDevice can see or warm the phone, but `xctrace` or Xcode destination readiness is incomplete. Install/run checks may continue, but Instruments/xctrace profiling and physical performance claims are blocked.
 - `RED` / `NO_DEVICE`: `start` stops before build/install. Simulator and local macOS results are not proof for physical iPhone RAM or performance.
-- `UNAVAILABLE`: Patrice's user-scoped gate is missing, so the script falls back to legacy checks for public repo users. Treat the output as install/run preflight only, not profiling proof.
+- `UNAVAILABLE`: optional maintainer-local readiness gate is missing, so the script falls back to legacy checks for public repo users. Treat the output as install/run preflight only, not profiling proof.
 
 `start` creates a focused evidence bundle under `build/Debug/ios-device/runs/<utc-run-id>/`, builds `VocelloiOS` Debug for the paired physical iPhone, installs it with CoreDevice, launches `com.patricedery.vocello` with lightweight native telemetry enabled, and opens iPhone Mirroring.
 
 Defaults:
 
-- device: the paired physical iPhone 17 Pro, currently `iPhone de Patrice`
+- device: paired physical iPhone 17 Pro (or override with `--device`)
 - build: Debug, direct install, automatic signing
 - catalog: bundled production iPhone catalog, with 1.7B Speed artifacts downloaded from pinned Hugging Face revisions
-- signing team resolution: `QVOICE_IOS_TEAM_ID`, `QWENVOICE_DEVELOPMENT_TEAM`, `APPLE_TEAM_ID`, then `FK2D8X36G2`
+- signing team resolution: `QVOICE_IOS_TEAM_ID`, `QWENVOICE_DEVELOPMENT_TEAM`, or `APPLE_TEAM_ID` (required; no hardcoded default in the public repo)
 - app data: preserved across runs unless you manually uninstall or clear the app; the May 2026 identity rename intentionally reset pre-release data by moving to `group.com.patricedery.vocello.shared`
 - proactive iPhone prefetch: disabled by default; explicit generation owns model load/warm work
 

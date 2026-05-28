@@ -18,7 +18,7 @@ EXPORT_OPTIONS_PLIST="$BUILD_DIR/vocello_ios_testflight_export_options.plist"
 METADATA_PATH="$BUILD_DIR/vocello_ios_testflight_release_metadata.txt"
 SCHEME="VocelloiOS"
 CONFIGURATION="Release"
-TEAM_ID="${QVOICE_IOS_TEAM_ID:-FK2D8X36G2}"
+TEAM_ID="${QVOICE_IOS_TEAM_ID:-${QWENVOICE_DEVELOPMENT_TEAM:-${APPLE_TEAM_ID:-}}}"
 CATALOG_URL="${QVOICE_IOS_MODEL_CATALOG_URL:-bundle://vocello/ios/catalog/v1/models.json}"
 VALIDATED_DEVICE_MODEL="${QVOICE_IOS_VALIDATED_DEVICE_MODEL:-unrecorded}"
 VALIDATED_DEVICE_OS="${QVOICE_IOS_VALIDATED_DEVICE_OS:-unrecorded}"
@@ -89,6 +89,11 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -z "$TEAM_ID" ]; then
+    echo "error: set APPLE_TEAM_ID, QWENVOICE_DEVELOPMENT_TEAM, or QVOICE_IOS_TEAM_ID for TestFlight export" >&2
+    exit 1
+fi
 
 mkdir -p "$BUILD_DIR" "$FOUNDATION_BUILD_ROOT" "$SOURCE_PACKAGES_DIR"
 

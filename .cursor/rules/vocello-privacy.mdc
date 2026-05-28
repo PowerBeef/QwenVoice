@@ -1,0 +1,35 @@
+---
+description: Maintainer privacy — never commit personal identifiers to public repo files
+alwaysApply: true
+---
+
+# Maintainer privacy (public repo)
+
+This repository is public. **Do not write maintainer-private data into tracked files** unless the user explicitly accepts that exposure.
+
+## Never commit or paste into user-facing prose
+
+| Forbidden in README, release notes, website, `docs/`, `AGENTS.md`, scripts | Use instead |
+|---|---|
+| Developer ID certificate **legal name** or full `spctl` / `codesign` `origin=` subject line | “Developer ID–signed and Apple-notarized”; verification expecting `source=Notarized Developer ID` only |
+| Personal email, phone, physical address | “maintainer Apple ID email” or secrets/env only |
+| `$HOME` paths (`/Users/<name>/...`) in docs | `PATH`, env var names, or “local maintainer tooling” |
+| Device nicknames (`iPhone de …`) | Hardware model only (“paired iPhone 17 Pro”) |
+| Hardware UDIDs, serial numbers in docs | Omit; cite run ids under `build/Debug/ios-device/runs/` |
+| Hardcoded Apple **team ID** literals in scripts or docs | `APPLE_TEAM_ID`, `QWENVOICE_DEVELOPMENT_TEAM`, `QVOICE_IOS_TEAM_ID` — fail if unset, no repo default |
+| Chat-only details the user shared for local debugging | Use in terminal only; do not propagate into commits |
+
+## Allowed without scrubbing
+
+- Apple **bundle IDs** (`com.patricedery.vocello`, engine extension, App Group) where signing/entitlements require them.
+- Generic claims: “Developer ID”, “notarized”, “stapled ticket”.
+
+## Before doc / README / website edits or commits
+
+1. Read [`.cursor/rules/vocello-privacy.mdc`](vocello-privacy.mdc) (this file).
+2. If you added or changed user-facing text, run a quick search for personal-name / team-id / UDID / home-path patterns under tracked paths (exclude `scratch/` unless committing it).
+3. Prefer `scratch/` or private notes **outside git** for maintainer-only device notes.
+
+## If the user asks to document signing trust
+
+Explain notarization generically. Do **not** quote the certificate subject name from `spctl -vv` output into the README.

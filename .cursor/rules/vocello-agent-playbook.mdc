@@ -7,6 +7,10 @@ alwaysApply: true
 
 Repo facts and architecture live in [`AGENTS.md`](../../AGENTS.md). This rule is the **execution layer**: which Axiom agents, skills, and MCPs to use when.
 
+## Privacy (check first)
+
+Before editing README, release notes, `docs/`, `AGENTS.md`, website copy, or committing: follow **[`vocello-privacy.mdc`](vocello-privacy.mdc)** (`alwaysApply`). Do not reintroduce legal names, emails, home paths, device nicknames, UDIDs, or hardcoded team IDs.
+
 ## Mandatory Axiom Task launches (high-risk)
 
 Launch via `Task` with the listed `subagent_type` **before** deep code changes. After the audit, fix findings or explicitly defer them before claiming done.
