@@ -18,13 +18,7 @@ When facts disagree, trust:
 
 `Sources/Resources/qwenvoice_contract.json` is the source of truth for model, speaker, variant, output, Hugging Face revision, and required-file metadata.
 
-Current model-selection policy:
-
-- macOS exposes both `Speed / 4-bit` and `Quality / 8-bit` variants for Custom Voice, Voice Design, and Voice Cloning.
-- 8 GB/floor Macs default to and recommend Speed; mid/high-memory Macs default to and recommend Quality.
-- Mac users may select either installed variant per generation mode.
-- iPhone remains Speed-only.
-- Legacy base model IDs resolve to the hardware-recommended variant; variant-specific IDs own model status, download, repair, delete, and install metadata.
+Model-selection policy (Mac exposes Speed/4-bit + Quality/8-bit per mode, hardware-default Speed on 8 GB / Quality on larger; iPhone Speed-only) is owned by `qwenvoice_contract.json` and described in `CLAUDE.md` § Architecture — don't restate it here.
 
 ## Workflow
 
@@ -50,7 +44,7 @@ Then run the relevant build proof:
 ./scripts/build_foundation_targets.sh ios
 ```
 
-Behavioral testing is local-only. CI is scoped to release packaging only via the single `.github/workflows/release.yml` workflow that fires on `release.published`. Two jobs run in parallel: `package` (macOS DMG: sign, notarize, staple, attach to the GitHub Release) and `compile-ios` (iOS compile-safety only, no signing, no tests). `compile-ios` failures do not block the macOS DMG. No tests, no benches, no smoke runs on CI. Local behavioral validation lives in the agent-driven smoke/bench harness in `scripts/uitest.sh` plus the runbooks under `docs/reference/`. For Debug behavior, launch with `./scripts/build.sh run` or `scripts/uitest.sh prep`; Debug uses the persistent `QwenVoice-Debug` store so models and history survive rebuilds. For fresh local release behavior, launch `build/Release/Vocello.app` only after `./scripts/release.sh`; each packaged local Release app receives its own clean app-support folder and preferences suite. Any new test framework, additional CI workflow beyond `release.yml`, QA shell surface, or parallel benchmark harness should be a deliberate, scoped decision.
+Behavioral testing is local-only; CI (`.github/workflows/release.yml`) is scoped to the macOS DMG (`package`) plus iOS compile-safety (`compile-ios`) — no tests, benches, or smoke runs. The local agent-driven smoke/bench harness is `scripts/uitest.sh` (+ runbooks under `docs/reference/`). The full CI boundary, the Debug vs repo-local-Release vs installed data-store rules, and the "don't reintroduce a test framework / extra CI workflow / parallel bench harness without a scoped decision" stance are documented in `CLAUDE.md` § "Testing policy" and § "Runtime data folders".
 
 The `scripts/build.sh` script is the canonical local entrypoint (`debug`, `run`, `release`, `clean`); the lower-level scripts remain available but route through it. At most one Debug `.app` and one Release `.app/.dmg` live under `build/` at a time — the build script prunes stale products automatically.
 
@@ -58,13 +52,7 @@ For current macOS release signoff, the maintained local loop is documented in `d
 
 ### Runtime Data Folders
 
-Three tiers, configuration-aware, never overlap:
-
-- **Debug** (`#if DEBUG` Xcode build): `~/Library/Application Support/QwenVoice-Debug/` — persistent across rebuilds.
-- **Repo-local Release** (built via `scripts/release.sh` and run from `build/Release/Vocello.app`): `~/Library/Application Support/QwenVoice-Release-Local/<release-data-id>/` — fresh per packaging.
-- **Installed/public Release** (the `.app` copied to `/Applications/`): `~/Library/Application Support/QwenVoice/` — normal end-user storage.
-
-The `QWENVOICE_APP_SUPPORT_DIR` env var overrides the root in any configuration.
+Three non-overlapping, configuration-aware tiers — **Debug** (`QwenVoice-Debug/`, persistent across rebuilds), **repo-local Release** (`QwenVoice-Release-Local/<release-data-id>/`, fresh per `scripts/release.sh` packaging), and **installed Release** (`QwenVoice/`, end-user). `QWENVOICE_APP_SUPPORT_DIR` overrides the root. Full paths + selection logic: `CLAUDE.md` § "Runtime data folders".
 
 ## Runtime Boundaries
 

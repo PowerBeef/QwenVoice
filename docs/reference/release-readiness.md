@@ -181,25 +181,7 @@ With macOS 2.0.0 stable shipped, the iPhone track is being re-opened on a TestFl
 
 ### Apple entitlement request (critical-path blocker)
 
-MLX generation currently hits the iOS engine-extension process memory limit before real model admission. The app already declares `com.apple.developer.kernel.increased-memory-limit` in `Sources/iOS/VocelloiOS.entitlements` and `Sources/iOSEngineExtension/VocelloEngineExtension.entitlements`, but Apple must approve the managed capability before it can be enabled in provisioning profiles.
-
-Maintained doc set (start at [`ios-shipping.md`](ios-shipping.md)):
-
-- [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md) — Apple request packet
-- [`ios-increased-memory-entitlement-tracker.md`](ios-increased-memory-entitlement-tracker.md) — submission status
-- [`ios-mlx-jetsam-feasibility.md`](ios-mlx-jetsam-feasibility.md) — feasibility and Jetsam posture
-- [`ios-memory-admission-policy.md`](ios-memory-admission-policy.md) — Release vs Debug admission
-- [`ios-device-proof-matrix.md`](ios-device-proof-matrix.md) — device validation (`scripts/ios_device_proof_matrix.sh`)
-
-The request must be submitted from Apple Developer → Certificates, Identifiers & Profiles → Identifiers → each App ID → Capability Requests:
-
-- Team ID: your Apple Developer team (`APPLE_TEAM_ID` / `QWENVOICE_DEVELOPMENT_TEAM` — do not commit literals)
-- App name + bundle IDs: Vocello, `com.patricedery.vocello` and engine extension `com.patricedery.vocello.engine-extension`
-- App Group: `group.com.patricedery.vocello.shared`
-- Entitlement: `com.apple.developer.kernel.increased-memory-limit`
-- Justification: cite private on-device Qwen3-TTS / MLX generation, the engine extension's process-isolation role, `os_proc_available_memory()` evidence showing extension process headroom is critically low before model load, app + extension memory-context diagnostics from `scripts/ios_device.sh pull`, and the implemented guardrails: admission blocking, streaming-first iOS generation, no inline PCM preview by default, cache clearing, critical cancellation, and full unload.
-
-Pass criterion: Apple replies with a tracking case number, then the App ID Capabilities tab shows Increased Memory Limit for both `com.patricedery.vocello.engine-extension` and `com.patricedery.vocello`. Regenerate profiles and run `scripts/ios_device.sh verify-entitlements --enable-increased-memory-limit` to confirm both signed products contain the entitlement.
+MLX generation currently hits the iOS engine-extension process memory limit before real model admission, so Apple must approve `com.apple.developer.kernel.increased-memory-limit` (a managed capability) for both `com.patricedery.vocello` and `com.patricedery.vocello.engine-extension` before the iPhone track can ship. The full request packet — copy-ready justification, identifiers, portal steps, evidence to capture, and the pass criterion — is owned by [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md); submission status lives in [`ios-increased-memory-entitlement-tracker.md`](ios-increased-memory-entitlement-tracker.md). Start at the hub [`ios-shipping.md`](ios-shipping.md) for the full reading order. Don't restate the packet contents here.
 
 ### App Store Connect setup (parallel to entitlement wait, ~30 min)
 
