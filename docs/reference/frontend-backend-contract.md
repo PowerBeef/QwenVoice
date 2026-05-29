@@ -169,7 +169,7 @@ Frontend work should treat the backend as frozen only when these maintained proo
 ./scripts/verify_packaged_dmg.sh build/Release/Vocello-macos26.dmg build/Release/release-metadata.txt
 ```
 
-Then exercise the affected user-facing paths locally. Use Debug (`./scripts/build.sh run` or `scripts/uitest.sh prep`) for persistent macOS development smoke, `build/Release/Vocello.app` after `./scripts/release.sh` for fresh repo-local release behavior, and `scripts/ios_device.sh` for real iPhone hardware behavior. There is no CI smoke, benchmark, or XCTest proof layer as of May 2026; manual smoke, the maintained agent-driven macOS `scripts/uitest.sh` runbooks, and iPhone screen-mirror runs are the behavioral regression checks.
+Then exercise the affected user-facing paths locally. Use Debug (`./scripts/build.sh run`) for persistent macOS development smoke and `build/Release/Vocello.app` after `./scripts/release.sh` for fresh repo-local release behavior; iPhone is compile-safe only. There is no CI smoke, benchmark, or XCTest proof layer, and no automated UI-driving or bench harness; manual local app acceptance is the behavioral regression check.
 
 The explicit build-gate acceptance checklist lives in:
 

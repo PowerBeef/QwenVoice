@@ -22,7 +22,7 @@ No tests, no lint config, no GitHub Actions workflow. Behavioral verification is
 
 - This is a **non-app, non-native zone** — do not run the Axiom Swift/iOS auditors here. For React/Vite/library API questions use the `context7` MCP (`resolve-library-id` then `query-docs`); your training data may lag the installed versions.
 - For UI/UX/visual passes use the `impeccable:impeccable` skill (the `PRODUCT.md` brand rules below are required reading for it).
-- For browser verification of the running dev/preview server, use the `chrome-devtools` MCP (`mcp__plugin_chrome-devtools-mcp_chrome-devtools__*`: `navigate_page`, `take_screenshot`, `take_snapshot`, `list_console_messages`) or native `computer-use` driving a browser window.
+- For browser verification of the running dev/preview server, use the `chrome-devtools` MCP (`mcp__plugin_chrome-devtools-mcp_chrome-devtools__*`: `navigate_page`, `take_screenshot`, `take_snapshot`, `list_console_messages`).
 - Run `npm`/`node` commands through the Bash tool.
 
 ## Architecture

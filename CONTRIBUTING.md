@@ -44,7 +44,7 @@ Then run the relevant build proof:
 ./scripts/build_foundation_targets.sh ios
 ```
 
-Behavioral testing is local-only; CI (`.github/workflows/release.yml`) is scoped to the macOS DMG (`package`) plus iOS compile-safety (`compile-ios`) — no tests, benches, or smoke runs. The local agent-driven smoke/bench harness is `scripts/uitest.sh` (+ runbooks under `docs/reference/`). The full CI boundary, the Debug vs repo-local-Release vs installed data-store rules, and the "don't reintroduce a test framework / extra CI workflow / parallel bench harness without a scoped decision" stance are documented in `CLAUDE.md` § "Testing policy" and § "Runtime data folders".
+Behavioral testing is local-only; CI (`.github/workflows/release.yml`) is scoped to the macOS DMG (`package`) plus iOS compile-safety (`compile-ios`) — no tests, benches, or smoke runs. Behavioral validation is **manual local app acceptance**: there is no automated UI-driving, smoke, or benchmark harness — build and launch the Debug app and exercise the affected paths by hand. The full CI boundary, the Debug vs repo-local-Release vs installed data-store rules, and the "don't reintroduce a test framework, extra CI workflow, or UI-driving / bench harness without a scoped decision" stance are documented in `CLAUDE.md` § "Testing policy" and § "Runtime data folders".
 
 The `scripts/build.sh` script is the canonical local entrypoint (`debug`, `run`, `release`, `clean`); the lower-level scripts remain available but route through it. At most one Debug `.app` and one Release `.app/.dmg` live under `build/` at a time — the build script prunes stale products automatically.
 

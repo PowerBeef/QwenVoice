@@ -288,21 +288,20 @@ jobs:
     # job and is intentionally NOT a `needs:` dependency — if iOS source
     # regresses, the macOS DMG still ships.
     #
-    # This job does NOT produce a TestFlight-ready IPA. The real archive
-    # + export + upload pipeline lives in scripts/release_ios_testflight.sh
-    # and needs three Apple-side prereqs that are not part of this CI lane:
+    # This job does NOT produce a TestFlight-ready IPA. The local iPhone
+    # archive/export/TestFlight tooling was removed in the testing-harness
+    # cleanup; resuming iPhone distribution means re-establishing that
+    # signing/export path first. It also needs three Apple-side prereqs
+    # that are not part of this CI lane:
     #   1. com.apple.developer.kernel.increased-memory-limit entitlement
     #      approved by Apple Developer Support for com.patricedery.vocello
     #      and com.patricedery.vocello.engine-extension.
     #   2. iOS Distribution certificate enrolled in the configured Apple Developer team.
     #   3. Provisioning profiles for the app + engine extension bundles
     #      that include the increased-memory-limit entitlement.
-    # Once those are in place, add a sibling `archive-ios` job that
-    # imports the iOS dist cert + profile, runs
-    # `scripts/release_ios_testflight.sh --export`, validates with
-    # scripts/verify_ios_release_archive.sh, and uploads the IPA as a
-    # workflow artifact. TestFlight `--upload` mode stays manual until
-    # the export path has been proven end-to-end at least once.
+    # Once those are in place, re-establish the iOS archive/export tooling
+    # and add a sibling `archive-ios` job that imports the iOS dist cert +
+    # profile, exports the IPA, and uploads it as a workflow artifact.
     name: iOS compile-safety
     runs-on: macos-latest
     timeout-minutes: 30

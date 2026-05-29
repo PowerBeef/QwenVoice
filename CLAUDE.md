@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working in this repository. It is the single, self-contained source of agent guidance for this repo — routing, conventions, engine invariants, and the testing-harness workflow all live here.
+This file provides guidance to Claude Code when working in this repository. It is the single, self-contained source of agent guidance for this repo — routing, conventions, and engine invariants all live here.
 
 ## What this repo is
 
-Vocello (formerly QwenVoice) — a local, private text-to-speech macOS app powered by Qwen3-TTS via MLX on Apple Silicon. The macOS scheme is still called `QwenVoice` but the shipped public product is `Vocello.app` / `Vocello-macos26.dmg`. The iOS counterpart (`VocelloiOS`) is active iPhone development and TestFlight-prep with a real-device Debug workflow through CoreDevice + iPhone Mirroring: keep it compile-safe on `main`, but do not treat iPhone release proof as a public-release blocker for the current macOS-first release track. The public product website now lives in `website/` as a React + Vite app deployed by Vercel with that subdirectory as the project root.
+Vocello (formerly QwenVoice) — a local, private text-to-speech macOS app powered by Qwen3-TTS via MLX on Apple Silicon. The macOS scheme is still called `QwenVoice` but the shipped public product is `Vocello.app` / `Vocello-macos26.dmg`. The iOS counterpart (`VocelloiOS`) is kept **compile-safe only** on `main`; on-device generation, memory proof, and TestFlight are deferred pending Apple's increased-memory entitlement, and iPhone release proof is not a public-release blocker for the current macOS-first release track. The public product website now lives in `website/` as a React + Vite app deployed by Vercel with that subdirectory as the project root.
 
 Targets: macOS 26.0+ and iOS 26.0+, Apple Silicon only, Xcode 26.0. No Python runtime. No bundled model weights — models are downloaded from Hugging Face from Settings → Model Downloads on first run.
 
@@ -12,11 +12,8 @@ Targets: macOS 26.0+ and iOS 26.0+, Apple Silicon only, Xcode 26.0. No Python ru
 
 ```sh
 ./scripts/build.sh run                       # Debug build → launch Vocello.app
-./scripts/uitest.sh prep                     # Build + launch under autonomous UI testing harness
+./scripts/build_foundation_targets.sh macos  # macOS foundation build
 ./scripts/build_foundation_targets.sh ios    # iOS compile-safety only
-ios-device-readiness --project QwenVoice.xcodeproj --scheme VocelloiOS --json   # optional; on PATH or QVOICE_IOS_READINESS_GATE
-./scripts/ios_device.sh doctor               # real iPhone/CoreDevice screen-mirror preflight
-./scripts/ios_device_proof_matrix.sh --phase preflight  # iPhone MLX/entitlement preflight (see docs/reference/ios-shipping.md)
 npm --prefix website run build               # marketing website production build
 ```
 
@@ -81,38 +78,24 @@ Use installed **skills** for workflow guidance and Axiom **subagents** (via the 
 
 ### iOS workflow
 
-- **iPhone MLX / memory / entitlement** — start at [`docs/reference/ios-shipping.md`](docs/reference/ios-shipping.md) (reading order, proof matrix, admission policy). May 2026: model admission **blocking** is off by default for Jetsam investigation — see [`ios-memory-admission-policy.md`](docs/reference/ios-memory-admission-policy.md).
-- `ios-device-readiness` — use before answering whether the physical iPhone is available for real on-device testing, CoreDevice, xctrace, Instruments, or physical-device performance evidence. Run `ios-device-readiness --project QwenVoice.xcodeproj --scheme VocelloiOS --json` when the executable is on `PATH` (or set `QVOICE_IOS_READINESS_GATE`) and trust its status over raw `devicectl` or `xctrace` output alone. `scripts/ios_device.sh doctor` and `start` record the same gate result under the run directory as `readiness.json`. If the status is `AMBER`, do not answer with a plain "yes"; describe it as partial CoreDevice readiness with physical profiling/performance evidence blocked.
-- **iOS Simulator build/run/inspect** — use `XcodeBuildMCP` (`mcp__XcodeBuildMCP__*`): `session_show_defaults` first, then `build_run_sim` / `install_app_sim` / `launch_app_sim`, `screenshot`, `snapshot_ui`, `list_sims`. The raw `xcodebuild` + `simctl` recipe in "iOS Simulator UI testing" below still works and is the source of truth for the derived-data path and bundle ID. Real iPhone runs always go through `scripts/ios_device.sh`.
-- **iOS retain cycles / memory growth, focused Simulator performance** — `axiom:memory-auditor` + `axiom:performance-profiler` (Agents) and `axiom:axiom-performance`. Do not use Simulator leak/perf proof as a substitute for physical iPhone memory-pressure evidence.
+iPhone is **compile-safe only** on the current macOS-first track — there is no in-repo device-deploy, on-device proof, or Simulator UI-testing harness. iOS verification is `./scripts/build_foundation_targets.sh ios` (compile-safety). On-device generation, memory proof, and TestFlight are deferred pending Apple's increased-memory entitlement; planning hub: [`docs/reference/ios-shipping.md`](docs/reference/ios-shipping.md), admission policy: [`ios-memory-admission-policy.md`](docs/reference/ios-memory-admission-policy.md).
+
 - **iOS SwiftUI feature work, refactors, architecture, render perf** — `axiom:axiom-swiftui` skill plus `axiom:swiftui-architecture-auditor`, `axiom:swiftui-performance-analyzer`, `axiom:swiftui-layout-auditor`, and `axiom:swiftui-nav-auditor` (Agents). Preserve the existing `@Observable` / `AppModel` architecture.
+- **iOS retain cycles / memory growth** — `axiom:memory-auditor` (Agent) + `axiom:axiom-performance`, as a static / code-review pass.
 - **iOS 26 Liquid Glass adoption or review** — `axiom:liquid-glass-auditor` (Agent) + `axiom:axiom-design`; keep the repo's iOS/macOS design-token alignment in mind before changing glass, tint, radius, or fallback behavior.
+- Need a Simulator visual spot-check? `XcodeBuildMCP` (`mcp__XcodeBuildMCP__*`) is available, but real MLX generation can't run in the Simulator — treat it as UI-only.
 
 ### macOS workflow
 
-- macOS build/run/debug — prefer the existing `./scripts/build.sh` and `./scripts/uitest.sh` entrypoints over creating new run scripts.
+- macOS build/run/debug — prefer the existing `./scripts/build.sh` entrypoint over creating new run scripts.
 - DMG, archive, notarization, distribution-readiness — `axiom:axiom-shipping` plus `scripts/release.sh` and the `scripts/verify_*.sh` helpers.
 - Code-signing, entitlements, hardened runtime, sandbox, Gatekeeper, provisioning — `axiom:axiom-security` and `axiom:axiom-macos`.
 - macOS-specific windowing / AppKit interop / SwiftUI-on-macOS — `axiom:axiom-macos`; use only when the task directly touches those concerns.
-- Telemetry — add or validate concise OSLog/signpost instrumentation directly; the bench harness reads these signposts.
+- Telemetry — add or validate concise OSLog/signpost instrumentation directly; inspect it with `log show --signpost` or Instruments.
 
-### UI testing and benchmarks — native computer-use
+### Behavioral testing
 
-**All UI-driven tests and benchmarks run through the native `computer-use` MCP** (`mcp__computer-use__*`) plus vision, driving the real `Vocello.app` Debug build. The driving model is vision-first: take a `screenshot`, find the control **by sight**, click its pixel directly — no AX-id→coordinate resolution, no logical-point scaling, no System-Events AppleScript. All *measurement* stays in the `scripts/uitest.sh` harness (OSSignpost + SQLite), so timing accuracy never depends on how the UI was driven. The harness and the smoke/bench runbooks under `docs/reference/` are the workflow source of truth; the canonical driving guide is [`docs/reference/computer-use-mcp.md`](docs/reference/computer-use-mcp.md).
-
-First call `mcp__computer-use__request_access` for `Vocello` (native app → full tier: clicks and typing both work). Run all shell commands (`scripts/uitest.sh ...`, builds, DB queries) through the **Bash tool**, not computer-use — Terminal/IDE apps are restricted tiers where typing is blocked.
-
-| Intent | computer-use call |
-|---|---|
-| Capture screen | `mcp__computer-use__screenshot` (locate elements by sight in the image) |
-| Re-front Vocello if focus is stale | `scripts/uitest.sh activate` (Bash), then `screenshot` again |
-| Click at pixel | `mcp__computer-use__left_click`, `coordinate: [x, y]` (screenshot pixel space) |
-| Type into focused field | `mcp__computer-use__type`, `text: "..."` (click the field first) |
-| Press key / chord | `mcp__computer-use__key`, `text: "cmd+Return"`; common: `cmd+a`, `BackSpace`, `Down`, `Up`, `Return` |
-
-Keyboard-first where possible (`cmd+Return` generate, `cmd+a`/`BackSpace` clear) to minimize clicks. AX identifiers in [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) are a **semantic reference for what to look for**, not a coordinate source; the `scripts/uitest.sh locate`/`screen-locate` helpers remain only as an optional fallback when two controls are visually indistinguishable. Test artifacts land in `build/Debug/uitest/<timestamp>/` and are wiped by `scripts/build.sh clean`.
-
-**Drive SwiftUI Picker menus by keyboard, not fixed click coordinates.** SwiftUI `Picker` menus open anchored to the currently-selected item, so a fixed-coordinate click only lands correctly on the first selection of a session. Reliable pattern: `left_click` to open the menu, then `key` `Down`/`Up` N times from the current index to the target, then `key` `Return`. Track current selection in agent state to compute N. Full pattern in `docs/reference/ui-test-surface.md` § "Driving SwiftUI Picker menus".
+There is **no automated UI-driving, smoke, or benchmark harness** in this repo. Behavioral validation is **manual local app acceptance**: build and launch the Debug app (`./scripts/build.sh run`), exercise the affected generation paths by hand, and listen to the output. Build/compile-safety is the only automated gate (`./scripts/build.sh debug`, `./scripts/build_foundation_targets.sh ios`). Do not reintroduce a UI-driving harness, computer-use bench tooling, smoke/bench runbooks, or committed timing baselines without an explicit maintainer decision (`scripts/check_project_inputs.sh` guards against the retired surfaces).
 
 ### Release, collaboration, and artifacts
 
@@ -121,7 +104,7 @@ Keyboard-first where possible (`cmd+Return` generate, `cmd+a`/`BackSpace` clear)
 
 ### Skill discipline
 
-Do not auto-invoke unrelated skills. Skip `deep-research`, `anthropic-skills:*` (docx/pptx/xlsx/canvas/etc.), `design:*`, `productivity:*`, `engineering:*`, and `claude-api` unless a task explicitly targets that tooling. For website (React/Vite) work, use the `context7` MCP for library/framework docs and `impeccable:impeccable` for UI/UX passes; browser verification goes through the `chrome-devtools` MCP or native `computer-use`.
+Do not auto-invoke unrelated skills. Skip `deep-research`, `anthropic-skills:*` (docx/pptx/xlsx/canvas/etc.), `design:*`, `productivity:*`, `engineering:*`, and `claude-api` unless a task explicitly targets that tooling. For website (React/Vite) work, use the `context7` MCP for library/framework docs and `impeccable:impeccable` for UI/UX passes; browser verification goes through the `chrome-devtools` MCP.
 
 ## Source of truth (when facts disagree)
 
@@ -158,12 +141,8 @@ Lower-level scripts (still supported, used by `build.sh` internally):
 ./scripts/build_and_run.sh                # legacy debug build → install → launch
 ./scripts/release.sh                      # macOS release packaging (ad-hoc signed DMG by default)
 ./scripts/check_ios_catalog.sh            # iOS catalog/static sanity check
-./scripts/ios_device.sh start             # Debug build → install/launch on paired iPhone + open iPhone Mirroring
-./scripts/ios_device_proof_matrix.sh      # iPhone entitlement proof phases (preflight|baseline|entitled|stress)
-./scripts/release_ios_testflight.sh       # iOS TestFlight build/sign/notarize/upload
 ./scripts/clean_build_caches.sh           # nuke build caches
 ./scripts/export_diagnostics.sh           # collect diagnostics bundle
-./scripts/verify_ios_release_archive.sh <archive>  # verify iOS release archive
 ./scripts/verify_packaged_dmg.sh <dmg>    # verify a packaged DMG
 ./scripts/verify_release_bundle.sh <app>  # verify .app signing/entitlements
 ```
@@ -178,7 +157,7 @@ Sha256 fingerprints under `build/Debug/.cache/` and `build/Release/.cache/` (`pr
 
 ### Single-resident build policy
 
-At most one published Debug `.app` and one published Release `.app` + `.dmg` exist under `build/` at any time: `build/Debug/Vocello.app`, `build/Release/Vocello.app`, and `build/Release/Vocello-macos26.dmg`. Xcode incremental products stay nested under the owning folder's `DerivedData/`; UI/benchmark artifacts live under `build/Debug/uitest/`; release logs, metadata, source packages, result bundles, and package outputs live under `build/Release/`. Pruning is automatic with no opt-out; if `Vocello` is running it is quit (SIGTERM, then SIGKILL after a short grace period) before deletion. Failed builds skip pruning so previous artifacts stay intact for inspection.
+At most one published Debug `.app` and one published Release `.app` + `.dmg` exist under `build/` at any time: `build/Debug/Vocello.app`, `build/Release/Vocello.app`, and `build/Release/Vocello-macos26.dmg`. Xcode incremental products stay nested under the owning folder's `DerivedData/`; release logs, metadata, source packages, result bundles, and package outputs live under `build/Release/`. Pruning is automatic with no opt-out; if `Vocello` is running it is quit (SIGTERM, then SIGKILL after a short grace period) before deletion. Failed builds skip pruning so previous artifacts stay intact for inspection.
 
 ### Runtime data folders
 
@@ -194,72 +173,13 @@ The first Debug launch under this policy renames an existing `QwenVoice/` folder
 
 Local Release defaults are isolated too: `AppDefaults` uses a release-id-specific preferences suite for repo-local Release apps, while Debug and installed/public Release use normal app preferences. To exercise Release with realistic data, copy/symlink data into the local release folder or use the env-var override.
 
-### Autonomous UI testing
-
-The Debug build is drivable via the **`computer-use`** MCP (see "UI testing and benchmarks — native computer-use" above for the call mapping). Entry point is `scripts/uitest.sh` (subcommands: `prep`, `reset [--include-voices|--full]`, `locate <ax-id>`, `screen-locate <ax-id> [image-w image-h]`, `window-locate` (deprecated), `scaled-locate` (legacy), `screen-size`, `activate`, `logs`, `db <sql>`, `artifacts-dir`, `smoke-check [<mode>]`, plus the bench-* family: `bench-wait`, `bench-step`, `bench-record`, `bench-summarize`, `bench-compare`, `bench-update-baselines`). Canonical MCP guide: [`docs/reference/computer-use-mcp.md`](docs/reference/computer-use-mcp.md). AX vocabulary and verification: [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md).
-
-Smoke runbooks (one per generation mode):
-
-- `docs/reference/smoke-custom-voice.md`
-- `docs/reference/smoke-voice-design.md`
-- `docs/reference/smoke-voice-cloning.md` (requires the `UITestRef` saved-voice fixture — see bootstrap below)
-
-Smoke runbooks for non-generation surfaces:
-
-- `docs/reference/smoke-settings.md` — Settings screen renders + Custom Voice model packages show "Ready"
-- `docs/reference/smoke-history.md` — History list renders + search filters + row plays
-- `docs/reference/smoke-saved-voices.md` — Saved Voices lists the `UITestRef` fixture + row plays
-
-Saved-voice fixture bootstrap (one-time, autonomous):
-
-- `docs/reference/bootstrap-saved-voice.md` — generates `voices/UITestRef.wav` via Voice Design → Save to Saved Voices, no file picker needed
-
-Benchmark runbooks share the bench-* harness (`bench-wait`, `bench-step <mode> <variant> <coldwarm> <bucket>` as the one-shot per-sample wrapper, `bench-record` for the raw record-only call, `bench-summarize`, `bench-compare`, `bench-update-baselines`):
-
-- `docs/reference/bench-custom-voice.md`
-- `docs/reference/bench-voice-design.md`
-- `docs/reference/bench-voice-cloning.md`
-
-Committed baselines live at `docs/reference/benchmark-baselines.json` (schema v3, regression-ready, 24 cells × n=3 on Apple M2 — full coverage of the 3 modes × 2 variants × cold/medium + warm/{short,medium,long} matrix as of May 2026). Every cell carries `ms_engine_start_to_final`, `ms_engine_start_to_autoplay`, `audio_duration_s`, `rtf`, `audio_rms_dbfs`, `audio_peak_dbfs`, `peak_rss_mb` (combined Vocello + XPC), and the `peak_rss_mb_app` / `peak_rss_mb_xpc` split. `bench-compare` flags drift on `ms_engine_start_to_final` and `rtf` at ±15 %; depth metrics are recorded in the baseline for forensic comparison but not gated on directly.
-
-**Reading bench-compare flags — `ms` and `rtf` as paired signals.** The two gates flag independently but are not independent metrics. When `ms_engine_start_to_final` flags but `rtf` stays within ±15 %, the latency change is driven by LM output-length variance (same input prompt occasionally produces a longer/shorter take), not engine throughput regression — inspect `audio_duration_s` in the per-sample JSONL for outliers. The `rtf` metric (audio-seconds per generation-second) normalizes out output-length and is the correct gate for engine throughput. The ±15 % gate on raw `ms` is conservative for catching obvious regressions but is noisy at n=3; for a "confirmed regression" verdict, prefer `rtf` and require n≥10 samples. See `docs/reference/ui-test-surface.md` § "Reading the bench-compare output" for the full reading rules and a May 18 worked example.
-
-### iOS Simulator UI testing
-
-Real MLX generation can't run in the iOS Simulator (no Apple Neural Engine, no real bytes on disk), but every iPhone UI surface is reviewable end-to-end through a stubbed engine and a Simulator-only fake-install path. Either drive it via `XcodeBuildMCP` (`build_run_sim` / `screenshot` / `snapshot_ui`) or the raw recipe:
-
-```sh
-xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -derivedDataPath build/Debug/foundation/local-builds/ios-simulator-derived-data \
-  -configuration Debug build
-xcrun simctl boot "iPhone 17 Pro"
-xcrun simctl install booted build/Debug/foundation/local-builds/ios-simulator-derived-data/Build/Products/Debug-iphonesimulator/Vocello.app
-xcrun simctl launch booted com.patricedery.vocello
-```
-
-`IOSAppBootstrap.makeBackend` swaps in `IOSSimulatorTTSEngine` (stub) + `IOSSimulatorFakeStatusProvider` (decorates `LocalModelStatusProvider` with a process-wide `IOSSimulatorFakeInstallRegistry`) when running on Simulator. Tapping Download / Delete on a model row in Settings drives a fake ~4.2 s download flow via `simulatorFakeInstall` / `simulatorFakeDelete`; the registry persists the installed state across `modelManager.refresh()` calls, so the Generate tab's onboarding card hides as expected after a fake install. All Simulator paths are gated on `IOSSimulatorRuntimeSupport.isSimulator`; real-hardware behavior is unchanged.
-
-Full runbook at `docs/reference/ios-simulator-testing.md` (covers Reduce Motion / Reduce Transparency toggle review, side-by-side macOS chrome comparison, and known limitations).
-
-### iOS device screen-mirror testing
-
-Real-device iPhone validation uses CoreDevice plus Apple's iPhone Mirroring app. Entry point:
-
-```sh
-./scripts/ios_device.sh doctor
-./scripts/ios_device.sh start
-```
-
-`scripts/ios_device.sh` defaults to the paired iPhone 17 Pro and the bundled production iPhone model catalog, builds the `VocelloiOS` Debug app for device, installs it directly, launches with lightweight native telemetry and a run id, opens iPhone Mirroring, and writes artifacts under `build/Debug/ios-device/runs/<run-id>/`. The optional readiness gate is resolved from `QVOICE_IOS_READINESS_GATE`, then `PATH`, then a repo-local helper if one exists; missing maintainer-local readiness tooling is a warning, not a public-script failure. Use `scripts/ios_device.sh screenshot <label>` during mirrored UI runs and `scripts/ios_device.sh pull` afterward to collect focused App Group evidence and memory diagnostics; CoreDevice may reject direct App Group copies on some local builds, so `pull` mirrors memory diagnostics from the Debug app container while history/output/voice evidence remains App Group best-effort. Entitlement and MLX proof phases: `scripts/ios_device_proof_matrix.sh` — hub and reading order: [`docs/reference/ios-shipping.md`](docs/reference/ios-shipping.md). Screen-mirror runbook: [`docs/reference/ios-device-screen-mirror-testing.md`](docs/reference/ios-device-screen-mirror-testing.md).
-
-When mirroring a physical iPhone on the Mac, the `computer-use` MCP can also drive the iPhone Mirroring window (it is a native macOS app, full tier) for visual review; treat any on-device evidence as authoritative over Simulator results.
-
 ## Testing policy — important
 
-This repo keeps CI **scoped to release packaging plus compile-safety automation** as of May 2026 — no XCTest targets, no automated bench/smoke/perceptual runs on CI, no legacy Python/CI benchmark harnesses. The sole workflow at `.github/workflows/release.yml` has two parallel jobs on `release.published` (and on manual `workflow_dispatch`): `package` (macOS DMG sign + notarize + staple via `scripts/release.sh`, attached to the GitHub Release) and `compile-ios` (iOS compile-safety only, no signing, no tests, runs `scripts/build_foundation_targets.sh ios`). `compile-ios` failures do not block the macOS DMG; the iOS signed-IPA path is intentionally local/manual until the increased-memory entitlement approval, iOS Distribution certificate, and provisioning profiles for `com.patricedery.vocello` plus `com.patricedery.vocello.engine-extension` are ready (see [`docs/reference/release-readiness.md`](docs/reference/release-readiness.md) § "iPhone Shipping Plan"). Behavioral validation is local-only: manual app acceptance, the maintained agent-driven macOS `scripts/uitest.sh` smoke/bench harness above, and real-device iPhone proof through `scripts/ios_device.sh` when hardware behavior matters. For Debug macOS behavior, use `./scripts/build.sh run` or `scripts/uitest.sh prep` (Debug app path: `build/Debug/Vocello.app`). For release signoff, launch `build/Release/Vocello.app` only after `./scripts/release.sh` has produced the Release bundle.
+This repo keeps CI **scoped to release packaging plus compile-safety automation** — no XCTest targets, no automated bench/smoke/perceptual runs, no Python/CI benchmark harnesses. The sole workflow at `.github/workflows/release.yml` has two parallel jobs on `release.published` (and on manual `workflow_dispatch`): `package` (macOS DMG sign + notarize + staple via `scripts/release.sh`, attached to the GitHub Release) and `compile-ios` (iOS compile-safety only, no signing, no tests, runs `scripts/build_foundation_targets.sh ios`). `compile-ios` failures do not block the macOS DMG; the iOS signed-IPA path is deferred until the increased-memory entitlement approval, an iOS Distribution certificate, and provisioning profiles for `com.patricedery.vocello` plus `com.patricedery.vocello.engine-extension` are ready (see [`docs/reference/release-readiness.md`](docs/reference/release-readiness.md) § "iPhone Shipping Plan").
 
-Do not reintroduce test bundles, QA shell scripts, agent configs, additional GitHub Actions workflows beyond `release.yml`, or a parallel benchmark harness without an explicit maintainer decision. `scripts/check_project_inputs.sh` enforces the retired surfaces with a prohibited-paths list and a regex sweep of the working tree. Inspect that script for the current list rather than quoting names here (its patterns also trip on any file that mentions the banned names verbatim).
+**Behavioral validation is manual and local only.** There is no automated UI-driving, smoke, or benchmark harness — exercise the app by hand. For Debug macOS behavior, `./scripts/build.sh run`, then drive the app yourself (Debug app path: `build/Debug/Vocello.app`). For release signoff, launch `build/Release/Vocello.app` only after `./scripts/release.sh` has produced the Release bundle. iPhone is compile-safe only (`./scripts/build_foundation_targets.sh ios`); there is no in-repo device-deploy or on-device proof tooling.
+
+Do not reintroduce test bundles, QA shell scripts, a UI-driving / computer-use bench harness, smoke/bench runbooks, committed timing baselines, device-deploy or on-device proof scripts, agent configs, or additional GitHub Actions workflows beyond `release.yml` without an explicit maintainer decision. `scripts/check_project_inputs.sh` enforces the retired surfaces with a prohibited-paths list and a regex sweep of the working tree. Inspect that script for the current list rather than quoting names here (its patterns also trip on any file that mentions the banned names verbatim).
 
 Recent commits that establish this stance: *"Retire all CI workflows; reset to local-only operation"*, *"Remove test harness and agent config"*, *"Scope CI to building and packaging validations only"*.
 
@@ -316,7 +236,7 @@ Two-platform Swift codebase with an out-of-process engine on each platform.
 - Memory-indicator store + accessory + state retired (`80f6511`, -358 lines). The iOS-side `IOSGenerateMemoryIndicatorStore` (`IOSShellPrimitives.swift`) and its rendering accessory had been orphaned since R0 dropped the IOSStudioShellCanopy. Engine-side memory policy is untouched — `IOSMemoryPressureBand` (QwenVoiceCore), `TTSEngineStore.refreshMemoryPolicy()`, and the per-tier `NativeMemoryPolicyResolver` remain.
 - All five bottom sheets (Voice / Delivery / ReferenceClip / ModelInstall / DeleteModel) + the full-screen Player sheet were rewritten to design spec: 2-col delivery grid with colored dots + descriptions, voice picker language pills + filter chips + per-row preview play, model install sheet's 56pt mode-tinted icon + size/`ON-DEVICE` pills + "Stays on your iPhone" privacy callout, Player sheet's centered 22pt header + 42-bar 96pt waveform + real scrubber track + thumb + centered karaoke transcript.
 - Settings model rows now route Download/Delete through `IOSModelInstallSheet` + `IOSDeleteModelSheet` (replacing the previous bare button + system `confirmationDialog`).
-- Voice picker preview play loads ~2.5s WAVs from `Sources/Resources/voice-previews/{aiden,ryan,vivian,serena}.wav` (24 kHz mono Int16 PCM, ~540 KB total bundled, generated via macOS Vocello Debug + `scripts/uitest.sh` harness + `computer-use` MCP). `IOSVoicePreviewPlayer.swift` is the shared previewer; `IOSVoicePickerSheet` drives it via `@StateObject`. Auto-stop on row tap + on sheet dismiss.
+- Voice picker preview play loads ~2.5s WAVs from `Sources/Resources/voice-previews/{aiden,ryan,vivian,serena}.wav` (24 kHz mono Int16 PCM, ~540 KB total bundled, generated via the macOS Vocello Debug app). `IOSVoicePreviewPlayer.swift` is the shared previewer; `IOSVoicePickerSheet` drives it via `@StateObject`. Auto-stop on row tap + on sheet dismiss.
 - Audio preview/player chrome now uses shared reference primitives: mini / player / big waveform styles, 40pt circular `IOSPlayerIconButtonChrome`, 38-bar inline waveform, 42-bar full-sheet waveform, and matching Save / Download / Dismiss controls. Studio inline player expansion, Voices preview buttons, voice-picker rows, the now-playing rail, and the full Player sheet should stay visually aligned with `design_references/Vocello iOS/player.jsx`, `studio.jsx`, and `app.css`.
 - DEBUG-only "Seed sample history" affordance in Settings (gated on `IOSSimulatorRuntimeSupport.isSimulator`) writes a silence WAV + Generation row so the Player sheet is reachable in Simulator runs where the stub engine never produces real takes.
 
@@ -342,7 +262,7 @@ The per-tier `clearMLXCacheOnStreamChunkEmit` and `mlxTokenMemoryClearCadence` f
 
 `Sources/QwenVoiceCore/NativeMemoryPressureMonitor.swift` wraps `DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical])` on macOS and iOS. `MLXTTSEngine.initialize(...)` starts it on floor8GBMac, mid16GBMac, and iPhonePro. Kernel pressure events map to `NativeMemoryTrimLevel` and route to `runtime.trimMemory(level:reason:)` — softTrim clears MLX cache + clone soft-trim; hardTrim clears all warm state. iOS still has no visible memory indicator; app-layer memory guardrails flow through `TTSEngineStore.refreshMemoryContext(...)`, combined app + engine-extension snapshots, and the per-tier `IOSMemoryBudgetPolicy`.
 
-iPhone memory remediation notes: physical-device model installs do not eager-load the engine anymore; the first foreground generation loads with its request-specific capability profile. iOS foreground generation is streaming-first, while physical-device streaming chunks omit inline `previewAudio.pcm16LE` by default unless `QWENVOICE_STREAMING_PREVIEW_DATA=on` is set. `Qwen3TTSMemoryCaches.clearAll()` clears prepared tokenizer, speech-tokenizer, conditioning-prefix, and streaming-decoder bucket caches on iPhone hard-trim/full-unload/unload/failure paths; macOS cache warmth is intentionally preserved. As of May 2026, iOS **model admission blocking and in-flight critical cancel are disabled** while measuring extension Jetsam without the increased-memory entitlement (`docs/reference/ios-memory-admission-policy.md`); `guardModelAdmission` only records `model_admission_observed`. On iPhone, switching to a different model ID unloads and clears Qwen3 caches before the next load peak. Device diagnostics record combined app+extension resident/physical/GPU footprints and aggregate pressure bands. Debug iPhone runs can experiment with MLX limits via `scripts/ios_device.sh --mlx-memory-limit-mb <mb>` / `--mlx-cache-limit-mb <mb>` or `QVOICE_IOS_MLX_MEMORY_LIMIT_MB` / `QVOICE_IOS_MLX_CACHE_LIMIT_MB`; the memory-limit override is process-lifetime for that launched app process and ignored outside Debug.
+iPhone memory remediation notes: physical-device model installs do not eager-load the engine anymore; the first foreground generation loads with its request-specific capability profile. iOS foreground generation is streaming-first, while physical-device streaming chunks omit inline `previewAudio.pcm16LE` by default unless `QWENVOICE_STREAMING_PREVIEW_DATA=on` is set. `Qwen3TTSMemoryCaches.clearAll()` clears prepared tokenizer, speech-tokenizer, conditioning-prefix, and streaming-decoder bucket caches on iPhone hard-trim/full-unload/unload/failure paths; macOS cache warmth is intentionally preserved. As of May 2026, iOS **model admission blocking and in-flight critical cancel are disabled** while measuring extension Jetsam without the increased-memory entitlement (`docs/reference/ios-memory-admission-policy.md`); `guardModelAdmission` only records `model_admission_observed`. On iPhone, switching to a different model ID unloads and clears Qwen3 caches before the next load peak. Device diagnostics record combined app+extension resident/physical/GPU footprints and aggregate pressure bands. Debug iPhone builds can experiment with MLX limits via `QVOICE_IOS_MLX_MEMORY_LIMIT_MB` / `QVOICE_IOS_MLX_CACHE_LIMIT_MB`; the memory-limit override is process-lifetime for the launched app process and ignored outside Debug.
 
 ### Adaptive idle-unload on floor8GBMac
 
@@ -380,7 +300,7 @@ Global UserDefaults override at key `QwenVoice.PreferSpeedEverywhere` (legacy ke
 
 ### Prewarm signposts for bench traces
 
-Two OSSignposter events in `NativeEngineRuntime` for bench/forensics: `"Native Prewarm Cache Hit"` (fires when `loadCoordinator.isPrewarmed(...)` returns true) and `"Native Design Conditioning Reuse"` (fires on the `reused: true` branch of `ensureDesignConditioningWarmStateIfNeeded`). Future bench-* tooling can count hits vs misses.
+Two OSSignposter events in `NativeEngineRuntime` for forensics: `"Native Prewarm Cache Hit"` (fires when `loadCoordinator.isPrewarmed(...)` returns true) and `"Native Design Conditioning Reuse"` (fires on the `reused: true` branch of `ensureDesignConditioningWarmStateIfNeeded`). Inspect them via `log show --signpost` to confirm prewarm hits vs misses.
 
 ### Short-prompt Custom Voice prewarm depth
 
@@ -401,22 +321,11 @@ Two OSSignposter events in `NativeEngineRuntime` for bench/forensics: `"Native P
 
 `shouldStream: true` at the user-facing single-generation call sites (3 macOS coordinators + active iOS generation builders); the iOS readiness/prefetch builders stream too. This is Vocello's internal chunked preview/final-file pipeline, not a claim that the app exposes Qwen's public Python true end-to-end streaming API. Physical iOS defaults to final-file playback and omits inline PCM chunk payloads unless the Debug event sink plus chunk-file output are explicitly enabled. `BatchGenerationRunner` stays `shouldStream: false` by design — macOS batch is quality-first regardless. On macOS preview-enabled runs, the user hears the first audio chunk within ~3-6 seconds of pressing generate on cold cells, vs ~8-15 seconds for the materialize-then-play flow that preceded it.
 
-**Bench-measured perceived-speed gain** (Phase 3 cycle, against `fa94cc7` baselines):
+**Perceived-speed gain.** Enabling streaming preview roughly halved time-to-first-sound on cold cells in the Phase 3 measurements (e.g. custom/cold-medium ≈9.9 s → 5.5 s, design/cold-medium ≈7.8 s → 3.1 s, clone/cold-medium ≈14 s → 5.8 s); warm-custom was the one cell that regressed. Those figures came from a since-removed bench harness — treat them as directional history, not a live baseline.
 
-| Cell | Baseline ms_autoplay | Phase 3 ms_autoplay | Gain |
-|---|---:|---:|---:|
-| custom/cold/medium | 9 893 ms | 5 509 ms | **+4.4 s (+44 %)** |
-| design/cold/medium | 7 830 ms | 3 068 ms | **+4.8 s (+61 %)** |
-| design/warm/medium | 7 166 ms | 4 083 ms | **+3.1 s (+43 %)** |
-| clone/cold/medium (n=3) | 14 036 ms | 5 765 ms | **+8.3 s (+59 %)** |
-| clone/warm/medium | 15 090 ms | 5 483 ms | **+9.6 s (+64 %)** |
-| custom/warm/medium | 8 044 ms | 11 106 ms | **−3.1 s (−38 %)** ⚠ |
+**Decoder drift bug + fix (do not reintroduce).** An early streaming-enable attempt produced audible audio RMS/peak drift across cells. The early "model-side sampling/RNG divergence" hypothesis was falsified; the real cause was that both paths invoke the same `streamingStep` decoder but with very different chunk sizes (300 tokens for `streamingDecode` vs ~12 for streaming), and `DecoderBlockUpsample.step()`'s output-side overlap-and-add accumulator produced LSB drift at every chunk boundary that amplified through `SnakeBeta` and downstream blocks. **The fix landed in `4fab110`** (input-side `inputContext` buffer + `callAsFunction([context, x])` + discard leading samples — each emitted sample is now a slice of one conv operation, matching batch-mode float parenthesisation regardless of chunk size). `CausalConv1d.step()` was audited and left unchanged; its `streamBuffer` already implements the equivalent pattern for stride=1.
 
-Mean gain across all 6 cells: **+4.5 s** saved on time-to-first-sound.
-
-**History.** A first May 2026 enable attempt was bench-rejected: 6/6 cells exceeded ±0.1 dB on `audio_rms_dbfs` and `audio_peak_dbfs` vs the `fa94cc7` baselines, three cells > ±1 dB peak deviation. Investigation falsified the early "model-side sampling/RNG divergence" hypothesis and identified the real cause: both paths invoke the same `streamingStep` decoder but with very different chunk sizes (300 tokens for `streamingDecode` vs ~12 tokens for streaming). `DecoderBlockUpsample.step()`'s output-side overlap-and-add accumulator was producing LSB drift at every chunk boundary that amplified through `SnakeBeta` and downstream blocks. **The decoder fix landed in `4fab110`** (input-side `inputContext` buffer + `callAsFunction([context, x])` + discard leading samples — each emitted sample is now a slice of one conv operation, matching batch-mode float parenthesisation regardless of chunk size). `CausalConv1d.step()` was audited and left unchanged; its `streamBuffer` already implements the equivalent pattern for stride=1.
-
-**Phase 3 verification gap closed in `f6aa8e3`.** `prepareStreamingPreview` is defined but never called from production — the streaming-autoplay flow relies on the auto-init path in `AudioPlayerViewModel.startLiveSession`, which is invoked from `handleGenerationChunk` when the first streaming chunk arrives with a new session ID. That path set `liveAutoplayEnabled` but forgot to set `pendingAutoplaySignpost`, so `consumeAutoplaySignpostIfNeeded()` was a no-op and the "Autoplay Start" OSSignposter event never fired despite actual playback starting. `f6aa8e3` adds `pendingAutoplaySignpost = autoPlay` in `startLiveSession` so the signpost mirrors the live engine's actual play() call. The bench parser in `scripts/uitest.sh` was also updated (`6b7c5e2`) to capture "Autoplay Start" when it fires BEFORE "Final File Ready" — required because streaming autoplay fires during generation, not after.
+**Autoplay signpost (`f6aa8e3`).** `prepareStreamingPreview` is defined but never called from production — the streaming-autoplay flow relies on the auto-init path in `AudioPlayerViewModel.startLiveSession`, invoked from `handleGenerationChunk` when the first streaming chunk arrives with a new session ID. That path set `liveAutoplayEnabled` but forgot `pendingAutoplaySignpost`, so `consumeAutoplaySignpostIfNeeded()` was a no-op and the "Autoplay Start" OSSignposter event never fired despite actual playback starting. `f6aa8e3` sets `pendingAutoplaySignpost = autoPlay` in `startLiveSession` so the signpost mirrors the live engine's actual play() call.
 
 **Ruled out** by the investigation (do not re-litigate): `PCM16StreamLimiter` math (sequential, state-pure, no lookahead — `NativeStreamingSynthesisSession.swift:506`); LM token sampling (deterministic given seed); the transformer KV-cache (offset correctly tracked, normalization is over feature axis).
 
@@ -426,13 +335,11 @@ Mean gain across all 6 cells: **+4.5 s** saved on time-to-first-sound.
    - **Race A (engine retention, fixed in `6c2ea52`)**: `teardownLivePlayback(clearSession: true)` left `liveEngine` and `livePlayerNode` references non-nil after `.reset()`ing the engine. The next session's `appendLiveChunk` skipped `configureLiveEngine` (guard `if liveEngine == nil || livePlayerNode == nil` was false), and `attemptLivePlay`'s `liveEngine.start()` threw — silently swallowed. Fix: nil out the references in the clearSession block. Closed custom/warm and design/warm.
    - **Race B (stale buffer completions, fixed in `be4dbcf`)**: AVAudioEngine's per-buffer completion callback hops to MainActor via `Task { @MainActor in ... }`. Cold's late-firing tasks landed AFTER warm's `startLiveSession` had reset `liveScheduledCount = 0` and `liveQueuedAudioSeconds = 0`, then decremented warm's freshly-incremented counters and removed warm's entries from `liveBufferDurations`. `shouldStartLivePlayback`'s Policy 2 then could never trigger for warm. The `guard playbackMode == .live` was too coarse (warm IS .live). Fix: capture `liveSessionID` at `scheduleLiveBuffer` time and reject completions in `handleLiveBufferPlaybackCompletion` whose sessionID doesn't match the current `liveSessionID`.
 
-   Verification (`build/Debug/uitest/20260516-153215`): 10 streaming samples across 3 modes (3 clone cold/warm pairs + 1 custom pair + 1 design pair) — **10/10 engaged streaming, 0 fallbacks**. Pre-fix repro rate on clone/warm back-to-back pairs was ~50 %.
+   Verified across 10 streaming samples spanning 3 modes (clone, custom, design cold/warm pairs) — **10/10 engaged streaming, 0 fallbacks**. Pre-fix repro rate on clone/warm back-to-back pairs was ~50 %.
 
    Production signposts at every streaming state transition (`Chunk Received`, `Chunk Decoded`, `Live Session Start`, `Live Engine Play`, `Session Completed Recorded`, `Switch To File Playback`, `Should Start Reject Autoplay`, `Should Start Reject Buffer`, `Stale Completion Dropped`) — together they reconstruct the streaming state machine's complete trace in `log show --signpost`; useful for any future regression triage.
 
-2. **Cold-cell audio loudness shift — falsified as a regression.** The Phase 3 observation of +1-3 dB louder RMS on cold cells was based on too-small samples (n=1 for custom/design, n=3 for clone). Phase 4 re-bench with the fix in place showed the deviation goes BOTH ways (-1.56 to +2.81 dB across cells in the same run, with the same generation parameters). The previous "AVAudioFile applies gain" hypothesis was wrong: the streaming WAV writer's `IncrementalPCM16WAVFileWriter` and the non-streaming `AtomicPCM16WAVWriter` both write the same Int16 samples; the per-cell deviation is dominated by LM sampling variance run-to-run. The `fa94cc7` baseline's n=3 samples just happened to lie at one end of that variance distribution. To re-promote the baseline accurately would need n=10+ per cell. Not a regression; no action needed.
-
-**If a future change needs to bench-validate against `fa94cc7` again,** the recipe is the same as Phase 3: 6 minimal cells (custom/design/clone × cold/warm × medium prompt × Speed variant) via `scripts/uitest.sh bench-step`. Pass criteria: ms_engine_start_to_autoplay should drop substantially on cold cells (>40 % gain expected); audio RMS/peak within baseline natural variance (using the per-cell `min..max` range, NOT ±0.1 dB of mean — that's stricter than the n=3 baseline's own spread).
+2. **Cold-cell audio loudness shift — not a regression.** An observed +1–3 dB louder RMS on cold cells was sampling noise: re-measurement with the fix in place showed deviation in both directions (≈−1.6 to +2.8 dB) under identical generation parameters. The "AVAudioFile applies gain" hypothesis was wrong — the streaming WAV writer (`IncrementalPCM16WAVFileWriter`) and the non-streaming `AtomicPCM16WAVWriter` write the same Int16 samples; per-cell deviation is dominated by run-to-run LM sampling variance.
 
 ## SPM dependencies (pinned in `project.yml`)
 
@@ -450,7 +357,6 @@ Mean gain across all 6 cells: **+4.5 s** saved on time-to-first-sound.
 - Keep macOS release artifacts named `Vocello.app` and `Vocello-macos26.dmg`.
 - Use local plan mode when a plan is needed; do not introduce cloud-only planning instructions or environment-variable workarounds on this project.
 - **Maintainer privacy:** see the "Maintainer privacy" section above — do not commit legal names, personal emails, home paths, device nicknames, UDIDs, or hardcoded Apple team IDs in user-facing docs or script defaults.
-- **Drive SwiftUI Picker menus by keyboard, not fixed click coordinates** (see "UI testing and benchmarks" above). This is the bug that mislabeled 45 of 53 cells in the May 2026 emotion matrix run. Full pattern lives in [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) under "Driving SwiftUI Picker menus"; keep that doc in sync if `scripts/uitest.sh` or any bench/smoke runbook adds a new picker-driver path.
 
 ## Where to find more
 
@@ -460,9 +366,6 @@ Mean gain across all 6 cells: **+4.5 s** saved on time-to-first-sound.
 - `docs/reference/ios-shipping.md` — iPhone MLX, memory, entitlement hub (start here for on-device iOS)
 - `docs/reference/ios-memory-admission-policy.md` — admission block / critical cancel (off by default May 2026)
 - `docs/reference/ios-mlx-jetsam-feasibility.md` — Jetsam vs entitlement verdict and constraints
-- `docs/reference/ios-device-proof-matrix.md` — hardware proof phases + `ios_device_proof_matrix.sh`
-- `docs/reference/ios-simulator-testing.md` — iOS Simulator UI review + Simulator-only fake install/delete dev affordance
-- `docs/reference/ios-device-screen-mirror-testing.md` — real-device iPhone Debug validation through CoreDevice + iPhone Mirroring
 - `docs/reference/privacy-storage.md` — local storage and deletion
 - `docs/qwen_tone.md` — prompt/tone guidance for voice generation
 - `design_references/Vocello Design System/` — the Vocello design system: brand register (SKILL.md), color + type scale (`colors_and_type.css`), preview HTML pages per token family. Read before touching iOS chrome or shipping new mode tints.

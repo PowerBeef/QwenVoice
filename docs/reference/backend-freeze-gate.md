@@ -65,7 +65,7 @@ The gate is green only when the maintained checks below are green for the curren
 ./scripts/build_foundation_targets.sh ios
 ```
 
-After a clean foundation build, exercise the affected paths locally. Use `./scripts/build.sh run` or `scripts/uitest.sh prep` for persistent Debug macOS behavior, `build/Release/Vocello.app` after `./scripts/release.sh` for fresh repo-local release behavior, and `scripts/ios_device.sh` for real iPhone hardware behavior. There is no CI smoke, benchmark, or XCTest harness as of May 2026; manual smoke, the maintained agent-driven macOS `scripts/uitest.sh` runbooks, and iPhone screen-mirror runs are the behavioral regression checks.
+After a clean foundation build, exercise the affected paths locally. Use `./scripts/build.sh run` for persistent Debug macOS behavior and `build/Release/Vocello.app` after `./scripts/release.sh` for fresh repo-local release behavior; iPhone is compile-safe only. There is no CI smoke, benchmark, or XCTest harness, and no automated UI-driving or bench harness; manual local app acceptance is the behavioral regression check.
 
 ### Local Unsigned Release Proof
 
@@ -77,19 +77,12 @@ After a clean foundation build, exercise the affected paths locally. Use `./scri
 
 ### Maintained CI Proof
 
-`.github/workflows/release.yml` is the only maintained workflow. It packages the macOS DMG and runs unsigned iOS compile-safety; it does not run behavioral tests, benchmarks, signed iOS archive/export, or TestFlight upload. Build, packaging, signing, notarization, TestFlight-prep, and device validation remain source-of-truth local flows on Mac mini M2 via:
+`.github/workflows/release.yml` is the only maintained workflow. It packages the macOS DMG and runs unsigned iOS compile-safety; it does not run behavioral tests, benchmarks, signed iOS archive/export, or TestFlight upload. Build, packaging, signing, and notarization remain source-of-truth local flows on Mac mini M2 via:
 
 - `scripts/release.sh` + `scripts/verify_release_bundle.sh` + `scripts/verify_packaged_dmg.sh` — signed/notarized macOS DMG
-- `scripts/ios_device.sh` — direct Debug install/launch, iPhone Mirroring, screenshots, and pulled diagnostics for owned-device iPhone proof
-- `scripts/check_ios_catalog.sh` + `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` — iPhone archive/export/TestFlight prep
-- `scripts/build_foundation_targets.sh macos\|ios` — deterministic foundation builds
+- `scripts/build_foundation_targets.sh macos\|ios` — deterministic foundation builds (iOS is compile-safety only)
 
-These are the authoritative source-of-truth tools for build, packaging, distribution, and behavioral proof. CI is deliberately narrower than local proof.
-
-Deferred but still maintained local proof:
-
-- `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh`
-- iPhone archive/export/upload-prep on Mac mini M2 via the local TestFlight tooling
+These are the authoritative source-of-truth tools for build and packaging. CI is deliberately narrower than local proof. iPhone on-device deploy/proof and TestFlight tooling were removed in the testing-harness cleanup; that work is deferred pending the increased-memory entitlement, and behavioral validation is manual local app acceptance.
 
 ## Acceptance Checklist
 

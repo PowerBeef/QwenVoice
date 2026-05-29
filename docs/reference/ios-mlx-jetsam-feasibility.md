@@ -11,7 +11,7 @@ Maintained summary of whether Vocello can run Qwen3-TTS on iPhone with acceptabl
 | Can this project run Qwen3-TTS on iPhone at all? | **Yes in principle** — same `MLXTTSEngine` in an ExtensionKit process with iOS admission, trim, and streaming policy. |
 | Smooth for typical users today? | **No** — without Apple's increased-memory entitlement, extension headroom is low; admission blocking is temporarily disabled (May 2026) so Jetsam/MLX behavior can be observed on device. |
 | Smooth after entitlement + device proof? | **Plausible** for **iPhone 15 Pro+** with **Speed 4-bit** packages only — not yet proven on official minimum hardware. |
-| Simulator sufficient? | **No** for MLX/memory — UI and stub engine only ([`ios-simulator-testing.md`](ios-simulator-testing.md)). |
+| Simulator sufficient? | **No** for MLX/memory — UI and stub engine only. |
 
 **Bottom line:** Design and code support a bounded iOS product; **shipping smooth on-device generation** requires entitlement approval plus entitled proof on iPhone 17 Pro (dev) and **iPhone 15 Pro** (minimum).
 
@@ -87,15 +87,10 @@ Not parity with 16 GB Mac Quality bench cells.
 
 ### Optional engineering (only if entitled 1.7B still fails)
 
-See [`ios-device-proof-matrix.md`](ios-device-proof-matrix.md) § deferred 0.6B evaluation. Do not switch macOS event buffering to match iOS bounded stream.
+The deferred 0.6B evaluation is gated behind entitled 1.7B proof. Do not switch macOS event buffering to match iOS bounded stream.
 
-## Validation commands
+## Validation (deferred)
 
-```sh
-./scripts/ios_device.sh doctor
-./scripts/ios_device_proof_matrix.sh --phase baseline
-# After entitlement:
-./scripts/ios_device_proof_matrix.sh --phase entitled
-```
+The on-device validation scripts (`ios_device.sh`, `ios_device_proof_matrix.sh`) were removed in the testing-harness cleanup. iOS verification is currently `./scripts/build_foundation_targets.sh ios` (compile-safety only); on-device baseline/entitled proof must be re-established when iPhone work resumes.
 
 Axiom: `memory-auditor` + `axiom:axiom-performance` on policy changes (see `CLAUDE.md` § Performance + memory adaptation).

@@ -58,9 +58,8 @@ Maintained local packaging entrypoints:
 - `scripts/verify_release_bundle.sh`
 - `scripts/verify_packaged_dmg.sh`
 - `scripts/check_ios_catalog.sh`
-- `scripts/release_ios_testflight.sh`
 
-The only CI/release workflow surface is `.github/workflows/release.yml`, scoped to macOS DMG packaging plus iOS compile-safety. Signed release work, iPhone archive/export, TestFlight upload, and real-device validation still run locally via the `scripts/` listed above.
+The only CI/release workflow surface is `.github/workflows/release.yml`, scoped to macOS DMG packaging plus iOS compile-safety. Signed macOS release work runs locally via the `scripts/` listed above; iPhone is compile-safe only (on-device deploy/proof and TestFlight tooling were removed, deferred pending the increased-memory entitlement).
 
 ## Current Verification Surface
 
@@ -72,6 +71,5 @@ The only CI/release workflow surface is `.github/workflows/release.yml`, scoped 
 - `xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build`
 - `./scripts/check_ios_catalog.sh`
 - `./scripts/release.sh`
-- `./scripts/release_ios_testflight.sh`
 
 Visual and interaction verification still includes manual local passes after project-input checks and builds are green.

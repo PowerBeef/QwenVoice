@@ -128,7 +128,7 @@ Project and automation source of truth:
 - `scripts/`
 - `config/apple-platform-capability-matrix.json`
 
-The only maintained GitHub workflow is `.github/workflows/release.yml`: macOS DMG packaging plus iOS compile-safety, with no tests, smoke, benchmarks, or signed iOS IPA. XCTest targets and the legacy Python/CI benchmark harnesses were retired in May 2026 after harness-driven churn made them unreliable. Build, packaging, signing, notarization, iPhone archive/export, and real-device Debug validation are driven locally on Mac mini M2 via the `scripts/` tooling. Behavioral verification is local-only: manual app acceptance, the maintained agent-driven macOS `scripts/uitest.sh` smoke/bench harness, and iPhone screen-mirror proof through `scripts/ios_device.sh` when hardware behavior matters. Debug macOS checks use `./scripts/build.sh run` or `scripts/uitest.sh prep` against the persistent `QwenVoice-Debug` store. Release macOS checks use `build/Release/Vocello.app` after `./scripts/release.sh`; that repo-local app gets a fresh release-id-specific app-support folder and preferences suite.
+The only maintained GitHub workflow is `.github/workflows/release.yml`: macOS DMG packaging plus iOS compile-safety, with no tests, smoke, benchmarks, or signed iOS IPA. XCTest targets and the legacy Python/CI benchmark harnesses were retired in May 2026; the agent-driven macOS UI-driving / bench harness and the iPhone device-deploy / proof / TestFlight tooling were removed in a later cleanup. Build, packaging, signing, and notarization are driven locally on Mac mini M2 via the `scripts/` tooling; iPhone is compile-safe only. Behavioral verification is manual local app acceptance — build and launch the app and exercise the affected paths by hand. Debug macOS checks use `./scripts/build.sh run` against the persistent `QwenVoice-Debug` store. Release macOS checks use `build/Release/Vocello.app` after `./scripts/release.sh`; that repo-local app gets a fresh release-id-specific app-support folder and preferences suite.
 
 Key local checks:
 
@@ -140,8 +140,6 @@ xcodebuild -project QwenVoice.xcodeproj -scheme VocelloiOS -destination 'generic
 ./scripts/build_foundation_targets.sh ios
 ./scripts/check_ios_catalog.sh
 ./scripts/release.sh
-./scripts/release_ios_testflight.sh
-./scripts/verify_ios_release_archive.sh
 ```
 
 For deterministic local compile proof, prefer `./scripts/build_foundation_targets.sh` over a shared-DerivedData signed debug build. The deterministic script uses isolated derived-data and `.xcresult` roots so stale build artifacts cannot pollute app codesigning.

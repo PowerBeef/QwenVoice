@@ -48,7 +48,7 @@ Public messaging rules:
 
 Two-track macOS hardware proof:
 
-- `Mac mini M2, 8 GB RAM` is the active development and bench-capture host. Perf is verified locally after material engine changes with targeted manual checks and, when appropriate, the maintained agent-driven `scripts/uitest.sh` bench harness.
+- `Mac mini M2, 8 GB RAM` is the active development host. Perf is verified locally after material engine changes with targeted manual checks (Instruments when warranted); there is no automated bench harness.
 - `Mac mini M1, 8 GB RAM` remains the documented official minimum, but engine-level findings captured on M1 have not been re-verified on M2. The M1-saturation conclusion (Step Eval Flush ≈62 % of generation, irreducible without quantization or hardware change) was reached on M1; M2's wider memory bandwidth and more capable GPU cores mean the saturation profile may differ. Re-verify via manual Instruments capture on M2 before citing the finding as M2-bound.
 - Do not claim the M1 floor is fully verified as of the dual-variant catalog (`d5b3c61`, 2026-05-05). Re-verify the floor-device finding before citing it for current M2 behavior.
 
@@ -69,7 +69,7 @@ Two-track proof policy:
 
 - Public homepage posture: Vocello-led for the public `v2.0.0` (stable) macOS 26+ release, with `QwenVoice v1.2.3` retained as the legacy macOS 15 fallback
 - macOS source and packaging surfaces: maintained in-repo
-- iPhone archive/export/TestFlight tooling: maintained in-repo
+- iPhone tooling: compile-safe only — on-device deploy/proof and TestFlight tooling removed, deferred pending the increased-memory entitlement
 - Current public release milestone: macOS only
 - iPhone owned-device proof: `iPhone 17 Pro` path is the active validation target
 - iPhone official minimum-device proof: pending until `iPhone 15 Pro` evidence is recorded
@@ -96,14 +96,13 @@ The current `macOS-first release track` uses three proof tiers. The authoritativ
 1. Build and validation proof
    - `scripts/check_project_inputs.sh` (static validation)
    - `scripts/build_foundation_targets.sh macos` + `scripts/build_foundation_targets.sh ios` (compile proof)
-   - Debug behavioral smoke with `./scripts/build.sh run` or `scripts/uitest.sh prep`; use manual acceptance and targeted `scripts/uitest.sh` runbooks for affected paths
+   - Debug behavioral smoke with `./scripts/build.sh run`; manual app acceptance for affected paths
 2. macOS ship gate
    - local unsigned macOS packaging and verification via `scripts/release.sh` + `scripts/verify_release_bundle.sh` + `scripts/verify_packaged_dmg.sh`
    - signed/notarized DMG produced by `scripts/release.sh --preflight full` against the project owner's Apple developer credentials (local Keychain)
 3. Deferred iPhone release proof
-   - owned-device validation follow-through
-   - direct Debug hardware validation through `scripts/ios_device.sh` on the owned iPhone 17 Pro
-   - local `scripts/check_ios_catalog.sh` + `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh`; TestFlight upload run locally
+   - iPhone is compile-safe only (`scripts/build_foundation_targets.sh ios` + `scripts/check_ios_catalog.sh`); the on-device deploy/proof and TestFlight tooling was removed
+   - on-device generation, memory proof, and TestFlight are deferred pending the increased-memory entitlement and a re-established device workflow
 
 Only tiers 1 and 2 block the current public release milestone.
 
@@ -113,9 +112,9 @@ Only tiers 1 and 2 block the current public release milestone.
 |---|---|
 | 1. Build and validation proof | `./scripts/check_project_inputs.sh` + `./scripts/build_foundation_targets.sh macos\|ios` + manual app smoke |
 | 2. macOS ship gate | `./scripts/release.sh` + `./scripts/verify_release_bundle.sh` + `./scripts/verify_packaged_dmg.sh` |
-| 3. Deferred iPhone release | `./scripts/ios_device.sh start` + `./scripts/ios_device.sh pull` + `./scripts/check_ios_catalog.sh` + `./scripts/release_ios_testflight.sh` + `./scripts/verify_ios_release_archive.sh` |
+| 3. Deferred iPhone release | `./scripts/build_foundation_targets.sh ios` + `./scripts/check_ios_catalog.sh` (compile-safety only; on-device deploy/proof tooling removed) |
 
-Only tiers 1 and 2 block the current public release milestone. Tier 3 is maintained but deferred from public signoff until the iPhone re-entry conditions below are met. There are no CI smoke, benchmark, or XCTest proof layers; local manual smoke, the maintained macOS harness, and real-device iPhone screen-mirror runs are the behavioral regression checks.
+Only tiers 1 and 2 block the current public release milestone. Tier 3 is deferred from public signoff until the iPhone re-entry conditions below are met. There are no CI smoke, benchmark, or XCTest proof layers and no automated UI/bench harness; local manual app acceptance is the behavioral regression check.
 
 ## Program Priorities
 
@@ -140,11 +139,11 @@ The default local release-readiness loop for the current milestone is:
 ./scripts/verify_packaged_dmg.sh build/Release/Vocello-macos26.dmg build/Release/release-metadata.txt
 ```
 
-Then launch `build/Release/Vocello.app` and exercise the affected user-facing paths by hand; each packaged repo-local Release app starts from a fresh release-id-specific app-support folder and preferences suite. For Debug behavior before release packaging, use `./scripts/build.sh run` or `scripts/uitest.sh prep` and follow the targeted `scripts/uitest.sh` smoke/bench runbooks when the change affects generation, playback, or benchmarked latency.
+Then launch `build/Release/Vocello.app` and exercise the affected user-facing paths by hand; each packaged repo-local Release app starts from a fresh release-id-specific app-support folder and preferences suite. For Debug behavior before release packaging, use `./scripts/build.sh run` and exercise the affected paths by hand.
 
 ## CI Proof Surface
 
-The current CI proof surface is intentionally narrow: `.github/workflows/release.yml` packages the macOS DMG and runs unsigned iOS compile-safety. It does not run XCTest, smoke tests, benchmarks, signed iOS archive/export, or TestFlight upload. The broad historical GitHub workflows were retired in May 2026 after harness-driven churn made them unreliable. `scripts/release.sh` remains the authoritative signed/notarized DMG producer, `scripts/release_ios_testflight.sh` remains the authoritative iPhone archive/export tool, and `scripts/ios_device.sh` is the real-device Debug validation entrypoint.
+The current CI proof surface is intentionally narrow: `.github/workflows/release.yml` packages the macOS DMG and runs unsigned iOS compile-safety. It does not run XCTest, smoke tests, benchmarks, signed iOS archive/export, or TestFlight upload. The broad historical GitHub workflows were retired in May 2026 after harness-driven churn made them unreliable. `scripts/release.sh` remains the authoritative signed/notarized DMG producer. iPhone is compile-safe only — the on-device deploy/proof and TestFlight tooling was removed in the testing-harness cleanup and that work is deferred pending the increased-memory entitlement.
 
 Historical CI evidence (kept for the audit trail; not a current gate):
 
@@ -160,9 +159,9 @@ Do not treat iPhone as a public release target again until all of the following 
 - no critical shared-core macOS regressions remain open from the release cycle
 - the build gate stays green after post-release fixes
 - owned-device iPhone validation is current
-- real-device screen-mirror evidence from `scripts/ios_device.sh` is current for affected Custom / Design / Clone paths
+- real-device validation evidence is current for affected Custom / Design / Clone paths (requires re-establishing an on-device deploy/proof workflow — that tooling was removed)
 - official `iPhone 15 Pro` minimum-device proof is recorded before claiming full iPhone release readiness
-- `scripts/release_ios_testflight.sh` + `scripts/verify_ios_release_archive.sh` succeed from the intended release ref (local on Mac mini M2)
+- a re-established iPhone archive/export + verification path succeeds from the intended release ref (local on Mac mini M2)
 
 Minimum-device re-entry evidence should explicitly cover:
 
@@ -194,7 +193,7 @@ Manual prep that does not require the entitlement and can happen immediately:
 
 ### Pipeline state after Phase 4
 
-`.github/workflows/release.yml` now runs `compile-ios` in parallel with the macOS `package` job. The iOS job runs `scripts/build_foundation_targets.sh ios` (compile-safety only, no signing). A signed-IPA `archive-ios` job is intentionally NOT in the workflow yet — it requires the entitlement approval, an iOS Distribution certificate, and provisioning profiles for `com.patricedery.vocello` plus `com.patricedery.vocello.engine-extension` that include the increased-memory entitlement. Once those prereqs are met, extend the workflow with a sibling job that imports the iOS dist cert, runs `scripts/release_ios_testflight.sh --export`, and uploads the IPA + `release-metadata-ios.txt` as workflow artifacts. TestFlight `--upload` mode stays manual until the export path is proven end-to-end at least once.
+`.github/workflows/release.yml` now runs `compile-ios` in parallel with the macOS `package` job. The iOS job runs `scripts/build_foundation_targets.sh ios` (compile-safety only, no signing). A signed-IPA `archive-ios` job is intentionally NOT in the workflow yet — it requires the entitlement approval, an iOS Distribution certificate, and provisioning profiles for `com.patricedery.vocello` plus `com.patricedery.vocello.engine-extension` that include the increased-memory entitlement. The local iPhone archive/export/TestFlight tooling was removed in the testing-harness cleanup; resuming iPhone distribution means re-establishing that signing/export path (and then a CI sibling job that imports the iOS dist cert, exports the IPA, and uploads it as a workflow artifact). All of this is deferred until the entitlement lands.
 
 ### iPhone model catalog
 

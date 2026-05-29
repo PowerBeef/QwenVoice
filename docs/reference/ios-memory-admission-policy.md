@@ -33,7 +33,7 @@ Source of truth for iPhone memory guardrails. Implementation: `TTSEngineStore` i
 | `QVOICE_IOS_MEMORY_GUARD_FORCE_BAND` | Debug: synthetic guarded band |
 | `QWENVOICE_STREAMING_PREVIEW_DATA` | Inline PCM on device when `on` |
 
-Removed: `QVOICE_IOS_SKIP_MODEL_ADMISSION_GUARD` / `scripts/ios_device.sh --skip-admission-guard` (admission skip is now the default).
+Removed: `QVOICE_IOS_SKIP_MODEL_ADMISSION_GUARD` and the `--skip-admission-guard` device flag (admission skip is now the default).
 
 ## Restoring admission blocking (future)
 

@@ -4,6 +4,8 @@ This packet is the source of truth for requesting Apple's increased-memory entit
 
 **Hub:** [`ios-shipping.md`](ios-shipping.md) · **Tracker (submission status):** [`ios-increased-memory-entitlement-tracker.md`](ios-increased-memory-entitlement-tracker.md)
 
+> **Note:** the copy-ready request text, identifiers, and Apple-portal steps below are the enduring value of this packet and are unaffected. The on-device evidence-capture and verify recipes (which used the removed `ios_device.sh` / `ios_device_proof_matrix.sh` scripts) are **not currently runnable** — those scripts were removed in the testing-harness cleanup and a device deploy/proof path would need to be re-established before capturing fresh on-device evidence.
+
 Apple capability: `com.apple.developer.kernel.increased-memory-limit`
 
 Apple docs:
@@ -109,8 +111,8 @@ Memory-reduction behavior already implemented:
 
 Validation scripts:
 
-- `scripts/ios_device.sh verify-entitlements` inspects the signed app and extension for `com.apple.developer.kernel.increased-memory-limit=true`.
-- `scripts/verify_ios_release_archive.sh` verifies archive/export entitlements for both app and extension.
+- Entitlement presence on the signed app + extension must be re-checked once a device deploy/verify path is re-established (the prior `ios_device.sh verify-entitlements` helper was removed in the testing-harness cleanup).
+- `scripts/verify_ios_release_archive.sh` verifies archive/export entitlements for both app and extension (still in-repo; verifies a manually-produced archive).
 
 ## Evidence To Capture Before Submitting
 

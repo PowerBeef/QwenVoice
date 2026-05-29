@@ -2,7 +2,9 @@
 
 Status board for Apple's managed capability `com.apple.developer.kernel.increased-memory-limit`.
 
-**Hub:** [`ios-shipping.md`](ios-shipping.md) · **Request copy:** [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md) · **Proof:** [`ios-device-proof-matrix.md`](ios-device-proof-matrix.md)
+**Hub:** [`ios-shipping.md`](ios-shipping.md) · **Request copy:** [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md)
+
+> **Note:** the local device deploy/proof scripts (`ios_device.sh`, `ios_device_proof_matrix.sh`) were removed in the testing-harness cleanup. The `scripts/...` verify/proof recipes below are the *intended* workflow and are **not currently runnable** — re-establish a device deploy/proof path when iPhone work resumes. The portal/submission steps (which happen in Apple Developer, not the repo) are unaffected.
 
 ## Current status (2026-05-27)
 

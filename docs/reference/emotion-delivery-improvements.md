@@ -117,14 +117,6 @@ Notable removals during the rewrite, by rule:
 - "natural pacing" stripped (rule 6 — verb already implies natural pacing unless modified).
 - "controlled intensity" / "well-timed pauses" / "sweeping intensity" trimmed from non-Dramatic presets (rule 7).
 
-## The picker-driving lesson (test-side fix)
-
-May 18's 53-cell test driving the delivery picker via fixed click coordinates produced 45 mis-labeled cells. Root cause: SwiftUI `Picker` menus open **anchored to the currently-selected item**, so fixed menu-item y-coordinates only work for the first selection.
-
-The fix is in `docs/reference/ui-test-surface.md`'s "Driving SwiftUI `Picker` menus" subsection: click the picker → `key("down")` N times → `key("return")`, tracking the current selection in shell state to compute N. Cross-link from this doc.
-
-A note also lands in `CLAUDE.md`'s "Conventions to preserve" so the next session driving a Picker doesn't repeat the mistake.
-
 ## Expected perceptual-score deltas (verification gates)
 
 Re-run criteria after the fix lands (per the plan's verification section). Originally graded with the now-retired Gemini-CLI perceptual review; left here as listen-and-judge gates for any future regression check:
@@ -145,6 +137,5 @@ Re-run criteria after the fix lands (per the plan's verification section). Origi
 ## Cross-references
 
 - `docs/qwen_tone.md` — phrasing guidance the rewrite follows.
-- `docs/reference/ui-test-surface.md` § "Driving SwiftUI `Picker` menus" — keyboard-navigation pattern for tests.
 - `Sources/QwenVoiceCore/GenerationSemantics.swift` — instruction-assembly layer (the only Swift file that changed for the two fixes).
 - `Sources/Models/EmotionPreset.swift` + `Sources/iOSSupport/Models/EmotionPreset.swift` — preset string library (kept byte-identical between macOS and iOS targets).
