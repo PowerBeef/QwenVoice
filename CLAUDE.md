@@ -11,10 +11,11 @@ Targets: macOS 26+ and iOS 26+, Apple Silicon only, Xcode 26. No Python runtime,
 ## Quick start
 
 ```sh
-./scripts/build.sh run                       # Debug build → launch Vocello.app
-./scripts/build.sh debug                      # fast incremental Debug build, no launch
-./scripts/build.sh release                    # → scripts/release.sh (signed/notarized DMG)
+./scripts/build.sh run                       # fast -Onone build → launch Vocello.app
+./scripts/build.sh build                      # fast -Onone build, no launch (alias: debug)
+./scripts/build.sh release                    # → scripts/release.sh (optimized signed/notarized DMG)
 ./scripts/build.sh clean                      # rm -rf build/
+QWENVOICE_DEBUG=1 ./scripts/build.sh run      # launch with the runtime debug toggle ON
 ./scripts/build_foundation_targets.sh macos   # clean macOS foundation build
 ./scripts/build_foundation_targets.sh ios     # iOS compile-safety only
 ./scripts/check_project_inputs.sh             # static validator — run before any build
@@ -51,18 +52,17 @@ Before any iOS/Swift response, check whether an **Axiom skill** applies (environ
 
 ## Build & project generation
 
-The Xcode project is generated from `project.yml` via XcodeGen — edit `project.yml` (not `.xcodeproj`), then `./scripts/regenerate_project.sh`. `build.sh` skips regen / SPM resolve when their input fingerprints (under `build/<config>/.cache/`) are unchanged.
+The Xcode project is generated from `project.yml` via XcodeGen — edit `project.yml` (not `.xcodeproj`), then `./scripts/regenerate_project.sh`. `build.sh` skips regen / SPM resolve when their input fingerprints (under `build/.cache/`) are unchanged.
+
+**Single config — no `DEBUG` symbol.** There is one shippable Xcode config (`Release`); `project.yml` declares only `configs: { Release: release }`. `build.sh` builds it **`-Onone`** for a fast local loop; `release.sh` builds the same config **optimized** for the DMG. So dev and shipped binaries run **identical code paths** — there is no `DEBUG` compilation symbol and no Debug-vs-Release behavior fork. Debug capabilities (telemetry, probing) are gated at **runtime** by `DebugMode`, not compiled out. (`#if DEBUG` blocks that remain are pure test/sim scaffolding and intentionally compile out of the shipped package.)
+
+**Debug mode (runtime toggle).** `Sources/Services/DebugMode.swift` resolves `DebugMode.isEnabled` once at launch from either the `QWENVOICE_DEBUG` env var (`1`/`true`/`on`/`yes` — dev + scripts) or a persisted `UserDefaults` flag (`QwenVoice.DebugModeEnabled`) flipped by tapping the version label in Settings **7×**. Gesture changes apply on the next launch (it gates the data folder, resolved early).
 
 **XcodeGen iOS-resource gotcha (do not break).** The iOS app target lists `qwenvoice_contract.json`, `qwenvoice_ios_model_catalog.json`, `voice-previews`, and `Assets.xcassets` under its `sources:` block with an explicit `buildPhase: resources` override — **not** under `resources:`. XcodeGen 2.45.4 silently drops them from the `VocelloiOS` Resources phase if listed under `resources:`, so iOS builds compile but crash on first launch with missing bundled resources. (macOS uses the `resources:` directory pattern and is unaffected.) Landed in `287c969`.
 
-**Build layout.** Only two top-level folders under `build/`: `build/Debug/` (development) and `build/Release/` (packaging) — don't add siblings. **Single-resident policy:** at most one `build/Debug/Vocello.app`, one `build/Release/Vocello.app`, and one `build/Release/Vocello-macos26.dmg` exist at a time; pruning is automatic (a running `Vocello` is quit first). Failed builds skip pruning so artifacts survive for inspection.
+**Build layout.** Everything lives directly under a single `build/` (`build/DerivedData`, `build/.cache`, `build/Vocello.app`, `build/Vocello-macos26.dmg`, `build/foundation/`) — `build.sh` and `release.sh` share it. **Single-resident policy:** one `build/Vocello.app` + one `build/Vocello-macos26.dmg` at a time; pruning is automatic (a running `Vocello` is quit first; the legacy `build/Debug` + `build/Release` split is cleaned on sight). Failed builds skip pruning so artifacts survive for inspection.
 
-**Runtime data folders** (configuration-aware, never overlap):
-- Debug (`#if DEBUG`): `~/Library/Application Support/QwenVoice-Debug/` — persistent across rebuilds.
-- Repo-local Release (run from `build/Release/Vocello.app`): `~/Library/Application Support/QwenVoice-Release-Local/<release-data-id>/` — fresh per `scripts/release.sh` packaging.
-- Installed Release (copied elsewhere): `~/Library/Application Support/QwenVoice/`.
-
-Selection lives in `Sources/Services/AppPaths.swift` (`#if DEBUG` + the signed `QwenVoiceLocalReleaseDataID` Info.plist value + bundle path). `QWENVOICE_APP_SUPPORT_DIR` overrides the root and disables auto-migration. Don't drop `DEBUG` from the macOS target's `SWIFT_ACTIVE_COMPILATION_CONDITIONS` without moving this logic to a custom flag.
+**Runtime data folder.** One folder, selected in `Sources/Services/AppPaths.swift`: `~/Library/Application Support/QwenVoice/` normally, or `QwenVoice-Debug/` when `DebugMode.isEnabled` (so dev work never touches real data). `QWENVOICE_APP_SUPPORT_DIR` overrides the root. `AppDefaults` mirrors this (a `…app.debug` prefs suite when the toggle is on).
 
 ## Architecture
 
@@ -96,7 +96,7 @@ There is **no automated UI-driving, smoke, or benchmark harness**. Behavioral va
 
 ## Release & iPhone status
 
-macOS-first. Signoff = green build + `scripts/release.sh` package (sign/notarize/staple → `Vocello-macos26.dmg`) + manual smoke of `build/Release/Vocello.app`. CI is a single workflow (`.github/workflows/release.yml`): `package` (macOS DMG) + `compile-ios` (iOS compile-safety only) — no tests, benches, or signed IPA.
+macOS-first. Signoff = green build + `scripts/release.sh` package (sign/notarize/staple → `build/Vocello-macos26.dmg`) + manual smoke of the packaged `build/Vocello.app`. CI is a single workflow (`.github/workflows/release.yml`): `package` (macOS DMG) + `compile-ios` (iOS compile-safety only) — no tests, benches, or signed IPA.
 
 iPhone is compile-safe only; on-device generation, memory proof, and TestFlight are deferred pending Apple's `com.apple.developer.kernel.increased-memory-limit` entitlement for `com.patricedery.vocello` + `com.patricedery.vocello.engine-extension`. The copy-ready Apple request packet is [`docs/reference/ios-increased-memory-entitlement-request.md`](docs/reference/ios-increased-memory-entitlement-request.md). (The previous on-device deploy/proof tooling was removed and would need re-establishing when iPhone work resumes.)
 

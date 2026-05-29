@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-all}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FOUNDATION_BUILD_ROOT="$ROOT_DIR/build/Debug/foundation/local-builds"
+FOUNDATION_BUILD_ROOT="$ROOT_DIR/build/foundation/local-builds"
 PROJECT_FILE="$ROOT_DIR/QwenVoice.xcodeproj"
 MATRIX_PATH="$ROOT_DIR/config/apple-platform-capability-matrix.json"
 . "$ROOT_DIR/scripts/lib/shared.sh"
@@ -51,12 +51,15 @@ build_macos() {
   xcodebuild \
     -project "$PROJECT_FILE" \
     -scheme QwenVoice \
+    -configuration Release \
     -destination 'platform=macOS' \
     -derivedDataPath "$derived_data_path" \
     -resultBundlePath "$result_bundle_path" \
     -resultBundleVersion 3 \
     CODE_SIGN_IDENTITY="-" \
     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+    SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+    SWIFT_COMPILATION_MODE="incremental" \
     build
 }
 

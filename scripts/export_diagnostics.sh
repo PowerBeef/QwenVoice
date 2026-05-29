@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
-OUTPUT_ROOT="${1:-$PROJECT_DIR/build/Debug/diagnostics/qwenvoice-diagnostics-$TIMESTAMP}"
+OUTPUT_ROOT="${1:-$PROJECT_DIR/build/diagnostics/qwenvoice-diagnostics-$TIMESTAMP}"
 
 mkdir -p "$OUTPUT_ROOT"
 
@@ -22,8 +22,8 @@ mkdir -p "$OUTPUT_ROOT"
 cp "$PROJECT_DIR/config/apple-platform-capability-matrix.json" "$OUTPUT_ROOT/" 2>/dev/null || true
 cp "$PROJECT_DIR/Sources/Resources/qwenvoice_contract.json" "$OUTPUT_ROOT/" 2>/dev/null || true
 
-if [ -f "$PROJECT_DIR/build/Release/release-metadata.txt" ]; then
-    cp "$PROJECT_DIR/build/Release/release-metadata.txt" "$OUTPUT_ROOT/"
+if [ -f "$PROJECT_DIR/build/release-metadata.txt" ]; then
+    cp "$PROJECT_DIR/build/release-metadata.txt" "$OUTPUT_ROOT/"
 fi
 
 /usr/bin/log show \

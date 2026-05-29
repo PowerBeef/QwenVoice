@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-RELEASE_DIR="$PROJECT_DIR/build/Release"
+RELEASE_DIR="$PROJECT_DIR/build"
 
 APP_PATH="${1:-$RELEASE_DIR/Vocello.app}"
 DMG_BASENAME="${2:-Vocello-macos26}"

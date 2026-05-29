@@ -21,7 +21,7 @@ if [ -z "${ROOT_DIR:-}" ]; then
     ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 
-BUILD_CACHE_DIR="${BUILD_CACHE_DIR:-$ROOT_DIR/build/Debug/.cache}"
+BUILD_CACHE_DIR="${BUILD_CACHE_DIR:-$ROOT_DIR/build/.cache}"
 PROJECT_YML="$ROOT_DIR/project.yml"
 PROJECT_FILE="$ROOT_DIR/QwenVoice.xcodeproj"
 PROJECT_RESOLVED="$PROJECT_FILE/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
@@ -133,97 +133,61 @@ quit_app_if_running() {
     sleep 0.5
 }
 
+# Remove the now-legacy dual-folder split (build/Debug + build/Release) and the
+# retired uitest dir. The single-package layout lives directly under build/.
 prune_legacy_build_layout() {
     local killed=false
     local path
-
     for path in \
-        "$ROOT_DIR/build/DerivedData" \
-        "$ROOT_DIR/build/foundation" \
-        "$ROOT_DIR/build/uitest" \
-        "$ROOT_DIR/build/release-build-settings.log" \
-        "$ROOT_DIR/build/release-metadata.txt" \
-        "$ROOT_DIR/build/xcodebuild-release.log"; do
+        "$ROOT_DIR/build/Debug" \
+        "$ROOT_DIR/build/Release" \
+        "$ROOT_DIR/build/uitest"; do
         if [ -e "$path" ]; then
+            if ! $killed; then
+                quit_app_if_running
+                killed=true
+            fi
             echo "==> Removing legacy build layout item: $path"
             rm -rf "$path"
         fi
     done
-
-    if [ -d "$ROOT_DIR/build/Vocello.app" ]; then
-        if ! $killed; then
-            quit_app_if_running
-            killed=true
-        fi
-        echo "==> Removing legacy build layout item: $ROOT_DIR/build/Vocello.app"
-        rm -rf "$ROOT_DIR/build/Vocello.app"
-    fi
-
-    while IFS= read -r -d '' path; do
-        echo "==> Removing legacy build layout item: $path"
-        rm -f "$path"
-    done < <(find "$ROOT_DIR/build" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
 }
 
-# After a Debug build succeeds, enforce single-resident policy: remove
-# any extra Vocello.app under build/Debug that is not the canonical
-# published Debug app. Leave DerivedData intact for incremental builds.
-prune_stale_debug_builds() {
+# Single-resident policy for the one build/ folder. Keeps build/Vocello.app
+# (staged by both build.sh and release.sh) and, when an output name is given
+# (release), build/<output_name>.dmg; removes any other Vocello.app (outside
+# DerivedData) or stray *.dmg. Leaves DerivedData intact for incremental builds.
+prune_stale_builds() {
+    local output_name="${1:-}"
     prune_legacy_build_layout
 
-    local keep="$ROOT_DIR/build/Debug/Vocello.app"
+    local keep_app="$ROOT_DIR/build/Vocello.app"
     local killed=false
-    while IFS= read -r -d '' candidate; do
-        if [ "$candidate" = "$keep" ]; then
-            continue
-        fi
-        if [[ "$candidate" == "$ROOT_DIR/build/Debug/DerivedData/"* ]]; then
-            continue
-        fi
-        if ! $killed; then
-            quit_app_if_running
-            killed=true
-        fi
-        echo "==> Removing stale Debug build: $candidate"
-        rm -rf "$candidate"
-    done < <(find "$ROOT_DIR/build/Debug" -type d -name "Vocello.app" -prune -print0 2>/dev/null)
-}
-
-# After a Release build succeeds, enforce single-resident policy:
-# - Remove any Release/Vocello.app under build/Release that isn't the
-#   canonical published Release app.
-# - Remove any build/Release/*.dmg whose basename differs from the just-built one.
-prune_stale_release_builds() {
-    local output_name="${1:?prune_stale_release_builds requires output_name}"
-    local keep_app="$ROOT_DIR/build/Release/Vocello.app"
-    local keep_dmg="$ROOT_DIR/build/Release/${output_name}.dmg"
-    local killed=false
-
-    prune_legacy_build_layout
-
     while IFS= read -r -d '' candidate; do
         if [ "$candidate" = "$keep_app" ]; then
             continue
         fi
-        if [[ "$candidate" == "$ROOT_DIR/build/Release/DerivedData/"* ]] \
-            || [[ "$candidate" == "$ROOT_DIR/build/Release/"*"/DerivedData/"* ]]; then
+        if [[ "$candidate" == "$ROOT_DIR/build/DerivedData/"* ]]; then
             continue
         fi
         if ! $killed; then
             quit_app_if_running
             killed=true
         fi
-        echo "==> Removing stale Release build: $candidate"
+        echo "==> Removing stale build: $candidate"
         rm -rf "$candidate"
-    done < <(find "$ROOT_DIR/build/Release" -type d -name "Vocello.app" -prune -print0 2>/dev/null)
+    done < <(find "$ROOT_DIR/build" -type d -name "Vocello.app" -prune -print0 2>/dev/null)
 
-    while IFS= read -r -d '' candidate; do
-        if [ "$candidate" = "$keep_dmg" ]; then
-            continue
-        fi
-        echo "==> Removing stale DMG: $candidate"
-        rm -f "$candidate"
-    done < <(find "$ROOT_DIR/build/Release" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
+    if [ -n "$output_name" ]; then
+        local keep_dmg="$ROOT_DIR/build/${output_name}.dmg"
+        while IFS= read -r -d '' candidate; do
+            if [ "$candidate" = "$keep_dmg" ]; then
+                continue
+            fi
+            echo "==> Removing stale DMG: $candidate"
+            rm -f "$candidate"
+        done < <(find "$ROOT_DIR/build" -maxdepth 1 -type f -name '*.dmg' -print0 2>/dev/null)
+    fi
 }
 
 # Run xcodebuild, piping output through xcbeautify when it's on PATH and

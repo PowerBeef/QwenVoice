@@ -93,6 +93,7 @@
 		4E6467D56FBF3DE606E26839 /* NativeStreamingSynthesisSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06720D555739C2E8AE36A913 /* NativeStreamingSynthesisSession.swift */; };
 		4EC0A4406C6A83061B2D8C91 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = DA662A93B5FC56B54CAA0A2E /* MLX */; };
 		5012914CE6C6153D70138396 /* AppEngineSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C69234A301AA6DDDBFDFD7BD /* AppEngineSelection.swift */; };
+		5123CE70A9FCB0491D5FFAEB /* DebugMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE54BCF401CCC7CA234A148B /* DebugMode.swift */; };
 		51250E1F1F94E164B9702E30 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9445661C0EDF79BBEAA434C6 /* MLXAudioCore */; };
 		526AB39EEB0CE64693396887 /* QwenVoiceEngineService.xpc in CopyFiles */ = {isa = PBXBuildFile; fileRef = 34A69E43A7FA75DD38753845 /* QwenVoiceEngineService.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5377189B01790E90BDEEE4AE /* eric.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3B9B756B0B79BA2E94926CD3 /* eric.wav */; };
@@ -556,6 +557,7 @@
 		D8C3DAC6B72B4D38C5870A78 /* VocelloiOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VocelloiOS.entitlements; sourceTree = "<group>"; };
 		DB8833440B1C4055104BE1C4 /* GenerationMigrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationMigrations.swift; sourceTree = "<group>"; };
 		DC061E247067EDDB99401F09 /* IOSModelDeliverySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSModelDeliverySupport.swift; sourceTree = "<group>"; };
+		DE54BCF401CCC7CA234A148B /* DebugMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugMode.swift; sourceTree = "<group>"; };
 		E1C9AF9CA9731358DD0649B3 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
 		E1F796BD7F461844DF75A7EE /* QwenVoiceEngineSupport.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = QwenVoiceEngineSupport.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationSheet.swift; sourceTree = "<group>"; };
@@ -997,6 +999,7 @@
 				006AC6BD98420562AC6A931C /* AudioService.swift */,
 				297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */,
 				0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */,
+				DE54BCF401CCC7CA234A148B /* DebugMode.swift */,
 				C5D4F51C8BBABFB4246536FD /* GenerationLibraryEvents.swift */,
 				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				2A4F18EF6E8C4624607CF181 /* LongTextGenerationRouter.swift */,
@@ -1681,6 +1684,7 @@
 				AD4BB14FA57891024AF706D2 /* CustomVoiceCoordinator.swift in Sources */,
 				369B39A3B4D6D2C2FE6B956F /* CustomVoiceView.swift in Sources */,
 				6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */,
+				5123CE70A9FCB0491D5FFAEB /* DebugMode.swift in Sources */,
 				6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */,
 				EEFE4FE49F13B576053735F5 /* EmotionPreset.swift in Sources */,
 				5E975521FC8B355333145278 /* FlowLayout.swift in Sources */,
@@ -1892,209 +1896,6 @@
 			};
 			name = Release;
 		};
-		2948D566F93EF3E13DCA0AED /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				GENERATE_INFOPLIST_FILE = YES;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.qvoice.backend-core";
-				PRODUCT_MODULE_NAME = QwenVoiceBackendCore;
-				PRODUCT_NAME = QwenVoiceBackendCore;
-				SDKROOT = auto;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SWIFT_VERSION = 6;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
-		37A78EB76A3C16C21610FF29 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "$(QVOICE_IOS_EXTENSION_ENTITLEMENTS)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
-				DEVELOPMENT_TEAM = "$(QWENVOICE_DEVELOPMENT_TEAM)";
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Sources/iOSEngineExtension/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.patricedery.vocello.engine-extension";
-				PRODUCT_MODULE_NAME = VocelloEngineExtension;
-				PRODUCT_NAME = VocelloEngineExtension;
-				QVOICE_IOS_APP_GROUP_IDENTIFIER = group.com.patricedery.vocello.shared;
-				QVOICE_IOS_EXTENSION_ENTITLEMENTS = Sources/iOSEngineExtension/VocelloEngineExtension.entitlements;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		470AE23C861E20AA7FB8465F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"$(inherited)",
-					"DEBUG=1",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		4C700C64E1867BF723EE1B43 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "";
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				GENERATE_INFOPLIST_FILE = YES;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.qvoice.core;
-				PRODUCT_MODULE_NAME = QwenVoiceCore;
-				PRODUCT_NAME = QwenVoiceCore;
-				SDKROOT = auto;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Sources/QwenVoiceCore/QwenVoiceCore-Bridging-Header.h";
-				SWIFT_VERSION = 6;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
-		4EC66D2B194F4FB4C5C8426F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
-				COMBINE_HIDPI_IMAGES = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Sources/QwenVoiceEngineService/Info.plist;
-				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.qwenvoice.app.engine-service";
-				PRODUCT_MODULE_NAME = QwenVoiceEngineService;
-				PRODUCT_NAME = QwenVoiceEngineService;
-				SDKROOT = macosx;
-				SWIFT_VERSION = 6;
-			};
-			name = Debug;
-		};
-		59F2DE1C9EAA5F175E40867D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "";
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				GENERATE_INFOPLIST_FILE = YES;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.native;
-				PRODUCT_MODULE_NAME = QwenVoiceNative;
-				PRODUCT_NAME = QwenVoiceNative;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 6;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
 		5AC32F3ED50B55E376F75FBB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2215,43 +2016,6 @@
 			};
 			name = Release;
 		};
-		860152904F9AE769E1667A52 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = VocelloIOSIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "$(QVOICE_IOS_APP_ENTITLEMENTS)";
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
-				DEVELOPMENT_TEAM = "$(QWENVOICE_DEVELOPMENT_TEAM)";
-				EXECUTABLE_NAME = Vocello;
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Sources/iOS/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Vocello;
-				INFOPLIST_KEY_QVoiceModelCatalogURL = "$(QVOICE_IOS_DEFAULT_MODEL_CATALOG_URL)";
-				INFOPLIST_KEY_QVoiceSharedAppGroupIdentifier = "$(QVOICE_IOS_APP_GROUP_IDENTIFIER)";
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.patricedery.vocello;
-				PRODUCT_MODULE_NAME = QVoiceiOS;
-				PRODUCT_NAME = Vocello;
-				QVOICE_IOS_APP_ENTITLEMENTS = Sources/iOS/VocelloiOS.entitlements;
-				QVOICE_IOS_APP_GROUP_IDENTIFIER = group.com.patricedery.vocello.shared;
-				QVOICE_IOS_DEFAULT_MODEL_CATALOG_URL = "bundle://vocello/ios/catalog/v1/models.json";
-				SDKROOT = iphoneos;
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_VERSION = 6;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
 		9A66A92F39112D5A406DB7AB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2308,35 +2072,6 @@
 			};
 			name = Release;
 		};
-		D1198E20882E12A9DDAFF9CD /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Sources/QwenVoice.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 16;
-				ENABLE_HARDENED_RUNTIME = YES;
-				INFOPLIST_FILE = Sources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Vocello;
-				INFOPLIST_KEY_QwenVoiceTeamIdentifier = "$(QWENVOICE_DEVELOPMENT_TEAM)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.qwenvoice.app;
-				PRODUCT_MODULE_NAME = QwenVoice;
-				PRODUCT_NAME = Vocello;
-				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG QW_UI_LIQUID";
-				SWIFT_VERSION = 6;
-				WRAPPER_NAME = Vocello.app;
-			};
-			name = Debug;
-		};
 		D4FACB4706117D4E27BD82BE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2369,33 +2104,6 @@
 			};
 			name = Release;
 		};
-		DADEB91BD0B9AE8B874ABE53 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "";
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				GENERATE_INFOPLIST_FILE = YES;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.qwenvoice.engine-support";
-				PRODUCT_MODULE_NAME = QwenVoiceEngineSupport;
-				PRODUCT_NAME = QwenVoiceEngineSupport;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_VERSION = 6;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
 		DEEEED16F9F09B1E3EBBA12F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2423,83 +2131,74 @@
 		0C5B51AF6C1B9DC43AB9AE4E /* Build configuration list for PBXNativeTarget "QwenVoiceCore" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4C700C64E1867BF723EE1B43 /* Debug */,
 				0A7366F00039838673A7CFC7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		19D569918E369A8988632FB3 /* Build configuration list for PBXNativeTarget "QwenVoiceBackendCore" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2948D566F93EF3E13DCA0AED /* Debug */,
 				D4FACB4706117D4E27BD82BE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		2BBBE90B1D4F2BB23C26AB97 /* Build configuration list for PBXNativeTarget "QwenVoice" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D1198E20882E12A9DDAFF9CD /* Debug */,
 				9A66A92F39112D5A406DB7AB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		3D5201A5ADBACFF7CB82F3ED /* Build configuration list for PBXNativeTarget "QwenVoiceNative" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				59F2DE1C9EAA5F175E40867D /* Debug */,
 				5AC32F3ED50B55E376F75FBB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		6AA8DFD7D4CE6B5CD59477A4 /* Build configuration list for PBXNativeTarget "QwenVoiceEngineSupport" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				DADEB91BD0B9AE8B874ABE53 /* Debug */,
 				A439D252C09AFF17EBA24700 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		8953407C6DBB64854F3F49F7 /* Build configuration list for PBXNativeTarget "QwenVoiceEngineService" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4EC66D2B194F4FB4C5C8426F /* Debug */,
 				DEEEED16F9F09B1E3EBBA12F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		8B68E0265A99FDBC3EFCB83B /* Build configuration list for PBXNativeTarget "VocelloEngineExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				37A78EB76A3C16C21610FF29 /* Debug */,
 				20C0834B84F03A640450D634 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		A3D129E6D5A19BBE074BCC71 /* Build configuration list for PBXProject "QwenVoice" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				470AE23C861E20AA7FB8465F /* Debug */,
 				65C58766B1E4E77FF0C9ABFB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		E3E7DAD2DB39D506CB26F34E /* Build configuration list for PBXNativeTarget "VocelloiOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				860152904F9AE769E1667A52 /* Debug */,
 				5F24A61769F4581AA42E5E66 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 

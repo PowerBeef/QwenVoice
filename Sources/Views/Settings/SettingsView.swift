@@ -42,6 +42,13 @@ struct SettingsView: View {
     @State private var modelToDelete: TTSModel?
     @State private var showDeleteConfirmation = false
 
+    // Hidden "secret debug toggle": tap the version label 7× to flip the
+    // persisted DebugMode flag (telemetry/probing + isolated QwenVoice-Debug
+    // data). Applies on next launch. The QWENVOICE_DEBUG env var is the
+    // equivalent dev/script path.
+    @State private var showDebugToggledAlert = false
+    @State private var debugModeNowEnabled = false
+
     // Empty FocusState declared so SwiftUI doesn't assert a
     // default tracked focus target on the form. Combined with
     // the first-responder reset below, this keeps the page
@@ -129,6 +136,18 @@ struct SettingsView: View {
                             Text(appVersion)
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.tertiary)
+                                .onTapGesture(count: 7) {
+                                    debugModeNowEnabled = DebugMode.togglePersistedFlag()
+                                    showDebugToggledAlert = true
+                                }
+                                .alert(
+                                    debugModeNowEnabled ? "Debug mode enabled" : "Debug mode disabled",
+                                    isPresented: $showDebugToggledAlert
+                                ) {
+                                    Button("OK", role: .cancel) {}
+                                } message: {
+                                    Text("Relaunch Vocello to apply. While on, debug mode isolates data in the QwenVoice-Debug folder and (soon) enables telemetry and probing.")
+                                }
                             Button("Reveal in Finder") {
                                 NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
                             }

@@ -7,6 +7,13 @@ options:
   xcodeVersion: "26.0"
   generateEmptyDirectories: true
 
+# Single shippable config. There is no separate Debug config / DEBUG symbol —
+# debug capabilities are gated at runtime via DebugMode (env QWENVOICE_DEBUG or
+# the hidden version-tap toggle). scripts/build.sh builds this config -Onone for
+# a fast local loop; scripts/release.sh builds it optimized for the DMG.
+configs:
+  Release: release
+
 packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
@@ -26,7 +33,13 @@ schemes:
       targets:
         QwenVoice: all
     run:
-      config: Debug
+      config: Release
+    test:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Release
     archive:
       config: Release
 
@@ -35,7 +48,13 @@ schemes:
       targets:
         VocelloiOS: all
     run:
-      config: Debug
+      config: Release
+    test:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Release
     archive:
       config: Release
 
@@ -105,8 +124,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
       configs:
-        Debug:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG QW_UI_LIQUID"
         Release:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: QW_UI_LIQUID
     dependencies:

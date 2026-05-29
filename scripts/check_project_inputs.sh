@@ -58,13 +58,7 @@ PROHIBITED_SURFACES=(
     "docs/reference/live-testing.md"
     "docs/reference/instruments-profiling.md"
     "docs/reference/backend-hardening-validation-evidence.md"
-    "build/DerivedData"
-    "build/foundation"
     "build/uitest"
-    "build/Vocello.app"
-    "build/Vocello-macos26.dmg"
-    "build/release-metadata.txt"
-    "build/xcodebuild-release.log"
 )
 
 for prohibited_surface in "${PROHIBITED_SURFACES[@]}"; do

@@ -5,8 +5,6 @@ final class AppStartupCoordinator: ObservableObject {
     @Published private(set) var launchDiagnostics: AppLaunchDiagnosticsSnapshot?
 
     func setupAppSupport() {
-        AppPaths.migrateLegacyDataIfNeeded()
-
         let fm = FileManager.default
         let outputSubdirectories = Set(TTSModel.all.map(\.outputSubfolder))
 

@@ -7,15 +7,17 @@ ROOT_DIR="$PROJECT_DIR"
 PROJECT_FILE="$PROJECT_DIR/QwenVoice.xcodeproj"
 SCHEME="QwenVoice"
 CONFIGURATION="Release"
+# Single-package layout: release and dev share build/ (and its DerivedData +
+# .cache). release.sh builds the Release config optimized (-O); build.sh builds
+# it -Onone. Switching between them triggers a recompile, which is fine.
 BUILD_ROOT="$PROJECT_DIR/build"
-BUILD_DIR="$BUILD_ROOT/Release"
+BUILD_DIR="$BUILD_ROOT"
 SOURCE_PACKAGES_DIR="$BUILD_DIR/source-packages"
 DERIVED_DATA_PATH="$BUILD_DIR/DerivedData"
 BUILD_RESULT_BUNDLE_PATH="$BUILD_DIR/macos-release-build.xcresult"
 DEFAULT_OUTPUT_NAME="Vocello-macos26"
 TOTAL_START="$(date +%s)"
 BUILD_CACHE_DIR="$BUILD_DIR/.cache"
-LOCAL_RELEASE_DATA_ID=""
 
 # shellcheck source=lib/build_cache.sh
 . "$SCRIPT_DIR/lib/build_cache.sh"
@@ -290,8 +292,6 @@ APP_SOURCE="$BUILT_PRODUCTS_DIR/$WRAPPER_NAME"
 APP_PATH="$BUILD_DIR/$WRAPPER_NAME"
 rm -rf "$APP_PATH"
 cp -a "$APP_SOURCE" "$APP_PATH"
-LOCAL_RELEASE_DATA_ID="$(/usr/bin/uuidgen | /usr/bin/tr '[:upper:]' '[:lower:]')"
-/usr/bin/plutil -replace QwenVoiceLocalReleaseDataID -string "$LOCAL_RELEASE_DATA_ID" "$APP_PATH/Contents/Info.plist"
 
 APP_RESOURCES="$APP_PATH/Contents/Resources"
 rm -rf "$APP_RESOURCES/backend" "$APP_RESOURCES/python" "$APP_RESOURCES/vendor" 2>/dev/null || true
@@ -397,7 +397,6 @@ METADATA_PATH="$BUILD_DIR/release-metadata.txt"
     echo "dmg_name=$OUTPUT_NAME.dmg"
     echo "app_wrapper_name=$WRAPPER_NAME"
     echo "app_executable_name=$EXECUTABLE_NAME"
-    echo "local_release_data_id=$LOCAL_RELEASE_DATA_ID"
     echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 } > "$METADATA_PATH"
 echo "[7/7] Release metadata written to $METADATA_PATH ($(step_time "$STEP_START"))"
@@ -410,4 +409,4 @@ echo "  DMG:      $DMG_PATH"
 echo "  Metadata: $METADATA_PATH"
 echo "  Total:    ${TOTAL_ELAPSED}s"
 
-prune_stale_release_builds "$OUTPUT_NAME"
+prune_stale_builds "$OUTPUT_NAME"
