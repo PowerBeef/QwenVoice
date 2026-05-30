@@ -105,13 +105,13 @@ Toggle those in System Settings, relaunch, and compare screenshots.
 
 ## Audio listening review (output-quality gate)
 
-The mandatory perceptual gate before merging a backend change (the objective `QC`/`WER%` tools are a
+The mandatory perceptual gate before merging a backend change (the objective `QC` tool is a
 tripwire, not a substitute — see "Guarding output quality" in
 [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md)). Per fixed-corpus take:
 1. Generate it (functional flow above), then click the inline **Player** play control to audition.
 2. Listen for: clicks/pops (chunk-boundary discontinuities), dropouts/gaps, clipping/distortion, wrong or
    garbled words, unnatural prosody/pacing, timbre drift vs the known-good baseline.
-3. First check the summarizer: any `QC=fail` or spiking `WER%` is a hard stop — investigate before the
+3. First check the summarizer: any `QC=fail` is a hard stop — investigate before the
    listen. Record the listen verdict (pass/fail + notes) in the benchmark snapshot / `HISTORY.md` note.
 Note: computer-use can drive playback and confirm the Player state by sight, but **a human ear is the
 judge of subtle quality** — agent runs surface the objective flags; sign-off on "sounds great" is yours.

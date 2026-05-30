@@ -82,19 +82,6 @@ final class CustomVoiceCoordinator: ObservableObject {
                     summary: result.telemetrySummary
                 )
                 GenerationTelemetryMerger.scheduleMerge(generationID: generationRequest.generationID)
-                if SpeechContentCheck.isEnabled {
-                    let qcID = generationRequest.generationID
-                    let qcText = draft.text
-                    let qcPath = result.audioPath
-                    Task.detached(priority: .background) {
-                        await SpeechContentCheck.run(
-                            generationID: qcID,
-                            audioPath: qcPath,
-                            referenceText: qcText,
-                            appSupportDirectory: AppPaths.appSupportDir
-                        )
-                    }
-                }
 
                 var generation = Generation(
                     text: draft.text,

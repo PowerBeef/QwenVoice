@@ -32,7 +32,5 @@
     <string>$(QWENVOICE_DEVELOPMENT_TEAM)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Vocello can transcribe generated audio on-device to verify it matches your text. This optional quality check runs only when you enable it; no audio leaves your Mac.</string>
 </dict>
 </plist>

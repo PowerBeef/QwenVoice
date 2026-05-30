@@ -458,7 +458,7 @@ to watch is the dominant `timingsMS` substage (e.g. `qwen_stream_step_eval_total
 ### Guarding output quality
 
 Perf is only half the story — a backend change must not introduce **audio** regressions (glitches,
-dropouts, garbled words, "sounds worse"). Three layers, increasing in what they catch and what they cost:
+dropouts, garbled words, "sounds worse"). Two layers, increasing in what they catch and what they cost:
 
 1. **Reference-free defect detector — automatic, every run.** The engine runs a per-sample QC pass on
    the final PCM (extends `PCM16StreamLimiter`) and writes an `audioQC` verdict into the engine row:
@@ -466,26 +466,15 @@ dropouts, garbled words, "sounds worse"). Three layers, increasing in what they 
    (chunk-boundary discontinuities — the decoder-drift class), `dropout:Nms` (mid-utterance silence),
    `near_silent` (dead output). Surfaced as the summarizer's **`QC`** column. **Any `fail` blocks
    promoting a backend change.** Thresholds are conservative + tunable (`makeAudioQCReport`).
-2. **ASR content accuracy — opt-in.** Launch with `QWENVOICE_TRANSCRIPT_CHECK=1`: after each take the app
-   transcribes it with Apple Speech (forced **on-device**, `requiresOnDeviceRecognition` — audio never
-   leaves the Mac) using a fixed **`en-US`** recognizer (the corpus is English; not the system locale),
-   and records word error rate vs the input text → the summarizer's **`WER%`** column. Catches garbled /
-   wrong / dropped words. **Requires:** (a) Speech Recognition **already granted** to the app (System Settings →
-   Privacy & Security → Speech Recognition) — the check **never prompts on its own**; it only runs when
-   authorized, else skips silently (a background check must not pop a permission dialog mid-generation,
-   and locally ad-hoc-signed dev builds reset TCC per rebuild, so it would otherwise re-prompt after
-   every build), and (b) the **en-US on-device model installed** (System Settings → Keyboard → Dictation
-   with English (US)). If either is missing it **skips gracefully** (no row, no upload, `WER%` shows `-`).
-   Adds latency — dev/QC only.
-3. **Human/agent listening pass — mandatory before merging a backend change.** No automated check judges
+2. **Human/agent listening pass — mandatory before merging a backend change.** No automated check judges
    subtle perceptual quality (timbre, prosody, naturalness). Generate the fixed corpus, play each take
    (drive via computer-use, see [`ui-driving.md`](ui-driving.md)), and listen for hiccups/artifacts/
    quality. Record the verdict in the benchmark snapshot / `HISTORY.md` note. **This is the real quality
-   gate — the objective tools are a fast tripwire, not a substitute for ears.**
+   gate — the objective `audioQC` tripwire is fast, not a substitute for ears.**
 
-Workflow: run the corpus → any `QC=fail` or spiking `WER%` is a hard stop (investigate before merging) →
-otherwise do the listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free
-default; committed quality-check scripts/baselines under `benchmarks/` are also permitted.)
+Workflow: run the corpus → any `QC=fail` is a hard stop (investigate before merging) → otherwise do the
+listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free default; committed
+quality-check scripts/baselines under `benchmarks/` are also permitted.)
 
 ---
 

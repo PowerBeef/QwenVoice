@@ -79,11 +79,6 @@ def load_runs(diag_dir):
     """Join engine + app rows by generationID. Returns list of per-run dicts."""
     engine = {r.get("generationID"): r for r in read_jsonl(os.path.join(diag_dir, "engine", "generations.jsonl"))}
     app = {r.get("generationID"): r for r in read_jsonl(os.path.join(diag_dir, "app", "generations.jsonl"))}
-    # Opt-in ASR content-accuracy results, written by SpeechContentCheck.
-    content = {
-        r.get("generationID"): r
-        for r in read_jsonl(os.path.join(diag_dir, "app", "content-checks.jsonl"))
-    }
 
     runs = []
     for gid, e in engine.items():
@@ -93,7 +88,6 @@ def load_runs(diag_dir):
         a = app.get(gid) or {}
         app_timings = a.get("timingsMS") or {}
         qc = e.get("audioQC") or {}
-        wer = (content.get(gid) or {}).get("werPercent")
         trim_count, pressure_count, worst = count_memory_events(e, summary)
         runs.append(
             {
@@ -128,10 +122,9 @@ def load_runs(diag_dir):
                 # GPU peak MB at pipeline boundaries (mlxMemoryByStage) — shows WHERE
                 # GPU memory grows and how much a trim reclaims.
                 "gpuByStage": gpu_peak_by_stage(e.get("mlxMemoryByStage") or {}),
-                # Reference-free audio-quality verdict (engine) + opt-in ASR WER (app).
+                # Reference-free audio-quality verdict (engine).
                 "qcVerdict": qc.get("verdict"),
                 "qcFlags": qc.get("flags") or [],
-                "wer": wer,
             }
         )
     return runs
@@ -285,7 +278,6 @@ def emit_ledger_row(cells, label):
         fmt(med(r["physFootMB"] for r in group), 0),
         fmt_trims(group),
         cell_qc(group),
-        fmt(med(r["wer"] for r in group), 1),
         note or "—",
     ]
     print("| " + " | ".join(cols) + " |")
@@ -327,7 +319,7 @@ def main():
     header = (
         f"{'mode':<8} {'model':<26} {'state':<5} {'n':>2} "
         f"{'RTF':>6} {'tok/s':>7} {'TTFC ms':>8} {'decode ms':>9} "
-        f"{'peakGPU':>8} {'physFoot':>8} {'trims':>9} {'QC':<12} {'WER%':>6}"
+        f"{'peakGPU':>8} {'physFoot':>8} {'trims':>9} {'QC':<12}"
     )
     tiers = sorted({r["deviceClass"] for r in runs})
     forced = any(r["deviceClassForced"] for r in runs)
@@ -352,8 +344,7 @@ def main():
             f"{fmt(med(r['peakGpuMB'] for r in group), 0):>8} "
             f"{fmt(med(r['physFootMB'] for r in group), 0):>8} "
             f"{fmt_trims(group):>9} "
-            f"{cell_qc(group):<12} "
-            f"{fmt(med(r['wer'] for r in group), 1):>6}"
+            f"{cell_qc(group):<12}"
         )
 
     # GPU memory by pipeline stage (peak MB) — shows WHERE GPU memory grows and how
@@ -388,8 +379,7 @@ def main():
     )
     print(
         "QC = reference-free audio defect verdict (pass / warn / fail:flags — "
-        "nonfinite/clipping/clicks/dropout/near_silent). WER% = ASR content-accuracy "
-        "(opt-in QWENVOICE_TRANSCRIPT_CHECK; '-' when not run). Neither judges subtle "
+        "nonfinite/clipping/clicks/dropout/near_silent). It does not judge subtle "
         "perceptual quality — that needs the listening pass (see telemetry doc)."
     )
     return 0

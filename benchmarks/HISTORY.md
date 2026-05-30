@@ -14,7 +14,7 @@ Columns: date · short git SHA the run measured · cell (mode/model/state) ·
 RTF (audioSec/wallSec, >1 = faster than realtime) · tok/s (codec tokens/s) ·
 TTFC ms (submit→first chunk) · physFoot MB (phys_footprint peak, the OOM-relevant
 figure) · trims (memory_trim count [worst level]) · QC (reference-free audio
-defect verdict pass/warn/fail) · WER% (ASR content accuracy; '-' if not run) · note.
+defect verdict pass/warn/fail) · note.
 
 Compare two runs with `git diff`, or ask the agent to diff the deltas. This is a
 reference ledger, not an auto-compared baseline gate.
@@ -22,5 +22,5 @@ reference ledger, not an auto-compared baseline gate.
 
 # Performance history
 
-| date | sha | cell | RTF | tok/s | TTFC ms | physFoot MB | trims | QC | WER% | note |
-|------|-----|------|-----|-------|---------|-------------|-------|----|------|------|
+| date | sha | cell | RTF | tok/s | TTFC ms | physFoot MB | trims | QC | note |
+|------|-----|------|-----|-------|---------|-------------|-------|----|------|
