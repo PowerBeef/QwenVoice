@@ -2,12 +2,6 @@ import Foundation
 
 enum AppPaths {
     static let appSupportOverrideEnvironmentKey = "QWENVOICE_APP_SUPPORT_DIR"
-    /// Overrides ONLY the models directory, leaving diagnostics/history/outputs in
-    /// the resolved `appSupportDir`. Lets a debug-isolated run (separate
-    /// diagnostics/history folder) reuse the real app's downloaded model weights
-    /// without copying or symlinking them — useful on storage-tight machines when
-    /// capturing telemetry/benchmarks. Unset ⇒ `appSupportDir/models` as before.
-    static let modelsDirOverrideEnvironmentKey = "QWENVOICE_MODELS_DIR"
 
     // Single package: production data lives in `QwenVoice/`. When the runtime
     // debug toggle is on, dev work is isolated in `QwenVoice-Debug/` so it never
@@ -25,12 +19,7 @@ enum AppPaths {
     }
 
     static var modelsDir: URL {
-        if let overridePath = ProcessInfo.processInfo.environment[modelsDirOverrideEnvironmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !overridePath.isEmpty {
-            return URL(fileURLWithPath: overridePath, isDirectory: true)
-        }
-        return appSupportDir.appendingPathComponent("models", isDirectory: true)
+        appSupportDir.appendingPathComponent("models", isDirectory: true)
     }
 
     static var outputsDir: URL {

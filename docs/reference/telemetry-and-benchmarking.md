@@ -69,7 +69,6 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
 |---|---|
 | `QWENVOICE_SUPPRESS_WARMUP=1` | Skips proactive prewarm/clone‑priming so the first generation records its own **cold** load (`MacGenerationWarmupCoordinator`). App‑process only. |
 | `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` | Forces the device‑memory tier (`NativeDeviceClassGate`), propagated to the engine over `initialize`. Runs the constrained‑tier code paths so memory **pressure is measurable on any hardware**. See §11 "Memory & pressure pass". Accepts the `NativeDeviceMemoryClass` rawValues + aliases `8gb`/`16gb`. |
-| `QWENVOICE_MODELS_DIR=<path>` | Overrides **only** the models directory (`AppPaths.modelsDir`); diagnostics/history/outputs stay in the resolved app‑support dir. Lets a debug‑isolated run (`QWENVOICE_DEBUG=1`) reuse the real app's downloaded weights (`~/Library/Application Support/QwenVoice/models`) **without copying or symlinking** — so a storage‑tight machine captures telemetry into the isolated `QwenVoice-Debug/` folder while sharing real model weights. (Symlinking models instead breaks the prepared‑cache rebuild.) |
 
 ---
 
@@ -355,10 +354,12 @@ package does — and records — its own cold load**. Leave it unset for normal 
 
 **Storage‑safe order (disk‑tight machines):** process one cell at a time — download that package
 → run cold + 3 warm → delete the package (`QwenVoice-Debug/models/<pkg>`) → next cell. Peak disk ≈
-one package (~2.3–4 GB) instead of all six (~12–18 GB). If the **real** app already has the weights you
-want, skip the download entirely: launch with `QWENVOICE_MODELS_DIR="$HOME/Library/Application Support/QwenVoice/models"`
-so the debug‑isolated run reuses them in place (no copy, no symlink) while telemetry/history still land
-in the isolated `QwenVoice-Debug/` folder.
+one package (~2.3–4 GB) instead of all six (~12–18 GB). If the **real** app already has the weights and
+you want to avoid the re‑download, **copy** the package into `QwenVoice-Debug/models/` once (don't
+symlink — the prepared‑cache overlay lives inside the model dir, so a symlink breaks the rebuild). To
+benchmark *without* the debug‑folder isolation, run the real app with telemetry on
+(`QWENVOICE_NATIVE_TELEMETRY_MODE=lightweight`, no `QWENVOICE_DEBUG`) — telemetry then lands in the real
+`QwenVoice/diagnostics`; prune those rows afterward if you don't want them.
 
 **Aggregate:**
 

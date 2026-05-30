@@ -32,9 +32,10 @@ takes land in `QwenVoice-Debug/` instead of polluting the real `QwenVoice/` Hist
 **Do NOT direct-exec the bundle binary** (`build/Vocello.app/Contents/MacOS/Vocello`): LaunchServices
 re-launches it and drops the env, so debug mode/telemetry silently won't engage. For ad-hoc env on an
 already-running session, use `launchctl setenv KEY VALUE` then `open` (and `launchctl unsetenv` after).
-To reuse the real app's downloaded weights from a debug-isolated run without a re-download, add
-`QWENVOICE_MODELS_DIR="$HOME/Library/Application Support/QwenVoice/models"` (don't symlink models — it
-breaks the prepared-cache rebuild).
+To reuse the real app's weights from a debug-isolated run without a re-download, **copy** the package
+into `QwenVoice-Debug/models/` — do **not** symlink or point a models-dir override at the real dir: the
+prepared-cache overlay lives inside the model dir, so the debug run would rebuild it in place and mutate
+your real model data.
 
 ## Tool mapping + gotchas
 
