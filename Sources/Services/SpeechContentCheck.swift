@@ -46,8 +46,8 @@ enum SpeechContentCheck {
         let reference = normalize(referenceText)
         guard !reference.isEmpty else { return }
 
-        guard await ensureAuthorized() else {
-            print("[SpeechContentCheck] skipped: Speech recognition not authorized")
+        guard ensureAuthorized() else {
+            print("[SpeechContentCheck] skipped: Speech Recognition not authorized — enable it in System Settings → Privacy & Security → Speech Recognition (this check never prompts on its own)")
             return
         }
         // Use a fixed en-US recognizer for the (English) benchmark corpus rather
@@ -87,42 +87,15 @@ enum SpeechContentCheck {
 
     // MARK: - Speech
 
-    private static let authLock = NSLock()
-    nonisolated(unsafe) private static var authorizationRequestedThisProcess = false
-
-    /// One-shot per process: returns true only for the first caller, so the
-    /// system permission dialog is requested at most once. A background QC check
-    /// must never re-prompt on every generation (that floods the user with
-    /// dialogs while the status is still notDetermined).
-    private static func claimAuthorizationRequest() -> Bool {
-        authLock.lock()
-        defer { authLock.unlock() }
-        if authorizationRequestedThisProcess { return false }
-        authorizationRequestedThisProcess = true
-        return true
-    }
-
-    private static func ensureAuthorized() async -> Bool {
-        switch SFSpeechRecognizer.authorizationStatus() {
-        case .authorized:
-            return true
-        case .denied, .restricted:
-            return false
-        case .notDetermined:
-            // Prompt at most once per process; subsequent generations skip the
-            // check rather than stacking another permission dialog.
-            guard claimAuthorizationRequest() else {
-                print("[SpeechContentCheck] skipped: Speech permission not yet granted (enable it in System Settings → Privacy & Security → Speech Recognition)")
-                return false
-            }
-            return await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { status in
-                    continuation.resume(returning: status == .authorized)
-                }
-            }
-        @unknown default:
-            return false
-        }
+    /// Only proceed when Speech Recognition is ALREADY authorized. A background
+    /// QC check that piggybacks on generation must never trigger the system
+    /// permission dialog — that's intrusive (it pops mid-generation) and, on
+    /// locally ad-hoc-signed dev builds, TCC resets per rebuild so it would
+    /// re-prompt after every build. The user enables Speech Recognition for the
+    /// app once in System Settings → Privacy & Security; until then the check
+    /// skips silently. Never calls `requestAuthorization`.
+    private static func ensureAuthorized() -> Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
     }
 
     private static func transcribe(url: URL, recognizer: SFSpeechRecognizer) async -> String? {

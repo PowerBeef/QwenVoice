@@ -465,11 +465,13 @@ dropouts, garbled words, "sounds worse"). Three layers, increasing in what they 
    transcribes it with Apple Speech (forced **on-device**, `requiresOnDeviceRecognition` — audio never
    leaves the Mac) using a fixed **`en-US`** recognizer (the corpus is English; not the system locale),
    and records word error rate vs the input text → the summarizer's **`WER%`** column. Catches garbled /
-   wrong / dropped words. **Requires:** (a) Speech Recognition granted to Vocello (System Settings →
-   Privacy & Security → Speech Recognition — the check requests it **at most once per process**, never
-   re-prompting on later generations), and (b) the **en-US on-device model installed** (set up via
-   System Settings → Keyboard → Dictation with English (US)). If either is missing it **skips gracefully**
-   (no row, no upload, `WER%` shows `-`). Adds latency — dev/QC only.
+   wrong / dropped words. **Requires:** (a) Speech Recognition **already granted** to the app (System Settings →
+   Privacy & Security → Speech Recognition) — the check **never prompts on its own**; it only runs when
+   authorized, else skips silently (a background check must not pop a permission dialog mid-generation,
+   and locally ad-hoc-signed dev builds reset TCC per rebuild, so it would otherwise re-prompt after
+   every build), and (b) the **en-US on-device model installed** (System Settings → Keyboard → Dictation
+   with English (US)). If either is missing it **skips gracefully** (no row, no upload, `WER%` shows `-`).
+   Adds latency — dev/QC only.
 3. **Human/agent listening pass — mandatory before merging a backend change.** No automated check judges
    subtle perceptual quality (timbre, prosody, naturalness). Generate the fixed corpus, play each take
    (drive via computer-use, see [`ui-driving.md`](ui-driving.md)), and listen for hiccups/artifacts/
