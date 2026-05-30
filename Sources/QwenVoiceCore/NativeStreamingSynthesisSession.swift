@@ -1439,9 +1439,8 @@ private struct StreamingExecutionContext: Sendable {
         guard TelemetryGate.resolvedEnabled else { return }
         guard let appSupportDirectory = diagnosticAppSupportBox?.url else { return }
         // Stamp the resolved device-memory tier so each row self-identifies which
-        // policy it ran under — confirms a forced-tier benchmark took effect, and
-        // (with modelID) flags the floor-tier Quality→Speed OOM fallback. Reuses
-        // the free-form notes field; a caller-supplied key wins on collision.
+        // policy it ran under — confirms a forced-tier benchmark took effect.
+        // Reuses the free-form notes field; a caller-supplied key wins on collision.
         let notesWithTier = [
             "deviceClass": NativeMemoryPolicyResolver.deviceClass().rawValue,
             // Whether the tier was forced (QWENVOICE_FORCE_MEMORY_CLASS) vs the

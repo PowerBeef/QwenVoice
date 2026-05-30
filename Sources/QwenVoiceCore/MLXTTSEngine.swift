@@ -613,103 +613,13 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             visibleErrorMessage = nil
             scheduleIdleUnloadIfNeeded(modelID: id, isBatch: false)
         } catch {
-            // Quality → Speed automatic fallback on the floor8GBMac
-            // tier. If a user picked an 8-bit variant on a
-            // memory-constrained Mac and it failed to load with an
-            // allocation-related error, retry with the active 4-bit sibling
-            // and surface a notice. False positives (non-OOM errors
-            // mistaken for OOM) only cause a slower run; the user
-            // can still pick Quality manually on their next attempt.
-            if let speedID = self.lowerMemoryFallbackID(for: id),
-               Self.looksLikeMemoryAllocationError(error) {
-                #if DEBUG
-                print("[MLXTTSEngine] Quality load failed (\(id)) with allocation error; falling back to lower-memory sibling (\(speedID)): \(error.localizedDescription)")
-                #endif
-                do {
-                    applyMemoryPolicyIfKnown(modelID: speedID, isBatch: false)
-                    _ = try await runtime.loadModel(id: speedID)
-                    loadState = .loaded(modelID: speedID)
-                    clonePreparationState = .idle
-                    visibleErrorMessage = "Switched to a lower-memory model — Quality didn't fit in memory."
-                    scheduleIdleUnloadIfNeeded(modelID: speedID, isBatch: false)
-                    return
-                } catch {
-                    // The fallback also failed — surface the original
-                    // error so the user sees the actionable message,
-                    // not a confusing "Speed failed too" cascade.
-                    handle(error)
-                    throw error
-                }
-            }
+            // No silent Quality→Speed downgrade: a model load that fails
+            // (including an 8-bit allocation failure on a memory-constrained
+            // Mac) surfaces the real error. "Quality" always means the 8-bit
+            // model — never a quietly-substituted Speed model.
             handle(error)
             throw error
         }
-    }
-
-    /// If `id` is an 8-bit variant on the floor8GBMac tier, return the
-    /// matching active Speed 4-bit variant's id. Otherwise return nil.
-    /// Used by the OOM-fallback path in `loadModel`.
-    private func lowerMemoryFallbackID(for id: String) -> String? {
-        guard NativeMemoryPolicyResolver.deviceClass() == .floor8GBMac else { return nil }
-        guard let descriptor = modelRegistry.model(id: id) else { return nil }
-        // After expandedForPlatform, a variant-aliased descriptor carries
-        // exactly one variant in its `variants` array. We rely on that
-        // to detect 8-bit variants and look for a 4-bit sibling.
-        guard descriptor.variants.first?.kind == .quality
-            || descriptor.variants.first?.kind == .compactQuality else { return nil }
-        // Find the active Speed sibling for the same mode. Both
-        // descriptors come from the same expandedForPlatform pass so
-        // their `mode` fields will match.
-        for candidate in modelRegistryAllDescriptors() {
-            guard candidate.id != descriptor.id,
-                  candidate.mode == descriptor.mode,
-                  candidate.variants.first?.kind == .speed else { continue }
-            return candidate.id
-        }
-        return nil
-    }
-
-    /// Iterate the registry's model descriptors. The `ModelRegistry`
-    /// protocol exposes `model(id:)` / `model(for:)` but not a full
-    /// list, so we discover siblings by mode + variant kind through
-    /// `model(for:)` enumeration over the three known generation modes.
-    private func modelRegistryAllDescriptors() -> [ModelDescriptor] {
-        var seen: Set<String> = []
-        var results: [ModelDescriptor] = []
-        for mode in GenerationMode.allCases {
-            // model(for:) returns the alias-resolved descriptor (one
-            // per mode), not all variants. We rebuild the variant
-            // descriptors via the `variants` array on that base.
-            guard let base = modelRegistry.model(for: mode) else { continue }
-            for variant in base.variants {
-                let scopedID = base.variantScopedID(for: variant)
-                guard !seen.contains(scopedID) else { continue }
-                seen.insert(scopedID)
-                if let resolved = modelRegistry.model(id: scopedID) {
-                    results.append(resolved)
-                }
-            }
-        }
-        return results
-    }
-
-    /// Heuristic detection of memory-allocation errors. MLX, Metal, and
-    /// the macOS allocator surface OOM as a variety of NSError shapes;
-    /// rather than enumerate every domain/code we look for "memory" or
-    /// "allocate" in the localized description. False positives only
-    /// cause an unnecessary downgrade to Speed; false negatives only
-    /// cause the existing error to surface (status quo behavior).
-    private static func looksLikeMemoryAllocationError(_ error: Error) -> Bool {
-        let message = (error as NSError).localizedDescription.lowercased()
-        if message.contains("memory") || message.contains("allocate") || message.contains("allocation") {
-            return true
-        }
-        if let posix = (error as NSError) as NSError?,
-           posix.domain == NSPOSIXErrorDomain,
-           posix.code == Int(ENOMEM) {
-            return true
-        }
-        return false
     }
 
     public func unloadModel() async throws {
