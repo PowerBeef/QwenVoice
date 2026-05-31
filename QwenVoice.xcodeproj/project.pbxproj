@@ -10,6 +10,7 @@
 		0141AEF6E30F38BF8030FCB4 /* ExtensionEngineIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111F1F71B7CC59C9C1AD4038 /* ExtensionEngineIPC.swift */; };
 		019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */; };
 		029B0938030B762235FA9420 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5AE447F84CD51CB07A01FC61 /* MLXAudioCore */; };
+		03E4608C9E1EBA775FF6A306 /* BenchCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29686361B012B6250B0DB709 /* BenchCommand.swift */; };
 		03F29BE5251591790C3A7750 /* IOSDesignSystemPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A2196B40607E117E55849B /* IOSDesignSystemPrimitives.swift */; };
 		051D4607CAD1F08CFF493DA5 /* HistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8532D00EDC1F26A3483EC751 /* HistoryScreen.swift */; };
 		0569D23D4DF51247B13A2600 /* IOSOnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A23CA857F62F9575FCCD255 /* IOSOnboardingFlow.swift */; };
@@ -448,6 +449,7 @@
 		220CFD2739290441DB6C2732 /* GenerationPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationPersistence.swift; sourceTree = "<group>"; };
 		2315EB98D0887ED3A911EEF2 /* GenerationChunkBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationChunkBroker.swift; sourceTree = "<group>"; };
 		23ECC0A581C6D3682E9A846A /* IOSDeviceDiagnosticsRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeviceDiagnosticsRecorder.swift; sourceTree = "<group>"; };
+		29686361B012B6250B0DB709 /* BenchCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchCommand.swift; sourceTree = "<group>"; };
 		297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationRunner.swift; sourceTree = "<group>"; };
 		2A4F18EF6E8C4624607CF181 /* LongTextGenerationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongTextGenerationRouter.swift; sourceTree = "<group>"; };
 		2C3D5708FC88C667497CBF52 /* StudioGenerationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGenerationCoordinator.swift; sourceTree = "<group>"; };
@@ -1191,6 +1193,7 @@
 		AB4D866846843A971A62AE65 /* VocelloCLI */ = {
 			isa = PBXGroup;
 			children = (
+				29686361B012B6250B0DB709 /* BenchCommand.swift */,
 				A5C15F6A1291506C7D8605BB /* CLIRuntime.swift */,
 				944BB98E564576BA42D80E3E /* GenerateCommand.swift */,
 				4E86AC791986726B8753994F /* Support.swift */,
@@ -1887,6 +1890,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				03E4608C9E1EBA775FF6A306 /* BenchCommand.swift in Sources */,
 				2589BEF4455DB23814489EF1 /* CLIRuntime.swift in Sources */,
 				2774CCB9AA73B8B0AB929C4D /* GenerateCommand.swift in Sources */,
 				DA60A835AE1FB55B29533BCA /* Support.swift in Sources */,
