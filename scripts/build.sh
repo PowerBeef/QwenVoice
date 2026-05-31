@@ -46,6 +46,7 @@ commands:
   run [--logs|--telemetry|--verify|--debug]
                         Build, then launch $APP_NAME.app.
   release [args...]     Run scripts/release.sh (optimized DMG) with the shared regen/SPM cache.
+  cli [args...]         Build the headless vocello CLI (build/vocello); runs it if args are given.
   clean                 Remove build/.
   help                  Show this message.
 
@@ -149,6 +150,60 @@ cmd_run() {
     esac
 }
 
+CLI_TARGET="VocelloCLI"
+CLI_BINARY="$BUILD_DIR/vocello"
+CLI_BUILT="$DERIVED_DATA/Build/Products/Release/vocello"
+
+build_cli() {
+    ensure_project_regenerated
+    ensure_spm_resolved "$DERIVED_DATA" "" dev
+
+    # Build by -target (no scheme): XcodeGen 2.45.4 SIGTRAPs generating a scheme
+    # for a `tool` product. `-derivedDataPath` requires a scheme, so instead point
+    # SYMROOT/OBJROOT + the cloned-packages dir at the SHARED DerivedData — this
+    # reuses the app's already-built engine frameworks + resolved SPM packages
+    # (no re-download, no duplicate build tree).
+    echo "==> Building $CLI_TARGET (vocello, single config, -Onone)..."
+    xcb_run \
+        -project "$ROOT_DIR/QwenVoice.xcodeproj" \
+        -target "$CLI_TARGET" \
+        -configuration Release \
+        -destination "$DESTINATION" \
+        -onlyUsePackageVersionsFromResolvedFile \
+        -clonedSourcePackagesDirPath "$DERIVED_DATA/SourcePackages" \
+        SYMROOT="$DERIVED_DATA/Build/Products" \
+        OBJROOT="$DERIVED_DATA/Build/Intermediates.noindex" \
+        ARCHS=arm64 \
+        ONLY_ACTIVE_ARCH=YES \
+        CODE_SIGN_IDENTITY="-" \
+        CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+        SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+        SWIFT_COMPILATION_MODE="incremental" \
+        GCC_OPTIMIZATION_LEVEL="0" \
+        build
+
+    if [ ! -x "$CLI_BUILT" ]; then
+        echo "error: vocello binary not found at $CLI_BUILT" >&2
+        exit 1
+    fi
+    # Run IN PLACE: MLX's Metal shader bundle (mlx-swift_Cmlx.bundle, holding
+    # default.metallib) and the other SPM resource bundles live next to this
+    # binary — copying it elsewhere breaks metallib lookup. Expose a convenience
+    # symlink at build/vocello; macOS resolves it to the real path, so the
+    # bundles stay adjacent.
+    ln -sf "$CLI_BUILT" "$CLI_BINARY"
+    echo "==> CLI ready: $CLI_BINARY → $CLI_BUILT"
+}
+
+cmd_cli() {
+    build_cli
+    # Invoke the in-place binary (bundles adjacent) — pass args straight through.
+    if [ "$#" -gt 0 ]; then
+        echo "==> Running: vocello $*"
+        "$CLI_BUILT" "$@"
+    fi
+}
+
 cmd_release() {
     exec "$SCRIPT_DIR/release.sh" "$@"
 }
@@ -174,6 +229,9 @@ main() {
             ;;
         run)
             cmd_run "$@"
+            ;;
+        cli)
+            cmd_cli "$@"
             ;;
         release)
             cmd_release "$@"

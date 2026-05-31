@@ -81,6 +81,8 @@ targets:
           - "iOSSupport/**"
           - "QwenVoiceNative"
           - "QwenVoiceNative/**"
+          - "VocelloCLI"
+          - "VocelloCLI/**"
           - "Resources/ffmpeg"
           - "Resources/ffmpeg/**"
           - "Resources/vendor"
@@ -140,6 +142,38 @@ targets:
         product: MLX
       - package: SwiftHuggingFace
         product: HuggingFace
+
+  # Headless Swift CLI over the in-process engine (QwenVoiceCore). User-facing
+  # generation without the UI + the deterministic driver for benchmarks/perf
+  # tests (replaces computer-use UI-driving). No Python backend, no bundled
+  # weights — links the same engine frameworks as the app/XPC service.
+  VocelloCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/VocelloCLI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.cli
+        PRODUCT_NAME: vocello
+        PRODUCT_MODULE_NAME: VocelloCLI
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        # Ad-hoc signed, no hardened runtime: a plain CLI runs Metal/MLX fine
+        # without the app's allow-unsigned-memory entitlement.
+        CODE_SIGN_IDENTITY: "-"
+    dependencies:
+      - target: QwenVoiceCore
+      - target: QwenVoiceEngineSupport
+      - package: MLXAudio
+        product: MLXAudioCore
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXSwift
+        product: MLX
+      - package: SwiftHuggingFace
+        product: HuggingFace
+
   QwenVoiceNative:
     type: framework.static
     platform: macOS
