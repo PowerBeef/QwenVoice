@@ -27,3 +27,4 @@ reference ledger, not an auto-compared baseline gate.
 |------|-----|------|-----|-------|---------|-------------|-------|----|------|
 | 2026-05-30 | 06166f0 | custom/pro_custom_quality/warm | 0.66 | 8.31 | 1114 | 4079 | 0 | warn:dropout | baseline pre-optimization; QC dropout = natural comma-pause (listening PASS); Quality = genuine 8-bit, native floor tier |
 | 2026-05-30 | 670d5c8 | custom/pro_custom_quality/warm/medium | 0.70 | 8.79 | 1001 | 4114 | 0 | warn:dropout | baseline pre-opt LENGTH SWEEP (short/med/long); Quality genuine 8-bit, native floor; listening PASS (dropout+clicks = detector false-positives on natural pauses) |
+| 2026-05-31 | 641a541 | custom/pro_custom_quality/warm/medium | 0.83 | 10.39 | - | 5773 | 0 | warn:dropout | reference baseline 2026-05-31 641a541 — CLI-driven, native floor 8GB |
