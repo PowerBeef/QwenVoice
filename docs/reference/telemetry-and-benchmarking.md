@@ -315,6 +315,16 @@ dominant `timingsMS` substage across your before/after.
 
 ## 11. Reusable benchmark procedure (full matrix)
 
+> **Primary driver — the `vocello` CLI (headless, deterministic).**
+> `./scripts/build.sh cli bench --lengths short,medium,long --warm 3 [--review]` drives this entire
+> matrix in‑process (cold/warm controlled exactly via load/unload — no UI waits, focus races, or
+> engine‑busy rejections) and runs the aggregator automatically. It **replaced computer‑use UI‑driving**
+> as the benchmark/test driver. Engine telemetry rows (RTF / decode / memory / `audioQC` / `promptChars`)
+> are identical to the app path; the CLI bypasses XPC, so the app/XPC frontend row is absent and the
+> summarizer's end‑to‑end **TTFC shows `-`** (engine‑only boundary — what backend optimization targets).
+> `--review` adds the agy listening pass over flagged clips (see "Guarding output quality"). The
+> computer‑use UI procedure below is retained for manual/visual runs only.
+
 A repeatable, accurate sweep over **mode × model variant × cold/warm**. The default procedure drives
 the UI and reads the JSONL the probes write, then aggregates with the read‑only helper (committed
 benchmark scripts + baselines are permitted if you want to automate it further). Each engine row
@@ -466,11 +476,17 @@ dropouts, garbled words, "sounds worse"). Two layers, increasing in what they ca
    (chunk-boundary discontinuities — the decoder-drift class), `dropout:Nms` (mid-utterance silence),
    `near_silent` (dead output). Surfaced as the summarizer's **`QC`** column. **Any `fail` blocks
    promoting a backend change.** Thresholds are conservative + tunable (`makeAudioQCReport`).
-2. **Human/agent listening pass — mandatory before merging a backend change.** No automated check judges
-   subtle perceptual quality (timbre, prosody, naturalness). Generate the fixed corpus, play each take
-   (drive via computer-use, see [`ui-driving.md`](ui-driving.md)), and listen for hiccups/artifacts/
-   quality. Record the verdict in the benchmark snapshot / `HISTORY.md` note. **This is the real quality
-   gate — the objective `audioQC` tripwire is fast, not a substitute for ears.**
+2. **Listening pass — mandatory before merging a backend change.** No automated check judges subtle
+   perceptual quality (timbre, prosody, naturalness). Two ways to run it:
+   - **agy ear (default, scriptable):** `vocello bench --review` (or `vocello review --diag <dir>` /
+     `vocello review --clip <wav>`) transcodes each flagged clip to m4a and hands it to **agy**
+     (Antigravity/Gemini multimodal) to LISTEN and judge **real‑defect vs false‑positive** (e.g. a
+     `dropout` that's just the natural pause at a comma). Verdicts land in `diagnostics/review/review.jsonl`.
+     **Dev/benchmark workflow only** — agy receives dev clips, never shipped user audio (the product
+     keeps audio on‑device). Note: agy's loader rejects raw 24 kHz Int16 WAV, hence the m4a transcode.
+   - **By ear:** play each take and listen for hiccups/artifacts. Record the verdict in the snapshot /
+     `HISTORY.md` note.
+   **This is the real quality gate — the objective `audioQC` tripwire is fast, not a substitute for ears.**
 
 Workflow: run the corpus → any `QC=fail` is a hard stop (investigate before merging) → otherwise do the
 listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free default; committed

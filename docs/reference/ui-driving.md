@@ -1,5 +1,12 @@
 # Driving UI tests, reviews, and benchmarks
 
+> **For headless generation + benchmarks/perf tests, use the `vocello` CLI, not this.** The CLI
+> (`./scripts/build.sh cli …` → `build/vocello`) drives `generate` and the `bench` matrix in-process,
+> deterministically — it replaced computer-use UI-driving because computer-use is flaky for *driving
+> generation* (MCP disconnects, focus races, engine-busy rejections). See `telemetry-and-benchmarking.md`
+> §11 + `vocello bench --help`. **computer-use here is for what the CLI can't do: visual/UX review**
+> (layout, tints, Liquid Glass + Reduce Motion/Transparency fallbacks) and **iOS via iPhone Mirroring**.
+
 How Claude exercises the Vocello UI directly — **macOS via the native `computer-use` MCP** (mouse +
 keyboard + vision), **iOS via the iPhone Mirroring window**. This is live agent-driving, **not** an
 XCUITest bundle (`scripts/uitest.sh` / `QwenVoiceTests` stay retired — `scripts/check_project_inputs.sh`
