@@ -136,6 +136,15 @@ table collapses because the engine reuses `OS_SIGNPOST_ID_EXCLUSIVE`):
   shapes because `KVCacheSimple`/`RotatingKVCache` grow the KV each step → shapeless compile recompiles
   every frame. Requires a **fixed-shape (preallocated + position-masked) KV cache** so shapes are static.
   Architectural, but the highest-value backend work (≫ RoPE's ~2–3%).
+  - **Obstacle found (2026-06-01):** the ~21 ms build is dominated by constructing the **quantized**
+    `Linear` projections (4-bit model → `QuantizedLinear` after `quantize(model:)`; config bits 4 /
+    group 64 / affine). MLX-Swift 0.30.6 `compile` is **pure-array oriented** — the established pattern only
+    compiles the elementwise SwiGLU (`silu*up`), never the projections, precisely to avoid this. Capturing
+    the quantized forward requires either hand-replicating `quantizedMatmul(x, w, scales:biases:groupSize:bits:)`
+    inside compiled closures (fragile, bit-exactness risk under the strict bar + no test suite) or a
+    fixed-shape-KV + a non-standard whole-module compile. So the lever is **harder/riskier than the headline**;
+    the disciplined next step is a throwaway **validation spike** (compile one layer's static path correctly,
+    verify bit-identical audio + measure the real build-time delta) BEFORE the full vendored rewrite.
 - **Step Eval Flush (GPU, 61%)** is the model's real compute — largely fixed for 1.7B 4-bit at this
   precision; no transparent lever (quantization-mode work is pinned out at MLX 0.30.6, see §E).
 - RoPE fusion → `MLXFast.RoPE` (CP + Talker): only a small slice of the 21 ms build → minor; keep as a small
