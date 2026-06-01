@@ -76,9 +76,15 @@ extension QVoiceiOSApp {
     ) throws -> SelectedBackend {
         // MARK: Engine selection
         // Simulator → `IOSSimulatorTTSEngine`, a fake that fabricates audio so UI
-        // review works without MLX/Metal. Real hardware → `ExtensionBackedTTSEngine`,
-        // which drives the out-of-process `VocelloEngineExtension`. Both are wrapped
-        // in the same `TTSEngineStore`, so the UI is agnostic to which is active.
+        // review works without MLX/Metal. Real hardware → an IN-PROCESS
+        // `MLXTTSEngine` (via `NativeRuntimeFactory`, the same path the macOS
+        // `vocello` CLI uses). It used to drive the out-of-process
+        // `VocelloEngineExtension`, but that ExtensionKit non-UI extension is capped
+        // at a tiny per-process memory limit the increased-memory entitlement does
+        // NOT raise — iOS jetsam-killed it (per-process-limit) while loading the
+        // model. The app process *does* get the entitlement's raised limit, so
+        // generation runs in-process here. Both are wrapped in the same
+        // `TTSEngineStore`, so the UI is agnostic to which is active.
         if IOSSimulatorRuntimeSupport.isSimulator {
             let modelAssetStore = LocalModelAssetStore(
                 modelRegistry: registry,
@@ -141,11 +147,19 @@ extension QVoiceiOSApp {
             modelRegistry: registry,
             modelAssetStore: modelAssetStore
         )
-        let engine = ExtensionBackedTTSEngine(
-            modelRegistry: registry,
-            documentIO: documentIO,
-            hostManager: VocelloEngineHostManager.shared
+        // In-process engine in the APP process (mirrors the macOS CLI's
+        // NativeRuntimeFactory path). `.iOSProductionDefault` (= withoutCloneEncoders)
+        // keeps the load memory-conscious; `.skipDedicatedCustomPrewarm` avoids a
+        // prewarm memory spike. Models resolve from the same shared-container
+        // `models/` dir the user already downloaded into.
+        let runtime = try NativeRuntimeFactory.make(
+            registry: registry,
+            paths: .rooted(at: AppPaths.appSupportDir),
+            storeVersionSeed: modelAssetStoreSeed(),
+            customPrewarmPolicy: .skipDedicatedCustomPrewarm,
+            qwenPreparedLoadProfile: .iOSProductionDefault
         )
+        let engine = runtime.engine
         let engineStore = TTSEngineStore(
             backend: AnyTTSEngineBackend(
                 engine: engine,
