@@ -4,6 +4,13 @@ import SwiftUI
 import UIKit
 import QwenVoiceCore
 
+/// iOS app entry point.
+///
+/// **Compile-safe only on `main`.** On-device generation, memory proof, and
+/// TestFlight are deferred pending Apple's
+/// `com.apple.developer.kernel.increased-memory-limit` entitlement — see
+/// CLAUDE.md "Release & iPhone status". The app builds and the UI runs; heavy
+/// generation routes to `VocelloEngineExtension` (ExtensionKit).
 @main
 struct QVoiceiOSApp: App {
     @StateObject private var deps = IOSAppDependenciesContainer()

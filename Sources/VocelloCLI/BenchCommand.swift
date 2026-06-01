@@ -1,12 +1,11 @@
 import Foundation
 import QwenVoiceCore
 
-/// `vocello bench` — the deterministic benchmark/perf driver. Replaces the
-/// computer-use UI-driving: drives the matrix (mode × variant × length ×
-/// cold/warm) in-process with telemetry on, controlling cold/warm exactly via
-/// explicit load/unload (no UI waits, no engine-busy races). Then runs the
-/// aggregator. Engine telemetry rows (RTF / decode / memory / audioQC /
-/// promptChars) are written exactly as in the app.
+/// `vocello bench` — the deterministic benchmark/perf driver: drives the matrix
+/// (mode × variant × length × cold/warm) in-process with telemetry on,
+/// controlling cold/warm exactly via explicit load/unload (no UI waits, no
+/// engine-busy races). Then runs the aggregator. Engine telemetry rows (RTF /
+/// decode / memory / audioQC / promptChars) are written exactly as in the app.
 enum BenchCommand {
     /// Fixed corpus — keep identical to benchmarks/baseline-*-length-sweep.md.
     static let corpus: [(len: String, text: String)] = [

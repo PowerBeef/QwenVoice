@@ -11,6 +11,10 @@ import GRDB
 /// via `Task.detached` so they don't block the UI's main run loop —
 /// previously the synchronous save on `@MainActor` introduced a 5-30ms
 /// hitch right after every generation completed.
+///
+/// This is the iOS copy (mirrors `Sources/Services/DatabaseService.swift`); it
+/// resolves its database file under the iOS App Group container via `AppPaths`,
+/// which is itself platform-specific.
 final class DatabaseService: @unchecked Sendable {
     /// Process-wide singleton. The service manages thread-safety via
     /// `DatabaseQueue`; the initializer is the only place state is mutated.

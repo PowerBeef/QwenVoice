@@ -1,6 +1,10 @@
 import Foundation
 
-/// Utility functions for audio file management.
+/// Utility functions for audio file management (iOS).
+///
+/// Mirrors `Sources/Services/AudioService.swift`. The only divergence is the
+/// preferences store: iOS reads `UserDefaults.standard`; macOS reads the
+/// debug-aware `AppDefaults.store`.
 enum AudioService {
     private static var defaults: UserDefaults {
         UserDefaults.standard

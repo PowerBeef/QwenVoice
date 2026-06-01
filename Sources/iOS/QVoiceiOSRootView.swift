@@ -5,6 +5,8 @@ import QwenVoiceCore
 /// environment. The real tab routing + screen content lives in
 /// `Sources/iOS/App/RootView.swift`. Kept under this filename so the
 /// existing app entry point + Xcode scheme don't need renaming.
+///
+/// iOS is compile-safe only on `main` (see CLAUDE.md "Release & iPhone status").
 struct QVoiceiOSRootView: View {
     let modelRegistry: ContractBackedModelRegistry
 

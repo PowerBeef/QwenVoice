@@ -214,14 +214,14 @@ struct VoiceCloningReadinessDescriptor: Equatable {
 
 enum VoiceCloningReadiness {
     static func describe(
-        pythonReady: Bool,
+        engineReady: Bool,
         isModelAvailable: Bool,
         modelDisplayName: String,
         referenceAudioPath: String?,
         text: String,
         contextStatus: VoiceCloningContextStatus?
     ) -> VoiceCloningReadinessDescriptor {
-        if !pythonReady {
+        if !engineReady {
             return VoiceCloningReadinessDescriptor(
                 noteIsReady: false,
                 title: "Engine starting",

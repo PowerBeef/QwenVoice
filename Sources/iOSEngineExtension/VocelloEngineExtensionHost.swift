@@ -65,6 +65,10 @@ private final class RuntimeContext: @unchecked Sendable {
     }
 }
 
+/// Adapts the ExtensionKit / XPC wire protocol to the in-process `TTSEngine`.
+/// One per extension: it accepts incoming connections from the app, forwards
+/// generation/model requests to the engine, and streams events back over XPC —
+/// the iOS analogue of the macOS `EngineServiceHost`.
 final class VocelloEngineExtensionHost: NSObject, VocelloEngineExtensionXPCProtocol, @unchecked Sendable {
     private struct ActiveSession {
         let id: UUID

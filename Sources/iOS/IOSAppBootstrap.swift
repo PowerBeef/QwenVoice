@@ -74,6 +74,11 @@ extension QVoiceiOSApp {
         registry: ContractBackedModelRegistry,
         documentIO: LocalDocumentIO
     ) throws -> SelectedBackend {
+        // MARK: Engine selection
+        // Simulator → `IOSSimulatorTTSEngine`, a fake that fabricates audio so UI
+        // review works without MLX/Metal. Real hardware → `ExtensionBackedTTSEngine`,
+        // which drives the out-of-process `VocelloEngineExtension`. Both are wrapped
+        // in the same `TTSEngineStore`, so the UI is agnostic to which is active.
         if IOSSimulatorRuntimeSupport.isSimulator {
             let modelAssetStore = LocalModelAssetStore(
                 modelRegistry: registry,
