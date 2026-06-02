@@ -413,8 +413,12 @@ targets:
     dependencies:
       - package: GRDB
       - target: QwenVoiceCore
+      # Dormant since 7822a8a: generation runs in-process (NativeRuntimeFactory), nothing
+      # instantiates ExtensionBackedTTSEngine on hardware. embed: false stops shipping the
+      # unused .appex (smaller app) while keeping the target compile-verified. Full removal
+      # of the target + Sources/iOSEngineExtension is a later step.
       - target: VocelloEngineExtension
-        embed: true
+        embed: false
       - package: MLXAudio
         product: MLXAudioCore
       - package: MLXAudio

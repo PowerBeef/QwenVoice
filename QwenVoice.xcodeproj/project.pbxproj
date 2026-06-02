@@ -175,7 +175,6 @@
 		9C7F54D72E62B1918F56298B /* TTSContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56DB3F2A6729473A3816C4C /* TTSContract.swift */; };
 		9D252B7945375066E6E70CAC /* BatchGenerationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C37F7C548405565C230BF8 /* BatchGenerationSheet.swift */; };
 		9D5A56B668872C98C75B1C4D /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F3C3BE74B8A198E25C3557BF /* GRDB */; };
-		9E1DB554D66DA9B0A56E9067 /* VocelloEngineExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 0EA939FD6306E55AA6F741A4 /* VocelloEngineExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		9EA117DEBC5F27237704DEAD /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 39EB137F1E02BDF05CCE4CB1 /* MLX */; };
 		A1A06C031B9A40EA24BB7C8A /* MLXModelLoadCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9DFF46140E21950EEDD4721 /* MLXModelLoadCoordinator.swift */; };
 		A33389F099A68B8B1E97355A /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1208FA55F0C73C515E9B9CF /* SettingsScreen.swift */; };
@@ -411,17 +410,6 @@
 			files = (
 				526AB39EEB0CE64693396887 /* QwenVoiceEngineService.xpc in CopyFiles */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		D0E2AF2A95465563981EB7FF /* Embed ExtensionKit Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
-			dstSubfolderSpec = 16;
-			files = (
-				9E1DB554D66DA9B0A56E9067 /* VocelloEngineExtension.appex in Embed ExtensionKit Extensions */,
-			);
-			name = "Embed ExtensionKit Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -1494,7 +1482,6 @@
 				117112FDCE00BA55C4DD569B /* Sources */,
 				82AB45C9C6844963F9AB48D8 /* Resources */,
 				C69E64CD4DA3A6CE1A73C039 /* Frameworks */,
-				D0E2AF2A95465563981EB7FF /* Embed ExtensionKit Extensions */,
 			);
 			buildRules = (
 			);
