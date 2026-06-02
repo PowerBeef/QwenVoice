@@ -124,6 +124,18 @@ enum IOSAutorunHarness {
             print("[autorun] loading \(model.id)…")
             try await engine.loadModel(id: model.id)
 
+            // Clone requires the reference primed (the optimized `voiceClonePrompt`) BEFORE
+            // generate — mirrors `VoiceCloningCoordinator`. With proactive warm now gated on
+            // the memory band (not blanket-disabled on hardware), this actually runs on device.
+            if case .clone(let reference) = payload {
+                print("[autorun] priming clone reference…")
+                do {
+                    try await engine.ensureCloneReferencePrimed(modelID: model.id, reference: reference)
+                } catch {
+                    print("[autorun] clone prime degraded: \(error.localizedDescription)")
+                }
+            }
+
             let outputPath = makeOutputPath(runID: runID, model: model)
             let request = GenerationRequest(
                 mode: spec.mode,
@@ -185,17 +197,54 @@ enum IOSAutorunHarness {
             )
         case .clone:
             let voices = try await engine.listPreparedVoices()
-            guard let voice = voices.first else {
-                throw HarnessError("clone autorun needs a saved voice (none enrolled on this device)")
-            }
-            return .clone(
-                reference: CloneReference(
-                    audioPath: voice.audioPath,
-                    transcript: nil,
-                    preparedVoiceID: voice.id
+            if let voice = voices.first {
+                return .clone(
+                    reference: CloneReference(
+                        audioPath: voice.audioPath,
+                        transcript: nil,
+                        preparedVoiceID: voice.id
+                    )
                 )
-            )
+            }
+            // Headless-bench fallback: no enrolled voice → use a bundled English
+            // voice-preview clip as the clone reference. Clone needs a TRANSCRIPT to build
+            // the optimized voiceClonePrompt (NativeCloneSupport: createVoiceClonePrompt),
+            // so this only uses aiden/ryan — generated from the exact known phrase below
+            // (voice-previews/README.md). Exercises the clone encoder + generation path +
+            // memory fit (the point of a clone bench); NOT a quality reference (real cloning
+            // uses a user-enrolled recording). Lets `ios_device.sh bench clone:…` run with
+            // nothing enrolled.
+            if let previewURL = bundledPreviewReferenceURL() {
+                print("[autorun] clone: no saved voice — using bundled preview reference \(previewURL.lastPathComponent)")
+                return .clone(
+                    reference: CloneReference(
+                        audioPath: previewURL.path,
+                        transcript: bundledPreviewReferenceTranscript,
+                        preparedVoiceID: nil
+                    )
+                )
+            }
+            throw HarnessError("clone autorun needs a saved voice or a bundled English preview reference (none found)")
         }
+    }
+
+    /// The exact phrase the English voice-previews were generated from
+    /// (`voice-previews/README.md`) — the matching transcript clone needs to build the
+    /// optimized voiceClonePrompt.
+    private static let bundledPreviewReferenceTranscript = "Hello, this is a sample of my voice."
+
+    /// A bundled ENGLISH preview WAV usable as a fallback clone reference for benching
+    /// (`Sources/Resources/voice-previews/<id>.wav`). Restricted to aiden/ryan because only
+    /// those have a documented transcript (the non-English previews use unknown text, and a
+    /// mismatched transcript degrades/blocks clone conditioning). Returns the first present.
+    private static func bundledPreviewReferenceURL() -> URL? {
+        for id in ["aiden", "ryan"] {
+            if let url = Bundle.main.url(forResource: id, withExtension: "wav", subdirectory: "voice-previews")
+                ?? Bundle.main.url(forResource: id, withExtension: "wav") {
+                return url
+            }
+        }
+        return nil
     }
 
     // MARK: - Paths & sentinel

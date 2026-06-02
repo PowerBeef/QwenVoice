@@ -70,6 +70,32 @@ extension QVoiceiOSApp {
         }
     }
 
+    /// Minimum **entitled per-app memory budget** to load the clone/speaker encoders
+    /// in-process. Clone (`.fullCapabilities`) keeps those encoders resident for the whole
+    /// session (~0.6 GB) on top of the ~2.3 GB model + a ~0.4 GB priming spike (~3.3 GB
+    /// peak). The `increased-memory-limit` entitlement raises the per-app Jetsam budget
+    /// (NOT total RAM): ~50% of RAM default → ~75% entitled (community-measured; Apple
+    /// publishes no exact figure). So 8 GB iPhones (15/16/17, all Pro) get ~5–5.5 GB and
+    /// 12 GB (17 Pro / Air) ~8–8.5 GB — clone fits on *every entitled* device. 4.5 GB
+    /// clears the 3.3 GB peak + ~1.2 GB working headroom and aligns with the policy's
+    /// 4.5 GB guarded / 5.2 GB critical footprint thresholds; it self-disables if a
+    /// device's real budget is too low. (Runtime priming is separately gated on the
+    /// healthy memory band in `TTSEngineStore.ensureCloneReferencePrimed`.)
+    static let cloneCapableMinimumProcessLimitBytes: UInt64 = 4_500_000_000
+
+    /// `.fullCapabilities` (clone enabled) when the measured entitled per-app limit clears
+    /// the threshold, else the memory-conscious `.iOSProductionDefault`. Read once at
+    /// launch — footprint is tiny then, so `impliedProcessLimitBytes`
+    /// (= `phys_footprint` + `os_proc_available_memory()`) ≈ the full granted ceiling.
+    /// Simulator never reaches this path (it uses the fake engine).
+    static func cloneCapableLoadProfile() -> NativeQwenPreparedLoadProfile {
+        let limitBytes = IOSMemorySnapshot.capture(role: .app).impliedProcessLimitBytes ?? 0
+        let enabled = limitBytes >= cloneCapableMinimumProcessLimitBytes
+        print("[bootstrap] clone gate: entitled per-app limit ≈ \(limitBytes / 1_048_576) MB → "
+              + (enabled ? "fullCapabilities (clone ON)" : "withoutCloneEncoders (clone OFF)"))
+        return enabled ? .fullCapabilities : .iOSProductionDefault
+    }
+
     static func makeBackend(
         registry: ContractBackedModelRegistry,
         documentIO: LocalDocumentIO
@@ -148,16 +174,18 @@ extension QVoiceiOSApp {
             modelAssetStore: modelAssetStore
         )
         // In-process engine in the APP process (mirrors the macOS CLI's
-        // NativeRuntimeFactory path). `.iOSProductionDefault` (= withoutCloneEncoders)
-        // keeps the load memory-conscious; `.skipDedicatedCustomPrewarm` avoids a
-        // prewarm memory spike. Models resolve from the same shared-container
-        // `models/` dir the user already downloaded into.
+        // NativeRuntimeFactory path). The load profile is RAM-gated (see
+        // `cloneCapableLoadProfile`): high-RAM iPhones load `.fullCapabilities` (clone
+        // encoders, so Voice Cloning works in-process); everyone else keeps the
+        // memory-conscious `.iOSProductionDefault` (= withoutCloneEncoders).
+        // `.skipDedicatedCustomPrewarm` avoids a prewarm memory spike. Models resolve
+        // from the same shared-container `models/` dir the user already downloaded into.
         let runtime = try NativeRuntimeFactory.make(
             registry: registry,
             paths: .rooted(at: AppPaths.appSupportDir),
             storeVersionSeed: modelAssetStoreSeed(),
             customPrewarmPolicy: .skipDedicatedCustomPrewarm,
-            qwenPreparedLoadProfile: .iOSProductionDefault
+            qwenPreparedLoadProfile: cloneCapableLoadProfile()
         )
         let engine = runtime.engine
         let engineStore = TTSEngineStore(

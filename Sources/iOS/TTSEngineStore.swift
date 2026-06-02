@@ -453,22 +453,24 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     }
 
     private func allowsProactiveWarmOperations(reason: String) async -> Bool {
-#if targetEnvironment(simulator)
-        let hardwarePrefetchAllowed = true
-#elseif DEBUG
-        let hardwarePrefetchAllowed = ProcessInfo.processInfo.environment["QVOICE_IOS_ENABLE_PROACTIVE_PREFETCH"] == "1"
-#else
-        let hardwarePrefetchAllowed = false
-#endif
-        guard hardwarePrefetchAllowed else {
+        // Proactive warm + clone-reference priming are gated ONLY by the live memory band
+        // (the real safety — see `memoryBudgetPolicy.allowsProactiveWarmOperations`). The
+        // former blanket "disabled on Release hardware" default was a pre-entitlement
+        // caution that silently blocked clone priming (and prewarm); with the
+        // increased-memory entitlement + the band guard, warm when the band is healthy on
+        // all of simulator/DEBUG/Release. `QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH=1` is an
+        // optional escape hatch to force it off (A/B / battery testing).
+#if !targetEnvironment(simulator)
+        if ProcessInfo.processInfo.environment["QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH"] == "1" {
             diagnosticsRecorder?.recordAction(
                 event: "proactive_warm_blocked",
-                reason: "\(reason)_hardware_default",
+                reason: "\(reason)_env_disabled",
                 context: latestMemoryContext,
-                message: "iPhone proactive warm/load work is disabled by default."
+                message: "Proactive warm disabled via QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH."
             )
             return false
         }
+#endif
         let context = await refreshMemoryContext(reason: reason, source: "warm_gate")
         let allowed = memoryBudgetPolicy.allowsProactiveWarmOperations(for: context.pressureBand)
         if !allowed {
