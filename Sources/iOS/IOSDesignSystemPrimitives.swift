@@ -828,6 +828,14 @@ struct IOSSetupChipPill: View {
                     .foregroundStyle(tint)
                     .lineLimit(1)
             }
+            // Trailing chevron — signals every pill is a tappable selector (opens a picker),
+            // so the value pills don't read as static badges. Subtle + subordinate to the value.
+            // Points UP: these pills sit in the bottom screen area and their pickers are bottom
+            // sheets that slide UP, so the chevron points toward where the menu appears.
+            Image(systemName: "chevron.up")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint.opacity(0.5))
+                .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
