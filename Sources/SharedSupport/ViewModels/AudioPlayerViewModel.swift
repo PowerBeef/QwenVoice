@@ -110,8 +110,16 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     @Published var waveformSamples: [Float] = []
     @Published var playbackError: String?
     @Published private(set) var isLiveStream = false
-    @Published private(set) var livePreviewQueueDepth = 0
-    @Published private(set) var livePreviewPhase: LivePreviewPhase = .idle
+    // Demoted from @Published (iOS frontend perf audit, Wave 3): these have ZERO SwiftUI
+    // readers — `livePreviewQueueDepth` is written on every streamed chunk but consumed only
+    // internally. Publishing them fired AudioPlayerViewModel.objectWillChange per chunk,
+    // invalidating every observer (notably the 3 Studio mode views, which inject this VM via
+    // @EnvironmentObject only for imperative cancel/abort, rendering none of its state). Plain
+    // stored properties remove that per-chunk broadcast at the source; the high-frequency
+    // progress is already isolated in the PlaybackProgress slice. If a streaming-progress UI
+    // ever needs these, move them into a nested ObservableObject slice (mirror PlaybackProgress).
+    private(set) var livePreviewQueueDepth = 0
+    private(set) var livePreviewPhase: LivePreviewPhase = .idle
     @Published private(set) var playbackPresentationContext: PlaybackPresentationContext = .none
     @Published private(set) var generatePreviewVisibilityState: GeneratePreviewVisibilityState = .hidden
 
