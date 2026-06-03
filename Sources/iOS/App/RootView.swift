@@ -88,7 +88,7 @@ struct RootView: View {
             bottomPanelOverlay
             deleteModelSheetOverlay
         }
-        .iosAppAnimation(Theme.Motion.easeOut, value: isFocusBackdropActive)
+        .iosAppAnimation(Theme.Motion.sheetSlideUp, value: isFocusBackdropActive)
         .environment(\.presentIOSPlayerSheet) { item in
             appModel.playerSheetItem = item
         }
@@ -183,12 +183,17 @@ struct RootView: View {
                             dismissBottomPanel()
                         }
 
-                    item.content(proxy.safeAreaInsets.bottom, dismissBottomPanel)
+                    item.content(proxy.safeAreaInsets.bottom, proxy.size.height, dismissBottomPanel)
                         .frame(maxWidth: .infinity)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .ignoresSafeArea()
             }
+            // Measure the FULL screen (not the safe-area-reduced content region inside
+            // RootView's TabDock/toast safeAreaInset chain), so the expanded picker height
+            // (IOSBottomSheetChrome.expandedHeight) is computed off the real screen and the
+            // top peek is what we actually specify.
+            .ignoresSafeArea()
             .zIndex(19)
         }
     }

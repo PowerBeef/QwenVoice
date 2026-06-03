@@ -124,7 +124,7 @@ struct IOSDeliveryPicker: View {
     }
 
     private func presentPresetSheet() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSDeliveryPickerSheet(
                     selectedPresetID: Binding(
@@ -142,7 +142,7 @@ struct IOSDeliveryPicker: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.deliveryPickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )

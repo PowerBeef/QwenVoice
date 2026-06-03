@@ -12,11 +12,11 @@ struct IOSDeleteModelSheetPresentation: Identifiable {
 
 struct IOSBottomPanelPresentation: Identifiable {
     let id: String
-    let content: @MainActor (_ bottomSafeAreaInset: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
+    let content: @MainActor (_ bottomSafeAreaInset: CGFloat, _ availableHeight: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
 
     init(
         id: String = UUID().uuidString,
-        content: @escaping @MainActor (_ bottomSafeAreaInset: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
+        content: @escaping @MainActor (_ bottomSafeAreaInset: CGFloat, _ availableHeight: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
     ) {
         self.id = id
         self.content = content
@@ -120,7 +120,7 @@ final class AppModel {
 
     func presentBottomPanel(
         id: String = UUID().uuidString,
-        content: @escaping @MainActor (_ bottomSafeAreaInset: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
+        content: @escaping @MainActor (_ bottomSafeAreaInset: CGFloat, _ availableHeight: CGFloat, _ dismiss: @escaping @MainActor () -> Void) -> AnyView
     ) {
         isFocusBackdropPresented = true
         bottomPanelItem = IOSBottomPanelPresentation(id: id, content: content)

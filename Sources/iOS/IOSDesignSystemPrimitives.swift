@@ -443,6 +443,17 @@ enum IOSBottomSheetChrome {
     static let voiceBriefHeight: CGFloat = 520
     static let referenceClipHeight: CGFloat = 430
     static let modelInstallHeight: CGFloat = 430
+
+    /// Height for the expanded selector pickers (voice / delivery / language / reference):
+    /// the sheet rises to just BELOW the Studio mode selector (Custom/Design/Clone), leaving
+    /// it + the status bar visible above for a balanced look (still tap-to-dismiss).
+    /// `screenHeight` is the FULL window height (from the bottom-panel overlay's GeometryReader,
+    /// which ignores the safe area), so the subtracted value is the sheet-top y. 116 ≈ top safe
+    /// inset (~59) + the selector's 6pt top pad + 44pt rail + ~7pt gap. Clamped so it never
+    /// collapses. (Tuned for the 17 Pro; ~12pt looser on notch devices.)
+    static func expandedHeight(forScreenHeight screenHeight: CGFloat) -> CGFloat {
+        max(440, screenHeight - 116)
+    }
 }
 
 enum IOSBottomSheetPresentationStyle {

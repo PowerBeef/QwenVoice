@@ -228,7 +228,7 @@ struct IOSCustomVoiceView: View {
     }
 
     private func presentVoicePicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSVoicePickerSheet(
                     speakers: voicePickerOptions,
@@ -244,7 +244,7 @@ struct IOSCustomVoiceView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.voicePickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -252,7 +252,7 @@ struct IOSCustomVoiceView: View {
     }
 
     private func presentLanguagePicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSQwenLanguagePickerSheet(
                     selectedLanguage: $draft.selectedLanguage,
@@ -260,7 +260,7 @@ struct IOSCustomVoiceView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.voicePickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -269,7 +269,7 @@ struct IOSCustomVoiceView: View {
 
     private func presentDeliveryPicker() {
         guard supportsDeliveryControl else { return }
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSDeliveryPickerSheet(
                     selectedPresetID: Binding(
@@ -285,7 +285,7 @@ struct IOSCustomVoiceView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.deliveryPickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -682,7 +682,7 @@ struct IOSVoiceDesignView: View {
     }
 
     private func presentBriefEditor() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSVoiceDesignBriefSheet(
                     voiceDescription: $draft.voiceDescription,
@@ -698,7 +698,7 @@ struct IOSVoiceDesignView: View {
     }
 
     private func presentDesignLanguagePicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSQwenLanguagePickerSheet(
                     selectedLanguage: $draft.selectedLanguage,
@@ -706,7 +706,7 @@ struct IOSVoiceDesignView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.voicePickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -714,7 +714,7 @@ struct IOSVoiceDesignView: View {
     }
 
     private func presentDesignDeliveryPicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSDeliveryPickerSheet(
                     selectedPresetID: Binding(
@@ -730,7 +730,7 @@ struct IOSVoiceDesignView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.deliveryPickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -1174,7 +1174,7 @@ struct IOSVoiceCloningView: View {
     }
 
     private func presentReferencePicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSReferenceClipSheet(
                     savedVoices: savedVoiceOptions,
@@ -1199,7 +1199,7 @@ struct IOSVoiceCloningView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.referenceClipHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )
@@ -1207,7 +1207,7 @@ struct IOSVoiceCloningView: View {
     }
 
     private func presentCloneLanguagePicker() {
-        appModel.presentBottomPanel { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel { bottomSafeAreaInset, availableHeight, dismiss in
             AnyView(
                 IOSQwenLanguagePickerSheet(
                     selectedLanguage: $draft.selectedLanguage,
@@ -1215,7 +1215,7 @@ struct IOSVoiceCloningView: View {
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
                         bottomSafeAreaInset: bottomSafeAreaInset,
-                        height: IOSBottomSheetChrome.voicePickerHeight
+                        height: IOSBottomSheetChrome.expandedHeight(forScreenHeight: availableHeight)
                     )
                 )
             )

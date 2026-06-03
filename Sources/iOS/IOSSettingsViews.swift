@@ -577,7 +577,7 @@ private struct IOSModelRow: View {
     }
 
     private func presentInstallPanel() {
-        appModel.presentBottomPanel(id: "install-\(model.id)") { bottomSafeAreaInset, dismiss in
+        appModel.presentBottomPanel(id: "install-\(model.id)") { bottomSafeAreaInset, _, dismiss in
             AnyView(
                 IOSModelInstallSheet(
                     item: installSheetItem,
