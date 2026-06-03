@@ -168,16 +168,22 @@ struct IOSCustomVoiceView: View {
             eyebrow: "Voice",
             value: speakerDisplayName,
             leadingAvatar: AnyView(
-                IOSVoiceAvatar(seed: draft.selectedSpeaker, initials: speakerDisplayName, diameter: 32)
+                IOSVoiceAvatar(
+                    seed: draft.selectedSpeaker,
+                    initials: speakerDisplayName,
+                    diameter: IOSStudioSetupChip.iconDiameter
+                )
             ),
             tint: IOSBrandTheme.custom,
+            accessibilityID: "studioChip_voice",
             action: presentVoicePicker
         )
         IOSStudioSetupChip(
             eyebrow: "Delivery",
             value: deliveryChipLabel,
-            leadingSymbol: "waveform",
+            leadingSymbol: "theatermasks.fill",
             tint: IOSEmotionPresetPalette.dotColor(forID: draft.delivery.selectedPresetID),
+            accessibilityID: "studioChip_delivery",
             action: presentDeliveryPicker
         )
         .disabled(!supportsDeliveryControl)
@@ -187,6 +193,7 @@ struct IOSCustomVoiceView: View {
             value: draft.selectedLanguage.displayName,
             leadingSymbol: "globe",
             tint: IOSBrandTheme.custom,
+            accessibilityID: "studioChip_language",
             action: presentLanguagePicker
         )
     }
@@ -612,13 +619,15 @@ struct IOSVoiceDesignView: View {
             leadingSymbol: "wand.and.stars",
             tint: IOSBrandTheme.design,
             isPlaceholder: draft.voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            accessibilityID: "studioChip_voiceBrief",
             action: presentBriefEditor
         )
         IOSStudioSetupChip(
             eyebrow: "Delivery",
             value: deliveryChipLabel,
-            leadingSymbol: "waveform",
+            leadingSymbol: "theatermasks.fill",
             tint: IOSEmotionPresetPalette.dotColor(forID: draft.delivery.selectedPresetID),
+            accessibilityID: "studioChip_delivery",
             action: presentDesignDeliveryPicker
         )
         IOSStudioSetupChip(
@@ -626,6 +635,7 @@ struct IOSVoiceDesignView: View {
             value: draft.selectedLanguage.displayName,
             leadingSymbol: "globe",
             tint: IOSBrandTheme.design,
+            accessibilityID: "studioChip_language",
             action: presentDesignLanguagePicker
         )
     }
@@ -1098,6 +1108,7 @@ struct IOSVoiceCloningView: View {
             leadingSymbol: draft.referenceAudioPath == nil ? "mic.fill" : "person.wave.2.fill",
             tint: IOSBrandTheme.clone,
             isPlaceholder: draft.referenceAudioPath == nil,
+            accessibilityID: "studioChip_reference",
             action: presentReferencePicker
         )
         IOSStudioSetupChip(
@@ -1105,6 +1116,7 @@ struct IOSVoiceCloningView: View {
             value: draft.selectedLanguage.displayName,
             leadingSymbol: "globe",
             tint: IOSBrandTheme.clone,
+            accessibilityID: "studioChip_language",
             action: presentCloneLanguagePicker
         )
     }

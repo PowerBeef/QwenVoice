@@ -31,6 +31,17 @@ extension View {
     func iosAppAnimation<Value: Equatable>(_ animation: Animation?, value: Value) -> some View {
         modifier(IOSAccessibleAnimationModifier(animation: animation, value: value))
     }
+
+    /// Apply `accessibilityIdentifier` only when an id is provided. Lets a view
+    /// take an optional id without the caller branching.
+    @ViewBuilder
+    func iosAccessibilityIdentifier(_ id: String?) -> some View {
+        if let id {
+            accessibilityIdentifier(id)
+        } else {
+            self
+        }
+    }
 }
 
 private struct IOSAccessibleAnimationModifier<Value: Equatable>: ViewModifier {

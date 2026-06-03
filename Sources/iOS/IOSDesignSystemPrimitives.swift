@@ -726,18 +726,26 @@ struct IOSBottomSheet<Content: View>: View {
 
 // MARK: - Setup chip
 
-/// Two-line setup chip used in Studio. Top line is a tiny eyebrow label
-/// (e.g. "Voice"); bottom line is the current value (e.g. "Aiden").
-/// Tapping the chip routes to a sheet.
+/// Icon-only Studio selector. A single large, premium tinted icon "orb" is the
+/// whole control — no value caption, no card chrome. The current value + the
+/// category ("Voice: Aiden") live in the VoiceOver label and the picker that
+/// tapping opens. (Earlier two-line / tile variants either cropped the value or
+/// read as boxy placeholders in a third-of-row chip; the icon-only orb is the
+/// clean icon-led answer.)
 ///
-/// Per `design_references/Vocello iOS/studio.jsx` setup-chip pattern.
+/// Uses the app's tinted-icon language: `IOSSetupChipIcon` for symbols,
+/// `IOSVoiceAvatar` for the voice slot (it encodes the chosen speaker).
 struct IOSStudioSetupChip: View {
-    let eyebrow: String
+    /// Shared orb size — Voice avatars (built by callers) must match this.
+    static let iconDiameter: CGFloat = 54
+
+    let eyebrow: String       // category — VoiceOver label only, not rendered
     let value: String
     let leadingSymbol: String?
     let leadingAvatar: AnyView?
     let tint: Color
     let isPlaceholder: Bool
+    let accessibilityID: String?
     let action: () -> Void
 
     init(
@@ -747,6 +755,7 @@ struct IOSStudioSetupChip: View {
         leadingAvatar: AnyView? = nil,
         tint: Color = IOSBrandTheme.accent,
         isPlaceholder: Bool = false,
+        accessibilityID: String? = nil,
         action: @escaping () -> Void
     ) {
         self.eyebrow = eyebrow
@@ -755,59 +764,74 @@ struct IOSStudioSetupChip: View {
         self.leadingAvatar = leadingAvatar
         self.tint = tint
         self.isPlaceholder = isPlaceholder
+        self.accessibilityID = accessibilityID
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .center, spacing: 10) {
+            Group {
                 if let leadingAvatar {
                     leadingAvatar
-                        .frame(width: 32, height: 32)
+                        .frame(width: Self.iconDiameter, height: Self.iconDiameter)
                 } else if let leadingSymbol {
-                    ZStack {
-                        Circle()
-                            .fill(tint.opacity(0.22))
-                            .frame(width: 32, height: 32)
-                        Image(systemName: leadingSymbol)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(tint)
-                    }
+                    IOSSetupChipIcon(symbol: leadingSymbol, tint: tint, diameter: Self.iconDiameter)
                 }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(eyebrow.uppercased())
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(IOSAppTheme.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text(value)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isPlaceholder ? IOSAppTheme.textTertiary : IOSAppTheme.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(IOSAppTheme.textTertiary)
-                    .padding(.leading, 2)
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 12)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.05))
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
-            }
+            // Icon-only: the orb IS the control — no value caption, no card chrome.
+            // The current value lives in the picker + the VoiceOver label below.
+            // Placeholder (unset reference / brief) reads dimmer. The orb hugs its
+            // natural size; the row groups them (see IOSStudioCanvas.setupRow).
+            .opacity(isPlaceholder ? 0.55 : 1)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(eyebrow): \(value)")
+        .accessibilityAddTraits(.isButton)
+        .iosAccessibilityIdentifier(accessibilityID)
+    }
+}
+
+/// Premium "lit tinted" icon used by the Studio setup chips: a soft tint
+/// gradient fill, the app's standard glass strokes, a faint tint glow, and a
+/// hierarchical glyph in the tint. Honors Reduce Transparency (flat fill, no
+/// glow). The voice slot uses `IOSVoiceAvatar` instead (it encodes the speaker).
+struct IOSSetupChipIcon: View {
+    let symbol: String
+    let tint: Color
+    var diameter: CGFloat = IOSStudioSetupChip.iconDiameter
+
+    @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(fillStyle)
+            Circle()
+                .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+            Circle()
+                .inset(by: 0.65)
+                .stroke(Color.white.opacity(0.04), lineWidth: 0.55)
+            Image(systemName: symbol)
+                .font(.system(size: diameter * 0.45, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(tint)
+        }
+        .frame(width: diameter, height: diameter)
+        .shadow(color: reduceTransparency ? .clear : tint.opacity(0.28), radius: 8, y: 1)
+    }
+
+    private var fillStyle: AnyShapeStyle {
+        if reduceTransparency {
+            return AnyShapeStyle(tint.opacity(0.22))
+        }
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [tint.opacity(0.30), tint.opacity(0.14)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 }
 
