@@ -176,11 +176,17 @@ back-to-back runs. Commit compact snapshots/baselines under `benchmarks/` if use
 > watch on the Mac — and crucially, iPhone Mirroring keeps a *locked* device reachable to `devicectl` (a locked
 > phone without mirroring drops to "unavailable"). Opt out with `QVOICE_IOS_NO_MIRROR=1`.
 
-## iOS via the Simulator — sanctioned (the fast UI loop)
+## iOS UI testing — on-device XCUITest (standing method)
 
-What's deprecated above is driving the **physical device** through the iPhone-Mirroring window. Driving the
-**iOS Simulator** is fine and is the preferred path for visual UI work: the app compile-swaps to the fake
-`IOSSimulatorTTSEngine` on the sim (no models, no Metal/MLX, no signing), so the full UI runs. Use
-`scripts/ios_sim.sh` (`run` to build + launch the seeded app, `shot` to screenshot) or the `xcodebuildmcp` MCP
-(`build_run_sim` / `screenshot` / `snapshot_ui` / `tap`). Real taps are still required (the SwiftUI a11y tree
-is virtualized). Full reference: [`ios-device-testing.md`](ios-device-testing.md) → "Simulator UI review".
+**Maintainer decision, 2026-06-04: the Simulator is retired for this project.** The standing autonomous
+UI test/control/review path is the **`VocelloiOSUITests` XCUITest suite run on the device** via
+**`scripts/ios_device.sh ui-test`** (Apple's official on-device UI framework — *not* the deprecated
+mirror-pixel driving above). Review via `scripts/ios_device.sh shot` + the `.xcresult`. Full reference:
+[`ios-device-testing.md`](ios-device-testing.md) → §2 "XCUITest on the device".
+
+### iOS via the Simulator — RETIRED (kept, not used)
+
+The Simulator path (`scripts/ios_sim.sh`, the fake `IOSSimulatorTTSEngine`, `QVOICE_SIM_*` seeding, AXe /
+`scripts/install_axe.sh`, and the `xcodebuildmcp` sim tools) stays **in-tree but inert** — don't reach for
+it for UI review. (What was always deprecated — driving the **physical device** through the iPhone-Mirroring
+window — remains deprecated.)

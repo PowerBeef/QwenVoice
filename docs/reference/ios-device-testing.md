@@ -143,28 +143,42 @@ the sentinel is the authoritative single-run record.
 
 ---
 
-## 2. Thin XCUITest UI-flow smoke
+## 2. XCUITest on the device — the standing autonomous UI loop
 
-`Tests/VocelloiOSUITests/VocelloiOSSmokeUITests.swift` (target `VocelloiOSUITests`, host
-`VocelloiOS`). Intentionally shallow — it does **not** generate audio (that's the harness
-above). It launches, dismisses onboarding if present, and asserts:
+**This is the standing autonomous UI test/control/review method (maintainer decision,
+2026-06-04 — the Simulator is retired; see §3).** Run the `VocelloiOSUITests` suite **on the
+device** with **`scripts/ios_device.sh ui-test`** (`xcodebuild test -destination
+'platform=iOS,id=<device>'` — Apple's official on-device UI framework, distinct from the
+deprecated mirror-pixel driving). Pass `[only]` to scope a run, e.g.
+`scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSSheetUITests`.
 
-- the 4 tabs navigate (`rootTab_studio|voices|history|settings` → their screens);
-- the Studio composer (`textInput_textEditor`) + Custom/Design/Clone mode control
-  (`generateSectionPicker`, `generateSection_custom|design|clone`) are present.
+`Tests/VocelloiOSUITests/` (target `VocelloiOSUITests`, host `VocelloiOS`):
+- `VocelloiOSSmokeUITests` — launch + 4-tab reachability + Custom/Design/Clone segments.
+- `VocelloiOSSheetUITests` — sheet regressions: voice select-and-close, preview-keeps-open,
+  language select-and-close, brief confirm-closes.
 
-Run on a simulator (fast, no signing) or the device:
+It does **not** generate audio (that's the harness above) — the IA + identifiers + sheet
+behaviour are what's under test.
+
+**Driving identifiers (important):** the screen-level `screen_generateStudio` identifier
+propagates onto its descendants, **shadowing** the Studio selector pills' `studioChip_*` ids
+and the composer's `textInput_*` ids — so tap the pills by their stable **label prefix**
+(`"Voice: "`, `"Language:"`, `"Voice brief:"`), and assert the mode segments
+(`generateSection_custom|design|clone`, which keep their ids) rather than the shadowed ones.
+Inside the bottom-sheet overlays the elements keep their own ids
+(`bottomSheet_close`, `voicePickerRow_*`, `voicePickerPreview_*`, `languagePicker_*`,
+`voiceBrief_editor`, `voiceBrief_confirm`). Tab buttons (`rootTab_*`) expose an `isSelected`
+trait. See `VocelloiOSSheetUITests.swift` for the helper patterns.
+
+Run via the script (preferred) or directly — always pass `-derivedDataPath build/ios`:
 
 Always pass `-derivedDataPath build/ios` so device + simulator builds share **one**
 tree (one `SourcePackages`) and don't pollute the global `~/Library/Developer/Xcode/DerivedData`:
 
 ```sh
-# Simulator
-xcodebuild test -project QwenVoice.xcodeproj -scheme VocelloiOS \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build/ios
-
-# Device
+# Device (standing method) — via the script, or directly:
 export QWENVOICE_DEVELOPMENT_TEAM=<team-id>
+scripts/ios_device.sh ui-test
 xcodebuild test -project QwenVoice.xcodeproj -scheme VocelloiOS \
   -destination 'id=<device-udid>' -derivedDataPath build/ios -allowProvisioningUpdates
 ```
@@ -179,7 +193,13 @@ through refactors; the smoke + any agent UI checks depend on them.
 
 ---
 
-## 3. Simulator UI review (the fake engine)
+## 3. Simulator UI review (the fake engine) — RETIRED (kept in-tree, not used)
+
+> **Retired (maintainer decision, 2026-06-04).** The Simulator path below — `scripts/ios_sim.sh`,
+> the fake `IOSSimulatorTTSEngine`, the `QVOICE_SIM_*` seeding, and AXe (`scripts/install_axe.sh`)
+> — is **kept in the repo (inert, reversible) but is no longer part of the workflow**. Do UI
+> testing/control/review **on the device** via §2 (`scripts/ios_device.sh ui-test`). The text
+> below is retained for reference only.
 
 For **visual UI work** (layout, chrome, flows, keyboard behavior) the Simulator is the right
 tool — no device, no signing, no models, no Metal/MLX. On the simulator the app swaps to

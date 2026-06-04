@@ -24,6 +24,7 @@
 #   scripts/ios_device.sh pull [dest]             # pull the app-container diagnostics mirror
 #   scripts/ios_device.sh bench [spec] [--label "note"]
 #                                                 # build→install→autorun→pull→summarize
+#   scripts/ios_device.sh ui-test [only]          # run VocelloiOSUITests ON THE DEVICE (signed XCUITest)
 #
 # Observation: every device command auto-starts macOS iPhone Mirroring (watch on the Mac;
 # the phone stays locked + screen-dark, OLED-safe; mirroring also keeps a LOCKED device
@@ -363,12 +364,42 @@ PY
   python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status")=="ok" else 1)' "$sentinel"
 }
 
+# ui-test [only]: run the VocelloiOSUITests XCUITest suite ON THE DEVICE (signed). This is
+# Apple's official on-device UI-test framework — the sanctioned on-device UI automation,
+# distinct from the deprecated screen-mirror UI-driving. Optional [only] scopes the run
+# (e.g. VocelloiOSUITests/VocelloiOSSheetUITests or .../testVoicePickerSelectAndClose).
+cmd_ui_test() {
+  require_team
+  local only="${1:-}"
+  local dev; dev="$(resolve_device)"
+  note "running VocelloiOSUITests on device $dev (signed XCUITest)${only:+ — only $only}"
+  mkdir -p "$DERIVED"
+  local log="$DERIVED/device-uitest.log"
+  local -a only_args=()
+  [[ -n "$only" ]] && only_args=( -only-testing:"$only" )
+  set +e
+  xcodebuild test \
+    -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
+    -destination "id=$dev" -derivedDataPath "$DERIVED" \
+    -allowProvisioningUpdates \
+    DEVELOPMENT_TEAM="$QWENVOICE_DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic \
+    ${only_args[@]+"${only_args[@]}"} \
+    2>&1 | tee "$log"
+  local status=${PIPESTATUS[0]}
+  set -e
+  if grep -q '\*\* TEST SUCCEEDED \*\*' "$log"; then
+    note "device UI tests PASSED"
+  else
+    die "device UI tests did not report TEST SUCCEEDED (exit $status; see $log)"
+  fi
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
   # locked device reachable). `mirror` calls ensure_mirror itself; help/none skip it.
   case "$sub" in
-    doctor|build|install|launch|console|pull|bench|shot) ensure_mirror ;;
+    doctor|build|install|launch|console|pull|bench|shot|ui-test) ensure_mirror ;;
   esac
   case "$sub" in
     doctor)  cmd_doctor "$@" ;;
@@ -380,9 +411,10 @@ main() {
     shot)    cmd_shot "$@" ;;
     pull)    cmd_pull "$@" ;;
     bench)   cmd_bench "$@" ;;
+    ui-test) cmd_ui_test "$@" ;;
     help|-h|--help)
-      sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|help)" ;;
+      sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|help)" ;;
   esac
 }
 

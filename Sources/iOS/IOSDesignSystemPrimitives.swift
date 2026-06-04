@@ -645,6 +645,7 @@ struct IOSBottomEdgeSheet<Content: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
+            .accessibilityIdentifier("bottomSheet_close")
         }
     }
 }
@@ -735,6 +736,7 @@ struct IOSBottomSheet<Content: View>: View {
                     }
             }
             .accessibilityLabel("Close")
+            .accessibilityIdentifier("bottomSheet_close")
         }
     }
 }

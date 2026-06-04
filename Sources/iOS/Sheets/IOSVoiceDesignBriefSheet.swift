@@ -174,6 +174,7 @@ private struct IOSBriefTextEditor: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.delegate = context.coordinator
+        view.accessibilityIdentifier = "voiceBrief_editor"
         view.backgroundColor = .clear
         view.font = .systemFont(ofSize: 16, weight: .medium)
         view.textColor = IOSAppTheme.textPrimaryUIColor

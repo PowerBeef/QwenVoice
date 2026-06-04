@@ -42,6 +42,7 @@
 		204995EE6E17D7F1DDFA02FB /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 357F5CA9E28DE9CA8F48905E /* HuggingFace */; };
 		207CC9B667B93AD4010CE0B5 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 356CE30F0920C8E6BEDAFCBF /* MLXAudioTTS */; };
 		221EB5F147B661B78C0F203C /* sohee.wav in Resources */ = {isa = PBXBuildFile; fileRef = B03BDEE35746990C5202A7A9 /* sohee.wav */; };
+		22DDAD6351784EA1052742F1 /* VocelloiOSSheetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B7BEC208EBCD33A51F21653 /* VocelloiOSSheetUITests.swift */; };
 		2589BEF4455DB23814489EF1 /* CLIRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C15F6A1291506C7D8605BB /* CLIRuntime.swift */; };
 		258EEA1F20457D450A2883C0 /* IOSStudioInlinePlayerCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DB48541EB53A7C555669534 /* IOSStudioInlinePlayerCard.swift */; };
 		25AA6B68605F58DB9EE09EE6 /* RuntimeReleaseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43033F9668B23257EDC8EEE3 /* RuntimeReleaseCoordinator.swift */; };
@@ -231,6 +232,7 @@
 		CE9FB73376B49D81E5BEFAF3 /* StartupDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21943A54ED34AAA37626A252 /* StartupDiagnosticsView.swift */; };
 		D27D60A56143986204A2D592 /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623B6EAE78F8B7100D4675F4 /* Voice.swift */; };
 		D4008E9B424CE5E4D9D76879 /* VocelloMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3548C32EC85AB76ABEAEA6A8 /* VocelloMain.swift */; };
+		D75C67CBCAC91DF7F71B0273 /* IOSScrollRefinements.swift in Sources */ = {isa = PBXBuildFile; fileRef = E829FDA2BC5308802AB3A837 /* IOSScrollRefinements.swift */; };
 		D9CD489105C5ADCF38E6EE96 /* IOSModelDeliverySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC061E247067EDDB99401F09 /* IOSModelDeliverySupport.swift */; };
 		DA60A835AE1FB55B29533BCA /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E86AC791986726B8753994F /* Support.swift */; };
 		DAD34C5A369EE8338E586DDC /* NativeTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B33472B5B6CE711BEEF3244 /* NativeTelemetry.swift */; };
@@ -438,6 +440,7 @@
 		3837D18DB04238E5D9200B5E /* IOSSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSSettingsViews.swift; sourceTree = "<group>"; };
 		3912F66CF11ACFE5DD83B2BE /* NativeRuntimeFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRuntimeFactory.swift; sourceTree = "<group>"; };
 		3ADE213695C11F46205AE6DC /* QwenVoice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QwenVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B7BEC208EBCD33A51F21653 /* VocelloiOSSheetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocelloiOSSheetUITests.swift; sourceTree = "<group>"; };
 		3B9B756B0B79BA2E94926CD3 /* eric.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = eric.wav; sourceTree = "<group>"; };
 		3DDAA8C5ADE95EC61570A219 /* GenerationTelemetryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationTelemetryRecord.swift; sourceTree = "<group>"; };
 		3F056FE32E688786725FCC8D /* ModelAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelAssets.swift; sourceTree = "<group>"; };
@@ -579,6 +582,7 @@
 		E56DB3F2A6729473A3816C4C /* TTSContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSContract.swift; sourceTree = "<group>"; };
 		E7B6A4BEC2A7485ACA5C4C78 /* NativeTelemetrySampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTelemetrySampler.swift; sourceTree = "<group>"; };
 		E7EF4B9CD82A748843A9C362 /* EngineDomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineDomainModels.swift; sourceTree = "<group>"; };
+		E829FDA2BC5308802AB3A837 /* IOSScrollRefinements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSScrollRefinements.swift; sourceTree = "<group>"; };
 		E876590A12FADBE38100CD17 /* LayoutConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConstants.swift; sourceTree = "<group>"; };
 		E889EF31C2F3350E9F0CC31C /* QwenVoiceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceApp.swift; sourceTree = "<group>"; };
 		EA27F5C2D0BF5784B054202E /* IOSStudioShellViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSStudioShellViews.swift; sourceTree = "<group>"; };
@@ -718,6 +722,7 @@
 		07C4B16B256D0400582DA591 /* VocelloiOSUITests */ = {
 			isa = PBXGroup;
 			children = (
+				3B7BEC208EBCD33A51F21653 /* VocelloiOSSheetUITests.swift */,
 				CDDDFA0A5DBF06B5F473D5DA /* VocelloiOSSmokeUITests.swift */,
 			);
 			name = VocelloiOSUITests;
@@ -1084,6 +1089,7 @@
 				CAC079A66AD5DB1CFDD33485 /* IOSOnboardingCard.swift */,
 				ECF1A0C732B9920CE8D5889A /* IOSPreviewSupport.swift */,
 				C4A51A054EBF03C0D4E010A6 /* IOSRootNavigationModels.swift */,
+				E829FDA2BC5308802AB3A837 /* IOSScrollRefinements.swift */,
 				3837D18DB04238E5D9200B5E /* IOSSettingsViews.swift */,
 				FA28E2DF284402995B080598 /* IOSShellPrimitives.swift */,
 				87264D972026F10185EC34F6 /* IOSSimulatorFakeInstallRegistry.swift */,
@@ -1674,6 +1680,7 @@
 				FBBE8417A797550DC677BD06 /* IOSPreviewSupport.swift in Sources */,
 				4426E1F55BB05BAF12EADAB7 /* IOSRecordingOverlay.swift in Sources */,
 				344EA1CECA3F8F8B111BC547 /* IOSRootNavigationModels.swift in Sources */,
+				D75C67CBCAC91DF7F71B0273 /* IOSScrollRefinements.swift in Sources */,
 				0EFABC078A628F459E6E62F7 /* IOSSettingsViews.swift in Sources */,
 				2652AA780375CA68D2A076C9 /* IOSShellPrimitives.swift in Sources */,
 				0DBD4126D6783119602B2DB3 /* IOSSimulatorFakeInstallRegistry.swift in Sources */,
@@ -1800,6 +1807,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				22DDAD6351784EA1052742F1 /* VocelloiOSSheetUITests.swift in Sources */,
 				40DC335349106693E0EC365F /* VocelloiOSSmokeUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
