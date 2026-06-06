@@ -2,49 +2,80 @@ import AVFoundation
 import Observation
 import SwiftUI
 
-/// "Just generated" hero player in Studio's dock area, after a take
-/// completes. Per design_references/Vocello iOS/studio.jsx (InlinePlayer):
-/// waveform progress bar across the top, then a row with a mode-tinted
-/// Play/Pause button, voice meta, and Save / Download / Dismiss icon
-/// buttons.
+/// Studio dock hero player — a SINGLE card that serves both the **live streaming
+/// preview** (during generation) and the **completed take** (after), so the
+/// `.live → .complete` dock transition is an in-place morph (one view identity, one
+/// `IOSInlinePlaybackController`) rather than a swap of two separate views.
 ///
-/// Drives a local AVAudioPlayer so it's independent from the engine's
-/// streaming preview state machine. Tapping the waveform surface
-/// escalates to the full-screen IOSPlayerSheet via the `onExpand`
-/// closure (caller plumbs through to the global Player sheet
-/// presentation state on QVoiceiOSRootView).
-struct IOSStudioInlinePlayerCard: View {
-    let item: IOSStudioInlinePlayerItem
+/// Per design_references/Vocello iOS/studio.jsx (InlinePlayer): a waveform progress
+/// bar across the top, then a row with a mode-tinted Play/Pause button, voice meta,
+/// and phase-specific trailing controls (Cancel while streaming; Save / Download /
+/// Dismiss when complete). The same controller mirrors the shared `AudioPlayerViewModel`
+/// throughout, so playback position + waveform continue smoothly across the morph.
+struct IOSStudioPlayerCard: View {
+    enum Phase {
+        case live(IOSStudioLivePreviewItem)
+        case complete(IOSStudioInlinePlayerItem)
+
+        var isLive: Bool { if case .live = self { return true } else { return false } }
+        var waveformSeed: Int {
+            switch self {
+            case .live(let i): return i.waveformSeed
+            case .complete(let i): return i.waveformSeed
+            }
+        }
+        var voiceName: String {
+            switch self {
+            case .live(let i): return i.voiceName
+            case .complete(let i): return i.voiceName
+            }
+        }
+        var modeLabel: String {
+            switch self {
+            case .live(let i): return i.modeLabel
+            case .complete(let i): return i.modeLabel
+            }
+        }
+        var liveEstimate: TimeInterval? {
+            if case .live(let i) = self { return i.estimatedAudioDuration } else { return nil }
+        }
+        /// Stable task key: stays `"live"` while streaming, flips to the final path on
+        /// completion so the controller re-adopts by URL.
+        var taskKey: String {
+            switch self {
+            case .live: return "live"
+            case .complete(let i): return "complete:\(i.audioURL.path)"
+            }
+        }
+    }
+
+    let phase: Phase
     let tint: Color
     var onSave: (() -> Void)?
     var onDismiss: () -> Void
+    var onCancel: () -> Void
     var onExpand: (() -> Void)?
 
     @State private var controller = IOSInlinePlaybackController()
+    @State private var pulse = false
+    @State private var showDismissConfirm = false
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @Environment(\.iosReduceMotionEnabled) private var reduceMotion
 
     private let referenceHeight: CGFloat = 127
 
-    init(
-        item: IOSStudioInlinePlayerItem,
-        tint: Color,
-        onSave: (() -> Void)? = nil,
-        onDismiss: @escaping () -> Void,
-        onExpand: (() -> Void)? = nil
-    ) {
-        self.item = item
-        self.tint = tint
-        self.onSave = onSave
-        self.onDismiss = onDismiss
-        self.onExpand = onExpand
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Per-tick currentTime/progress lives in this child only, so the parent
-            // body (chrome + shadow below) no longer re-renders on every display-link tick.
-            InlineWaveformProgressRow(controller: controller, waveformSeed: item.waveformSeed, tint: tint, onExpand: onExpand)
+            // Per-tick currentTime/progress/buffer math lives in this child only, so the
+            // parent body (chrome + shadow) doesn't re-render on every display-link tick.
+            InlineWaveformProgressRow(
+                controller: controller,
+                waveformSeed: phase.waveformSeed,
+                tint: tint,
+                scrubEnabled: !phase.isLive,
+                liveEstimate: phase.liveEstimate,
+                onExpand: phase.isLive ? nil : onExpand
+            )
             controlsRow
         }
         .padding(.horizontal, 16)
@@ -61,91 +92,156 @@ struct IOSStudioInlinePlayerCard: View {
                 .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
         }
         // Softer shadow per the design notes: dropped from `0 12 32 / 0.45`
-        // to `0 2 10 / 0.22` so the player floats lightly above the canvas
-        // instead of bleeding into the space below the tab dock.
+        // to `0 2 10 / 0.22` so the player floats lightly above the canvas.
         .shadow(color: Color.black.opacity(0.22), radius: 5, x: 0, y: 2)
         .transition(cardTransition)
-        .task(id: item.audioURL) {
+        .task(id: phase.taskKey) { await activateController() }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+        }
+        .onDisappear { controller.stop() }
+        .accessibilityIdentifier(phase.isLive ? "studio_livePreviewPlayer" : "studio_inlinePlayer")
+        .confirmationDialog(
+            "Dismiss this clip?",
+            isPresented: $showDismissConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Dismiss", role: .destructive) {
+                // The take is already saved in History, so this only clears it from Studio.
+                // Stop the shared player too, so dismissing doesn't leave audio playing with
+                // no visible card.
+                audioPlayer.dismiss()
+                onDismiss()
+            }
+            .accessibilityIdentifier("studio_inlinePlayer_dismissConfirm")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your generation is saved in History — you can replay it anytime.")
+        }
+    }
+
+    /// Activate the shared-player adoption for the current phase on the SAME controller.
+    /// Live → mirror the streaming preview; complete → re-adopt by URL (the shared player's
+    /// `currentFilePath` already equals the final URL by the time `.complete` is set, so this
+    /// is a seamless hand-off with no position reset).
+    private func activateController() async {
+        switch phase {
+        case .live:
+            controller.adoptLive(sharedPlayer: audioPlayer)
+        case .complete(let item):
             if item.ownedBySharedPlayer {
-                // The shared player already owns this generation's playback (live preview →
-                // seamless hand-off). Mirror/forward it instead of starting a second player.
                 controller.adopt(sharedPlayer: audioPlayer, url: item.audioURL)
             } else {
                 await controller.load(url: item.audioURL, autoplay: item.autoplay)
             }
         }
-        .onDisappear {
-            controller.stop()
-        }
-        .accessibilityIdentifier("studio_inlinePlayer")
     }
 
     private var cardTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
-        }
-        return .move(edge: .bottom).combined(with: .opacity)
+        reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
     }
 
     // MARK: - Controls row
 
     private var controlsRow: some View {
         HStack(spacing: 8) {
-            Button {
-                controller.togglePlayback()
-                IOSHaptics.selection()
-            } label: {
-                Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(IOSAppTheme.accentForeground)
-                    .frame(width: 48, height: 48)
-                    .background {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        tint,
-                                        tint.mix(with: .black, by: 0.20, in: .perceptual),
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                    }
-                    .overlay {
-                        Circle().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
-                    }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
+            playPauseButton
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.voiceName)
+                Text(phase.voiceName)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(IOSAppTheme.textPrimary)
                     .lineLimit(1)
-                Text("Just now · \(item.modeLabel)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(IOSAppTheme.textSecondary)
-                    .lineLimit(1)
+                statusLine
             }
             .padding(.leading, 4)
 
             Spacer(minLength: 0)
 
-            iconButton(symbol: "bookmark", label: "Save") {
-                if let onSave {
-                    onSave()
-                } else {
-                    shareWAV()
+            trailingControls
+        }
+        // Card stays put; only the status line + trailing cluster cross-fade between phases.
+        .animation(reduceMotion ? nil : IOSDesignMotion.stateChange, value: phase.isLive)
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            controller.togglePlayback()
+            IOSHaptics.selection()
+        } label: {
+            Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(IOSAppTheme.accentForeground)
+                .frame(width: 48, height: 48)
+                .background {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    tint,
+                                    tint.mix(with: .black, by: 0.20, in: .perceptual),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 }
+                .overlay {
+                    Circle().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
+        .accessibilityIdentifier(phase.isLive ? "studio_livePreview_playPause" : "studio_inlinePlayer_playPause")
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        if phase.isLive {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                    .opacity(reduceMotion ? 1.0 : (pulse ? 1.0 : 0.3))
+                Text("Streaming preview")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                    .lineLimit(1)
             }
-            iconButton(symbol: "arrow.down.to.line", label: "Download") {
-                shareWAV()
+            .transition(.opacity)
+        } else {
+            Text("Just now · \(phase.modeLabel)")
+                .font(.system(size: 11))
+                .foregroundStyle(IOSAppTheme.textSecondary)
+                .lineLimit(1)
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingControls: some View {
+        if phase.isLive {
+            Button(action: onCancel) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(IOSAppTheme.textPrimary)
+                    .frame(width: 36, height: 36)
+                    .background { Circle().fill(IOSAppTheme.glassSurfaceFillMuted.opacity(0.7)) }
             }
-            iconButton(symbol: "xmark", label: "Dismiss") {
-                onDismiss()
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel generation")
+            .accessibilityIdentifier("studio_livePreview_cancel")
+            .transition(.opacity)
+        } else {
+            HStack(spacing: 8) {
+                iconButton(symbol: "bookmark", label: "Save") {
+                    if let onSave { onSave() } else { shareWAV() }
+                }
+                iconButton(symbol: "arrow.down.to.line", label: "Download") { shareWAV() }
+                iconButton(symbol: "xmark", label: "Dismiss") { showDismissConfirm = true }
             }
+            .transition(.opacity)
         }
     }
 
@@ -158,6 +254,7 @@ struct IOSStudioInlinePlayerCard: View {
     }
 
     private func shareWAV() {
+        guard case .complete(let item) = phase else { return }
         let activity = UIActivityViewController(activityItems: [item.audioURL], applicationActivities: nil)
         UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow }
@@ -180,7 +277,34 @@ struct InlineWaveformProgressRow: View {
     /// Scrubbing is disabled during a live preview (seek is a no-op until the final
     /// file exists) — the waveform is a pure progress indicator then.
     var scrubEnabled: Bool = true
+    /// When set, the row renders in **streaming-preview mode**: the waveform shows a
+    /// generated-so-far buffer fill (`duration / estimate`) with the playhead inside it
+    /// and an animated not-yet-generated tail, and the right label shows `~estimate`.
+    /// `nil` (default) is the normal completed player (playback progress + final duration).
+    /// All per-tick state (`currentTime`/`duration`) is read here so the parent card's
+    /// chrome doesn't re-render on every display-link tick.
+    var liveEstimate: TimeInterval? = nil
     var onExpand: (() -> Void)?
+
+    @Environment(\.iosReduceMotionEnabled) private var reduceMotion
+
+    private var isStreaming: Bool { liveEstimate != nil }
+
+    /// Estimate floored by what's actually been generated so the buffer fill can't overflow
+    /// even when the forecast undershoots.
+    private var resolvedEstimate: TimeInterval {
+        max(liveEstimate ?? 0, controller.duration, 0.8)
+    }
+
+    private var bufferedFraction: Double {
+        guard isStreaming, resolvedEstimate > 0 else { return controller.progress }
+        return min(1, controller.duration / resolvedEstimate)
+    }
+
+    private var playheadFraction: Double {
+        guard isStreaming, resolvedEstimate > 0 else { return controller.progress }
+        return min(bufferedFraction, controller.currentTime / resolvedEstimate)
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -194,10 +318,11 @@ struct InlineWaveformProgressRow: View {
                     seed: waveformSeed,
                     barCount: 38,
                     tint: tint,
-                    progress: controller.progress,
-                    isAnimating: false,
+                    progress: playheadFraction,
+                    isAnimating: isStreaming && !reduceMotion,
                     unplayedColor: Color.white.opacity(0.18),
-                    style: .player
+                    style: .player,
+                    bufferedProgress: isStreaming ? bufferedFraction : nil
                 )
                 .contentShape(Rectangle())
                 .gesture(scrubGesture(width: proxy.size.width), isEnabled: scrubEnabled)
@@ -205,6 +330,9 @@ struct InlineWaveformProgressRow: View {
             }
             .frame(height: 36)
 
+            // Always the real (generated-so-far → final) duration — stable format, never wraps,
+            // and doesn't change "by much" across the live→complete morph. The estimate stays
+            // internal (it only scales the streaming buffer-fill bands above).
             Text(controller.formatted(time: controller.duration))
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
                 .foregroundStyle(IOSAppTheme.textSecondary)

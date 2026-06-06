@@ -180,6 +180,11 @@ struct IOSWaveformBars: View {
         }
     }
 
+    /// Which streaming band a bar belongs to. With `bufferedProgress == nil` only
+    /// `.played`/`.tail` occur (the buffered band is empty), so rendering is identical
+    /// to the pre-streaming two-band waveform.
+    private enum Band { case played, buffered, tail }
+
     let seed: Int
     let barCount: Int
     let tint: Color
@@ -187,6 +192,13 @@ struct IOSWaveformBars: View {
     let isAnimating: Bool
     let unplayedColor: Color?
     let style: Style
+    /// Absolute generated fraction (0…1) for the live streaming preview: bars between
+    /// `progress` (playhead) and `bufferedProgress` render as "generated, not yet played",
+    /// and bars beyond it are the not-yet-generated tail (animated when streaming). `nil`
+    /// (the default) means "not streaming" → pixel-identical to the prior two-band render.
+    let bufferedProgress: Double?
+
+    @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
 
     init(
         seed: Int,
@@ -195,7 +207,8 @@ struct IOSWaveformBars: View {
         progress: Double = 1.0,
         isAnimating: Bool = false,
         unplayedColor: Color? = nil,
-        style: Style = .mini
+        style: Style = .mini,
+        bufferedProgress: Double? = nil
     ) {
         self.seed = seed
         self.barCount = barCount
@@ -204,6 +217,7 @@ struct IOSWaveformBars: View {
         self.isAnimating = isAnimating
         self.unplayedColor = unplayedColor
         self.style = style
+        self.bufferedProgress = bufferedProgress
     }
 
     var body: some View {
@@ -212,7 +226,10 @@ struct IOSWaveformBars: View {
         // per-frame TimelineView to `.big` and cap it to ~24fps (vsync-aligned). The
         // generating dock + recording overlay (.mini) and history thumbnails (.player)
         // fall through to a single static draw — pixel-identical, zero per-frame cost.
-        if isAnimating && style == .big {
+        // `.big` always animates when asked; `.player` animates ONLY while streaming
+        // (a tail breathing on the not-yet-generated bars). `.mini` + the static
+        // `bufferedProgress == nil` `.player` fall through to one static draw — zero per-frame cost.
+        if isAnimating && (style == .big || (style == .player && bufferedProgress != nil)) {
             TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { context in
                 bars(phase: context.date.timeIntervalSinceReferenceDate)
             }
@@ -227,21 +244,44 @@ struct IOSWaveformBars: View {
             let totalSpacing = spacing * CGFloat(barCount - 1)
             let fittedBarWidth = (geo.size.width - totalSpacing) / CGFloat(barCount)
             let barWidth = resolvedBarWidth(fitted: fittedBarWidth)
-            let progressIndex = Int((Double(barCount) * progress).rounded())
+            let playhead = min(max(progress, 0), 1)
+            let buffered = max(playhead, min(bufferedProgress ?? playhead, 1))
+            let playheadIndex = Int((Double(barCount) * playhead).rounded())
+            let bufferedIndex = Int((Double(barCount) * buffered).rounded())
+            let tailAnimated = isAnimating && style == .player && bufferedProgress != nil
+            let showsPlayhead = bufferedProgress != nil && style == .player
 
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(0..<barCount, id: \.self) { i in
-                    let amplitude = amplitude(at: i, phase: phase)
-                    let height = max(2, geo.size.height * CGFloat(amplitude))
-                    let isPast = i < progressIndex
-                    RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
-                        .fill(fillStyle(isPast: isPast))
-                        .opacity(opacity(isPast: isPast, amplitude: amplitude))
-                        .frame(width: barWidth, height: height)
+            ZStack(alignment: .leading) {
+                HStack(alignment: .center, spacing: spacing) {
+                    ForEach(0..<barCount, id: \.self) { i in
+                        let band: Band = i < playheadIndex ? .played : (i < bufferedIndex ? .buffered : .tail)
+                        let amp = amplitude(at: i, phase: phase)
+                        let height = max(2, geo.size.height * CGFloat(amp))
+                        RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+                            .fill(fillStyle(band: band))
+                            .opacity(renderOpacity(at: i, band: band, amplitude: amp, phase: phase, tailAnimated: tailAnimated))
+                            .frame(width: barWidth, height: height)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+
+                // Streaming-only playhead: marks the playback position and crisply separates the
+                // bright "played" tier from the dimmer "generated-ahead" tier.
+                if showsPlayhead {
+                    playheadMarker(height: geo.size.height)
+                        .offset(x: playhead * geo.size.width - playheadMarkerWidth / 2)
                 }
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
+    }
+
+    private var playheadMarkerWidth: CGFloat { 2.5 }
+
+    private func playheadMarker(height: CGFloat) -> some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.92))
+            .frame(width: playheadMarkerWidth, height: height)
+            .shadow(color: reduceTransparency ? .clear : tint.opacity(0.6), radius: 3)
     }
 
     private func resolvedBarWidth(fitted: CGFloat) -> CGFloat {
@@ -251,8 +291,23 @@ struct IOSWaveformBars: View {
         return max(style.minimumBarWidth, fitted)
     }
 
-    private func fillStyle(isPast: Bool) -> AnyShapeStyle {
-        if isPast {
+    // A gentle traveling wave used to softly shimmer the not-yet-generated tail while streaming.
+    private func tailWave(_ index: Int, phase: TimeInterval) -> Double {
+        sin(phase * 2.2 + Double(index) * 0.55)
+    }
+
+    private func renderOpacity(at index: Int, band: Band, amplitude: Double, phase: TimeInterval, tailAnimated: Bool) -> Double {
+        // Streaming tail reads as faint/incoming (a soft shimmer when animating); the completed
+        // card's unplayed tail keeps its prior 0.55 via `opacity(band:)`.
+        if band == .tail, bufferedProgress != nil {
+            return tailAnimated ? 0.30 + 0.10 * tailWave(index, phase: phase) : 0.30
+        }
+        return opacity(band: band, amplitude: amplitude)
+    }
+
+    private func fillStyle(band: Band) -> AnyShapeStyle {
+        switch band {
+        case .played, .buffered:
             let bottomOpacity: Double = style == .big ? 0.60 : 0.70
             return AnyShapeStyle(
                 LinearGradient(
@@ -264,19 +319,23 @@ struct IOSWaveformBars: View {
                     endPoint: .bottom
                 )
             )
+        case .tail:
+            return AnyShapeStyle(unplayedColor ?? Color.white.opacity(style == .big ? 0.14 : 0.18))
         }
-
-        return AnyShapeStyle(unplayedColor ?? Color.white.opacity(style == .big ? 0.14 : 0.18))
     }
 
-    private func opacity(isPast: Bool, amplitude: Double) -> Double {
+    private func opacity(band: Band, amplitude: Double) -> Double {
         switch style {
         case .mini:
             return 0.4 + amplitude * 0.5
         case .player:
-            return isPast ? 1.0 : 0.55
+            switch band {
+            case .played: return 1.0
+            case .buffered: return 0.50   // generated, ahead of the playhead — a clear step below played
+            case .tail: return 0.55       // completed-card unplayed tail (streaming tail is dimmer via renderOpacity)
+            }
         case .big:
-            return isPast ? 1.0 : 0.65
+            return band == .played ? 1.0 : 0.65
         }
     }
 

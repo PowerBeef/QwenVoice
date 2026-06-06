@@ -222,28 +222,31 @@ struct IOSStudioCanvas<SetupChips: View>: View {
 
     @ViewBuilder
     private var dockArea: some View {
-        switch genState {
-        case .idle where errorMessage != nil:
-            errorBar
-        case .idle where !modelInstalled:
-            installCTA
-        case .idle:
-            generateCTA
-        case .generating:
-            generatingBar
-        case .live(let live):
-            IOSStudioLivePreviewCard(
-                item: live,
-                tint: tint,
-                onCancel: onCancel
-            )
-        case .complete(let item):
-            IOSStudioInlinePlayerCard(
-                item: item,
+        // The player card is a TOP-LEVEL `if let` (not a `switch` branch) so it keeps one
+        // stable view identity while `playerPhase` stays non-nil — i.e. the `.live → .complete`
+        // change morphs the card's content in place instead of running the card's transition
+        // (slide out / slide in). The transition fires only on the true entrance
+        // (generating → card) and exit (card → idle).
+        if let phase = genState.playerPhase {
+            IOSStudioPlayerCard(
+                phase: phase,
                 tint: tint,
                 onDismiss: onPlayerDismiss,
+                onCancel: onCancel,
                 onExpand: onPlayerExpand
             )
+            .id("studioPlayerCard")
+        } else {
+            switch genState {
+            case .idle where errorMessage != nil:
+                errorBar
+            case .idle where !modelInstalled:
+                installCTA
+            case .idle:
+                generateCTA
+            default:
+                generatingBar   // .generating (player states handled above)
+            }
         }
     }
 
@@ -385,6 +388,17 @@ enum IOSStudioGenState: Equatable {
     /// that seamlessly becomes the `.complete` card when generation finishes.
     case live(IOSStudioLivePreviewItem)
     case complete(IOSStudioInlinePlayerItem)
+
+    /// Maps the two player-bearing states to the unified card's phase. `nil` for
+    /// idle/generating. Used by the dock to render ONE `IOSStudioPlayerCard` for both
+    /// `.live` and `.complete` (stable view identity ⇒ the transition morphs in place).
+    var playerPhase: IOSStudioPlayerCard.Phase? {
+        switch self {
+        case .live(let item): return .live(item)
+        case .complete(let item): return .complete(item)
+        case .idle, .generating: return nil
+        }
+    }
 }
 
 /// Lightweight payload for the live-preview dock card (no audio URL — the final
@@ -398,6 +412,10 @@ struct IOSStudioLivePreviewItem: Equatable {
     /// Identical to the eventual `.complete` item's seed (prompt-derived) so the
     /// decorative waveform shape does not change across the live→final swap.
     let waveformSeed: Int
+    /// Prompt-derived forecast of the final audio length (from `LivePreviewEstimate`),
+    /// computed once at generation start. Drives the streaming waveform's buffer fill
+    /// (`generated-so-far / estimate`) so the card looks full while audio is still arriving.
+    let estimatedAudioDuration: TimeInterval
 }
 
 struct IOSStudioInlinePlayerItem: Equatable {

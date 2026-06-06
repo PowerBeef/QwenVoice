@@ -330,7 +330,8 @@ struct IOSCustomVoiceView: View {
             modeLabel: "Custom",
             mode: .custom,
             transcript: promptText,
-            waveformSeed: seed
+            waveformSeed: seed,
+            estimatedAudioDuration: LivePreviewEstimate(text: promptText)?.estimatedAudioDuration ?? 0
         ))
 
         coordinator.generationTask = Task {
@@ -815,7 +816,8 @@ struct IOSVoiceDesignView: View {
             modeLabel: "Design",
             mode: .design,
             transcript: promptText,
-            waveformSeed: seed
+            waveformSeed: seed,
+            estimatedAudioDuration: LivePreviewEstimate(text: promptText)?.estimatedAudioDuration ?? 0
         ))
 
         coordinator.generationTask = Task {
@@ -1363,7 +1365,8 @@ struct IOSVoiceCloningView: View {
             modeLabel: "Clone",
             mode: .clone,
             transcript: promptText,
-            waveformSeed: seed
+            waveformSeed: seed,
+            estimatedAudioDuration: LivePreviewEstimate(text: promptText)?.estimatedAudioDuration ?? 0
         ))
 
         coordinator.generationTask = Task {
