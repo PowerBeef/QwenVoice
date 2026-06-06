@@ -240,13 +240,20 @@ cmd_launch() {
     local run_id="ios-$(date +%Y%m%d-%H%M%S)"
     note "launching with autorun ($spec), runID=$run_id"
     local env_json
+    # Benchmark A/B passthrough: any caller-set QWENVOICE_*/QVOICE_* tuning env
+    # (e.g. QWENVOICE_STREAMING_PREVIEW_DATA=off, QWENVOICE_FORCE_MEMORY_CLASS)
+    # is forwarded into the launched app's env so on-device benches are reproducible.
     env_json="$(QV_SPEC="$spec" QV_RUNID="$run_id" python3 -c '
 import json, os
-print(json.dumps({
+env = {
     "QWENVOICE_DEBUG": "1",
     "QVOICE_IOS_DEVICE_RUN_ID": os.environ["QV_RUNID"],
     "QVOICE_IOS_AUTORUN": os.environ["QV_SPEC"],
-}))')"
+}
+for k, v in os.environ.items():
+    if (k.startswith("QWENVOICE_") or k.startswith("QVOICE_")) and k not in env:
+        env[k] = v
+print(json.dumps(env))')"
     xcrun devicectl device process launch --device "$dev" \
       --terminate-existing -e "$env_json" "$BUNDLE_ID" >&2
     printf '%s\n' "$run_id"   # stdout: ONLY the runID (consumed by bench)

@@ -265,6 +265,18 @@ progress record live in
 [`../docs/reference/ios-engine-optimization.md`](../docs/reference/ios-engine-optimization.md). Entitlement
 detail: [`../docs/reference/ios-increased-memory-entitlement-request.md`](../docs/reference/ios-increased-memory-entitlement-request.md).
 
+### Live streaming playback — verified zero-cost (2026-06-06, `b961cc8`)
+
+iOS live-preview playback (audio during generation) was checked for engine impact via an on-device A/B on
+the same binary: live OFF (`QWENVOICE_STREAMING_PREVIEW_DATA=off` → `.skip` = pre-feature: no PCM, chunks
+dropped, no consumer) vs ON (`.emit` = feature; the autorun harness keeps `AudioPlayerViewModel` alive so
+the `AVAudioEngine` consumer is exercised too). iPhone 17 Pro, custom/speed, short+long × 3, interleaved.
+**Result: no measurable cost** — RTF +0.5% overall (short −1.9% / long +0.2%, within run-to-run noise),
+physFootprint peak identical (~2.7 GB, off-max 2731 vs on-max 2722 MB; inside the 2.4–3.3 GB band, far
+under the 4.5 GB guard), **0 memory trims** across all 12 runs, audioQC all pass. Ledger rows in
+[`HISTORY.md`](HISTORY.md). The `scripts/ios_device.sh` launch now forwards caller-set `QWENVOICE_*`/`QVOICE_*`
+env, so this A/B is repeatable (`QWENVOICE_STREAMING_PREVIEW_DATA=off scripts/ios_device.sh bench …`).
+
 ## Next step (if resumed)
 
 The only open lever is **D**, and only after the Instruments os_signpost capture above justifies it. The
