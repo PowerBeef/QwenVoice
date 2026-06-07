@@ -1,15 +1,15 @@
 <h1 align="center">Vocello</h1>
 
 <p align="center">
-  A local, private voice studio for Apple Silicon. Write a script, shape how the voice should sound, and generate speech right on your device.<br>
-  <strong>macOS today · iPhone coming soon.</strong>
+  A local, private voice studio for Apple Silicon — on Mac and iPhone. Write a script, shape how the voice should sound, and generate speech right on your device.<br>
+  <strong>On your Mac today · iPhone arriving soon.</strong>
 </p>
 
 <p align="center">
   <a href="https://vocello.vercel.app/"><img src="https://img.shields.io/badge/Website-vocello.vercel.app-7b61ff?style=flat-square&logo=vercel" alt="Website"></a>
   <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0"><img src="https://img.shields.io/badge/Vocello-2.0.0-7b61ff?style=flat-square" alt="Vocello 2.0.0"></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-111827?style=flat-square&logo=apple" alt="macOS 26+">
-  <img src="https://img.shields.io/badge/iPhone-coming%20soon-7b61ff?style=flat-square&logo=apple" alt="iPhone — coming soon">
+  <img src="https://img.shields.io/badge/iPhone-arriving%20soon-7b61ff?style=flat-square&logo=apple" alt="iPhone — arriving soon">
   <img src="https://img.shields.io/badge/Apple%20Silicon-required-111827?style=flat-square&logo=apple" alt="Apple Silicon">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0"><img src="https://img.shields.io/github/downloads/PowerBeef/QwenVoice/v2.0.0/total?label=2.0.0%20downloads&style=flat-square" alt="Downloads"></a>
@@ -19,14 +19,14 @@
   <img src="docs/readme_banner_vocello.png" alt="Vocello banner with abstract voice waves and the Vocello logo" width="920">
 </p>
 
-<p align="center"><em>Formerly QwenVoice, now Vocello 2.0 on macOS 26.</em></p>
+<p align="center"><em>Formerly QwenVoice — now Vocello 2.0.</em></p>
 
 ---
 
 - 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone a reference clip you have rights to.
 - 🔒 **Private by default** — after a one-time model download, every line renders on your device. No scripts uploaded, no audio sent to a cloud TTS service.
 - ⚡ **Native Swift + MLX** — no Python runtime, no bundled weights, no per-line meter and no cloud queue.
-- 📱 **iPhone coming soon** — the same engine, running fully on-device on Apple Silicon iPhones.
+- 📱 **iPhone arriving soon** — the same on-device engine on Apple Silicon iPhone, in the final stretch before release.
 
 ## Get Vocello
 
@@ -34,9 +34,9 @@
 | --- | --- | --- |
 | **macOS 26+** (Apple Silicon) | **Vocello 2.0.0** — [Download DMG](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0) | Signed, notarized, stable. Double-click to open. |
 | **macOS 15** | QwenVoice 1.2.3 — [Download legacy](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3) | Legacy build. No 2.x backport planned. |
-| **iPhone** (Apple Silicon) | **Coming soon** | Ships via App Store / TestFlight when ready — [see below](#-coming-soon-vocello-for-iphone). |
+| **iPhone** (iOS 26+, Apple Silicon) | **Arriving soon** | The same on-device engine; ships via App Store / TestFlight (not GitHub Releases). |
 
-## 📱 Coming soon: Vocello for iPhone
+## 📱 Vocello for iPhone — arriving soon
 
 <table>
   <tr>
@@ -44,8 +44,9 @@
       <img src="docs/screenshots/vocello-ios-studio.png" alt="Vocello running on iPhone — the Studio screen with Custom / Design / Clone modes" width="300">
     </td>
     <td valign="top">
-      <p>Vocello is coming to iPhone — the <strong>same local, private engine</strong>, running <strong>fully on-device</strong> on Apple Silicon iPhones. Write a script, pick or describe a voice, and generate speech without a cloud round-trip, exactly like the Mac app.</p>
-      <p>It's in active development in this repository. When it's ready it will ship through the <strong>App Store / TestFlight</strong> — not GitHub Releases. There's no public release date yet.</p>
+      <p>Vocello is coming to iPhone — the <strong>same local, private engine</strong>, running <strong>fully on-device</strong> on Apple Silicon. Write a script, pick or describe a voice, and generate speech without a cloud round-trip, exactly like the Mac app.</p>
+      <p><strong>On-device generation already works.</strong> The app is in the final stretch before it ships through the <strong>App Store / TestFlight</strong> (not GitHub Releases). No public release date yet.</p>
+      <p>This is what the native Swift + MLX rebuild was for: replacing the old bundled Python runtime with an engine that runs entirely on-device — the only way to bring Vocello to iPhone.</p>
       <p><strong>Want to follow along?</strong> Star ⭐ and watch 👀 the repo for updates.</p>
     </td>
   </tr>
@@ -56,7 +57,7 @@
 - **Private by default.** After models are installed, generation runs locally and your scripts, history, and generated audio stay in local app storage unless you export them.
 - **No subscription meter.** Download the models you want, then generate on your own hardware without paying per line or waiting on a cloud queue.
 - **Three voice workflows.** Use a built-in speaker, describe a new voice, or clone from a reference clip you own or have permission to use.
-- **Built for Apple Silicon.** A native Swift + MLX backend (replacing the older bundled Python runtime) keeps generation local, private, and Mac-like — and powers the on-device iPhone build.
+- **Built for Apple Silicon.** A native Swift + MLX engine (replacing the old bundled Python runtime) keeps generation local, private, and fully on-device — and it's what makes the iPhone app possible (Python can't ship on iPhone; on-device MLX can).
 
 ## Three voice workflows
 
@@ -110,14 +111,15 @@ spctl --assess --type install -vv Vocello-macos26.dmg   # accepted, source=Notar
 
 A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, build number) is attached to the same release for build provenance.
 
-## Requirements
+## System requirements
 
-- macOS 26.0+ on an Apple Silicon Mac
-- Voice models installed from **Settings → Model downloads**
+- **macOS 26.0+** on an Apple Silicon Mac — available now.
+- **iPhone (iOS 26.0+)** on Apple Silicon — arriving soon via App Store / TestFlight.
+- Voice models installed from **Settings → Model downloads**.
 
-**Speed** models are smaller 4-bit packages for faster startup and lower memory use. **Quality** models are larger 8-bit packages for Macs with more headroom.
+**Speed** models are smaller 4-bit packages for faster startup and lower memory use. **Quality** models are larger 8-bit packages for devices with more headroom.
 
-Vocello 2.0.0 is the first stable release of the macOS 26 line. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every GitHub Release from here on ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
+Vocello 2.0.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every macOS GitHub Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
 
 ## Local-first privacy
 
