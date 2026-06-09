@@ -344,15 +344,12 @@ private struct VoiceDesignBriefSettings: View {
             label: "Voice brief",
             accessibilityIdentifier: "voiceDesign_voiceSetup"
         ) {
-            ContinuousVoiceDescriptionField(
+            VoiceBriefEditor(
                 text: $voiceDescription,
-                placeholder: "A warm, deep narrator with a subtle British accent.",
+                accentColor: AppTheme.voiceDesign,
                 accessibilityIdentifier: "voiceDesign_voiceDescriptionField"
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassTextField(radius: 10)
         }
         .overlay(alignment: .topLeading) {
             voiceDescriptionValueAnchor

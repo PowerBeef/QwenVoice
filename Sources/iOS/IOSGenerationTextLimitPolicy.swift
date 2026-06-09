@@ -5,12 +5,9 @@ struct IOSGenerationTextLimitPolicy {
     private static let sharedScriptLimit = 150
 
     /// Voice Design BRIEF (the voice DESCRIPTION) limit — deliberately decoupled from the
-    /// spoken-script limit above. Research on the official Qwen3-TTS VoiceDesign docs found no
-    /// model-imposed description cap for the open-weights model; the hosted API caps voice_prompt
-    /// at 2048 chars, and official example descriptions are short (one dense sentence, ~21–160
-    /// chars). 500 fits 2–3 dense sentences with headroom while discouraging paragraph-length
-    /// rambling the examples suggest is unnecessary. (The spoken-script limit stays 150.)
-    static let descriptionLimit = 500
+    /// spoken-script limit above. Sourced from the shared catalog so the iOS sheet and the
+    /// macOS inline editor stay in lockstep. (The spoken-script limit stays 150.)
+    static let descriptionLimit = VoiceDesignBriefCatalog.descriptionLimit
 
     struct State: Equatable {
         let count: Int

@@ -18,15 +18,9 @@ struct IOSVoiceDesignBriefSheet: View {
     // that bridges focus through this Bool via its begin/end-editing delegate.
     @State private var isFocused = false
 
-    // Research-aligned (official Qwen3-TTS VoiceDesign): each combines several of age, gender,
-    // tone, timbre, accent, pace, and use-case — the attributes the model's own example
-    // descriptions lean on — kept to one dense sentence. A few options fill the tall sheet.
-    private let startingPoints = [
-        "A warm, deep male narrator with a subtle British accent.",
-        "A bright young woman, energetic and conversational.",
-        "A gravelly older man, slow and intimate, late-night radio.",
-        "A soft, breathy young woman, gentle and reassuring.",
-    ]
+    // Research-aligned starter briefs, sourced from the shared catalog so the iOS sheet and
+    // the macOS inline editor stay in lockstep.
+    private let startingPoints = VoiceDesignBriefCatalog.startingPoints
 
     var body: some View {
         IOSBottomSheetSurface(
