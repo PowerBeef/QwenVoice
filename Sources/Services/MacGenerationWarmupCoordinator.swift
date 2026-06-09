@@ -103,6 +103,12 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
     private var dispatchedContext: WarmupContext?
     private var completedContext: WarmupContext?
     private var revision: UInt64 = 0
+    /// Warm-admission gate for constrained tiers (defers proactive warms
+    /// under kernel memory pressure). Constructed eagerly so its pressure
+    /// monitor is already listening before the first pressure transition —
+    /// DispatchSource pressure events don't replay the in-progress level to
+    /// a late starter. (On highMemoryMac / gate=off it starts no monitor.)
+    private let admissionPolicy = MacWarmupAdmissionPolicy()
 
     init(
         debounce: Duration = .milliseconds(300),
@@ -220,6 +226,19 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
                 return
             }
 
+            // Warm-admission gate (constrained Macs): defer proactive warms
+            // while the system is under memory pressure — checked at dispatch
+            // time (after the debounce) so the freshest pressure level wins.
+            // Clearing pendingPlan lets the next snapshot/draft change
+            // reschedule once pressure releases. User generations are never
+            // routed through this coordinator and stay ungated.
+            if case .deferred = self.admissionPolicy.admit(
+                contextDescription: "\(plan.context.mode.rawValue)/\(plan.context.purpose)"
+            ) {
+                self.pendingPlan = nil
+                return
+            }
+
             self.pendingPlan = nil
             self.dispatchedContext = plan.context
             defer {
@@ -278,7 +297,18 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
         switch snapshot.loadState {
         case .idle:
             dispatchedContext = nil
-            completedContext = nil
+            // On the floor tier, an idle transition is almost always the
+            // engine's own idle-unload relieving memory. Clearing
+            // completedContext here made the coordinator immediately re-warm
+            // the ~2.3 GB model, so an 8 GB Mac churned unload→reload forever
+            // and the unload never actually relieved anything. Keep the
+            // context: the unload sticks, the next generation pays the
+            // documented floor-tier cold start, and fresh user intent
+            // (navigation to a different mode / model change) still creates
+            // a different context that warms normally.
+            if NativeMemoryPolicyResolver.deviceClass() != .floor8GBMac {
+                completedContext = nil
+            }
         case .loaded(let modelID):
             dispatchedContext = nil
             if completedContext?.modelID != modelID {
