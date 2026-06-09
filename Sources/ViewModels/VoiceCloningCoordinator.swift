@@ -138,6 +138,7 @@ final class VoiceCloningCoordinator {
         errorMessage = nil
 
         generationTask = Task { @MainActor in
+            var submittedGenerationID: UUID?
             defer {
                 audioPlayer.setLivePreviewEstimate(nil)
                 isGenerating = false
@@ -184,6 +185,7 @@ final class VoiceCloningCoordinator {
                     id: generationRequest.generationID,
                     mode: generationRequest.modeIdentifier
                 )
+                submittedGenerationID = generationRequest.generationID
                 audioPlayer.setLivePreviewEstimate(
                     LivePreviewEstimate(text: currentDraft.text)
                 )
@@ -218,9 +220,11 @@ final class VoiceCloningCoordinator {
                     caller: "VoiceCloningCoordinator"
                 )
             } catch is CancellationError {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = nil
             } catch {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 errorMessage = error.localizedDescription
             }

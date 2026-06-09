@@ -51,6 +51,7 @@ final class CustomVoiceCoordinator {
         errorMessage = nil
 
         generationTask = Task { @MainActor in
+            var submittedGenerationID: UUID?
             defer {
                 audioPlayer.setLivePreviewEstimate(nil)
                 self.isGenerating = false
@@ -72,6 +73,7 @@ final class CustomVoiceCoordinator {
                     id: generationRequest.generationID,
                     mode: generationRequest.modeIdentifier
                 )
+                submittedGenerationID = generationRequest.generationID
                 audioPlayer.setLivePreviewEstimate(
                     LivePreviewEstimate(text: draft.text)
                 )
@@ -105,9 +107,11 @@ final class CustomVoiceCoordinator {
                     caller: "CustomVoiceCoordinator"
                 )
             } catch is CancellationError {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 self.errorMessage = nil
             } catch {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 self.errorMessage = error.localizedDescription
             }

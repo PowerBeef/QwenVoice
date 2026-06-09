@@ -104,6 +104,7 @@ def load_runs(diag_dir):
         summary = e.get("summary") or {}
         a = app.get(gid) or {}
         app_timings = a.get("timingsMS") or {}
+        app_counters = a.get("counters") or {}
         qc = e.get("audioQC") or {}
         trim_count, pressure_count, worst = count_memory_events(e, summary)
         runs.append(
@@ -117,6 +118,11 @@ def load_runs(diag_dir):
                 "tokps": derived.get("tokensPerSecond"),
                 "audioSec": derived.get("audioSeconds"),
                 "ttfcMS": app_timings.get("submitToFirstChunkMS"),
+                # UI-responsiveness KPI (app row, MainThreadStallWatchdog):
+                # main-thread heartbeat stalls during the generation window.
+                "uiStall50": app_counters.get("uiStallCount50"),
+                "uiStall250": app_counters.get("uiStallCount250"),
+                "uiMaxStallMS": app_counters.get("uiMaxStallMS"),
                 "decodeLoopMS": timings.get("qwen_token_loop_total"),
                 "peakGpuMB": summary.get("gpuAllocatedPeakMB"),
                 "peakRssMB": summary.get("residentPeakMB"),
@@ -324,6 +330,17 @@ def select_headline_cell(cells, requested):
     return keys[0] if keys else None
 
 
+def fmt_ui_stall(group):
+    """UI-responsiveness cell: '<stalls>50ms/<max>ms' from the app row's
+    MainThreadStallWatchdog counters ('—' when the app row carried none —
+    CLI bench runs have no UI, and overlapping generations omit the report)."""
+    stalls = med(r["uiStall50"] for r in group)
+    max_ms = med(r["uiMaxStallMS"] for r in group)
+    if stalls is None and max_ms is None:
+        return "—"
+    return f"{fmt(stalls, 0)}/{fmt(max_ms, 0)}ms"
+
+
 def emit_ledger_row(cells, label):
     """Print one Markdown table row for benchmarks/HISTORY.md. Columns match the
     table header seeded in that file."""
@@ -346,6 +363,9 @@ def emit_ledger_row(cells, label):
         fmt_trims(group),
         cell_qc(group),
         note or "—",
+        # UI-responsiveness KPI (added 2026-06; trailing so older rows stay
+        # aligned). "—" for CLI bench rows (no UI process).
+        fmt(med(r["uiMaxStallMS"] for r in group), 0),
     ]
     print("| " + " | ".join(cols) + " |")
     return 0
@@ -386,7 +406,7 @@ def main():
     header = (
         f"{'mode':<8} {'model':<26} {'state':<5} {'len':<6} {'n':>2} "
         f"{'RTF':>6} {'tok/s':>7} {'TTFC ms':>8} {'decode ms':>9} "
-        f"{'peakGPU':>8} {'physFoot':>8} {'trims':>9} {'QC':<12}"
+        f"{'peakGPU':>8} {'physFoot':>8} {'trims':>9} {'UIstall':>9} {'QC':<12}"
     )
     tiers = sorted({r["deviceClass"] for r in runs})
     forced = any(r["deviceClassForced"] for r in runs)
@@ -412,6 +432,7 @@ def main():
             f"{fmt(med(r['peakGpuMB'] for r in group), 0):>8} "
             f"{fmt(med(r['physFootMB'] for r in group), 0):>8} "
             f"{fmt_trims(group):>9} "
+            f"{fmt_ui_stall(group):>9} "
             f"{cell_qc(group):<12}"
         )
 

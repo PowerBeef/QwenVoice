@@ -124,6 +124,7 @@ final class VoiceDesignCoordinator {
         let emotion = draft.emotion
 
         generationTask = Task { @MainActor in
+            var submittedGenerationID: UUID?
             defer {
                 audioPlayer.setLivePreviewEstimate(nil)
                 self.isGenerating = false
@@ -149,6 +150,7 @@ final class VoiceDesignCoordinator {
                     id: generationRequest.generationID,
                     mode: generationRequest.modeIdentifier
                 )
+                submittedGenerationID = generationRequest.generationID
                 audioPlayer.setLivePreviewEstimate(
                     LivePreviewEstimate(text: text)
                 )
@@ -190,9 +192,11 @@ final class VoiceDesignCoordinator {
                     text: text
                 )
             } catch is CancellationError {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 self.errorMessage = nil
             } catch {
+                AppGenerationTimeline.shared.recordFailed(id: submittedGenerationID)
                 audioPlayer.abortLivePreviewIfNeeded()
                 self.errorMessage = error.localizedDescription
             }

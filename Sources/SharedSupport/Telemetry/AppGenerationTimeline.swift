@@ -25,6 +25,10 @@ final class AppGenerationTimeline {
     }
 
     private var marksByID: [String: Marks] = [:]
+    /// Generations currently holding a `MainThreadStallWatchdog` session —
+    /// kept separately from `marksByID` so the watchdog refcount stays
+    /// balanced through evictions and failures.
+    private var watchdogSessions: Set<String> = []
     private let clock = ContinuousClock()
     /// Backstop against unbounded growth if a `completed` is ever missed.
     private static let maxTrackedGenerations = 16
@@ -36,8 +40,24 @@ final class AppGenerationTimeline {
         guard let key = id?.uuidString else { return }
         if marksByID.count >= Self.maxTrackedGenerations {
             marksByID.removeAll(keepingCapacity: true)
+            for _ in watchdogSessions { MainThreadStallWatchdog.shared.end() }
+            watchdogSessions.removeAll(keepingCapacity: true)
         }
         marksByID[key] = Marks(submittedAt: clock.now, mode: mode)
+        if watchdogSessions.insert(key).inserted {
+            MainThreadStallWatchdog.shared.begin()
+        }
+    }
+
+    /// Balance the watchdog/marks for a generation that failed or was
+    /// cancelled before `recordCompleted` — call from coordinator catch
+    /// paths. No app-layer row is written for failures (unchanged behavior).
+    func recordFailed(id: UUID?) {
+        guard let key = id?.uuidString else { return }
+        marksByID.removeValue(forKey: key)
+        if watchdogSessions.remove(key) != nil {
+            MainThreadStallWatchdog.shared.end()
+        }
     }
 
     /// `id` is the player's session id string (== `generationID.uuidString` whenever
@@ -66,6 +86,16 @@ final class AppGenerationTimeline {
         let now = clock.now
         let marks = marksByID.removeValue(forKey: key)
 
+        // UI-responsiveness KPI: the report is only available when this is
+        // the last active generation (overlapping generations share one
+        // watchdog window, so per-generation attribution isn't meaningful —
+        // the counters are simply omitted on all but the closing row).
+        var counters: [String: Int] = [:]
+        if watchdogSessions.remove(key) != nil,
+           let report = MainThreadStallWatchdog.shared.end() {
+            counters = report.asCounters
+        }
+
         var timingsMS: [String: Int] = [:]
         if let marks {
             timingsMS["submitToCompletedMS"] = Self.milliseconds(from: marks.submittedAt, to: now)
@@ -85,7 +115,8 @@ final class AppGenerationTimeline {
             usedStreaming: usedStreaming,
             finishReason: finishReason,
             summary: summary,
-            timingsMS: timingsMS
+            timingsMS: timingsMS,
+            counters: counters
         )
         let appSupportDirectory = AppPaths.appSupportDir
         Task.detached(priority: .background) {
