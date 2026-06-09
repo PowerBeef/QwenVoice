@@ -269,6 +269,11 @@ struct VoiceCloningView: View {
                 pendingSavedVoiceHandoff: $pendingSavedVoiceHandoff
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // The user may have just granted speech recognition in System
+            // Settings — clear the hint and retry the transcript auto-fill.
+            coordinator.refreshTranscriptionAvailability(draft: $draft)
+        }
         .sheet(item: $coordinator.presentedSheet) { presentedSheet in
             switch presentedSheet {
             case .batch(let configuration):
@@ -340,6 +345,12 @@ private extension VoiceCloningView {
                     retrySavedVoices: { Task { await savedVoicesViewModel.refresh(using: ttsEngineStore) } }
                 )
                 VoiceCloningTranscriptSettings(referenceTranscript: $draft.referenceTranscript)
+                if let unavailableMessage = coordinator.transcriptionUnavailableMessage {
+                    GenerationSetupHint(
+                        message: unavailableMessage,
+                        accessibilityIdentifier: "voiceCloning_transcriptionUnavailable"
+                    )
+                }
                 languageSettings
             }
         }

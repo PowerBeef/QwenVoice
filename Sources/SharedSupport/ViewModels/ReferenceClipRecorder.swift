@@ -55,6 +55,23 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     /// Active virtual-microphone session (see `virtualMicrophoneURL`).
     private var virtualSource: (url: URL, duration: Double, envelope: [Double])?
 
+    /// Re-read the system permission state without prompting — call when the
+    /// app becomes active again so a grant made in System Settings clears the
+    /// denied UI without a relaunch.
+    func refreshPermissionState() {
+        guard Self.virtualMicrophoneURL == nil else { return }
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            permissionDenied = false
+        case .denied:
+            permissionDenied = true
+        case .undetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+
     func requestPermissionIfNeeded() async {
         guard Self.virtualMicrophoneURL == nil else { return }
         switch AVAudioApplication.shared.recordPermission {

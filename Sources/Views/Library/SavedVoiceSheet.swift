@@ -164,6 +164,7 @@ struct SavedVoiceSheet: View {
     @State private var isRecordSheetPresented = false
     @State private var isTranscribing = false
     @State private var transcriptionTask: Task<Void, Never>?
+    @State private var speechAvailability: VoiceClipTranscriber.TranscriptionAvailability = .available
 
     init(
         configuration: SavedVoiceSheetConfiguration,
@@ -278,6 +279,24 @@ struct SavedVoiceSheet: View {
                         }
                     }
 
+                    if let issue = speechIssueMessage {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text(issue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("voicesEnroll_speechUnavailable")
+                            Button(speechIssueButtonLabel) {
+                                openSpeechSettings()
+                            }
+                            .controlSize(.small)
+                            .accessibilityIdentifier("voicesEnroll_speechSettingsButton")
+                        }
+                    }
+
                     TextEditor(text: $transcript)
                         .font(.body)
                         .focusEffectDisabled()
@@ -345,6 +364,7 @@ struct SavedVoiceSheet: View {
         .padding(20)
         .frame(width: 520)
         .task {
+            speechAvailability = VoiceClipTranscriber.availability()
             await loadExistingVoiceNames()
         }
         .onChange(of: name) { _, _ in
@@ -352,6 +372,17 @@ struct SavedVoiceSheet: View {
         }
         .onChange(of: audioPath) { _, newPath in
             autoTranscribeIfNeeded(path: newPath)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // The user may have just granted speech recognition in System
+            // Settings — refresh the caption and retry the auto-fill.
+            let refreshed = VoiceClipTranscriber.availability()
+            if refreshed != speechAvailability {
+                speechAvailability = refreshed
+                if refreshed == .available {
+                    autoTranscribeIfNeeded(path: audioPath)
+                }
+            }
         }
         .onDisappear {
             transcriptionTask?.cancel()
@@ -404,10 +435,38 @@ struct SavedVoiceSheet: View {
         }
     }
 
+    /// Caption shown when automatic transcription can't run — silent denial
+    /// was the old behavior and left users wondering why the transcript
+    /// never auto-filled.
+    private var speechIssueMessage: String? {
+        switch speechAvailability {
+        case .available, .notDetermined:
+            return nil
+        case .denied:
+            return "Speech recognition is off for Vocello — the transcript won't auto-fill."
+        case .siriDisabled:
+            return "Auto-transcription needs Siri enabled (macOS requirement) — the transcript won't auto-fill."
+        }
+    }
+
+    private var speechIssueButtonLabel: String {
+        speechAvailability == .siriDisabled ? "Open Siri Settings" : "Open System Settings"
+    }
+
+    private func openSpeechSettings() {
+        let anchor = speechAvailability == .siriDisabled
+            ? "x-apple.systempreferences:com.apple.Siri-Settings.extension"
+            : "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+        if let url = URL(string: anchor) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Best-effort on-device transcription of a freshly picked/recorded clip.
     /// Only fills the transcript if the user hasn't typed one by the time the
     /// pass finishes; never blocks enrollment (degrades to nothing on failure).
     private func autoTranscribeIfNeeded(path: String) {
+        speechAvailability = VoiceClipTranscriber.availability()
         transcriptionTask?.cancel()
         isTranscribing = false
 

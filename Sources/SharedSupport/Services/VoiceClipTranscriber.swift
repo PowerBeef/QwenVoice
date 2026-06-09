@@ -17,6 +17,57 @@ import Speech
 /// Everything degrades to `nil` (no transcript, language `.auto`) so enrollment is never blocked,
 /// and audio never leaves the device (`requiresOnDeviceRecognition`).
 enum VoiceClipTranscriber {
+    /// Why automatic transcription may currently be unavailable — drives the
+    /// permission captions in the enrollment/clone UI instead of failing
+    /// silently.
+    enum TranscriptionAvailability: Equatable {
+        /// Authorized — transcription can run.
+        case available
+        /// The user hasn't been asked yet; the system prompt appears on first use.
+        case notDetermined
+        /// The user (or a policy) denied speech recognition for this app —
+        /// recoverable in System Settings → Privacy & Security → Speech Recognition.
+        case denied
+        /// macOS only: Siri is disabled, so the OS auto-denies speech-recognition
+        /// authorization without ever showing a prompt. Recoverable by enabling
+        /// Siri in System Settings, then granting the app.
+        case siriDisabled
+    }
+
+    /// Cheap, prompt-free availability check for UI captions. (The expensive
+    /// on-device-locale enumeration is NOT included — a missing model already
+    /// degrades gracefully to "no transcript".)
+    static func availability() -> TranscriptionAvailability {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized:
+            return .available
+        case .notDetermined:
+            #if os(macOS)
+            if !isSiriEnabled { return .siriDisabled }
+            #endif
+            return .notDetermined
+        case .denied, .restricted:
+            #if os(macOS)
+            if !isSiriEnabled { return .siriDisabled }
+            #endif
+            return .denied
+        @unknown default:
+            return .denied
+        }
+    }
+
+    #if os(macOS)
+    /// On macOS, SFSpeechRecognizer authorization is auto-DENIED while Siri is
+    /// off — an OS gate, no prompt is ever shown. Readable directly because the
+    /// app is not sandboxed; defaults to true when unreadable so we never show
+    /// a false warning.
+    private static var isSiriEnabled: Bool {
+        guard let value = UserDefaults(suiteName: "com.apple.assistant.support")?
+            .object(forKey: "Assistant Enabled") as? NSNumber else { return true }
+        return value.boolValue
+    }
+    #endif
+
     /// Score at/above which we accept a candidate's language as the detected one.
     private static let confidentLanguageScore = 0.5
     /// Score at/above which we stop trying further candidates (a clear match).

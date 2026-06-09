@@ -28,10 +28,42 @@ enum AudioService {
         return URL(fileURLWithPath: expandedPath, isDirectory: true)
     }
 
+    /// Non-nil when the user-configured output directory can't currently be
+    /// used (deleted, unmounted, or unwritable). New audio silently falls back
+    /// to the default outputs folder; Settings surfaces this message so the
+    /// fallback isn't a mystery.
+    static func configuredOutputDirectoryIssue() -> String? {
+        let configuredPath = (defaults.string(forKey: "outputDirectory") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !configuredPath.isEmpty else { return nil }
+
+        let expandedPath = (configuredPath as NSString).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expandedPath, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return "The chosen folder no longer exists — new audio saves to the default outputs folder."
+        }
+        guard FileManager.default.isWritableFile(atPath: expandedPath) else {
+            return "The chosen folder isn't writable — new audio saves to the default outputs folder."
+        }
+        return nil
+    }
+
     /// Generate an output file path with timestamp and text snippet.
     static func makeOutputPath(subfolder: String, text: String) -> String {
-        let outputsDir = configuredOutputsRoot.appendingPathComponent(subfolder, isDirectory: true)
-        try? FileManager.default.createDirectory(at: outputsDir, withIntermediateDirectories: true)
+        var root = configuredOutputsRoot
+        if configuredOutputDirectoryIssue() != nil {
+            root = AppPaths.outputsDir
+        }
+        var outputsDir = root.appendingPathComponent(subfolder, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: outputsDir, withIntermediateDirectories: true)
+        } catch {
+            // The custom directory vanished or became unwritable between the
+            // probe and the write — never lose a generation over it.
+            outputsDir = AppPaths.outputsDir.appendingPathComponent(subfolder, isDirectory: true)
+            try? FileManager.default.createDirectory(at: outputsDir, withIntermediateDirectories: true)
+        }
 
         let timestamp = Self.timestampFormatter.string(from: Date())
         let cleanText = text

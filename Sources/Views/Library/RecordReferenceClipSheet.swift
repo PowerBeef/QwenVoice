@@ -187,6 +187,11 @@ struct RecordReferenceClipSheet: View {
         .task {
             await recorder.requestPermissionIfNeeded()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // The user may have just granted the microphone in System
+            // Settings — clear the denied state without a relaunch.
+            recorder.refreshPermissionState()
+        }
         .onDisappear {
             reviewPlayer.stop()
             recorder.stopWithoutSaving()

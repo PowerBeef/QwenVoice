@@ -24,6 +24,11 @@ final class VoiceCloningCoordinator {
     var hydratedSavedVoiceID: String?
     var isDragOver = false
     var presentedSheet: VoiceCloningPresentedSheet?
+    /// Non-nil when auto-transcription of a fresh reference was skipped
+    /// because speech recognition is unavailable (denied, or the macOS Siri
+    /// gate). Drives a hint near the transcript field; cleared once a
+    /// transcript exists or transcription becomes available again.
+    var transcriptionUnavailableMessage: String?
     @ObservationIgnored private var generationTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptionTask: Task<Void, Never>?
 
@@ -424,6 +429,13 @@ final class VoiceCloningCoordinator {
         with path: String,
         draft: Binding<VoiceCloningDraft>
     ) {
+        // A transcript hydrated from a saved voice belongs to the OLD audio —
+        // keep it and the clone would be guided by mismatched text. Clear it
+        // so auto-transcription can fill the one matching the new clip.
+        // Hand-typed transcripts (no saved-voice selection) are preserved.
+        if draft.wrappedValue.selectedSavedVoiceID != nil {
+            draft.wrappedValue.referenceTranscript = ""
+        }
         draft.wrappedValue.referenceAudioPath = path
         draft.wrappedValue.selectedSavedVoiceID = nil
         transcriptLoadError = nil
@@ -445,6 +457,18 @@ final class VoiceCloningCoordinator {
         let trimmed = draft.wrappedValue.referenceTranscript
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty else { return }
+        switch VoiceClipTranscriber.availability() {
+        case .denied:
+            transcriptionUnavailableMessage =
+                "Speech recognition is off for Vocello — type the transcript or enable it in System Settings → Privacy & Security."
+            return
+        case .siriDisabled:
+            transcriptionUnavailableMessage =
+                "Auto-transcription needs Siri enabled (macOS requirement) — type the transcript or enable Siri in System Settings."
+            return
+        case .available, .notDetermined:
+            transcriptionUnavailableMessage = nil
+        }
         transcriptionTask = Task {
             guard let result = await VoiceClipTranscriber.transcribe(
                 url: URL(fileURLWithPath: path)
@@ -459,6 +483,21 @@ final class VoiceCloningCoordinator {
             if draft.wrappedValue.selectedLanguage == .auto, result.language != .auto {
                 draft.wrappedValue.selectedLanguage = result.language
             }
+        }
+    }
+
+    /// Re-evaluate the transcription hint after the user returns from System
+    /// Settings (and retry the auto-fill when access was just granted).
+    func refreshTranscriptionAvailability(draft: Binding<VoiceCloningDraft>) {
+        guard transcriptionUnavailableMessage != nil else { return }
+        switch VoiceClipTranscriber.availability() {
+        case .available, .notDetermined:
+            transcriptionUnavailableMessage = nil
+            if let path = draft.wrappedValue.referenceAudioPath {
+                autoTranscribeReference(path: path, draft: draft)
+            }
+        case .denied, .siriDisabled:
+            break
         }
     }
 }

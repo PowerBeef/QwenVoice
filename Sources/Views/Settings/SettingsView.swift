@@ -41,6 +41,9 @@ struct SettingsView: View {
     @State private var flashedMode: GenerationMode?
     @State private var modelToDelete: TTSModel?
     @State private var showDeleteConfirmation = false
+    /// Non-nil when the configured output folder is missing/unwritable
+    /// (AudioService falls back to the default outputs folder).
+    @State private var outputDirectoryIssue: String?
 
     // Hidden "secret debug toggle": tap the version label 7× to flip the
     // persisted DebugMode flag (telemetry/probing + isolated QwenVoice-Debug
@@ -107,6 +110,13 @@ struct SettingsView: View {
                 Section("Storage") {
                     LabeledContent("Output directory") {
                         HStack(spacing: 6) {
+                            if outputDirectoryIssue != nil {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                                    .help(outputDirectoryIssue ?? "")
+                                    .accessibilityIdentifier("preferences_outputDirectoryWarning")
+                            }
                             Text(outputDirectorySummary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -123,6 +133,14 @@ struct SettingsView: View {
                                     .accessibilityIdentifier("preferences_outputResetButton")
                             }
                         }
+                    }
+
+                    if let outputDirectoryIssue {
+                        Text(outputDirectoryIssue)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("preferences_outputDirectoryIssue")
                     }
 
                     // Application data row carries the version
@@ -167,6 +185,7 @@ struct SettingsView: View {
             .settingsNavigationTitle(showsNavigationTitle)
             .accessibilityIdentifier("screen_settings")
             .task {
+                outputDirectoryIssue = AudioService.configuredOutputDirectoryIssue()
                 await viewModel.refresh()
                 focusHighlighted(using: proxy)
 
@@ -180,6 +199,14 @@ struct SettingsView: View {
             }
             .onChange(of: highlightedMode) { _, _ in
                 focusHighlighted(using: proxy)
+            }
+            .onChange(of: outputDirectory) { _, _ in
+                outputDirectoryIssue = AudioService.configuredOutputDirectoryIssue()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                // The folder may have been deleted/restored while the user
+                // was away — keep the warning truthful.
+                outputDirectoryIssue = AudioService.configuredOutputDirectoryIssue()
             }
         }
         .alert("Delete Model?", isPresented: $showDeleteConfirmation) {
