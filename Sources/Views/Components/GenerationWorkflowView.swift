@@ -605,7 +605,7 @@ struct GenerationSetupNotice: View {
 
 struct GenerationVariantSelector: View {
     let mode: GenerationMode
-    @ObservedObject var modelManager: ModelManagerViewModel
+    var modelManager: ModelManagerViewModel
     var accentColor: Color = AppTheme.accent
     var accessibilityPrefix: String
     var isDisabled: Bool = false

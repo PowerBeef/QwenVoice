@@ -10,7 +10,7 @@ struct VoiceDesignView: View {
     @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
 
     @ObservedObject private var ttsEngineStore: TTSEngineStore
-    @ObservedObject private var modelManager: ModelManagerViewModel
+    private var modelManager: ModelManagerViewModel
     private let audioPlayer: AudioPlayerViewModel
     private let savedVoicesViewModel: SavedVoicesViewModel
 
@@ -63,7 +63,7 @@ struct VoiceDesignView: View {
     ) {
         _draft = draft
         _ttsEngineStore = ObservedObject(wrappedValue: ttsEngineStore)
-        _modelManager = ObservedObject(wrappedValue: modelManager)
+        self.modelManager = modelManager
         self.audioPlayer = audioPlayer
         self.savedVoicesViewModel = savedVoicesViewModel
     }

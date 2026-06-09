@@ -46,7 +46,7 @@ struct VoiceCloningView: View {
     @State private var coordinator = VoiceCloningCoordinator()
 
     @ObservedObject private var ttsEngineStore: TTSEngineStore
-    @ObservedObject private var modelManager: ModelManagerViewModel
+    private var modelManager: ModelManagerViewModel
     private let audioPlayer: AudioPlayerViewModel
     private let savedVoicesViewModel: SavedVoicesViewModel
 
@@ -177,7 +177,7 @@ struct VoiceCloningView: View {
         _draft = draft
         _pendingSavedVoiceHandoff = pendingSavedVoiceHandoff
         _ttsEngineStore = ObservedObject(wrappedValue: ttsEngineStore)
-        _modelManager = ObservedObject(wrappedValue: modelManager)
+        self.modelManager = modelManager
         self.audioPlayer = audioPlayer
         self.savedVoicesViewModel = savedVoicesViewModel
     }

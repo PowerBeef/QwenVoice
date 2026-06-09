@@ -1,9 +1,11 @@
 import Foundation
+import Observation
 import QwenVoiceCore
 
 /// Manages model install state, repairability, download, and delete flows.
 @MainActor
-final class ModelManagerViewModel: ObservableObject {
+@Observable
+final class ModelManagerViewModel {
 
     struct DownloadProgress: Equatable, Sendable {
         enum Phase: String, Equatable, Sendable {
@@ -106,10 +108,10 @@ final class ModelManagerViewModel: ObservableObject {
 
     private nonisolated static let installMetadataFilename = ".qwenvoice-install-metadata.json"
 
-    @Published private(set) var statuses: [String: ModelStatus] = [:]
-    @Published private(set) var modelInfoByID: [String: ModelInfo] = [:]
-    @Published private(set) var activeVariantRevision = 0
-    @Published private(set) var recommendedSetupProgress: RecommendedSetupProgress?
+    private(set) var statuses: [String: ModelStatus] = [:]
+    private(set) var modelInfoByID: [String: ModelInfo] = [:]
+    private(set) var activeVariantRevision = 0
+    private(set) var recommendedSetupProgress: RecommendedSetupProgress?
 
     private let fileManager: FileManager
     private let modelsDirectory: URL

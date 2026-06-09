@@ -18,7 +18,7 @@ import AppKit
 /// Mode color identity attaches to each row's leading 8 pt dot
 /// rather than the section header.
 struct SettingsView: View {
-    @EnvironmentObject private var viewModel: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) private var viewModel
     /// Mode-keyed deep-link target. When the sidebar redirects
     /// the user to Settings (because a generation tab's required
     /// variant is missing), the upstream `ContentView` sets this
@@ -265,7 +265,7 @@ private extension View {
 // MARK: - Model download rows
 
 private struct ModelSetupSummaryRow: View {
-    @ObservedObject var viewModel: ModelManagerViewModel
+    var viewModel: ModelManagerViewModel
 
     private var summary: ModelManagerViewModel.ModelSetupSummary {
         viewModel.modelSetupSummary()
@@ -333,7 +333,7 @@ private struct ModelSetupSummaryRow: View {
 
 private struct ModelDownloadRow: View {
     let mode: GenerationMode
-    @ObservedObject var viewModel: ModelManagerViewModel
+    var viewModel: ModelManagerViewModel
     let isFlashed: Bool
     let onDelete: (TTSModel) -> Void
 
@@ -384,7 +384,7 @@ private struct ModelDownloadRow: View {
 
 private struct ModelPackageLine: View {
     let model: TTSModel
-    @ObservedObject var viewModel: ModelManagerViewModel
+    var viewModel: ModelManagerViewModel
     let onDelete: () -> Void
 
     private var presentation: ModelManagerViewModel.ModelPackagePresentation {
@@ -524,7 +524,7 @@ private struct ModelPackageLine: View {
 /// Compact package control whose role flips with install state.
 private struct ActionButton: View {
     let model: TTSModel
-    @ObservedObject var viewModel: ModelManagerViewModel
+    var viewModel: ModelManagerViewModel
     let onDelete: () -> Void
 
     /// Holder for the NSView that backs the Manage button's

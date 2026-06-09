@@ -115,7 +115,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 @MainActor
 struct ContentView: View {
-    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) private var modelManager
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @Environment(SavedVoicesViewModel.self) private var savedVoicesViewModel
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
@@ -547,7 +547,7 @@ private struct CustomVoiceScreenHost: View {
 
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) private var modelManager
 
     var body: some View {
         CustomVoiceView(
@@ -564,7 +564,7 @@ private struct VoiceDesignScreenHost: View {
 
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) private var modelManager
     @Environment(SavedVoicesViewModel.self) private var savedVoicesViewModel
 
     var body: some View {
@@ -584,7 +584,7 @@ private struct VoiceCloningScreenHost: View {
 
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject private var modelManager: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) private var modelManager
     @Environment(SavedVoicesViewModel.self) private var savedVoicesViewModel
 
     var body: some View {

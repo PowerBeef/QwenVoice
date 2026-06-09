@@ -4,7 +4,7 @@ import SwiftUI
 struct BatchGenerationSheet: View {
     @EnvironmentObject var ttsEngineStore: TTSEngineStore
     @EnvironmentObject var audioPlayer: AudioPlayerViewModel
-    @EnvironmentObject var modelManager: ModelManagerViewModel
+    @Environment(ModelManagerViewModel.self) var modelManager
     @EnvironmentObject var appCommandRouter: AppCommandRouter
     @Environment(\.dismiss) private var dismiss
 

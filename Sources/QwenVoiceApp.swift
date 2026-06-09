@@ -9,7 +9,7 @@ struct QwenVoiceApp: App {
     @StateObject private var ttsEngineStore: TTSEngineStore
     @State private var didInitializeSelectedTTSEngine = false
     @StateObject private var audioPlayer = AudioPlayerViewModel()
-    @StateObject private var modelManager = ModelManagerViewModel()
+    @State private var modelManager = ModelManagerViewModel()
     @State private var savedVoicesViewModel = SavedVoicesViewModel()
     @StateObject private var appCommandRouter = AppCommandRouter.shared
     @StateObject private var generationLibraryEvents = GenerationLibraryEvents.shared
@@ -40,7 +40,7 @@ struct QwenVoiceApp: App {
             // disabled mode" inside the standalone settings
             // window).
             SettingsView(highlightedMode: .constant(nil))
-                .environmentObject(modelManager)
+                .environment(modelManager)
         }
         .commands {
             CommandGroup(replacing: .newItem) { }
@@ -125,7 +125,7 @@ struct QwenVoiceApp: App {
                     .environmentObject(ttsEngineStore)
                     .environmentObject(audioPlayer)
                     .environmentObject(audioPlayer.playbackProgress)
-                    .environmentObject(modelManager)
+                    .environment(modelManager)
                     .environment(savedVoicesViewModel)
                     .environmentObject(appCommandRouter)
                     .environmentObject(generationLibraryEvents)
