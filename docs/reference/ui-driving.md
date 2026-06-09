@@ -28,9 +28,18 @@ benchmark *timing*, do not time wall-clock around clicks — capture it from the
 Computer use is available to **Claude Code and Cowork** in the Claude Desktop app (Pro/Max) once
 **Settings → General → Computer use** is on — verified working end-to-end here. The tools are
 `mcp__computer-use__*`. Per session: load the toolkit (one `ToolSearch` with query `computer-use`,
-`max_results: 30`), call `mcp__computer-use__request_access` for `Vocello` (resolves to **full** tier
-— clicks + typing both work), then `screenshot`. They are action tools, so they're hidden while in
-plan mode; a normal session exposes them. Screen Recording is already granted.
+`max_results: 30`), call `mcp__computer-use__request_access` — **use the bundle id
+`com.qwenvoice.app`**, not the display name "Vocello" (the name can resolve to the iOS app's bundle
+id and then `open_application` fails) — then `screenshot`. The grant is **full** tier (clicks +
+typing both work). They are action tools, so they're hidden while in plan mode; a normal session
+exposes them. Screen Recording is already granted.
+
+**TCC prompts are invisible to computer-use.** macOS permission dialogs (mic, speech recognition)
+don't render in screenshots (only allow-listed apps do), and synthetic keystrokes can land on a
+hidden prompt and dismiss it as "Don't Allow". After any `tccutil reset` or permission-triggering
+flow: stop driving, let the human answer the dialog, and verify the outcome with
+`scripts/permissions_doctor.sh` instead of assuming. See
+[`macos-permissions.md`](macos-permissions.md) § Agent/computer-use caveat.
 
 Run all shell work (builds, `log`, Instruments, DB queries) through the **Bash tool**, never through
 computer-use — Terminal/IDE are restricted tiers where typing is blocked.
@@ -88,8 +97,9 @@ refactoring views.
   [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md).
 - **Constrained-tier / memory-pressure runs:** launch with `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac`
   to make the engine run the 8 GB code paths (pressure monitor on, tight caches) so memory pressure is
-  measurable on this Mac — induce real pressure with `sudo memory_pressure -l warn` (Bash tool) during a
-  take. See the "Memory & pressure pass" in [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md).
+  measurable on this Mac — fire a simulated pressure notification with `sudo memory_pressure -S -l warn`
+  during a take (plain `-l warn` raises the kernel level but delivers NO notifications to monitors).
+  See the "Memory & pressure pass" in [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md).
 - **Settings:** model rows `settings_package_<id>` + `settings_download_<id>` / `settings_repair_<id>`;
   `preferences_autoPlayToggle`; `settings_preferSpeedEverywhere`; `preferences_openFinderButton`.
   The **version label** carries the hidden **7-tap debug-mode toggle** (`appVersion` Text).

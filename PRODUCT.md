@@ -18,7 +18,7 @@ Vocello is a local-first text-to-speech application that runs Qwen3-TTS / MLX mo
 
 - **Custom Voice** — generate with a chosen preset speaker, controllable emotion + speed.
 - **Voice Design** — describe a voice in natural language; the model produces it.
-- **Voice Cloning** — provide a 10–20 s reference clip; the model speaks the user's text in that voice.
+- **Voice Cloning** — provide a 10–20 s reference clip (record it in-app or import a file; the transcript can auto-fill via on-device transcription); the model speaks the user's text in that voice.
 
 Saved Voices, Generation History, and downloaded Models are first-class library surfaces, not afterthought tabs.
 

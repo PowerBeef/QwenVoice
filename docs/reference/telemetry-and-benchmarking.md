@@ -71,6 +71,9 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
 |---|---|
 | `QWENVOICE_SUPPRESS_WARMUP=1` | Skips proactive prewarm/clone‑priming so the first generation records its own **cold** load (`MacGenerationWarmupCoordinator`). App‑process only. |
 | `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` | Forces the device‑memory tier (`NativeDeviceClassGate`), propagated to the engine over `initialize`. Runs the constrained‑tier code paths so memory **pressure is measurable on any hardware**. See §11 "Memory & pressure pass". Accepts the `NativeDeviceMemoryClass` rawValues + aliases `8gb`/`16gb`. |
+| `QWENVOICE_MAC_WARM_GATE=off\|records\|enforce` | macOS warm‑admission gate (`MacWarmupAdmissionPolicy`): defers **proactive** warms while the app‑process kernel pressure level is soft/hardTrim on floor/mid tiers. Default `enforce` (validated 2026‑06‑09); `records` logs verdicts without blocking; user generations are never gated. Events land in `diagnostics/app/native-events.jsonl`. |
+| `QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=<n>` | Dev override for the XPC service retirement idle dwell (default 300 s) so retirement‑to‑reclaim can be exercised without the full wait. App‑process only. |
+| `QWENVOICE_FAKE_MIC_WAV=<clip.wav>` | Virtual microphone for mic‑less machines — the record flow simulates capture from this clip (see [`macos-permissions.md`](macos-permissions.md)). |
 
 ---
 
@@ -120,7 +123,7 @@ folder when DebugMode is on, so real data is never polluted):
 | `app/generations.jsonl` | frontend | User‑perceived timings: submit→first chunk→first audible→completed + memory summary. |
 | `generations-merged.jsonl` | merged | All layers joined per `generationID` (one row per run). |
 | `engine/samples-<generationID>.jsonl` | backend (verbose only) | Raw per‑sample memory/timing series. |
-| `*/native-events.jsonl` | engine/middle | Legacy: chunk‑sequence gaps + encode drops only. |
+| `*/native-events.jsonl` | engine/middle/app | Chunk‑sequence gaps + encode drops; the **app** file also carries `mac_warm_admission_observed` / `mac_warm_blocked` (warm‑admission gate) and `engine_service_retired` (XPC retirement) events. |
 
 One JSON object per line. Read with `jq` or Python (examples in [§10](#10-running--reading-a-benchmark)).
 
@@ -148,7 +151,7 @@ so older rows still decode.
 | `finishReason` | String? | `eos` / `maxTokens` / `failed` / `superseded`. |
 | `stageMarks` | `[{tMS, stage, metadata}]` | Lifecycle timeline (see §6). |
 | `timingsMS` | `[String: Int]` | **Engine layer: the full MLX decode breakdown + counters** (see §6). |
-| `counters` | `[String: Int]` | e.g. `chunkCount`; middle layer: `chunksForwarded`, `chunkGaps`. |
+| `counters` | `[String: Int]` | e.g. `chunkCount`; middle layer: `chunksForwarded`, `chunkGaps`; **app layer: `uiStallCount50`/`uiStallCount250`/`uiMaxStallMS`/`uiHeartbeats`** — the UI‑responsiveness KPI from `MainThreadStallWatchdog` (100 ms main‑thread heartbeat during generations; the summarizer surfaces it as the `UIstall` column, `—` for CLI runs which have no UI process). |
 | `derivedMetrics` | `[String: Double]?` | Headline KPIs (see §7). |
 | `mlxMemoryByStage` | `[String: {activeMB, cacheMB, peakMB}]?` | MLX GPU memory at each stage (see §8). |
 | `chunkTimeline` | `[GenerationChunkTelemetry]?` | Per‑chunk decode substages (see §6.3). |
@@ -432,14 +435,18 @@ single‑gen clears + post‑batch hard trims fire, and idle‑unload is aggress
 `notes.deviceClass`, so the summarizer header shows `tier: floor_8gb_mac ⚠ forced` — never mistake a
 forced run for native‑tier data.
 
-To exercise **real kernel pressure** (so `memory_pressure` + pressure‑driven `memory_trim` marks
-appear), induce it mid‑generation from a Bash shell while a take is running:
+To exercise kernel pressure (so `memory_pressure` + pressure‑driven `memory_trim` marks appear),
+fire a **simulated pressure notification** mid‑generation from a shell while a take is running:
 
 ```sh
-sudo memory_pressure -l warn      # or: -l critical
+sudo memory_pressure -S -l warn      # or: -S -l critical
 ```
 
-The forced‑tier monitor observes it and the marks land on that generation's timeline. Then
+`-S` sends a one‑shot notification to every subscribed process and auto‑resets ~1 s later (it needs
+sudo — without it the trigger sysctl fails with "Operation not permitted"). **Plain `-l warn` does
+NOT work for this**: it allocates real memory and raises the kernel level, but dispatch‑source
+monitors never receive a notification, so nothing lands in telemetry (verified 2026‑06‑09).
+The monitor observes the simulated event and the marks land on that generation's timeline. Then
 `python3 scripts/summarize_generation_telemetry.py` → confirm non‑zero `trims`/`pressure` and inspect
 `physFoot` + the GPU‑by‑stage block.
 
@@ -477,7 +484,9 @@ Two committed artifacts under `benchmarks/` (compact, ≤256 KB, no raw `*.jsonl
    python3 scripts/summarize_generation_telemetry.py --ledger-row --label "stepeval fix" >> benchmarks/HISTORY.md
    ```
    Default headline cell is `custom/quality/warm`; pass `--cell mode/model/state` (model = substring)
-   to track a different one. Columns: date · sha · cell · RTF · tok/s · TTFC · physFoot · trims · note.
+   to track a different one. Columns: date · sha · cell · RTF · tok/s · TTFC · physFoot · trims · QC ·
+   note · uiMaxStall ms (trailing, added 2026‑06 — max main‑thread stall during the generation; `—`
+   for CLI bench rows, which have no UI process).
 
 **Compare** by `git diff`‑ing two snapshots (or ask the agent to diff the deltas and flag
 regressions). For trustworthy deltas: **same machine, quiet (quit other apps), watch thermals**; keep

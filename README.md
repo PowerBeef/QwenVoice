@@ -23,7 +23,7 @@
 
 ---
 
-- 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone a reference clip you have rights to.
+- 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone from a reference clip you have rights to (record it right in the app, or import a file).
 - 🔒 **Private by default** — after a one-time model download, every line renders on your device. No scripts uploaded, no audio sent to a cloud TTS service.
 - ⚡ **Native Swift + MLX** — no Python runtime, no bundled weights, no per-line meter and no cloud queue.
 - 📱 **iPhone arriving soon** — the same on-device engine on Apple Silicon iPhone; on-device generation already works, with the App Store / TestFlight distribution lane still in progress.
@@ -56,7 +56,7 @@
 
 - **Private by default.** After models are installed, generation runs locally and your scripts, history, and generated audio stay in local app storage unless you export them.
 - **No subscription meter.** Download the models you want, then generate on your own hardware without paying per line or waiting on a cloud queue.
-- **Three voice workflows.** Use a built-in speaker, describe a new voice, or clone from a reference clip you own or have permission to use.
+- **Three voice workflows.** Use a built-in speaker, describe a new voice, or clone from a reference clip you own or have permission to use — recorded in the app or imported.
 - **Built for Apple Silicon.** A native Swift + MLX engine (replacing the old bundled Python runtime) keeps generation local, private, and fully on-device — and it's what makes the iPhone app possible (Python can't ship on iPhone; on-device MLX can).
 
 ## Three voice workflows
@@ -81,7 +81,7 @@
       <img src="docs/screenshots/vocello-voice-cloning.png" alt="Voice Cloning screen">
       <br>
       <strong>Voice Cloning</strong><br>
-      Generate speech from a short reference clip (WAV, MP3, AIFF, M4A, FLAC, or OGG) with an optional transcript. Only clone voices you own or have permission to use.
+      Record a short reference clip with your Mac's microphone, or import one (WAV, MP3, AIFF, M4A, FLAC, or OGG). The optional transcript can auto-fill with on-device transcription. Only clone voices you own or have permission to use.
     </td>
     <td width="50%">
       <img src="docs/screenshots/vocello-model-downloads.png" alt="Model downloads settings screen">
@@ -124,8 +124,9 @@ Vocello 2.0.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 ## Local-first privacy
 
 - Speech generation runs locally after models are installed.
-- Generated audio and history stay in local app storage unless you export them.
+- Generated audio, recorded reference clips, and history stay in local app storage unless you export them.
 - Model downloads come from Hugging Face when you install a voice model.
+- Recording a reference clip and transcript auto-fill ask for the **Microphone** and **Speech Recognition** permissions on first use. Both run entirely on your Mac — recognition is on-device only, and nothing is sent to Apple or anyone else. (Transcript auto-fill additionally requires Siri to be enabled, a macOS requirement; the app explains this and links the right Settings pane.)
 - Voice cloning should only be used with voices you own or have permission to use.
 
 ## Build from source

@@ -15,7 +15,9 @@ the summarizer appends the length bucket — older rows predate it) ·
 RTF (audioSec/wallSec, >1 = faster than realtime) · tok/s (codec tokens/s) ·
 TTFC ms (submit→first chunk) · physFoot MB (phys_footprint peak, the OOM-relevant
 figure) · trims (memory_trim count [worst level]) · QC (reference-free audio
-defect verdict pass/warn/fail) · note.
+defect verdict pass/warn/fail) · note · uiMaxStall ms (trailing, added 2026-06 —
+max main-thread stall during the generation; "—" for CLI bench rows, which have
+no UI process; older rows predate the column).
 
 Compare two runs with `git diff`, or ask the agent to diff the deltas. This is a
 reference ledger, not an auto-compared baseline gate.
