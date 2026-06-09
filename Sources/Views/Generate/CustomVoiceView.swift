@@ -121,6 +121,9 @@ struct CustomVoiceReadinessPresentation: Equatable {
 struct CustomVoiceView: View {
     @Binding private var draft: CustomVoiceDraft
     @StateObject private var coordinator = CustomVoiceCoordinator()
+    /// Language detected from the typed script; floats matching speakers and
+    /// the matching language to "Recommended" sections in the pickers.
+    @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
 
     @ObservedObject private var ttsEngineStore: TTSEngineStore
     @ObservedObject private var modelManager: ModelManagerViewModel
@@ -217,6 +220,13 @@ struct CustomVoiceView: View {
         .modeGlassTint(AppTheme.customVoice)
         .modeCanvasBackdrop(AppTheme.customVoice)
         .onAppear(perform: reconcileGenerationVariantSelection)
+        .onAppear { detectedPromptLanguage = PromptLanguageDetector.detect(draft.text) }
+        .onChange(of: draft.text) { _, newText in
+            let detected = PromptLanguageDetector.detect(newText)
+            if detected != detectedPromptLanguage {
+                detectedPromptLanguage = detected
+            }
+        }
         .onChange(of: modelManager.statuses) { _, _ in reconcileGenerationVariantSelection() }
         .onChange(of: modelManager.activeVariantRevision) { _, _ in reconcileGenerationVariantSelection() }
         .sheet(item: $coordinator.presentedSheet) { presentedSheet in
@@ -333,7 +343,10 @@ private extension CustomVoiceView {
     }
 
     var speakerSettings: some View {
-        SpeakerPickerRow(selectedSpeaker: $draft.selectedSpeaker) { speaker in
+        SpeakerPickerRow(
+            selectedSpeaker: $draft.selectedSpeaker,
+            recommendedLanguage: detectedPromptLanguage
+        ) { speaker in
             draft.selectedSpeaker = speaker
             draft.selectedLanguage = TTSModel.qwenLanguage(forSpeaker: speaker)
         }
@@ -345,7 +358,8 @@ private extension CustomVoiceView {
             accentColor: AppTheme.customVoice,
             accessibilityPrefix: "customVoice",
             hint: languageHintMessage,
-            showsDefaultHelp: false
+            showsDefaultHelp: false,
+            recommended: detectedPromptLanguage
         )
     }
 
@@ -409,6 +423,10 @@ private extension CustomVoiceView {
 
 private struct SpeakerPickerRow: View {
     @Binding var selectedSpeaker: String
+    /// Language detected from the typed prompt (`PromptLanguageDetector`).
+    /// When confident (non-`.auto`), speakers native to it float to a
+    /// "Recommended" section — mirroring the iOS voice-picker treatment.
+    var recommendedLanguage: Qwen3SupportedLanguage? = nil
     var onSelectSpeaker: ((String) -> Void)?
 
     private var speakerSelection: Binding<String> {
@@ -424,14 +442,34 @@ private struct SpeakerPickerRow: View {
         )
     }
 
+    private var recommendedSpeakers: [String] {
+        guard let recommendedLanguage, recommendedLanguage != .auto else { return [] }
+        return TTSModel.allSpeakers.filter {
+            TTSModel.qwenLanguage(forSpeaker: $0) == recommendedLanguage
+        }
+    }
+
     var body: some View {
         GenerationSetupRow(
             label: "Speaker",
             accessibilityIdentifier: "customVoice_voiceSetup"
         ) {
             Picker("Speaker", selection: speakerSelection) {
-                ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
-                    Text(TTSModel.speakerPickerLabel(for: speaker)).tag(speaker)
+                if !recommendedSpeakers.isEmpty {
+                    Section("Recommended for your script") {
+                        ForEach(recommendedSpeakers, id: \.self) { speaker in
+                            Text(TTSModel.speakerPickerLabel(for: speaker)).tag(speaker)
+                        }
+                    }
+                    Section("All speakers") {
+                        ForEach(TTSModel.allSpeakers.filter { !recommendedSpeakers.contains($0) }, id: \.self) { speaker in
+                            Text(TTSModel.speakerPickerLabel(for: speaker)).tag(speaker)
+                        }
+                    }
+                } else {
+                    ForEach(TTSModel.allSpeakers, id: \.self) { speaker in
+                        Text(TTSModel.speakerPickerLabel(for: speaker)).tag(speaker)
+                    }
                 }
             }
             .labelsHidden()

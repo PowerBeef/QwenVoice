@@ -193,6 +193,9 @@ struct VoiceCloningView: View {
     }
 
     @State private var isRecordSheetPresented = false
+    /// Language detected from the typed script; floats the matching language
+    /// to a "Recommended" section in the language picker.
+    @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
 
     var body: some View {
         PageScaffold(
@@ -251,6 +254,13 @@ struct VoiceCloningView: View {
             )
         }
         .onAppear(perform: handleAppear)
+        .onAppear { detectedPromptLanguage = PromptLanguageDetector.detect(draft.text) }
+        .onChange(of: draft.text) { _, newText in
+            let detected = PromptLanguageDetector.detect(newText)
+            if detected != detectedPromptLanguage {
+                detectedPromptLanguage = detected
+            }
+        }
         .onChange(of: modelManager.statuses) { _, _ in reconcileGenerationVariantSelection() }
         .onChange(of: modelManager.activeVariantRevision) { _, _ in reconcileGenerationVariantSelection() }
         .onChange(of: pendingSavedVoiceHandoff) { _, _ in
@@ -415,7 +425,8 @@ private extension VoiceCloningView {
             selectedLanguage: $draft.selectedLanguage,
             accentColor: AppTheme.voiceCloning,
             accessibilityPrefix: "voiceCloning",
-            showsDefaultHelp: false
+            showsDefaultHelp: false,
+            recommended: detectedPromptLanguage
         )
     }
 }

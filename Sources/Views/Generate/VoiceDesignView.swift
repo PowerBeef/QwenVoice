@@ -1,9 +1,13 @@
+import QwenVoiceCore
 import QwenVoiceNative
 import SwiftUI
 
 struct VoiceDesignView: View {
     @Binding private var draft: VoiceDesignDraft
     @StateObject private var coordinator = VoiceDesignCoordinator()
+    /// Language detected from the typed script; floats the matching language
+    /// to a "Recommended" section in the language picker.
+    @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
 
     @ObservedObject private var ttsEngineStore: TTSEngineStore
     @ObservedObject private var modelManager: ModelManagerViewModel
@@ -80,6 +84,13 @@ struct VoiceDesignView: View {
         .modeGlassTint(AppTheme.voiceDesign)
         .modeCanvasBackdrop(AppTheme.voiceDesign)
         .onAppear(perform: reconcileGenerationVariantSelection)
+        .onAppear { detectedPromptLanguage = PromptLanguageDetector.detect(draft.text) }
+        .onChange(of: draft.text) { _, newText in
+            let detected = PromptLanguageDetector.detect(newText)
+            if detected != detectedPromptLanguage {
+                detectedPromptLanguage = detected
+            }
+        }
         .onChange(of: modelManager.statuses) { _, _ in reconcileGenerationVariantSelection() }
         .onChange(of: modelManager.activeVariantRevision) { _, _ in reconcileGenerationVariantSelection() }
         .sheet(item: $coordinator.presentedSheet) { presentedSheet in
@@ -220,7 +231,8 @@ private extension VoiceDesignView {
             selectedLanguage: $draft.selectedLanguage,
             accentColor: AppTheme.voiceDesign,
             accessibilityPrefix: "voiceDesign",
-            showsDefaultHelp: false
+            showsDefaultHelp: false,
+            recommended: detectedPromptLanguage
         )
     }
 

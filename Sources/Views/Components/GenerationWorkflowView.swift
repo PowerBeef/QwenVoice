@@ -890,9 +890,19 @@ struct QwenLanguagePickerRow: View {
     var includesAuto = true
     var hint: String?
     var showsDefaultHelp = true
+    /// Language detected from the typed prompt (`PromptLanguageDetector`).
+    /// When confident (non-`.auto`), it floats to a "Recommended" section at
+    /// the top of the menu — mirroring the iOS picker treatment. Tags are
+    /// unchanged, so selection bindings and accessibility ids are unaffected.
+    var recommended: Qwen3SupportedLanguage? = nil
 
     private var options: [Qwen3SupportedLanguage] {
         includesAuto ? Qwen3SupportedLanguage.allCases : Qwen3SupportedLanguage.selectableCases
+    }
+
+    private var recommendedOption: Qwen3SupportedLanguage? {
+        guard let recommended, recommended != .auto, options.contains(recommended) else { return nil }
+        return recommended
     }
 
     var body: some View {
@@ -901,8 +911,19 @@ struct QwenLanguagePickerRow: View {
             accessibilityIdentifier: "\(accessibilityPrefix)_languageSetup"
         ) {
             Picker("Language", selection: $selectedLanguage) {
-                ForEach(options, id: \.self) { language in
-                    Text(language.displayName).tag(language)
+                if let recommendedOption {
+                    Section("Recommended for your script") {
+                        Text(recommendedOption.displayName).tag(recommendedOption)
+                    }
+                    Section("All languages") {
+                        ForEach(options.filter { $0 != recommendedOption }, id: \.self) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                } else {
+                    ForEach(options, id: \.self) { language in
+                        Text(language.displayName).tag(language)
+                    }
                 }
             }
             .labelsHidden()
