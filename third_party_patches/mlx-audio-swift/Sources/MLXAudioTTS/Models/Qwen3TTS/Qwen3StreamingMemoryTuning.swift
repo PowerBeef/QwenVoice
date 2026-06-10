@@ -45,4 +45,16 @@ public enum Qwen3StreamingMemoryTuning: Sendable {
             $0.talkerKVGeneratedWindow = window
         }
     }
+
+    /// Opt-in talker KV-cache quantization (P4 A/B; dev knob, default off):
+    /// `QVOICE_TALKER_KV_QUANT=8|4` → QuantizedKVCache(groupSize: 64, bits: n).
+    /// Quality-sensitive (clone fidelity) — ships per-tier only after the
+    /// listening gate. Never combined with the rotating-window cache (its
+    /// toQuantized is unimplemented upstream); the window knob wins if both
+    /// are set.
+    public static let talkerKVQuantBits: Int? = {
+        guard let raw = ProcessInfo.processInfo.environment["QVOICE_TALKER_KV_QUANT"],
+              let bits = Int(raw), bits == 4 || bits == 8 else { return nil }
+        return bits
+    }()
 }

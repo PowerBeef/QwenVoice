@@ -173,12 +173,13 @@ final class TalkerAttention: Module {
         let (cosVal, sinVal) = positionEmbeddings
         (q, k) = applyRotaryPosEmb(q, k, cos: cosVal, sin: sinVal)
 
-        if let cache {
-            (k, v) = cache.update(keys: k, values: v)
-        }
-
-        let output = MLXFast.scaledDotProductAttention(
-            queries: q, keys: k, values: v, scale: scale, mask: mask
+        // attentionWithCacheUpdate is behavior-identical for plain caches
+        // (cache.update + the same fused SDPA) and additionally dispatches
+        // QuantizedKVCache to quantizedScaledDotProductAttention — required
+        // for the opt-in talker KV quantization (QVOICE_TALKER_KV_QUANT).
+        let output = MLXLMCommon.attentionWithCacheUpdate(
+            queries: q, keys: k, values: v, cache: cache, scale: scale,
+            mask: mask.map { .array($0) } ?? .none
         )
 
         return oProj(output.transposed(0, 2, 1, 3).reshaped(batch, seqLen, -1))
@@ -305,7 +306,10 @@ final class Qwen3TTSTalkerModel: Module {
     }
 
     func makeCache() -> [any KVCache] {
-        layers.map { _ in KVCacheSimple() }
+        if let bits = Qwen3StreamingMemoryTuning.talkerKVQuantBits {
+            return layers.map { _ in QuantizedKVCache(groupSize: 64, bits: bits) }
+        }
+        return layers.map { _ in KVCacheSimple() }
     }
 
     /// Sliding-window KV cache for constrained tiers (iOS / low-end Mac): keeps the
@@ -313,6 +317,7 @@ final class Qwen3TTSTalkerModel: Module {
     /// forever and rotates only generated audio-codec tokens beyond a window of
     /// `window` positions. Caps peak KV at `keep + window` instead of growing with
     /// audio length. Gated by the host via `Qwen3StreamingMemoryTuning.talkerKVGeneratedWindow`.
+    /// NEVER quantized (RotatingKVCache.toQuantized is unimplemented upstream).
     func makeRotatingCache(keep: Int, window: Int) -> [any KVCache] {
         layers.map { _ in RotatingKVCache(maxSize: keep + window, keep: keep, step: 256) }
     }
