@@ -3,7 +3,7 @@
 Durable record of backend/MLX + output-quality optimization work — what was investigated, decided,
 shipped, and deferred. The blow-by-blow lives in git history + `HISTORY.md`; this file is the **standing
 status** so a future session (or maintainer) can resume without re-deriving it. Anchored to the reference
-baseline. Point-in-time as of **2026-05-31**.
+baseline. Point-in-time as of **2026-06-09** (§H is the active program record).
 
 ## Reference baseline
 
@@ -20,7 +20,7 @@ and on memory (~7.4–8.7 GB physFoot in-process); `trims = 0` everywhere. Perf-
 | A | Per-stage decode breakdown (measure) | ✅ done | `ac86b8a` (`summarize_generation_telemetry.py`) |
 | B | The ~586 ms "dropout" investigation | ✅ done — root-caused | this doc + `641a541` baseline note |
 | C | Punctuation-aware audioQC recalibration | ✅ done + verified | `ac86b8a` (`NativeStreamingSynthesisSession.swift`) |
-| D | CodePredictor RoPE fusion | ⏸ deferred — gated, not recommended | n/a |
+| D | CodePredictor RoPE fusion | ✅ **done — closed by §H P3** (`f3cd2aa`): +26%, realtime crossed | §H |
 | E | MLXSwift / mlx-swift-lm version bump (0.31.x) | ⏸ deferred — stay pinned, gated | this doc + CLAUDE.md "SPM dependencies" |
 | F | iPhone 1.7B-4bit program — feasibility + WS0b profiling + compile/KV spikes | 🔬 see §F: compile rejected; **iOS RAM premise corrected — streaming peaks ~3 GB flat, KV windowing unneeded** | this doc + session plan |
 
@@ -79,7 +79,7 @@ Sensitivity retained — synthetic 1300 ms → fail, 11 long pauses → fail. Pe
 see the `3da580d` `HISTORY.md` row vs the `641a541` baseline). The residual rare mid-phrase gap is ear-only;
 the **mandatory listening pass remains the perceptual gate**.
 
-## D — CodePredictor RoPE fusion (deferred; **not recommended to start**)
+## D — CodePredictor RoPE fusion (CLOSED — implemented in §H P3, `f3cd2aa`; kept for history)
 
 CP RoPE is hand-rolled (`Qwen3TTSCodePredictor.swift`); `MLXFast.RoPE` exists in MLX-Swift 0.30.6 and the CP
 uses standard 2D RoPE, so it *could* swap in. Realistic ceiling **~2–3 % RTF (CP only)**. **Gate (revised by
@@ -405,6 +405,16 @@ GPU-bound workload; the launch-bound reality made it 10×).
   shipping tier.
 - **GPU cacheLimit re-sweep**: not re-run this program; current per-tier values stand (set during
   the iOS program; no P0–P4 row shows cache-pressure misfit). Open as a low-priority follow-up.
+
+### P6 — Final full-matrix validation (macOS, native floor tier)
+
+`P6 final full-matrix (P0-P4)` ledger row + the 12-cell speed matrix: **QC pass on every cell**
+(including design/long, historically warn/fail-prone). Warm medians — custom 0.99/1.11/**1.07**
+(short/medium/long), design 0.99/1.11/0.99, clone 0.24/0.47/**0.63** (clone short is prefill-
+dominated by design). Headline vs the same-day pre-program baseline: **custom/warm/medium
+0.83 → 1.11 (+34%)**; custom/warm/long 0.80 → 1.07 (+34%); clone/long 0.55 → 0.63 (+15%);
+physFoot unchanged (4493 vs 4486). Listening: agy 3-mode adjudication clean (P3 gate); nothing
+flagged in the final matrix.
 
 ## Next step (if resumed)
 
