@@ -32,10 +32,13 @@ schemes:
     build:
       targets:
         QwenVoice: all
+        VocelloMacUITests: [test]
     run:
       config: Release
     test:
       config: Release
+      targets:
+        - VocelloMacUITests
     profile:
       config: Release
     analyze:
@@ -385,6 +388,26 @@ targets:
   # Thin XCUITest UI-flow smoke (host = VocelloiOS). Asserts launch + the 4-tab IA +
   # the Studio composer/mode-control via the stable accessibilityIdentifiers. The
   # durable replacement (with scripts/ios_device.sh) for the deprecated screen-mirror
+  # macOS UI smoke — the standing pre-release gate (docs/reference/macos-release-qa.md).
+  # Run: xcodebuild test -scheme QwenVoice -destination 'platform=macOS,arch=arm64'
+  VocelloMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/VocelloMacUITests
+    dependencies:
+      - target: QwenVoice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.uitests
+        PRODUCT_NAME: VocelloMacUITests
+        PRODUCT_MODULE_NAME: VocelloMacUITests
+        TEST_TARGET_NAME: QwenVoice
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: YES
+
   # UI driving — see docs/reference/ios-device-testing.md. Runs on device or simulator
   # via: xcodebuild test -scheme VocelloiOS -destination 'id=<UDID>' (or a sim).
   VocelloiOSUITests:

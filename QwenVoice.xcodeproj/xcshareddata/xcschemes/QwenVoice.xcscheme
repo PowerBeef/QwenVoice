@@ -21,6 +21,20 @@
                ReferencedContainer = "container:QwenVoice.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4342C5A6FEF870F69F428B8A"
+               BuildableName = "VocelloMacUITests.xctest"
+               BlueprintName = "VocelloMacUITests"
+               ReferencedContainer = "container:QwenVoice.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -39,6 +53,17 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4342C5A6FEF870F69F428B8A"
+               BuildableName = "VocelloMacUITests.xctest"
+               BlueprintName = "VocelloMacUITests"
+               ReferencedContainer = "container:QwenVoice.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
