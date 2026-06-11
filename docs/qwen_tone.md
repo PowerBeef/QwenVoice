@@ -1,6 +1,6 @@
 # Tone and Emotion in Vocello
 
-_Last reviewed: 2026-05-31._
+_Last reviewed: 2026-06-11 (deep-research refresh: official Qwen3-TTS guidance + measured instruct-adherence findings folded in)._
 
 This guide is a supplemental prompt-writing reference for the shipped macOS app. It is supplemental and may lag shipped behavior — when in doubt, trust the sources listed below before this guide.
 
@@ -31,12 +31,19 @@ Useful instruction patterns:
 ## Practical Guidance
 
 - Be specific: combine voice character, emotional state, pacing, and clarity in one instruction.
-- Keep requests concrete: `calm middle-aged narrator with steady pacing` works better than `make it better`.
-- Prefer short, direct performance direction over one-word labels; Qwen3-TTS follows natural-language delivery instructions.
+- Be multidimensional (the official instruction-writing principle): combine **emotion + pace + pitch + timbre** rather than a single dimension — `bright energy and a slightly lifted pitch` beats `happy`.
+- Keep requests concrete: `calm middle-aged narrator with steady pacing` works better than `make it better`. Measured adherence is highest for concrete acoustic wording and lowest for persona-only briefs ("like a detective") — describe the sound, not just the character.
+- Prefer short, direct performance direction over one-word labels; Qwen3-TTS follows natural-language delivery instructions. 1–3 dense sentences is the sweet spot; stacked intensifiers (`very, very deep`) do nothing.
+- **Negative constraints work and are officially endorsed**: high-arousal instructions like `very happy` can trigger literal laughter — add `but without laughing` / `no added sounds`. The shipped Happy/Excited Strong presets carry this clause.
 - Keep strong emotions intelligible: add constraints like `while keeping words clear`, `without shouting`, or `still understandable`.
 - For whisper delivery, say `whisper` explicitly. Generic `soft and quiet` wording can produce soft-spoken delivery instead of an actual whisper.
+- Phrase instructions as **descriptions, not requests**: a conversational instruction ("Could you read this like…") can leak a spoken "OK" acknowledgment into the audio.
+- Write the instruction in **English or Chinese** regardless of the output language — those are the trained instruction languages; the spoken-text language is controlled separately (the Language picker / auto-detection).
+- **Don't expect dialect or accent switching from instructions** — emotion and style follow, but `speak in a Sichuan dialect` yields standard Mandarin. Dialects come from the dialect speakers (Dylan — Beijing, Eric — Sichuan) or from cloning an accented reference.
+- **Speakers carry baked-in delivery biases**: Ryan is inherently expressive and resists a flat newscast read; for neutral delivery start from a calmer voice (Aiden, Serena) instead of fighting the timbre with instructions.
 - Iterate wording: instruction following is probabilistic, so small prompt changes can materially change the result.
-- Use Voice Design when you want a reusable prompt-driven voice shape, and use Voice Cloning when you want a specific reference identity from audio.
+- Use Voice Design when you want a reusable prompt-driven voice shape, and use Voice Cloning when you want a specific reference identity from audio. (Cloned voices cannot take delivery instructions on the current checkpoints — pick a reference clip that already carries the delivery you want, e.g. by saving a Voice Design result.)
+- **Long scripts drift**: very long single generations tend to speed up and compress pauses toward the end. Break long material into paragraph-sized generations (each re-asserts the delivery instruction) for steadier pacing.
 
 ## Pauses in the Spoken Text
 
@@ -87,4 +94,4 @@ Voice Cloning support text:
 
 - [`../README.md`](../README.md)
 - [`../CLAUDE.md`](../CLAUDE.md) — repo architecture, build, and conventions
-- `Sources/Models/EmotionPreset.swift` (macOS) / `Sources/iOSSupport/Models/EmotionPreset.swift` (iOS) — the shipped 9 × 3 preset instruction strings; `Sources/QwenVoiceCore/GenerationSemantics.swift` assembles the Voice Design "Voice character / Delivery" framing.
+- `Sources/QwenVoiceCore/EmotionPreset.swift` — the shipped 12 × 3 preset instruction strings (single source for macOS + iOS + the CLI's `bench --delivery` cells); `Sources/QwenVoiceCore/GenerationSemantics.swift` assembles the Voice Design "Voice character / Delivery" framing.

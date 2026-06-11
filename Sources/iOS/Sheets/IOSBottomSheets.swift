@@ -15,23 +15,26 @@ import QwenVoiceCore
 enum IOSEmotionPresetPalette {
     static func dotColor(forID id: String?) -> Color {
         switch id {
-        case "happy":    return Color(red: 0.95, green: 0.78, blue: 0.30)  // #F2C74D
-        case "sad":      return Color(red: 0.55, green: 0.62, blue: 0.78)  // #8C9EC7
-        case "angry":    return Color(red: 0.78, green: 0.32, blue: 0.20)  // #C75233
-        case "fearful":  return Color(red: 0.62, green: 0.50, blue: 0.78)  // #9E80C7
-        case "whisper":  return Color(red: 0.62, green: 0.62, blue: 0.66)  // #9E9EA8
-        case "dramatic": return Color(red: 0.78, green: 0.52, blue: 0.66)  // #C785A8
-        case "calm":     return Color(red: 0.62, green: 0.74, blue: 0.62)  // #9EBD9E
-        case "excited":  return Color(red: 0.92, green: 0.58, blue: 0.32)  // #EB9452
-        default:         return .white.opacity(0.55)                       // neutral / unknown
+        case "happy":     return Color(red: 0.95, green: 0.78, blue: 0.30)  // #F2C74D
+        case "sad":       return Color(red: 0.55, green: 0.62, blue: 0.78)  // #8C9EC7
+        case "angry":     return Color(red: 0.78, green: 0.32, blue: 0.20)  // #C75233
+        case "fearful":   return Color(red: 0.62, green: 0.50, blue: 0.78)  // #9E80C7
+        case "surprised": return Color(red: 0.38, green: 0.72, blue: 0.72)  // #61B8B8
+        case "whisper":   return Color(red: 0.62, green: 0.62, blue: 0.66)  // #9E9EA8
+        case "dramatic":  return Color(red: 0.78, green: 0.52, blue: 0.66)  // #C785A8
+        case "calm":      return Color(red: 0.62, green: 0.74, blue: 0.62)  // #9EBD9E
+        case "excited":   return Color(red: 0.92, green: 0.58, blue: 0.32)  // #EB9452
+        case "narrator":  return Color(red: 0.72, green: 0.58, blue: 0.42)  // #B8946B
+        case "news":      return Color(red: 0.40, green: 0.56, blue: 0.74)  // #668FBD
+        default:          return .white.opacity(0.55)                       // neutral / unknown
         }
     }
 }
 
 // MARK: - Delivery picker
 
-/// 9-cell preset grid + intensity row. Drives a `DeliveryInputState`-shaped
-/// binding (selected preset id + intensity).
+/// Preset grid (2 columns over `EmotionPreset.all`) + intensity row. Drives a
+/// `DeliveryInputState`-shaped binding (selected preset id + intensity).
 struct IOSDeliveryPickerSheet: View {
     @Binding var selectedPresetID: String
     @Binding var intensity: EmotionIntensity

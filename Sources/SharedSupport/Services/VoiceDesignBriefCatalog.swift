@@ -14,15 +14,24 @@ enum VoiceDesignBriefCatalog {
     /// unnecessary.
     static let descriptionLimit = 500
 
-    /// Research-aligned (official Qwen3-TTS VoiceDesign): each combines
-    /// several of age, gender, tone, timbre, accent, pace, and use-case — the
-    /// attributes the model's own example descriptions lean on — kept to one
-    /// dense sentence.
+    /// Research-aligned (official Qwen3-TTS VoiceDesign guidance): each brief
+    /// combines several dimensions from the official voice-design table —
+    /// gender, age, pitch, pace, emotion, timbre, and purpose/use-case — in one
+    /// dense sentence, the shape the model's own example descriptions use.
+    /// The last four mirror official example archetypes (documentary narrator,
+    /// fast upbeat commercial voice, animation child voice, and the
+    /// persona-plus-delivery-mechanics teenager from the design-then-clone
+    /// example). Accent wording is a flavor hint, not a guarantee — instruct
+    ///-driven accent/dialect control is unreliable on the open checkpoints.
     static let startingPoints = [
         "A warm, deep male narrator with a subtle British accent.",
         "A bright young woman, energetic and conversational.",
         "A gravelly older man, slow and intimate, late-night radio.",
         "A soft, breathy young woman, gentle and reassuring.",
+        "A calm middle-aged male voice with slow pace and a deep, magnetic tone, ideal for documentary narration.",
+        "A lively young female voice with fast pace and upward intonation, suited to upbeat product videos.",
+        "A cute child's voice, around eight years old, slightly mischievous, suited to animated characters.",
+        "A teenage male voice, tenor range, gaining confidence, though the vowels still tighten when he is nervous.",
     ]
 
     static let placeholder = "A warm, deep narrator with a subtle British accent."

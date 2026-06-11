@@ -82,6 +82,8 @@ enum AppTheme {
             return Color(red: 0.78, green: 0.32, blue: 0.20)  // deep rust
         case "fearful":
             return Color(red: 0.62, green: 0.50, blue: 0.78)  // quiet violet
+        case "surprised":
+            return Color(red: 0.38, green: 0.72, blue: 0.72)  // bright teal
         case "whisper":
             return Color(red: 0.62, green: 0.62, blue: 0.66)  // cool gray
         case "dramatic":
@@ -90,6 +92,10 @@ enum AppTheme {
             return Color(red: 0.62, green: 0.74, blue: 0.62)  // sage
         case "excited":
             return Color(red: 0.92, green: 0.58, blue: 0.32)  // warm orange
+        case "narrator":
+            return Color(red: 0.72, green: 0.58, blue: 0.42)  // warm tan
+        case "news":
+            return Color(red: 0.40, green: 0.56, blue: 0.74)  // steel blue
         default:
             return accent
         }

@@ -129,6 +129,15 @@ public struct EmotionPreset: Identifiable, Sendable {
         return all.first(where: { $0.id == id })
     }
 
+    // Instruction-writing canon (Qwen3-TTS official guidance + measured adherence,
+    // researched 2026-06-11): be specific and multidimensional (combine emotion +
+    // pace + pitch + timbre), objective, concise — concrete acoustic wording is
+    // followed far more reliably than persona-only briefs, and stacked
+    // intensifiers do nothing. Negative constraints are officially endorsed and
+    // work ("very happy but without laughing"); high-arousal instructions can
+    // otherwise trigger literal laughter or added sounds. Intelligibility
+    // clauses ("keeps every word audible") bound strong tiers the same way the
+    // model's training descriptions do — keep them.
     public static let all: [EmotionPreset] = [
         EmotionPreset(
             id: "neutral",
@@ -146,8 +155,8 @@ public struct EmotionPreset: Identifiable, Sendable {
             sfSymbol: "face.smiling",
             instructions: [
                 .subtle: "Speaks with a hint of warmth and a faint smile in the voice.",
-                .normal: "Speaks happily and upbeat, smiling through the words with bright energy.",
-                .strong: "Speaks joyfully and exuberantly, lighting up every word with bouncy, beaming enthusiasm.",
+                .normal: "Speaks happily and upbeat, smiling through the words with bright energy and a slightly lifted pitch.",
+                .strong: "Speaks joyfully and exuberantly, lighting up every word with bouncy, beaming enthusiasm, but without laughing or adding extra sounds.",
             ]
         ),
         EmotionPreset(
@@ -156,8 +165,8 @@ public struct EmotionPreset: Identifiable, Sendable {
             sfSymbol: "cloud.rain",
             instructions: [
                 .subtle: "Speaks with quiet, reflective sadness, slower and a little subdued.",
-                .normal: "Speaks sadly and somberly, with a heavy, restrained tone and small gentle pauses.",
-                .strong: "Speaks through deep sorrow, fragile and tearful, words slow and weighted with grief.",
+                .normal: "Speaks sadly and somberly, with a heavy, restrained tone, lowered pitch, and small gentle pauses.",
+                .strong: "Speaks through deep sorrow, fragile and tearful, words slow and weighted with grief, while keeping every word clear.",
             ]
         ),
         EmotionPreset(
@@ -178,6 +187,16 @@ public struct EmotionPreset: Identifiable, Sendable {
                 .subtle: "Speaks with quiet unease, cautious and hesitant, voice a little smaller than usual.",
                 .normal: "Speaks fearfully and anxiously, breath caught, pacing uncertain, words pushed out shakily.",
                 .strong: "Speaks in trembling panic, voice quavering and urgent, but still keeps every word audible.",
+            ]
+        ),
+        EmotionPreset(
+            id: "surprised",
+            label: "Surprised",
+            sfSymbol: "exclamationmark.2",
+            instructions: [
+                .subtle: "Speaks with mild surprise, a light lift in pitch and a slightly quickened pace, as if just noticing something unexpected.",
+                .normal: "Speaks with unmistakable surprise, pitch jumping higher, pace quick and animated, stressing the unexpected words as if astonished by the news.",
+                .strong: "Speaks in open astonishment, high rising pitch, fast eager bursts and strong emphasis, utterly amazed by every detail, without gasping or adding extra sounds.",
             ]
         ),
         EmotionPreset(
@@ -206,7 +225,7 @@ public struct EmotionPreset: Identifiable, Sendable {
             sfSymbol: "leaf",
             instructions: [
                 .subtle: "Speaks easily and unhurriedly, relaxed and warm throughout.",
-                .normal: "Speaks calmly and soothingly, smooth pacing with reassuring warmth and gentle confidence.",
+                .normal: "Speaks calmly and soothingly, smooth unhurried pacing, low settled pitch, with reassuring warmth.",
                 .strong: "Speaks with serene, meditative stillness, slow and softly grounded, each phrase fully landed.",
             ]
         ),
@@ -217,7 +236,27 @@ public struct EmotionPreset: Identifiable, Sendable {
             instructions: [
                 .subtle: "Speaks with a touch of enthusiasm, slightly energized and engaged.",
                 .normal: "Speaks energetically and enthusiastically, bright and animated, picking up the pace just slightly.",
-                .strong: "Speaks with bursting, lively excitement, animated and bright, can hardly contain the eager energy.",
+                .strong: "Speaks with bursting, lively excitement, animated and bright, barely containing the eager energy, but without laughing or shouting.",
+            ]
+        ),
+        EmotionPreset(
+            id: "narrator",
+            label: "Narrator",
+            sfSymbol: "text.book.closed",
+            instructions: [
+                .subtle: "Speaks like a relaxed storyteller, even pacing and a warm, settled tone.",
+                .normal: "Narrates like a composed documentary voice, low warm timbre, deliberate pacing, crisp diction, gentle emphasis on key phrases.",
+                .strong: "Narrates with rich documentary gravitas, deep settled timbre, slow deliberate pacing, strong measured emphasis and well-placed pauses.",
+            ]
+        ),
+        EmotionPreset(
+            id: "news",
+            label: "News",
+            sfSymbol: "newspaper",
+            instructions: [
+                .subtle: "Speaks in a light news-desk style, tidy even pacing and a neutral, professional tone.",
+                .normal: "Speaks in a clear news broadcast style, steady professional delivery, even pacing, precise articulation, no dramatics.",
+                .strong: "Speaks like a prime-time news anchor, brisk authoritative delivery, firm even stress, crisp precise articulation throughout.",
             ]
         ),
     ]
