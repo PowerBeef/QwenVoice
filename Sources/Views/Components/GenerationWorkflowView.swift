@@ -860,13 +860,24 @@ extension ConfigurationFieldRow where Supporting == EmptyView {
 struct ConfigurationColumn<Content: View>: View {
     let label: String
     var isEnabled: Bool = true
+    /// Optional quiet suffix after the caption (e.g. "· Auto" while the
+    /// language selector follows detection) — tertiary so it reads as state,
+    /// not as part of the label.
+    var detail: String? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(isEnabled ? .secondary : .tertiary)
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(isEnabled ? .secondary : .tertiary)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             content()
         }
@@ -906,14 +917,14 @@ struct QwenLanguagePicker: View {
     var accessibilityPrefix: String = "qwenLanguage"
     var includesAuto = true
     /// Language detected from the typed prompt (`PromptLanguageDetector`).
-    /// When confident (non-`.auto`): the `.auto` row (and therefore the closed
-    /// menu button, which mirrors the selected tag's label) reads
-    /// "French (Auto)" — the selector auto-shows the detected language while
-    /// `.auto` keeps meaning "follow detection" — and the detected language is
-    /// tagged "— Detected" in a "Recommended for your script" section at the
-    /// top of the menu. Picking the tagged row pins the language; picking the
-    /// Auto row resumes following. Tags are unchanged, so selection bindings
-    /// and accessibility ids are unaffected.
+    /// When confident (non-`.auto`): the closed control shows the plain
+    /// effective name ("French" — the caption above carries the "· Auto"
+    /// state, so the bar never widens), and the open menu tags the detected
+    /// language "— Detected" in a "Recommended for your script" section.
+    /// Picking the tagged row pins the language; picking Auto resumes
+    /// following. A custom `Menu` (not `Picker`) because a native picker's
+    /// button always mirrors the selected row's text — the compact button
+    /// label needs to be independent of the row labels.
     var recommended: Qwen3SupportedLanguage? = nil
     var minWidth: CGFloat = LayoutConstants.configurationControlMinWidth
     var maxWidth: CGFloat = 220
@@ -927,41 +938,70 @@ struct QwenLanguagePicker: View {
         return recommended
     }
 
-    private var autoRowLabel: String {
+    private var effectiveLabel: String {
         LanguageSelectionPresentation.buttonLabel(
-            selected: .auto,
+            selected: selectedLanguage,
             detected: recommendedOption ?? .auto
         )
     }
 
+    private var isFollowingDetection: Bool {
+        LanguageSelectionPresentation.isFollowingDetection(
+            selected: selectedLanguage,
+            detected: recommendedOption ?? .auto
+        )
+    }
+
+    /// One checkable menu row. macOS renders Menu `Toggle`s as native
+    /// checkmarked items; the binding's setter only ever selects (menus
+    /// dismiss on tap, so "unchecking" just re-selects the same language).
+    private func languageRow(_ language: Qwen3SupportedLanguage, title: String? = nil) -> some View {
+        Toggle(
+            title ?? language.displayName,
+            isOn: Binding(
+                get: { selectedLanguage == language },
+                set: { _ in selectedLanguage = language }
+            )
+        )
+    }
+
     var body: some View {
-        Picker("Language", selection: $selectedLanguage) {
+        Menu {
             if let recommendedOption {
                 Section("Recommended for your script") {
-                    Text("\(recommendedOption.displayName) — Detected").tag(recommendedOption)
+                    languageRow(recommendedOption, title: "\(recommendedOption.displayName) — Detected")
                 }
                 Section("All languages") {
                     ForEach(options.filter { $0 != recommendedOption }, id: \.self) { language in
-                        Text(language == .auto ? autoRowLabel : language.displayName).tag(language)
+                        languageRow(language)
                     }
                 }
             } else {
                 ForEach(options, id: \.self) { language in
-                    Text(language.displayName).tag(language)
+                    languageRow(language)
                 }
             }
+        } label: {
+            // A single concatenated Text so the bordered button style cannot
+            // decompose the label and move the chevron to the leading edge
+            // (it reorders HStack{Text, Image} labels); per-segment color
+            // keeps the chevron quiet like the native picker's.
+            (Text(effectiveLabel)
+                + Text("  ")
+                + Text(Image(systemName: "chevron.up.chevron.down"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(.secondary))
+                .lineLimit(1)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 1)
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .menuIndicator(.hidden)
         .focusEffectDisabled()
         .frame(minWidth: minWidth, maxWidth: maxWidth, alignment: .leading)
         .tint(accentColor)
-        .accessibilityValue(
-            LanguageSelectionPresentation.buttonLabel(
-                selected: selectedLanguage,
-                detected: recommendedOption ?? .auto
-            )
-        )
+        .accessibilityValue(isFollowingDetection ? "\(effectiveLabel), auto" : effectiveLabel)
         .accessibilityIdentifier("\(accessibilityPrefix)_languagePicker")
     }
 }

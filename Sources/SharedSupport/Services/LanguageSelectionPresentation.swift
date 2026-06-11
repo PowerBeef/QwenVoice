@@ -19,15 +19,25 @@ enum LanguageSelectionPresentation {
         selected == .auto && detected != .auto ? detected : selected
     }
 
-    /// What the closed selector (menu button / Studio chip) reads:
-    /// "French (Auto)" while following a detection, "Auto" while following
-    /// with nothing detected, the pinned language's name otherwise.
+    /// What the closed selector (menu button / Studio chip) reads: the plain
+    /// effective name — "French" while following a detection, "Auto" while
+    /// following with nothing detected, the pinned language's name otherwise.
+    /// The auto-following STATE is conveyed outside the control (the macOS
+    /// caption's "· Auto" suffix / the iOS sheet's Auto row), so the control
+    /// never widens when detection kicks in.
     static func buttonLabel(
         selected: Qwen3SupportedLanguage,
         detected: Qwen3SupportedLanguage
     ) -> String {
-        guard selected == .auto else { return selected.displayName }
-        guard detected != .auto else { return Qwen3SupportedLanguage.auto.displayName }
-        return "\(detected.displayName) (Auto)"
+        effective(selected: selected, detected: detected).displayName
+    }
+
+    /// True while the selector follows detection (stored Auto + a confident
+    /// detection) — drives the caption suffix / hint at the call sites.
+    static func isFollowingDetection(
+        selected: Qwen3SupportedLanguage,
+        detected: Qwen3SupportedLanguage
+    ) -> Bool {
+        selected == .auto && detected != .auto
     }
 }

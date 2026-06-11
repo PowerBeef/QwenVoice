@@ -407,7 +407,13 @@ private extension CustomVoiceView {
     }
 
     var languageColumn: some View {
-        ConfigurationColumn(label: "Language") {
+        ConfigurationColumn(
+            label: "Language",
+            detail: LanguageSelectionPresentation.isFollowingDetection(
+                selected: draft.selectedLanguage,
+                detected: detectedPromptLanguage
+            ) ? "· Auto" : nil
+        ) {
             QwenLanguagePicker(
                 selectedLanguage: $draft.selectedLanguage,
                 accentColor: AppTheme.customVoice,

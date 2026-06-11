@@ -311,16 +311,13 @@ struct IOSQwenLanguagePickerSheet: View {
                 leadingBadge(language)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    // Auto mirrors the macOS picker: while a language is
-                    // detected, the row (and the Studio chip) reads
+                    // While a language is detected, the Auto row reads
                     // "French (Auto)" — Auto keeps meaning "follow detection".
-                    // The detected row itself is tagged via its subtitle.
-                    Text(language == .auto
-                        ? LanguageSelectionPresentation.buttonLabel(
-                            selected: .auto,
-                            detected: recommended ?? .auto
-                        )
-                        : language.displayName)
+                    // (The Studio chip stays compact with just the effective
+                    // name; this full-width row has the room to spell out the
+                    // state.) The detected row itself is tagged via its
+                    // subtitle.
+                    Text(autoRowTitle(language))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(IOSAppTheme.textPrimary)
                     Text(rowSubtitle(language))
@@ -357,6 +354,13 @@ struct IOSQwenLanguagePickerSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("languagePicker_\(language.rawValue)")
+    }
+
+    private func autoRowTitle(_ language: Qwen3SupportedLanguage) -> String {
+        guard language == .auto, let recommended, recommended != .auto else {
+            return language.displayName
+        }
+        return "\(recommended.displayName) (Auto)"
     }
 
     private func rowSubtitle(_ language: Qwen3SupportedLanguage) -> String {

@@ -435,10 +435,17 @@ private extension VoiceCloningView {
     }
 
     var languageSettings: some View {
+        // The side-label row's 92pt caption column can't fit a "· Auto"
+        // suffix (the caption-above columns carry it elsewhere), so while
+        // the selector follows detection the auto state rides the hint slot.
         QwenLanguagePickerRow(
             selectedLanguage: $draft.selectedLanguage,
             accentColor: AppTheme.voiceCloning,
             accessibilityPrefix: "voiceCloning",
+            hint: LanguageSelectionPresentation.isFollowingDetection(
+                selected: draft.selectedLanguage,
+                detected: detectedPromptLanguage
+            ) ? "Auto · detected from your script." : nil,
             showsDefaultHelp: false,
             recommended: detectedPromptLanguage
         )
