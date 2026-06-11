@@ -463,6 +463,23 @@ Knobs remain as dev A/B surfaces (resolved once at launch, official behavior whe
 `QWENVOICE_ENGLISH_DICTION_REINFORCEMENT=off` (GenerationSemantics). Single-take A/Bs are directional,
 not conclusive — re-run with more reps + the maintainer's ear before ever shipping a non-default.
 
+**Backend robustness verifications (no code needed):** (a) the vLLM-Omni pre-decode codec-frame filter
+(clamp/drop out-of-range or negative codes) is unnecessary here — out-of-range codes are impossible by
+construction in our single-stream path (talker suppresses the 1024 special/speaker rows except EOS,
+which terminates the loop; the code predictor's vocab is exactly the 2048 codebook); it guards their
+batched −1-padded path, which we don't have. (b) No `code > 0`-style length trimming exists in our
+decode paths (the official `-1`-padding rule, QwenLM 5f8581d, applies to batch decode only).
+(c) Speaker-embedding injection matches upstream #148: spk_id rows injected between the codec prefill
+and the pad+bos suffix, with the dialect language-ID override (dylan→beijing, eric→sichuan under
+auto/chinese). The optional degenerate-loop runaway guard (mlx-audio-swift ASR #174 pattern) stays
+unadopted — existing EOS gating + the flat max-token cap + the audioQC tripwire cover that failure mode.
+
+Deliberately NOT pursued (maintainer decision 2026-06-11): the MLX 0.31.x bump (backend is drastically
+streamlined/customized — stay pinned; supersedes the §E "quarterly review" trigger list for this program),
+CFG (absent from the architecture), batched talker/CP decode for `vocello batch` (future idea only).
+Watch item: the promised `Qwen3-TTS-25Hz-1.7B-VoiceEditing` checkpoint (clone+instruct) — would unlock
+delivery presets in Voice Cloning mode.
+
 ## Next step (if resumed)
 
 §H is the active program (branch `engine-risk`): P2 hot-path build/allocator work is first-order per
