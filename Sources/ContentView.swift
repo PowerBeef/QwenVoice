@@ -662,48 +662,48 @@ private struct MainWindowToolbar: ToolbarContent {
     @Binding var voicesEnrollRequestID: UUID?
 
     var body: some ToolbarContent {
-        // Separate ToolbarItems (not one HStack) so macOS can overflow each
-        // control individually at narrow window widths — a single combined
-        // item collapses into one unusable "Sort" overflow row.
+        // One ToolbarItem (HStack) — separate items pick up enough inter-item
+        // padding that the search field overflows at the default 720pt window
+        // (regressing the smoke test's `history_searchField` assertion). The
+        // combined group fits like the pre-clear-menu layout did, with the
+        // search slimmed to make room for the trash menu.
         if selectedItem == .history {
             ToolbarItem {
-                Menu {
-                    Picker("Sort", selection: $historySortOrder) {
-                        ForEach(HistorySortOrder.allCases) { order in
-                            Text(order.label).tag(order)
+                HStack(spacing: 10) {
+                    Menu {
+                        Picker("Sort", selection: $historySortOrder) {
+                            ForEach(HistorySortOrder.allCases) { order in
+                                Text(order.label).tag(order)
+                            }
                         }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down.circle")
                     }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down.circle")
-                }
-                .accessibilityLabel("Sort history")
-                .accessibilityIdentifier("history_sortPicker")
-            }
+                    .accessibilityLabel("Sort history")
+                    .accessibilityIdentifier("history_sortPicker")
 
-            ToolbarItem {
-                Menu {
-                    Button("Clear History (Keep Audio Files)…") {
-                        historyClearRequest = HistoryClearRequest(scope: .keepFiles)
+                    Menu {
+                        Button("Clear History (Keep Audio Files)…") {
+                            historyClearRequest = HistoryClearRequest(scope: .keepFiles)
+                        }
+                        .accessibilityIdentifier("history_clearKeepFiles")
+                        Button("Clear History and Delete Audio…", role: .destructive) {
+                            historyClearRequest = HistoryClearRequest(scope: .deleteFiles)
+                        }
+                        .accessibilityIdentifier("history_clearDeleteFiles")
+                    } label: {
+                        Image(systemName: "trash.circle")
                     }
-                    .accessibilityIdentifier("history_clearKeepFiles")
-                    Button("Clear History and Delete Audio…", role: .destructive) {
-                        historyClearRequest = HistoryClearRequest(scope: .deleteFiles)
-                    }
-                    .accessibilityIdentifier("history_clearDeleteFiles")
-                } label: {
-                    Image(systemName: "trash.circle")
-                }
-                .accessibilityLabel("Clear history")
-                .accessibilityIdentifier("history_clearMenu")
-            }
+                    .accessibilityLabel("Clear history")
+                    .accessibilityIdentifier("history_clearMenu")
 
-            ToolbarItem {
-                ToolbarSearchField(
-                    text: $historySearchText,
-                    placeholder: "Search history",
-                    accessibilityIdentifier: "history_searchField"
-                )
-                .frame(width: 180)
+                    ToolbarSearchField(
+                        text: $historySearchText,
+                        placeholder: "Search history",
+                        accessibilityIdentifier: "history_searchField"
+                    )
+                    .frame(width: 150)
+                }
             }
         }
 
