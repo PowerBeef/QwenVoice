@@ -44,3 +44,4 @@ reference ledger, not an auto-compared baseline gate.
 | 2026-06-09 | f3cd2aa | clone/pro_clone_speed/warm/long | 0.53 | 6.57 | - | 6955 | 0 | pass | P4 KV-quant A/B: 8-bit | - |
 | 2026-06-09 | fc3aaf8 | custom/pro_custom_speed/warm/medium | 1.11 | 13.82 | - | 4493 | 0 | pass | P6 final full-matrix (P0-P4) | - |
 | 2026-06-09 | 90e16b3 | custom/pro_custom_speed/warm/medium | 1.03 | 12.85 | - | 4539 | 0 | pass | release-QA net (post audit fixes) | - |
+| 2026-06-12 | a2c5206 | custom/pro_custom_speed/warm/medium | 1.06 | 13.19 | - | 4877 | 0 | pass | v2.1.0 release-QA | - |
