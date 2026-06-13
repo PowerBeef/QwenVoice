@@ -27,15 +27,26 @@ struct IOSEngineLifecycleToast: View {
 
     @ViewBuilder
     private func toastBody(descriptor: ToastDescriptor) -> some View {
+        // An error toast carries the engine's specific message when available, and
+        // is the only one the user can act on (tap to dismiss). Transient states
+        // (interrupted/recovering/restarted) stay informational + non-interactive.
+        let message = descriptor.isError
+            ? (ttsEngine.visibleErrorMessage ?? descriptor.message)
+            : descriptor.message
         HStack(spacing: 10) {
             Image(systemName: descriptor.symbol)
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(descriptor.tint)
-            Text(descriptor.message)
+            Text(message)
                 .font(IOSTypeStyle.subhead.font)
                 .foregroundStyle(IOSAppTheme.textPrimary)
-                .lineLimit(2)
+                .lineLimit(3)
             Spacer(minLength: 0)
+            if descriptor.isError {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(IOSAppTheme.textTertiary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -45,8 +56,20 @@ struct IOSEngineLifecycleToast: View {
             tint: descriptor.tint
         )
         .padding(.horizontal, 16)
-        .allowsHitTesting(false)
+        .contentShape(Rectangle())
+        .allowsHitTesting(descriptor.isError)
+        .onTapGesture {
+            if descriptor.isError { dismissError() }
+        }
         .accessibilityIdentifier("engineLifecycleToast_\(descriptor.identifier)")
+        .accessibilityAddTraits(descriptor.isError ? .isButton : [])
+        .accessibilityHint(descriptor.isError ? "Double tap to dismiss" : "")
+    }
+
+    private func dismissError() {
+        dismissTask?.cancel()
+        ttsEngine.clearVisibleError()
+        visibleState = nil
     }
 
     private func handle(newState: EngineLifecycleState) {
@@ -63,6 +86,13 @@ struct IOSEngineLifecycleToast: View {
         }
         visibleState = newState
         dismissTask?.cancel()
+        // Error toasts persist until the engine state changes or the user taps to
+        // dismiss — a real failure must not vanish before it can be read/acted on.
+        // Transient states keep the 4s auto-dismiss.
+        guard Self.descriptor(for: newState)?.isError != true else {
+            dismissTask = nil
+            return
+        }
         dismissTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             guard !Task.isCancelled else { return }
@@ -77,6 +107,7 @@ struct IOSEngineLifecycleToast: View {
         let message: String
         let symbol: String
         let tint: Color
+        var isError: Bool = false
     }
 
     private static func descriptor(for state: EngineLifecycleState) -> ToastDescriptor? {
@@ -107,7 +138,8 @@ struct IOSEngineLifecycleToast: View {
                 identifier: "failed",
                 message: "Engine error. Try again, or open Settings → Model Downloads.",
                 symbol: "exclamationmark.triangle",
-                tint: .red
+                tint: .red,
+                isError: true
             )
         case .idle, .launching, .connected:
             return nil

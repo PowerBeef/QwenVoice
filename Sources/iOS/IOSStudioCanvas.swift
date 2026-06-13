@@ -112,6 +112,12 @@ struct IOSStudioCanvas<SetupChips: View>: View {
                 .frame(maxHeight: .infinity)
                 .layoutPriority(1)
             setupRow
+                // Lock voice/delivery/language changes while a take is generating
+                // (the in-flight request already captured its config; mutating mid-
+                // generation is confusing). Re-enabled at .complete for the next take.
+                .disabled(isGenerationActive)
+                .opacity(isGenerationActive ? 0.5 : 1)
+                .iosAppAnimation(IOSDesignMotion.stateChange, value: isGenerationActive)
                 .layoutPriority(2)
             dockArea
                 .padding(.horizontal, 16)
@@ -132,6 +138,16 @@ struct IOSStudioCanvas<SetupChips: View>: View {
         // flex element so the text you're typing stays visible above the keyboard.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .iosAppAnimation(IOSDesignMotion.stateChange, value: genState)
+    }
+
+    /// A take is actively generating (request in flight or live-streaming).
+    /// `.complete` is excluded — reviewing a finished take, the user may retune
+    /// the chips for the next generation.
+    private var isGenerationActive: Bool {
+        switch genState {
+        case .generating, .live: return true
+        case .idle, .complete: return false
+        }
     }
 
     private var dockAreaHeight: CGFloat {
