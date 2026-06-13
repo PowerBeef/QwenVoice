@@ -42,6 +42,9 @@ struct IOSStudioCanvas<SetupChips: View>: View {
     let onPlayerExpand: (() -> Void)?
     /// When provided (Voice Design), the completed player card shows a "Save as voice" button.
     let onSaveAsVoice: (() -> Void)?
+    /// When provided (Custom Voice, Voice Design), a "Batch" affordance appears once the
+    /// script has ≥2 non-empty lines — each line becomes its own take.
+    let onBatch: (() -> Void)?
 
     init(
         mode: GenerationMode,
@@ -61,7 +64,8 @@ struct IOSStudioCanvas<SetupChips: View>: View {
         onInstallModel: @escaping () -> Void,
         onPlayerDismiss: @escaping () -> Void,
         onPlayerExpand: (() -> Void)? = nil,
-        onSaveAsVoice: (() -> Void)? = nil
+        onSaveAsVoice: (() -> Void)? = nil,
+        onBatch: (() -> Void)? = nil
     ) {
         self.mode = mode
         self._script = script
@@ -81,6 +85,12 @@ struct IOSStudioCanvas<SetupChips: View>: View {
         self.onPlayerDismiss = onPlayerDismiss
         self.onPlayerExpand = onPlayerExpand
         self.onSaveAsVoice = onSaveAsVoice
+        self.onBatch = onBatch
+    }
+
+    /// Non-empty lines of the current script — when ≥2, batch is offered.
+    private var batchLineCount: Int {
+        IOSBatchGenerationCoordinator.lines(from: script).count
     }
 
     // Plain @State (NOT @FocusState): this drives `IOSFlexibleTextEditor`'s
@@ -220,6 +230,19 @@ struct IOSStudioCanvas<SetupChips: View>: View {
                     .tracking(0.24)               // letter-spacing 0.02em ≈ 0.24pt at 12pt
                     .foregroundStyle(IOSAppTheme.textSecondary)
                 Spacer()
+                if let onBatch, batchLineCount >= 2, genState == .idle {
+                    Button(action: onBatch) {
+                        Label("Batch \(batchLineCount)", systemImage: "square.stack.3d.up.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(tint)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("textInput_batchButton")
+                    .accessibilityLabel("Generate \(batchLineCount) takes, one per line")
+                    Text("·")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(IOSAppTheme.textTertiary)
+                }
                 Text("\(script.count) / \(charLimit)")
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
                     .foregroundStyle(script.count > charLimit ? Color.orange : IOSAppTheme.textSecondary)

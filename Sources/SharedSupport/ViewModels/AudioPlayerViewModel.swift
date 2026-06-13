@@ -268,6 +268,11 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     private var interruptionObserver: NSObjectProtocol?
     private var routeChangeObserver: NSObjectProtocol?
     private var shouldResumeAfterInterruption = false
+    /// During a headless batch run, streamed chunks are ignored so each item
+    /// doesn't start the live-preview player. The engine still streams
+    /// internally (flat memory), and dropped PCM chunk events carry no files
+    /// to clean up (NativeStreamingOutputPolicy defaults to .pcmPreview).
+    private(set) var batchSuppressionActive = false
     #endif
 
     private func setLivePreviewQueueDepth(_ value: Int) {
@@ -394,6 +399,13 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         guard let reasonRaw,
               AVAudioSession.RouteChangeReason(rawValue: reasonRaw) == .oldDeviceUnavailable else { return }
         if isPlaying { pause() }
+    }
+
+    /// Toggle batch suppression. Enabling it tears down any active live preview
+    /// so a batch run generates headlessly without audible per-item playback.
+    func setBatchSuppression(_ active: Bool) {
+        batchSuppressionActive = active
+        if active { abortLivePreviewIfNeeded() }
     }
     #endif
 
@@ -741,6 +753,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
     }
 
     private func handleGenerationChunk(_ chunk: ChunkInfo) {
+        #if os(iOS)
+        // Batch runs headlessly: drop streamed chunks so items don't live-play.
+        if batchSuppressionActive { return }
+        #endif
         let sessionID = chunk.generationID?.uuidString ?? String(chunk.requestID)
         AppPerformanceSignposts.emit("Chunk Received")
         AppGenerationTimeline.shared.recordFirstChunk(id: sessionID)
