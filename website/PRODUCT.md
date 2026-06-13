@@ -29,5 +29,5 @@ Warm, clear, confident, and human. Vocello explains local AI generation plainly.
 - Privacy is the architecture, not a badge.
 - The Mac app is the hero. Product screenshots and concrete workflows should carry trust.
 - The page should feel calm, polished, and Apple-native, with quiet motion and no decorative excess.
-- The primary CTA is Vocello 2.0 for macOS 26 and Apple Silicon (stable, released 2026-05-20). QwenVoice 1.2.3 remains the stable fallback for macOS 15.
+- The primary CTA is Vocello 2.1 for macOS 26 and Apple Silicon (stable, released 2026-06-12). QwenVoice 1.2.3 remains the stable fallback for macOS 15.
 - The site should acknowledge the QwenVoice rebrand quietly (inline "formerly QwenVoice" by the wordmark, the v1.2.3 fallback line, and the GitHub repo name). It is not a hero moment.

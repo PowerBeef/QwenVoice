@@ -7,19 +7,19 @@
 
 <p align="center">
   <a href="https://vocello.vercel.app/"><img src="https://img.shields.io/badge/Website-vocello.vercel.app-7b61ff?style=flat-square&logo=vercel" alt="Website"></a>
-  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0"><img src="https://img.shields.io/badge/Vocello-2.0.0-7b61ff?style=flat-square" alt="Vocello 2.0.0"></a>
+  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0"><img src="https://img.shields.io/badge/Vocello-2.1.0-7b61ff?style=flat-square" alt="Vocello 2.1.0"></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-111827?style=flat-square&logo=apple" alt="macOS 26+">
   <img src="https://img.shields.io/badge/iPhone-arriving%20soon-7b61ff?style=flat-square&logo=apple" alt="iPhone — arriving soon">
   <img src="https://img.shields.io/badge/Apple%20Silicon-required-111827?style=flat-square&logo=apple" alt="Apple Silicon">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
-  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0"><img src="https://img.shields.io/github/downloads/PowerBeef/QwenVoice/v2.0.0/total?label=2.0.0%20downloads&style=flat-square" alt="Downloads"></a>
+  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0"><img src="https://img.shields.io/github/downloads/PowerBeef/QwenVoice/v2.1.0/total?label=2.1.0%20downloads&style=flat-square" alt="Downloads"></a>
 </p>
 
 <p align="center">
   <img src="docs/readme_banner_vocello.png" alt="Vocello banner with abstract voice waves and the Vocello logo" width="920">
 </p>
 
-<p align="center"><em>Formerly QwenVoice — now Vocello 2.0.</em></p>
+<p align="center"><em>Formerly QwenVoice — now Vocello 2.1.</em></p>
 
 ---
 
@@ -32,7 +32,7 @@
 
 | Platform | Build | Notes |
 | --- | --- | --- |
-| **macOS 26+** (Apple Silicon) | **Vocello 2.0.0** — [Download DMG](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0) | Signed, notarized, stable. Double-click to open. |
+| **macOS 26+** (Apple Silicon) | **Vocello 2.1.0** — [Download DMG](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) | Signed, notarized, stable. Double-click to open. |
 | **macOS 15** | QwenVoice 1.2.3 — [Download legacy](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3) | Legacy build. No 2.x backport planned. |
 | **iPhone** (iOS 26+, Apple Silicon) | **Arriving soon** | The same on-device engine; ships via App Store / TestFlight (not GitHub Releases). |
 
@@ -94,7 +94,7 @@
 
 ## Install (macOS)
 
-1. Download [`Vocello-macos26.dmg`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0).
+1. Download [`Vocello-macos26.dmg`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
 2. Open the DMG and drag `Vocello.app` to `/Applications`.
 3. Open Vocello.
 4. Go to **Settings → Model downloads** and install the voice models you want.
@@ -119,7 +119,7 @@ A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, bui
 
 **Speed** models are smaller 4-bit packages for faster startup and lower memory use. **Quality** models are larger 8-bit packages for devices with more headroom.
 
-Vocello 2.0.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every macOS GitHub Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
+Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every macOS GitHub Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
 
 ## Local-first privacy
 
@@ -131,7 +131,7 @@ Vocello 2.0.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 
 ## Build from source
 
-The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.0.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.0.0).
+The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
 
 Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`CLAUDE.md`](CLAUDE.md).
 
