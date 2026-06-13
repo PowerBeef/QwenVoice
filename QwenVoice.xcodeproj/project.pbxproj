@@ -18,6 +18,7 @@
 		057B63F15E495358760D4967 /* AudioPlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE335D1E032508F0E9B7614 /* AudioPlayerViewModel.swift */; };
 		06445A839283CCD0ADBFF1C7 /* NativeCloneSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05AE04FC3819262A8952F8FB /* NativeCloneSupport.swift */; };
 		064757D9D01A90CB2FF04261 /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C9AF9CA9731358DD0649B3 /* DatabaseService.swift */; };
+		071633B3268879BAB9172CCE /* IOSGenerationVariationPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D187C4B7DA7A21208083FA3 /* IOSGenerationVariationPreference.swift */; };
 		0C938FCAEB2BB9E2356C4326 /* ModelManagerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A367AAE25201E301F646DCA /* ModelManagerViewModel.swift */; };
 		0CF0F58510A8660B4271B74E /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 15E10159D190CE71E25388FE /* MLXAudioTTS */; };
 		0D54E198EE173129C4A2B771 /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B703DF8A07FC4F83D3202F /* ModelInfo.swift */; };
@@ -558,6 +559,7 @@
 		9AC0AAA8033470C310E11EA6 /* UnsafeSpeechGenerationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsafeSpeechGenerationModel.swift; sourceTree = "<group>"; };
 		9B899A22B7619F15A40FC99C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9CF1799CE5C412D42C6F175D /* aiden.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = aiden.wav; sourceTree = "<group>"; };
+		9D187C4B7DA7A21208083FA3 /* IOSGenerationVariationPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerationVariationPreference.swift; sourceTree = "<group>"; };
 		9E06F182E0D06AC11E44161D /* IOSAppBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAppBootstrap.swift; sourceTree = "<group>"; };
 		9E0FED1EF94E06A5363542F9 /* StudioScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioScreen.swift; sourceTree = "<group>"; };
 		A014ECB4F32BED1D8FE49B68 /* IOSAccessibilityIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAccessibilityIdentifiers.swift; sourceTree = "<group>"; };
@@ -1006,6 +1008,7 @@
 				E1C9AF9CA9731358DD0649B3 /* DatabaseService.swift */,
 				474261D7C145B2FFB657E3F7 /* IOSAppDefaults.swift */,
 				23ECC0A581C6D3682E9A846A /* IOSDeviceDiagnosticsRecorder.swift */,
+				9D187C4B7DA7A21208083FA3 /* IOSGenerationVariationPreference.swift */,
 				DC061E247067EDDB99401F09 /* IOSModelDeliverySupport.swift */,
 				3F2675499CA07A2901B0A6EA /* IOSSavedOutputsDestination.swift */,
 				43033F9668B23257EDC8EEE3 /* RuntimeReleaseCoordinator.swift */,
@@ -1754,6 +1757,7 @@
 				DB901031F858C01ECCED4DA4 /* IOSGenerationSetupCards.swift in Sources */,
 				E9EB9AE15204CD38D5E00E2B /* IOSGenerationSharedViews.swift in Sources */,
 				DCEF09940749A14DEB062D04 /* IOSGenerationTextLimitPolicy.swift in Sources */,
+				071633B3268879BAB9172CCE /* IOSGenerationVariationPreference.swift in Sources */,
 				C39A0C9962838D3BE32B960F /* IOSLibraryViews.swift in Sources */,
 				79DE724D6C80DC46BBA54D68 /* IOSModelDeliveryActor.swift in Sources */,
 				734C58F78D1DD830791C7364 /* IOSModelDeliveryBackgroundEvents.swift in Sources */,

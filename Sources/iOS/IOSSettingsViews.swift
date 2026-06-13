@@ -42,6 +42,7 @@ private struct IOSSettingsView: View {
 
     @Binding var selectedTab: IOSAppTab
     @AppStorage("autoPlay") private var autoPlay = true
+    @AppStorage(IOSGenerationVariationPreference.key) private var generationVariation = IOSGenerationVariationPreference.defaultValue
     @AppStorage(IOSAppDefaults.reduceMotionEnabledKey) private var reduceMotionEnabled = false
     @AppStorage(IOSAppDefaults.reduceTransparencyEnabledKey) private var reduceTransparencyEnabled = false
     // Drives the "Saved outputs" row value reactively (empty == internal "Keep in app (History)").
@@ -100,6 +101,10 @@ private struct IOSSettingsView: View {
                             isOn: $autoPlay,
                             tint: IOSBrandTheme.accent
                         )
+
+                        IOSSettingsReferenceDivider()
+
+                        IOSSettingsVariationRow(selection: $generationVariation)
 
                         IOSSettingsReferenceDivider()
 
@@ -425,6 +430,61 @@ private struct IOSSettingsReferenceValueRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+}
+
+/// Variation control (GitHub #47) — Expressive / Balanced / Consistent. A Menu
+/// styled to match the reference value rows. Persisted via @AppStorage on the
+/// shared IOSGenerationVariationPreference key; stamped onto every generation.
+private struct IOSSettingsVariationRow: View {
+    @Binding var selection: String
+
+    private var currentDisplayName: String {
+        (Qwen3SamplingVariation(rawValue: selection) ?? .expressive).displayName
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(Qwen3SamplingVariation.allCases, id: \.self) { variation in
+                Button {
+                    selection = variation.rawValue
+                    IOSHaptics.selection()
+                } label: {
+                    if selection == variation.rawValue {
+                        Label(variation.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(variation.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                IOSSettingsUtilityIcon(symbol: "dial.medium")
+
+                Text("Variation")
+                    .font(.system(size: 16))
+                    .foregroundStyle(IOSAppTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(currentDisplayName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(IOSAppTheme.textTertiary)
+                    .padding(.leading, 4)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Variation")
+        .accessibilityValue(currentDisplayName)
+        .accessibilityHint("How much takes vary when you regenerate the same text")
     }
 }
 

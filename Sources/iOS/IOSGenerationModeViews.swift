@@ -383,7 +383,8 @@ struct IOSCustomVoiceView: View {
                             deliveryStyle: model.supportsInstructionControl
                                 ? draft.resolvedDeliveryInstruction
                                 : nil
-                        )
+                        ),
+                        variation: IOSGenerationVariationPreference.requestValue()
                     )
                 )
                 // If the user cancelled while the take was generating, discard it: don't
@@ -997,7 +998,8 @@ struct IOSVoiceDesignView: View {
                         payload: .design(
                             voiceDescription: draft.voiceDescription,
                             deliveryStyle: draft.resolvedDeliveryInstruction
-                        )
+                        ),
+                        variation: IOSGenerationVariationPreference.requestValue()
                     )
                 )
                 // If the user cancelled while the take was generating, discard it: don't
@@ -1563,7 +1565,8 @@ struct IOSVoiceCloningView: View {
                                 transcript: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
                                 preparedVoiceID: draft.selectedSavedVoiceID
                             )
-                        )
+                        ),
+                        variation: IOSGenerationVariationPreference.requestValue()
                     )
                 )
                 // If the user cancelled while the take was generating, discard it: don't
