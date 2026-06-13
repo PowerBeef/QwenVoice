@@ -91,7 +91,10 @@ enum Theme {
 
         /// `#7E7868` — warm-tinted tertiary text (placeholders, eyebrows).
         static let tertiary = Color(uiColor: UIColor(red: 0.62, green: 0.60, blue: 0.55, alpha: 1))
-        static let placeholderUIColor = UIColor(red: 0.50, green: 0.53, blue: 0.58, alpha: 1)
+        /// Cool-gray placeholder text. Lightened from (0.50,0.53,0.58) so it clears
+        /// WCAG-AA 4.5:1 on every surface incl. the lightest field fill (was 3.84:1
+        /// on `Surface.field`; now ≥5.3:1) while staying clearly dimmer than entered text.
+        static let placeholderUIColor = UIColor(red: 0.60, green: 0.63, blue: 0.68, alpha: 1)
 
         /// Foreground ink on accent-filled buttons. Warm near-black.
         static let onAccent = Color(uiColor: UIColor(red: 0.10, green: 0.085, blue: 0.055, alpha: 0.82))

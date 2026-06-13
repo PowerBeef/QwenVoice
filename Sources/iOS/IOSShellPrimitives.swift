@@ -126,7 +126,9 @@ enum IOSBrandTheme {
     static let inputFill = Color(dark: UIColor(red: 0.120, green: 0.126, blue: 0.148, alpha: 1))
     static let inputFillUIColor = UIColor(red: 0.120, green: 0.126, blue: 0.148, alpha: 1)
     static let primaryTextUIColor = UIColor(red: 0.95, green: 0.94, blue: 0.92, alpha: 1)
-    static let placeholderUIColor = UIColor(red: 0.50, green: 0.53, blue: 0.58, alpha: 1)
+    // Lightened from (0.50,0.53,0.58) so placeholder text clears WCAG-AA 4.5:1 on the
+    // input/field fills (was ~3.8–4.4:1; now ≥5.3:1). Mirrors Theme.Text.placeholderUIColor.
+    static let placeholderUIColor = UIColor(red: 0.60, green: 0.63, blue: 0.68, alpha: 1)
     static let primaryText = Color(uiColor: primaryTextUIColor)
     // Warm-neutral secondary text. Drops the prior cool blue chroma so the
     // palette tints toward the Vocello gold hue per the impeccable shared
