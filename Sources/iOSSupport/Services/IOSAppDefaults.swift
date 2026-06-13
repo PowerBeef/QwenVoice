@@ -8,6 +8,20 @@ public enum IOSAppDefaults {
     private enum Keys {
         static let hasCompletedOnboarding = "vocello.ios.hasCompletedOnboarding"
         static let autoplayCompletions = "vocello.ios.autoplayCompletions"
+        static let lastTab = "vocello.ios.lastTab"
+        static let lastStudioMode = "vocello.ios.lastStudioMode"
+    }
+
+    /// Last bottom-tab the user was on (raw value), for state restoration.
+    public static var lastTabRawValue: String? {
+        get { defaults.string(forKey: Keys.lastTab) }
+        set { defaults.set(newValue, forKey: Keys.lastTab) }
+    }
+
+    /// Last Studio mode the user was editing (raw value), for state restoration.
+    public static var lastStudioModeRawValue: String? {
+        get { defaults.string(forKey: Keys.lastStudioMode) }
+        set { defaults.set(newValue, forKey: Keys.lastStudioMode) }
     }
 
     public static let reduceMotionEnabledKey = "vocello.ios.reduceMotionEnabled"

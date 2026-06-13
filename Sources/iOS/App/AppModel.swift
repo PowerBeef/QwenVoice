@@ -49,12 +49,17 @@ final class AppModel {
     // MARK: - Routing
 
     /// The bottom-tab destination currently visible. Defaults to Studio.
-    var tab: IOSAppTab = .studio
+    /// Persisted for state restoration (didSet fires only on post-init changes).
+    var tab: IOSAppTab = .studio {
+        didSet { IOSAppDefaults.lastTabRawValue = tab.rawValue }
+    }
 
     /// Which mode the unified Studio screen is currently editing.
     /// Mirrors the legacy `IOSGenerationSection`; the enum stays
     /// because `TTSContract` keyed against it.
-    var studioMode: IOSGenerationSection = .custom
+    var studioMode: IOSGenerationSection = .custom {
+        didSet { IOSAppDefaults.lastStudioModeRawValue = studioMode.rawValue }
+    }
 
     // MARK: - Drafts
 
@@ -136,6 +141,17 @@ final class AppModel {
     init(modelRegistry: ContractBackedModelRegistry) {
         self.customVoiceDraft = CustomVoiceDraft(selectedSpeaker: modelRegistry.defaultSpeaker.id)
         self.isOnboardingPresented = !IOSAppDefaults.hasCompletedOnboarding
+
+        // State restoration: return to the last tab + Studio mode. (Setting these
+        // in init does not fire the didSet observers, so no spurious write.) The
+        // preview-runtime override below intentionally takes precedence.
+        if let raw = IOSAppDefaults.lastTabRawValue, let restored = IOSAppTab(rawValue: raw) {
+            self.tab = restored
+        }
+        if let raw = IOSAppDefaults.lastStudioModeRawValue,
+           let restored = IOSGenerationSection(rawValue: raw) {
+            self.studioMode = restored
+        }
 
 #if DEBUG
         let environment = ProcessInfo.processInfo.environment

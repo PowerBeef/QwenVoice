@@ -25,11 +25,14 @@ struct IOSVoicesView: View {
     @State private var search: String = ""
     @State private var filter: VoiceFilter = .all
 
-    private var builtIn: [SpeakerDescriptor] {
-        TTSContract.allSpeakerDescriptors.sorted { lhs, rhs in
+    // The built-in speaker list is a static constant — sort it once, not on
+    // every body evaluation (iOS readiness audit, fix #25).
+    private static let builtInSorted: [SpeakerDescriptor] = TTSContract.allSpeakerDescriptors
+        .sorted { lhs, rhs in
             lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
         }
-    }
+
+    private var builtIn: [SpeakerDescriptor] { Self.builtInSorted }
 
     private var saved: [Voice] {
         savedVoicesViewModel.voices.sorted { lhs, rhs in
