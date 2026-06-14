@@ -99,7 +99,7 @@ enum AgyReviewer {
         var out = ""
         var heard = "UNPARSED"
         for attempt in 1...2 {
-            out = run(agy, ["-p", rubric, "--add-dir", tmpDir, "--print-timeout", "5m"]).out
+            out = run(agy, ["-p", rubric, "--add-dir", tmpDir, "--print-timeout", "5m"], timeoutSeconds: 360).out
             heard = parseLabeled(out, "ACOUSTIC", allow: ["AUDIBLE_DEFECT", "CLEAN", "CANNOT_LISTEN"])
             if heard == "AUDIBLE_DEFECT" || heard == "CLEAN" { break }
             if attempt == 1 { note("  agy returned no clear listening verdict — retrying once…") }
@@ -136,7 +136,7 @@ enum AgyReviewer {
     /// Benign here: `vocello` is a single-caller CLI with nothing else on the main
     /// actor, and the review pass is intentionally sequential.
     @discardableResult
-    private static func run(_ exe: String, _ args: [String]) -> (out: String, code: Int32) {
+    private static func run(_ exe: String, _ args: [String], timeoutSeconds: Int? = nil) -> (out: String, code: Int32) {
         let logURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("vocello_proc_\(UUID().uuidString).log")
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         let fh = try? FileHandle(forWritingTo: logURL)
@@ -148,7 +148,24 @@ enum AgyReviewer {
             try? fh?.close(); try? FileManager.default.removeItem(at: logURL)
             return ("launch failed: \(error.localizedDescription)", -1)
         }
-        p.waitUntilExit()
+        // HARD wall-clock timeout. agy's `--print-timeout` only bounds when it
+        // prints, not the process — a stuck agy otherwise hangs the whole review
+        // run forever on `waitUntilExit()` (observed: 55 min on one clip). Kill it
+        // (SIGTERM, then SIGKILL) so a hang degrades to an "uncertain" verdict.
+        if let timeoutSeconds {
+            let killer = DispatchWorkItem {
+                guard p.isRunning else { return }
+                p.terminate()
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                    if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeoutSeconds), execute: killer)
+            p.waitUntilExit()
+            killer.cancel()
+        } else {
+            p.waitUntilExit()
+        }
         try? fh?.close()
         let out = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
         try? FileManager.default.removeItem(at: logURL)
