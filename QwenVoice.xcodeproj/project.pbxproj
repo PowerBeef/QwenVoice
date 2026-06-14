@@ -77,6 +77,7 @@
 		39A0EF5E0230EED06B24B64C /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = C82CD07ADC45103BD5C2BB0B /* MLX */; };
 		39AA20C20D7E3716C7F67116 /* SidebarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F84F3D2B1CF22DA6148705D /* SidebarStatus.swift */; };
 		3B14C307F432B1C28D297F2D /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AFCD5DBEA3DCE816F44221 /* AudioService.swift */; };
+		3BC28E6167D5021099334D1F /* DeliveriesCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE81E817159879E59B5FD78 /* DeliveriesCommand.swift */; };
 		3BDC4AA653F02FBA3C6406D3 /* Generation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBFD195E3C3F6CFC29D83EC1 /* Generation.swift */; };
 		3C95AE735CD9F27854A2BA5A /* DocumentIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C465AE879E2D9F601EC26DB /* DocumentIO.swift */; };
 		3CB983EC52EAFD3B140F1312 /* NativeRuntimeFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3912F66CF11ACFE5DD83B2BE /* NativeRuntimeFactory.swift */; };
@@ -460,6 +461,7 @@
 		2A4F18EF6E8C4624607CF181 /* LongTextGenerationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongTextGenerationRouter.swift; sourceTree = "<group>"; };
 		2C3D5708FC88C667497CBF52 /* StudioGenerationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioGenerationCoordinator.swift; sourceTree = "<group>"; };
 		2CE335D1E032508F0E9B7614 /* AudioPlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewModel.swift; sourceTree = "<group>"; };
+		2CE81E817159879E59B5FD78 /* DeliveriesCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveriesCommand.swift; sourceTree = "<group>"; };
 		2E74540DA8C426D633D6114C /* VocelloMacSmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocelloMacSmokeUITests.swift; sourceTree = "<group>"; };
 		2EC6F0D89B4220E1F3A6CA71 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		305B82987DE76A718A67DE36 /* QwenVoiceBackendCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenVoiceBackendCore.swift; sourceTree = "<group>"; };
@@ -1229,6 +1231,7 @@
 				FBD264895A6D236200B068D4 /* BatchCommand.swift */,
 				29686361B012B6250B0DB709 /* BenchCommand.swift */,
 				A5C15F6A1291506C7D8605BB /* CLIRuntime.swift */,
+				2CE81E817159879E59B5FD78 /* DeliveriesCommand.swift */,
 				944BB98E564576BA42D80E3E /* GenerateCommand.swift */,
 				02675FED92DFFB3ED1508C5B /* ModelsCommand.swift */,
 				447411D60FB5B62ACB81DD90 /* ModesCommand.swift */,
@@ -1960,6 +1963,7 @@
 				5689BE482459B9DFDA157DBF /* BatchCommand.swift in Sources */,
 				03E4608C9E1EBA775FF6A306 /* BenchCommand.swift in Sources */,
 				2589BEF4455DB23814489EF1 /* CLIRuntime.swift in Sources */,
+				3BC28E6167D5021099334D1F /* DeliveriesCommand.swift in Sources */,
 				2774CCB9AA73B8B0AB929C4D /* GenerateCommand.swift in Sources */,
 				02746D3FDEF60418302930C5 /* ModelsCommand.swift in Sources */,
 				4B63A6F9B72FA50A8105DDA9 /* ModesCommand.swift in Sources */,

@@ -124,6 +124,19 @@ Lists the three generation modes (`custom` / `design` / `clone`) and what each n
 `--voice-brief` / `--voice` | `--reference`). Static and instant. Select a mode via the
 `vocello custom|design|clone …` shortcut, `generate --mode <mode>`, or the interactive picker.
 
+### `deliveries` — list delivery presets + instruction text
+
+```sh
+vocello deliveries [--json]
+```
+
+Lists every built-in delivery preset as `<preset>.<intensity>` and the natural-language instruction
+the model receives (the source of truth is `EmotionPreset`). Static and instant. These ids are the
+`bench --delivery <id>` cells, and `--json` is the DRY feed for `scripts/delivery_adherence.py` — the
+objective, reference-free delivery-adherence measurement (F0 / speaking-rate / duration deltas vs a
+same-seed neutral take; **not** the agy ear). See `scripts/analyze_delivery.py` + the §I.3 writeup in
+[`../../benchmarks/OPTIMIZATION.md`](../../benchmarks/OPTIMIZATION.md).
+
 ### `models` — inventory installed/available models (read-only)
 
 ```sh
@@ -187,6 +200,12 @@ never shipped user audio. Verdicts land in `<diag>/review/review.jsonl`. Deliver
 `bench --delivery` carry their preset id automatically in `--diag` mode (and `--delivery` supplies it
 for a single `--clip`), so agy judges an intentional whisper or slow emotional pacing as intended
 style rather than a defect.
+
+> **Delivery/pitch adherence is NOT judged by agy.** agy proved too unreliable to decide on (it flips
+> on byte-identical audio and abstains under load). For *delivery adherence* use the deterministic DSP
+> instrument instead — `scripts/delivery_adherence.py` (paired neutral-vs-instructed F0/rate/duration
+> deltas). `review` remains useful for *acoustic-defect* triage, where its verdict is one input, not the
+> gate. Background: §I.3 in [`../../benchmarks/OPTIMIZATION.md`](../../benchmarks/OPTIMIZATION.md).
 
 ## Examples
 

@@ -30,6 +30,8 @@ enum VocelloMain {
                 try await BatchCommand.run(argv)
             case "modes":
                 try await ModesCommand.run(argv)
+            case "deliveries", "delivery":
+                try await DeliveriesCommand.run(argv)
             case "voices", "voice":
                 try await VoicesCommand.run(argv)
             case "speakers", "speaker":
@@ -66,6 +68,7 @@ enum VocelloMain {
           voices              manage saved clone voices    (vocello voices help)
           speakers            list built-in Custom Voice speakers (vocello speakers help)
           modes               list the generation modes    (vocello modes --help)
+          deliveries          list delivery presets + instruction text (vocello deliveries --help)
           models              inventory installed models   (vocello models help)
           bench               drive the perf/quality matrix (vocello bench --help)
           review              adjudicate flagged clips by ear via agy (vocello review --help)
