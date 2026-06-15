@@ -98,6 +98,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceToggleRow(
                             symbol: "play.fill",
                             title: "Autoplay after generate",
+                            accessibilityIdentifier: "iosSettings_autoPlayToggle",
                             isOn: $autoPlay,
                             tint: IOSBrandTheme.accent
                         )
@@ -111,6 +112,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceValueRow(
                             symbol: "bookmark",
                             title: "Saved outputs",
+                            accessibilityIdentifier: "iosSettings_savedOutputsRow",
                             value: savedOutputsName.isEmpty ? "Keep in app (History)" : savedOutputsName,
                             showsChevron: true,
                             action: { isSavedOutputsDialogPresented = true }
@@ -121,6 +123,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceValueRow(
                             symbol: "arrow.down.to.line",
                             title: "Storage",
+                            accessibilityIdentifier: "iosSettings_storageRow",
                             value: storageSummaryText,
                             showsChevron: false
                         )
@@ -130,6 +133,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceToggleRow(
                             symbol: "sparkles",
                             title: "Reduce Motion",
+                            accessibilityIdentifier: "iosSettings_reduceMotionToggle",
                             isOn: $reduceMotionEnabled,
                             tint: IOSBrandTheme.accent
                         )
@@ -139,6 +143,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceToggleRow(
                             symbol: "lock.fill",
                             title: "Reduce Transparency",
+                            accessibilityIdentifier: "iosSettings_reduceTransparencyToggle",
                             isOn: $reduceTransparencyEnabled,
                             tint: IOSBrandTheme.accent
                         )
@@ -148,6 +153,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceValueRow(
                             symbol: "hand.raised.fill",
                             title: "Privacy Policy",
+                            accessibilityIdentifier: "iosSettings_privacyPolicyRow",
                             value: "",
                             showsChevron: true,
                             action: { open("https://vocello.vercel.app/privacy") }
@@ -158,6 +164,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceValueRow(
                             symbol: "chevron.left.forwardslash.chevron.right",
                             title: "Open source & licenses",
+                            accessibilityIdentifier: "iosSettings_openSourceRow",
                             value: "",
                             showsChevron: true,
                             action: { open("https://github.com/PowerBeef/QwenVoice") }
@@ -170,6 +177,7 @@ private struct IOSSettingsView: View {
                         IOSSettingsReferenceValueRow(
                             symbol: "gearshape.fill",
                             title: "Open iOS Settings",
+                            accessibilityIdentifier: "iosSettings_openIOSSettingsRow",
                             value: "Permissions",
                             showsChevron: true,
                             action: { open(UIApplication.openSettingsURLString) }
@@ -359,6 +367,7 @@ private struct IOSSettingsReferenceSwitch: View {
 private struct IOSSettingsReferenceToggleRow: View {
     let symbol: String
     let title: String
+    let accessibilityIdentifier: String
     @Binding var isOn: Bool
     let tint: Color
 
@@ -383,6 +392,7 @@ private struct IOSSettingsReferenceToggleRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityIdentifier(accessibilityIdentifier)
         .accessibilityLabel(title)
         .accessibilityValue(isOn ? "On" : "Off")
     }
@@ -391,6 +401,7 @@ private struct IOSSettingsReferenceToggleRow: View {
 private struct IOSSettingsReferenceValueRow: View {
     let symbol: String
     let title: String
+    let accessibilityIdentifier: String
     let value: String
     let showsChevron: Bool
     /// When set, the whole row becomes tappable (e.g. the "Saved outputs" destination picker).
@@ -430,6 +441,7 @@ private struct IOSSettingsReferenceValueRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -482,6 +494,7 @@ private struct IOSSettingsVariationRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("iosSettings_variationRow")
         .accessibilityLabel("Variation")
         .accessibilityValue(currentDisplayName)
         .accessibilityHint("How much takes vary when you regenerate the same text")
@@ -503,6 +516,7 @@ private struct IOSSettingsBrandFooter: View {
 
             Text(Theme.Branding.version.uppercased())
                 .font(.system(size: 11, weight: .medium))
+                .accessibilityIdentifier("iosSettings_versionLabel")
                 .tracking(0.66)
                 .foregroundStyle(IOSAppTheme.textTertiary)
         }
