@@ -9,9 +9,9 @@ Vocello already has three audio QA layers:
 
 1. **Signal-level QC** (`AudioQualityGate.swift` / `AudioQCReport`): deterministic, reference-free checks for clipping, DC offset, dropouts, discontinuities, silence, and duration.
 2. **Delivery adherence** (`scripts/analyze_delivery.py` + `scripts/delivery_adherence.py`): deterministic, paired neutral-vs-instructed A/B using median F0, F0 range, syllable rate, and duration deltas.
-3. **Listening review** (`Sources/VocelloCLI/ReviewCommand.swift` via `agy`): multimodal judge for acoustic defects, text match, delivery match, and voice match. Known to be unreliable (flips on byte-identical audio, abstains under load).
+3. **Listening review** (manual): the final arbiter for subtle perceptual quality (timbre, naturalness). An earlier external-model listening pass was removed after proving unreliable.
 
-The gap: none of these layers reliably catches **monotone delivery**, **rushed/slurred cadence**, **unnatural pauses**, or **weak emotional differentiation** within a single take.
+The gap: none of the automated layers reliably catches **monotone delivery**, **rushed/slurred cadence**, **unnatural pauses**, or **weak emotional differentiation** within a single take.
 
 ## Research findings
 
@@ -100,7 +100,7 @@ scripts/delivery_adherence.py --presets happy.strong,excited.strong --seeds 4 --
 build/vocello bench --delivery happy.strong,calm.normal --modes custom,design
 ```
 
-`agy` listening remains an optional manual review layer (`--review`); it is no longer used for automated gates.
+Manual listening remains the optional final review layer; it is not used for automated gates.
 
 ### Calibration note
 

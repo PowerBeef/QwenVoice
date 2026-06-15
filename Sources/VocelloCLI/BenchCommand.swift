@@ -20,8 +20,15 @@ enum BenchCommand {
 
     /// Default delivery cells for `--delivery` (bare flag): one expressive, one
     /// calm, one whisper — the three preset families with distinct acoustic
-    /// signatures, so QC + the listening pass cover the delivery spectrum.
+    /// signatures, so QC + the prosody gate cover the delivery spectrum.
     static let defaultDeliverySet = ["happy.strong", "calm.normal", "whisper.normal"]
+
+    /// Bucket a prompt char count into the short/medium/long labels used for
+    /// filenames and the telemetry `lenBucket`. Mirrors the logic in
+    /// `scripts/summarize_generation_telemetry.py`.
+    static func lenBucket(_ chars: Int) -> String {
+        chars == 0 ? "n/a" : chars < 70 ? "short" : chars > 220 ? "long" : "medium"
+    }
 
     /// A resolved delivery cell: `id` is the stable `<preset>.<intensity>` token
     /// (stamped into the telemetry note + filename), `instruction` the preset's
@@ -69,13 +76,11 @@ enum BenchCommand {
         if args.flag("help") { printHelp(); return }
         CLIOutput.configure(args)
 
-        // Invariant: the filename length token is derived via FlaggedClips.lenBucket
-        // (same function `discover` uses), so producer and consumer agree by
-        // construction. This guards the corpus label still matching its own bucket
-        // (used for the agy text lookup) — fail loudly if a corpus edit drifts past
-        // a threshold instead of silently dropping flagged clips from review.
-        for c in corpus where FlaggedClips.lenBucket(c.text.count) != c.len {
-            throw CLIError("corpus drift: '\(c.len)' text buckets as '\(FlaggedClips.lenBucket(c.text.count))' (\(c.text.count) chars) — adjust the corpus or FlaggedClips.lenBucket thresholds")
+        // Invariant: the filename length token is derived via the same lenBucket
+        // the summarizer uses, so producer and consumer agree by construction.
+        // Fail loudly if a corpus edit drifts past a threshold.
+        for c in corpus where lenBucket(c.text.count) != c.len {
+            throw CLIError("corpus drift: '\(c.len)' text buckets as '\(lenBucket(c.text.count))' (\(c.text.count) chars) — adjust the corpus or lenBucket thresholds")
         }
 
         // Telemetry on (in-process) regardless of env; default to the debug-isolated
@@ -247,13 +252,6 @@ enum BenchCommand {
             reportTTFC(rows, diagnostics: diagDir)
         }
 
-        // Optional agy listening pass over flagged clips (dev workflow only).
-        if args.flag("review") {
-            guard AgyReviewer.isAvailable else {
-                note("skip --review: `agy` and/or afconvert not available"); return
-            }
-            ReviewCommand.reviewFlagged(diagnosticsDir: diagDir.path)
-        }
     }
 
     // MARK: - One take
@@ -262,13 +260,12 @@ enum BenchCommand {
     private static func take(_ runtime: CLIRuntime, mode: GenerationMode, modelID: String,
                              payload: GenerationRequest.Payload, len: String, text: String,
                              state: String, n: Int, outDir: URL, delivery: String? = nil) async throws {
-        // Bucket the char count with the SAME function `FlaggedClips.discover`
-        // uses, so the filename and the flagged-row correlation agree by
-        // construction regardless of the bucket thresholds.
-        let lenToken = FlaggedClips.lenBucket(text.count)
+        // Bucket the char count with the SAME function the summarizer uses, so
+        // the filename and the telemetry row agree by construction regardless of
+        // the bucket thresholds.
+        let lenToken = lenBucket(text.count)
         // Delivery takes extend the state token (`warm_d-<preset>.<intensity>`)
-        // so the filename and the engine row's notes.delivery stamp agree —
-        // FlaggedClips builds its lookup pattern from both.
+        // so the filename and the engine row's notes.delivery stamp agree.
         let stateToken = delivery.map { "\(state)_d-\($0)" } ?? state
         let out = outDir.appendingPathComponent("\(mode.rawValue)_\(modelID)_\(lenToken)_\(stateToken)_\(n).wav").path
         let request = GenerationRequest(
@@ -482,7 +479,7 @@ enum BenchCommand {
         the app's end-to-end through-XPC latency (TTFC/TTFA) or the merged 3-layer row
         (use the app for those); --ttfc adds an engine-side first-chunk probe.
         Prerequisites: the requested models installed; a saved clone voice for clone
-        (else clone is auto-skipped); agy + afconvert for --review.
+        (else clone is auto-skipped).
 
         Options:
           --modes        comma list (default custom,design,clone)
@@ -512,8 +509,6 @@ enum BenchCommand {
           --keep         append to existing diagnostics (default: clear first)
           --force        allow clearing even the real (non-debug) app data dir
           --no-summary   skip running the aggregator
-          --review       after aggregating, have agy listen to flagged clips + judge
-                         real-defect vs false-positive (dev workflow; needs agy + afconvert)
           --quiet|--verbose   suppress / expand stderr progress notes
         """)
     }

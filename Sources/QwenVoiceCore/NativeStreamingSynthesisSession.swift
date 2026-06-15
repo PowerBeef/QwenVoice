@@ -1488,17 +1488,17 @@ private struct StreamingExecutionContext: Sendable {
             }
         }
         // Bench delivery cells (vocello bench --delivery) stamp the preset id so
-        // the summarizer/review can segregate instruct-bearing takes from the
-        // plain matrix. Read via getenv (not ProcessInfo) because the in-process
-        // CLI updates it per take; only the id is recorded, never user text.
+        // the summarizer can segregate instruct-bearing takes from the plain matrix.
+        // Read via getenv (not ProcessInfo) because the in-process CLI updates it per
+        // take; only the id is recorded, never user text.
         if let rawDelivery = getenv("QWENVOICE_BENCH_DELIVERY") {
             let delivery = String(cString: rawDelivery)
             if !delivery.isEmpty { tierNotes["delivery"] = delivery }
         }
-        // Adherence ground-truth for the agy review pipeline (dev-gated diagnostics
-        // only — this whole writer is behind TelemetryGate; never ships). The reviewer
-        // needs the EXPECTED voice description + delivery instruction to judge whether
-        // the audio actually matches them — acoustic audioQC can't see adherence.
+        // Adherence ground-truth for bench analysis (dev-gated diagnostics only —
+        // this whole writer is behind TelemetryGate; never ships). These notes let
+        // post-processing scripts pair instruct/design takes with their expected
+        // voice description + delivery instruction; acoustic audioQC can't see adherence.
         switch request.payload {
         case .design(let voiceDescription, let deliveryStyle):
             let desc = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)

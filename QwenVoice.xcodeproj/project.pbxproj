@@ -131,7 +131,6 @@
 		66E1A7D6BACD92132EDF16EE /* MainThreadStallWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C66191A5DDE964FBA36052A3 /* MainThreadStallWatchdog.swift */; };
 		6911F6DF40E40078CDE91DA0 /* TTSEngineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E7AE4ADBE28C15D463E8CC /* TTSEngineStore.swift */; };
 		696D108B695D096D5C44E494 /* qwenvoice_contract.json in Resources */ = {isa = PBXBuildFile; fileRef = 617BE72142511CD5043C341E /* qwenvoice_contract.json */; };
-		6A965B238C48DDF34D504B7B /* ReviewCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA95DD61ACA099061B8B21FB /* ReviewCommand.swift */; };
 		6B1CA378BE6796ED13971FF0 /* StudioScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E0FED1EF94E06A5363542F9 /* StudioScreen.swift */; };
 		6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8174C5EB5C39242E7EF445 /* DatabaseService.swift */; };
 		6C51CFC163C64CE831D44BD3 /* VoicesCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D9DDDEEAEED933D8DB35472 /* VoicesCommand.swift */; };
@@ -587,7 +586,6 @@
 		B8DE0E108884A82B4A671FE5 /* Voice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice.swift; sourceTree = "<group>"; };
 		B91514FA8C99D6C0162B95D2 /* LatestEventCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatestEventCoalescer.swift; sourceTree = "<group>"; };
 		B9F62310AABC856664C0A81B /* EngineHostPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineHostPrimitives.swift; sourceTree = "<group>"; };
-		BA95DD61ACA099061B8B21FB /* ReviewCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewCommand.swift; sourceTree = "<group>"; };
 		BB32F260AC5AC53C0C94D153 /* VocelloiOSLocalDevice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VocelloiOSLocalDevice.entitlements; sourceTree = "<group>"; };
 		BB46CEB7DE369F4E1B24668E /* GenerationTelemetryMerger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationTelemetryMerger.swift; sourceTree = "<group>"; };
 		BC2B47BB4F36569E72D128B1 /* ono_anna.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ono_anna.wav; sourceTree = "<group>"; };
@@ -1235,7 +1233,6 @@
 				944BB98E564576BA42D80E3E /* GenerateCommand.swift */,
 				02675FED92DFFB3ED1508C5B /* ModelsCommand.swift */,
 				447411D60FB5B62ACB81DD90 /* ModesCommand.swift */,
-				BA95DD61ACA099061B8B21FB /* ReviewCommand.swift */,
 				B696A7377F4C23E2FA9D4D4E /* SpeakersCommand.swift */,
 				4E86AC791986726B8753994F /* Support.swift */,
 				3548C32EC85AB76ABEAEA6A8 /* VocelloMain.swift */,
@@ -1967,7 +1964,6 @@
 				2774CCB9AA73B8B0AB929C4D /* GenerateCommand.swift in Sources */,
 				02746D3FDEF60418302930C5 /* ModelsCommand.swift in Sources */,
 				4B63A6F9B72FA50A8105DDA9 /* ModesCommand.swift in Sources */,
-				6A965B238C48DDF34D504B7B /* ReviewCommand.swift in Sources */,
 				35A356E59B11D7E9E797157F /* SpeakersCommand.swift in Sources */,
 				DA60A835AE1FB55B29533BCA /* Support.swift in Sources */,
 				D4008E9B424CE5E4D9D76879 /* VocelloMain.swift in Sources */,

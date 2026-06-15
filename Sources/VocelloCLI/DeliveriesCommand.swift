@@ -9,8 +9,8 @@ import QwenVoiceCore
 /// (`scripts/delivery_adherence.py`, which generates a neutral + instructed take
 /// per seed and compares their acoustics with `scripts/analyze_delivery.py`) and a
 /// way to discover the `bench --delivery <id>` cell ids. Delivery adherence is
-/// judged by acoustics, NOT by the agy ear — agy proved too unreliable to decide
-/// delivery on (see benchmarks/OPTIMIZATION.md section I.3).
+/// judged by acoustics, not by an external model ear (see benchmarks/OPTIMIZATION.md
+/// section I.3).
 enum DeliveriesCommand {
     struct DeliveryJSON: Encodable {
         let id: String          // "<preset>.<intensity>"
@@ -57,8 +57,8 @@ enum DeliveriesCommand {
 
         Each row is `<preset>.<intensity>` and the natural-language instruction the
         model receives. These ids are the `bench --delivery <id>` cells. Reference-free
-        delivery adherence is measured objectively from the audio (F0 / rate / duration),
-        NOT via the agy ear — see scripts/delivery_adherence.py + scripts/analyze_delivery.py.
+        delivery adherence is measured objectively from the audio (F0 / rate / duration)
+        — see scripts/delivery_adherence.py + scripts/analyze_delivery.py.
 
         Options:
           --json   emit JSON instead of a table

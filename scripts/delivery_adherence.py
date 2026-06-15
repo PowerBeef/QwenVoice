@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Objective DELIVERY-ADHERENCE bench (deterministic; no agy).
+"""Objective DELIVERY-ADHERENCE bench (deterministic).
 
 The committed, reproducible measurement of whether a delivery preset actually
-moves the voice the way its instruction asks. Replaces the agy-as-ear delivery
-review, which proved too unreliable to decide on (flips on byte-identical audio,
-abstains under load -- see benchmarks/OPTIMIZATION.md section I.3).
+moves the voice the way its instruction asks. Replaces the earlier multimodal
+ear-based review, which proved too unreliable to decide on (flips on byte-
+identical audio, abstains under load -- see benchmarks/OPTIMIZATION.md section I.3).
 
 Method -- paired neutral-vs-instructed, same seed:
   for each (preset, variant, seed):
@@ -85,7 +85,7 @@ def med(xs):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Objective delivery-adherence bench (no agy).")
+    ap = argparse.ArgumentParser(description="Objective delivery-adherence bench.")
     ap.add_argument("--presets", default=",".join(DEFAULT_PRESETS),
                     help="comma list of <preset>.<intensity> ids (default high-arousal set)")
     ap.add_argument("--variants", default="speed", help="comma list: speed[,quality]")

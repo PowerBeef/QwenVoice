@@ -324,11 +324,11 @@ dominant `timingsMS` substage across your before/after.
 ## 11. Reusable benchmark procedure (full matrix)
 
 > **Primary driver — the `vocello` CLI (headless, deterministic).**
-> `./scripts/build.sh cli bench --lengths short,medium,long --warm 3 [--review]` drives this entire
-> matrix in‑process (cold/warm controlled exactly via load/unload — no UI waits, focus races, or
-> engine‑busy rejections) and runs the aggregator automatically. It **replaced computer‑use UI‑driving**
-> as the benchmark/test driver. Engine telemetry rows (RTF / decode / memory / `audioQC` / `promptChars`)
-> are identical to the app path; the CLI bypasses XPC, so the app/XPC frontend row is absent and the
+> `./scripts/build.sh cli bench --lengths short,medium,long --warm 3` drives this entire matrix
+> in‑process (cold/warm controlled exactly via load/unload — no UI waits, focus races, or engine‑busy
+> rejections) and runs the aggregator automatically. It **replaced computer‑use UI‑driving** as the
+> benchmark/test driver. Engine telemetry rows (RTF / decode / memory / `audioQC` / `promptChars`) are
+> identical to the app path; the CLI bypasses XPC, so the app/XPC frontend row is absent and the
 > summarizer's end‑to‑end **TTFC shows `-`** (engine‑only boundary — what backend optimization targets).
 > To measure first‑chunk latency, use `vocello generate --stream` or `vocello bench --ttfc` (an
 > engine‑side warm probe per cell → a table + `diagnostics/bench-ttfc.json`); both report engine TTFC,
@@ -337,9 +337,8 @@ dominant `timingsMS` substage across your before/after.
 > One‑command flags fold in the manual workflow below: `--label "<note>"` stamps the summary,
 > `--ledger` appends a row to `benchmarks/HISTORY.md`, `--force-class 8gb|16gb|high|iphone` forces a
 > constrained tier on any Mac (the `QWENVOICE_FORCE_MEMORY_CLASS` knob), and `--telemetry verbose`
-> writes the raw per‑sample sidecars. `--review` adds the agy listening pass over flagged clips (see
-> "Guarding output quality"). Full CLI reference: [`cli.md`](cli.md). The computer‑use UI procedure
-> below is retained for manual/visual runs only.
+> writes the raw per‑sample sidecars. Full CLI reference: [`cli.md`](cli.md). The computer‑use UI
+> procedure below is retained for manual/visual runs only.
 
 A repeatable, accurate sweep over **mode × model variant × cold/warm**. The `vocello` CLI above is the
 default driver; the **manual UI procedure below** drives the app by hand and reads the JSONL the probes
@@ -515,21 +514,19 @@ dropouts, garbled words, "sounds worse"). Two layers, increasing in what they ca
    reaches (≥1200 ms = fail `dropout:Nms`; ≥900 ms = warn). A genuine mid-phrase gap that merely *replaces*
    a punctuation pause (same count, ~same length) is positionally indistinguishable from a comma pause by
    amplitude alone — that residual is **ear-only**, so the listening pass below stays its gate.
-2. **Listening pass — mandatory before merging a backend change.** No automated check judges subtle
-   perceptual quality (timbre, prosody, naturalness). Two ways to run it:
-   - **agy ear (default, scriptable):** `vocello bench --review` (or `vocello review --diag <dir>` /
-     `vocello review --clip <wav>`) transcodes each flagged clip to m4a and hands it to **agy**
-     (Antigravity/Gemini multimodal) to LISTEN and judge **real‑defect vs false‑positive** (e.g. a
-     `dropout` that's just the natural pause at a comma). Verdicts land in `diagnostics/review/review.jsonl`.
-     **Dev/benchmark workflow only** — agy receives dev clips, never shipped user audio (the product
-     keeps audio on‑device). Note: agy's loader rejects raw 24 kHz Int16 WAV, hence the m4a transcode.
-   - **By ear:** play each take and listen for hiccups/artifacts. Record the verdict in the snapshot /
-     `HISTORY.md` note.
-   **This is the real quality gate — the objective `audioQC` tripwire is fast, not a substitute for ears.**
+2. **Automated prosody gate — every run, no external model.** `scripts/prosody_quality_gate.py`
+   analyzes each take for monotone, rushed, flat, and pause-issue signatures; `scripts/delivery_adherence.py`
+   measures paired neutral-vs-instructed deltas for delivery cells. These are deterministic, reference-free,
+   and run on the bench WAVs directly. With `vocello bench --delivery`, the summarizer also surfaces
+   `prosEff` / `dF0Std` / `dRateCV` / `dPauseR` / `dRough` in the delivery table.
+3. **Listening pass — mandatory before merging a backend change.** No automated check judges subtle
+   perceptual quality (timbre, prosody, naturalness). Play each take and listen for hiccups/artifacts;
+   record the verdict in the snapshot / `HISTORY.md` note. The objective `audioQC` + prosody gates are
+   fast tripwires, not substitutes for ears.
 
-Workflow: run the corpus → any `QC=fail` is a hard stop (investigate before merging) → otherwise do the
-listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free default; committed
-quality-check scripts/baselines under `benchmarks/` are also permitted.)
+Workflow: run the corpus → any `QC=fail` is a hard stop (investigate before merging) → inspect prosody
+gate output → do the manual listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free
+default; committed quality-check scripts/baselines under `benchmarks/` are also permitted.)
 
 ---
 

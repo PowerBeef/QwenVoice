@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reference-free DELIVERY acoustic analyzer (deterministic, numpy-only).
 
-The committed, deterministic alternative to the agy-as-ear review for *delivery*
-and *pitch* decisions. The agy multimodal judge proved too unreliable to decide
-on (it flips its verdict on byte-identical audio and abstains under load), so for
+The committed, deterministic alternative to an ear-based review for *delivery*
+and *pitch* decisions. A multimodal judge proved too unreliable to decide on
+(it flips its verdict on byte-identical audio and abstains under load), so for
 delivery/pitch we measure the acoustics directly instead. Dev/benchmark tool only
 (no Python ships in the app; this never runs in the product).
 
