@@ -33,7 +33,7 @@ done
 
 # iOS device tooling + a thin XCUITest smoke were RE-ENABLED (maintainer decision,
 # 2026-06-01): the hybrid headless-harness + XCUITest method replaced the retired
-# screen-mirror UI-driving workflow (see CLAUDE.md "Testing" +
+# screen-mirror UI-driving workflow (see AGENTS.md "Testing" +
 # docs/reference/ios-device-testing.md). The device driver (scripts/ios_device.sh),
 # the VocelloiOSUITests smoke bundle, and the iOS test trees are all allowed again.
 # The only surface still banned is the vendored upstream test tree — don't pull in

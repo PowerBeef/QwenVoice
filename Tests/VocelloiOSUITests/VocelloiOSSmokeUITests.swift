@@ -6,7 +6,7 @@ import XCTest
 /// Intentionally shallow: it does NOT generate audio (that's the headless
 /// `IOSAutorunHarness` / `vocello bench` path). It asserts the app launches and the
 /// 4-tab information architecture + Studio composer/mode-control are reachable, keyed
-/// off the stable `accessibilityIdentifier`s (kept through refactors per CLAUDE.md).
+/// off the stable `accessibilityIdentifier`s (kept through refactors per AGENTS.md).
 ///
 /// Run on a simulator (fast, no signing) or the device:
 ///   xcodebuild test -scheme VocelloiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'

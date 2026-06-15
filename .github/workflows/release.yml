@@ -1,7 +1,7 @@
 name: Release
 
 # Single Vocello CI workflow. Scoped to release packaging only, per the
-# carve-out in CLAUDE.md ("Testing policy — important"). No tests, no
+# carve-out in AGENTS.md ("Testing policy — important"). No tests, no
 # benchmarks, no smoke validation here — those layers stay local-only.
 #
 # Triggers:
@@ -24,9 +24,9 @@ name: Release
 #     (scripts/ios_device.sh + the QVOICE_IOS_AUTORUN harness + the
 #     VocelloiOSUITests smoke; see docs/reference/ios-device-testing.md).
 #     A signed lane still needs the iOS Distribution certificate + an
-#     archive-ios CI job. See CLAUDE.md "Release & iPhone status".
+#     archive-ios CI job. See AGENTS.md "Release & iPhone status".
 #
-# Toolchain pinning mirrors the local setup documented in CLAUDE.md:
+# Toolchain pinning mirrors the local setup documented in AGENTS.md:
 #   - Xcode 26.0 (project.yml `xcodeVersion: "26.0"`)
 #   - macOS 26.0 deployment target, Apple Silicon (`arch=arm64`)
 #   - SPM versions inherited from Package.resolved (committed)

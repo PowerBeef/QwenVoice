@@ -3,7 +3,7 @@ import XCTest
 /// macOS UI smoke suite — the standing automated pre-release gate.
 ///
 /// Mirrors the iOS suite's pattern (Tests/VocelloiOSUITests): resolve elements
-/// by stable `accessibilityIdentifier` (CLAUDE.md: identifiers are stable
+/// by stable `accessibilityIdentifier` (AGENTS.md: identifiers are stable
 /// surface area), tolerate missing models via the hidden window markers
 /// (`mainWindow_disabledSidebarItems`), and keep every test independent.
 ///

@@ -191,7 +191,7 @@ for `test`, so the foundation compile-safety build stays focused on the app). On
 simulator the app uses `IOSSimulatorTTSEngine` (a fake), so the smoke needs no model and
 no Metal — the IA + identifiers are what's under test.
 
-`accessibilityIdentifier`s are stable surface area (CLAUDE.md "Conventions") — keep them
+`accessibilityIdentifier`s are stable surface area (AGENTS.md "Conventions") — keep them
 through refactors; the smoke + any agent UI checks depend on them.
 
 ---
@@ -277,4 +277,4 @@ Mirroring directly.
 
 A signed-IPA / TestFlight distribution lane (needs the iOS Distribution cert + an
 `archive-ios` CI job). On-device proof is **not** a public-release blocker (macOS-first;
-see CLAUDE.md "Release & iPhone status").
+see AGENTS.md "Release & iPhone status").

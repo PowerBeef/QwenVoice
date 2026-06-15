@@ -321,7 +321,7 @@ Use `scripts/summarize_generation_telemetry.py` to aggregate results.
 ### Website
 
 - Deployed by Vercel from the `website/` directory.
-- See `website/CLAUDE.md` for website-specific conventions and `website/PRODUCT.md` for brand copy rules.
+- See `website/AGENTS.md` for website-specific conventions and `website/PRODUCT.md` for brand copy rules.
 
 ## Useful reference documents
 
@@ -333,4 +333,4 @@ Use `scripts/summarize_generation_telemetry.py` to aggregate results.
 - `docs/reference/privacy-storage.md` — local storage paths and privacy details.
 - `docs/reference/macos-permissions.md` — TCC/permission model.
 - `docs/reference/mlx-audio-swift-patching.md` — vendored backend patch procedure.
-- `website/CLAUDE.md` — marketing site guidance.
+- `website/AGENTS.md` — marketing site guidance.

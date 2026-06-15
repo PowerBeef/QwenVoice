@@ -23,7 +23,7 @@
 # NEVER removed by this script.
 #
 # The repo's .gitignore excludes build/, .build/, DerivedData/ — nothing removed
-# here is version-controlled. See CLAUDE.md "Storage hygiene".
+# here is version-controlled. See AGENTS.md "Storage hygiene".
 
 set -euo pipefail
 
@@ -60,7 +60,7 @@ Usage: clean_build_caches.sh [--aggressive] [--models] [--all] [--dry-run|-n]
   -h, --help    Show this help.
 
 Always reported but never removed: the shipped app's QwenVoice/models.
-See the header in scripts/clean_build_caches.sh and CLAUDE.md "Storage hygiene".
+See the header in scripts/clean_build_caches.sh and AGENTS.md "Storage hygiene".
 EOF
             exit 0
             ;;

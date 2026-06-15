@@ -4,7 +4,7 @@ This is the source of truth for enabling Apple's increased-memory entitlement on
 and the (kept-for-fallback) justification text. The engine runs **in-process** in the app (`MLXTTSEngine`),
 so the **app** process is the one that needs the raised limit — there is no separate engine-extension App ID.
 
-Status context: [`../../CLAUDE.md`](../../CLAUDE.md) § "Release & iPhone status".
+Status context: [`../../AGENTS.md`](../../AGENTS.md) § "Release & iPhone status".
 
 > **TL;DR — there is most likely no "request to Apple" to make.** `com.apple.developer.kernel.increased-memory-limit`
 > is a **self-serve Additional Capability** (Apple DTS confirms it follows the same flow as Multicast

@@ -1,10 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (and other agents) when working with code in this repository.
+This file provides guidance to AI coding agents when working on the website in this repository.
 
 ## What this is
 
-A marketing site for **Vocello** (formerly QwenVoice), a local-first Mac TTS app. Single-page React + Vite. This directory lives inside the QwenVoice monorepo at `website/` and is deployed by Vercel with `website/` as the project root. The site is the brand surface for the app in the parent repo — see "Content accuracy" below. For repo-wide conventions, the app engine, and the source-of-truth order, see the root [`../CLAUDE.md`](../CLAUDE.md); this file is scoped to the website only.
+A marketing site for **Vocello** (formerly QwenVoice), a local-first Mac TTS app. Single-page React + Vite. This directory lives inside the QwenVoice monorepo at `website/` and is deployed by Vercel with `website/` as the project root. The site is the brand surface for the app in the parent repo — see "Content accuracy" below. For repo-wide conventions, the app engine, and the source-of-truth order, see the root [`../AGENTS.md`](../AGENTS.md); this file is scoped to the website only.
 
 ## Commands
 
@@ -63,7 +63,7 @@ Two design-context files in this directory encode the website's rules:
 
 The product's ground truth lives in the parent QwenVoice app repo. When making product claims on the site (model variants, hardware requirements, emotion presets, speaker names, OS requirements), cross-reference:
 
-- `../CLAUDE.md` — repo facts: model variant policy, architecture, distribution.
+- `../AGENTS.md` — repo facts: model variant policy, architecture, distribution.
 - `../Sources/Resources/qwenvoice_contract.json` — model registry, speakerMetadata, Hugging Face revisions.
 - `../Sources/Models/EmotionPreset.swift` — actual emotion presets (8 non-Neutral × 3 intensities + Neutral).
 - Voice Cloning has no controllable delivery — the engine path doesn't accept emotion/intensity for clone.
