@@ -63,14 +63,16 @@ vocello generate --mode custom|design|clone --variant speed|quality \
 | `--seed` | deterministic sampling seed — the same request + seed reproduces the same take bit-for-bit |
 | `--variation` | `expressive` (default, official sampling) · `balanced` · `consistent` — trades take-to-take liveliness for repeatability |
 | `--out` | output `.wav` path; default → `<data>/outputs/cli/` |
-| `--stream` | exercise the engine's streaming path at the app's 320ms cadence; reports first-chunk latency (TTFC) + chunk count |
+| `--stream` | streaming synthesis at the app's 320ms cadence; reports first-chunk latency (TTFC) + chunk count (default) |
+| `--no-stream` | accumulate the full result before decoding (old non-streaming behavior) |
 | `--play` | play the result with `afplay` when done |
 | `--json` | emit a JSON result object instead of the bare path |
 
-`--stream` mirrors the app's engine streaming path (same `streamingInterval` and chunk delivery) and
-reports the user-perceived first-chunk latency, but it does **not** play audio as it generates — there
-is no live preview player; `--play` plays the completed file. Generation output is identical to the
-non-streaming path.
+Streaming is now the default for `vocello generate`. It mirrors the app's engine streaming path (same
+`streamingInterval` and chunk delivery) and reports the user-perceived first-chunk latency, but it does
+**not** play audio as it generates — there is no live preview player; `--play` plays the completed file.
+Generation output is identical to the non-streaming path. Use `--no-stream` to force the old
+accumulate-then-decode behavior.
 
 **Selecting a mode** — three equivalent ways: the shortcut subcommands `vocello custom|design|clone …`
 (a `--file` makes them route to `batch`), the explicit `--mode <mode>` flag, or — when you omit `--mode`
@@ -167,10 +169,15 @@ is forced on; results land in `<data>/diagnostics` and are summarized by
 | `--ledger` | append a one-line row to `benchmarks/HISTORY.md` (the perf-over-time ledger) |
 | `--force-class` | **dev/diagnostic only** — force a constrained memory tier on any Mac: `8gb` · `16gb` · `high` · `iphone` (sets the `QWENVOICE_FORCE_MEMORY_CLASS` knob, relayed to the engine over the `initialize` handshake; stamps `notes.deviceClass`) |
 | `--telemetry` | `lightweight` (default) · `verbose` (raw per-sample sidecars) |
+| `--no-stream` | accumulate the full result before decoding (old bench behavior) |
 | `--ttfc` | add an engine first-chunk-latency probe per cell → table + `diagnostics/bench-ttfc.json` |
 | `--keep` / `--force` | append to existing diagnostics / allow clearing even the real app data dir |
 | `--data-dir` / `--manifest` | override the runtime data dir (default: the debug-isolated folder) / the `qwenvoice_contract.json` path |
 | `--no-summary` | skip running the aggregator |
+
+**Streaming by default.** As of this change, `vocello bench` runs the streaming path by default, so its
+memory numbers match the iOS/app streaming reality. Pass `--no-stream` to run the old accumulate-then-decode
+behavior for comparison.
 
 **What it measures.** Engine truth — RTF, decode, memory, per-stage GPU, and the `audioQC` verdict.
 It does **not** capture the app's end-to-end through-XPC latency (TTFC/TTFA) or the merged 3-layer

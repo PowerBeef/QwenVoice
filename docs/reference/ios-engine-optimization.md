@@ -24,7 +24,7 @@ this doc.** All claims below are cited to a file or commit; re-verify before rel
 - **Faster than realtime, flat memory.** Custom/Design/Clone all run at **RTF ≈ 1.6–1.9** (>1 =
   faster than realtime) with **physFootprint ≈ 2.4–3.3 GB** and **0 memory trims** (§6).
 - **Streaming-first is the headline RAM win.** The streaming path peaks ~3 GB **flat with length**
-  vs ~7–8.7 GB for the non-streaming bench path — iOS never incurs the accumulation (§3).
+  vs ~7–8.7 GB for the legacy non-streaming bench path (`--no-stream`) — iOS never incurs the accumulation (§3).
 - **Entitlement enabled, self-serve.** `increased-memory-limit` is on the app App ID; measured
   entitled per-app limit ≈ **~6 GB** on the 17 Pro, ~5–5.5 GB on 8 GB devices. No hard
   `Memory.memoryLimit` on any tier (§2).
@@ -132,14 +132,15 @@ that variant and surfaces the real error if it can't fit.)
 
 ## 3. The headline optimization — streaming-first
 
-The single most important iOS memory finding (OPTIMIZATION.md §F.1): the `vocello`/CLI **bench
-default is non-streaming** (accumulates *all* codec tokens, decodes the whole clip at the end), but
-**iOS is streaming-first** (emits + releases each chunk). On the same 69–76 s custom/Speed input:
+The single most important iOS memory finding (OPTIMIZATION.md §F.1): the `vocello`/CLI bench
+used to default to **non-streaming** (accumulates *all* codec tokens, decodes the whole clip at the end),
+but **iOS is streaming-first** (emits + releases each chunk), and the macOS CLI now streams by default as
+well. On the same 69–76 s custom/Speed input:
 
 | path | gpuAlloc peak | physFootprint |
 |---|---|---|
-| non-streaming (bench default) | ~8.0 GB | ~7.6 GB |
-| **streaming (what iOS uses)** | **~3.0 GB** | **~3.0 GB** |
+| non-streaming (legacy CLI default, now `--no-stream`) | ~8.0 GB | ~7.6 GB |
+| **streaming (iOS / current CLI default)** | **~3.0 GB** | **~3.0 GB** |
 
 And the streaming peak is **flat with length** — short 2901 MB · medium 2860 MB · long-76 s 2992 MB.
 So the non-streaming numbers that drove the *original* "iPhone is marginal/infeasible" verdict

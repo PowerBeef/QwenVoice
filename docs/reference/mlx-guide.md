@@ -256,16 +256,16 @@ On iOS the engine runs **in-process** inside the app. The app and the engine sha
 
 ## 6. Streaming vs full-result memory
 
-The `vocello bench` default and the macOS quality path use a **non-streaming, full-result** pipeline: all codec tokens are accumulated, then the whole waveform is decoded at the end. This gives the highest quality and the simplest graph, but it uses more peak memory.
+`vocello bench` and `vocello generate` now use a **streaming-first** pipeline by default on macOS: chunks of codec tokens are emitted, decoded, and released as generation proceeds. The legacy **non-streaming, full-result** path (accumulates all tokens, decodes once at the end) is still available with `--no-stream`; it uses more peak memory.
 
-The iOS path is **streaming-first**: chunks of tokens are emitted, decoded, and released as generation proceeds.
+The iOS app path is also **streaming-first**.
 
 Measured on the same ~70 s custom/Speed input (`benchmarks/OPTIMIZATION.md` §F.1):
 
 | Path | gpuAlloc peak | physFootprint |
 |---|---|---|
-| Non-streaming (bench default) | ~8.0 GB | ~7.6 GB |
-| Streaming (iOS path) | ~3.0 GB | ~3.0 GB |
+| Non-streaming (`--no-stream`) | ~8.0 GB | ~7.6 GB |
+| Streaming (CLI default / iOS path) | ~3.0 GB | ~3.0 GB |
 
 The streaming peak is **flat with length** — short, medium, and long inputs all peak around 3 GB. This is why iPhone generation is viable despite the lower device RAM.
 
@@ -432,7 +432,7 @@ Do not regress these without a maintainer decision:
 - **Do not revert the input-side decoder-drift fix (`4fab110`).**
 - **Do not pipeline the 15-pass Code Predictor loop.** It is autoregressive; pipelining would change sampling semantics.
 - **macOS `MLXTTSEngine.events` stays `.unbounded`; iOS stays `.bufferingNewest(64)`.**
-- **Streaming-first on iOS; full-result-first on macOS quality path.** Do not force the macOS app onto the streaming path for quality generation.
+- **Streaming-first on iOS and on the macOS CLI (`vocello generate` / `vocello bench`).** The macOS *app* quality path remains full-result-first. Do not force the macOS app onto the streaming path for quality generation.
 
 ---
 

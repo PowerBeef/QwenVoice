@@ -10,8 +10,13 @@ baseline. Point-in-time as of **2026-06-11** (§H complete; §I is the delivery-
 [`baseline-2026-05-31-641a541.md`](baseline-2026-05-31-641a541.md) — pre-optimization reference, CLI-driven
 (`vocello bench`), native floor **8 GB** tier. Headline: **RTF 0.20–0.89 (slower than realtime)**; the
 **decode loop dominates wall time** and scales ~linearly with length; **clone is the heaviest** per length
-and on memory (~7.4–8.7 GB physFoot in-process); `trims = 0` everywhere. Perf-over-time ledger:
-[`HISTORY.md`](HISTORY.md).
+and on memory (~7.4–8.7 GB physFoot in-process); `trims = 0` everywhere.
+
+[`baseline-2026-06-16-45720dd-streaming-default.md`](baseline-2026-06-16-45720dd-streaming-default.md) —
+**streaming-default** baseline after switching `vocello bench` / `vocello generate` to streaming by default.
+Custom/Design Speed RTF **0.95–1.04**, physFoot **2.4–3.8 GB** (down from ~7–8 GB non-streaming); Custom
+Quality RTF **0.77–0.84**, physFoot **3.1–3.6 GB**. All QC pass; `trims = 0`. Design Quality not installed
+on the bench machine. Perf-over-time ledger: [`HISTORY.md`](HISTORY.md).
 
 ## Status at a glance
 
@@ -188,13 +193,14 @@ generation moved peak <5 MB. The investigation's "talker KV ≈ 2.7 GB / 30–50
 that the measurement refutes**: the talker KV is tens of MB, not GB.
 
 **The real driver — and the headline correction to the whole RAM analysis:** the `vocello` bench / CLI
-default is **non-streaming** (accumulates *all* generated codec tokens + decodes the full audio at the end),
-but **iOS is streaming-first** (emits + releases chunks). Measured on the *same* 69–76 s custom/speed input:
+used to default to **non-streaming** (accumulates *all* generated codec tokens + decodes the full audio at the
+end), while **iOS was already streaming-first** (emits + releases chunks). Measured on the *same* 69–76 s
+custom/speed input:
 
 | path | gpuAllocPeak | physFoot |
 |---|---|---|
-| non-streaming (bench default) | ~8.0 GB | ~7.6 GB |
-| **streaming (what iOS uses)** | **~3.0 GB** | **~3.0 GB** |
+| non-streaming (legacy bench default, now `--no-stream`) | ~8.0 GB | ~7.6 GB |
+| **streaming (iOS path / current CLI default)** | **~3.0 GB** | **~3.0 GB** |
 
 And streaming peak is **flat with length** — short 2901 MB · medium 2860 MB · long-76 s 2992 MB. So the
 non-streaming numbers that drove this entire optimization program (clone ~7–8 GB, "+3.4 GB short→long", the
@@ -210,8 +216,8 @@ blocker for custom/design). The +3.4 GB growth is non-streaming accumulation tha
 - **Talker-KV windowing is unnecessary for iOS** (KV isn't the driver; streaming already keeps peak flat).
   Originally parked on `feature/rotating-kv`; the "multi-minute single-shot" escape hatch was later closed too
   (see **§F.2** — the token cap forecloses it). Final disposition: shipped **env-only, off by default**.
-- For any future bench that wants an iOS-representative peak, use `vocello generate --stream` (or a streaming
-  bench mode), **not** the non-streaming full-result path.
+- For any future bench that wants an iOS-representative peak, use `vocello generate` or `vocello bench`
+  (both stream by default), **not** the non-streaming full-result path (`--no-stream`).
 
 ### F.2 — Windowing revisited (default-on + toggle) → INERT at the token cap; shipped env-only (2026-06-01)
 
