@@ -107,6 +107,7 @@ enum BenchCommand {
         let designBrief = args.string("voice-brief") ?? defaultDesignBrief
         let cloneVoiceName = args.string("voice") ?? defaultCloneVoice
         let ttfc = args.flag("ttfc")
+        let noStream = args.flag("no-stream")
         // --delivery [list]: instruct-bearing cells on top of the plain matrix.
         // Value form picks the cells; the bare flag runs the default set.
         let deliveryItems: [DeliveryItem]
@@ -174,7 +175,8 @@ enum BenchCommand {
                 // Cold sample (Custom/Design only — Clone is warm-by-design).
                 if mode != .clone, let coldLen, let coldText = text(for: coldLen) {
                     try await take(runtime, mode: mode, modelID: modelID, payload: payload,
-                                   len: coldLen, text: coldText, state: "cold", n: 0, outDir: outDir)
+                                   len: coldLen, text: coldText, state: "cold", n: 0, outDir: outDir,
+                                   shouldStream: !noStream)
                     total += 1
                 }
                 // Warm samples per requested length.
@@ -182,7 +184,8 @@ enum BenchCommand {
                     guard let t = text(for: len) else { continue }
                     for n in 0..<warm {
                         try await take(runtime, mode: mode, modelID: modelID, payload: payload,
-                                       len: len, text: t, state: "warm", n: n, outDir: outDir)
+                                       len: len, text: t, state: "warm", n: n, outDir: outDir,
+                                       shouldStream: !noStream)
                         total += 1
                     }
                 }
@@ -201,7 +204,7 @@ enum BenchCommand {
                             deliveryStyle: item.instruction)
                         try await take(runtime, mode: mode, modelID: modelID, payload: deliveryPayload,
                                        len: "medium", text: deliveryText, state: "warm", n: 0,
-                                       outDir: outDir, delivery: item.id)
+                                       outDir: outDir, delivery: item.id, shouldStream: !noStream)
                         total += 1
                     }
                 }
@@ -260,7 +263,8 @@ enum BenchCommand {
     @MainActor
     private static func take(_ runtime: CLIRuntime, mode: GenerationMode, modelID: String,
                              payload: GenerationRequest.Payload, len: String, text: String,
-                             state: String, n: Int, outDir: URL, delivery: String? = nil) async throws {
+                             state: String, n: Int, outDir: URL, delivery: String? = nil,
+                             shouldStream: Bool = true) async throws {
         // Bucket the char count with the SAME function the summarizer uses, so
         // the filename and the telemetry row agree by construction regardless of
         // the bucket thresholds.
@@ -271,7 +275,7 @@ enum BenchCommand {
         let out = outDir.appendingPathComponent("\(mode.rawValue)_\(modelID)_\(lenToken)_\(stateToken)_\(n).wav").path
         let request = GenerationRequest(
             mode: mode, modelID: modelID, text: text, outputPath: out,
-            shouldStream: false, payload: payload, generationID: UUID())
+            shouldStream: shouldStream, payload: payload, generationID: UUID())
         if let delivery { setenv("QWENVOICE_BENCH_DELIVERY", delivery, 1) }
         defer { if delivery != nil { unsetenv("QWENVOICE_BENCH_DELIVERY") } }
         let t0 = Date()
@@ -510,6 +514,7 @@ enum BenchCommand {
           --ledger       append a one-line row to benchmarks/HISTORY.md (perf ledger)
           --force-class  run a constrained tier on any Mac: 8gb|16gb|high|iphone
           --telemetry    lightweight (default) | verbose (raw per-sample sidecars)
+          --no-stream    accumulate the full result before decoding (old bench behavior)
           --ttfc         add an engine first-chunk-latency probe per cell (warm
                          streaming) → table + diagnostics/bench-ttfc.json
           --data-dir     runtime dir; default the debug-isolated folder (full model set)

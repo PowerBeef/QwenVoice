@@ -46,3 +46,5 @@ reference ledger, not an auto-compared baseline gate.
 | 2026-06-09 | 90e16b3 | custom/pro_custom_speed/warm/medium | 1.03 | 12.85 | - | 4539 | 0 | pass | release-QA net (post audit fixes) | - |
 | 2026-06-12 | a2c5206 | custom/pro_custom_speed/warm/medium | 1.06 | 13.19 | - | 4877 | 0 | pass | v2.1.0 release-QA | - |
 | 2026-06-16 | 0e7d6dd | custom/pro_custom_quality/warm/medium | 0.82 | 10.26 | - | 5155 | 0 | pass | P4 native 8GB full matrix | - |
+| 2026-06-16 | 45720dd | custom/pro_custom_speed/warm/medium | 1.01 | 12.58 | - | 2456 | 0 | pass | streaming-default speed matrix | - |
+| 2026-06-16 | 45720dd | custom/pro_custom_quality/warm/medium | 0.83 | 10.37 | - | 3594 | 0 | pass | streaming-default + custom quality | - |

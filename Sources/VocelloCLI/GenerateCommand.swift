@@ -81,7 +81,7 @@ enum GenerateCommand {
         CLIOutput.configure(args)
 
         let quality = try resolveQuality(args)
-        let streaming = args.flag("stream")
+        let streaming = !args.flag("no-stream")
 
         // Resolve text first so a missing-text run fails fast (before any prompt).
         let text = try resolveText(args)
@@ -317,7 +317,9 @@ enum GenerateCommand {
           --variation    expressive (default, official) | balanced | consistent
           --out          output .wav path; default → <data>/outputs/cli/
           --stream       streaming synthesis at the app's 320ms cadence; reports
-                         first-chunk latency (TTFC) + chunk count (no live playback)
+                         first-chunk latency (TTFC) + chunk count (no live playback).
+                         This is the default; use --no-stream to disable it.
+          --no-stream    accumulate the full result before decoding (non-streaming)
           --play         play the result with afplay when done
           --json         emit a JSON result object on stdout instead of the bare path
           --quiet|--verbose   suppress / expand stderr progress notes
