@@ -9,3 +9,5 @@ export const CREDITS = [
 export const REPO = "https://github.com/PowerBeef/QwenVoice";
 export const RELEASE_LATEST = "https://github.com/PowerBeef/QwenVoice/releases/latest";
 export const RELEASE_V1 = "https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3";
+export const SPONSOR_GITHUB = "https://github.com/sponsors/PowerBeef";
+export const SPONSOR_KOFI = "https://ko-fi.com/PowerBeef";
