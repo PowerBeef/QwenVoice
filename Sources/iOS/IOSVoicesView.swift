@@ -56,7 +56,7 @@ struct IOSVoicesView: View {
             activeTab: .voices,
             tint: IOSAppTab.voices.dockAccent(studioMode: .custom)
         ) {
-            ScrollView(.vertical, showsIndicators: false) {
+            IOSScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     IOSSearchField(text: $search, placeholder: "Search voices")
                         .padding(.horizontal, 20)
@@ -107,7 +107,6 @@ struct IOSVoicesView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.bottom, 12)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .task {
                 await savedVoicesViewModel.ensureLoaded(using: ttsEngine)
             }

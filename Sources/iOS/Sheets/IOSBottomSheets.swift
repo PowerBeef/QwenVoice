@@ -119,7 +119,7 @@ struct IOSDeliveryPickerSheet: View {
                 .accessibilityIdentifier("deliveryPicker_confirm")
             }
         ) {
-            ScrollView(.vertical, showsIndicators: false) {
+            IOSScrollView(bottomFadeHeight: 0) {
                 VStack(alignment: .leading, spacing: 18) {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(EmotionPreset.all) { preset in
@@ -601,7 +601,7 @@ struct IOSVoicePickerSheet: View {
                         .padding(.horizontal, 20)
                 }
 
-                ScrollView(.vertical, showsIndicators: false) {
+                IOSScrollView(bottomFadeHeight: 0) {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         let recommended = filtered.filter(\.isRecommended)
                         let others = filtered.filter { !$0.isRecommended }
@@ -885,7 +885,7 @@ struct IOSReferenceClipSheet: View {
             presentation: presentation,
             onDismiss: onDismiss
         ) {
-            ScrollView(.vertical, showsIndicators: false) {
+            IOSScrollView(bottomFadeHeight: 0) {
                 VStack(alignment: .leading, spacing: 14) {
                     sourcePicker
 

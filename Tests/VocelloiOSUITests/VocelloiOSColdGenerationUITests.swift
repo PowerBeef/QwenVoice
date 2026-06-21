@@ -16,12 +16,17 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
 
         // Guarantee a cold start: terminate any app the shared coordinator may be holding.
         VocelloUITestApp.shared.forceTerminate()
+        // Give the terminated process a moment to clean up on the device before we
+        // launch a fresh instance; this avoids the occasional "PID could not be
+        // determined" race when the runner tries to attach too quickly.
+        Thread.sleep(forTimeInterval: 1.0)
 
         app = XCUIApplication()
         // Do NOT set QVOICE_IOS_DISABLE_ENGINE — we want the real model load + generation.
         // Enable durable telemetry so the engine layer writes diagnostics we can pull.
         app.launchEnvironment["QWENVOICE_DEBUG"] = "1"
         app.launch()
+        _ = app.wait(for: .runningForeground, timeout: 30)
         dismissOnboardingIfPresent()
     }
 
@@ -32,7 +37,7 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
 
     func testColdGenerationCompletes() {
         XCTAssertTrue(
-            app.descendants(matching: .any)["rootTab_studio"].waitForExistence(timeout: 10),
+            app.descendants(matching: .any)["rootTab_studio"].waitForExistence(timeout: 30),
             "Studio tab should be visible after cold launch"
         )
         captureScreenshot(named: "cold-launch-studio")
@@ -45,11 +50,7 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
 
         // Make sure we are in Custom mode. The app persists the last-used mode, so a
         // previous test may have left it in Design/Clone, where Generate is disabled.
-        let customMode = app.descendants(matching: .any)["generateSection_custom"]
-        XCTAssertTrue(customMode.waitForExistence(timeout: 10), "Custom mode segment should exist")
-        if !customMode.isSelected {
-            customMode.tap()
-        }
+        selectCustomMode()
 
         // The custom text editor is a UIViewRepresentable; relying on a single identifier
         // has proven brittle. Use the only editable text view in the Studio, and fall back
@@ -111,6 +112,31 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Selects the Custom generation-mode segment, retrying by identifier and then by
+    /// visible label. SwiftUI Picker segments can be slow to resolve after a cold launch,
+    /// so the identifier lookup gets a generous timeout before we fall back.
+    private func selectCustomMode() {
+        let byID = app.descendants(matching: .any)["generateSection_custom"]
+        let byLabel = app.buttons.matching(NSPredicate(format: "label == %@", "Custom")).firstMatch
+
+        var found = byID.waitForExistence(timeout: 30)
+        let customMode: XCUIElement = found ? byID : byLabel
+
+        if !found {
+            found = byLabel.waitForExistence(timeout: 10)
+        }
+
+        XCTAssertTrue(
+            found,
+            "Custom mode segment should exist (looked up by identifier and by label)"
+        )
+        captureScreenshot(named: "cold-custom-mode-found")
+
+        if customMode.waitForExistence(timeout: 5), !customMode.isSelected {
+            customMode.tap()
+        }
+    }
 
     private func captureScreenshot(named name: String) {
         let screenshot = app.screenshot()

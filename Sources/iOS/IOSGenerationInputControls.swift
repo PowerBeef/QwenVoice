@@ -372,7 +372,7 @@ struct IOSSaveVoiceSheet: View {
 
     var body: some View {
         IOSBottomSheetSurface(title: title, tint: tint, presentation: .system, onDismiss: onCancel) {
-            ScrollView(.vertical, showsIndicators: false) {
+            IOSScrollView(bottomFadeHeight: 0) {
                 VStack(alignment: .leading, spacing: 18) {
                     if let clipAudioURL {
                         clipReviewCard(url: clipAudioURL)

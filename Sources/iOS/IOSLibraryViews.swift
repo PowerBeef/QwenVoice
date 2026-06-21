@@ -217,7 +217,7 @@ private struct IOSHistoryLibrarySection: View {
             IOSHistoryFilterChips(selection: $modeFilter)
                 .padding(.bottom, 0)
 
-            ScrollView(showsIndicators: false) {
+            IOSScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if errorMessage != nil, items.isEmpty {
                         IOSEmptyStateCard(
@@ -589,7 +589,7 @@ private struct IOSSavedVoicesLibrarySection: View {
     let onUseInVoiceCloning: (Voice) -> Void
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        IOSScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if !ttsEngine.isReady {
                     IOSEmptyStateCard(
