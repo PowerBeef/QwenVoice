@@ -125,6 +125,43 @@ final class VocelloiOSSheetUITests: XCTestCase {
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-brief-closed")
     }
 
+    /// A long custom tone is accepted up to the 500-char cap and is truncated in the Studio chip.
+    func testCustomToneLongInstructionAndChipTruncation() {
+        selectMode("generateSection_custom")
+        openSheet(viaChipLabelPrefix: "Delivery: ")
+
+        let customToneButton = element("deliveryPickerSheet_customTone")
+        XCTAssertTrue(customToneButton.waitForExistence(timeout: 10), "custom tone button should exist")
+        customToneButton.tap()
+
+        let editor = element("deliveryPickerSheet_customTone_editor")
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
+
+        let longInstruction = String(
+            repeating: "A calm, deep narrator with a slow pace and warm timbre. ",
+            count: 6
+        )
+        editor.tap()
+        editor.typeText(longInstruction)
+
+        let counter = element("deliveryPickerSheet_customTone_charCount")
+        XCTAssertTrue(counter.waitForExistence(timeout: 5), "character counter should exist")
+        XCTAssertTrue(counter.label.contains("/500"), "counter should show the 500-character cap")
+
+        let confirm = element("deliveryPicker_confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Confirm CTA should remain visible")
+        confirm.tap()
+        XCTAssertTrue(
+            confirm.waitForNonExistence(timeout: 10),
+            "Confirm should apply the custom tone and close the sheet"
+        )
+
+        let chip = button(labelPrefix: "Delivery: ")
+        XCTAssertTrue(chip.label.hasPrefix("Delivery: "), "delivery chip should show a custom tone")
+        XCTAssertTrue(chip.label.contains("…"), "long custom tone should be truncated in the chip")
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-long")
+    }
+
     // MARK: - Helpers
 
     private func element(_ identifier: String) -> XCUIElement {

@@ -208,13 +208,15 @@ struct EmotionPickerView: View {
         }
     }
 
+    private let customToneCharacterLimit = 500
+
     private var customToneField: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Custom tone")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(isCustomMode ? .secondary : .tertiary)
 
-            TextField("Describe the delivery in your own words", text: $customText)
+            TextField("e.g. whispered, close-mic and breathy", text: $customText)
                 .textFieldStyle(.plain)
                 .focusEffectDisabled()
                 .padding(.horizontal, 8)
@@ -225,6 +227,9 @@ struct EmotionPickerView: View {
                 .disabled(!isCustomMode)
                 .accessibilityIdentifier("\(accessibilityPrefix)_toneField")
                 .onChange(of: customText) { _, newValue in
+                    if newValue.count > customToneCharacterLimit {
+                        customText = String(newValue.prefix(customToneCharacterLimit))
+                    }
                     if isCustomMode {
                         applyCurrentSelection()
                     }

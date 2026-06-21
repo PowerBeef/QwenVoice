@@ -10,9 +10,14 @@ struct IOSGenerationTextLimitPolicy {
     static let descriptionLimit = VoiceDesignBriefCatalog.descriptionLimit
 
     /// Delivery instruction / custom tone limit. The instruction is passed to the model as an
-    /// emotion/delivery style string; keep it short enough to fit comfortably in the prompt
-    /// while leaving room for the script. Matches the macOS inline editor cap.
-    static let deliveryInstructionLimit = 140
+    /// emotion/delivery style string.
+    ///
+    /// Research (Qwen3-TTS hosted API) allows up to 1,600 tokens for `instructions`, and the
+    /// open-weights examples are short phrases. 500 characters gives users 2–3 dense,
+    /// multidimensional sentences (emotion + pace + pitch + timbre) while discouraging
+    /// paragraph-length prompts. It also leaves room for the English diction reinforcement
+    /// clause appended during prompt assembly.
+    static let deliveryInstructionLimit = 500
 
     struct State: Equatable {
         let count: Int

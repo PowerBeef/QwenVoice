@@ -253,6 +253,7 @@
 		CE9FB73376B49D81E5BEFAF3 /* StartupDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21943A54ED34AAA37626A252 /* StartupDiagnosticsView.swift */; };
 		D27D60A56143986204A2D592 /* Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 623B6EAE78F8B7100D4675F4 /* Voice.swift */; };
 		D3BBFC311AF428545AD5CB7C /* IOSRecordVoiceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2290D85D02EF277B2AC164A /* IOSRecordVoiceSheet.swift */; };
+		D3F57027988DB65BD672108D /* IOSDeliveryInstructionGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43061AABE43C94B629B7FDD1 /* IOSDeliveryInstructionGuidance.swift */; };
 		D4008E9B424CE5E4D9D76879 /* VocelloMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3548C32EC85AB76ABEAEA6A8 /* VocelloMain.swift */; };
 		D75C67CBCAC91DF7F71B0273 /* IOSScrollRefinements.swift in Sources */ = {isa = PBXBuildFile; fileRef = E829FDA2BC5308802AB3A837 /* IOSScrollRefinements.swift */; };
 		D9CD489105C5ADCF38E6EE96 /* IOSModelDeliverySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC061E247067EDDB99401F09 /* IOSModelDeliverySupport.swift */; };
@@ -492,6 +493,7 @@
 		405DF32499EDF28E20D73FEA /* QwenVoiceNative.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = QwenVoiceNative.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		42AC8266C0AD7CFD40D5D6E8 /* IOSVoiceDesignBriefSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSVoiceDesignBriefSheet.swift; sourceTree = "<group>"; };
 		43033F9668B23257EDC8EEE3 /* RuntimeReleaseCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReleaseCoordinator.swift; sourceTree = "<group>"; };
+		43061AABE43C94B629B7FDD1 /* IOSDeliveryInstructionGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeliveryInstructionGuidance.swift; sourceTree = "<group>"; };
 		447411D60FB5B62ACB81DD90 /* ModesCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModesCommand.swift; sourceTree = "<group>"; };
 		44E29A8F18ADF5E5C68E11E1 /* ModelManagerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerViewModel.swift; sourceTree = "<group>"; };
 		452CA311723F50EB66FFBC4D /* mlx-audio-swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "mlx-audio-swift"; path = "third_party_patches/mlx-audio-swift"; sourceTree = SOURCE_ROOT; };
@@ -1150,6 +1152,7 @@
 				A014ECB4F32BED1D8FE49B68 /* IOSAccessibilityIdentifiers.swift */,
 				9E06F182E0D06AC11E44161D /* IOSAppBootstrap.swift */,
 				6641D04C1FCFC1FE05718F69 /* IOSAutorunHarness.swift */,
+				43061AABE43C94B629B7FDD1 /* IOSDeliveryInstructionGuidance.swift */,
 				14A2196B40607E117E55849B /* IOSDesignSystemPrimitives.swift */,
 				5F8CA939BDEDD6DB1F479C5F /* IOSEngineLifecycleToast.swift */,
 				F8D4D8DFF4CFC912BE52FF1E /* IOSGenerateFlowViews.swift */,
@@ -1769,6 +1772,7 @@
 				65048D02AFB84A5714B5037F /* IOSBatchGenerationCoordinator.swift in Sources */,
 				B68965FA60F8470BB342ECA1 /* IOSBatchSheet.swift in Sources */,
 				AD80E2D5F84411EE540547BE /* IOSBottomSheets.swift in Sources */,
+				D3F57027988DB65BD672108D /* IOSDeliveryInstructionGuidance.swift in Sources */,
 				03F29BE5251591790C3A7750 /* IOSDesignSystemPrimitives.swift in Sources */,
 				1E717451FC0F883570018189 /* IOSDeviceDiagnosticsRecorder.swift in Sources */,
 				5534D672FF2E267DAFE941E4 /* IOSEngineLifecycleToast.swift in Sources */,

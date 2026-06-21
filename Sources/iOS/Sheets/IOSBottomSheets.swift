@@ -229,7 +229,7 @@ struct IOSDeliveryPickerSheet: View {
                     )
 
                     if customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("e.g. whispered, like a movie trailer, gently excited")
+                        Text(placeholderExamples[placeholderExampleIndex])
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(IOSAppTheme.textTertiary)
                             .padding(.horizontal, 16)
@@ -247,16 +247,13 @@ struct IOSDeliveryPickerSheet: View {
                         .stroke(tint.opacity(0.22), lineWidth: 0.5)
                 }
 
+                customToneGuidance
+
+                quickStartChipsView
+
                 HStack {
                     Spacer(minLength: 0)
-                    Text("\(customText.count)/\(IOSGenerationTextLimitPolicy.deliveryInstructionLimit)")
-                        .font(.system(size: 12, weight: .medium).monospacedDigit())
-                        .foregroundStyle(
-                            customText.count >= IOSGenerationTextLimitPolicy.deliveryInstructionLimit
-                                ? tint
-                                : IOSAppTheme.textTertiary
-                        )
-                        .accessibilityIdentifier("deliveryPickerSheet_customTone_charCount")
+                    customToneCounter
                 }
             }
             .padding(.horizontal, 20)
@@ -268,6 +265,109 @@ struct IOSDeliveryPickerSheet: View {
                 customText = String(newValue.prefix(limit))
             }
         }
+        .onAppear {
+            placeholderExampleIndex = Int.random(in: 0..<placeholderExamples.count)
+        }
+    }
+
+    // MARK: - Custom tone guidance
+
+    private let placeholderExamples: [String] = [
+        "e.g. whispered, close-mic and breathy",
+        "e.g. a calm middle-aged narrator, slow and deep",
+        "e.g. energetic and bright, with a fast pace",
+        "e.g. gentle, serious, and reassuring",
+    ]
+
+    @State private var placeholderExampleIndex = 0
+
+    private var customToneGuidance: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Be specific and concise. Combine emotion, pace, pitch, and timbre. Avoid vague words like 'nice'.")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(IOSAppTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let guidance = IOSDeliveryInstructionGuidance.message(for: customText) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tint)
+                    Text(guidance)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(tint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("deliveryPickerSheet_customTone_guidance")
+            }
+        }
+    }
+
+    private let quickStartChips: [String] = [
+        "calm, slow",
+        "bright, fast",
+        "deep, serious",
+        "whispered",
+        "warm and gentle",
+        "crisp and clear",
+    ]
+
+    private var quickStartChipsView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Quick starts")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(IOSAppTheme.textSecondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(quickStartChips, id: \.self) { chip in
+                        Button {
+                            insertQuickStartChip(chip)
+                            IOSHaptics.selection()
+                        } label: {
+                            Text(chip)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(tint)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background {
+                                    Capsule(style: .continuous)
+                                        .fill(IOSAppTheme.accentWash(tint).opacity(0.5))
+                                }
+                                .overlay {
+                                    Capsule(style: .continuous)
+                                        .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("deliveryPickerSheet_customTone_chip_\(chip)")
+                    }
+                }
+            }
+        }
+    }
+
+    private var customToneCounter: some View {
+        let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
+        let remaining = limit - customText.count
+        return Text("\(customText.count)/\(limit)")
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundStyle(
+                customText.count >= limit
+                    ? tint
+                    : remaining <= 50
+                        ? .orange
+                        : IOSAppTheme.textTertiary
+            )
+            .accessibilityIdentifier("deliveryPickerSheet_customTone_charCount")
+    }
+
+    private func insertQuickStartChip(_ chip: String) {
+        let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
+        let trimmed = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let separator = trimmed.isEmpty ? "" : (trimmed.hasSuffix(",") ? " " : ", ")
+        let proposed = trimmed + separator + chip
+        customText = String(proposed.prefix(limit))
     }
 
     private func closeSheet() {

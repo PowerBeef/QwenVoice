@@ -90,7 +90,12 @@ struct IOSCustomVoiceView: View {
         let preset = draft.delivery.selectedPresetLabel
         if draft.delivery.mode == .custom {
             let trimmed = draft.delivery.customText.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "Custom delivery" : trimmed
+            guard !trimmed.isEmpty else { return "Custom delivery" }
+            let maxLength = 30
+            if trimmed.count > maxLength {
+                return String(trimmed.prefix(maxLength)) + "…"
+            }
+            return trimmed
         }
         if draft.delivery.supportsIntensity {
             return "\(preset) · \(draft.delivery.selectedIntensity.label)"
