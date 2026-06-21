@@ -11,7 +11,8 @@ which drives the UI by pixels:
    summarizes. This is the real on-device entitlement/memory/RTF proof.
 2. **Thin XCUITest UI-flow smoke** (`VocelloiOSUITests`) — asserts the app launches and
    the 4-tab IA + Studio composer/mode-control are reachable, off the stable
-   `accessibilityIdentifier`s. Runs on a simulator (fast, no signing) or the device.
+   `accessibilityIdentifier`s. Runs on a paired physical device only (the Simulator is retired
+   for UI work; see §3).
 
 Why this exists: on-device generation is the never-CI-tested path (real Jetsam, real
 model download, the in-process engine + increased-memory entitlement). iPhone Mirroring is
@@ -156,12 +157,18 @@ Simulator is retired; see §3).** Run the `VocelloiOSUITests` suite **on the dev
 a run, e.g. `scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSSheetUITests`.
 
 `Tests/VocelloiOSUITests/` (target `VocelloiOSUITests`, host `VocelloiOS`):
+- `VocelloUITestApp.swift` — shared warm-app coordinator; keeps one app session alive across
+  non-cold tests and resets to Studio between cases.
 - `VocelloiOSSmokeUITests` — launch + 4-tab reachability + Custom/Design/Clone segments.
 - `VocelloiOSSheetUITests` — sheet regressions: voice select-and-close, preview-keeps-open,
   language select-and-close, brief confirm-closes.
+- `VocelloiOSColdGenerationUITests` — cold-launch real-generation test. Unlike the smoke suite,
+  this one kills the warm session, launches a fresh app with the engine enabled, types in Custom
+  mode, and waits for actual audio generation to complete.
 
-It does **not** generate audio (that's the harness above) — the IA + identifiers + sheet
-behaviour are what's under test.
+The smoke/sheet suites do **not** generate audio (that's the harness above) — the IA + identifiers +
+sheet behaviour are what's under test. The cold-generation suite is the exception: it proves a real
+on-device generation still works from a cold start.
 
 **Driving identifiers (important):** the screen-level `screen_generateStudio` identifier
 propagates onto its descendants, **shadowing** the Studio selector pills' `studioChip_*` ids
@@ -203,6 +210,9 @@ through refactors; the smoke + any agent UI checks depend on them.
 > — is **kept in the repo (inert, reversible) but is no longer part of the workflow**. Do UI
 > testing/control/review **on the device** via §2 (`scripts/ios_device.sh ui-test`). The text
 > below is retained for reference only.
+
+> **Do not follow the instructions below.** They document how the simulator path used to work
+> and are left in place only so the retirement decision and historical setup are discoverable.
 
 For **visual UI work** (layout, chrome, flows, keyboard behavior) the Simulator is the right
 tool — no device, no signing, no models, no Metal/MLX. On the simulator the app swaps to
@@ -268,9 +278,9 @@ Mirroring directly.
 | Level | Command | Proves |
 |-------|---------|--------|
 | Compile (app) | `scripts/build_foundation_targets.sh ios` | the in-process engine + harness compile |
-| Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'platform=iOS Simulator,…' -derivedDataPath build/ios` | the test target compiles + is wired |
-| UI smoke | `xcodebuild test -scheme VocelloiOS -destination … -derivedDataPath build/ios` (or `scripts/ios_sim.sh ui-test`) | launch + IA reachable |
-| Sim UI review | `scripts/ios_sim.sh run` + `scripts/ios_sim.sh shot` | the full UI renders + is navigable with the fake engine (visual review — no device) |
+| Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'platform=iOS,id=<udid>' -derivedDataPath build/ios` | the test target compiles + is wired for the device |
+| UI smoke | `scripts/ios_device.sh ui-test` | launch + IA reachable on a real device |
+| Interactive UI review | `scripts/ios_device.sh launch` + `scripts/ios_device.sh shot <path>` | the full UI renders over iPhone Mirroring for visual review |
 | On-device proof | `scripts/ios_device.sh bench "custom:speed:…"` | real generation, entitlement/memory headroom, RTF/`audioQC` |
 
 ## Still deferred

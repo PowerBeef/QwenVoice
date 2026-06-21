@@ -273,10 +273,26 @@ The sanctioned paths are:
 scripts/ios_device.sh doctor       # environment + device preflight
 scripts/ios_device.sh bench        # build → install → autorun → pull → summarize
 scripts/ios_device.sh ui-test      # run VocelloiOSUITests on the device
+scripts/ios_device.sh launch       # launch the app (with optional autorun spec)
+scripts/ios_device.sh console      # stream os_log from the running app
+scripts/ios_device.sh pull         # pull files from the app container
 scripts/ios_device.sh shot         # screenshot the iPhone Mirroring window
 ```
 
 The headless autorun harness is triggered by `QVOICE_IOS_AUTORUN` and writes telemetry into the App Group container.
+
+iOS UI-test architecture:
+- `Tests/VocelloiOSUITests/VocelloUITestApp.swift` is the shared warm-app coordinator. It keeps one
+  app session alive across the smoke/sheet tests and resets to Studio between cases, so the suite
+  behaves like a real user session instead of launching from scratch every test.
+- `Tests/VocelloiOSUITests/VocelloiOSColdGenerationUITests.swift` is the exception: it deliberately
+  kills the warm session, cold-launches the app with the engine enabled, and asserts that a real
+  on-device generation completes.
+
+iOS UI conventions:
+- Use `IOSScrollView` instead of raw `ScrollView` for vertical iOS scroll surfaces. It bundles the
+  no-rubber-band behavior, subtle custom scroll indicator, and bottom fade that keeps content from
+  drawing under the TabDock. Pass `bottomFadeHeight: 0` for sheets that float above the dock.
 
 ### Benchmarks and output quality
 

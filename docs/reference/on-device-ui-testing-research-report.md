@@ -35,6 +35,13 @@ From [`docs/reference/ios-device-testing.md`](ios-device-testing.md):
 - **Build/sign:** `scripts/ios_device.sh` using `QWENVOICE_DEVELOPMENT_TEAM`.
 - **Headless proof:** `bench` autorun launches the app with env specs and pulls telemetry.
 - **UI smoke:** `VocelloiOSUITests` runs through `xcodebuild test` on the device, relying on stable `accessibilityIdentifier`s (`rootTab_*`, `generateSection_*`, `bottomSheet_close`, `voicePickerRow_*`, etc.).
+  - `VocelloUITestApp.swift` is the shared warm-app coordinator that keeps one app session alive
+    across smoke/sheet tests and resets to Studio between cases.
+  - `VocelloiOSSmokeUITests` covers launch + 4-tab reachability.
+  - `VocelloiOSSheetUITests` covers voice/language/delivery/brief sheet regressions.
+  - `VocelloiOSColdGenerationUITests` is the cold-launch exception: it kills the warm session,
+    launches a fresh app with the engine enabled, and asserts that a real on-device generation
+    completes.
 - **Visual review:** iPhone Mirroring is used for observation, but synthetic clicks through macOS accessibility on the mirrored window are **unreliable** — the mirrored content is not a normal AX tree, and focus races make scripted tapping brittle.
 
 The next improvement should complement this baseline rather than replace it.
@@ -237,9 +244,10 @@ A layered strategy that preserves today’s reliable baseline while adding agent
 
 ### Immediate next steps (if approved)
 
-1. **Strengthen Layer 1:** Update `VocelloiOSSheetUITests` for the new Confirm-button behavior (tap Confirm, assert `selectedID` change, dismiss).
-2. **Pilot Layer 2:** Install `appium/appium-mcp` in a disposable local test (not in this repo yet) and run a minimal real-device flow: select device → prepare WDA → launch Vocello → tap a known `accessibilityIdentifier` → screenshot → terminate. This validates WDA signing and MCP session stability with the current Claude Code version.
-3. **Decide on Layer 3:** Evaluate Drizz only after Layer 2 proves the maintenance burden; use a free trial against a non-production build.
+1. ~~**Strengthen Layer 1:** Update `VocelloiOSSheetUITests` for the new Confirm-button behavior (tap Confirm, assert `selectedID` change, dismiss).~~ **Done** — Confirm buttons are unified across voice/delivery/language pickers and the voice-brief sheet, with matching assertions in `VocelloiOSSheetUITests`.
+2. **Extend Layer 1:** Harden `VocelloiOSColdGenerationUITests` against launch-time flakiness and add coverage for Design/Clone mode cold generation if those modes become critical paths.
+3. **Pilot Layer 2:** Install `appium/appium-mcp` in a disposable local test (not in this repo yet) and run a minimal real-device flow: select device → prepare WDA → launch Vocello → tap a known `accessibilityIdentifier` → screenshot → terminate. This validates WDA signing and MCP session stability with the current Claude Code version.
+4. **Decide on Layer 3:** Evaluate Drizz only after Layer 2 proves the maintenance burden; use a free trial against a non-production build.
 
 ---
 

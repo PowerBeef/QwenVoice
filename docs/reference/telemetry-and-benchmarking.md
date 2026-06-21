@@ -13,8 +13,9 @@ If anything here disagrees with the code, the code wins — fix this file.
 > drive a generation, then read the JSONL this system writes + aggregate with
 > `summarize_generation_telemetry.py`. Benchmarking + output‑quality checks are **first‑class**:
 > committed benchmark/QC scripts, baselines, and summaries are permitted (bounded by the
-> `benchmarks/` cap). Only the **XCUITest test bundle** stays retired
-> (`scripts/check_project_inputs.sh`).
+> `benchmarks/` cap). Only the old **simulator-only XCUITest path** stays retired
+> (`scripts/check_project_inputs.sh`); on-device UI testing is active and documented in
+> `docs/reference/ios-device-testing.md`.
 
 ---
 
@@ -482,10 +483,10 @@ The monitor observes the simulated event and the marks land on that generation's
 `python3 scripts/summarize_generation_telemetry.py` → confirm non‑zero `trims`/`pressure` and inspect
 `physFoot` + the GPU‑by‑stage block.
 
-> **Caveat:** on the forced floor tier, **Quality can be downgraded to Speed** by the OOM fallback in
-> `loadModel(id:)`. The row's `modelID` reveals the actual variant served — check it before attributing
-> a Quality cell. The forced tier changes real behavior **only while the env is set**; unset it for
-> normal use.
+> **Caveat:** on the forced floor tier, a Quality load that cannot fit will surface as an error rather
+> than silently falling back to Speed. The row's `modelID` reveals the actual variant served — check it
+> before attributing a Quality cell. The forced tier changes real behavior **only while the env is set**;
+> unset it for normal use.
 
 **Watch for OOM regressions** when optimizing the backend: a rising `physFoot` peak, GPU‑stage peak,
 or any `hardTrim` in `trims` means a run is shedding model state under pressure — the early OOM signal.
