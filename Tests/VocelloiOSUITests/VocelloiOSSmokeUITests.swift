@@ -8,30 +8,27 @@ import XCTest
 /// 4-tab information architecture + Studio composer/mode-control are reachable, keyed
 /// off the stable `accessibilityIdentifier`s (kept through refactors per AGENTS.md).
 ///
-/// Run on a simulator (fast, no signing) or the device:
-///   xcodebuild test -scheme VocelloiOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
-///   xcodebuild test -scheme VocelloiOS -destination 'id=<device-udid>'
+/// The app is launched once for the whole UI-test target by `VocelloUITestApp` and
+/// stays alive across test classes; each test only resets surface state.
 final class VocelloiOSSmokeUITests: XCTestCase {
-    private var app: XCUIApplication!
+
+    override class func setUp() {
+        super.setUp()
+        VocelloUITestApp.shared.retain()
+    }
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        app = XCUIApplication()
-        // Pure UI-navigation smoke (no audio generation): skip the heavy on-launch engine
-        // model load so the accessibility server stays responsive and launches are
-        // fast/deterministic. Engine generation is covered by the headless bench harness.
-        app.launchEnvironment["QVOICE_IOS_DISABLE_ENGINE"] = "1"
-        app.launch()
-        dismissOnboardingIfPresent()
+        VocelloUITestApp.shared.resetToStudio()
     }
 
-    override func tearDown() {
-        app = nil
+    override class func tearDown() {
+        VocelloUITestApp.shared.release()
         super.tearDown()
     }
 
-    /// Launches and confirms the Studio tab + its Custom/Design/Clone mode control are present.
+    /// Confirms the Studio tab + its Custom/Design/Clone mode control are present.
     /// (Note: the screen-level `screen_generateStudio` identifier propagates onto the composer +
     /// pills, shadowing their own `textInput_*` / `studioChip_*` ids — so this asserts the mode
     /// segments, which keep their identifiers, rather than those shadowed ones.)
@@ -44,6 +41,7 @@ final class VocelloiOSSmokeUITests: XCTestCase {
                 && element("generateSection_clone").exists,
             "all three Custom/Design/Clone mode segments should be present"
         )
+        VocelloUITestApp.shared.captureScreenshot(named: "smoke-studio-surface")
     }
 
     /// Confirms each of the 4 tabs is reachable and becomes selected when tapped. (Uses the tab's
@@ -55,15 +53,19 @@ final class VocelloiOSSmokeUITests: XCTestCase {
             XCTAssertTrue(tabElement.waitForExistence(timeout: 10), "tab \(tab) should exist")
             tabElement.tap()
             XCTAssertTrue(isSelectedEventually(tabElement), "tapping \(tab) should select it")
+            VocelloUITestApp.shared.captureScreenshot(named: "smoke-tab-\(tab)")
         }
     }
 
     // MARK: - Helpers
 
-    /// Resolve an element by accessibility identifier across any element type
-    /// (SwiftUI surfaces vary the underlying XCUIElementType).
     private func element(_ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
+        VocelloUITestApp.shared.element(identifier)
+    }
+
+    @discardableResult
+    private func waitFor(_ identifier: String, timeout: TimeInterval = 30) -> Bool {
+        VocelloUITestApp.shared.waitFor(identifier, timeout: timeout)
     }
 
     /// Poll an element's `isSelected` (the trait updates a beat after the tap).
@@ -74,31 +76,5 @@ final class VocelloiOSSmokeUITests: XCTestCase {
             usleep(200_000)
         }
         return e.isSelected
-    }
-
-    @discardableResult
-    private func waitFor(_ identifier: String, timeout: TimeInterval = 30) -> Bool {
-        element(identifier).waitForExistence(timeout: timeout)
-    }
-
-    /// First-run onboarding (3 pages) sits in front of the tabs on a fresh install — which
-    /// happens on every `xcodebuild test` reinstall, and can render a beat after launch.
-    /// Poll for either the main UI or onboarding rather than a one-shot wait; Skip completes
-    /// the whole flow, the CTA advances/completes as a fallback.
-    private func dismissOnboardingIfPresent() {
-        let studio = element("rootTab_studio")
-        let skip = element("onboarding_skip")
-        let cta = element("onboarding_cta")
-        let deadline = Date().addingTimeInterval(20)
-        while Date() < deadline {
-            if studio.exists { return }
-            if skip.exists {
-                skip.tap()
-                _ = studio.waitForExistence(timeout: 6)
-                return
-            }
-            if cta.exists { cta.tap() }
-            usleep(300_000)
-        }
     }
 }

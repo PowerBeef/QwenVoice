@@ -229,6 +229,7 @@ cmd_ui_test() {
   local udid; udid="$(resolve_sim)"
   note "running VocelloiOSUITests on the simulator [$udid]"
   mkdir -p "$DERIVED"
+  export UI_TEST_SCREENSHOT_DIR="$DERIVED/uitest-screenshots"
   local log="$DERIVED/sim-uitest.log"
   set +e
   xcodebuild test \

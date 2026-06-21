@@ -65,7 +65,7 @@ When facts disagree, trust in this order: `Sources/` → `project.yml` → `scri
 
 This project is developed with **Kimi Code CLI**. Use the following tools and skills instead of the Axiom subagents referenced in older versions of this guide:
 
-- **Build / Xcode issues:** `mcp__xcodebuildmcp__*` (build, test, launch, simulator screenshots/snapshots) and the `swift-mlx` / `swift-mlx-lm` skills. For environmental setup problems, run the relevant `scripts/*.sh` command and inspect output with `Bash`.
+- **Build / Xcode issues:** `mcp__xcodebuildmcp__*` (build, test, launch) and the `swift-mlx` / `swift-mlx-lm` skills. iOS verification is **on-device only** — never use the iOS Simulator or simulator-only MCP tools for Vocello iOS UI work. For environmental setup problems, run the relevant `scripts/*.sh` command and inspect output with `Bash`.
 - **Code exploration / architecture:** `Agent` with `subagent_type: "explore"` for read-only audits; `Agent` with `subagent_type: "coder"` for implementation or review tasks.
 - **Crash logs / symbolication:** `mcp__axiom__xcsym_*` tools (`xcsym_crash`, `xcsym_resolve`, `xcsym_find_dsym`).
 - **Performance / profiling:** `mcp__axiom__xcprof_*` tools (`xcprof_record`, `xcprof_analyze`).
@@ -260,7 +260,14 @@ The `VocelloMacUITests` target contains a single `VocelloMacSmokeUITests` class 
 
 ### iOS testing
 
-iOS testing is **on-device** (the Simulator is retired for this project). The sanctioned paths are:
+iOS testing is **on-device only**. The iOS Simulator is retired for this project and must not be used for UI testing, verification, screenshots, or snapshots.
+
+**Do not use:**
+- `scripts/ios_sim.sh`
+- `xcodebuild -destination 'platform=iOS Simulator...'` for iOS UI work
+- simulator-only MCP tools such as `mcp__xcodebuildmcp__build_run_sim` / `snapshot_ui` for iOS
+
+The sanctioned paths are:
 
 ```sh
 scripts/ios_device.sh doctor       # environment + device preflight

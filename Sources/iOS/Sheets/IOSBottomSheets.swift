@@ -92,7 +92,33 @@ struct IOSDeliveryPickerSheet: View {
     }
 
     var body: some View {
-        IOSBottomSheetSurface(title: "Delivery", tint: tint, presentation: presentation, onDismiss: onDismiss) {
+        IOSBottomSheetSurface(
+            title: "Delivery",
+            tint: tint,
+            presentation: presentation,
+            onDismiss: onDismiss,
+            headerTrailing: {
+                Button {
+                    closeSheet()
+                } label: {
+                    Text("Confirm")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .padding(.horizontal, 18)
+                        .frame(height: 40)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(tint.opacity(0.18))
+                        }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("deliveryPicker_confirm")
+            }
+        ) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -284,7 +310,33 @@ struct IOSQwenLanguagePickerSheet: View {
     }
 
     var body: some View {
-        IOSBottomSheetSurface(title: "Language", tint: tint, presentation: presentation, onDismiss: onDismiss) {
+        IOSBottomSheetSurface(
+            title: "Language",
+            tint: tint,
+            presentation: presentation,
+            onDismiss: onDismiss,
+            headerTrailing: {
+                Button {
+                    closeSheet()
+                } label: {
+                    Text("Confirm")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .padding(.horizontal, 18)
+                        .frame(height: 40)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(tint.opacity(0.18))
+                        }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("languagePicker_confirm")
+            }
+        ) {
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     let recommendedLanguages = languages.filter(isRecommended)
@@ -338,7 +390,6 @@ struct IOSQwenLanguagePickerSheet: View {
         return Button {
             selectedLanguage = language
             IOSHaptics.selection()
-            closeSheet()
         } label: {
             HStack(alignment: .center, spacing: 12) {
                 leadingBadge(language)
@@ -428,11 +479,29 @@ struct IOSVoicePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var search: String = ""
     @StateObject private var previewer = IOSVoicePreviewPlayer()
+    /// Local provisional selection. The binding is only committed when the
+    /// user taps the Confirm header button.
+    @State private var pendingSelectedID: String
     /// R3-FU G.2.1 (2026-05-21): selected language tag, or
     /// `IOSVoicePickerSheet.allFilterID` for "show everything". Matches
     /// the design's filter-chip behaviour where the first chip ("All")
     /// is a sentinel value and the rest are concrete language tags.
     @State private var selectedFilter: String = IOSVoicePickerSheet.allFilterID
+
+    init(
+        speakers: [IOSVoicePickerOption],
+        selectedID: Binding<String>,
+        tint: Color,
+        onDismiss: (() -> Void)? = nil,
+        presentation: IOSBottomSheetPresentationStyle = .system
+    ) {
+        self.speakers = speakers
+        self._selectedID = selectedID
+        self.tint = tint
+        self.onDismiss = onDismiss
+        self.presentation = presentation
+        self._pendingSelectedID = State(initialValue: selectedID.wrappedValue)
+    }
 
     /// Sentinel id for the "All" chip. Real language tags are short
     /// uppercase strings ("EN", "ZH", …) so any non-matching marker
@@ -496,7 +565,33 @@ struct IOSVoicePickerSheet: View {
     }
 
     var body: some View {
-        IOSBottomSheetSurface(title: "Voice", tint: tint, presentation: presentation, onDismiss: onDismiss) {
+        IOSBottomSheetSurface(
+            title: "Voice",
+            tint: tint,
+            presentation: presentation,
+            onDismiss: onDismiss,
+            headerTrailing: {
+                Button {
+                    confirmSelection()
+                } label: {
+                    Text("Confirm")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .padding(.horizontal, 18)
+                        .frame(height: 40)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(tint.opacity(0.18))
+                        }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("voicePicker_confirm")
+            }
+        ) {
             VStack(alignment: .leading, spacing: 14) {
                 IOSSearchField(text: $search, placeholder: "Search voices")
                     .padding(.horizontal, 20)
@@ -527,6 +622,12 @@ struct IOSVoicePickerSheet: View {
         // preview audio would keep playing under the studio screen.
         .onDisappear {
             previewer.stop()
+        }
+        .onAppear {
+            pendingSelectedID = selectedID
+        }
+        .onChange(of: selectedID) { _, newID in
+            pendingSelectedID = newID
         }
     }
 
@@ -559,20 +660,19 @@ struct IOSVoicePickerSheet: View {
     }
 
     private func row(for option: IOSVoicePickerOption) -> some View {
-        let isSelected = option.id == selectedID
+        let isSelected = option.id == pendingSelectedID
         let isPreviewing = previewer.currentlyPlayingID == option.id
         // Two SIBLING Buttons (select + preview) — never nested. Nesting a Button inside
         // another Button's label is a SwiftUI hit-testing trap that swallowed the row's
         // select tap; siblings each consume their own taps. The leading select Button
-        // fills the row (Spacer) and, per design, selects the voice AND closes the sheet;
+        // marks the provisional choice (the binding is committed by the Confirm header);
         // the trailing preview Button previews WITHOUT selecting/closing. Each carries a
         // stable accessibilityIdentifier so the UI loop can drive them independently.
         return HStack(alignment: .center, spacing: 12) {
             Button {
                 previewer.stop()
-                selectedID = option.id
+                pendingSelectedID = option.id
                 IOSHaptics.selection()
-                closeSheet()
             } label: {
                 HStack(alignment: .center, spacing: 12) {
                     IOSVoiceAvatar(seed: option.id, initials: option.initials, diameter: 44)
@@ -655,6 +755,13 @@ struct IOSVoicePickerSheet: View {
                 .fill(Color.white.opacity(0.06))
                 .frame(height: 0.5)
         }
+    }
+
+    private func confirmSelection() {
+        previewer.stop()
+        selectedID = pendingSelectedID
+        IOSHaptics.selection()
+        closeSheet()
     }
 
     private func closeSheet() {

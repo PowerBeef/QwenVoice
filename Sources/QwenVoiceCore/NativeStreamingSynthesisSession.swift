@@ -903,6 +903,12 @@ private struct StreamingExecutionContext: Sendable {
         do {
             completion = try await generateQualityFirstAudio()
         } catch {
+            GenerationFailureDiagnosticLogger.shared.log(
+                surfacedMessage: "Quality-first generation failed",
+                stage: NativeRuntimeStage.streamFailed.description,
+                underlyingError: error,
+                request: request
+            )
             await telemetryRecorder?.mark(
                 metadata: StreamFailureMessageMetadata(message: error.localizedDescription)
             )
@@ -1347,6 +1353,12 @@ private struct StreamingExecutionContext: Sendable {
                 }
             }
         } catch {
+            GenerationFailureDiagnosticLogger.shared.log(
+                surfacedMessage: "Streaming execution failed",
+                stage: NativeRuntimeStage.streamFailed.description,
+                underlyingError: error,
+                request: request
+            )
             await telemetryRecorder?.mark(
                 metadata: StreamFailureMessageMetadata(message: error.localizedDescription)
             )

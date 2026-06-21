@@ -524,6 +524,7 @@ struct IOSBottomSheetSurface<Content: View>: View {
     let tint: Color
     let presentation: IOSBottomSheetPresentationStyle
     let onDismiss: (() -> Void)?
+    let headerTrailing: AnyView?
     let content: Content
 
     init(
@@ -537,24 +538,60 @@ struct IOSBottomSheetSurface<Content: View>: View {
         self.tint = tint
         self.presentation = presentation
         self.onDismiss = onDismiss
+        self.headerTrailing = nil
+        self.content = content()
+    }
+
+    init<Trailing: View>(
+        title: String,
+        tint: Color = IOSBrandTheme.accent,
+        presentation: IOSBottomSheetPresentationStyle = .system,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder headerTrailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.tint = tint
+        self.presentation = presentation
+        self.onDismiss = onDismiss
+        self.headerTrailing = AnyView(headerTrailing())
         self.content = content()
     }
 
     var body: some View {
         switch presentation {
         case .system:
-            IOSBottomSheet(title: title, tint: tint, onDismiss: onDismiss) {
-                content
+            if let headerTrailing {
+                IOSBottomSheet(title: title, tint: tint, onDismiss: onDismiss, headerTrailing: { headerTrailing }) {
+                    content
+                }
+            } else {
+                IOSBottomSheet(title: title, tint: tint, onDismiss: onDismiss) {
+                    content
+                }
             }
         case .edgeToEdge(let bottomSafeAreaInset, let height):
-            IOSBottomEdgeSheet(
-                title: title,
-                tint: tint,
-                bottomSafeAreaInset: bottomSafeAreaInset,
-                height: height,
-                onDismiss: { onDismiss?() }
-            ) {
-                content
+            if let headerTrailing {
+                IOSBottomEdgeSheet(
+                    title: title,
+                    tint: tint,
+                    bottomSafeAreaInset: bottomSafeAreaInset,
+                    height: height,
+                    onDismiss: { onDismiss?() },
+                    headerTrailing: { headerTrailing }
+                ) {
+                    content
+                }
+            } else {
+                IOSBottomEdgeSheet(
+                    title: title,
+                    tint: tint,
+                    bottomSafeAreaInset: bottomSafeAreaInset,
+                    height: height,
+                    onDismiss: { onDismiss?() }
+                ) {
+                    content
+                }
             }
         }
     }
@@ -598,6 +635,7 @@ struct IOSBottomEdgeSheet<Content: View>: View {
     let bottomSafeAreaInset: CGFloat
     let height: CGFloat?
     let onDismiss: () -> Void
+    let headerTrailing: AnyView?
     let content: Content
 
     @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
@@ -615,6 +653,25 @@ struct IOSBottomEdgeSheet<Content: View>: View {
         self.bottomSafeAreaInset = bottomSafeAreaInset
         self.height = height
         self.onDismiss = onDismiss
+        self.headerTrailing = nil
+        self.content = content()
+    }
+
+    init<Trailing: View>(
+        title: String,
+        tint: Color = IOSBrandTheme.accent,
+        bottomSafeAreaInset: CGFloat,
+        height: CGFloat? = nil,
+        onDismiss: @escaping () -> Void,
+        @ViewBuilder headerTrailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.tint = tint
+        self.bottomSafeAreaInset = bottomSafeAreaInset
+        self.height = height
+        self.onDismiss = onDismiss
+        self.headerTrailing = AnyView(headerTrailing())
         self.content = content()
     }
 
@@ -686,25 +743,29 @@ struct IOSBottomEdgeSheet<Content: View>: View {
                 .foregroundStyle(IOSAppTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(IOSAppTheme.textPrimary)
-                    .frame(width: 40, height: 40)
-                    .background {
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                    }
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
-                    }
+            if let headerTrailing {
+                headerTrailing
+            } else {
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .frame(width: 40, height: 40)
+                        .background {
+                            Circle()
+                                .fill(Color.white.opacity(0.06))
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("bottomSheet_close")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("bottomSheet_close")
         }
     }
 }
@@ -720,6 +781,7 @@ struct IOSBottomSheet<Content: View>: View {
     let title: String
     let tint: Color
     let onDismiss: (() -> Void)?
+    let headerTrailing: AnyView?
     let content: Content
 
     @Environment(\.dismiss) private var dismiss
@@ -733,6 +795,21 @@ struct IOSBottomSheet<Content: View>: View {
         self.title = title
         self.tint = tint
         self.onDismiss = onDismiss
+        self.headerTrailing = nil
+        self.content = content()
+    }
+
+    init<Trailing: View>(
+        title: String,
+        tint: Color = IOSBrandTheme.accent,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder headerTrailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.tint = tint
+        self.onDismiss = onDismiss
+        self.headerTrailing = AnyView(headerTrailing())
         self.content = content()
     }
 
@@ -777,25 +854,29 @@ struct IOSBottomSheet<Content: View>: View {
                 .foregroundStyle(IOSAppTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                onDismiss?()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(IOSAppTheme.textPrimary)
-                    .frame(width: 40, height: 40)
-                    .background {
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                    }
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
-                    }
+            if let headerTrailing {
+                headerTrailing
+            } else {
+                Button {
+                    onDismiss?()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .frame(width: 40, height: 40)
+                        .background {
+                            Circle()
+                                .fill(Color.white.opacity(0.06))
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                        }
+                }
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("bottomSheet_close")
             }
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("bottomSheet_close")
         }
     }
 }

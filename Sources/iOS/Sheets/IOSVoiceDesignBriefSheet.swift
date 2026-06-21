@@ -22,12 +22,40 @@ struct IOSVoiceDesignBriefSheet: View {
     // the macOS inline editor stay in lockstep.
     private let startingPoints = VoiceDesignBriefCatalog.startingPoints
 
+    private var isBriefEmpty: Bool {
+        voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         IOSBottomSheetSurface(
             title: "Voice brief",
             tint: tint,
             presentation: presentation,
-            onDismiss: onDismiss
+            onDismiss: onDismiss,
+            headerTrailing: {
+                Button {
+                    isFocused = false
+                    closeSheet()
+                } label: {
+                    Text("Confirm")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(IOSAppTheme.textPrimary)
+                        .padding(.horizontal, 18)
+                        .frame(height: 40)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(tint.opacity(0.18))
+                        }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(isBriefEmpty)
+                .opacity(isBriefEmpty ? 0.5 : 1.0)
+                .accessibilityIdentifier("voiceBrief_confirm")
+            }
         ) {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Describe the voice. Combine character, age, accent, and texture.")
@@ -90,22 +118,6 @@ struct IOSVoiceDesignBriefSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 6)
                 .padding(.bottom, 18)
-
-                // Explicit confirm: apply the typed brief (the binding already writes through
-                // live) and close. Sits above the keyboard while editing; the Starting points
-                // below are alternative one-tap confirms. Disabled until something is written —
-                // the header X still closes an empty sheet.
-                IOSPrimaryCTAButton(
-                    title: "Done",
-                    tint: tint,
-                    isEnabled: !voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
-                    isFocused = false
-                    closeSheet()
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
-                .accessibilityIdentifier("voiceBrief_confirm")
 
                 Text("Starting points".uppercased())
                     .font(.system(size: 11, weight: .semibold))
