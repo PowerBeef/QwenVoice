@@ -87,8 +87,8 @@ struct IOSDeliveryPickerSheet: View {
         Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
     }
 
-    private var canChooseIntensity: Bool {
-        localPresetID != "neutral"
+    private var intensityDisabled: Bool {
+        localPresetID == "neutral"
     }
 
     var body: some View {
@@ -127,18 +127,18 @@ struct IOSDeliveryPickerSheet: View {
                         }
                     }
 
-                    if canChooseIntensity {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Intensity")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(IOSAppTheme.textPrimary)
-                            HStack(spacing: 8) {
-                                ForEach(EmotionIntensity.allCases) { level in
-                                    intensityButton(level)
-                                }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Intensity")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(IOSAppTheme.textPrimary)
+                        HStack(spacing: 8) {
+                            ForEach(EmotionIntensity.allCases) { level in
+                                intensityButton(level)
                             }
                         }
                     }
+                    .disabled(intensityDisabled)
+                    .opacity(intensityDisabled ? 0.45 : 1.0)
 
                     if let onUseCustomTone {
                         Button {
