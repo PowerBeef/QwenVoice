@@ -162,6 +162,53 @@ final class VocelloiOSSheetUITests: XCTestCase {
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-long")
     }
 
+    /// Quick-start token chips insert single-dimension prompts and compose into a
+    /// comma-separated instruction, teaching the multidimensional prompt style.
+    func testCustomToneQuickStartChipsComposeTokens() {
+        selectMode("generateSection_custom")
+        openSheet(viaChipLabelPrefix: "Delivery: ")
+
+        let customToneButton = element("deliveryPickerSheet_customTone")
+        XCTAssertTrue(customToneButton.waitForExistence(timeout: 10), "custom tone button should exist")
+        customToneButton.tap()
+
+        let editor = element("deliveryPickerSheet_customTone_editor")
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
+
+        let warmChip = element("deliveryPickerSheet_customTone_chip_warm")
+        XCTAssertTrue(warmChip.waitForExistence(timeout: 5), "warm quick-start chip should exist")
+        warmChip.tap()
+
+        let slowChip = element("deliveryPickerSheet_customTone_chip_slow")
+        XCTAssertTrue(slowChip.waitForExistence(timeout: 5), "slow quick-start chip should exist")
+        slowChip.tap()
+
+        // UITextView text is surfaced through its `value` property in XCUITest.
+        guard let editorText = editor.value as? String else {
+            XCTFail("custom tone editor should expose its text as value")
+            return
+        }
+        XCTAssertTrue(editorText.contains("warm"), "tapping warm chip should insert 'warm'")
+        XCTAssertTrue(editorText.contains("slow"), "tapping slow chip should insert 'slow'")
+        XCTAssertTrue(editorText.contains(","), "composed tokens should be comma-separated")
+
+        // De-duplication: tapping the same chip again should not add a second copy.
+        let tokenCountBefore = editorText.components(separatedBy: ",").filter {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "warm"
+        }.count
+        warmChip.tap()
+        guard let editorTextAfter = editor.value as? String else {
+            XCTFail("custom tone editor value should remain readable")
+            return
+        }
+        let tokenCountAfter = editorTextAfter.components(separatedBy: ",").filter {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "warm"
+        }.count
+        XCTAssertEqual(tokenCountBefore, tokenCountAfter, "tapping an existing token should not duplicate it")
+
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-chips")
+    }
+
     // MARK: - Helpers
 
     private func element(_ identifier: String) -> XCUIElement {

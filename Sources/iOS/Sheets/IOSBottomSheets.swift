@@ -303,45 +303,61 @@ struct IOSDeliveryPickerSheet: View {
         }
     }
 
-    private let quickStartChips: [String] = [
-        "calm, slow",
-        "bright, fast",
-        "deep, serious",
-        "whispered",
-        "warm and gentle",
-        "crisp and clear",
+    private struct QuickStartCategory {
+        let title: String
+        let tokens: [String]
+    }
+
+    private let quickStartCategories: [QuickStartCategory] = [
+        QuickStartCategory(title: "Emotion", tokens: ["warm", "calm", "excited", "serious", "playful"]),
+        QuickStartCategory(title: "Pace", tokens: ["slow", "measured", "fast", "urgent"]),
+        QuickStartCategory(title: "Timbre", tokens: ["deep", "bright", "whispered", "breathy"]),
+        QuickStartCategory(title: "Style", tokens: ["narrator", "conversational", "news anchor", "dramatic"]),
     ]
 
     private var quickStartChipsView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Quick starts")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(IOSAppTheme.textSecondary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(quickStartChips, id: \.self) { chip in
-                        Button {
-                            insertQuickStartChip(chip)
-                            IOSHaptics.selection()
-                        } label: {
-                            Text(chip)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(tint)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background {
-                                    Capsule(style: .continuous)
-                                        .fill(IOSAppTheme.accentWash(tint).opacity(0.5))
-                                }
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(tint.opacity(0.35), lineWidth: 0.8)
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("deliveryPickerSheet_customTone_chip_\(chip)")
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(quickStartCategories, id: \.title) { category in
+                    quickStartCategorySection(category)
+                }
+            }
+        }
+    }
+
+    private func quickStartCategorySection(_ category: QuickStartCategory) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(category.title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(IOSAppTheme.textTertiary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(category.tokens, id: \.self) { token in
+                    Button {
+                        insertQuickStartChip(token)
+                        IOSHaptics.selection()
+                    } label: {
+                        Text(token)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(tint)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background {
+                                Capsule(style: .continuous)
+                                    .fill(IOSAppTheme.accentWash(tint).opacity(0.5))
+                            }
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                            }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("deliveryPickerSheet_customTone_chip_\(token)")
                 }
             }
         }
@@ -362,11 +378,22 @@ struct IOSDeliveryPickerSheet: View {
             .accessibilityIdentifier("deliveryPickerSheet_customTone_charCount")
     }
 
-    private func insertQuickStartChip(_ chip: String) {
+    private func insertQuickStartChip(_ token: String) {
         let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
+        let cleanedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedToken.isEmpty else { return }
+
         let trimmed = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // De-duplicate: skip if the token already appears as a whole word/phrase.
+        let existingTokens = trimmed
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        if existingTokens.contains(cleanedToken.lowercased()) { return }
+
         let separator = trimmed.isEmpty ? "" : (trimmed.hasSuffix(",") ? " " : ", ")
-        let proposed = trimmed + separator + chip
+        let proposed = trimmed + separator + cleanedToken
         customText = String(proposed.prefix(limit))
     }
 
