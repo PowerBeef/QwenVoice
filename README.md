@@ -215,6 +215,10 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
   </tr>
 </table>
 
+## Support
+
+If Vocello is useful to you, consider [sponsoring development on GitHub](https://github.com/sponsors/PowerBeef).
+
 ## License
 
 Vocello is available under the [MIT License](LICENSE).
