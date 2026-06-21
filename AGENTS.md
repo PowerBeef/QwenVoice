@@ -234,10 +234,15 @@ Engine selection is currently a single option (`AppEngineSelection.native`). `Ap
 - Keep minimal changes. Preserve existing module boundaries.
 - Vendor patches in `third_party_patches/mlx-audio-swift/` are allowed when the fix belongs below `QwenVoiceCore`; keep them small and preserve upstream style.
 
+### Branch hygiene
+
+- Once a PR is merged into `main`, delete the remote feature branch immediately and remove the
+  local branch after fast-forwarding `main`. Do not leave stale merged branches on `origin`.
+
 ### Privacy and content
 
 - Never commit personal identifiers (legal names, emails, home paths, device nicknames, UDIDs, hardcoded team IDs) into user-facing files (`README.md`, `website/`, `docs/`, release notes). Technical bundle IDs (`com.patricedery.vocello`) are acceptable.
-- Voice cloning must only be used with voices the user owns or has permission to use.
+- Voice cloning must only be used with voices the user owns or have permission to use.
 
 ## Testing instructions
 
