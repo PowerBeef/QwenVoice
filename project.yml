@@ -434,3 +434,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: NO
+        # UI tests are inherently main-thread bound and touch Objective-C XCTest/XCUIAutomation
+        # APIs that are annotated @MainActor. Use minimal concurrency checking so the test code
+        # can stay focused on flows instead of actor isolation boilerplate.
+        SWIFT_STRICT_CONCURRENCY: minimal

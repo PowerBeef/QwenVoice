@@ -140,3 +140,67 @@ extension View {
         modifier(IOSSubtleScrollIndicator())
     }
 }
+
+// MARK: - Convenience wrapper
+
+/// iOS scroll surface with the same no-rubber-band, subtle-indicator behavior as the
+/// language picker. Use this instead of raw `ScrollView` for all vertical iOS scroll
+/// content so the app-wide scrolling feel stays consistent.
+///
+/// On full-screen shells the bottom of the scroll view fades out under the TabDock;
+/// pass `bottomFadeHeight: 0` for sheets that float above the dock.
+struct IOSScrollView<Content: View>: View {
+    let bottomFadeHeight: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(
+        bottomFadeHeight: CGFloat = IOSStudioShellMetrics.dockFadeHeight,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.bottomFadeHeight = bottomFadeHeight
+        self.content = content
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            content()
+                .iosDisableScrollBounce()
+        }
+        .iosSubtleScrollIndicator()
+        .bottomFadeMask(height: bottomFadeHeight)
+    }
+}
+
+private struct IOSScrollBottomFadeMask: ViewModifier {
+    let height: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .mask {
+                GeometryReader { proxy in
+                    let total = proxy.size.height
+                    let start = total > 0 ? max(0, (total - height) / total) : 1
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white, location: start),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func bottomFadeMask(height: CGFloat) -> some View {
+        if height > 0 {
+            modifier(IOSScrollBottomFadeMask(height: height))
+        } else {
+            self
+        }
+    }
+}

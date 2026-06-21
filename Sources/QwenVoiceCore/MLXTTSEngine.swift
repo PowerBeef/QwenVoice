@@ -891,10 +891,17 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                         try? FileManager.default.removeItem(at: URL(fileURLWithPath: request.outputPath))
                         throw error
                     }
+                    let surfacedMessage = "The native runtime could not start audio generation after one allocation retry."
+                    GenerationFailureDiagnosticLogger.shared.log(
+                        surfacedMessage: surfacedMessage,
+                        stage: NativeRuntimeStage.streamStartup.description,
+                        underlyingError: error,
+                        request: request
+                    )
                     let surfacedError = NativeRuntimeError.wrapping(
                         error,
                         stage: .streamStartup,
-                        message: "The native runtime could not start audio generation after one allocation retry."
+                        message: surfacedMessage
                     )
                     handle(surfacedError)
                     let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)
@@ -903,10 +910,17 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     throw surfacedError
                 }
             }
+            let surfacedMessage = "The native runtime could not start audio generation."
+            GenerationFailureDiagnosticLogger.shared.log(
+                surfacedMessage: surfacedMessage,
+                stage: NativeRuntimeStage.streamStartup.description,
+                underlyingError: error,
+                request: request
+            )
             let surfacedError = NativeRuntimeError.wrapping(
                 error,
                 stage: .streamStartup,
-                message: "The native runtime could not start audio generation."
+                message: surfacedMessage
             )
             handle(surfacedError)
             let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)

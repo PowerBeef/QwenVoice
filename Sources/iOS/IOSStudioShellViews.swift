@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Shared metrics for the iOS shell chrome.
+enum IOSStudioShellMetrics {
+    /// Height over which scroll content fades out under the glass TabDock.
+    static let dockFadeHeight: CGFloat = 118
+}
+
 /// Thin per-screen body container.
 ///
 /// History: this used to host the full iOS chrome — `IOSStudioShellCanopy`

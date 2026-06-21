@@ -8,124 +8,148 @@ import XCTest
 /// prefix ("Voice: ", "Language:", "Voice brief:") — their own `studioChip_*` identifiers are
 /// shadowed by the screen-level `screen_generateStudio` identifier that SwiftUI propagates
 /// onto descendants (same reason `textInput_*` are shadowed). Inside the sheets the elements
-/// keep their own identifiers (`bottomSheet_close`, `voicePickerRow_*`, `voicePickerPreview_*`,
+/// keep their own identifiers (`voicePickerRow_*`, `voicePickerPreview_*`, `voicePicker_confirm`,
 /// `languagePicker_*`, `voiceBrief_editor`, `voiceBrief_confirm`) because the bottom panel is a
 /// separate overlay, so those are driven by identifier.
 ///
-/// These assert *behaviour* (select-and-close, preview-doesn't-close, confirm gating), not
-/// pixels — the no-rubber-band scroll feel + thumb fade are verified by visual review.
+/// These assert *behaviour* (select-and-confirm, preview-doesn't-close, confirm gating),
+/// not pixels — the no-rubber-band scroll feel + thumb fade are verified by visual review.
 final class VocelloiOSSheetUITests: XCTestCase {
-    private var app: XCUIApplication!
+
+    override class func setUp() {
+        super.setUp()
+        VocelloUITestApp.shared.retain()
+    }
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        app = XCUIApplication()
-        // Seed the simulator fake engine so the Studio is in its normal, model-installed
-        // state (ignored on a real device, which uses the in-process MLX engine).
-        app.launchEnvironment["QVOICE_SIM_FAKE_MODELS"] = "all"
-        app.launchEnvironment["QVOICE_SIM_SEED_DATA"] = "voices,history"
-        // These tests drive only the Studio chrome + bottom-sheet pickers (no audio
-        // generation), so skip the heavy on-launch engine model load. On the device that
-        // load (~2.3 GB) ran on every per-test relaunch and contended the accessibility
-        // server, making the Studio-surface waits flaky across the batch. The pickers'
-        // data (built-in speakers, languages, brief editor) comes from the contract, not
-        // the engine, so they populate regardless.
-        app.launchEnvironment["QVOICE_IOS_DISABLE_ENGINE"] = "1"
-        app.launch()
-        dismissOnboardingIfPresent()
-        // Absorb cold-launch latency once here: wait for the Studio surface to render
-        // before any test body runs, instead of failing mid-test in selectMode.
-        _ = app.descendants(matching: .any)["generateSection_custom"].waitForExistence(timeout: 30)
+        VocelloUITestApp.shared.resetToStudio()
     }
 
-    override func tearDown() {
-        app = nil
+    override class func tearDown() {
+        VocelloUITestApp.shared.release()
         super.tearDown()
     }
 
-    /// Tapping a voice row selects it and closes the picker (the regression this session fixed:
-    /// the row was a nested Button whose select tap got swallowed).
-    func testVoicePickerSelectAndClose() {
+    /// Selecting a voice row updates the provisional selection but does NOT close the picker.
+    /// Tapping the Confirm header button commits the selection and dismisses the sheet.
+    func testVoicePickerSelectAndConfirm() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Voice: ")
 
-        let close = element("bottomSheet_close")
-        let firstRow = firstElement(prefix: "voicePickerRow_")
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 10), "at least one voice row should exist")
-        firstRow.tap()
+        let confirm = element("voicePicker_confirm")
+        let chipBefore = button(labelPrefix: "Voice: ").label
 
-        XCTAssertTrue(close.waitForNonExistence(timeout: 10), "selecting a voice should close the picker")
+        // The shared app session means the current voice may already be the first row.
+        // Derive the current row identifier from the chip label and pick a different one.
+        let currentVoiceName = chipBefore
+            .replacingOccurrences(of: "Voice: ", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        let currentRowID = "voicePickerRow_\(currentVoiceName.lowercased())"
+
+        let newRow = firstElement(prefix: "voicePickerRow_", excludingIdentifier: currentRowID)
+        XCTAssertTrue(newRow.waitForExistence(timeout: 10), "a different voice row should exist")
+        newRow.tap()
+
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "confirm button should remain visible after selecting a row")
+        confirm.tap()
+        XCTAssertTrue(
+            confirm.waitForNonExistence(timeout: 10),
+            "tapping Confirm should dismiss the voice picker"
+        )
+
+        let chipAfter = button(labelPrefix: "Voice: ").label
+        XCTAssertTrue(chipAfter.hasPrefix("Voice: "), "voice chip should show a selected voice")
+        XCTAssertNotEqual(chipAfter, chipBefore, "voice chip should reflect the newly selected voice")
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-voice-confirmed")
     }
 
     /// The per-row preview button is a sibling Button (not nested) — tapping it must preview
-    /// WITHOUT selecting or closing the sheet.
+    /// WITHOUT selecting or closing the sheet. The sheet is then closed with the Confirm header.
     func testVoicePreviewKeepsPickerOpen() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Voice: ")
 
-        let close = element("bottomSheet_close")
+        let confirm = element("voicePicker_confirm")
         let preview = firstElement(prefix: "voicePickerPreview_")
         XCTAssertTrue(preview.waitForExistence(timeout: 10), "a preview button should exist")
         preview.tap()
 
-        XCTAssertTrue(close.exists, "previewing a voice should not close the picker")
-        close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: 10), "tapping close should dismiss the picker")
+        XCTAssertTrue(confirm.exists, "previewing a voice should not close the picker")
+        confirm.tap()
+        XCTAssertTrue(
+            confirm.waitForNonExistence(timeout: 10),
+            "tapping Confirm should dismiss the picker after preview"
+        )
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-preview-closed")
     }
 
-    /// Tapping a language row selects it and closes the picker.
+    /// Selecting a language row updates the selection but does NOT close the picker.
+    /// Tapping the Confirm header button commits the selection and dismisses the sheet.
     func testLanguagePickerSelectAndClose() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Language:")
 
-        let close = element("bottomSheet_close")
-        let firstRow = firstElement(prefix: "languagePicker_")
+        let confirm = element("languagePicker_confirm")
+        let firstRow = firstElement(prefix: "languagePicker_", excludingIdentifier: "languagePicker_confirm")
         XCTAssertTrue(firstRow.waitForExistence(timeout: 10), "language rows should exist")
         firstRow.tap()
 
-        XCTAssertTrue(close.waitForNonExistence(timeout: 10), "selecting a language should close the picker")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "confirm button should remain visible after selecting a row")
+        confirm.tap()
+        XCTAssertTrue(
+            confirm.waitForNonExistence(timeout: 10),
+            "tapping Confirm should dismiss the language picker"
+        )
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-language-closed")
     }
 
-    /// With a non-empty brief, the "Done" CTA applies it and closes the sheet (the affordance
-    /// added this session). The empty-brief gating is a visual/disabled-opacity concern that's
-    /// state-dependent here (the device draft persists), so it's left to code/visual review.
+    /// With a non-empty brief, the header Confirm button applies it and closes the sheet.
     func testVoiceBriefConfirmCloses() {
         selectMode("generateSection_design")
         openSheet(viaChipLabelPrefix: "Voice brief:")
 
-        let close = element("bottomSheet_close")
+        let confirm = element("voiceBrief_confirm")
         let editor = element("voiceBrief_editor")
         XCTAssertTrue(editor.waitForExistence(timeout: 10), "the brief editor should exist")
         editor.tap()
         editor.typeText("A calm test narrator")   // ensure a non-empty brief deterministically
 
-        let done = element("voiceBrief_confirm")
-        XCTAssertTrue(done.waitForExistence(timeout: 10), "the Done CTA should exist")
-        done.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "the Confirm CTA should exist")
+        confirm.tap()
         XCTAssertTrue(
-            close.waitForNonExistence(timeout: 10),
-            "Done with a non-empty brief should apply + close the sheet"
+            confirm.waitForNonExistence(timeout: 10),
+            "Confirm with a non-empty brief should apply + close the sheet"
         )
+        VocelloUITestApp.shared.captureScreenshot(named: "sheet-brief-closed")
     }
 
     // MARK: - Helpers
 
     private func element(_ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
+        VocelloUITestApp.shared.element(identifier)
     }
 
     /// First element whose identifier begins with `prefix` (rows carry a per-item suffix).
     private func firstElement(prefix: String) -> XCUIElement {
-        app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
-            .firstMatch
+        VocelloUITestApp.shared.firstElement(prefix: prefix)
+    }
+
+    /// First element whose identifier begins with `prefix` but is not `excludingIdentifier`.
+    private func firstElement(prefix: String, excludingIdentifier: String) -> XCUIElement {
+        VocelloUITestApp.shared.firstElement(prefix: prefix, excludingIdentifier: excludingIdentifier)
     }
 
     /// A button matched by its label prefix — used for the Studio selector pills, whose own
     /// identifiers are shadowed by the screen-level identifier (see the type doc).
     private func button(labelPrefix: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", labelPrefix)).firstMatch
+        VocelloUITestApp.shared.button(labelPrefix: labelPrefix)
+    }
+
+    @discardableResult
+    private func waitFor(_ identifier: String, timeout: TimeInterval = 30) -> Bool {
+        VocelloUITestApp.shared.waitFor(identifier, timeout: timeout)
     }
 
     /// Tap a Studio selector pill (by label) and wait for the bottom sheet to open.
@@ -133,15 +157,14 @@ final class VocelloiOSSheetUITests: XCTestCase {
         let chip = button(labelPrefix: prefix)
         XCTAssertTrue(chip.waitForExistence(timeout: 30), "selector pill '\(prefix)…' should exist")
         chip.tap()
-        XCTAssertTrue(
-            element("bottomSheet_close").waitForExistence(timeout: 10),
-            "the sheet opened from '\(prefix)…' should appear"
-        )
-    }
 
-    @discardableResult
-    private func waitFor(_ identifier: String, timeout: TimeInterval = 30) -> Bool {
-        element(identifier).waitForExistence(timeout: timeout)
+        // Voice, language, delivery, and voice-brief pickers surface a Confirm header; other sheets expose the X close button.
+        let sheetOpen = element("voicePicker_confirm").waitForExistence(timeout: 10)
+            || element("languagePicker_confirm").waitForExistence(timeout: 10)
+            || element("deliveryPicker_confirm").waitForExistence(timeout: 10)
+            || element("voiceBrief_confirm").waitForExistence(timeout: 10)
+            || element("bottomSheet_close").waitForExistence(timeout: 10)
+        XCTAssertTrue(sheetOpen, "the sheet opened from '\(prefix)…' should appear")
     }
 
     /// Tap a mode segment (Custom/Design/Clone). A no-op if already selected; harmless.
@@ -149,24 +172,5 @@ final class VocelloiOSSheetUITests: XCTestCase {
         let segment = element(identifier)
         XCTAssertTrue(segment.waitForExistence(timeout: 30), "mode segment \(identifier) should exist")
         segment.tap()
-    }
-
-    /// First-run onboarding (3 pages) shows on a fresh install. Poll for either the main UI or
-    /// onboarding; tapping Skip completes the whole flow, the CTA advances/completes as a fallback.
-    private func dismissOnboardingIfPresent() {
-        let studio = element("rootTab_studio")
-        let skip = element("onboarding_skip")
-        let cta = element("onboarding_cta")
-        let deadline = Date().addingTimeInterval(20)
-        while Date() < deadline {
-            if studio.exists { return }
-            if skip.exists {
-                skip.tap()
-                _ = studio.waitForExistence(timeout: 6)
-                return
-            }
-            if cta.exists { cta.tap() }
-            usleep(300_000)
-        }
     }
 }

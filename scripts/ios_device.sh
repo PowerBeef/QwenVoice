@@ -482,6 +482,7 @@ cmd_ui_test() {
   local dev; dev="$(resolve_device)"
   note "running VocelloiOSUITests on device $dev (signed XCUITest)${only:+ — only $only}"
   mkdir -p "$DERIVED"
+  export UI_TEST_SCREENSHOT_DIR="$DERIVED/uitest-screenshots"
   local log="$DERIVED/device-uitest.log"
   local -a only_args=()
   [[ -n "$only" ]] && only_args=( -only-testing:"$only" )

@@ -65,7 +65,7 @@ When facts disagree, trust in this order: `Sources/` → `project.yml` → `scri
 
 This project is developed with **Kimi Code CLI**. Use the following tools and skills instead of the Axiom subagents referenced in older versions of this guide:
 
-- **Build / Xcode issues:** `mcp__xcodebuildmcp__*` (build, test, launch, simulator screenshots/snapshots) and the `swift-mlx` / `swift-mlx-lm` skills. For environmental setup problems, run the relevant `scripts/*.sh` command and inspect output with `Bash`.
+- **Build / Xcode issues:** `mcp__xcodebuildmcp__*` (build, test, launch) and the `swift-mlx` / `swift-mlx-lm` skills. iOS verification is **on-device only** — never use the iOS Simulator or simulator-only MCP tools for Vocello iOS UI work. For environmental setup problems, run the relevant `scripts/*.sh` command and inspect output with `Bash`.
 - **Code exploration / architecture:** `Agent` with `subagent_type: "explore"` for read-only audits; `Agent` with `subagent_type: "coder"` for implementation or review tasks.
 - **Crash logs / symbolication:** `mcp__axiom__xcsym_*` tools (`xcsym_crash`, `xcsym_resolve`, `xcsym_find_dsym`).
 - **Performance / profiling:** `mcp__axiom__xcprof_*` tools (`xcprof_record`, `xcprof_analyze`).
@@ -260,16 +260,39 @@ The `VocelloMacUITests` target contains a single `VocelloMacSmokeUITests` class 
 
 ### iOS testing
 
-iOS testing is **on-device** (the Simulator is retired for this project). The sanctioned paths are:
+iOS testing is **on-device only**. The iOS Simulator is retired for this project and must not be used for UI testing, verification, screenshots, or snapshots.
+
+**Do not use:**
+- `scripts/ios_sim.sh`
+- `xcodebuild -destination 'platform=iOS Simulator...'` for iOS UI work
+- simulator-only MCP tools such as `mcp__xcodebuildmcp__build_run_sim` / `snapshot_ui` for iOS
+
+The sanctioned paths are:
 
 ```sh
 scripts/ios_device.sh doctor       # environment + device preflight
 scripts/ios_device.sh bench        # build → install → autorun → pull → summarize
 scripts/ios_device.sh ui-test      # run VocelloiOSUITests on the device
+scripts/ios_device.sh launch       # launch the app (with optional autorun spec)
+scripts/ios_device.sh console      # stream os_log from the running app
+scripts/ios_device.sh pull         # pull files from the app container
 scripts/ios_device.sh shot         # screenshot the iPhone Mirroring window
 ```
 
 The headless autorun harness is triggered by `QVOICE_IOS_AUTORUN` and writes telemetry into the App Group container.
+
+iOS UI-test architecture:
+- `Tests/VocelloiOSUITests/VocelloUITestApp.swift` is the shared warm-app coordinator. It keeps one
+  app session alive across the smoke/sheet tests and resets to Studio between cases, so the suite
+  behaves like a real user session instead of launching from scratch every test.
+- `Tests/VocelloiOSUITests/VocelloiOSColdGenerationUITests.swift` is the exception: it deliberately
+  kills the warm session, cold-launches the app with the engine enabled, and asserts that a real
+  on-device generation completes.
+
+iOS UI conventions:
+- Use `IOSScrollView` instead of raw `ScrollView` for vertical iOS scroll surfaces. It bundles the
+  no-rubber-band behavior, subtle custom scroll indicator, and bottom fade that keeps content from
+  drawing under the TabDock. Pass `bottomFadeHeight: 0` for sheets that float above the dock.
 
 ### Benchmarks and output quality
 

@@ -158,6 +158,7 @@ Useful checks:
 ./scripts/check_project_inputs.sh
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
+./scripts/ios_device.sh ui-test   # on-device iOS UI-flow smoke (requires paired iPhone)
 ```
 
 More technical detail:

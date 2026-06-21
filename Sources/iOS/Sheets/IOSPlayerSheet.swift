@@ -282,7 +282,7 @@ struct IOSPlayerSheet: View {
     /// Wrapping card removed so the transcript reads as flowing prose
     /// like the design — the player sheet itself is the surface.
     private var transcript: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        IOSScrollView(bottomFadeHeight: 0) {
             IOSPlayerKaraokeText(
                 spans: controller.spans,
                 currentTime: controller.currentTime,

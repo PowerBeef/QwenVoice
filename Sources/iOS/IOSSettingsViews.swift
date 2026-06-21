@@ -75,7 +75,7 @@ private struct IOSSettingsView: View {
             activeTab: .settings,
             tint: IOSAppTab.settings.dockAccent(studioMode: .custom)
         ) {
-            ScrollView(showsIndicators: false) {
+            IOSScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     IOSSettingsReferenceSection(title: "Voice models") {
                         ForEach(TTSModel.all) { model in
@@ -189,10 +189,6 @@ private struct IOSSettingsView: View {
                 // Extra bottom padding so the bottom-most section clears
                 // the TabDock's gradient fade in RootView.
                 .padding(.bottom, 90)
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Color.clear
-                    .frame(height: 118)
             }
         }
         .task {

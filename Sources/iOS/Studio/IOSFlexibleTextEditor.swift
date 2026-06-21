@@ -28,6 +28,7 @@ struct IOSFlexibleTextEditor: UIViewRepresentable {
 
     func makeUIView(context: Context) -> NoIntrinsicHeightTextView {
         let view = NoIntrinsicHeightTextView()
+        view.accessibilityIdentifier = "textInput_textEditor"
         view.delegate = context.coordinator
         view.backgroundColor = .clear
         view.font = font
@@ -59,6 +60,9 @@ struct IOSFlexibleTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ view: NoIntrinsicHeightTextView, context: Context) {
+        if view.accessibilityIdentifier != "textInput_textEditor" {
+            view.accessibilityIdentifier = "textInput_textEditor"
+        }
         if view.text != text {
             view.text = text
         }
