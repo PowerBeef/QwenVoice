@@ -65,6 +65,10 @@ struct IOSDeliveryPickerSheet: View {
     /// Toggling back to the preset grid is allowed via the editor's back button.
     @State private var isCustomToneEditorVisible = false
 
+    /// Whether the free-form text editor is expanded. The default experience is
+    /// chip-first; manual typing is available as a secondary/advanced option.
+    @State private var isManualEditorExpanded = false
+
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -216,40 +220,19 @@ struct IOSDeliveryPickerSheet: View {
 
     private var customToneEditorBody: some View {
         IOSScrollView(bottomFadeHeight: 0) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Describe the delivery or emotion you want.")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(IOSAppTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                ZStack(alignment: .topLeading) {
-                    IOSDeliveryCustomTextEditor(
-                        text: $customText,
-                        tintColor: UIColor(tint)
-                    )
-
-                    if customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(placeholderExamples[placeholderExampleIndex])
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(IOSAppTheme.textTertiary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 18)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .frame(height: 260)
-                .background {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(tint.opacity(0.22), lineWidth: 0.5)
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                composedInstructionPreview
 
                 customToneGuidance
 
                 quickStartChipsView
+
+                manualEditorDisclosure
+
+                if isManualEditorExpanded {
+                    manualTextEditor
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
 
                 HStack {
                     Spacer(minLength: 0)
@@ -303,6 +286,41 @@ struct IOSDeliveryPickerSheet: View {
         }
     }
 
+    // MARK: - Composed instruction preview
+
+    /// Compact read-only preview of the instruction being built. Chips are the
+    /// primary input, so this bar replaces the large text editor as the focal
+    /// point and gives immediate feedback.
+    private var composedInstructionPreview: some View {
+        HStack(spacing: 10) {
+            let trimmed = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                Text(placeholderExamples[placeholderExampleIndex])
+                    .foregroundStyle(IOSAppTheme.textTertiary)
+            } else {
+                Text(trimmed)
+                    .foregroundStyle(IOSAppTheme.textPrimary)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .font(.system(size: 15, weight: .medium))
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(IOSAppTheme.accentWash(tint).opacity(0.22))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.32), lineWidth: 0.8)
+        }
+        .accessibilityIdentifier("deliveryPickerSheet_customTone_preview")
+    }
+
     private struct QuickStartCategory {
         let title: String
         let tokens: [String]
@@ -338,22 +356,30 @@ struct IOSDeliveryPickerSheet: View {
 
             FlowLayout(spacing: 8) {
                 ForEach(category.tokens, id: \.self) { token in
+                    let isSelected = isTokenSelected(token)
                     Button {
-                        insertQuickStartChip(token)
+                        toggleQuickStartToken(token)
                         IOSHaptics.selection()
                     } label: {
                         Text(token)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(tint)
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                            .foregroundStyle(isSelected ? IOSAppTheme.textPrimary : tint)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background {
                                 Capsule(style: .continuous)
-                                    .fill(IOSAppTheme.accentWash(tint).opacity(0.5))
+                                    .fill(
+                                        isSelected
+                                            ? IOSAppTheme.accentWash(tint).opacity(0.9)
+                                            : IOSAppTheme.accentWash(tint).opacity(0.5)
+                                    )
                             }
                             .overlay {
                                 Capsule(style: .continuous)
-                                    .stroke(tint.opacity(0.35), lineWidth: 0.8)
+                                    .stroke(
+                                        isSelected ? tint.opacity(0.65) : tint.opacity(0.35),
+                                        lineWidth: 0.8
+                                    )
                             }
                     }
                     .buttonStyle(.plain)
@@ -378,23 +404,97 @@ struct IOSDeliveryPickerSheet: View {
             .accessibilityIdentifier("deliveryPickerSheet_customTone_charCount")
     }
 
-    private func insertQuickStartChip(_ token: String) {
+    private func isTokenSelected(_ token: String) -> Bool {
+        tokenize(customText).contains(token.lowercased())
+    }
+
+    private func tokenize(_ text: String) -> [String] {
+        text
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func toggleQuickStartToken(_ token: String) {
         let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
         let cleanedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedToken.isEmpty else { return }
 
-        let trimmed = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedNew = cleanedToken.lowercased()
 
-        // De-duplicate: skip if the token already appears as a whole word/phrase.
-        let existingTokens = trimmed
+        var originalTokens = customText
             .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        if existingTokens.contains(cleanedToken.lowercased()) { return }
+        let normalizedExisting = originalTokens.map { $0.lowercased() }
 
-        let separator = trimmed.isEmpty ? "" : (trimmed.hasSuffix(",") ? " " : ", ")
-        let proposed = trimmed + separator + cleanedToken
-        customText = String(proposed.prefix(limit))
+        if let index = normalizedExisting.firstIndex(of: normalizedNew) {
+            originalTokens.remove(at: index)
+            customText = originalTokens.joined(separator: ", ")
+        } else {
+            let proposed = (originalTokens + [cleanedToken]).joined(separator: ", ")
+            customText = String(proposed.prefix(limit))
+        }
+    }
+
+    private var manualEditorDisclosure: some View {
+        Button {
+            withAnimation(IOSDesignMotion.stateChange) {
+                isManualEditorExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(isManualEditorExpanded ? "Hide manual editor" : "Edit manually")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer(minLength: 0)
+                Image(systemName: isManualEditorExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(IOSAppTheme.accentWash(tint).opacity(0.5))
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(tint.opacity(0.35), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("deliveryPickerSheet_customTone_manualToggle")
+    }
+
+    private var manualTextEditor: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            ZStack(alignment: .topLeading) {
+                IOSDeliveryCustomTextEditor(
+                    text: $customText,
+                    tintColor: UIColor(tint)
+                )
+
+                if customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Type a custom delivery instruction…")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(IOSAppTheme.textTertiary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: 140)
+            .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(tint.opacity(0.22), lineWidth: 0.5)
+            }
+        }
     }
 
     private func closeSheet() {

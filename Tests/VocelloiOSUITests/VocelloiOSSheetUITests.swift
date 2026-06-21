@@ -126,6 +126,7 @@ final class VocelloiOSSheetUITests: XCTestCase {
     }
 
     /// A long custom tone is accepted up to the 500-char cap and is truncated in the Studio chip.
+    /// The manual editor is now secondary/collapsed, so the test expands it before typing.
     func testCustomToneLongInstructionAndChipTruncation() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Delivery: ")
@@ -134,8 +135,12 @@ final class VocelloiOSSheetUITests: XCTestCase {
         XCTAssertTrue(customToneButton.waitForExistence(timeout: 10), "custom tone button should exist")
         customToneButton.tap()
 
+        let manualToggle = element("deliveryPickerSheet_customTone_manualToggle")
+        XCTAssertTrue(manualToggle.waitForExistence(timeout: 10), "manual editor toggle should exist")
+        manualToggle.tap()
+
         let editor = element("deliveryPickerSheet_customTone_editor")
-        XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist after expanding")
 
         let longInstruction = String(
             repeating: "A calm, deep narrator with a slow pace and warm timbre. ",
@@ -162,8 +167,9 @@ final class VocelloiOSSheetUITests: XCTestCase {
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-long")
     }
 
-    /// Quick-start token chips insert single-dimension prompts and compose into a
-    /// comma-separated instruction, teaching the multidimensional prompt style.
+    /// Quick-start token chips are the primary input. They toggle tokens on/off,
+    /// compose a comma-separated instruction, and update the compact preview.
+    /// Tokens chosen here are unlikely to collide with text left over from other tests.
     func testCustomToneQuickStartChipsComposeTokens() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Delivery: ")
@@ -172,39 +178,30 @@ final class VocelloiOSSheetUITests: XCTestCase {
         XCTAssertTrue(customToneButton.waitForExistence(timeout: 10), "custom tone button should exist")
         customToneButton.tap()
 
-        let editor = element("deliveryPickerSheet_customTone_editor")
-        XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
+        let preview = element("deliveryPickerSheet_customTone_preview")
+        XCTAssertTrue(preview.waitForExistence(timeout: 10), "composed instruction preview should exist")
 
-        let warmChip = element("deliveryPickerSheet_customTone_chip_warm")
-        XCTAssertTrue(warmChip.waitForExistence(timeout: 5), "warm quick-start chip should exist")
-        warmChip.tap()
+        let playfulChip = element("deliveryPickerSheet_customTone_chip_playful")
+        XCTAssertTrue(playfulChip.waitForExistence(timeout: 5), "playful quick-start chip should exist")
+        playfulChip.tap()
 
-        let slowChip = element("deliveryPickerSheet_customTone_chip_slow")
-        XCTAssertTrue(slowChip.waitForExistence(timeout: 5), "slow quick-start chip should exist")
-        slowChip.tap()
+        let urgentChip = element("deliveryPickerSheet_customTone_chip_urgent")
+        XCTAssertTrue(urgentChip.waitForExistence(timeout: 5), "urgent quick-start chip should exist")
+        urgentChip.tap()
 
-        // UITextView text is surfaced through its `value` property in XCUITest.
-        guard let editorText = editor.value as? String else {
-            XCTFail("custom tone editor should expose its text as value")
-            return
-        }
-        XCTAssertTrue(editorText.contains("warm"), "tapping warm chip should insert 'warm'")
-        XCTAssertTrue(editorText.contains("slow"), "tapping slow chip should insert 'slow'")
-        XCTAssertTrue(editorText.contains(","), "composed tokens should be comma-separated")
+        let previewText = preview.label.lowercased()
+        XCTAssertTrue(previewText.contains("playful"), "tapping playful chip should add 'playful' to the preview")
+        XCTAssertTrue(previewText.contains("urgent"), "tapping urgent chip should add 'urgent' to the preview")
+        XCTAssertTrue(previewText.contains(","), "composed tokens should be comma-separated")
 
-        // De-duplication: tapping the same chip again should not add a second copy.
-        let tokenCountBefore = editorText.components(separatedBy: ",").filter {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "warm"
-        }.count
-        warmChip.tap()
-        guard let editorTextAfter = editor.value as? String else {
-            XCTFail("custom tone editor value should remain readable")
-            return
-        }
-        let tokenCountAfter = editorTextAfter.components(separatedBy: ",").filter {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "warm"
-        }.count
-        XCTAssertEqual(tokenCountBefore, tokenCountAfter, "tapping an existing token should not duplicate it")
+        // Toggle off: tapping the same chip again should remove the token.
+        playfulChip.tap()
+        let previewTextAfter = preview.label.lowercased()
+        XCTAssertFalse(
+            previewTextAfter.contains("playful"),
+            "tapping a selected chip should remove its token from the preview"
+        )
+        XCTAssertTrue(previewTextAfter.contains("urgent"), "other tokens should remain after toggling one off")
 
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-chips")
     }
