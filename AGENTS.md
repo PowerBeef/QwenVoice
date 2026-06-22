@@ -16,6 +16,21 @@ Key facts:
 - **Models:** Qwen3-TTS 1.7B in Speed (4-bit) and Quality (8-bit) variants; 0.6B is verified but not listed.
 - **Distribution:** macOS ships as a signed, notarized, stapled `Vocello-macos26.dmg` via GitHub Releases; iOS is intended for App Store / TestFlight under a separate team namespace.
 
+## Agent handoff protocol (with Claude Code / CLAUDE.md)
+
+Two coding agents work this repo. Kimi owns `AGENTS.md`; Claude Code owns
+`CLAUDE.md`. Neither edits the other's owned file. The shared coordination
+channel is `AGENT_HANDOFF.md` (repo root), an append-at-top log.
+
+- **On pickup** (taking over from Claude Code): read `AGENT_HANDOFF.md` from the
+top down to your most recent `kimi` entry — everything above it is new. Action
+any `Requests for kimi` items before starting.
+- **On handoff** (before ending a session): prepend a new entry (template at the
+top of `AGENT_HANDOFF.md`) — commits, files touched, summary, decisions,
+`Requests for claude-code`, open questions. Commit it with your work.
+- Never edit `CLAUDE.md` — route cross-owner changes through
+`Requests for claude-code` in `AGENT_HANDOFF.md`.
+
 ## Repository layout
 
 ```text

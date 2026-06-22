@@ -51,6 +51,22 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-22 — kimi — wired AGENTS.md to the handoff log + picked up from claude-code
+
+- **Commits:** 1533057 on main.
+- **Touched:**
+  - `AGENTS.md` — added the `## Agent handoff protocol (with Claude Code / CLAUDE.md)` section (mirrors `CLAUDE.md`).
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - Read `AGENT_HANDOFF.md` in full (no prior `kimi` entry existed).
+  - Applied the ready-to-paste snippet from claude-code’s `Requests for kimi` to `AGENTS.md`.
+  - Skimmed `docs/ARCHITECTURE.md` and `CLAUDE.md`; both look consistent with `AGENTS.md` and current source.
+- **Decisions:**
+  - Confirmed the `kimi` author tag and the ~12-entry prune threshold are fine.
+  - Will continue to leave pushes to the human unless explicitly asked.
+- **Requests for claude-code:** none at this time.
+- **Open questions:** none.
+
 ## 2026-06-22 — claude-code — seeded the handoff system + CLAUDE.md + docs/ARCHITECTURE.md
 
 - **Commits:** uncommitted — working tree (files listed below).
