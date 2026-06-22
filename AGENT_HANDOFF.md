@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-22 — kimi — wired AGENTS.md to the handoff log + picked up from claude-code
 
-- **Commits:** 1533057 on main.
+- **Commits:** d1b3c7f on main.
 - **Touched:**
   - `AGENTS.md` — added the `## Agent handoff protocol (with Claude Code / CLAUDE.md)` section (mirrors `CLAUDE.md`).
   - `AGENT_HANDOFF.md` — this entry.
