@@ -106,67 +106,67 @@ public struct EmotionPreset: Identifiable, Sendable {
             id: "happy",
             label: "Happy",
             sfSymbol: "face.smiling",
-            instruction: "Speaks happily and upbeat, with a bright, beaming tone, slightly lifted pitch, and a lively, bouncy pace; no laughing."
+            instruction: "Speak happily and upbeat, with a bright, beaming tone, slightly lifted pitch, and a lively, bouncy pace; no laughing."
         ),
         EmotionPreset(
             id: "sad",
             label: "Sad",
             sfSymbol: "cloud.rain",
-            instruction: "Speaks sadly and somberly, with a lowered pitch, slow weighted pace, and a fragile, restrained tone; keeps every word clear."
+            instruction: "Speak sadly and softly, with a lowered pitch, slow weighted pace, and a fragile, restrained tone; keep every word clear and audible."
         ),
         EmotionPreset(
             id: "angry",
             label: "Angry",
             sfSymbol: "flame",
-            instruction: "Speaks angrily and firmly, with sharp consonants, tight stress, and forceful tension; never breaks into a scream."
+            instruction: "Speak angrily and firmly, with sharp consonants, tight stress, forceful tension, and a lower clipped tone; never shout or scream."
         ),
         EmotionPreset(
             id: "fearful",
             label: "Fearful",
             sfSymbol: "exclamationmark.triangle",
-            instruction: "Speaks fearfully and anxiously, with a breathy, shaky voice, uncertain pacing, and a smaller, urgent tone; stays audible."
+            instruction: "Speak fearfully and anxiously, with a breathy, shaky voice, uncertain pacing, and a smaller, urgent tone; stay fully audible."
         ),
         EmotionPreset(
             id: "surprised",
             label: "Surprised",
             sfSymbol: "exclamationmark.2",
-            instruction: "Speaks with unmistakable surprise, pitch jumping higher, pace quick and animated, stressing unexpected words; no gasping or extra sounds."
+            instruction: "Speak with unmistakable surprise, a quick animated pace, pitch jumping higher on key words, and sharp emphasis; no gasping or extra sounds."
         ),
         EmotionPreset(
             id: "whisper",
             label: "Whisper",
             sfSymbol: "ear",
-            instruction: "Whispers throughout, hushed and breathy, every word voiced just above breath, close and confidential; never lifted into normal speech."
+            instruction: "Whisper throughout, hushed and breathy, every word voiced just above breath, close and confidential; never lift into normal speech."
         ),
         EmotionPreset(
             id: "dramatic",
             label: "Dramatic",
             sfSymbol: "theatermasks",
-            instruction: "Speaks dramatically with heightened inflection, deliberate pacing, and bold stress on key words; generous, well-timed pauses command attention."
+            instruction: "Speak dramatically with heightened inflection, deliberate pacing, bold stress on key words, and generous pauses; no shouting."
         ),
         EmotionPreset(
             id: "calm",
             label: "Calm",
             sfSymbol: "leaf",
-            instruction: "Speaks calmly and soothingly, with smooth unhurried pacing, low settled pitch, and reassuring warmth."
+            instruction: "Speak calmly and soothingly, with smooth unhurried pacing, low settled pitch, and reassuring warmth; no tension or urgency."
         ),
         EmotionPreset(
             id: "excited",
             label: "Excited",
             sfSymbol: "sparkles",
-            instruction: "Noticeably higher pitch and louder than normal, with a fast, driving, animated pace and a bright, ringing tone; no laughing or shouting."
+            instruction: "Speak excitedly, with a fast driving pace, bright ringing tone, higher pitch and louder volume than normal; no laughing or shouting."
         ),
         EmotionPreset(
             id: "narrator",
             label: "Narrator",
             sfSymbol: "text.book.closed",
-            instruction: "Narrates like a composed documentary voice, with a low warm timbre, deliberate pacing, crisp diction, and gentle emphasis on key phrases."
+            instruction: "Narrate like a composed documentary voice, with a low warm timbre, deliberate pacing, crisp diction, and gentle emphasis on key phrases."
         ),
         EmotionPreset(
             id: "news",
             label: "News",
             sfSymbol: "newspaper",
-            instruction: "Speaks in a clear news broadcast style, with steady professional delivery, even pacing, precise articulation, and no dramatics."
+            instruction: "Speak in a clear news broadcast style, with steady professional delivery, even pacing, precise articulation, and no dramatics."
         ),
     ]
 }
