@@ -70,13 +70,7 @@ struct EmotionPickerView: View {
 
     private var tonePicker: some View {
         Picker(title, selection: selectedOptionID) {
-            ForEach(EmotionPreset.all) { preset in
-                Text(preset.label)
-                    .tag(preset.id)
-            }
-
-            Text("Custom")
-                .tag("custom")
+            tonePickerOptions
         }
         .labelsHidden()
         .pickerStyle(.menu)
@@ -87,6 +81,28 @@ struct EmotionPickerView: View {
             alignment: .leading
         )
         .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
+    }
+
+    @ViewBuilder
+    private var tonePickerOptions: some View {
+        if let neutralPreset = EmotionPreset.preset(id: "neutral") {
+            Text(neutralPreset.label)
+                .tag(neutralPreset.id)
+        }
+
+        let nonNeutralCategories = DeliveryPresetCategory.allCases.filter { $0 != .neutral }
+        ForEach(nonNeutralCategories, id: \.self) { category in
+            Section(category.displayName ?? "") {
+                let presets = EmotionPreset.all.filter { $0.category == category }
+                ForEach(presets) { preset in
+                    Text(preset.label)
+                        .tag(preset.id)
+                }
+            }
+        }
+
+        Text("Custom")
+            .tag("custom")
     }
 
     @ViewBuilder

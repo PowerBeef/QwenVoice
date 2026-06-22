@@ -152,9 +152,19 @@ struct IOSDeliveryPickerSheet: View {
     private var presetPickerBody: some View {
         IOSScrollView(bottomFadeHeight: 0) {
             VStack(alignment: .leading, spacing: 18) {
+                if let neutralPreset = EmotionPreset.preset(id: "neutral") {
+                    cell(for: neutralPreset)
+                }
+
                 LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(EmotionPreset.all) { preset in
-                        cell(for: preset)
+                    let categories = DeliveryPresetCategory.allCases.filter { $0 != .neutral }
+                    ForEach(categories, id: \.self) { category in
+                        Section(header: sectionHeader(category.displayName ?? "")) {
+                            let presets = EmotionPreset.all.filter { $0.category == category }
+                            ForEach(presets) { preset in
+                                cell(for: preset)
+                            }
+                        }
                     }
                 }
 
@@ -346,6 +356,16 @@ struct IOSDeliveryPickerSheet: View {
         dismiss()
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 10, weight: .semibold))
+            .tracking(0.7)
+            .foregroundStyle(IOSAppTheme.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+    }
+
     /// Multi-line custom-tone editor backed by a `UITextView` with
     /// scroll-bounce disabled and focus-driven tint chrome. Mirrors
     /// `IOSBriefTextEditor` used by the Voice Design brief sheet.
@@ -406,6 +426,8 @@ struct IOSDeliveryPickerSheet: View {
         case "dramatic": return "Theatrical, projected"
         case "calm":     return "Slower, reassuring"
         case "excited":  return "Energetic, faster"
+        case "narrator": return "Low, warm, deliberate narration"
+        case "news":     return "Clear, professional broadcast"
         default:         return ""
         }
     }
