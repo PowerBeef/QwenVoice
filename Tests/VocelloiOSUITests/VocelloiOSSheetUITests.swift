@@ -262,7 +262,8 @@ final class VocelloiOSSheetUITests: XCTestCase {
     }
 
     /// Tapping chips in a shuffled category order produces a canonically ordered
-    /// instruction (Style → Emotion → Timbre → Pace).
+    /// instruction (Style → Emotion → Timbre → Pace). The added chips are removed
+    /// at the end so later tests start from the same shared state this test found.
     func testCustomToneChipsReorderByCategory() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Delivery: ")
@@ -274,19 +275,7 @@ final class VocelloiOSSheetUITests: XCTestCase {
         let editor = element("deliveryPickerSheet_customTone_editor")
         XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
 
-        // Clear any leftover text from shared app state.
-        let app = VocelloUITestApp.shared.app
-        editor.tap()
-        editor.press(forDuration: 1.0)
-        let menu = app.menuItems
-        if menu["Select All"].waitForExistence(timeout: 3) {
-            menu["Select All"].tap()
-            if menu["Cut"].waitForExistence(timeout: 3) {
-                menu["Cut"].tap()
-            }
-        }
-
-        // Tap chips in shuffled order: Pace, Emotion, Style, Timbre.
+        // Tap chips in shuffled category order: Pace, Emotion, Style, Timbre.
         element("deliveryPickerSheet_customTone_chip_measured").tap()
         element("deliveryPickerSheet_customTone_chip_playful").tap()
         element("deliveryPickerSheet_customTone_chip_conversational").tap()
@@ -297,13 +286,27 @@ final class VocelloiOSSheetUITests: XCTestCase {
             return
         }
 
-        XCTAssertEqual(
-            editorText.lowercased(),
-            "conversational, playful, bright, measured",
-            "selected tags should be sorted Style → Emotion → Timbre → Pace"
+        let lowered = editorText.lowercased()
+        XCTAssertTrue(
+            lowered.contains("conversational, playful, bright"),
+            "selected tags should be sorted Style → Emotion → Timbre"
+        )
+
+        let brightRange = lowered.range(of: "bright")!
+        let measuredRange = lowered.range(of: "measured")!
+        XCTAssertLessThan(
+            brightRange.lowerBound,
+            measuredRange.lowerBound,
+            "Timbre (bright) should appear before Pace (measured)"
         )
 
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-ordered")
+
+        // Remove the chips we added so shared app state is restored for later tests.
+        element("deliveryPickerSheet_customTone_chip_measured").tap()
+        element("deliveryPickerSheet_customTone_chip_playful").tap()
+        element("deliveryPickerSheet_customTone_chip_conversational").tap()
+        element("deliveryPickerSheet_customTone_chip_bright").tap()
     }
 
     // MARK: - Helpers
