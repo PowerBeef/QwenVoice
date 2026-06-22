@@ -175,7 +175,6 @@
 		983F844C4A47B79402AA20D8 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 357F5CA9E28DE9CA8F48905E /* HuggingFace */; };
 		98AF262A3789109DF8DDAD46 /* IOSSimulatorTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7201D32EDE24172A957BE8 /* IOSSimulatorTTSEngine.swift */; };
 		99A480BECDB6DABBD58BCA5F /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = D98F00F2FF60D6BE90A813A0 /* MLXAudioTTS */; };
-		9A4620F7CC4B4A4EC42B6ADA /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291CC68E07F7806784063D89 /* FlowLayout.swift */; };
 		9A61EA31B9D88F4FE7F16517 /* IOSVoicePreviewPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C919DCC4F7D2AD285B5DCC /* IOSVoicePreviewPlayer.swift */; };
 		9AD93240195D2474CD96EB6B /* SavedVoicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A8A61CE5C27E5BDC4EE04BA /* SavedVoicesViewModel.swift */; };
 		9C596C12FF2FAF4901655F51 /* GenerationDrafts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7220613AFFBB1E9C0C9AB52F /* GenerationDrafts.swift */; };
@@ -287,7 +286,6 @@
 		F266C15FA07029E30CE44C0E /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006AC6BD98420562AC6A931C /* AudioService.swift */; };
 		F674AE89EAE48E64296DA6F0 /* MacEngineServiceLifecycleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D74D044F7CCAA1AF2027134 /* MacEngineServiceLifecycleCoordinator.swift */; };
 		F68E2BDC38DA509F2751452D /* GenerationTelemetryJSONLSink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874E0767E61CDEEE88A9FACF /* GenerationTelemetryJSONLSink.swift */; };
-		F7000DBDE04708D8F5A351F3 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291CC68E07F7806784063D89 /* FlowLayout.swift */; };
 		F7ADA5F9C8DA92B6A0DAAF4C /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 101C186459D9AAABF80EDFAE /* MLXAudioCore */; };
 		F8B5F8AD8687822EBCC338CB /* IOSStudioCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 492494B8403570CFFAAD7769 /* IOSStudioCanvas.swift */; };
 		FAB031D2988164F1B0477F4C /* AppGenerationTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D1BFA11B3D97C8053C1336A /* AppGenerationTimeline.swift */; };
@@ -461,7 +459,6 @@
 		2315EB98D0887ED3A911EEF2 /* GenerationChunkBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationChunkBroker.swift; sourceTree = "<group>"; };
 		23ECC0A581C6D3682E9A846A /* IOSDeviceDiagnosticsRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeviceDiagnosticsRecorder.swift; sourceTree = "<group>"; };
 		288BDF7769F75089A6F065B4 /* EmotionPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmotionPreset.swift; sourceTree = "<group>"; };
-		291CC68E07F7806784063D89 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		29686361B012B6250B0DB709 /* BenchCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchCommand.swift; sourceTree = "<group>"; };
 		297CA448BB4837C19346ECC7 /* BatchGenerationRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchGenerationRunner.swift; sourceTree = "<group>"; };
 		2A4F18EF6E8C4624607CF181 /* LongTextGenerationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongTextGenerationRouter.swift; sourceTree = "<group>"; };
@@ -1306,7 +1303,6 @@
 		D60DD2E7E088F85A9224EF53 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				291CC68E07F7806784063D89 /* FlowLayout.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1768,7 +1764,6 @@
 				3B14C307F432B1C28D297F2D /* AudioService.swift in Sources */,
 				6311B4AE98C1DB4A1B040DEC /* ClipReviewPlayer.swift in Sources */,
 				064757D9D01A90CB2FF04261 /* DatabaseService.swift in Sources */,
-				9A4620F7CC4B4A4EC42B6ADA /* FlowLayout.swift in Sources */,
 				3BDC4AA653F02FBA3C6406D3 /* Generation.swift in Sources */,
 				E8BBD85A6CE7E8CFE9C6877D /* GenerationDrafts.swift in Sources */,
 				2A2A5CEFC23A86F73E9B1CCC /* GenerationMigrations.swift in Sources */,
@@ -1875,7 +1870,6 @@
 				6C329D9AE8AC56F1C930D32A /* DatabaseService.swift in Sources */,
 				5123CE70A9FCB0491D5FFAEB /* DebugMode.swift in Sources */,
 				6C73192903DFFED166DD93FB /* EmotionPickerView.swift in Sources */,
-				F7000DBDE04708D8F5A351F3 /* FlowLayout.swift in Sources */,
 				1F607713C38054A7FA7F1D6E /* Generation.swift in Sources */,
 				9C596C12FF2FAF4901655F51 /* GenerationDrafts.swift in Sources */,
 				ECEE4AE6F2D1AF6BA9EFECAA /* GenerationLibraryEvents.swift in Sources */,

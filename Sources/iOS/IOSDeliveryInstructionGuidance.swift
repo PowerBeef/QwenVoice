@@ -15,11 +15,16 @@ enum IOSDeliveryInstructionGuidance {
         "interesting": ["engaging", "expressive", "dynamic"],
         "fun": ["playful", "lively", "upbeat"],
         "bad": ["rough", "tense", "strained"],
+        "happy": ["cheerful", "upbeat", "warm"],
+        "sad": ["somber", "melancholy", "subdued"],
     ]
 
     private static let imitationPhrases = [
         "sound like", "just like", "exactly like", "imitate",
     ]
+
+    /// Minimum length that tends to produce reliable delivery control.
+    private static let shortInstructionThreshold = 10
 
     /// Returns a tip if the instruction contains vague or weak wording.
     static func weakWordSuggestion(for text: String) -> String? {
@@ -43,10 +48,19 @@ enum IOSDeliveryInstructionGuidance {
         return "Voice imitation of real people is not supported."
     }
 
+    /// Returns a nudge if the instruction is too short to be descriptive.
+    static func shortInstructionNudge(for text: String) -> String? {
+        let meaningful = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard meaningful.count < shortInstructionThreshold else { return nil }
+        return "Add a little more detail: emotion, timbre, pace, or style."
+    }
+
     /// Returns the most relevant guidance message, if any. Priority: imitation
-    /// warning, then weak-word suggestion.
+    /// warning, then weak-word suggestion, then short-instruction nudge.
     static func message(for text: String) -> String? {
-        imitationWarning(for: text) ?? weakWordSuggestion(for: text)
+        imitationWarning(for: text)
+            ?? weakWordSuggestion(for: text)
+            ?? shortInstructionNudge(for: text)
     }
 
     /// Whether the instruction looks concrete enough to not need a nudge.

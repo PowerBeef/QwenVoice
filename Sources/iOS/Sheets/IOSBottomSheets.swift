@@ -221,7 +221,7 @@ struct IOSDeliveryPickerSheet: View {
 
                 customToneGuidance
 
-                quickStartChipsView
+                customToneExamples
 
                 HStack {
                     Spacer(minLength: 0)
@@ -245,10 +245,10 @@ struct IOSDeliveryPickerSheet: View {
     // MARK: - Custom tone guidance
 
     private let placeholderExamples: [String] = [
-        "e.g. whispered, close-mic and breathy",
-        "e.g. a calm middle-aged narrator, slow and deep",
-        "e.g. energetic and bright, with a fast pace",
-        "e.g. gentle, serious, and reassuring",
+        "e.g. A calm narrator, warm and measured",
+        "e.g. An energetic news anchor, bright and fast",
+        "e.g. Whispered, close-mic and breathy",
+        "e.g. Gentle, serious, and reassuring",
     ]
 
     @State private var placeholderExampleIndex = 0
@@ -272,19 +272,6 @@ struct IOSDeliveryPickerSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityIdentifier("deliveryPickerSheet_customTone_guidance")
-            }
-
-            if !selectedTokenConflicts.isEmpty {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.orange)
-                    Text("These qualities may conflict: \(selectedTokenConflicts.joined(separator: "; ")). Consider removing one for clearer results.")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityIdentifier("deliveryPickerSheet_customTone_conflictWarning")
             }
         }
     }
@@ -325,112 +312,40 @@ struct IOSDeliveryPickerSheet: View {
         // that shadows the real text view in UI tests.
     }
 
-    private struct QuickStartCategory {
-        let title: String
-        let tokens: [String]
-    }
-
-    private let quickStartCategories: [QuickStartCategory] = [
-        QuickStartCategory(title: "Emotion", tokens: ["warm", "calm", "excited", "serious", "playful"]),
-        QuickStartCategory(title: "Pace", tokens: ["slow", "measured", "fast", "urgent"]),
-        QuickStartCategory(title: "Timbre", tokens: ["deep", "bright", "whispered", "breathy"]),
-        QuickStartCategory(title: "Style", tokens: ["narrator", "conversational", "news anchor", "dramatic"]),
+    private let customToneExamplesList: [String] = [
+        "A calm narrator, warm and measured.",
+        "An energetic news anchor, bright and fast.",
+        "A whispered, close-mic and breathy tone.",
+        "Gentle, serious, and reassuring.",
     ]
 
-    /// Canonical category order for composed delivery instructions.
-    /// Mirrors the dimension order recommended by Qwen3-TTS voice-design
-    /// guidance (role/style first, then emotion, vocal quality, pace).
-    private let quickStartCategoryOrder: [String] = ["Style", "Emotion", "Timbre", "Pace"]
-
-    /// Maps a lowercased chip token to its category title.
-    private var tokenCategoryMap: [String: String] {
-        var map: [String: String] = [:]
-        for category in quickStartCategories {
-            for token in category.tokens {
-                map[token.lowercased()] = category.title
-            }
-        }
-        return map
-    }
-
-    /// Tokens that are direct antonyms. When one is selected, its antonyms are
-    /// disabled in the chip grid to prevent obviously conflicting instructions.
-    private let tokenAntonyms: [String: [String]] = [
-        "calm": ["excited", "urgent"],
-        "excited": ["calm", "serious"],
-        "serious": ["playful", "excited"],
-        "playful": ["serious"],
-        "slow": ["fast", "urgent"],
-        "fast": ["slow", "measured"],
-        "urgent": ["slow", "calm"],
-        "measured": ["fast"],
-        "deep": ["bright"],
-        "bright": ["deep"],
-    ]
-
-    private var quickStartChipsView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Quick starts")
+    private var customToneExamples: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Examples")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(IOSAppTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(quickStartCategories, id: \.title) { category in
-                    quickStartCategorySection(category)
-                }
-            }
-        }
-    }
-
-    private func quickStartCategorySection(_ category: QuickStartCategory) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(category.title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(IOSAppTheme.textTertiary)
-
-            FlowLayout(spacing: 8) {
-                ForEach(category.tokens, id: \.self) { token in
-                    let isSelected = isTokenSelected(token)
-                    let isDisabled = isTokenDisabled(token)
-                    Button {
-                        guard !isDisabled else { return }
-                        toggleQuickStartToken(token)
-                        IOSHaptics.selection()
-                    } label: {
-                        Text(token)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                            .foregroundStyle(
-                                isDisabled
-                                    ? IOSAppTheme.textTertiary
-                                    : (isSelected ? IOSAppTheme.textPrimary : tint)
-                            )
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background {
-                                Capsule(style: .continuous)
-                                    .fill(
-                                        isSelected
-                                            ? IOSAppTheme.accentWash(tint).opacity(0.9)
-                                            : IOSAppTheme.accentWash(tint).opacity(0.5)
-                                    )
-                            }
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .stroke(
-                                        isDisabled
-                                            ? Color.gray.opacity(0.25)
-                                            : (isSelected ? tint.opacity(0.65) : tint.opacity(0.35)),
-                                        lineWidth: 0.8
-                                    )
-                            }
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(customToneExamplesList, id: \.self) { example in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(tint)
+                        Text(example)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(IOSAppTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isDisabled)
-                    .accessibilityIdentifier("deliveryPickerSheet_customTone_chip_\(token)")
                 }
             }
+            .padding(12)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(IOSAppTheme.accentWash(tint).opacity(0.18))
+            }
         }
+        .accessibilityIdentifier("deliveryPickerSheet_customTone_examples")
     }
 
     private var customToneCounter: some View {
@@ -446,100 +361,6 @@ struct IOSDeliveryPickerSheet: View {
                         : IOSAppTheme.textTertiary
             )
             .accessibilityIdentifier("deliveryPickerSheet_customTone_charCount")
-    }
-
-    private func isTokenSelected(_ token: String) -> Bool {
-        tokenize(customText).contains(token.lowercased())
-    }
-
-    private func isTokenDisabled(_ token: String) -> Bool {
-        let selected = tokenize(customText)
-        guard let antonyms = tokenAntonyms[token.lowercased()] else { return false }
-        return antonyms.contains { selected.contains($0.lowercased()) }
-    }
-
-    private var selectedTokenConflicts: [String] {
-        let selected = tokenize(customText)
-        var conflicts: [String] = []
-        for token in selected {
-            guard let antonyms = tokenAntonyms[token] else { continue }
-            for antonym in antonyms where selected.contains(antonym) {
-                let pair = [token, antonym].sorted().joined(separator: " + ")
-                if !conflicts.contains(pair) {
-                    conflicts.append(pair)
-                }
-            }
-        }
-        return conflicts
-    }
-
-    private func tokenize(_ text: String) -> [String] {
-        text
-            .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
-    }
-
-    private func toggleQuickStartToken(_ token: String) {
-        let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
-        let cleanedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanedToken.isEmpty else { return }
-
-        let normalizedNew = cleanedToken.lowercased()
-
-        var originalTokens = customText
-            .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let normalizedExisting = originalTokens.map { $0.lowercased() }
-
-        if let index = normalizedExisting.firstIndex(of: normalizedNew) {
-            originalTokens.remove(at: index)
-            customText = originalTokens.joined(separator: ", ")
-        } else {
-            let proposed = (originalTokens + [cleanedToken]).joined(separator: ", ")
-            customText = String(proposed.prefix(limit))
-        }
-
-        reorderComposedInstruction()
-    }
-
-    /// Sorts recognized quick-start chip tokens by the canonical Qwen3-TTS
-    /// category order (Style → Emotion → Timbre → Pace). Unrecognized/freeform
-    /// segments are preserved in their original relative order and appended
-    /// after the sorted chip tokens.
-    private func reorderComposedInstruction() {
-        let limit = IOSGenerationTextLimitPolicy.deliveryInstructionLimit
-
-        let rawSegments = customText
-            .components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-        var recognized: [(text: String, category: String, originalIndex: Int)] = []
-        var unrecognized: [(text: String, originalIndex: Int)] = []
-
-        for (index, segment) in rawSegments.enumerated() {
-            guard !segment.isEmpty else { continue }
-            let key = segment.lowercased()
-            if let category = tokenCategoryMap[key] {
-                recognized.append((text: segment, category: category, originalIndex: index))
-            } else {
-                unrecognized.append((text: segment, originalIndex: index))
-            }
-        }
-
-        let sortedRecognized = recognized.sorted {
-            let lhsRank = quickStartCategoryOrder.firstIndex(of: $0.category) ?? Int.max
-            let rhsRank = quickStartCategoryOrder.firstIndex(of: $1.category) ?? Int.max
-            if lhsRank != rhsRank { return lhsRank < rhsRank }
-            return $0.originalIndex < $1.originalIndex
-        }
-
-        let orderedTokens = sortedRecognized.map { $0.text }
-            + unrecognized.sorted { $0.originalIndex < $1.originalIndex }.map { $0.text }
-
-        let reordered = orderedTokens.joined(separator: ", ")
-        customText = String(reordered.prefix(limit))
     }
 
     private func closeSheet() {
