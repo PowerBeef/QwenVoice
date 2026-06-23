@@ -51,6 +51,22 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-23 — kimi — added missing Surprised description in delivery picker
+
+- **Commits:** uncommitted — working tree (files listed below).
+- **Touched:**
+  - `Sources/iOS/Sheets/IOSBottomSheets.swift` — added `case "surprised"` to `description(for:)`.
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - The `Surprised` preset cell was missing its secondary description; added "Animated, pitch jumps".
+  - Verified all other presets have descriptions.
+  - Ran `scripts/ios_device.sh build`, `install`, and `ui-test` on the real device.
+  - 9 of 10 tests passed; the single failure is `VocelloiOSColdGenerationUITests.testColdGenerationCompletes` (missing active model), unrelated to this UI change.
+- **Decisions:**
+  - No further preset description changes.
+- **Requests for claude-code:** none.
+- **Open questions:** none.
+
 ## 2026-06-23 — kimi — made on-device iOS verification mandatory in AGENTS.md
 
 - **Commits:** bd4c8ae on main.

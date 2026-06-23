@@ -422,6 +422,7 @@ struct IOSDeliveryPickerSheet: View {
         case "sad":      return "Quiet, slower, somber"
         case "angry":    return "Tense, sharp"
         case "fearful":  return "Quiet, hesitant"
+        case "surprised":return "Animated, pitch jumps"
         case "whisper":  return "Soft, close-mic breath"
         case "dramatic": return "Theatrical, projected"
         case "calm":     return "Slower, reassuring"
