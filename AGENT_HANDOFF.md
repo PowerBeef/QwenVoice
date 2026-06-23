@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-23 — kimi — dismiss model install sheet immediately on Install tap
 
-- **Commits:** <to-fill-after-push> on main.
+- **Commits:** bc80c26 on main.
 - **Touched:**
   - `Sources/iOS/IOSSettingsViews.swift` — `IOSModelRow.presentInstallPanel()` now dismisses the bottom panel when the user taps Install; `.onChange(of: operationState)` no longer re-presents the sheet for active download states.
   - `AGENT_HANDOFF.md` — this entry.
