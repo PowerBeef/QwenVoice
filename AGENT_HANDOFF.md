@@ -51,6 +51,22 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-23 — kimi — on-device verification of delivery picker revert
+
+- **Commits:** uncommitted — working tree (log entry only).
+- **Touched:**
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - Ran the full iOS on-device UI test suite against the latest `main`.
+  - Build/install succeeded; 9 of 10 tests passed.
+  - All 7 `VocelloiOSSheetUITests` passed, exercising the delivery picker and custom-tone sheet.
+  - Both `VocelloiOSSmokeUITests` passed.
+  - The single failure was `VocelloiOSColdGenerationUITests.testColdGenerationCompletes`, which failed because the active model was not installed (`textInput_installModelButton` appeared instead of the Generate button). This is unrelated to the delivery picker revert.
+- **Decisions:**
+  - No code changes required; the revert is verified on device.
+- **Requests for claude-code:** none.
+- **Open questions:** none.
+
 ## 2026-06-22 — kimi — reverted delivery picker to emotion grid + intensity with rewritten Qwen3-TTS prompts
 
 - **Commits:** e66f63c on main.
