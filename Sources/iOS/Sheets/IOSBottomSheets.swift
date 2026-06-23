@@ -253,25 +253,10 @@ struct IOSDeliveryPickerSheet: View {
 
 
     private var customToneGuidance: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Be specific: combine emotion, pace, pitch, and timbre.")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(IOSAppTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let guidance = IOSDeliveryInstructionGuidance.message(for: customText) {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(tint)
-                    Text(guidance)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(tint)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityIdentifier("deliveryPickerSheet_customTone_guidance")
-            }
-        }
+        Text("Be specific: combine emotion, pace, pitch, and timbre.")
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(IOSAppTheme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - Composed instruction editor

@@ -165,7 +165,7 @@ final class VocelloiOSSheetUITests: XCTestCase {
 
 
     /// Typing into the custom-tone editor updates the text and the character counter.
-    func testCustomToneTextInputAndGuidance() {
+    func testCustomToneTextInputAndCounter() {
         selectMode("generateSection_custom")
         openSheet(viaChipLabelPrefix: "Delivery: ")
 
@@ -177,21 +177,15 @@ final class VocelloiOSSheetUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 10), "custom tone editor should exist")
 
         editor.tap()
-        editor.typeText("nice and clear")
+        editor.typeText("warm and clear")
 
         guard let editorText = editor.value as? String else {
             XCTFail("custom tone editor should expose its text as value")
             return
         }
 
-        XCTAssertTrue(editorText.contains("nice and clear"), "typed text should appear in the editor")
+        XCTAssertTrue(editorText.contains("warm and clear"), "typed text should appear in the editor")
         XCTAssertTrue(element("deliveryPickerSheet_customTone_charCount").exists)
-
-        let guidance = element("deliveryPickerSheet_customTone_guidance")
-        XCTAssertTrue(
-            guidance.waitForExistence(timeout: 5),
-            "weak-word guidance should appear for vague words"
-        )
 
         VocelloUITestApp.shared.captureScreenshot(named: "sheet-custom-tone-text-input")
     }

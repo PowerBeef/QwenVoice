@@ -51,6 +51,25 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-23 — kimi — removed dynamic Custom tone hints and fixed UI test
+
+- **Commits:** <to-fill-after-push> on main.
+- **Touched:**
+  - `Sources/iOS/Sheets/IOSBottomSheets.swift` — replaced dynamic guidance with a single static line, removed empty-state nudge.
+  - `Sources/iOS/IOSDeliveryInstructionGuidance.swift` — deleted; no longer referenced.
+  - `QwenVoice.xcodeproj/project.pbxproj` — regenerated after file deletion.
+  - `Tests/VocelloiOSUITests/VocelloiOSSheetUITests.swift` — renamed `testCustomToneTextInputAndGuidance` to `testCustomToneTextInputAndCounter` and removed the guidance assertion.
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - Dropped all dynamic/conditional hints from the Custom tone sheet to keep the UI simple.
+  - Updated the on-device UI test to match the simplified UI; the old guidance identifier no longer exists.
+  - Verified with `scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSSheetUITests` — 7 tests, 0 failures.
+- **Decisions:**
+  - Static guidance only; no weak-word detection or live suggestions in the Custom tone panel.
+  - On-device verification is required before commit/push for UI changes.
+- **Requests for other:** none.
+- **Open questions / blockers:** none.
+
 ## 2026-06-23 — kimi — tightened Custom tone sheet guidance text
 
 - **Commits:** 40bd967 on main.
