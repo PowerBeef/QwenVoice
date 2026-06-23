@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-22 — kimi — reverted delivery picker to emotion grid + intensity with rewritten Qwen3-TTS prompts
 
-- **Commits:** uncommitted — working tree (files listed below).
+- **Commits:** e66f63c on main.
 - **Touched:**
   - `Sources/QwenVoiceCore/EmotionPreset.swift` — restored `EmotionIntensity` and `[EmotionIntensity: String]` instructions; curated preset list to Neutral + 7 emotions + Whisper + Dramatic; rewrote all prompts.
   - `Sources/iOSSupport/Models/GenerationDrafts.swift` — restored `selectedIntensity`, `supportsIntensity`, and intensity-aware resolution/legacy mapping.
