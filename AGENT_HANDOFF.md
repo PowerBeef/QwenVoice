@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-23 — kimi — tightened Custom tone sheet guidance text
 
-- **Commits:** uncommitted — working tree (files listed below).
+- **Commits:** 40bd967 on main.
 - **Touched:**
   - `Sources/iOS/Sheets/IOSBottomSheets.swift` — shortened main guidance to "Be specific: combine emotion, pace, pitch, and timbre."
   - `Sources/iOS/IOSDeliveryInstructionGuidance.swift` — no short-instruction nudge when the text field is empty, so the lightbulb hint doesn't appear on first open.
