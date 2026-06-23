@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-23 — kimi — fixed paused download byte count
 
-- **Commits:** (to be filled after push) on main.
+- **Commits:** 1359d81 on main.
 - **Touched:**
   - `Sources/iOS/IOSModelDeliveryActor.swift` — added `currentFilePartialBytes` and `currentFileLiveBytes` to `IOSPersistedModelInstallState`; updated state-machine helpers and actor progress/pause/resume/restore paths so the paused snapshot includes bytes already downloaded for the current file.
   - `AGENT_HANDOFF.md` — this entry.
