@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-23 — kimi — reverted to simple download + cancel confirmation
 
-- **Commits:** (to be filled after push) on main.
+- **Commits:** 4792562 on main.
 - **Touched:**
   - `Sources/iOS/IOSModelDeliveryActor.swift` — removed `pause(modelID:)`, partial-byte tracking, and pause-specific state-machine helpers; kept `.paused` as a legacy decoder value and clean up any stale paused persisted state on launch.
   - `Sources/iOS/IOSModelInstallerViewModel.swift` — removed `.paused` operation state, `pause(_:)`, `simulatorFakePause(_:)`, and paused resume logic in the fake installer.
