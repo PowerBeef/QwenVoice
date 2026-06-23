@@ -53,7 +53,7 @@ RULES
 
 ## 2026-06-23 — kimi — added pause/resume for model downloads
 
-- **Commits:** uncommitted — working tree (pending push).
+- **Commits:** 6a49a8b on main.
 - **Touched:**
   - `Sources/iOS/IOSModelDeliveryActor.swift` — added `.paused` phase; added `pause(modelID:)` using `cancel(byProducingResumeData:)` and persisted resume data; updated `install(model:)` to resume a paused install.
   - `Sources/iOS/IOSModelInstallerViewModel.swift` — added `.paused` operation state, `pause(_:)` method, and simulator fake-pause/resume support.
