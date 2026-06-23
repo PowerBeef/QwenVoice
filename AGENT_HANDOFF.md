@@ -51,6 +51,23 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-23 — kimi — tightened Custom tone sheet guidance text
+
+- **Commits:** uncommitted — working tree (files listed below).
+- **Touched:**
+  - `Sources/iOS/Sheets/IOSBottomSheets.swift` — shortened main guidance to "Be specific: combine emotion, pace, pitch, and timbre."
+  - `Sources/iOS/IOSDeliveryInstructionGuidance.swift` — no short-instruction nudge when the text field is empty, so the lightbulb hint doesn't appear on first open.
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - User felt the Custom tone guidance was too wordy.
+  - Trimmed the static guidance line and suppressed the empty-state nudge.
+  - Ran `scripts/ios_device.sh build`, `install`, and `ui-test` on the real device.
+  - 9 of 10 tests passed; the only failure is the unrelated cold-generation test (missing active model).
+- **Decisions:**
+  - Keep the dynamic weak-word / imitation-warning hints; they still appear once the user types.
+- **Requests for claude-code:** none.
+- **Open questions:** none.
+
 ## 2026-06-23 — kimi — added missing Surprised description in delivery picker
 
 - **Commits:** da64da3 on main.

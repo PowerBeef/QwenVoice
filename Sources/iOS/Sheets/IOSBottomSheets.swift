@@ -254,7 +254,7 @@ struct IOSDeliveryPickerSheet: View {
 
     private var customToneGuidance: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Be specific and concise. Combine emotion, pace, pitch, and timbre. Avoid vague words like 'nice'.")
+            Text("Be specific: combine emotion, pace, pitch, and timbre.")
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(IOSAppTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

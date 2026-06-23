@@ -49,9 +49,10 @@ enum IOSDeliveryInstructionGuidance {
     }
 
     /// Returns a nudge if the instruction is too short to be descriptive.
+    /// Empty input gets no nudge so the sheet stays clean on first open.
     static func shortInstructionNudge(for text: String) -> String? {
         let meaningful = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard meaningful.count < shortInstructionThreshold else { return nil }
+        guard !meaningful.isEmpty, meaningful.count < shortInstructionThreshold else { return nil }
         return "Add a little more detail: emotion, timbre, pace, or style."
     }
 
