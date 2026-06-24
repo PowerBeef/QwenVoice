@@ -27,7 +27,7 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
         app.launchEnvironment["QWENVOICE_DEBUG"] = "1"
         app.launch()
         _ = app.wait(for: .runningForeground, timeout: 30)
-        dismissOnboardingIfPresent()
+        VocelloUITestApp.dismissOnboardingIfPresent(in: app)
     }
 
     override func tearDown() {
@@ -35,7 +35,7 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
         super.tearDown()
     }
 
-    func testColdGenerationCompletes() {
+    func testColdGenerationCompletes() throws {
         XCTAssertTrue(
             app.descendants(matching: .any)["rootTab_studio"].waitForExistence(timeout: 30),
             "Studio tab should be visible after cold launch"
@@ -43,10 +43,9 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
         captureScreenshot(named: "cold-launch-studio")
 
         let installButton = app.descendants(matching: .any)["textInput_installModelButton"]
-        XCTAssertFalse(
-            installButton.exists,
-            "model must already be installed on the device for the cold-generation test"
-        )
+        if installButton.waitForExistence(timeout: 5) {
+            throw XCTSkip("Speed model not installed on device")
+        }
 
         // Make sure we are in Custom mode. The app persists the last-used mode, so a
         // previous test may have left it in Design/Clone, where Generate is disabled.
@@ -156,24 +155,6 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
             } catch {
                 print("[ColdGenerationUITest] could not write screenshot to \(path): \(error)")
             }
-        }
-    }
-
-    /// First-run onboarding (3 pages) sits in front of the tabs on a fresh install.
-    private func dismissOnboardingIfPresent() {
-        let studio = app.descendants(matching: .any)["rootTab_studio"]
-        let skip = app.descendants(matching: .any)["onboarding_skip"]
-        let cta = app.descendants(matching: .any)["onboarding_cta"]
-        let deadline = Date().addingTimeInterval(20)
-        while Date() < deadline {
-            if studio.exists { return }
-            if skip.exists {
-                skip.tap()
-                _ = studio.waitForExistence(timeout: 6)
-                return
-            }
-            if cta.exists { cta.tap() }
-            usleep(300_000)
         }
     }
 }

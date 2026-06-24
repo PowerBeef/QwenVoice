@@ -49,6 +49,7 @@ private struct IOSSettingsView: View {
     @AppStorage(IOSSavedOutputsDestination.displayNameKey) private var savedOutputsName = ""
     @State private var isSavedOutputsDialogPresented = false
     @State private var isFolderPickerPresented = false
+    @State private var modelPendingCancel: TTSModel? = nil
 
     private var previewSettingsState: IOSPreviewSettingsState? {
         IOSPreviewRuntime.current?.definition.settingsState
@@ -84,8 +85,8 @@ private struct IOSSettingsView: View {
                                 status: effectiveStatus(for: model),
                                 operationState: effectiveOperationState(for: model),
                                 onInstall: { install(model) },
-                                onPause: { pause(model) },
-                                onCancel: { cancel(model) },
+                                onRequestCancelOptions: { requestCancelOptions(for: model) },
+                                onDirectCancel: { cancel(model) },
                                 onDelete: { delete(model) }
                             )
 
@@ -205,6 +206,34 @@ private struct IOSSettingsView: View {
         } message: {
             Text("Generated clips are always kept on this iPhone for History. Optionally also copy each new clip to a folder you choose — Files or iCloud Drive.")
         }
+        .confirmationDialog(
+            "Downloading…",
+            isPresented: Binding(
+                get: { modelPendingCancel != nil },
+                set: { isPresented in
+                    if !isPresented { modelPendingCancel = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let model = modelPendingCancel {
+                Button("Pause") {
+                    pause(model)
+                    modelPendingCancel = nil
+                }
+                .accessibilityIdentifier("iosModelPauseConfirmButton")
+                Button("Cancel Download", role: .destructive) {
+                    cancel(model)
+                    modelPendingCancel = nil
+                }
+                .accessibilityIdentifier("iosModelCancelDownloadConfirmButton")
+                Button("Cancel", role: .cancel) {
+                    modelPendingCancel = nil
+                }
+            }
+        } message: {
+            Text("Pausing keeps the downloaded data so you can resume later. Canceling removes it.")
+        }
         .fileImporter(
             isPresented: $isFolderPickerPresented,
             allowedContentTypes: [.folder],
@@ -236,6 +265,11 @@ private struct IOSSettingsView: View {
 
     private func install(_ model: TTSModel) {
         modelInstaller.install(model)
+    }
+
+    private func requestCancelOptions(for model: TTSModel) {
+        IOSHaptics.selection()
+        modelPendingCancel = model
     }
 
     private func pause(_ model: TTSModel) {
@@ -653,11 +687,9 @@ private struct IOSModelRow: View {
     let status: ModelManagerViewModel.ModelStatus
     let operationState: IOSModelInstallerViewModel.OperationState
     let onInstall: () -> Void
-    let onPause: () -> Void
-    let onCancel: () -> Void
+    let onRequestCancelOptions: () -> Void
+    let onDirectCancel: () -> Void
     let onDelete: () -> Void
-
-    @State private var isPauseOrCancelDialogPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -677,23 +709,6 @@ private struct IOSModelRow: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("iosModelRow_\(model.id)")
-        .confirmationDialog(
-            "Downloading…",
-            isPresented: $isPauseOrCancelDialogPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Pause") {
-                onPause()
-            }
-            .accessibilityIdentifier("iosModelPauseConfirmButton")
-            Button("Cancel Download", role: .destructive) {
-                onCancel()
-            }
-            .accessibilityIdentifier("iosModelCancelDownloadConfirmButton")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Pausing keeps the downloaded data so you can resume later. Canceling removes it.")
-        }
     }
 
     private func requestInstall() {
@@ -701,14 +716,14 @@ private struct IOSModelRow: View {
         onInstall()
     }
 
-    private func requestPauseOrCancel() {
+    private func requestCancelOptions() {
         IOSHaptics.selection()
-        isPauseOrCancelDialogPresented = true
+        onRequestCancelOptions()
     }
 
-    private func requestCancel() {
+    private func requestDirectCancel() {
         IOSHaptics.selection()
-        onCancel()
+        onDirectCancel()
     }
 
     private func requestDelete() {
@@ -828,9 +843,9 @@ private struct IOSModelRow: View {
         case .available:
             installButton(title: "Install", accessibilityIdentifier: "iosModelDownload_\(model.id)")
         case .downloading, .resuming, .restarting:
-            installButton(title: "Cancel", action: requestPauseOrCancel, accessibilityIdentifier: "iosModelCancel_\(model.id)")
+            installButton(title: "Cancel", action: requestCancelOptions, accessibilityIdentifier: "iosModelCancel_\(model.id)")
         case .interrupted:
-            installButton(title: "Cancel", action: requestCancel, accessibilityIdentifier: "iosModelCancel_\(model.id)")
+            installButton(title: "Cancel", action: requestDirectCancel, accessibilityIdentifier: "iosModelCancel_\(model.id)")
         case .paused:
             installButton(title: "Resume", action: requestInstall, accessibilityIdentifier: "iosModelResume_\(model.id)")
         case .verifying, .installing, .deleting:

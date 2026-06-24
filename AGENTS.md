@@ -282,7 +282,7 @@ The `VocelloMacUITests` target contains a single `VocelloMacSmokeUITests` class 
 
 iOS testing is **on-device only**. The iOS Simulator is retired for this project and must not be used for UI testing, verification, screenshots, or snapshots.
 
-After any iOS UI change, on-device verification is **mandatory** before committing or pushing. A compile-only build (`scripts/ios_device.sh build`) is not enough. Run `scripts/ios_device.sh ui-test` if the change touches UI flows; if UI tests are unavailable or flaky for the changed surface, manually exercise the flow after `scripts/ios_device.sh launch` and capture a screenshot with `scripts/ios_device.sh shot`.
+After any iOS UI change, on-device verification is **mandatory** before committing or pushing. A compile-only build (`scripts/ios_device.sh build`) is not enough. Run `scripts/ios_device.sh ui-test` if the change touches UI flows (unlock the iPhone once at test start; `bench`/`launch` work with a locked phone). If UI tests are unavailable or flaky for the changed surface, manually exercise the flow after `scripts/ios_device.sh launch` and capture a screenshot with `scripts/ios_device.sh shot`.
 
 **Do not use:**
 - `scripts/ios_sim.sh`
@@ -294,7 +294,9 @@ The sanctioned paths are:
 ```sh
 scripts/ios_device.sh doctor       # environment + device preflight
 scripts/ios_device.sh bench        # build → install → autorun → pull → summarize
-scripts/ios_device.sh ui-test      # run VocelloiOSUITests on the device
+scripts/ios_device.sh ui-test      # device-safe UI smoke (Smoke+Sheet+OnDeviceDownload; unlock phone once)
+scripts/ios_device.sh ui-test --cold  # cold generation soak (skips when Speed model missing)
+scripts/ios_device.sh ui-test --all   # debug: all classes (DownloadManager skips on device)
 scripts/ios_device.sh launch       # launch the app (with optional autorun spec)
 scripts/ios_device.sh console      # stream os_log from the running app
 scripts/ios_device.sh pull         # pull files from the app container
@@ -304,12 +306,15 @@ scripts/ios_device.sh shot         # screenshot the iPhone Mirroring window
 The headless autorun harness is triggered by `QVOICE_IOS_AUTORUN` and writes telemetry into the App Group container.
 
 iOS UI-test architecture:
-- `Tests/VocelloiOSUITests/VocelloUITestApp.swift` is the shared warm-app coordinator. It keeps one
-  app session alive across the smoke/sheet tests and resets to Studio between cases, so the suite
-  behaves like a real user session instead of launching from scratch every test.
+- `Tests/VocelloiOSUITests/VocelloUITestApp.swift` is the shared warm-app coordinator. It resets
+  to Studio between cases.
+- `Tests/VocelloiOSUITests/VocelloUITestObserver.swift` retains one app session across the default
+  device-safe trio (Smoke, Sheet, OnDeviceDownload) for an entire `ui-test` run.
+- `Tests/VocelloiOSUITests/VocelloiOSDownloadManagerUITests.swift` is **simulator-only**
+  (`QVOICE_SIM_*` backend); it skips on device even with `--all`.
 - `Tests/VocelloiOSUITests/VocelloiOSColdGenerationUITests.swift` is the exception: it deliberately
   kills the warm session, cold-launches the app with the engine enabled, and asserts that a real
-  on-device generation completes.
+  on-device generation completes (or skips when the Speed model is not installed).
 
 iOS UI conventions:
 - Use `IOSScrollView` instead of raw `ScrollView` for vertical iOS scroll surfaces. It bundles the

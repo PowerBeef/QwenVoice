@@ -17,22 +17,19 @@ final class VocelloUITestApp: @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    /// Call from `override class func setUp()` in every UI test class that shares the
-    /// warm app session. The first call launches the app; subsequent calls just ensure
-    /// it is still in the foreground.
-    func retain() {
+    /// Called from warm test class `setUp` and by the observer as a fallback.
+    func retainIfNeeded() {
         lock.lock()
         defer { lock.unlock() }
-        retainCount += 1
-        if retainCount == 1 {
-            launch()
-        } else {
+        if app != nil {
             ensureForeground()
+            return
         }
+        retainCount = max(retainCount, 1)
+        launch()
     }
 
-    /// Call from `override class func tearDown()` in every UI test class that called
-    /// `retain()`. The last matching release terminates the app.
+    /// Called by `VocelloUITestObserver` when the warm test bundle finishes.
     func release() {
         lock.lock()
         defer { lock.unlock() }
@@ -54,6 +51,7 @@ final class VocelloUITestApp: @unchecked Sendable {
     /// Per-test reset: make sure we are back on the Studio surface with no sheet open.
     /// This lets each test start from a clean, deterministic place without closing the app.
     func resetToStudio() {
+        retainIfNeeded()
         ensureForeground()
 
         let studioTab = element("rootTab_studio")
@@ -87,7 +85,8 @@ final class VocelloUITestApp: @unchecked Sendable {
     // MARK: - Element helpers
 
     func element(_ identifier: String) -> XCUIElement {
-        app.descendants(matching: .any)[identifier].firstMatch
+        retainIfNeeded()
+        return app.descendants(matching: .any)[identifier].firstMatch
     }
 
     func firstElement(prefix: String) -> XCUIElement {
@@ -115,6 +114,50 @@ final class VocelloUITestApp: @unchecked Sendable {
     @discardableResult
     func waitFor(_ identifier: String, timeout: TimeInterval = 30) -> Bool {
         element(identifier).waitForExistence(timeout: timeout)
+    }
+
+    /// Waits for a confirmation-dialog button (SwiftUI attach timing can lag one beat).
+    @discardableResult
+    func waitForConfirmationButton(_ identifier: String, timeout: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let button = element(identifier)
+            if button.waitForExistence(timeout: 1) {
+                return true
+            }
+            usleep(200_000)
+        }
+        return element(identifier).exists
+    }
+
+    /// Dismiss first-run onboarding when present. Shared by warm and cold test paths.
+    func dismissOnboardingIfPresent(timeout: TimeInterval = 25) {
+        guard let app else { return }
+        Self.dismissOnboardingIfPresent(in: app, timeout: timeout)
+    }
+
+    static func dismissOnboardingIfPresent(in app: XCUIApplication, timeout: TimeInterval = 25) {
+        let studio = app.descendants(matching: .any)["rootTab_studio"].firstMatch
+        let skip = app.descendants(matching: .any)["onboarding_skip"].firstMatch
+        let cta = app.descendants(matching: .any)["onboarding_cta"].firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        var ctaTaps = 0
+        while Date() < deadline {
+            if studio.exists { return }
+            if skip.exists {
+                skip.tap()
+                _ = studio.waitForExistence(timeout: 6)
+                return
+            }
+            if cta.exists {
+                cta.tap()
+                ctaTaps += 1
+                if ctaTaps > 5 { return }
+                usleep(400_000)
+                continue
+            }
+            usleep(300_000)
+        }
     }
 
     // MARK: - Screenshot diagnostics
@@ -177,26 +220,6 @@ final class VocelloUITestApp: @unchecked Sendable {
         guard let app = app else { return }
         if app.state != .runningForeground {
             app.activate()
-        }
-    }
-
-    /// First-run onboarding (3 pages) sits in front of the tabs on a fresh install.
-    /// Poll for either the main UI or onboarding; Skip completes the whole flow, the CTA
-    /// advances/completes as a fallback.
-    private func dismissOnboardingIfPresent() {
-        let studio = element("rootTab_studio")
-        let skip = element("onboarding_skip")
-        let cta = element("onboarding_cta")
-        let deadline = Date().addingTimeInterval(20)
-        while Date() < deadline {
-            if studio.exists { return }
-            if skip.exists {
-                skip.tap()
-                _ = studio.waitForExistence(timeout: 6)
-                return
-            }
-            if cta.exists { cta.tap() }
-            usleep(300_000)
         }
     }
 }

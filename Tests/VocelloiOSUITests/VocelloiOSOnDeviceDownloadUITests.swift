@@ -10,7 +10,8 @@ final class VocelloiOSOnDeviceDownloadUITests: XCTestCase {
 
     override class func setUp() {
         super.setUp()
-        VocelloUITestApp.shared.retain()
+        VocelloUITestBootstrap.registerObserverIfNeeded()
+        VocelloUITestApp.shared.retainIfNeeded()
     }
 
     override func setUp() {
@@ -21,8 +22,8 @@ final class VocelloiOSOnDeviceDownloadUITests: XCTestCase {
         uninstallProCustomIfNeeded()
     }
 
-    override class func tearDown() {
-        VocelloUITestApp.shared.release()
+    override func tearDown() {
+        VocelloUITestApp.shared.resetToStudio()
         super.tearDown()
     }
 
@@ -40,12 +41,11 @@ final class VocelloiOSOnDeviceDownloadUITests: XCTestCase {
         VocelloUITestApp.shared.captureScreenshot(named: "device-download-started-pro-custom")
         cancelButton.tap()
 
-        let cancelDownloadButton = element("iosModelCancelDownloadConfirmButton")
         XCTAssertTrue(
-            cancelDownloadButton.waitForExistence(timeout: 10),
+            VocelloUITestApp.shared.waitForConfirmationButton("iosModelCancelDownloadConfirmButton"),
             "Cancel Download option should be offered"
         )
-        cancelDownloadButton.tap()
+        element("iosModelCancelDownloadConfirmButton").tap()
 
         if !installButton.waitForExistence(timeout: 30) {
             print("=== Accessibility hierarchy after cancel ===")
@@ -54,6 +54,54 @@ final class VocelloiOSOnDeviceDownloadUITests: XCTestCase {
             XCTFail("Install button should reappear after cancelling on a real device")
         }
         VocelloUITestApp.shared.captureScreenshot(named: "device-download-cancelled-pro-custom")
+    }
+
+    /// Start a real download, pause with stable progress UI, resume, then cancel.
+    func testRealDeviceDownloadPauseResumeAndCancel() {
+        let installButton = element("iosModelDownload_pro_custom")
+        XCTAssertTrue(installButton.waitForExistence(timeout: 10), "Install button should be visible")
+        installButton.tap()
+
+        let cancelButton = element("iosModelCancel_pro_custom")
+        XCTAssertTrue(
+            cancelButton.waitForExistence(timeout: 30),
+            "Cancel button should appear after starting a real download"
+        )
+
+        cancelButton.tap()
+
+        XCTAssertTrue(
+            VocelloUITestApp.shared.waitForConfirmationButton("iosModelPauseConfirmButton"),
+            "Pause option should be offered"
+        )
+        element("iosModelPauseConfirmButton").tap()
+
+        let resumeButton = element("iosModelResume_pro_custom")
+        XCTAssertTrue(resumeButton.waitForExistence(timeout: 30), "Resume button should appear while paused")
+        VocelloUITestApp.shared.captureScreenshot(named: "device-download-paused-pro-custom")
+
+        resumeButton.tap()
+
+        let cancelAfterResume = element("iosModelCancel_pro_custom")
+        XCTAssertTrue(
+            cancelAfterResume.waitForExistence(timeout: 30),
+            "Cancel button should reappear after resuming"
+        )
+        cancelAfterResume.tap()
+
+        XCTAssertTrue(
+            VocelloUITestApp.shared.waitForConfirmationButton("iosModelCancelDownloadConfirmButton"),
+            "Cancel Download option should be offered after resume"
+        )
+        element("iosModelCancelDownloadConfirmButton").tap()
+
+        if !installButton.waitForExistence(timeout: 30) {
+            print("=== Accessibility hierarchy after pause/resume cancel ===")
+            print(VocelloUITestApp.shared.app.debugDescription)
+            print("=== End hierarchy ===")
+            XCTFail("Install button should reappear after pause/resume/cancel on a real device")
+        }
+        VocelloUITestApp.shared.captureScreenshot(named: "device-download-pause-resume-cancelled-pro-custom")
     }
 
     // MARK: - Helpers

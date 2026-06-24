@@ -22,6 +22,8 @@ struct IOSModelDeliverySnapshot: Equatable, Sendable {
     let totalBytes: Int64?
     let estimatedBytes: Int64?
     let message: String?
+    /// Monotonic token so the view model can ignore stale progress after cancel/fail.
+    let operationGeneration: UInt64
 }
 
 private struct IOSPersistedModelInstallState: Codable, Sendable {
@@ -269,6 +271,8 @@ actor IOSModelDeliveryActor {
     private let delegate: IOSModelDeliveryDownloadDelegate
 
     private var activeInstall: IOSPersistedModelInstallState?
+    private var operationGeneration: UInt64 = 0
+    private var activeOperationGeneration: UInt64?
 
     init(
         modelAssetStore: LocalModelAssetStore,
@@ -349,6 +353,7 @@ actor IOSModelDeliveryActor {
         }
 
         activeInstall = persisted
+        let generation = beginActiveOperation()
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: persisted.modelID,
@@ -356,7 +361,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: persisted.completedBytes + persisted.currentFilePartialBytes,
                 totalBytes: persisted.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: statusMessage(for: persisted.currentPhase)
+                message: statusMessage(for: persisted.currentPhase),
+                operationGeneration: generation
             )
         )
 
@@ -394,6 +400,9 @@ actor IOSModelDeliveryActor {
         if let activeInstall, activeInstall.modelID == model.id {
             // Resume a paused install; otherwise ignore duplicate install requests.
             if activeInstall.currentPhase == .paused {
+                if activeOperationGeneration == nil {
+                    _ = beginActiveOperation()
+                }
                 try await startNextDownloadIfNeeded()
             }
             return
@@ -430,6 +439,7 @@ actor IOSModelDeliveryActor {
             totalBytes: totalBytes
         )
         activeInstall = persisted
+        _ = beginActiveOperation()
         savePersistedState(persisted)
         try await startNextDownloadIfNeeded()
     }
@@ -453,6 +463,7 @@ actor IOSModelDeliveryActor {
         savePersistedState(pausedInstall)
 
         let descriptor = modelAssetStore.descriptor(id: modelID)?.model
+        guard let generation = activeOperationGeneration else { return }
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: modelID,
@@ -460,13 +471,15 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: pausedInstall.completedBytes + pausedInstall.currentFilePartialBytes,
                 totalBytes: pausedInstall.totalBytes,
                 estimatedBytes: descriptor?.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: generation
             )
         )
     }
 
     func cancel(modelID: String) async {
         guard let activeInstall, activeInstall.modelID == modelID else { return }
+        let terminalGeneration = endActiveOperation()
         await backend.cancelAllTasks(for: modelID)
 
         cleanupDirectory(at: URL(fileURLWithPath: activeInstall.stagingDirectoryPath, isDirectory: true))
@@ -481,7 +494,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: 0,
                 totalBytes: nil,
                 estimatedBytes: descriptor?.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: terminalGeneration
             )
         )
 
@@ -504,7 +518,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: 0,
                 totalBytes: nil,
                 estimatedBytes: model.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: beginActiveOperation()
             )
         )
 
@@ -515,6 +530,7 @@ actor IOSModelDeliveryActor {
             try fileManager.removeItem(at: finalRoot)
         }
 
+        let terminalGeneration = endActiveOperation()
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: model.id,
@@ -522,9 +538,23 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: 0,
                 totalBytes: nil,
                 estimatedBytes: model.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: terminalGeneration
             )
         )
+    }
+
+    private func beginActiveOperation() -> UInt64 {
+        operationGeneration += 1
+        activeOperationGeneration = operationGeneration
+        return operationGeneration
+    }
+
+    @discardableResult
+    private func endActiveOperation() -> UInt64 {
+        operationGeneration += 1
+        activeOperationGeneration = nil
+        return operationGeneration
     }
 
     private func fetchCatalog() async throws -> IOSModelCatalogDocument {
@@ -596,6 +626,7 @@ actor IOSModelDeliveryActor {
         self.activeInstall = activeInstall
         savePersistedState(activeInstall)
 
+        guard let generation = activeOperationGeneration else { return }
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: activeInstall.modelID,
@@ -603,13 +634,15 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: activeInstall.completedBytes + activeInstall.currentFilePartialBytes,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: statusMessage(for: phase)
+                message: statusMessage(for: phase),
+                operationGeneration: generation
             )
         )
     }
 
     private func verifyAndInstallActiveModel() async throws {
         guard let activeInstall else { return }
+        guard let generation = activeOperationGeneration else { return }
         let descriptor = try requireDescriptor(id: activeInstall.modelID).model
         let stagingRoot = URL(fileURLWithPath: activeInstall.stagingDirectoryPath, isDirectory: true)
         cleanupTransientInstallArtifacts(at: stagingRoot)
@@ -621,7 +654,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: activeInstall.totalBytes,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: generation
             )
         )
 
@@ -641,7 +675,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: activeInstall.totalBytes,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: generation
             )
         )
 
@@ -674,6 +709,7 @@ actor IOSModelDeliveryActor {
 
         cleanupPersistedState()
         self.activeInstall = nil
+        let terminalGeneration = endActiveOperation()
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: descriptor.id,
@@ -681,7 +717,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: activeInstall.totalBytes,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil
+                message: nil,
+                operationGeneration: terminalGeneration
             )
         )
     }
@@ -695,6 +732,7 @@ actor IOSModelDeliveryActor {
         _ = taskIdentifier
         let taskDescription = decodeTaskDescription(rawTaskDescription)
         guard let activeInstall,
+              let generation = activeOperationGeneration,
               let currentRelativePath = activeInstall.currentRelativePath,
               let taskDescription,
               taskDescription.modelID == activeInstall.modelID,
@@ -713,6 +751,7 @@ actor IOSModelDeliveryActor {
         )
         self.activeInstall = trackedInstall
         let downloadedBytes = trackedInstall.completedBytes + trackedInstall.currentFilePartialBytes + totalBytesWritten
+        guard activeOperationGeneration == generation else { return }
         await publishSnapshot(
             IOSModelDeliverySnapshot(
                 modelID: trackedInstall.modelID,
@@ -720,7 +759,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: downloadedBytes,
                 totalBytes: trackedInstall.totalBytes > 0 ? trackedInstall.totalBytes : expectedBytes,
                 estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: statusMessage(for: trackedInstall.currentPhase)
+                message: statusMessage(for: trackedInstall.currentPhase),
+                operationGeneration: generation
             )
         )
     }
@@ -806,6 +846,7 @@ actor IOSModelDeliveryActor {
             self.activeInstall = updatedInstall
             savePersistedState(updatedInstall)
             let descriptor = modelAssetStore.descriptor(id: activeInstall.modelID)?.model
+            guard let generation = activeOperationGeneration else { return }
             await publishSnapshot(
                 IOSModelDeliverySnapshot(
                     modelID: activeInstall.modelID,
@@ -815,7 +856,8 @@ actor IOSModelDeliveryActor {
                     estimatedBytes: descriptor?.estimatedDownloadBytes,
                     message: resumeDataPath == nil
                         ? "Connection interrupted. Restarting the current file."
-                        : "Connection interrupted. Resuming the current file."
+                        : "Connection interrupted. Resuming the current file.",
+                    operationGeneration: generation
                 )
             )
             do {
@@ -852,6 +894,7 @@ actor IOSModelDeliveryActor {
     private func failActiveInstall(_ error: Error) async {
         guard let activeInstall else { return }
         let descriptor = modelAssetStore.descriptor(id: activeInstall.modelID)?.model
+        let terminalGeneration = endActiveOperation()
         cleanupDirectory(at: URL(fileURLWithPath: activeInstall.stagingDirectoryPath, isDirectory: true))
         cleanupPersistedState()
         self.activeInstall = nil
@@ -862,7 +905,8 @@ actor IOSModelDeliveryActor {
                 downloadedBytes: 0,
                 totalBytes: activeInstall.totalBytes,
                 estimatedBytes: descriptor?.estimatedDownloadBytes,
-                message: error.localizedDescription
+                message: error.localizedDescription,
+                operationGeneration: terminalGeneration
             )
         )
         Task { @MainActor in

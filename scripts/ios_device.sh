@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Headless iPhone build/test driver for Vocello — the on-device analog of
-# `vocello bench`. Drives a real device over Apple's `devicectl` (CoreDevice): no
-# screen mirroring, no UI scripting. This replaced the earlier iPhone-Mirroring
-# UI-driving method.
+# On-device iPhone build/test driver for Vocello — CoreDevice via `devicectl`.
+# iPhone Mirroring is used for observation and to keep a locked device reachable to
+# CoreDevice; `ui-test` additionally requires the phone unlocked once for the XCUITest
+# automation auth handshake (bench/launch work with a locked phone).
 #
 # Pairs with IOSAutorunHarness (Sources/iOS/IOSAutorunHarness.swift): `bench`
 # launches the app with QVOICE_IOS_AUTORUN set, the in-app harness runs one
@@ -27,7 +27,8 @@
 #   scripts/ios_device.sh pull [dest]             # pull the app-container diagnostics mirror
 #   scripts/ios_device.sh bench [spec] [--label "note"]
 #                                                 # build→install→autorun→pull→summarize
-#   scripts/ios_device.sh ui-test [only]          # run VocelloiOSUITests ON THE DEVICE (signed XCUITest)
+#   scripts/ios_device.sh ui-test [--all|--cold] [only]
+#                                                 # device-safe UI tests (default: Smoke+Sheet+OnDeviceDownload)
 #
 # Observation: every device command auto-starts macOS iPhone Mirroring (watch on the Mac;
 # the phone stays locked + screen-dark, OLED-safe; mirroring also keeps a LOCKED device
@@ -81,6 +82,7 @@ MIRROR_APP="iPhone Mirroring"   # bundle com.apple.ScreenContinuity
 # mirroring, or rely on the phone's Auto-Lock; iPhone Mirroring reconnects on auto-lock.)
 ensure_mirror() {
   [[ "${QVOICE_IOS_NO_MIRROR:-}" == "1" ]] && return 0
+  local max_wait="${1:-30}"
   if pgrep -fq "iPhone Mirroring" 2>/dev/null \
      && xcrun devicectl list devices 2>/dev/null | grep -qi "available"; then
     return 0   # already mirroring and a device is reachable
@@ -88,14 +90,51 @@ ensure_mirror() {
   note "starting iPhone Mirroring (observation; keeps a locked device reachable, OLED-safe)…"
   open -a "$MIRROR_APP" >/dev/null 2>&1 || warn "could not launch iPhone Mirroring ($MIRROR_APP)"
   local waited=0
-  while (( waited < 30 )); do
+  local sleep_s=3
+  while (( waited < max_wait )); do
     if xcrun devicectl list devices 2>/dev/null | grep -qi "available"; then
       note "iPhone Mirroring up; device reachable."
       return 0
     fi
-    sleep 3; waited=$((waited + 3))
+    sleep "$sleep_s"; waited=$((waited + sleep_s))
+    if (( sleep_s < 6 )); then sleep_s=$((sleep_s + 1)); fi
   done
   warn "device not 'available' yet — LOCK your iPhone (or wait for Auto-Lock) so iPhone Mirroring connects, then re-run."
+}
+
+# Strict preflight for XCUITest: mirroring + devicectl availability + unlock guidance.
+ensure_device_ready() {
+  [[ "${QVOICE_IOS_NO_MIRROR:-}" == "1" ]] || ensure_mirror 60
+  local dev
+  dev="$(resolve_device)" || die "could not resolve a target device"
+  local tmp; tmp="$(mktemp)"
+  if ! xcrun devicectl list devices --json-output "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    die "devicectl could not list devices — connect USB, trust this Mac, enable Developer Mode, and confirm iPhone Mirroring is connected"
+  fi
+  if ! python3 - "$tmp" "$dev" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+target = sys.argv[2]
+devs = (data.get("result") or {}).get("devices") or []
+match = next((d for d in devs if d.get("identifier") == target), None)
+if not match:
+    sys.exit(2)
+cp = match.get("connectionProperties") or {}
+tunnel = cp.get("tunnelState", "")
+pairing = cp.get("pairingState", "")
+if tunnel not in ("connected", "available") and pairing != "paired":
+    sys.exit(3)
+PY
+  then
+    local code=$?
+    rm -f "$tmp"
+    [[ $code -eq 2 ]] && die "target device $dev not found in devicectl list"
+    [[ $code -eq 3 ]] && die "device $dev is not reachable — unlock iPhone once, confirm USB trust + iPhone Mirroring, then re-run ui-test"
+    die "device readiness check failed (exit $code)"
+  fi
+  rm -f "$tmp"
+  note "XCUITest preflight OK on $dev — unlock the iPhone once before tests start (automation auth handshake). bench/launch work with a locked phone."
 }
 
 # mirror: start/foreground iPhone Mirroring + confirm the device is reachable (manual use).
@@ -472,35 +511,165 @@ PY
   python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status")=="ok" else 1)' "$sentinel"
 }
 
-# ui-test [only]: run the VocelloiOSUITests XCUITest suite ON THE DEVICE (signed). This is
-# Apple's official on-device UI-test framework — the sanctioned on-device UI automation,
-# distinct from the deprecated screen-mirror UI-driving. Optional [only] scopes the run
-# (e.g. VocelloiOSUITests/VocelloiOSSheetUITests or .../testVoicePickerSelectAndClose).
+UI_TEST_DEFAULT_CLASSES=(
+  "VocelloiOSUITests/VocelloiOSSmokeUITests"
+  "VocelloiOSUITests/VocelloiOSSheetUITests"
+  "VocelloiOSUITests/VocelloiOSOnDeviceDownloadUITests"
+)
+UI_TEST_COLD_CLASSES=(
+  "VocelloiOSUITests/VocelloiOSColdGenerationUITests"
+)
+
+_ui_test_build_for_testing() {
+  local dev="$1"
+  require_team
+  local team; team="$(derive_team)"
+  note "building $SCHEME + VocelloiOSUITests for testing on $dev"
+  mkdir -p "$DERIVED"
+  local log="$DERIVED/device-uitest-build.log"
+  local mode="auto"
+  [[ "${QVOICE_IOS_MANUAL_SIGN:-}" == "1" ]] && mode="manual"
+  build_sign_args "$mode" "$team"
+  set +e
+  xcodebuild build-for-testing \
+    -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
+    -destination "id=$dev" -derivedDataPath "$DERIVED" \
+    "${SIGN_ARGS[@]}" \
+    SWIFT_OPTIMIZATION_LEVEL=-Onone \
+    2>&1 | tee "$log"
+  local st=${PIPESTATUS[0]}; set -e
+  [[ $st -eq 0 ]] || die "build-for-testing failed (see $log)"
+  [[ -d "$APP_PATH" ]] || die "build-for-testing finished but $APP_PATH is missing"
+}
+
+_ui_test_log_needs_unlock_retry() {
+  local log="$1"
+  grep -qiE 'Unlock iPhone|ApproveFailed|device locked|SFAuthenticationErrorCodeApproveFailedToPost' "$log"
+}
+
+_ui_test_latest_xcresult() {
+  find "$DERIVED/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1
+}
+
+_run_ui_test_once() {
+  local dev="$1"
+  local log="$2"
+  shift 2
+  local -a only_args=( "$@" )
+  set +e
+  if [[ -s "$log" ]]; then
+    xcodebuild test-without-building \
+      -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
+      -destination "id=$dev" -derivedDataPath "$DERIVED" \
+      -allowProvisioningUpdates \
+      DEVELOPMENT_TEAM="$QWENVOICE_DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic \
+      ${only_args[@]+"${only_args[@]}"} \
+      2>&1 | tee -a "$log"
+  else
+    xcodebuild test-without-building \
+      -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
+      -destination "id=$dev" -derivedDataPath "$DERIVED" \
+      -allowProvisioningUpdates \
+      DEVELOPMENT_TEAM="$QWENVOICE_DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic \
+      ${only_args[@]+"${only_args[@]}"} \
+      2>&1 | tee "$log"
+  fi
+  local status=${PIPESTATUS[0]}
+  set -e
+  return "$status"
+}
+
+# ui-test [--all|--cold] [only]: run VocelloiOSUITests on the device (signed XCUITest).
+# Default scope is the device-safe trio (Smoke + Sheet + OnDeviceDownload). Optional
+# [only] scopes to one class or method, e.g. VocelloiOSUITests/VocelloiOSSheetUITests.
 cmd_ui_test() {
   require_team
-  local only="${1:-}"
+  local scope="default"
+  local only=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all) scope="all"; shift ;;
+      --cold) scope="cold"; shift ;;
+      -*) die "unknown ui-test flag: $1 (try --all, --cold, or a VocelloiOSUITests/… target)" ;;
+      *) only="$1"; shift ;;
+    esac
+  done
+
+  ensure_device_ready
   local dev; dev="$(resolve_device)"
-  note "running VocelloiOSUITests on device $dev (signed XCUITest)${only:+ — only $only}"
+  note "running VocelloiOSUITests on device $dev (scope: ${only:-$scope})"
   mkdir -p "$DERIVED"
   export UI_TEST_SCREENSHOT_DIR="$DERIVED/uitest-screenshots"
   local log="$DERIVED/device-uitest.log"
-  local -a only_args=()
-  [[ -n "$only" ]] && only_args=( -only-testing:"$only" )
-  set +e
-  xcodebuild test \
-    -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG" \
-    -destination "id=$dev" -derivedDataPath "$DERIVED" \
-    -allowProvisioningUpdates \
-    DEVELOPMENT_TEAM="$QWENVOICE_DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic \
-    ${only_args[@]+"${only_args[@]}"} \
-    2>&1 | tee "$log"
-  local status=${PIPESTATUS[0]}
-  set -e
-  if grep -q '\*\* TEST SUCCEEDED \*\*' "$log"; then
-    note "device UI tests PASSED"
+
+  _ui_test_build_for_testing "$dev"
+  note "installing host app before XCUITest attach"
+  xcrun devicectl device install app --device "$dev" "$APP_PATH"
+
+  local attempt=1
+  local status=0
+  local all_ok=1
+  local -a run_targets=()
+  if [[ -n "$only" ]]; then
+    run_targets=( "$only" )
+  elif [[ "$scope" == "default" ]]; then
+    run_targets=( "${UI_TEST_DEFAULT_CLASSES[@]}" )
+  elif [[ "$scope" == "cold" ]]; then
+    run_targets=( "${UI_TEST_COLD_CLASSES[@]}" )
   else
-    die "device UI tests did not report TEST SUCCEEDED (exit $status; see $log)"
+    run_targets=( "" )
   fi
+
+  while (( attempt <= 2 )); do
+    if (( attempt > 1 )); then
+      warn "retrying ui-test after unlock/auth failure — unlock the iPhone, dismiss any automation prompt, then wait…"
+      sleep 8
+      : >"$log"
+    fi
+    status=0
+    all_ok=1
+    : >"$log"
+    if ((${#run_targets[@]} == 0)); then
+      set +e
+      _run_ui_test_once "$dev" "$log"
+      status=$?
+      set -e
+      (( status != 0 )) && all_ok=0
+    else
+      local target
+      for target in "${run_targets[@]}"; do
+        note "ui-test class: $target"
+        set +e
+        _run_ui_test_once "$dev" "$log" -only-testing:"$target"
+        local one=$?
+        set -e
+        if (( one != 0 )); then
+          all_ok=0
+          status=$one
+          break
+        fi
+        if _ui_test_log_needs_unlock_retry "$log"; then
+          all_ok=0
+          break
+        fi
+      done
+    fi
+    if (( all_ok == 1 )) && grep -q '\*\* TEST SUCCEEDED \*\*' "$log"; then
+      note "device UI tests PASSED"
+      return 0
+    fi
+    if (( attempt == 1 )) && _ui_test_log_needs_unlock_retry "$log"; then
+      attempt=$((attempt + 1))
+      continue
+    fi
+    break
+  done
+
+  local xcresult; xcresult="$(_ui_test_latest_xcresult || true)"
+  [[ -n "$xcresult" ]] && warn "xcresult bundle: $xcresult"
+  warn "ui-test log: $log"
+  [[ -d "$UI_TEST_SCREENSHOT_DIR" ]] && warn "screenshots: $UI_TEST_SCREENSHOT_DIR"
+  die "device UI tests did not report TEST SUCCEEDED (exit ${status:-1}; see $log)"
 }
 
 main() {
@@ -508,7 +677,7 @@ main() {
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
   # locked device reachable). `mirror` calls ensure_mirror itself; help/none skip it.
   case "$sub" in
-    doctor|build|install|launch|console|pull|bench|shot|ui-test) ensure_mirror ;;
+    doctor|build|install|launch|console|pull|bench|shot) ensure_mirror ;;
   esac
   case "$sub" in
     doctor)  cmd_doctor "$@" ;;

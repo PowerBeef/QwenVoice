@@ -13,6 +13,9 @@ final class VocelloiOSDownloadManagerUITests: XCTestCase {
     private var app: XCUIApplication!
 
     override func setUpWithError() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("simulator-only download backend (QVOICE_SIM_* env is ignored on device)")
+        #endif
         continueAfterFailure = false
 
         app = XCUIApplication()
@@ -22,7 +25,7 @@ final class VocelloiOSDownloadManagerUITests: XCTestCase {
         app.launchEnvironment["QVOICE_SIM_BACKEND_DELAY_MS"] = "500"
         app.launch()
 
-        dismissOnboardingIfPresent()
+        VocelloUITestApp.dismissOnboardingIfPresent(in: app)
         navigateToSettings()
         uninstallProCustomIfNeeded()
     }
@@ -103,34 +106,6 @@ final class VocelloiOSDownloadManagerUITests: XCTestCase {
         XCTAssertTrue(settingsTab.waitForExistence(timeout: 30), "Settings tab should exist")
         settingsTab.tap()
         XCTAssertTrue(element("iosModelRow_pro_custom").waitForExistence(timeout: 10), "Model row should be visible in Settings")
-    }
-
-    private func dismissOnboardingIfPresent() {
-        let studio = element("rootTab_studio")
-        let skip = element("onboarding_skip")
-        let cta = element("onboarding_cta")
-        let deadline = Date().addingTimeInterval(25)
-        var ctaTaps = 0
-        while Date() < deadline {
-            // The onboarding full-screen cover sits above the main tabs, so a
-            // visible Skip/CTA button is the reliable signal; the tabs exist
-            // underneath even when not interactive.
-            if skip.exists {
-                skip.tap()
-                _ = studio.waitForExistence(timeout: 6)
-                return
-            }
-            if cta.exists {
-                cta.tap()
-                ctaTaps += 1
-                // Failsafe: if we somehow get stuck advancing, stop.
-                if ctaTaps > 5 { return }
-                usleep(400_000)
-                continue
-            }
-            if studio.exists { return }
-            usleep(300_000)
-        }
     }
 
     private func uninstallProCustomIfNeeded() {

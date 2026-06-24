@@ -24,6 +24,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
     private let modelAssetStore: LocalModelAssetStore?
     private let modelManager: ModelManagerViewModel
     private var deliveryActor: IOSModelDeliveryActor?
+    private var lastAcceptedGeneration: [String: UInt64] = [:]
 
     /// Called after a model install completes so the engine can preload it in the background.
     var onModelInstalled: ((_ modelID: String) -> Void)?
@@ -109,6 +110,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
             do {
                 try await deliveryActor.install(model: model)
             } catch {
+                let generation = (lastAcceptedGeneration[model.id] ?? 0) + 1
+                lastAcceptedGeneration[model.id] = generation
                 apply(
                     IOSModelDeliverySnapshot(
                         modelID: model.id,
@@ -116,7 +119,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
                         downloadedBytes: 0,
                         totalBytes: model.estimatedDownloadBytes,
                         estimatedBytes: model.estimatedDownloadBytes,
-                        message: error.localizedDescription
+                        message: error.localizedDescription,
+                        operationGeneration: generation
                     )
                 )
             }
@@ -131,6 +135,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
     }
 
     func cancel(_ model: TTSModel) {
+        let bumpedGeneration = (lastAcceptedGeneration[model.id] ?? 0) + 1
+        lastAcceptedGeneration[model.id] = bumpedGeneration
         // Immediately show available state before background refresh
         if let descriptor = modelAssetStore?.descriptor(id: model.id)?.model {
             states[model.id] = .available(estimatedBytes: descriptor.estimatedDownloadBytes)
@@ -159,6 +165,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
                 await modelManager.refresh()
                 states.removeValue(forKey: model.id)
             } catch {
+                let generation = (lastAcceptedGeneration[model.id] ?? 0) + 1
+                lastAcceptedGeneration[model.id] = generation
                 apply(
                     IOSModelDeliverySnapshot(
                         modelID: model.id,
@@ -166,7 +174,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
                         downloadedBytes: 0,
                         totalBytes: nil,
                         estimatedBytes: model.estimatedDownloadBytes,
-                        message: error.localizedDescription
+                        message: error.localizedDescription,
+                        operationGeneration: generation
                     )
                 )
             }
@@ -185,6 +194,10 @@ final class IOSModelInstallerViewModel: ObservableObject {
     }
 
     private func apply(_ snapshot: IOSModelDeliverySnapshot) {
+        let previousGeneration = lastAcceptedGeneration[snapshot.modelID] ?? 0
+        guard snapshot.operationGeneration >= previousGeneration else { return }
+        lastAcceptedGeneration[snapshot.modelID] = snapshot.operationGeneration
+
         switch snapshot.phase {
         case .downloading:
             let progress: Double?
@@ -260,6 +273,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
             }
         case .deleted:
             states.removeValue(forKey: snapshot.modelID)
+            lastAcceptedGeneration.removeValue(forKey: snapshot.modelID)
             Task {
                 await modelManager.refresh()
             }

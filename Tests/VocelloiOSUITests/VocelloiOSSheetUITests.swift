@@ -18,18 +18,14 @@ final class VocelloiOSSheetUITests: XCTestCase {
 
     override class func setUp() {
         super.setUp()
-        VocelloUITestApp.shared.retain()
+        VocelloUITestBootstrap.registerObserverIfNeeded()
+        VocelloUITestApp.shared.retainIfNeeded()
     }
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         VocelloUITestApp.shared.resetToStudio()
-    }
-
-    override class func tearDown() {
-        VocelloUITestApp.shared.release()
-        super.tearDown()
     }
 
     /// Selecting a voice row updates the provisional selection but does NOT close the picker.

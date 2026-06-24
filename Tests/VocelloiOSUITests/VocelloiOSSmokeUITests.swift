@@ -14,18 +14,14 @@ final class VocelloiOSSmokeUITests: XCTestCase {
 
     override class func setUp() {
         super.setUp()
-        VocelloUITestApp.shared.retain()
+        VocelloUITestBootstrap.registerObserverIfNeeded()
+        VocelloUITestApp.shared.retainIfNeeded()
     }
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         VocelloUITestApp.shared.resetToStudio()
-    }
-
-    override class func tearDown() {
-        VocelloUITestApp.shared.release()
-        super.tearDown()
     }
 
     /// Confirms the Studio tab + its Custom/Design/Clone mode control are present.

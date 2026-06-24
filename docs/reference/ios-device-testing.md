@@ -49,6 +49,12 @@ in-process — there is no extension App ID) — see
   locked while mirroring) or rely on Auto-Lock — iPhone Mirroring reconnects when the phone auto-locks. Opt
   out with `QVOICE_IOS_NO_MIRROR=1`; start it manually with `scripts/ios_device.sh mirror`.
 
+- **Unlock vs lock:** `bench`, `launch`, and `pull` work with a **locked** phone (mirroring
+  keeps CoreDevice reachable). **`ui-test` requires the iPhone unlocked once** at the start of
+  the run so XCUITest can complete the automation auth handshake (`Unlock iPhone … to Continue`
+  / `SFAuthenticationErrorCodeApproveFailedToPost` when locked). Lock again after the handshake
+  if you prefer; mirroring keeps the tunnel up.
+
 ---
 
 ## 1. Headless generation harness
@@ -73,7 +79,7 @@ on the Mac with the phone locked + screen-dark (OLED-safe). Opt out with `QVOICE
 | `shot [path]` | `screencapture` the macOS iPhone Mirroring window → a real device screenshot (default `build/device-shot.png`). Brings Mirroring frontmost first. |
 | `pull [dest]` | `devicectl device copy from --domain-type appDataContainer --source Library/Caches/Vocello/diagnostics` (the app's pullable mirror — the App-Group container is NOT devicectl-readable). Default dest `build/ios-diagnostics`. |
 | `bench [spec] [--label "note"]` | The full loop: `build → install → launch-with-autorun → poll the sentinel → pull diagnostics → summarize`. Exits non-zero if the generation failed. |
-| `ui-test [target]` | Run the `VocelloiOSUITests` XCUITest suite on the device (`xcodebuild test`) — the standing automated UI-test method (see §2). Optional `target` scopes to a class, e.g. `VocelloiOSUITests/VocelloiOSSheetUITests`. |
+| `ui-test [--all\|--cold] [target]` | Run `VocelloiOSUITests` on the device (see §2). **Default:** Smoke + Sheet + OnDeviceDownload. `--cold` runs cold generation only (skips when no model). `--all` runs every class (debug). Optional `target` scopes further, e.g. `VocelloiOSUITests/VocelloiOSSheetUITests`. |
 
 ```sh
 export QWENVOICE_DEVELOPMENT_TEAM=<team-id>
@@ -151,20 +157,33 @@ the sentinel is the authoritative single-run record.
 ## 2. XCUITest on the device — the standing autonomous UI loop
 
 **This is the standing automated UI-test method (maintainer decision, 2026-06-04 — the
-Simulator is retired; see §3).** Run the `VocelloiOSUITests` suite **on the device** with
-**`scripts/ios_device.sh ui-test`** (`xcodebuild test -destination
-'platform=iOS,id=<device>'` — Apple's official on-device UI framework). Pass `[only]` to scope
-a run, e.g. `scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSSheetUITests`.
+Simulator is retired; see §3).** Run the device-safe UI suite on hardware with
+**`scripts/ios_device.sh ui-test`** (`build-for-testing` → install host app →
+`xcodebuild test-without-building`). Pass `[target]` to scope further, e.g.
+`scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSSheetUITests`.
+
+| Command | Classes | Notes |
+|---------|---------|-------|
+| `scripts/ios_device.sh ui-test` | Smoke, Sheet, OnDeviceDownload | Default (~1–2 min). One warm app session via `VocelloUITestObserver`. |
+| `scripts/ios_device.sh ui-test --cold` | ColdGeneration | Real generation from cold launch; **skips** when Speed model not installed. |
+| `scripts/ios_device.sh ui-test --all` | All classes | Debug/soak only. DownloadManager skips on device; cold gen skips without model. |
+| `scripts/ios_sim.sh ui-test` | DownloadManager + sim flows | Simulator-only (`QVOICE_SIM_*` backend). |
+
+**Preflight:** `ui-test` runs `ensure_device_ready` (mirroring up to 60s, devicectl
+reachability, unlock guidance). Retries once on unlock/auth log patterns.
 
 `Tests/VocelloiOSUITests/` (target `VocelloiOSUITests`, host `VocelloiOS`):
-- `VocelloUITestApp.swift` — shared warm-app coordinator; keeps one app session alive across
-  non-cold tests and resets to Studio between cases.
+- `VocelloUITestApp.swift` — shared warm-app coordinator; resets to Studio between cases.
+- `VocelloUITestObserver.swift` — target-level retain/release across the default trio.
 - `VocelloiOSSmokeUITests` — launch + 4-tab reachability + Custom/Design/Clone segments.
 - `VocelloiOSSheetUITests` — sheet regressions: voice select-and-close, preview-keeps-open,
   language select-and-close, brief confirm-closes.
+- `VocelloiOSOnDeviceDownloadUITests` — real URLSession download cancel + pause/resume/cancel
+  (short paths only; no full ~2.3 GB soak).
+- `VocelloiOSDownloadManagerUITests` — **simulator-only** (simulated backend + `QVOICE_SIM_*`).
 - `VocelloiOSColdGenerationUITests` — cold-launch real-generation test. Unlike the smoke suite,
   this one kills the warm session, launches a fresh app with the engine enabled, types in Custom
-  mode, and waits for actual audio generation to complete.
+  mode, and waits for actual audio generation to complete (or skips when the model is missing).
 
 The smoke/sheet suites do **not** generate audio (that's the harness above) — the IA + identifiers +
 sheet behaviour are what's under test. The cold-generation suite is the exception: it proves a real
@@ -186,10 +205,13 @@ Always pass `-derivedDataPath build/ios` so device + simulator builds share **on
 tree (one `SourcePackages`) and don't pollute the global `~/Library/Developer/Xcode/DerivedData`:
 
 ```sh
-# Device (standing method) — via the script, or directly:
+# Device (standing method) — default device-safe trio:
 export QWENVOICE_DEVELOPMENT_TEAM=<team-id>
 scripts/ios_device.sh ui-test
-xcodebuild test -project QwenVoice.xcodeproj -scheme VocelloiOS \
+# Cold generation soak (skips when Speed model not installed):
+scripts/ios_device.sh ui-test --cold
+# Direct xcodebuild (after build-for-testing + install):
+xcodebuild test-without-building -project QwenVoice.xcodeproj -scheme VocelloiOS \
   -destination 'id=<device-udid>' -derivedDataPath build/ios -allowProvisioningUpdates
 ```
 

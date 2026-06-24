@@ -51,9 +51,54 @@ RULES
 
 <!-- NEWEST ENTRIES BELOW THIS LINE — prepend your entry here (newest at top) -->
 
+## 2026-06-24 — claude-code — iOS on-device UI test harness remediation
+
+- **Commits:** uncommitted — working tree
+- **Touched:**
+  - `scripts/ios_device.sh` — `ensure_device_ready`, build-for-testing + install, default `--all`/`--cold` scope, sequential class order, unlock retry, failure artifacts; header comment fix.
+  - `Tests/VocelloiOSUITests/VocelloUITestApp.swift` — restored lifecycle helpers; `retainIfNeeded`, shared onboarding dismiss, confirmation-button wait helper.
+  - `Tests/VocelloiOSUITests/VocelloUITestObserver.swift` — new; bundle-level `release()` only.
+  - `Tests/VocelloiOSUITests/VocelloiOSSmokeUITests.swift`, `VocelloiOSSheetUITests.swift`, `VocelloiOSOnDeviceDownloadUITests.swift` — observer bootstrap + `retainIfNeeded`; OnDeviceDownload `tearDown` → `resetToStudio()`.
+  - `Tests/VocelloiOSUITests/VocelloiOSDownloadManagerUITests.swift` — simulator-only `XCTSkip` on device.
+  - `Tests/VocelloiOSUITests/VocelloiOSColdGenerationUITests.swift` — `XCTSkip` when Speed model not installed.
+  - `docs/reference/ios-device-testing.md`, `AGENTS.md` — unlock vs lock rules, default ui-test scope/flags.
+  - `QwenVoice.xcodeproj/project.pbxproj` — regenerated for `VocelloUITestObserver.swift`.
+- **Summary:**
+  - Implemented the iOS On-Device Test Harness Remediation Plan (Phases A–D).
+  - Default `scripts/ios_device.sh ui-test` now runs Smoke → Sheet → OnDeviceDownload sequentially (not alphabetically), with build-for-testing, host install, strict preflight, and one unlock/auth retry.
+  - Warm session uses `retainIfNeeded()` from class setUp (fixes crash when `resetToStudio()` ran before app launch); observer only releases at bundle end.
+  - `./scripts/build_foundation_targets.sh ios` passes. One ui-test run post-fix reached test execution (9 tests, 5 failures before lifecycle fix); a follow-up run hung on first-launch onboarding (device/env — unlock + complete onboarding manually, then re-run).
+- **Decisions:**
+  - Default scope runs three sequential `xcodebuild test-without-building` invocations in explicit order (accepts relaunch between classes for deterministic state).
+  - DownloadManager stays simulator-only via `#if !targetEnvironment(simulator)` + `XCTSkip`; cold gen skips cleanly without model.
+- **Requests for kimi:** none (AGENTS.md iOS testing section updated inline per plan).
+- **Open questions / blockers:**
+  - Maintainer should run `scripts/ios_device.sh ui-test` ×3 with phone unlocked once at start to confirm green after onboarding is cleared on device.
+
+## 2026-06-24 — claude-code — iOS download manager race + dialog fixes
+
+- **Commits:** uncommitted — working tree
+- **Touched:**
+  - `Sources/iOS/IOSModelDeliveryActor.swift` — operation generation token; end/begin active operation on cancel/fail/complete; guard progress against stale generation.
+  - `Sources/iOS/IOSModelInstallerViewModel.swift` — ignore stale snapshots via `lastAcceptedGeneration`; bump generation on cancel.
+  - `Sources/iOS/IOSSettingsViews.swift` — re-hoisted Pause/Cancel confirmation dialog to parent `IOSSettingsView` (`modelPendingCancel`).
+  - `Tests/VocelloiOSUITests/VocelloiOSOnDeviceDownloadUITests.swift` — added `testRealDeviceDownloadPauseResumeAndCancel`.
+  - `AGENT_HANDOFF.md` — this entry.
+- **Summary:**
+  - Investigated recurring cancel-stuck and pause/resume issues in the iOS model download manager.
+  - Root cause for cancel-stuck: stale `.downloading` snapshots could arrive on MainActor after cancel due to actor suspend at `publishSnapshot`; fixed with monotonic `operationGeneration` on every snapshot plus VM-side rejection of stale generations.
+  - Restored parent-level pause/cancel dialog (regression from `dcc6990` per-row `@State` dialog that `98c2272` had fixed).
+  - On-device validation: `scripts/ios_device.sh ui-test VocelloiOSUITests/VocelloiOSOnDeviceDownloadUITests` — **2 tests, 0 failures** (`testRealDeviceDownloadCancel` 16.5s, `testRealDeviceDownloadPauseResumeAndCancel` 21.3s).
+  - `./scripts/build_foundation_targets.sh ios` and `./scripts/build.sh build` passed.
+- **Decisions:**
+  - **Keep pause/resume** for now — device tests pass with the generation-token + parent-dialog fixes; simplifies only if pause/resume regresses again in the field.
+  - Interrupted downloads still use direct Cancel (no pause dialog); active downloading/resuming/restarting use parent Pause/Cancel dialog.
+- **Requests for kimi:** none.
+- **Open questions / blockers:** none.
+
 ## 2026-06-24 — kimi — on-device download-manager validation attempt
 
-- **Commits:** 77b6852 on main.
+- **Commits:** 77b6852, 9d8580f on main.
 - **Touched:**
   - `Tests/VocelloiOSUITests/VocelloiOSOnDeviceDownloadUITests.swift` — new cancel-only on-device UI test.
   - `QwenVoice.xcodeproj/project.pbxproj` — regenerated for the new test file.
