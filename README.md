@@ -141,7 +141,7 @@ Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 
 The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
 
-Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`AGENTS.md`](AGENTS.md).
+Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`CLAUDE.md`](CLAUDE.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -150,7 +150,7 @@ cd QwenVoice
 open QwenVoice.xcodeproj
 ```
 
-The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`AGENTS.md`](AGENTS.md).
+The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`CLAUDE.md`](CLAUDE.md).
 
 Useful checks:
 
@@ -164,7 +164,7 @@ Useful checks:
 More technical detail:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — unified architecture map: modules, dependencies, runtime (XPC vs in-process), and the generation lifecycle
-- [`AGENTS.md`](AGENTS.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
+- [`CLAUDE.md`](CLAUDE.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
 - [`docs/reference/cli.md`](docs/reference/cli.md) — the headless `vocello` command-line tool
 - [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) — local storage and deletion details
 

@@ -18,46 +18,29 @@ benchmark/diagnostic scripts (`benchmarks/`, `scripts/*.py`).
 
 ## Source of truth
 
-`AGENTS.md` is the canonical, deeper agent guide (architecture, engine
-invariants, dependency policy, release process). This file is the Claude Code
-operating lens on top of it. When facts disagree, trust in this order:
-`Sources/` → `project.yml` → `scripts/` → `.github/workflows/release.yml` →
-`AGENTS.md` → other prose. `Sources/Resources/qwenvoice_contract.json` is the
-canonical schema for speakers/models/variants/HF revisions. **If you change
-something that invalidates a doc, update the doc in the same change.**
-
-## Agent handoff protocol (with Kimi / AGENTS.md)
-
-This repo is worked on by two coding agents. **Claude Code owns `CLAUDE.md`**
-(this file); **Kimi owns `AGENTS.md`**. Neither edits the other's owned file. The
-shared coordination channel is **`AGENT_HANDOFF.md`** (repo root) — an
-append-at-top log each agent writes to when it finishes a session.
-
-- **On pickup** (when told you're taking over from Kimi): read `AGENT_HANDOFF.md`
-  from the top down to your most recent `claude-code` entry — everything above it
-  is new to you (your topmost entry is your read watermark; no external state
-  needed). Action any `Requests for claude-code` items before starting.
-- **On handoff** (before ending a session): prepend a new entry to
-  `AGENT_HANDOFF.md` using its template — commits, files touched, summary,
-  decisions, `Requests for kimi`, open questions. Reference the commit SHA(s);
-  commit the file with the work.
-- **Never edit `AGENTS.md`.** If a change belongs there, put the exact snippet
-  under `Requests for kimi` in your handoff entry for Kimi to apply.
-
-The full contract, protocol, and entry template live at the top of
-`AGENT_HANDOFF.md`.
+This file is the **main agent guide** for the repo. For deep architecture and
+engine invariants see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); for
+per-subsystem detail see [`docs/reference/`](docs/reference/). When facts
+disagree, trust in this order: `Sources/` → `project.yml` → `scripts/` →
+`.github/workflows/release.yml` → `CLAUDE.md` → other prose.
+`Sources/Resources/qwenvoice_contract.json` is the canonical schema for
+speakers/models/variants/HF revisions. **If you change something that
+invalidates a doc, update the doc in the same change.**
 
 ## Hard rules (do not violate)
 
 - **iOS is on-device only. Never use the iOS Simulator** or simulator-only tools
-  for iOS UI work — no `xcodebuild -destination 'platform=iOS Simulator…'`, no
-  `scripts/ios_sim.sh`, and **no XcodeBuildMCP simulator tools**
-  (`build_run_sim`, `snapshot_ui`, `list_sims`, …) or Axiom `simulator-tester`
-  for the `VocelloiOS` target. Use `scripts/ios_device.sh` (see Commands). This
-  project rule overrides the default simulator workflow.
+  for iOS UI work — no `xcodebuild -destination 'platform=iOS Simulator…'` and
+  **no XcodeBuildMCP simulator tools** (`build_run_sim`, `snapshot_ui`,
+  `list_sims`, …) or Axiom `simulator-tester` for the `VocelloiOS` target. Use
+  `scripts/ios_device.sh` (see Commands). The iOS Simulator is intentionally
+  unsupported — the engine runs in-process on Metal.
 - **`project.yml` is the Xcode project source of truth.** Never edit
   `QwenVoice.xcodeproj/project.pbxproj` directly. Edit `project.yml`, then
-  `./scripts/regenerate_project.sh`.
+  `./scripts/regenerate_project.sh`. (XcodeGen gotcha: the iOS target lists its
+  bundled JSON/catalog/`voice-previews` under `sources:` with
+  `buildPhase: resources`, **not** under `resources:` — XcodeGen silently drops
+  them otherwise and iOS builds compile but crash on launch. See `project.yml`.)
 - **Single shippable config: `Release` only.** No `DEBUG` symbol, no
   Debug-vs-Release fork. `build.sh` compiles `-Onone` for the local loop;
   `release.sh` compiles the same config optimized. Debug capabilities are gated
@@ -80,8 +63,9 @@ The full contract, protocol, and entry template live at the top of
 
 ### Engine invariants (do not regress)
 
-The full list is in `AGENTS.md` "Critical engine invariants." The ones most
-likely to bite: the **prewarm reentrancy gate** (`acquire/releasePrewarmSlot` —
+The full list lives in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (engine
+core + the macOS/iOS request lifecycles). The ones most likely to bite: the
+**prewarm reentrancy gate** (`acquire/releasePrewarmSlot` —
 never pair a throwing `try? await acquire` with an unconditional
 `defer { release }`); **event streams** (macOS `.unbounded`, iOS
 `.bufferingNewest(64)`); **cancellation ownership** (iOS cancel is cooperative
@@ -120,7 +104,12 @@ xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoice \
 scripts/ios_device.sh doctor             # environment + device preflight
 scripts/ios_device.sh bench              # build → install → autorun → pull → summarize
 scripts/ios_device.sh ui-test            # run VocelloiOSUITests on device
+# on-device lanes (observe via iPhone Mirroring, OLED-safe; `build` also preserves a
+# dSYM under build/ios/dsyms/ for symbolication):
 scripts/ios_device.sh launch|console|pull|shot
+scripts/ios_device.sh logs [spec]        # attached launch → retained build/ios-logs/<run>.log
+scripts/ios_device.sh crashes [--test]   # pull + xcsym-symbolicate MetricKit crash/hang diagnostics
+scripts/ios_device.sh debug [spec]       # get-task-allow build + attached launch + LLDB attach guidance
 
 # Perf/quality (deterministic driver; listening pass is the mandatory pre-merge gate)
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
@@ -220,14 +209,16 @@ single-config, deterministic local loop. Then:
 - Branch hygiene: once a PR merges into `main`, delete the remote feature branch
   immediately and fast-forward/remove the local branch. Don't leave stale merged
   branches on `origin`.
+- **Commits / pushes:** once an implementation or phase is complete and verified
+  (gates green), commit and push to `main` without asking each time. Use
+  Conventional Commits and end commit messages with
+  `Co-Authored-By: Claude <noreply@anthropic.com>`.
 
 ## Read for depth
 
 - `docs/ARCHITECTURE.md` — **start here**: unified, code-verified map of modules,
   dependencies, runtime architecture (XPC vs in-process), the generation
   lifecycle, persistence, model management, and telemetry.
-- `AGENTS.md` — canonical repo guide (full architecture, invariants, pinning,
-  release/QA, conventions). Read this for anything non-trivial.
 - `docs/reference/` — per-subsystem reading list: `mlx-guide.md`,
   `qwen3-tts-guide.md`, `mimi-codec-guide.md`, `metal-guide.md`,
   `swift-performance-guide.md`, `ios-engine-optimization.md`,
@@ -236,4 +227,4 @@ single-config, deterministic local loop. Then:
   `mlx-audio-swift-patching.md`.
 - `PRODUCT.md` (product/brand) · `website/AGENTS.md` + `website/PRODUCT.md`
   (marketing site) · `docs/qwen_tone.md` (tone prompt-writing; supplemental,
-  may lag shipped behavior — trust README/AGENTS first).
+  may lag shipped behavior — trust README/CLAUDE.md first).
