@@ -111,52 +111,12 @@ extension QVoiceiOSApp {
         // model. The app process *does* get the entitlement's raised limit, so
         // generation runs in-process here. Both are wrapped in the same
         // `TTSEngineStore`, so the UI is agnostic to which is active.
-        if IOSSimulatorRuntimeSupport.isSimulator {
-            let modelAssetStore = LocalModelAssetStore(
-                modelRegistry: registry,
-                rootDirectory: AppPaths.modelsDir,
-                storeVersionSeed: modelAssetStoreSeed()
-            )
-            // Wrap the real status provider so refresh queries overlay the
-            // Simulator-only fake-installed registry. The fake installer
-            // writes to that registry; every subsequent modelManager.refresh
-            // returns `.installed` for those IDs instead of the on-disk
-            // `.notInstalled` the real provider would otherwise report.
-            let fakeStatusProvider = IOSSimulatorFakeStatusProvider(
-                wrapping: LocalModelStatusProvider(modelAssetStore: modelAssetStore)
-            )
-            IOSSimulatorFakeInstallRegistry.shared.applyEnvironmentSeed(models: registry.models)
-            let modelManager = ModelManagerViewModel(
-                modelRegistry: registry,
-                statusProvider: fakeStatusProvider
-            )
-            let engineStore = TTSEngineStore(
-                backend: AnyTTSEngineBackend(
-                    engine: IOSSimulatorTTSEngine(
-                        modelRegistry: registry,
-                        documentIO: documentIO
-                    ),
-                    supportsSavedVoiceMutation: true,
-                    supportsModelManagementMutation: true,
-                    supportedModes: [.custom, .design, .clone]
-                )
-            )
-            let modelInstaller = IOSModelInstallerViewModel(
-                modelAssetStore: modelAssetStore,
-                modelManager: modelManager
-            )
-            modelInstaller.onModelInstalled = { [weak engineStore] modelID in
-                guard let engineStore else { return }
-                Task {
-                    try? await engineStore.loadModel(id: modelID)
-                }
-            }
-            return SelectedBackend(
-                engineStore: engineStore,
-                modelManager: modelManager,
-                modelInstaller: modelInstaller
-            )
-        }
+#if targetEnvironment(simulator)
+        return try IOSSimulatorBackendFactory.makeSelectedBackend(
+            registry: registry,
+            documentIO: documentIO
+        )
+#else
 
         guard AppPaths.isUsingSharedContainer else {
             throw IOSBackendBootstrapError.missingSharedContainer(
@@ -206,6 +166,7 @@ extension QVoiceiOSApp {
             modelManager: modelManager,
             modelInstaller: modelInstaller
         )
+#endif
     }
 }
 
