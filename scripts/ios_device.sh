@@ -35,6 +35,7 @@
 #   scripts/ios_device.sh profile [spec]           # Instruments/xctrace trace of an autorun generation (burn-in-safe)
 #   scripts/ios_device.sh preflight                # one-shot readiness (mirror+device+signing+app+dSYM; unlock advisory)
 #   scripts/ios_device.sh test [--all|--cold] [only] # ui-test + single verdict + build/ios/uitest-artifacts/
+#   scripts/ios_device.sh review [--baseline]        # on-device UI capture tour + baseline diff (burn-in-aware)
 #
 # Observation: every device command auto-starts macOS iPhone Mirroring (watch on the Mac;
 # the phone stays locked + screen-dark, OLED-safe; mirroring also keeps a LOCKED device
@@ -939,6 +940,64 @@ cmd_test() {
   fi
 }
 
+# review [--baseline]: capture on-device screenshots of the key screens (XCUITest tour:
+# VocelloiOSReviewTourUITests) for visual review + baseline diffing. Burns-in aware — the
+# tour opens each sheet only long enough to capture, then dismisses it. Captures land in
+# build/ios/review-shots/<run>/; committed baselines live in docs/ios-review-baselines/.
+# `--baseline` seeds/updates baselines from this run. The perceptual diff is a vision-MCP
+# step (ui_diff_check / axiom:screenshot-validator); this verb captures + does a
+# file-level baseline check and prints the pairs to diff.
+cmd_review() {
+  require_team
+  local baseline_mode=0
+  [[ "${1:-}" == "--baseline" ]] && baseline_mode=1
+
+  local run_id="ios-review-$(date +%Y%m%d-%H%M%S)"
+  local shots="$ROOT_DIR/build/ios/review-shots/$run_id"
+  local baselines="$ROOT_DIR/docs/ios-review-baselines"
+  mkdir -p "$shots" "$baselines"
+
+  note "review: capturing the on-device UI tour (runID=$run_id)"
+  set +e
+  ( cmd_ui_test "VocelloiOSUITests/VocelloiOSReviewTourUITests" )
+  local st=$?
+  set -e
+
+  local src="$DERIVED/uitest-screenshots"
+  [[ -d "$src" ]] && cp -R "$src/." "$shots/" 2>/dev/null || true
+  note "captures → $shots"
+
+  if (( baseline_mode == 1 )); then
+    if ls "$shots"/*.png >/dev/null 2>&1; then
+      cp "$shots"/*.png "$baselines/"
+      note "baselines seeded/updated → $baselines (review + git add + commit)"
+    else
+      warn "no PNGs in $shots to seed"
+    fi
+    return "$st"
+  fi
+
+  note "── baseline pairs (perceptual diff via vision MCP) ──"
+  local any=0 png name
+  for png in "$shots"/*.png; do
+    [[ -f "$png" ]] || continue
+    any=1
+    name="$(basename "$png")"
+    if [[ -f "$baselines/$name" ]]; then
+      printf '  DIFF  %s\n' "$name" >&2
+      printf '        actual:   %s\n' "$png" >&2
+      printf '        baseline: %s\n' "$baselines/$name" >&2
+    else
+      printf '  NEW   %s  (no baseline — run: %s review --baseline)\n' "$name" "$0" >&2
+    fi
+  done
+  (( any == 0 )) && warn "no captures produced (did the tour run?)"
+  note "diff each pair with mcp__zai-mcp-server__ui_diff_check (expected=baseline, actual=capture), or axiom:screenshot-validator."
+
+  (( st == 0 )) && note "review tour OK" || warn "review tour had failures (exit $st)"
+  return "$st"
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
@@ -963,9 +1022,10 @@ main() {
     profile) cmd_profile "$@" ;;
     preflight) cmd_preflight "$@" ;;
     test)      cmd_test "$@" ;;
+    review)    cmd_review "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|preflight|test|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|preflight|test|review|help)" ;;
   esac
 }
 
