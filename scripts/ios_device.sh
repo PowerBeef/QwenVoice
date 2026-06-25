@@ -33,6 +33,8 @@
 #   scripts/ios_device.sh debug [spec]             # attached launch + LLDB attach guidance (get-task-allow build)
 #   scripts/ios_device.sh logs [spec]              # attached launch teeing stdout → build/ios-logs/<run>.log
 #   scripts/ios_device.sh profile [spec]           # Instruments/xctrace trace of an autorun generation (burn-in-safe)
+#   scripts/ios_device.sh preflight                # one-shot readiness (mirror+device+signing+app+dSYM; unlock advisory)
+#   scripts/ios_device.sh test [--all|--cold] [only] # ui-test + single verdict + build/ios/uitest-artifacts/
 #
 # Observation: every device command auto-starts macOS iPhone Mirroring (watch on the Mac;
 # the phone stays locked + screen-dark, OLED-safe; mirroring also keeps a LOCKED device
@@ -841,6 +843,102 @@ cmd_profile() {
   printf '%s\n' "$trace"
 }
 
+# preflight: one-shot readiness check for on-device work — iPhone Mirroring up, device
+# reachable, signing team derivable, app + dSYM built. Fails fast (exit non-zero) with
+# what's missing. A LOCKED phone can't be auto-detected from the Mac (a locked +
+# mirroring device stays 'available' to devicectl), so this prints the unlock advisory
+# for ui-test up front instead of guessing.
+cmd_preflight() {
+  local rc=0
+  note "on-device preflight"
+  ensure_mirror 60
+
+  local dev; dev="$(resolve_device 2>/dev/null)" || dev=""
+  if [[ -z "$dev" ]]; then warn "  device: ✗ none resolved"; rc=1; else printf '  device: %s\n' "$dev" >&2; fi
+
+  if [[ -n "$dev" ]]; then
+    local tmp; tmp="$(mktemp)"
+    if xcrun devicectl list devices --json-output "$tmp" >/dev/null 2>&1; then
+      python3 - "$tmp" "$dev" <<'PY' >&2 || rc=1
+import json, sys
+data = json.load(open(sys.argv[1]))
+devs = (data.get("result") or {}).get("devices") or []
+m = next((d for d in devs if d.get("identifier") == sys.argv[2]), None)
+if not m:
+    print("  reachability: ✗ device not in devicectl list"); sys.exit(1)
+cp = m.get("connectionProperties") or {}
+tunnel, pairing = cp.get("tunnelState", ""), cp.get("pairingState", "")
+ok = tunnel in ("connected", "available") or pairing == "paired"
+print(f"  reachability: {'OK' if ok else 'FAIL'} tunnel={tunnel or '?'} pairing={pairing or '?'}")
+sys.exit(0 if ok else 1)
+PY
+    else
+      warn "  reachability: ✗ devicectl list failed"; rc=1
+    fi
+    rm -f "$tmp"
+  fi
+
+  local team; team="$(derive_team 2>/dev/null)"
+  if [[ -n "$team" ]]; then
+    printf '  signing: OK team %s\n' "$team" >&2
+  else
+    warn "  signing: ✗ no team (set QWENVOICE_DEVELOPMENT_TEAM or add an Apple Development cert)"; rc=1
+  fi
+
+  if [[ -d "$APP_PATH" ]]; then
+    printf '  app: OK %s\n' "$APP_PATH" >&2
+    if [[ -d "$ROOT_DIR/build/ios/dsyms/Vocello.app.dSYM" ]]; then
+      printf '  dsym: OK build/ios/dsyms/Vocello.app.dSYM\n' >&2
+    else
+      warn "  dsym: ✗ none (run '$0 build' to enable crash symbolication)"
+    fi
+  else
+    warn "  app: ✗ not built (run: $0 build)"; rc=1
+  fi
+
+  note "unlock advisory: ui-test needs the iPhone UNLOCKED once (automation auth handshake); bench/launch/profile/crashes/logs work locked."
+  (( rc == 0 )) && note "preflight OK" || die "preflight not ready (see above)"
+}
+
+# test [--all|--cold] [only]: run VocelloiOSUITests on-device and emit a single verdict +
+# gather artifacts under build/ios/uitest-artifacts/<runID>/. Thin wrapper over ui-test
+# (same scope flags) run in a subshell so its `die` is captured, plus a best-effort
+# xcresulttool summary. Screenshots land via the test app's UI_TEST_SCREENSHOT_DIR. For
+# deep .xcresult analysis, dispatch the axiom:test-runner agent on the bundle.
+cmd_test() {
+  require_team
+  local run_id="ios-test-$(date +%Y%m%d-%H%M%S)"
+  local artifacts="$ROOT_DIR/build/ios/uitest-artifacts/$run_id"
+  mkdir -p "$artifacts"
+
+  # Subshell: cmd_ui_test's `die` (exit) must not kill this function before we parse.
+  set +e
+  ( cmd_ui_test "$@" )
+  local st=$?
+  set -e
+
+  local xcresult; xcresult="$(_ui_test_latest_xcresult || true)"
+  {
+    echo "xcresult: ${xcresult:-<none>}"
+    echo "exit: $st"
+    if [[ -n "$xcresult" && -d "$xcresult" ]]; then
+      xcrun xcresulttool get test-results summary --format json --path "$xcresult" 2>/dev/null \
+        || echo "(xcresulttool summary unavailable — open the .xcresult in Xcode)"
+    fi
+  } >"$artifacts/verdict.json"
+  cat "$artifacts/verdict.json" >&2
+
+  local shots="$DERIVED/uitest-screenshots"
+  [[ -d "$shots" ]] && cp -R "$shots" "$artifacts/screenshots" 2>/dev/null || true
+
+  if (( st == 0 )); then
+    note "test verdict: PASS · artifacts → $artifacts"
+  else
+    warn "test verdict: FAIL (exit $st) · artifacts → $artifacts"
+    exit "$st"
+  fi
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
@@ -863,9 +961,11 @@ main() {
     debug)   cmd_debug "$@" ;;
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
+    preflight) cmd_preflight "$@" ;;
+    test)      cmd_test "$@" ;;
     help|-h|--help)
-      sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|help)" ;;
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|preflight|test|help)" ;;
   esac
 }
 
