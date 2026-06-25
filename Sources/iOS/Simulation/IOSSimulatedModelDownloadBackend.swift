@@ -24,8 +24,13 @@ actor IOSSimulatedModelDownloadBackend: IOSModelDownloadBackend {
         self.delegate = delegate
         let rawMs = ProcessInfo.processInfo.environment["QVOICE_SIM_BACKEND_DELAY_MS"].flatMap(Int.init) ?? 2_000
         let clampedMs = max(0, min(rawMs, 30_000))
-        self.perFileDelayNanoseconds = UInt64(clampedMs) * 1_000_000
+        let scenario = IOSSimulatedDownloadScenario.current
+        let scaledMs = clampedMs * scenario.delayMultiplier
+        self.perFileDelayNanoseconds = UInt64(scaledMs) * 1_000_000
+        self.scenario = scenario
     }
+
+    private let scenario: IOSSimulatedDownloadScenario
 
     func startDownload(
         taskDescription: IOSModelDownloadTaskDescription,
@@ -109,7 +114,7 @@ actor IOSSimulatedModelDownloadBackend: IOSModelDownloadBackend {
         let delayPerChunk = perFileDelayNanoseconds / UInt64(chunkCount)
 
         var offset = startOffset
-        for _ in 0..<chunkCount {
+        for chunkIndex in 0..<chunkCount {
             guard !Task.isCancelled else { break }
             offset = min(offset + chunkSize, totalBytes)
             currentOffsets[taskDescription] = offset
@@ -119,6 +124,18 @@ actor IOSSimulatedModelDownloadBackend: IOSModelDownloadBackend {
                 offset,
                 totalBytes
             )
+
+            if scenario == .failMid, chunkIndex >= chunkCount / 2 {
+                let error = NSError(
+                    domain: "IOSSimulatedModelDownloadBackend",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Simulated mid-download failure."]
+                )
+                delegate.onCompleted?(taskIdentifier, encodedDescription, error)
+                await taskCompleted(taskDescription: taskDescription)
+                return
+            }
+
             if offset < totalBytes {
                 do {
                     try await Task.sleep(nanoseconds: delayPerChunk)
@@ -129,6 +146,12 @@ actor IOSSimulatedModelDownloadBackend: IOSModelDownloadBackend {
         }
 
         guard !Task.isCancelled else {
+            let error = NSError(
+                domain: NSURLErrorDomain,
+                code: NSURLErrorCancelled,
+                userInfo: [NSLocalizedDescriptionKey: "Download cancelled."]
+            )
+            delegate.onCompleted?(taskIdentifier, encodedDescription, error)
             await taskCompleted(taskDescription: taskDescription)
             return
         }

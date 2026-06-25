@@ -329,6 +329,10 @@ targets:
     # into the `resources:` block.
     sources:
       - path: Sources/iOS
+        excludes:
+          - "Simulation"
+          - "Simulation/**"
+      - path: Sources/iOS/Simulation
       - path: Sources/iOSSupport
       - path: Sources/SharedSupport
       - path: Sources/Resources/qwenvoice_contract.json

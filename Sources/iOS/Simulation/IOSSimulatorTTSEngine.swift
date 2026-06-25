@@ -10,6 +10,22 @@ enum IOSSimulatorRuntimeSupport {
 #endif
     }
 
+    /// When set on the simulator, overrides clone-capable UI gating for review (`0`/`false` = off).
+    static var simCloneCapableOverride: Bool? {
+        guard isSimulator else { return nil }
+        let raw = ProcessInfo.processInfo.environment["QVOICE_SIM_CLONE_CAPABLE"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch raw {
+        case "0", "false", "no", "off":
+            return false
+        case "1", "true", "yes", "on":
+            return true
+        default:
+            return nil
+        }
+    }
+
     static let unsupportedMessage =
         "Generation is unavailable in this runtime."
 }
@@ -170,12 +186,31 @@ final class IOSSimulatorTTSEngine: TTSEngine, TTSEngineRuntimeControlling, Activ
             (0.94, "Finalizing file"),
         ]
         let stepDelay = delay / UInt64(steps.count)
+        var chunkSequence: UInt64 = 0
 
         do {
             for (fraction, message) in steps {
                 try checkCancelled()
                 loadState = .running(modelID: request.modelID, label: request.engineActivityLabel, fraction: fraction)
                 latestEvent = .progress(GenerationProgress(percent: Int(fraction * 100), message: message))
+
+                if fraction >= 0.38 {
+                    chunkSequence += 1
+                    let chunkDuration = max(0.15, resultDurationEstimate(for: request.text) * Double(fraction))
+                    latestEvent = .chunk(
+                        GenerationChunk(
+                            mode: request.mode.rawValue,
+                            title: request.text.prefix(48).description,
+                            chunkPath: nil,
+                            isFinal: false,
+                            chunkDurationSeconds: chunkDuration * 0.4,
+                            cumulativeDurationSeconds: chunkDuration * 0.4,
+                            streamSessionDirectory: nil,
+                            chunkSequence: chunkSequence
+                        )
+                    )
+                }
+
                 try await Task.sleep(nanoseconds: stepDelay)
             }
 
@@ -193,6 +228,19 @@ final class IOSSimulatorTTSEngine: TTSEngine, TTSEngineRuntimeControlling, Activ
                 mode: request.mode,
                 text: request.text,
                 outputPath: request.outputPath
+            )
+            chunkSequence += 1
+            latestEvent = .chunk(
+                GenerationChunk(
+                    mode: request.mode.rawValue,
+                    title: request.text.prefix(48).description,
+                    chunkPath: result.audioPath,
+                    isFinal: true,
+                    chunkDurationSeconds: result.durationSeconds,
+                    cumulativeDurationSeconds: result.durationSeconds,
+                    streamSessionDirectory: nil,
+                    chunkSequence: chunkSequence
+                )
             )
             latestEvent = .completed(result)
             loadState = .loaded(modelID: model.id)
@@ -365,10 +413,17 @@ final class IOSSimulatorTTSEngine: TTSEngine, TTSEngineRuntimeControlling, Activ
                 throw MLXTTSEngineError.generationFailed("Describe the voice before generating.")
             }
         case .clone(let reference):
+            if IOSSimulatorBackendScenario.current.kind == .cloneMissingRef {
+                throw MLXTTSEngineError.generationFailed("Choose a reference voice before generating.")
+            }
             guard !reference.audioPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw MLXTTSEngineError.generationFailed("Choose a reference voice before generating.")
             }
         }
+    }
+
+    private func resultDurationEstimate(for text: String) -> Double {
+        max(0.8, Double(text.count) * 0.04)
     }
 
     private func checkCancelled() throws {
@@ -464,6 +519,8 @@ private struct IOSSimulatorBackendScenario {
         case success
         case slow
         case fail
+        case cancelMid
+        case cloneMissingRef
     }
 
     let kind: Kind
@@ -477,6 +534,10 @@ private struct IOSSimulatorBackendScenario {
             kind = .slow
         case "fail", "failure", "error":
             kind = .fail
+        case "cancel_mid", "cancel-mid":
+            kind = .cancelMid
+        case "clone_missing_ref", "clone-missing-ref":
+            kind = .cloneMissingRef
         default:
             kind = .success
         }
@@ -488,6 +549,10 @@ private struct IOSSimulatorBackendScenario {
         case .slow:
             defaultMilliseconds = 6_000
         case .fail:
+            defaultMilliseconds = 900
+        case .cancelMid:
+            defaultMilliseconds = 12_000
+        case .cloneMissingRef:
             defaultMilliseconds = 900
         }
 
