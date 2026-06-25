@@ -100,16 +100,19 @@ QWENVOICE_DEBUG=1 ./scripts/build.sh run # debug data folder + telemetry
 xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoice \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData
 
-# iOS — ON-DEVICE ONLY (requires a paired iPhone)
-scripts/ios_device.sh doctor             # environment + device preflight
-scripts/ios_device.sh bench              # build → install → autorun → pull → summarize
-scripts/ios_device.sh ui-test            # run VocelloiOSUITests on device
-# on-device lanes (observe via iPhone Mirroring, OLED-safe; `build` also preserves a
-# dSYM under build/ios/dsyms/ for symbolication):
-scripts/ios_device.sh launch|console|pull|shot
-scripts/ios_device.sh logs [spec]        # attached launch → retained build/ios-logs/<run>.log
+# iOS — ON-DEVICE ONLY (paired iPhone; observe via iPhone Mirroring, OLED-safe; `build`
+# preserves a dSYM under build/ios/dsyms/ for symbolication). One verb per lane
+# (see docs/reference/ios-device-testing.md §3 for the lane→tool map + burn-in policy):
+scripts/ios_device.sh preflight          # readiness: mirror+device+signing+app+dSYM + unlock advisory
+scripts/ios_device.sh bench [spec]       # build → install → autorun → pull → summarize (generation proof)
+scripts/ios_device.sh ui-test|test       # VocelloiOSUITests on device (test = + verdict + artifacts)
+scripts/ios_device.sh profile [spec]     # Instruments/xctrace trace of an autorun generation
+scripts/ios_device.sh review [--baseline]# UI capture tour + baseline diff (vision MCP)
 scripts/ios_device.sh crashes [--test]   # pull + xcsym-symbolicate MetricKit crash/hang diagnostics
 scripts/ios_device.sh debug [spec]       # get-task-allow build + attached launch + LLDB attach guidance
+scripts/ios_device.sh logs [spec]        # attached launch → retained build/ios-logs/<run>.log
+scripts/ios_device.sh gate               # pre-merge gate: preflight → test → crashes → verdict
+scripts/ios_device.sh launch|console|pull|shot|mirror
 
 # Perf/quality (deterministic driver; listening pass is the mandatory pre-merge gate)
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
@@ -174,6 +177,12 @@ single-config, deterministic local loop. Then:
 - **macOS build/run/inspect** → the Bash scripts, or `XcodeBuildMCP` for a quick
   check (macOS scheme `QwenVoice`). `XcodeBuildMCP` simulator tools are
   **off-limits for iOS** (on-device rule).
+- **iOS on-device lanes** (`scripts/ios_device.sh`, one verb per lane) →
+  `test`→`axiom:test-runner` on the `.xcresult`; `crashes`→`axiom:crash-analyzer` / `xcsym`
+  vs the build dSYM; `profile`→`axiom:performance-profiler` / `xcprof`; `debug`→XcodeBuildMCP
+  device/debugging; `review`→vision MCP `mcp__zai-mcp-server__ui_diff_check` vs
+  `docs/ios-review-baselines/`. Burn-in-safe by construction; the full map + policy is in
+  `docs/reference/ios-device-testing.md` §3. `gate` = preflight → test → crashes → verdict.
 - **Process / planning** → Superpowers: `brainstorming` before creative/feature
   work, `systematic-debugging` for any bug/test failure, `writing-plans` /
   `executing-plans`, `verification-before-completion` before claiming done,

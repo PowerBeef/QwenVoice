@@ -36,6 +36,7 @@
 #   scripts/ios_device.sh preflight                # one-shot readiness (mirror+device+signing+app+dSYM; unlock advisory)
 #   scripts/ios_device.sh test [--all|--cold] [only] # ui-test + single verdict + build/ios/uitest-artifacts/
 #   scripts/ios_device.sh review [--baseline]        # on-device UI capture tour + baseline diff (burn-in-aware)
+#   scripts/ios_device.sh gate                 # pre-merge gate: preflight → test → crashes → verdict
 #
 # Observation: every device command auto-starts macOS iPhone Mirroring (watch on the Mac;
 # the phone stays locked + screen-dark, OLED-safe; mirroring also keeps a LOCKED device
@@ -998,6 +999,53 @@ cmd_review() {
   return "$st"
 }
 
+# gate: one-command on-device pre-merge gate — preflight → test (default scope) → crashes
+# (post-run; expect none on a clean build) → a single PASS/FAIL verdict + per-step logs +
+# a verdict.txt under build/ios/gate-<run>/. Burns-in safe. Deeper dives (profile, review,
+# bench/listening-pass) are separate verbs — run them pre-release, not on every merge.
+cmd_gate() {
+  require_team
+  local run_id="ios-gate-$(date +%Y%m%d-%H%M%S)"
+  local gate_dir="$ROOT_DIR/build/ios/gate-$run_id"
+  mkdir -p "$gate_dir"
+  local verdict="$gate_dir/verdict.txt"
+  local overall=0
+
+  { echo "Vocello on-device gate — $run_id"; echo; } | tee "$verdict"
+
+  note "gate 1/3: preflight"
+  if ( cmd_preflight ) >>"$gate_dir/preflight.log" 2>&1; then
+    echo "preflight: PASS" | tee -a "$verdict"
+  else
+    echo "preflight: FAIL (see preflight.log)" | tee -a "$verdict"; overall=1
+  fi
+
+  note "gate 2/3: test (default scope)"
+  if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
+    echo "test: PASS" | tee -a "$verdict"
+  else
+    echo "test: FAIL (see test.log)" | tee -a "$verdict"; overall=1
+  fi
+
+  note "gate 3/3: crashes (post-run check; expect none)"
+  if ( cmd_crashes ) >>"$gate_dir/crashes.log" 2>&1; then
+    echo "crashes: none/new (see crashes.log)" | tee -a "$verdict"
+  else
+    echo "crashes: check failed (see crashes.log)" | tee -a "$verdict"
+  fi
+
+  echo | tee -a "$verdict"
+  if (( overall == 0 )); then
+    echo "GATE: PASS" | tee -a "$verdict"
+    note "gate PASS · $gate_dir"
+  else
+    echo "GATE: FAIL" | tee -a "$verdict"
+    warn "gate FAIL · $gate_dir"
+  fi
+  cat "$verdict" >&2
+  exit "$overall"
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
@@ -1023,9 +1071,10 @@ main() {
     preflight) cmd_preflight "$@" ;;
     test)      cmd_test "$@" ;;
     review)    cmd_review "$@" ;;
+    gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|preflight|test|review|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|crashes|debug|logs|profile|preflight|test|review|gate|help)" ;;
   esac
 }
 

@@ -79,6 +79,14 @@ on the Mac with the phone locked + screen-dark (OLED-safe). Opt out with `QVOICE
 | `pull [dest]` | `devicectl device copy from --domain-type appDataContainer --source Library/Caches/Vocello/diagnostics` (the app's pullable mirror — the App-Group container is NOT devicectl-readable). Default dest `build/ios-diagnostics`. |
 | `bench [spec] [--label "note"]` | The full loop: `build → install → launch-with-autorun → poll the sentinel → pull diagnostics → summarize`. Exits non-zero if the generation failed. |
 | `ui-test [--all\|--cold] [target]` | Run `VocelloiOSUITests` on the device (see §2). **Default:** Smoke + Sheet + OnDeviceDownload. `--cold` runs cold generation only (skips when no model). `--all` runs every class (debug). Optional `target` scopes further, e.g. `VocelloiOSUITests/VocelloiOSSheetUITests`. |
+| `preflight` | One-shot readiness check (mirror + device reachable + signing + app + dSYM) + the unlock advisory. Fails fast. |
+| `test [--all\|--cold] [target]` | `ui-test` + a single verdict + artifacts under `build/ios/uitest-artifacts/<run>/`. |
+| `crashes [--test]` | Pull + `xcsym`-symbolicate MetricKit crash/hang diagnostics (see §3). `--test` deliberately crashes to verify the lane. |
+| `debug [spec]` | `get-task-allow` build + attached launch + the LLDB attach command. |
+| `logs [spec]` | Attached launch teeing stdout/stderr → `build/ios-logs/<run>.log`. |
+| `profile [spec]` | Instruments/xctrace trace of an autorun generation → `build/ios/profile-<ts>.trace`. |
+| `review [--baseline]` | On-device UI capture tour + baseline pairs (see §3); `--baseline` seeds `docs/ios-review-baselines/`. |
+| `gate` | One-command pre-merge gate: preflight → test → crashes → verdict (`build/ios/gate-<run>/`). |
 
 ```sh
 export QWENVOICE_DEVELOPMENT_TEAM=<team-id>
@@ -216,8 +224,56 @@ The UI-test target is wired into the `VocelloiOS` scheme's `test` action (and bu
 for `test`, so the foundation compile-safety build stays focused on the app). The smoke +
 sheet suites exercise IA, identifiers, and sheet behaviour only — no audio generation.
 
-`accessibilityIdentifier`s are stable surface area (AGENTS.md "Conventions") — keep them
+`accessibilityIdentifier`s are stable surface area (CLAUDE.md "Conventions") — keep them
 through refactors; the smoke + any agent UI checks depend on them.
+
+---
+
+## 3. On-device quality lanes (testing overhaul)
+
+The driver is organized into lanes — one verb each — built on the headless harness + the
+warm-app XCUITest coordinator. All on-device, observed via iPhone Mirroring (OLED-safe).
+
+**Lane → tool map**
+
+| Lane | Verb | Captures / proves | Deeper analysis |
+|------|------|-------------------|-----------------|
+| Test | `test` / `ui-test` | launch + IA + sheets + real download cancel | `axiom:test-runner` on the `.xcresult` |
+| Crash | `crashes` | MetricKit crash/hang diagnostics (in-app `IOSCrashObserver`) | `axiom:crash-analyzer` / `xcsym` vs the build dSYM |
+| Debug | `debug` / `logs` | attached stdout + the LLDB attach command (`get-task-allow` build) | XcodeBuildMCP device/debugging; `systematic-debugging` |
+| Profile | `profile` | Instruments/xctrace trace over the engine's `OSSignpost` intervals | `axiom:performance-profiler` / `xcprof analyze` |
+| Review | `review` | XCUITest screenshot tour of the key screens | vision MCP `ui_diff_check` vs `docs/ios-review-baselines/` |
+| Gate | `gate` | preflight → test → crashes → single verdict | — |
+
+**Crash lane.** `IOSCrashObserver` (`Sources/iOSSupport/Services/IOSCrashObserver.swift`)
+subscribes to MetricKit crash/hang diagnostics + an `NSException` handler and writes them
+to the pullable diagnostics dir; `build` preserves the `.dSYM` under `build/ios/dsyms/`;
+`crashes` pulls + symbolicates via `xcsym` (or the `axiom:crash-analyzer` agent).
+`crashes --test` deliberately crashes (`QVOICE_IOS_CRASH_TEST`) to verify capture +
+symbolication end-to-end. (MetricKit delivers on its periodic cycle, so the self-test may
+need a short wait, or fall back to Xcode → Window → Devices and Simulators → Device Logs.)
+
+**Debug lane.** `VocelloiOS.entitlements` carries `get-task-allow` (dev only — drop before
+App Store), so `debug` can attach LLDB (`process attach --name Vocello --device <udid>`, or
+the XcodeBuildMCP device/debugging workflow). `logs` retains the attached-launch stdout
+(incl. `[autorun]`/`[QVoiceiOSApp]` prints) to `build/ios-logs/<run>.log`.
+
+**Profile lane.** `profile [spec]` records an Instruments/xctrace trace (default `Time
+Profiler`; override via `QVOICE_IOS_PROFILE_TEMPLATE` / `QVOICE_IOS_PROFILE_DURATION`)
+while `IOSAutorunHarness` runs one generation, then cross-references the in-app telemetry.
+The engine emits `OSSignpost` intervals under `com.qwenvoice.engine` /
+`com.patricedery.vocello` — use a signpost-bearing template to capture them.
+
+**Review lane.** `VocelloiOSReviewTourUITests` navigates the key screens + a sheet and
+screenshots each (XCUITest `app.screenshot()` — no Mirroring chrome). `review` gathers the
+captures + prints each baseline pair for a vision-MCP diff; `review --baseline` seeds the
+committed `docs/ios-review-baselines/`. The tour doubles as an a11y reachability pass
+(every screen reached via a hittable, identified control).
+
+**Burn-in policy (hard constraint).** iPhone Mirroring is kept on so the device screen
+stays dark/locked — headless lanes (`bench`/`profile`/`crashes`/`logs`) never light it.
+The UI-review tour is **capture-and-dismiss**: each sheet is opened only long enough to
+screenshot, then closed — never dwell on a static high-contrast screen.
 
 ---
 
@@ -227,7 +283,9 @@ through refactors; the smoke + any agent UI checks depend on them.
 |-------|---------|--------|
 | Compile (app) | `scripts/build_foundation_targets.sh ios` | the in-process engine + harness compile |
 | Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'platform=iOS,id=<udid>' -derivedDataPath build/ios` | the test target compiles + is wired for the device |
-| UI smoke (device gate) | `scripts/ios_device.sh ui-test` | launch + IA + real download cancel on hardware |
+| UI smoke (device gate) | `scripts/ios_device.sh ui-test` (or `test`) | launch + IA + real download cancel on hardware |
+| UI review | `scripts/ios_device.sh review` | screenshot tour vs `docs/ios-review-baselines/` |
+| Pre-merge gate | `scripts/ios_device.sh gate` | preflight → test → crashes → single verdict |
 | Interactive UI review | `scripts/ios_device.sh launch` + `scripts/ios_device.sh shot <path>` | the full UI renders over iPhone Mirroring for visual review |
 | On-device proof | `scripts/ios_device.sh bench "custom:speed:…"` | real generation, entitlement/memory headroom, RTF/`audioQC` |
 
@@ -235,4 +293,4 @@ through refactors; the smoke + any agent UI checks depend on them.
 
 A signed-IPA / TestFlight distribution lane (needs the iOS Distribution cert + an
 `archive-ios` CI job). On-device proof is **not** a public-release blocker (macOS-first;
-see AGENTS.md "Release & iPhone status").
+see CLAUDE.md).
