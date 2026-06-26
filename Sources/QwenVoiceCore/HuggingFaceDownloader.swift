@@ -3,25 +3,25 @@ import Foundation
 import QwenVoiceCore
 
 /// Downloads a HuggingFace model repository using native URLSession.
-final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
 
-    enum DownloadPhase: String, Equatable, Sendable {
+    public enum DownloadPhase: String, Equatable, Sendable {
         case downloading
         case verifying
         case installing
     }
 
-    struct RepositoryProgress: Equatable, Sendable {
-        let downloadedBytes: Int64
-        let totalBytes: Int64
-        let completedFiles: Int
-        let totalFiles: Int
-        let bytesPerSecond: Int64?
-        let isStalled: Bool
-        let phase: DownloadPhase
+    public struct RepositoryProgress: Equatable, Sendable {
+        public let downloadedBytes: Int64
+        public let totalBytes: Int64
+        public let completedFiles: Int
+        public let totalFiles: Int
+        public let bytesPerSecond: Int64?
+        public let isStalled: Bool
+        public let phase: DownloadPhase
     }
 
-    enum DownloadError: LocalizedError {
+    public enum DownloadError: LocalizedError {
         case cancelled
         case httpError(statusCode: Int, path: String)
         case fileDownloadFailed(path: String, underlying: Error)
@@ -31,7 +31,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         case invalidLocalDestination(String)
         case apiError(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .cancelled:
                 return "Download cancelled"
@@ -559,7 +559,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         self.init(progressHandler: nil)
     }
 
-    init(
+    public init(
         progressHandler: ((RepositoryProgress) -> Void)?,
         sessionConfiguration: URLSessionConfiguration = .default,
         apiBaseURL: URL = URL(string: "https://huggingface.co/api/models")!,
@@ -581,7 +581,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     // MARK: - Public API
 
     /// Download all files from a HuggingFace repo into `targetDir`.
-    func downloadRepo(repo: String, revision: String = "main", to targetDir: URL) async throws {
+    public func downloadRepo(repo: String, revision: String = "main", to targetDir: URL) async throws {
         await state.resetForNewRepositoryDownload()
 
         let files = try await listFiles(repo: repo, revision: revision)
@@ -595,10 +595,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         try fileManager.createDirectory(at: filesRoot, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: partialRoot, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: resumeRoot, withIntermediateDirectories: true)
-        AppPaths.excludeFromBackup(stagingRoot)
-        AppPaths.excludeFromBackup(filesRoot)
-        AppPaths.excludeFromBackup(partialRoot)
-        AppPaths.excludeFromBackup(resumeRoot)
+        Self.markExcludedFromBackup(stagingRoot)
+        Self.markExcludedFromBackup(filesRoot)
+        Self.markExcludedFromBackup(partialRoot)
+        Self.markExcludedFromBackup(resumeRoot)
         try persistDownloadState(
                 repo: repo,
                 revision: revision,
@@ -627,7 +627,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
             )
             await state.setPhase(.installing)
             try installStagedRepository(filesRoot: filesRoot, targetDir: targetDir)
-            AppPaths.excludeFromBackup(targetDir)
+            Self.markExcludedFromBackup(targetDir)
             try? fileManager.removeItem(at: stagingRoot)
             await state.finishRepositoryDownload()
         } catch {
@@ -640,7 +640,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     }
 
     /// Cancel all in-flight downloads.
-    func cancel() {
+    public func cancel() {
         Task {
             await state.requestCancellation()
         }
@@ -1267,8 +1267,18 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     /// Remove the staging tree (partials, resume data, staged files) for a target
     /// directory. Call when a model is permanently deleted so failed/partial downloads
     /// don't orphan multi-GB under `.qwenvoice-downloads/`. Best-effort.
-    static func discardStaging(forTargetDirectory targetDir: URL) {
+    public static func discardStaging(forTargetDirectory targetDir: URL) {
         try? FileManager.default.removeItem(at: stagingRoot(forTargetDirectory: targetDir))
+    }
+
+    /// Mark `url` excluded from Time Machine/backup (best-effort). Inlined here so the
+    /// downloader has no app-target dependency and can live in the shared QwenVoiceCore
+    /// module (used by the macOS app, the iOS app, and the `vocello` CLI alike).
+    private static func markExcludedFromBackup(_ url: URL) {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableURL = url
+        try? mutableURL.setResourceValues(values)
     }
 
     private static func partialURL(for relativePath: String, in root: URL) throws -> URL {
@@ -1290,7 +1300,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
 
     // MARK: - URLSessionDownloadDelegate
 
-    func urlSession(
+    public func urlSession(
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
         didWriteData bytesWritten: Int64,
@@ -1303,7 +1313,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         }
     }
 
-    func urlSession(
+    public func urlSession(
         _ session: URLSession,
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
@@ -1340,7 +1350,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         }
     }
 
-    func urlSession(
+    public func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         didCompleteWithError error: Error?

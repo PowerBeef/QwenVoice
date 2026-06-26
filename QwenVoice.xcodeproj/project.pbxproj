@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01902C5209092E3E24AE9FB7 /* HuggingFaceDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A836AA336201DB6B2A733B80 /* HuggingFaceDownloader.swift */; };
 		019E5164FDE5AFD5FE86CBC9 /* TTSModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802B55E1EAC5684CDE4BBE03 /* TTSModel.swift */; };
 		02746D3FDEF60418302930C5 /* ModelsCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02675FED92DFFB3ED1508C5B /* ModelsCommand.swift */; };
 		029B0938030B762235FA9420 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5AE447F84CD51CB07A01FC61 /* MLXAudioCore */; };
@@ -26,7 +27,6 @@
 		0D54E198EE173129C4A2B771 /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B703DF8A07FC4F83D3202F /* ModelInfo.swift */; };
 		0D5E8E836ABF05480B5F3F8D /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = DE4680A870D328916543620F /* HuggingFace */; };
 		0EFABC078A628F459E6E62F7 /* IOSSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3837D18DB04238E5D9200B5E /* IOSSettingsViews.swift */; };
-		102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */; };
 		12543458CF8FCB9C38524A9B /* EngineServiceTrustPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 940DC33B01DA7425CEB5E2FF /* EngineServiceTrustPolicy.swift */; };
 		1291AAC836956271BB8921A2 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = C93B0B5AAEA9C601A09A3F90 /* HuggingFace */; };
 		13462F046FE8C8196DE2BD97 /* WaveformService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A539A647083CC4810F72FE /* WaveformService.swift */; };
@@ -585,10 +585,10 @@
 		A014ECB4F32BED1D8FE49B68 /* IOSAccessibilityIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAccessibilityIdentifiers.swift; sourceTree = "<group>"; };
 		A55F5C185C7CAC960AAC9C80 /* MacGenerationWarmupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacGenerationWarmupCoordinator.swift; sourceTree = "<group>"; };
 		A5C15F6A1291506C7D8605BB /* CLIRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIRuntime.swift; sourceTree = "<group>"; };
+		A836AA336201DB6B2A733B80 /* HuggingFaceDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceDownloader.swift; sourceTree = "<group>"; };
 		A9213D3C53B12F841327ACCF /* IOSGenerationTextLimitPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGenerationTextLimitPolicy.swift; sourceTree = "<group>"; };
 		A9C7D6BE8A8364773C069202 /* WaveformService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformService.swift; sourceTree = "<group>"; };
 		AE6BCB1EBEAB95BB7072AC30 /* VoiceDesignBriefCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceDesignBriefCatalog.swift; sourceTree = "<group>"; };
-		AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceDownloader.swift; sourceTree = "<group>"; };
 		B03BDEE35746990C5202A7A9 /* sohee.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = sohee.wav; sourceTree = "<group>"; };
 		B3D02EB9F1A9C5CFD933A98F /* VocelloiOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VocelloiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B52E6F8ECC8DB9E266F1EE87 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -838,6 +838,7 @@
 				64B446ABFD75C0AE283E6D66 /* GenerationSemantics.swift */,
 				874E0767E61CDEEE88A9FACF /* GenerationTelemetryJSONLSink.swift */,
 				3DDAA8C5ADE95EC61570A219 /* GenerationTelemetryRecord.swift */,
+				A836AA336201DB6B2A733B80 /* HuggingFaceDownloader.swift */,
 				04959460DEEFC35448B5F9F7 /* IOSMemoryMetricsBridge.h */,
 				F84E19D8BAEB03195166A26A /* IOSMemoryMetricsBridge.m */,
 				FC8AF8C5F67A18A2A6790A33 /* IOSMemorySnapshot.swift */,
@@ -1127,7 +1128,6 @@
 				C5D4F51C8BBABFB4246536FD /* GenerationLibraryEvents.swift */,
 				BB46CEB7DE369F4E1B24668E /* GenerationTelemetryMerger.swift */,
 				3AC640F31070C11F3F6C432D /* GenerationVariationPreference.swift */,
-				AEDB6571B3DDCAA5D8166A54 /* HuggingFaceDownloader.swift */,
 				2A4F18EF6E8C4624607CF181 /* LongTextGenerationRouter.swift */,
 				7D74D044F7CCAA1AF2027134 /* MacEngineServiceLifecycleCoordinator.swift */,
 				A55F5C185C7CAC960AAC9C80 /* MacGenerationWarmupCoordinator.swift */,
@@ -1744,6 +1744,7 @@
 				CD601A69A8F0D1F41B8F2BDD /* GenerationSemantics.swift in Sources */,
 				F68E2BDC38DA509F2751452D /* GenerationTelemetryJSONLSink.swift in Sources */,
 				B6CB0C31F51CB8911AA30A07 /* GenerationTelemetryRecord.swift in Sources */,
+				01902C5209092E3E24AE9FB7 /* HuggingFaceDownloader.swift in Sources */,
 				94B78EACF79C8D0C97B1A8A2 /* IOSMemoryMetricsBridge.m in Sources */,
 				DFF41A112585ADC31484F16C /* IOSMemorySnapshot.swift in Sources */,
 				BB752024AFAACE7A138CA40E /* LatestEventCoalescer.swift in Sources */,
@@ -1899,7 +1900,6 @@
 				FF540F76D257DCBF303A314D /* GenerationVariationPreference.swift in Sources */,
 				B6824C9F4B35990C52CCDDB8 /* GenerationWorkflowView.swift in Sources */,
 				4B578A4D21A7CC18003BBA14 /* HistoryView.swift in Sources */,
-				102B2746352B5032F9F34A31 /* HuggingFaceDownloader.swift in Sources */,
 				AA2B0C9E9453C0E583369947 /* LanguageSelectionPresentation.swift in Sources */,
 				2E6A0B30C35D6D082403D964 /* LayoutConstants.swift in Sources */,
 				40A94D5A75E9D1F5FB41023C /* LivePreviewDiagnostics.swift in Sources */,

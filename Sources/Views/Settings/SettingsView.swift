@@ -541,10 +541,6 @@ private struct ModelPackageLine: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .imageScale(.small)
-        case .paused:
-            Image(systemName: "pause.circle.fill")
-                .foregroundStyle(.secondary)
-                .imageScale(.small)
         }
     }
 
@@ -561,22 +557,13 @@ private struct ModelPackageLine: View {
 
     @ViewBuilder
     private var downloadProgress: some View {
-        switch status {
-        case .downloading(let progress):
-            if let total = progress.totalBytes, total > 0 {
-                ProgressView(value: Double(progress.downloadedBytes), total: Double(total))
-                    .progressViewStyle(.linear)
-                    .tint(AppTheme.statusProgressTint)
-                    .accessibilityIdentifier("settings_downloadProgress_\(model.id)")
-            }
-        case .paused(let downloadedBytes, let totalBytes):
-            if let total = totalBytes, total > 0 {
-                ProgressView(value: Double(downloadedBytes), total: Double(total))
-                    .progressViewStyle(.linear)
-                    .tint(.secondary)
-            }
-        default:
-            EmptyView()
+        if case .downloading(let progress) = status,
+           let total = progress.totalBytes,
+           total > 0 {
+            ProgressView(value: Double(progress.downloadedBytes), total: Double(total))
+                .progressViewStyle(.linear)
+                .tint(AppTheme.statusProgressTint)
+                .accessibilityIdentifier("settings_downloadProgress_\(model.id)")
         }
     }
 }
@@ -593,8 +580,6 @@ private struct ActionButton: View {
     /// background, used as the anchor for the AppKit `NSMenu`'s
     /// popUp positioning.
     @State private var manageHostHolder = NSViewHostHolder()
-    /// Drives the "discard paused download" confirmation dialog.
-    @State private var showDiscardConfirm = false
 
     private var status: ModelManagerViewModel.ModelStatus {
         viewModel.statuses[model.id] ?? .checking
@@ -615,42 +600,11 @@ private struct ActionButton: View {
             .accessibilityIdentifier("settings_download_\(model.id)")
 
         case .downloading:
-            HoverableActionButton(title: "Pause") {
-                viewModel.pauseDownload(model)
+            HoverableActionButton(title: "Cancel") {
+                viewModel.cancelDownload(model)
             }
-            .help("Pause the download (keep progress)")
-            .accessibilityIdentifier("settings_pause_\(model.id)")
-
-        case .paused:
-            HStack(spacing: 6) {
-                HoverableActionButton(title: "Resume") {
-                    Task { await viewModel.download(model) }
-                }
-                .accessibilityIdentifier("settings_resume_\(model.id)")
-
-                Button {
-                    showDiscardConfirm = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .imageScale(.small)
-                }
-                .buttonStyle(.plain)
-                .help("Cancel and discard downloaded data")
-                .accessibilityIdentifier("settings_discard_\(model.id)")
-            }
-            .confirmationDialog(
-                "Cancel this download and discard the partial data?",
-                isPresented: $showDiscardConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Cancel Download", role: .destructive) {
-                    viewModel.discardDownload(model)
-                }
-                Button("Keep Download", role: .cancel) {}
-            } message: {
-                Text("The partial download will be removed. You can always download it again from scratch.")
-            }
+            .help("Cancel the download (discards partial data)")
+            .accessibilityIdentifier("settings_cancel_\(model.id)")
 
         case .repairAvailable:
             HoverableActionButton(title: "Repair", tint: .orange) {

@@ -37,7 +37,6 @@ final class ModelManagerViewModel {
         case checking
         case notDownloaded(message: String?)
         case downloading(progress: DownloadProgress)
-        case paused(downloadedBytes: Int64, totalBytes: Int64?)
         case repairAvailable(sizeBytes: Int, missingRequiredPaths: [String], message: String?)
         case downloaded(sizeBytes: Int)
     }
@@ -48,7 +47,6 @@ final class ModelManagerViewModel {
         case notInstalled
         case needsRepair
         case downloading
-        case paused
     }
 
     struct ModelPackagePresentation: Equatable {
@@ -122,9 +120,6 @@ final class ModelManagerViewModel {
     private var downloadTasks: [String: Task<Void, Never>] = [:]
     private var stateEpochs: [String: Int] = [:]
     private var lastProgressPublishTimes: [String: ContinuousClock.Instant] = [:]
-    /// Last reported progress per model — captured so a paused download can show how many
-    /// bytes are already on disk ("Paused · X of Y"). In-memory only (see plan trade-off).
-    private var lastReportedProgress: [String: DownloadProgress] = [:]
     private var refreshTask: Task<Void, Never>?
     private var recommendedSetupTask: Task<Void, Never>?
     private var lastFailureMessages: [String: String] = [:]
@@ -321,12 +316,6 @@ final class ModelManagerViewModel {
                 label: progress.phase.displayLabel,
                 detail: downloadDetail(for: progress)
             )
-        case .paused(let downloadedBytes, let totalBytes):
-            return ModelPackagePresentation(
-                kind: .paused,
-                label: "Paused",
-                detail: pausedDetail(downloadedBytes: downloadedBytes, totalBytes: totalBytes)
-            )
         case .repairAvailable(_, let missingRequiredPaths, let message):
             return ModelPackagePresentation(
                 kind: .needsRepair,
@@ -364,7 +353,7 @@ final class ModelManagerViewModel {
             return "Download"
         case .needsRepair:
             return "Repair"
-        case .downloading, .paused:
+        case .downloading:
             return presentation.label
         }
     }
@@ -427,7 +416,7 @@ final class ModelManagerViewModel {
         case .downloaded(let sizeBytes), .repairAvailable(let sizeBytes, _, _):
             guard sizeBytes > 0 else { return nil }
             return Self.formattedFileSize(Int64(sizeBytes))
-        case .notDownloaded, .paused:
+        case .notDownloaded:
             guard let estimated = model.estimatedDownloadBytes, estimated > 0 else {
                 return nil
             }
@@ -486,10 +475,9 @@ final class ModelManagerViewModel {
 
     func cancelRecommendedSetup() {
         recommendedSetupTask?.cancel()
-        // Several candidates can be in flight at once; pause them so their progress is kept
-        // and the user can resume individually.
+        // Several candidates can be in flight at once; cancel (discard) them all.
         for model in recommendedSetupCandidates() {
-            pauseDownload(model)
+            cancelDownload(model)
         }
         recommendedSetupTask = nil
         recommendedSetupProgress = nil
@@ -508,11 +496,6 @@ final class ModelManagerViewModel {
             return "\(progress.completedFiles) of \(totalFiles) files"
         }
         return nil
-    }
-
-    private func pausedDetail(downloadedBytes: Int64, totalBytes: Int64?) -> String? {
-        guard let totalBytes, totalBytes > 0 else { return nil }
-        return "\(Self.formattedFileSize(downloadedBytes)) of \(Self.formattedFileSize(totalBytes))"
     }
 
     private func repairDetail(missingRequiredPaths: [String]) -> String {
@@ -558,7 +541,6 @@ final class ModelManagerViewModel {
         guard !isDownloadActive(modelID) else { return }
 
         lastFailureMessages.removeValue(forKey: modelID)
-        lastReportedProgress.removeValue(forKey: modelID)
         statuses[modelID] = .downloading(progress: .initial)
         pendingModelDownloads.append(model)
         startPendingDownloads()
@@ -659,8 +641,7 @@ final class ModelManagerViewModel {
     }
 
     /// Stop the in-flight download for `modelID` and clear its tracking, without changing
-    /// the model's status. The staging tree (partials + staged files) is left on disk so a
-    /// later download resumes from where it stopped. Shared by pause/discard.
+    /// the model's status. Shared by cancel + delete.
     private func stopAndClear(for modelID: String) {
         _ = beginEpoch(for: modelID)
         pendingModelDownloads.removeAll { $0.id == modelID }
@@ -672,34 +653,18 @@ final class ModelManagerViewModel {
         lastProgressPublishTimes.removeValue(forKey: modelID)
     }
 
-    /// Pause an in-flight download, keeping the staged progress on disk and surfacing it as
-    /// a visible "Paused · X of Y" state. Resume by calling `download(_:)` again.
-    func pauseDownload(_ model: TTSModel) {
-        let modelID = model.id
-        stopAndClear(for: modelID)
-        let last = lastReportedProgress[modelID]
-        statuses[modelID] = .paused(
-            downloadedBytes: last?.downloadedBytes ?? 0,
-            totalBytes: last?.totalBytes
-        )
-        // A slot freed up — drain the next queued download, if any.
-        startPendingDownloads()
-    }
-
-    /// Truly cancel: stop the download and discard the staged partial so the next download
-    /// starts fresh from zero.
-    func discardDownload(_ model: TTSModel) {
-        let modelID = model.id
-        stopAndClear(for: modelID)
-        lastReportedProgress.removeValue(forKey: modelID)
+    /// Cancel an in-flight download and discard its staged partial so the next download
+    /// starts fresh from zero (a true cancel — no paused state, no silent resume).
+    func cancelDownload(_ model: TTSModel) {
+        stopAndClear(for: model.id)
         HuggingFaceDownloader.discardStaging(forTargetDirectory: model.installDirectory(in: modelsDirectory))
-        statuses[modelID] = .notDownloaded(message: nil)
-        startPendingDownloads()
+        Task {
+            await handleMutationCompletion(for: model.id)
+        }
     }
 
     func delete(_ model: TTSModel) {
         stopAndClear(for: model.id)
-        lastReportedProgress.removeValue(forKey: model.id)
 
         let modelDir = model.installDirectory(in: modelsDirectory)
         try? fileManager.removeItem(at: modelDir)
@@ -779,10 +744,9 @@ final class ModelManagerViewModel {
 
         for model in TTSModel.all {
             let id = model.id
-            // A download in flight or explicitly paused owns its row status — don't let a
-            // disk snapshot refresh overwrite it (paused progress lives in memory).
+            // A download in flight owns its row status — don't let a disk snapshot refresh
+            // overwrite it.
             if case .downloading = statuses[id] { continue }
-            if case .paused = statuses[id] { continue }
 
             let snapshot = snapshotByID[id] ?? localModelInfo(for: model)
             let failureMessage = lastFailureMessages[id]
@@ -812,7 +776,6 @@ final class ModelManagerViewModel {
         downloaders.removeValue(forKey: modelID)
         downloadTasks.removeValue(forKey: modelID)
         lastProgressPublishTimes.removeValue(forKey: modelID)
-        lastReportedProgress.removeValue(forKey: modelID)
         inflightModelDownloads.remove(modelID)
         if let model = TTSModel.model(id: modelID) {
             applyLocalSnapshot(for: model)
@@ -1075,17 +1038,17 @@ final class ModelManagerViewModel {
         }
         lastProgressPublishTimes[modelID] = now
 
-        let updated = DownloadProgress(
-            downloadedBytes: progress.downloadedBytes,
-            totalBytes: progress.totalBytes > 0 ? progress.totalBytes : nil,
-            completedFiles: progress.completedFiles,
-            totalFiles: progress.totalFiles > 0 ? progress.totalFiles : nil,
-            bytesPerSecond: progress.bytesPerSecond,
-            isStalled: progress.isStalled,
-            phase: DownloadProgress.Phase(progress.phase)
+        statuses[modelID] = .downloading(
+            progress: DownloadProgress(
+                downloadedBytes: progress.downloadedBytes,
+                totalBytes: progress.totalBytes > 0 ? progress.totalBytes : nil,
+                completedFiles: progress.completedFiles,
+                totalFiles: progress.totalFiles > 0 ? progress.totalFiles : nil,
+                bytesPerSecond: progress.bytesPerSecond,
+                isStalled: progress.isStalled,
+                phase: DownloadProgress.Phase(progress.phase)
+            )
         )
-        lastReportedProgress[modelID] = updated
-        statuses[modelID] = .downloading(progress: updated)
     }
 }
 
