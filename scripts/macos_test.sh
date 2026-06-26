@@ -246,6 +246,54 @@ cmd_review() {
   return "$st"
 }
 
+# xpc [--crash-isolation] [--watch N]: exercise the XPC engine-service lifecycle — the
+# macOS-unique dimension. The service is lazy (spawns on first generation), can be retired
+# under memory pressure (idle exit), and the app must survive a service crash + reconnect
+# on the next generation. This verb launches the app with a short retirement dwell and
+# WATCHES the service process (spawn → retire → relaunch); with --crash-isolation it
+# kills a running service to prove the app survives. Triggering a generation is manual
+# (the app is UI-driven) — the verb monitors + asserts the scriptable parts. Full
+# procedure + the expected app-side UX (sidebar_backendStatus_crashed / transparent
+# relaunch) are documented in docs/reference/macos-testing.md.
+cmd_xpc() {
+  local ci=0
+  [[ "${1:-}" == "--crash-isolation" ]] && ci=1
+  local watch="${QVOICE_MAC_XPC_WATCH:-60}"
+  ensure_app
+  note "xpc: launching app with a short retirement dwell (QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=8)…"
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  QWENVOICE_DEBUG=1 QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=8 /usr/bin/open -na "$APP_BUNDLE"
+  note "  ⇒ trigger a generation in the app to spawn the service; this verb watches the lifecycle."
+  note "  watching QwenVoiceEngineService for ${watch}s (spawn → retire → relaunch)…"
+  local seen=0 prev=0 end=$(( $(date +%s) + watch )) now pid
+  while (( $(date +%s) < end )); do
+    now=0; pgrep -x QwenVoiceEngineService >/dev/null 2>&1 && now=1
+    if (( now != prev )); then
+      if (( now == 1 )); then
+        pid="$(pgrep -xn QwenVoiceEngineService || echo '?')"
+        note "  service: SPAWNED (pid $pid)"
+        if (( ci == 1 )) && [[ "$pid" != "?" ]]; then
+          note "  crash-isolation: killing service pid $pid…"
+          kill -KILL "$pid" 2>/dev/null || true
+          sleep 2
+          if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+            note "  ✓ app ($APP_NAME) survived the service kill — crash isolation holds"
+          else
+            warn "  ✗ app died after the service kill — crash isolation FAILED"
+          fi
+          note "  (the next generation relaunches the service — keep watching)"
+        fi
+      else
+        note "  service: retired (idle exit)"
+      fi
+      prev=$now; seen=1
+    fi
+    sleep 1
+  done
+  (( seen )) || warn "service never spawned — trigger a generation in the app, then re-run"
+  note "done. Relaunch/reconnect is proven when the service reappears after a retire/kill on the next generation."
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   case "$sub" in
@@ -256,6 +304,7 @@ main() {
     preflight) cmd_preflight "$@" ;;
     test)      cmd_test "$@" ;;
     review)    cmd_review "$@" ;;
+    xpc)       cmd_xpc "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
