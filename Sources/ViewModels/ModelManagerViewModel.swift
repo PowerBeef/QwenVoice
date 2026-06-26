@@ -10,8 +10,6 @@ final class ModelManagerViewModel {
     struct DownloadProgress: Equatable, Sendable {
         enum Phase: String, Equatable, Sendable {
             case downloading
-            case interrupted
-            case resuming
             case verifying
             case installing
         }
@@ -1057,10 +1055,6 @@ private extension ModelManagerViewModel.DownloadProgress.Phase {
         switch self {
         case .downloading:
             return "Downloading"
-        case .interrupted:
-            return "Interrupted"
-        case .resuming:
-            return "Resuming"
         case .verifying:
             return "Verifying"
         case .installing:
@@ -1072,10 +1066,6 @@ private extension ModelManagerViewModel.DownloadProgress.Phase {
         switch phase {
         case .downloading:
             self = .downloading
-        case .interrupted:
-            self = .interrupted
-        case .resuming:
-            self = .resuming
         case .verifying:
             self = .verifying
         case .installing:

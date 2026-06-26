@@ -7,8 +7,6 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
 
     enum DownloadPhase: String, Equatable, Sendable {
         case downloading
-        case interrupted
-        case resuming
         case verifying
         case installing
     }
@@ -623,16 +621,10 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     ) async throws {
         guard !files.isEmpty else { return }
 
-        let hasResumeData = files.contains { file in
-            guard let relativePath = try? Self.validatedRelativeRepoPath(file.path) else { return false }
-            let partialURL = (try? Self.partialURL(for: relativePath, in: partialRoot))
-                ?? partialRoot.appendingPathComponent(relativePath)
-            let resumeDataURL = Self.resumeDataURL(for: relativePath, in: resumeRoot)
-            return Self.fileSizeIfPresent(at: partialURL) > 0
-                || fileManager.fileExists(atPath: resumeDataURL.path)
-        }
-        await state.setPhase(hasResumeData ? .resuming : .downloading)
-
+        // The phase is already `.downloading` (from `beginRepositoryDownload`); any
+        // partial files on disk are resumed silently, per-file, via Range requests in
+        // `downloadTemporaryFile`. macOS has no pause/resume UI, so we never surface a
+        // "Resuming" phase — that was a vestige of the discarded pause/resume feature.
         let maxConcurrent = min(max(1, Self.maxConcurrentFileDownloads), files.count)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
