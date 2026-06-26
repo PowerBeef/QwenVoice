@@ -26,6 +26,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         case httpError(statusCode: Int, path: String)
         case fileDownloadFailed(path: String, underlying: Error)
         case integrityCheckFailed(path: String, reason: String)
+        case rangeUnsupported(path: String)
         case invalidRemotePath(String)
         case invalidLocalDestination(String)
         case apiError(String)
@@ -40,6 +41,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
                 return "Failed to download \(path): \(underlying.localizedDescription)"
             case .integrityCheckFailed(let path, let reason):
                 return "Downloaded file failed integrity checks for \(path): \(reason)"
+            case .rangeUnsupported(let path):
+                return "Server did not honor the byte-range request for \(path); retrying as a single stream"
             case .invalidRemotePath(let path):
                 return "Rejected unsafe remote path: \(path)"
             case .invalidLocalDestination(let path):
@@ -347,6 +350,48 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         }
     }
 
+    /// Serializes writes from concurrently downloaded byte-range chunks into one partial
+    /// file. `FileHandle` is not safe for concurrent seek+write on the same descriptor, so
+    /// each chunk's bytes are written under actor isolation (the network — not the local
+    /// disk — is the bottleneck, so serial writes are cheap). APFS fills sparse holes as
+    /// out-of-order chunks land, so no pre-allocation is needed.
+    actor ChunkAssemblyCoordinator {
+        private let partialURL: URL
+        private var writeHandle: FileHandle?
+
+        init(partialURL: URL) {
+            self.partialURL = partialURL
+        }
+
+        /// Open the partial for writing, creating it if necessary.
+        func open() throws {
+            if !FileManager.default.fileExists(atPath: partialURL.path) {
+                FileManager.default.createFile(atPath: partialURL.path, contents: nil, attributes: nil)
+            }
+            writeHandle = try FileHandle(forWritingTo: partialURL)
+        }
+
+        /// Stream the contents of `tempURL` into the partial at absolute byte `offset`.
+        func writeChunk(tempURL: URL, offset: Int64) throws {
+            guard let writeHandle else { return }
+            try writeHandle.seek(toOffset: UInt64(offset))
+            let readHandle = try FileHandle(forReadingFrom: tempURL)
+            defer { try? readHandle.close() }
+            while autoreleasepool(invoking: {
+                let data = readHandle.readData(ofLength: 1_048_576)
+                guard !data.isEmpty else { return false }
+                writeHandle.write(data)
+                return true
+            }) {}
+        }
+
+        func close() {
+            try? writeHandle?.synchronize()
+            try? writeHandle?.close()
+            writeHandle = nil
+        }
+    }
+
     private var session: URLSession!
     private let state: DownloadStateRegistry
     private let apiBaseURL: URL
@@ -357,6 +402,14 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     /// URLSession's `httpMaximumConnectionsPerHost` is set to the same value, so this
     /// bounds both the in-flight file count and the open HTTP connections to the Hub.
     static let maxConcurrentFileDownloads = 6
+
+    /// Files at or above this size download as parallel byte-range chunks (HuggingFace LFS
+    /// serves HTTP 206 for ranges). Smaller files use the single-stream path.
+    static let chunkedDownloadThreshold: Int64 = 96 * 1024 * 1024
+    /// Target size of each byte-range chunk. The actual chunk size is
+    /// `max(this, expectedSize / maxConcurrentFileDownloads)` so a large file splits into at
+    /// most `maxConcurrentFileDownloads` chunks (one connection each).
+    static let chunkTargetSize: Int64 = 64 * 1024 * 1024
 
     static func validatedRelativeRepoPath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -792,6 +845,7 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         // so a single hiccup no longer fails the whole repo download. The partial
         // already on disk lets each attempt resume via a Range request.
         var attempt = 0
+        var avoidChunking = false
         while true {
             do {
                 // Clear any stale task state for this file from a prior failed attempt so
@@ -804,7 +858,8 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
                     resumeDataURL: resumeDataURL,
                     expectedSize: expectedSize,
                     sha256: sha256,
-                    fileIndex: fileIndex
+                    fileIndex: fileIndex,
+                    avoidChunking: avoidChunking
                 )
                 return
             } catch {
@@ -814,6 +869,13 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
                     if case .httpError(let code, _) = dlError,
                        (400..<500).contains(code), code != 429 {
                         throw error
+                    }
+                    // The server ignored a byte-range request — fall back to single-stream
+                    // for the remaining attempts instead of thrashing on chunks. The chunked
+                    // attempt may have left a sparse/holey partial, so clear it too.
+                    if case .rangeUnsupported = dlError {
+                        avoidChunking = true
+                        try? fileManager.removeItem(at: partialURL)
                     }
                 }
 
@@ -847,8 +909,26 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         resumeDataURL: URL,
         expectedSize: Int64,
         sha256: String?,
-        fileIndex: Int
+        fileIndex: Int,
+        avoidChunking: Bool
     ) async throws {
+        // Large LFS files (known size + sha256) download as parallel byte-range chunks so
+        // the biggest file is no longer a single-connection long pole. Smaller / non-LFS
+        // files — or chunked attempts that already saw the server ignore Range — use the
+        // single-stream path below.
+        if !avoidChunking, expectedSize >= Self.chunkedDownloadThreshold, sha256 != nil {
+            try? fileManager.removeItem(at: resumeDataURL)
+            try await downloadChunkedFile(
+                from: url,
+                to: destination,
+                partialURL: partialURL,
+                expectedSize: expectedSize,
+                sha256: sha256,
+                fileIndex: fileIndex
+            )
+            return
+        }
+
         let completedBytes = Self.fileSizeIfPresent(at: partialURL)
         let downloaded = try await downloadTemporaryFile(
             from: url,
@@ -881,6 +961,112 @@ final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchec
         let base = pow(2.0, Double(attempt - 1))
         let jitter = Double.random(in: 0...0.5)
         return min(base + jitter, 10)
+    }
+
+    /// Download a large file as parallel byte-range chunks, assembling them into the
+    /// partial, then validating size + SHA-256 (same gate as the single-stream path).
+    /// Each chunk is its own `URLSessionDownloadTask` registered under the same
+    /// `fileIndex`, so progress aggregates via the per-task counters. A single chunk
+    /// failure cancels its siblings and bubbles to the file-level retry.
+    private func downloadChunkedFile(
+        from url: URL,
+        to destination: URL,
+        partialURL: URL,
+        expectedSize: Int64,
+        sha256: String?,
+        fileIndex: Int
+    ) async throws {
+        // A partial from a prior single-stream or chunked attempt that isn't the expected
+        // size would leave holes; drop it so chunks write a clean file.
+        if Self.fileSizeIfPresent(at: partialURL) != expectedSize {
+            try? fileManager.removeItem(at: partialURL)
+        }
+
+        let chunkSize = max(Self.chunkTargetSize, expectedSize / Int64(Self.maxConcurrentFileDownloads))
+        let ranges = Self.byteRanges(total: expectedSize, chunkSize: chunkSize)
+
+        let assembly = ChunkAssemblyCoordinator(partialURL: partialURL)
+        try await assembly.open()
+
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for (chunkIndex, range) in ranges.enumerated() {
+                    group.addTask { [self] in
+                        try await self.downloadOneChunk(
+                            url: url,
+                            start: range.start,
+                            end: range.end,
+                            chunkIndex: chunkIndex,
+                            fileIndex: fileIndex,
+                            assembly: assembly
+                        )
+                    }
+                }
+                try await group.waitForAll()
+            }
+            await assembly.close()
+            try Self.validateDownloadedFile(at: partialURL, expectedSize: expectedSize, sha256: sha256)
+            try publishDownloadedFile(partialURL, to: destination)
+        } catch {
+            await assembly.close()
+            throw error
+        }
+    }
+
+    /// Download one byte-range `[start, end]` (inclusive) of `url` and write it into the
+    /// partial at offset `start`. Throws if the server ignores the Range request (200).
+    private func downloadOneChunk(
+        url: URL,
+        start: Int64,
+        end: Int64,
+        chunkIndex: Int,
+        fileIndex: Int,
+        assembly: ChunkAssemblyCoordinator
+    ) async throws {
+        var request = URLRequest(url: url)
+        request.setValue("bytes=\(start)-\(end)", forHTTPHeaderField: "Range")
+        let downloaded = try await withCheckedThrowingContinuation { continuation in
+            let task = session.downloadTask(with: request)
+            Task {
+                await state.register(
+                    task: task,
+                    destination: url,
+                    continuation: continuation,
+                    resumeDataURL: nil,
+                    fileIndex: fileIndex
+                )
+                task.resume()
+            }
+        }
+
+        // The delegate treats 200 and 206 as success; for a range request 200 means the
+        // server ignored Range and returned the whole file — throw a dedicated error so the
+        // file-level retry falls back to a single stream instead of thrashing on chunks.
+        guard downloaded.statusCode == 206 else {
+            try? fileManager.removeItem(at: downloaded.url)
+            throw DownloadError.rangeUnsupported(path: url.path)
+        }
+
+        if await state.cancellationRequested() {
+            try? fileManager.removeItem(at: downloaded.url)
+            throw DownloadError.cancelled
+        }
+
+        try await assembly.writeChunk(tempURL: downloaded.url, offset: start)
+        try? fileManager.removeItem(at: downloaded.url)
+    }
+
+    /// Partition `[0, total)` into inclusive `[start, end]` byte ranges of `chunkSize`.
+    private static func byteRanges(total: Int64, chunkSize: Int64) -> [(start: Int64, end: Int64)] {
+        guard total > 0, chunkSize > 0 else { return [] }
+        var ranges: [(start: Int64, end: Int64)] = []
+        var start: Int64 = 0
+        while start < total {
+            let end = min(start + chunkSize - 1, total - 1)
+            ranges.append((start, end))
+            start = end + 1
+        }
+        return ranges
     }
 
     private func downloadTemporaryFile(
