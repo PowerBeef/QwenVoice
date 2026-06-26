@@ -82,10 +82,46 @@ cmd_crashes() {
   done
 }
 
+# debug: launch the app and print LLDB attach commands for BOTH the app and the XPC
+# engine service (a separate process — the macOS-unique bit). Dev builds have hardened
+# runtime OFF, so LLDB attaches directly (no get-task-allow needed). The session is
+# interactive. The XPC service is lazy — spawn it with a generation first if absent.
+cmd_debug() {
+  ensure_app
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+  /usr/bin/open -na "$APP_BUNDLE"
+  local app_pid=""
+  for _ in {1..30}; do app_pid="$(pgrep -xn "$APP_NAME" || true)"; [[ -n "$app_pid" ]] && break; sleep 0.25; done
+  [[ -n "$app_pid" ]] || die "$APP_NAME did not launch"
+  note "debug: $APP_NAME running (pid $app_pid) — hardened runtime OFF, LLDB-attachable."
+  note "  lldb -p $app_pid        # app"
+  local svc_pid; svc_pid="$(pgrep -xn QwenVoiceEngineService || true)"
+  if [[ -n "$svc_pid" ]]; then
+    note "  lldb -p $svc_pid        # XPC engine service (pid $svc_pid)"
+  else
+    note "  XPC service not running yet — trigger a generation to spawn it, then:"
+    note "    lldb -p \$(pgrep -xn QwenVoiceEngineService)"
+  fi
+  note "  (or XcodeBuildMCP debugging, or Xcode → Debug → Attach to Process by PID)"
+  note "  retained os_log: scripts/macos_test.sh logs   (subsystem $BUNDLE_ID)"
+}
+
+# logs: retain the app + XPC service os_log (subsystem com.qwenvoice.app) to a file
+# under build/macos-logs/<run>.log. Ctrl-C to stop.
+cmd_logs() {
+  local out="$ROOT_DIR/build/macos-logs/macos-logs-$(date +%Y%m%d-%H%M%S).log"
+  mkdir -p "$(dirname "$out")"
+  note "streaming os_log (subsystem $BUNDLE_ID) → $out (Ctrl-C to stop)"
+  /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\"" 2>&1 | tee "$out"
+  note "saved $out"
+}
+
 main() {
   local sub="${1:-help}"; shift || true
   case "$sub" in
     crashes) cmd_crashes "$@" ;;
+    debug)   cmd_debug "$@" ;;
+    logs)    cmd_logs "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
