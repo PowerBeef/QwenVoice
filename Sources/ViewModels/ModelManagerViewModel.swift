@@ -125,6 +125,14 @@ final class ModelManagerViewModel {
     private var refreshTask: Task<Void, Never>?
     private var recommendedSetupTask: Task<Void, Never>?
     private var lastFailureMessages: [String: String] = [:]
+    /// Maximum number of models downloaded at the same time. Each model runs its own
+    /// downloader/URLSession (6 concurrent files), so this bounds the total bandwidth
+    /// and parallelism across simultaneous downloads.
+    private static let maxConcurrentModelDownloads = 3
+    /// Model IDs whose download is actively running (has an in-flight URLSession).
+    private var inflightModelDownloads = Set<String>()
+    /// Models waiting for a download slot, in launch order.
+    private var pendingModelDownloads: [TTSModel] = []
 
     init(
         fileManager: FileManager = .default,
@@ -433,26 +441,33 @@ final class ModelManagerViewModel {
 
         recommendedSetupTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            var completedCount = 0
 
+            // Launch every candidate up front; `startPendingDownloads` caps how many
+            // run concurrently. `download(_:)` returns immediately, so this no longer
+            // serializes models one at a time.
             for model in candidates {
                 guard !Task.isCancelled else { break }
-                recommendedSetupProgress = RecommendedSetupProgress(
-                    completedCount: completedCount,
-                    totalCount: candidates.count,
-                    currentModelID: model.id
-                )
                 if !isAvailable(model) {
                     await download(model)
                 }
-                guard !Task.isCancelled else { break }
-                guard isAvailable(model) else { break }
-                completedCount += 1
+            }
+
+            // Observe completions until every candidate is installed or no longer
+            // downloading (installed, failed, or cancelled).
+            while !Task.isCancelled {
+                let completedCount = candidates.filter { isAvailable($0) }.count
+                let activeCount = candidates.filter {
+                    !isAvailable($0) && isDownloadActive($0.id)
+                }.count
                 recommendedSetupProgress = RecommendedSetupProgress(
                     completedCount: completedCount,
                     totalCount: candidates.count,
-                    currentModelID: nil
+                    currentModelID: candidates.first { !isAvailable($0) }?.id
                 )
+                if completedCount >= candidates.count || activeCount == 0 {
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(400))
             }
 
             recommendedSetupTask = nil
@@ -462,8 +477,8 @@ final class ModelManagerViewModel {
 
     func cancelRecommendedSetup() {
         recommendedSetupTask?.cancel()
-        if let modelID = recommendedSetupProgress?.currentModelID,
-           let model = TTSModel.model(id: modelID) {
+        // Several candidates can be in flight at once now; cancel them all.
+        for model in recommendedSetupCandidates() {
             cancelDownload(model)
         }
         recommendedSetupTask = nil
@@ -520,83 +535,122 @@ final class ModelManagerViewModel {
         return "Install \(displayName) to enable \(model.mode.displayName)."
     }
 
+    /// Request a model download. Returns immediately; the download runs on the bounded
+    /// queue so multiple models download concurrently (up to
+    /// `maxConcurrentModelDownloads`). A model already queued or downloading is a no-op.
     func download(_ model: TTSModel) async {
-        if let existingTask = downloadTasks[model.id] {
-            await existingTask.value
-            return
-        }
+        let modelID = model.id
+        guard !isDownloadActive(modelID) else { return }
 
-        let epoch = beginEpoch(for: model.id)
-        lastFailureMessages.removeValue(forKey: model.id)
-        statuses[model.id] = .downloading(progress: .initial)
+        lastFailureMessages.removeValue(forKey: modelID)
+        statuses[modelID] = .downloading(progress: .initial)
+        pendingModelDownloads.append(model)
+        startPendingDownloads()
+    }
+
+    /// `true` when `modelID` is queued or actively downloading.
+    private func isDownloadActive(_ modelID: String) -> Bool {
+        inflightModelDownloads.contains(modelID)
+            || pendingModelDownloads.contains { $0.id == modelID }
+    }
+
+    /// Launch queued downloads until the concurrency cap is reached.
+    private func startPendingDownloads() {
+        while inflightModelDownloads.count < Self.maxConcurrentModelDownloads,
+              let next = pendingModelDownloads.first {
+            pendingModelDownloads.removeFirst()
+            beginModelDownload(next)
+        }
+    }
+
+    /// Start one model's download after it has claimed a concurrency slot.
+    private func beginModelDownload(_ model: TTSModel) {
+        let modelID = model.id
+        let epoch = beginEpoch(for: modelID)
+        inflightModelDownloads.insert(modelID)
 
         let targetDir = model.installDirectory(in: modelsDirectory)
         let modelsDirectory = self.modelsDirectory
 
-        downloaders[model.id]?.cancel()
-        downloaders.removeValue(forKey: model.id)
-        downloadTasks[model.id]?.cancel()
-        downloadTasks.removeValue(forKey: model.id)
+        // Clear any stale downloader/task for this model before starting fresh.
+        downloaders[modelID]?.cancel()
+        downloaders.removeValue(forKey: modelID)
+        downloadTasks[modelID]?.cancel()
+        downloadTasks.removeValue(forKey: modelID)
 
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
         removeInstallMetadata(for: model)
 
         let downloader = HuggingFaceDownloader(progressHandler: { [weak self] progress in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.publishDownloadProgressIfCurrent(
+                self?.publishDownloadProgressIfCurrent(
                     epoch: epoch,
-                    modelID: model.id,
+                    modelID: modelID,
                     progress: progress
                 )
             }
         })
-        downloaders[model.id] = downloader
+        downloaders[modelID] = downloader
 
-        let task = Task {
-            do {
-                try await downloader.downloadRepo(
-                    repo: model.huggingFaceRepo,
-                    revision: model.huggingFaceRevision ?? "main",
-                    to: targetDir
-                )
-                guard isCurrentEpoch(epoch, for: model.id) else { return }
-                let postDownloadSnapshot = localModelInfo(for: model)
-                if !postDownloadSnapshot.complete {
-                    lastFailureMessages[model.id] = "Download finished, but required model files are still missing."
-                } else {
-                    persistInstallMetadata(for: model, snapshot: postDownloadSnapshot)
-                }
-                await handleMutationCompletion(for: model.id)
-            } catch is CancellationError {
-                guard isCurrentEpoch(epoch, for: model.id) else { return }
-                await handleMutationCompletion(for: model.id)
-            } catch let dlError as HuggingFaceDownloader.DownloadError {
-                guard isCurrentEpoch(epoch, for: model.id) else { return }
-                switch dlError {
-                case .cancelled:
-                    lastFailureMessages.removeValue(forKey: model.id)
-                default:
-                    lastFailureMessages[model.id] = dlError.localizedDescription
-                }
-                await handleMutationCompletion(for: model.id)
-            } catch {
-                guard isCurrentEpoch(epoch, for: model.id) else { return }
-                lastFailureMessages[model.id] = error.localizedDescription
-                await handleMutationCompletion(for: model.id)
-            }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.runModelDownload(
+                model: model,
+                epoch: epoch,
+                downloader: downloader,
+                targetDir: targetDir
+            )
         }
-        downloadTasks[model.id] = task
-        await task.value
+        downloadTasks[modelID] = task
+    }
+
+    /// Runs one model's repo download to completion and reconciles status. The
+    /// concurrency slot is released in `handleMutationCompletion` when this returns.
+    private func runModelDownload(
+        model: TTSModel,
+        epoch: Int,
+        downloader: HuggingFaceDownloader,
+        targetDir: URL
+    ) async {
+        do {
+            try await downloader.downloadRepo(
+                repo: model.huggingFaceRepo,
+                revision: model.huggingFaceRevision ?? "main",
+                to: targetDir
+            )
+            guard isCurrentEpoch(epoch, for: model.id) else { return }
+            let postDownloadSnapshot = localModelInfo(for: model)
+            if !postDownloadSnapshot.complete {
+                lastFailureMessages[model.id] = "Download finished, but required model files are still missing."
+            } else {
+                persistInstallMetadata(for: model, snapshot: postDownloadSnapshot)
+            }
+        } catch is CancellationError {
+            guard isCurrentEpoch(epoch, for: model.id) else { return }
+        } catch let dlError as HuggingFaceDownloader.DownloadError {
+            guard isCurrentEpoch(epoch, for: model.id) else { return }
+            switch dlError {
+            case .cancelled:
+                lastFailureMessages.removeValue(forKey: model.id)
+            default:
+                lastFailureMessages[model.id] = dlError.localizedDescription
+            }
+        } catch {
+            guard isCurrentEpoch(epoch, for: model.id) else { return }
+            lastFailureMessages[model.id] = error.localizedDescription
+        }
+        await handleMutationCompletion(for: model.id)
     }
 
     func cancelDownload(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
 
+        pendingModelDownloads.removeAll { $0.id == model.id }
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
         downloadTasks[model.id]?.cancel()
         downloadTasks.removeValue(forKey: model.id)
+        inflightModelDownloads.remove(model.id)
 
         Task {
             await handleMutationCompletion(for: model.id)
@@ -606,10 +660,12 @@ final class ModelManagerViewModel {
     func delete(_ model: TTSModel) {
         _ = beginEpoch(for: model.id)
 
+        pendingModelDownloads.removeAll { $0.id == model.id }
         downloaders[model.id]?.cancel()
         downloaders.removeValue(forKey: model.id)
         downloadTasks[model.id]?.cancel()
         downloadTasks.removeValue(forKey: model.id)
+        inflightModelDownloads.remove(model.id)
 
         let modelDir = model.installDirectory(in: modelsDirectory)
         try? fileManager.removeItem(at: modelDir)
@@ -717,11 +773,14 @@ final class ModelManagerViewModel {
         downloaders.removeValue(forKey: modelID)
         downloadTasks.removeValue(forKey: modelID)
         lastProgressPublishTimes.removeValue(forKey: modelID)
+        inflightModelDownloads.remove(modelID)
         if let model = TTSModel.model(id: modelID) {
             applyLocalSnapshot(for: model)
         } else {
             statuses[modelID] = .checking
         }
+        // A slot just freed up — launch the next queued download, if any.
+        startPendingDownloads()
         scheduleRefreshIfPossible()
     }
 
