@@ -28,7 +28,7 @@ Stable macOS release: **Vocello 2.1.0**. iOS is on-device-capable on `main` but
 not yet distributed.
 
 > For repo conventions, build commands, engine invariants, and release process,
-> read [`CLAUDE.md`](../CLAUDE.md). This document is the *map*; `CLAUDE.md` is
+> read [`AGENTS.md`](../AGENTS.md). This document is the *map*; `AGENTS.md` is
 > the *operating manual*.
 
 ---
@@ -732,7 +732,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
-- [`CLAUDE.md`](../CLAUDE.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
+- [`AGENTS.md`](../AGENTS.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.
 - [`PRODUCT.md`](../PRODUCT.md) — product/brand guidance.
 - Per-subsystem deep-dives in `docs/reference/`:

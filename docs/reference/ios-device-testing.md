@@ -228,7 +228,7 @@ The UI-test target is wired into the `VocelloiOS` scheme's `test` action (and bu
 for `test`, so the foundation compile-safety build stays focused on the app). The smoke +
 sheet suites exercise IA, identifiers, and sheet behaviour only — no audio generation.
 
-`accessibilityIdentifier`s are stable surface area (CLAUDE.md "Conventions") — keep them
+`accessibilityIdentifier`s are stable surface area (`.agents/ios-engineer.md` "Conventions") — keep them
 through refactors; the smoke + any agent UI checks depend on them.
 
 ---
@@ -297,4 +297,4 @@ screenshot, then closed — never dwell on a static high-contrast screen.
 
 A signed-IPA / TestFlight distribution lane (needs the iOS Distribution cert + an
 `archive-ios` CI job). On-device proof is **not** a public-release blocker (macOS-first;
-see CLAUDE.md).
+see `AGENTS.md`).

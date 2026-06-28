@@ -33,7 +33,7 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    ```
    Gate: audioQC pass on all cells; RTF within noise of the latest `benchmarks/HISTORY.md` rows;
    the **listening pass** (`vocello bench --review` / by ear) for any engine-adjacent change.
-4. **Static audits** (release-sized changesets): run the five Axiom auditors per CLAUDE.md routing
+4. **Static audits** (release-sized changesets): run the five Axiom auditors per `.agents/release-qa-engineer.md` routing
    (swiftui-architecture, swiftui-performance, memory, concurrency, security-privacy) scoped to the
    changed surfaces; fix or explicitly defer findings.
 5. **Interactive matrix** (releases touching UI; drive via computer-use — never AppleScript):

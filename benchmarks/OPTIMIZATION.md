@@ -26,7 +26,7 @@ on the bench machine. Perf-over-time ledger: [`HISTORY.md`](HISTORY.md).
 | B | The ~586 ms "dropout" investigation | ✅ done — root-caused | this doc + `641a541` baseline note |
 | C | Punctuation-aware audioQC recalibration | ✅ done + verified | `ac86b8a` (`NativeStreamingSynthesisSession.swift`) |
 | D | CodePredictor RoPE fusion | ✅ **done — closed by §H P3** (`f3cd2aa`): +26%, realtime crossed | §H |
-| E | MLXSwift / mlx-swift-lm version bump (0.31.x) | ⏸ deferred — stay pinned, gated | this doc + CLAUDE.md "SPM dependencies" |
+| E | MLXSwift / mlx-swift-lm version bump (0.31.x) | ⏸ deferred — stay pinned, gated | this doc + [.agents/backend-mlx.md](../.agents/backend-mlx.md) "SPM dependencies" |
 | F | iPhone 1.7B-4bit program — feasibility + WS0b profiling + compile/KV spikes | 🔬 see §F: compile rejected; **iOS RAM premise corrected — streaming peaks ~3 GB flat, KV windowing unneeded** | this doc + session plan |
 
 ## Grounding (the headline conclusion)
@@ -180,7 +180,7 @@ table collapses because the engine reuses `OS_SIGNPOST_ID_EXCLUSIVE`):
   — GPU compute (61%) is fixed at this precision, and the build overhead (22%) is not compile-attackable
   (regresses). The primary iPhone RAM unlock is the **entitlement**; transparent backend RAM cuts are modest.
   The realistic path to acceptable **iPhone RTF** is therefore the entitlement + evaluating the smaller/faster
-  **0.6B variant** for on-device use (CLAUDE.md notes it's verified but unlisted), **not** backend
+  **0.6B variant** for on-device use ([.agents/backend-mlx.md](../.agents/backend-mlx.md) notes it's verified but unlisted), **not** backend
   micro-optimization of the 1.7B decode loop. Worth confirming with one more os_signpost capture whether the
   ~13% inter-frame gap (Code2Wav/plumbing) hides any cheap win before closing speed work.
 

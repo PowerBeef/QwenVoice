@@ -22,7 +22,7 @@ If anything here disagrees with the code, the code wins — fix this file.
 ## 1. Principles
 
 1. **Runtime‑gated, never compiled out.** There is one shippable config; dev and
-   release run identical code (see root `CLAUDE.md`). Telemetry is switched on at
+   release run identical code (see root `AGENTS.md`). Telemetry is switched on at
    runtime by `TelemetryGate`, not by `#if DEBUG`. When the gate is off, every probe
    is a no‑op and nothing is written.
 2. **Correlated by `generationID`.** The app mints a `UUID` per generation and threads
@@ -48,7 +48,7 @@ resolved once per process:
 | `QWENVOICE_NATIVE_TELEMETRY_MODE=lightweight\|verbose` | Forces sampling/persistence on regardless of the gate. |
 
 The engine runs **out of process on macOS** (XPC service) and **in process on iOS**
-(the ExtensionKit extension was removed; see `CLAUDE.md` / commit `aed617c`). The
+(the ExtensionKit extension was removed; see `AGENTS.md` / commit `aed617c`). The
 different bundle id means the app's `UserDefaults` flag still can't reach the macOS
 engine via environment — it is carried on the handshake, where the host calls
 `TelemetryGate.applyHandshakeMode(_:)`.
@@ -597,4 +597,4 @@ default; committed quality-check scripts/baselines under `benchmarks/` are also 
 
 - [`mlx-audio-swift-patching.md`](mlx-audio-swift-patching.md) — vendored backend patch procedure + validation gates.
 - [`privacy-storage.md`](privacy-storage.md) — where diagnostics live; deletion paths.
-- Root `CLAUDE.md` — telemetry summary + engine invariants (unbounded macOS `events`, prewarm reentrancy, per‑tier memory).
+- [`.agents/backend-mlx.md`](../../.agents/backend-mlx.md) — telemetry summary + engine invariants (unbounded macOS `events`, prewarm reentrancy, per‑tier memory).
