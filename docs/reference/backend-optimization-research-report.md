@@ -197,7 +197,7 @@ The **Rank 1 recommendation was implemented** in the same session:
 - `Sources/VocelloCLI/GenerateCommand.swift` — `vocello generate` now streams by default; `--no-stream` disables streaming.
 - Updated docs: `docs/reference/cli.md`, `docs/reference/telemetry-and-benchmarking.md`, `docs/reference/mlx-guide.md`, `docs/reference/ios-engine-optimization.md`, and `benchmarks/OPTIMIZATION.md`.
 - Built and smoke-tested the CLI (`generate` streaming and `--no-stream` both produce valid audio).
-- Re-ran the benchmark matrix in streaming mode and saved the new baseline: [`benchmarks/baseline-2026-06-16-45720dd-streaming-default.md`](../benchmarks/baseline-2026-06-16-45720dd-streaming-default.md).
+- Re-ran the benchmark matrix in streaming mode and saved the new baseline: [`benchmarks/baseline-2026-06-16-45720dd-streaming-default.md`](../../benchmarks/baseline-2026-06-16-45720dd-streaming-default.md).
 - Appended ledger rows to `benchmarks/HISTORY.md`.
 
 Streaming-default headline (floor 8 GB Mac, warm median):

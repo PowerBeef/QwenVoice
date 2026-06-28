@@ -3,7 +3,7 @@
 Durable record of backend/MLX + output-quality optimization work — what was investigated, decided,
 shipped, and deferred. The blow-by-blow lives in git history + `HISTORY.md`; this file is the **standing
 status** so a future session (or maintainer) can resume without re-deriving it. Anchored to the reference
-baseline. Point-in-time as of **2026-06-11** (§H complete; §I is the delivery-accuracy program record).
+baseline. Point-in-time as of **2026-06-16** (§H complete; §I is the delivery-accuracy program record).
 
 ## Reference baseline
 
@@ -455,8 +455,8 @@ Shipped (each gated by bench `--delivery` QC + agy listening):
   gets the right language token (was: english token + wrongly-appended diction reinforcement). Engine rows
   stamp `notes.languageHint`.
 - **Official speaker descriptions** (`bc73b70`) + **presets v2** (`e9671c7`): anti-laughter clauses on
-  happy/excited Strong, pitch/pace cues added, 3 new presets (Surprised — wording strengthened after a
-  listening iteration; Narrator; News), Voice Design briefs 4→8, `docs/qwen_tone.md` refreshed.
+  happy/excited Strong, pitch/pace cues added, Surprised preset wording strengthened after a
+  listening iteration, Voice Design briefs 4→8, `docs/qwen_tone.md` refreshed.
 
 **Sampling A/Bs (first pass, single-take agy comparisons) — shipped defaults won all three; nothing
 adopted:** (1) community "stability recipe" temp 0.8/topP 0.9 on calm — control steadier, treatment
@@ -601,9 +601,9 @@ in the app's already-granted process. Until then, **text adherence has no object
 delivery + voice/pitch are covered objectively by `scripts/analyze_delivery.py`, and text-match is
 agy-only (unreliable) or a manual listening pass.
 
-## Next step (if resumed)
+## Status
 
-§H is the active program (branch `engine-risk`): P2 hot-path build/allocator work is first-order per
-the P0 capture; then gated P3 (RoPE fusion, token-identity gate), P4 RAM levers (KV-quant A/B with
-the clone listening gate), P5 iPhone-15-Pro sim harness, P6 wrap-up. §D is superseded by the §H P0
-decision table. For UI smoothness (G), watch the `uiMaxStall ms` ledger column across releases.
+The optimization program tracked in this document is wrapped up. The §H P0–P6 work has been
+completed and validated, streaming is now the default generation path, and the remaining
+delivery-accuracy work is recorded in §I. For UI smoothness (G), watch the `uiMaxStall ms`
+ledger column across releases.

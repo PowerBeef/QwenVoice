@@ -12,8 +12,6 @@ const DELIVERY_SHAPES = {
   Dramatic:  { amp: 1.00, density: 1.15, noise: 0.20, env: 0.85, rate: 0.050 },
   Calm:      { amp: 0.55, density: 0.85, noise: 0.08, env: 1.20, rate: 0.030 },
   Excited:   { amp: 0.90, density: 1.30, noise: 0.25, env: 0.95, rate: 0.070 },
-  Narrator:  { amp: 0.66, density: 0.95, noise: 0.09, env: 1.15, rate: 0.034 },
-  News:      { amp: 0.72, density: 1.05, noise: 0.06, env: 0.95, rate: 0.046 },
 };
 
 const DEFAULT_SHAPE = DELIVERY_SHAPES.Neutral;

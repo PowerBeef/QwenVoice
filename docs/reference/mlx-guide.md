@@ -178,7 +178,7 @@ Historically the code predictor used a hand-rolled RoPE (rotate-half). Vocello r
 
 The Mimi neural codec converts generated audio-codebook frames into a 24 kHz PCM waveform. In the **full-result path**, all frames are accumulated and decoded once at the end. In the **streaming path**, a chunk of frames is emitted and decoded periodically, releasing memory as it goes.
 
-The decoder uses input-side overlap-and-add (`inputContext`) to avoid chunk-boundary discontinuities. Do not revert to output-side accumulation.
+The decoder uses input-side overlap-and-discard (`inputContext`) to avoid chunk-boundary discontinuities. Do not revert to output-side accumulation.
 
 ### 4.4 Sampling
 

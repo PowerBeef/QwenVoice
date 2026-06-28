@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents when working on the website in t
 
 ## What this is
 
-A marketing site for **Vocello** (formerly QwenVoice), a local-first Mac TTS app. Single-page React + Vite. This directory lives inside the QwenVoice monorepo at `website/` and is deployed by Vercel with `website/` as the project root. The site is the brand surface for the app in the parent repo — see "Content accuracy" below. For repo-wide conventions, the app engine, and the source-of-truth order, see the root [`../CLAUDE.md`](../CLAUDE.md); this file is scoped to the website only.
+A marketing site for **Vocello** (formerly QwenVoice), a local-first Mac TTS app. Single-page React + Vite. This directory lives inside the QwenVoice monorepo at `website/` and is deployed by Vercel with `website/` as the project root. The site is the brand surface for the app in the parent repo — see "Content accuracy" below. For repo-wide conventions, the app engine, and the source-of-truth order, see the root [`../AGENTS.md`](../AGENTS.md); this file is scoped to the website only.
 
 ## Commands
 
@@ -21,15 +21,15 @@ No tests, no lint config, no GitHub Actions workflow. Behavioral verification is
 ## Tooling for this directory
 
 - This is a **non-app, non-native zone** — do not run the Axiom Swift/iOS auditors here. For React/Vite/library API questions use the `context7` MCP (`resolve-library-id` then `query-docs`); your training data may lag the installed versions.
-- For UI/UX/visual passes use the `impeccable:impeccable` skill (the `PRODUCT.md` brand rules below are required reading for it).
-- For browser verification of the running dev/preview server, use the `chrome-devtools` MCP (`mcp__plugin_chrome-devtools-mcp_chrome-devtools__*`: `navigate_page`, `take_screenshot`, `take_snapshot`, `list_console_messages`).
+- For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first and use the `chrome-devtools` MCP to verify the running site.
+- For browser verification of the running dev/preview server, use the `chrome-devtools` MCP (`mcp__chrome-devtools__*`: `navigate_page`, `take_screenshot`, `take_snapshot`, `list_console_messages`).
 - Run `npm`/`node` commands through the Bash tool.
 
 ## Architecture
 
 `src/App.jsx` is a **thin composer** (~33 lines). All UI is split across:
 
-- `src/sections/` — one file per page section, in render order: `Nav`, `Hero`, `WorkflowBand` (rendered 3× from data), `Listen`, `WhyCloud`, `TryIt`, `HowItRuns`, `Limitations`, `FinalCTA`, `Footer`.
+- `src/sections/` — one file per page section, in render order: `Nav`, `Hero`, `WorkflowBand` (rendered 3× from data), `Listen`, `Capabilities`, `WhyCloud`, `TryIt`, `HowItRuns`, `Limitations`, `FinalCTA`, `Footer`.
 - `src/components/` — three shared primitives:
   - `Icon.jsx` — single switch over an 18-case SVG vocabulary. Also exports `makeWaveBars` (deterministic bar-height generator).
   - `Waveform.jsx` — bar waveform for Listen rows.
@@ -63,9 +63,9 @@ Two design-context files in this directory encode the website's rules:
 
 The product's ground truth lives in the parent QwenVoice app repo. When making product claims on the site (model variants, hardware requirements, emotion presets, speaker names, OS requirements), cross-reference:
 
-- `../CLAUDE.md` — repo facts: model variant policy, architecture, distribution.
+- `../AGENTS.md` — repo facts: model variant policy, architecture, distribution.
 - `../Sources/Resources/qwenvoice_contract.json` — model registry, speakerMetadata, Hugging Face revisions.
-- `../Sources/Models/EmotionPreset.swift` — actual emotion presets (8 non-Neutral × 3 intensities + Neutral).
+- `../Sources/QwenVoiceCore/EmotionPreset.swift` — actual emotion presets (9 non-Neutral × 3 intensities + Neutral = 10 total).
 - Voice Cloning has no controllable delivery — the engine path doesn't accept emotion/intensity for clone.
 
 The site has drifted from ground truth multiple times during iteration. Don't trust the existing copy — verify against the upstream.
@@ -82,7 +82,7 @@ Mode colors are referenced via CSS custom properties: rows pass them through `--
 
 ## Assets
 
-- `public/assets/screens/` — four Mac app screenshots (`custom-voice.png`, `voice-design.png`, `voice-cloning.png`, `model-downloads.png`).
+- `public/assets/screens/` — six Mac app screenshots (`custom-voice.png`, `voice-design.png`, `voice-cloning.png`, `model-downloads.png`, `delivery-presets.png`, `history.png`).
 - `public/assets/voice-samples/` — three WAV clips for the Listen rows; filenames match the `SAMPLES[*].src` field in `data/samples.js`.
 - `public/assets/app-icon-1024.png`, `vocello-header-mark.png`, `social_preview.png` — brand artwork.
 

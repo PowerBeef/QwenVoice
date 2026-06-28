@@ -6,7 +6,7 @@ to author accurate macOS XCUITest flows.
 
 > **Where this fits:** the canonical "macOS app + driving" reference. Running the tests
 > lives in [`macos-testing.md`](macos-testing.md); the engine/XPC internals live in
-> [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md); the iOS counterpart is
+> [`../ARCHITECTURE.md`](../ARCHITECTURE.md); the iOS counterpart is
 > [`ios-app-guide.md`](ios-app-guide.md).
 
 ---
@@ -24,7 +24,7 @@ or retire independently.
 | Voice Cloning | `sidebar_voiceCloning` | Cmd+3 |
 | History | `sidebar_history` | Cmd+4 |
 | Saved Voices | `sidebar_voices` | Cmd+5 |
-| Settings | `sidebar_settings` | Cmd+6 |
+| Settings | `sidebar_settings` | Cmd+6 (labeled "Models" in the Navigate menu, opens the unified Settings/Models surface) |
 
 Three generation modes (Custom / Design / Clone) — same engine contract as iOS, but macOS
 has **both Speed (4-bit) and Quality (8-bit)** variants.
@@ -153,7 +153,7 @@ higher-fidelity output.
   Cmd+1..6 shortcuts. Each click sets `mainWindow_activeScreen`.
 - **Menus + popovers** — sort pickers, model "Manage" menus, language/delivery pickers use
   macOS menus (NSMenu), not iOS-style sheets. Drive via `app.menuItems["…"]`.
-- **Keyboard shortcuts** — Cmd+1..6 for sidebar; Cmd+, for the Settings window.
+- **Keyboard shortcuts** — Cmd+1..6 for sidebar (Cmd+6 is labeled "Models" in the Navigate menu but opens the unified Settings/Models surface); Cmd+, for the Settings window.
 - **Hidden markers** — `mainWindow_ready` / `mainWindow_activeScreen` /
   `mainWindow_disabledSidebarItems` provide test-readable app state without visible UI.
 - **File pickers** — import/browse uses NSOpenPanel (a system sheet, not drivable by
@@ -188,5 +188,5 @@ macOS controls without stable identifiers (label/coordinate-driven):
 - Individual delivery/language menu items (drive by label).
 - Model "Manage" popover menu items.
 - Batch item rows (derived from `BatchGenerationItemState`, no per-item id).
-- Sidebar player waveform Canvas (tap-to-seek, no id).
+- History context menu items ("Reveal in Finder").
 - History context menu items ("Reveal in Finder").

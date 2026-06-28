@@ -7,7 +7,7 @@ This guide is a supplemental prompt-writing reference for the shipped macOS app.
 For current repo truth about app structure, workflows, or supported behavior, trust:
 
 1. `README.md`
-2. `CLAUDE.md` (repo guide: architecture, build, conventions)
+2. `AGENTS.md` (repo guide: architecture, build, conventions)
 
 ## What the App Exposes
 
@@ -83,7 +83,7 @@ Voice Design:
 
 Voice Cloning support text:
 
-> Use a clean 5–10 second reference clip and include the transcript if possible.
+> Use a clean 10–20 second reference clip and include the transcript if possible.
 
 ## Source References
 
@@ -94,5 +94,5 @@ Voice Cloning support text:
 ## Related Docs
 
 - [`../README.md`](../README.md)
-- [`../CLAUDE.md`](../CLAUDE.md) — repo architecture, build, and conventions
-- `Sources/QwenVoiceCore/EmotionPreset.swift` — the shipped 12 × 3 preset instruction strings (single source for macOS + iOS + the CLI's `bench --delivery` cells); `Sources/QwenVoiceCore/GenerationSemantics.swift` assembles the Voice Design "Voice character / Delivery" framing.
+- [`../AGENTS.md`](../AGENTS.md) — repo architecture, build, and conventions
+- `Sources/QwenVoiceCore/EmotionPreset.swift` — the shipped 10 × 3 preset instruction strings (single source for macOS + iOS + the CLI's `bench --delivery` cells); `Sources/QwenVoiceCore/GenerationSemantics.swift` assembles the Voice Design "Voice character / Delivery" framing.

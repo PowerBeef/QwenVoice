@@ -129,8 +129,9 @@ sentinel:
 
 `clone` autorun needs a saved voice on the device (else a clean sentinel error). Note
 clone generation in-app currently uses `.iOSProductionDefault` (= `withoutCloneEncoders`,
-memory-conscious), so a clone autorun may fail until clone-in-process is enabled — that
-failure is recorded, not crashed.
+memory-conscious). A clone autorun needs the iOS clone-encoders capability enabled
+(`.fullCapabilities` load profile); if the device is on the memory-conscious profile, the
+run records a clean sentinel error rather than crashing.
 
 ### Where the data lives + how it's pulled
 
@@ -227,7 +228,7 @@ The UI-test target is wired into the `VocelloiOS` scheme's `test` action (and bu
 for `test`, so the foundation compile-safety build stays focused on the app). The smoke +
 sheet suites exercise IA, identifiers, and sheet behaviour only — no audio generation.
 
-`accessibilityIdentifier`s are stable surface area (CLAUDE.md "Conventions") — keep them
+`accessibilityIdentifier`s are stable surface area (AGENTS.md "Conventions") — keep them
 through refactors; the smoke + any agent UI checks depend on them.
 
 ---
@@ -285,7 +286,7 @@ screenshot, then closed — never dwell on a static high-contrast screen.
 | Level | Command | Proves |
 |-------|---------|--------|
 | Compile (app) | `scripts/build_foundation_targets.sh ios` | the in-process engine + harness compile |
-| Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'platform=iOS,id=<udid>' -derivedDataPath build/ios` | the test target compiles + is wired for the device |
+| Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'id=<udid>' -derivedDataPath build/ios` | the test target compiles + is wired for the device |
 | UI smoke (device gate) | `scripts/ios_device.sh ui-test` (or `test`) | launch + IA + real download cancel on hardware |
 | UI review | `scripts/ios_device.sh review` | screenshot tour vs `docs/ios-review-baselines/` |
 | Pre-merge gate | `scripts/ios_device.sh gate` | preflight → test → crashes → single verdict |
@@ -296,4 +297,4 @@ screenshot, then closed — never dwell on a static high-contrast screen.
 
 A signed-IPA / TestFlight distribution lane (needs the iOS Distribution cert + an
 `archive-ios` CI job). On-device proof is **not** a public-release blocker (macOS-first;
-see CLAUDE.md).
+see AGENTS.md).

@@ -12,7 +12,7 @@ export const WORKFLOWS = [
     body: "Choose one of nine built-in Qwen3-TTS CustomVoice speaker presets, set the delivery, and turn a script into a clean spoken line. The simplest path when you want a consistent voice right away.",
     points: [
       ["Nine built-in speaker presets", "English, Chinese, Japanese, and Korean native presets, each tuned to its language."],
-      ["Delivery + intensity", "Twelve delivery presets: Neutral, Happy, Sad, Angry, Fearful, Surprised, Whisper, Dramatic, Calm, Excited, Narrator, and News. Non-neutral presets support Subtle, Normal, or Strong."],
+      ["Delivery + intensity", "Ten delivery presets: Neutral, Happy, Sad, Angry, Fearful, Surprised, Whisper, Dramatic, Calm, and Excited. Non-neutral presets support Subtle, Normal, or Strong."],
       ["Custom tone field", "Describe the delivery in your own words when the chips aren't enough."],
     ],
     shot: "assets/screens/custom-voice.png",
@@ -47,7 +47,7 @@ export const WORKFLOWS = [
     accent: "you own.",
     body: "Pick a voice you already designed in Saved Voices, record a short reference clip with your Mac's microphone, or import one. Transcript-backed saved voices can reuse prepared Qwen3 clone prompts for cleaner repeat generations. Only clone voices you have permission to use.",
     points: [
-      ["Saved, recorded, or imported", "Pick any voice from Saved Voices, record a clip in the app, or drop in a reference file (WAV, MP3, AIFF, M4A, FLAC, or OGG). Saved Voices are optimized for repeat use."],
+      ["Saved, recorded, or imported", "Pick any voice from Saved Voices, record a clip in the app, or drop in a reference file (WAV, MP3, AIFF, M4A, FLAC, OGG, or WebM). Saved Voices are optimized for repeat use."],
       ["Transcript-backed quality", "Paste the words spoken in the clip, or let Vocello transcribe them locally, for the strongest reusable clone prompt. Audio-only references remain available as a lower-guidance fallback."],
       ["Source-led delivery", "Voice Cloning follows the reference clip. Delivery presets are not exposed for this path today."],
     ],

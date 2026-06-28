@@ -29,8 +29,8 @@ app **and** the service.
 | Lane | Verb | Captures / proves | Deeper analysis |
 |------|------|-------------------|-----------------|
 | Preflight | `preflight` | Xcode + app + XPC bundle + dSYMs | — |
-| Test | `test` | VocelloMacSmokeUITests (10 tests) | `axiom:test-runner` on the `.xcresult` |
-| Bench | `build.sh cli — bench` | deterministic perf/quality matrix | `summarize_generation_telemetry.py` |
+| Test | `test` | VocelloMacUITests target (currently 11 tests: 10 smoke + 1 review tour) | `axiom:test-runner` on the `.xcresult` |
+| Bench | `build.sh cli bench` | deterministic perf/quality matrix | `summarize_generation_telemetry.py` |
 | Crash | `crashes [--test]` | `.ips` for app + XPC service | `axiom:crash-analyzer` / `xcsym` vs the dSYMs |
 | Debug | `debug` | LLDB attach (app + service PID) + `logs` | XcodeBuildMCP debugging; `systematic-debugging` |
 | Profile | `profile [spec]` | xctrace/Instruments on the engine (CLI in-process) | `axiom:performance-profiler` / `xcprof` |
@@ -143,4 +143,4 @@ A single PASS/FAIL verdict + per-step logs under `build/macos/gate-<run>/`. Deep
 - [`macos-permissions.md`](macos-permissions.md) — TCC + signing.
 - [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md) — telemetry schema + bench recipes.
 - [`cli.md`](cli.md) — the `vocello` CLI reference.
-- [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — the XPC host + macOS request lifecycle.
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the XPC host + macOS request lifecycle.

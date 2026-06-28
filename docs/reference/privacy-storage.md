@@ -30,7 +30,7 @@ Maintained macOS subtrees and preferences:
 - `voices/` stores saved voice reference assets (the reference WAV plus an optional `.txt` transcript sidecar).
 - Reference-clip **recording** (macOS, 2026-06) uses two short-lived directories under the system temporary directory: `voice-clone-references/` holds the in-progress capture and `voice-enroll/` holds a stable copy during enrollment. Both are deleted as part of enrollment/cancel; the kept copy is the one in `voices/`.
 - `history.sqlite` stores local generation history.
-- Active macOS model-quality choices are stored in app preferences, keyed per generation mode. Repo-local Release builds use an isolated release-id-specific preferences suite so local signoff starts from defaults.
+- Active macOS model-quality choices are stored in app preferences, keyed per generation mode. `DebugMode` isolates preferences to `com.qwenvoice.app.debug`; Release builds use `UserDefaults.standard`.
 
 Delete local macOS app data by quitting the app and removing the app support root or the specific subtree above. Deleting `models/` removes installed model files and requires downloading them again; it does not by itself clear normal app preferences such as the active model-quality choice.
 

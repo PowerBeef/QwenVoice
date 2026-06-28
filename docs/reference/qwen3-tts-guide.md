@@ -81,7 +81,7 @@ The canonical profile is defined once per model capability block in `qwenvoice_c
 | Per-quantizer codebook size | 2,048 |
 | Semantic codebook size (contract) | 4,096 |
 | Effective bitrate | ~2.1 kbps |
-| Compression ratio | ~1,920× vs. raw 24 kHz PCM |
+| Compression ratio | ~183× vs. 16-bit 24 kHz PCM (~366× vs. float32 PCM). The `decodeUpsampleRate` is 1,920 (24,000 / 12.5). |
 
 Each frame is therefore a vector of 16 integers in `[0, 2047]`. The first codebook carries the most semantic content; later codebooks add prosody, speaker identity, and acoustic residuals.
 
@@ -242,7 +242,7 @@ Vocello caches the resulting clone prompt on disk and in memory to avoid recompu
 
 ## 6. Delivery / emotion presets
 
-`Sources/QwenVoiceCore/EmotionPreset.swift` defines the single source of truth: **12 presets × 3 intensities**.
+`Sources/QwenVoiceCore/EmotionPreset.swift` defines the single source of truth: **10 presets × 3 intensities**.
 
 | Preset | subtle | normal | strong |
 | --- | --- | --- | --- |
@@ -256,8 +256,8 @@ Vocello caches the resulting clone prompt on disk and in memory to avoid recompu
 | `dramatic` | Measured theatrical weight | Heightened inflection | Sweeping grandeur, generous pauses |
 | `calm` | Relaxed and warm | Smooth, unhurried, reassuring | Serene, meditative stillness |
 | `excited` | Touch of enthusiasm | Bright, animated | Fast, driving, ringing, no laughing/shouting |
-| `narrator` | Relaxed storyteller | Documentary warmth, crisp diction | Rich gravitas, deep timbre, slow |
-| `news` | Light news-desk | Clear broadcast style | Prime-time anchor, brisk, crisp |
+
+> `narrator` and `news` are Voice Design brief archetypes, not delivery presets.
 
 Prompt-writing lessons baked into the preset copy:
 
@@ -437,7 +437,7 @@ These are compiled from the official docs, community reports, and Vocello's own 
 | File | What it owns |
 | --- | --- |
 | `Sources/Resources/qwenvoice_contract.json` | Model list, variants, repos/revisions, tokenizer profile, generation defaults, speaker roster. |
-| `Sources/QwenVoiceCore/EmotionPreset.swift` | 12 × 3 emotion/delivery presets and instruction copy. |
+| `Sources/QwenVoiceCore/EmotionPreset.swift` | 10 × 3 emotion/delivery presets and instruction copy. |
 | `Sources/QwenVoiceCore/GenerationSemantics.swift` | Prompt assembly, language hint logic, English diction reinforcement, prompt validation. |
 | `Sources/QwenVoiceCore/NativeCloneSupport.swift` | Reference normalization, transcript resolution, clone prompt caching, quality warnings. |
 | `Sources/QwenVoiceCore/Qwen3TTSRuntimeProfile.swift` | Runtime model-family detection, capability validation, generation-defaults parsing. |

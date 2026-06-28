@@ -412,8 +412,8 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
 
-  # UI driving — see docs/reference/ios-device-testing.md. Runs on device or simulator
-  # via: xcodebuild test -scheme VocelloiOS -destination 'id=<UDID>' (or a sim).
+  # UI driving — see docs/reference/ios-device-testing.md. Runs on a paired physical
+  # device via: xcodebuild test -scheme VocelloiOS -destination 'id=<UDID>'.
   VocelloiOSUITests:
     type: bundle.ui-testing
     platform: iOS

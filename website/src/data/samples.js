@@ -45,8 +45,6 @@ export const DELIVERIES = [
   { label: "Dramatic", color: "var(--emotion-dramatic)" },
   { label: "Calm", color: "var(--emotion-calm)" },
   { label: "Excited", color: "var(--emotion-excited)" },
-  { label: "Narrator", color: "var(--emotion-narrator)" },
-  { label: "News", color: "var(--emotion-news)" },
 ];
 
 export const DELIVERY_COLORS = {
@@ -60,6 +58,4 @@ export const DELIVERY_COLORS = {
   Dramatic: "#C785A8",
   Calm: "#9EBC9E",
   Excited: "#EB9452",
-  Narrator: "#C7A36F",
-  News: "#7E93B0",
 };

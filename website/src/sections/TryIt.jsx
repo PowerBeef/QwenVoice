@@ -16,7 +16,7 @@ export const TryIt = () => {
             Describe a voice.<br />Watch it take shape.
           </h2>
           <p className="section-sub try-sub">
-            A demo of the Voice Design surface. Type a brief, pick one of twelve delivery
+            A demo of the Voice Design surface. Type a brief, pick one of ten delivery
             presets, and the waveform shifts with your choices. In Vocello, the same brief
             generates real audio locally on your Mac.
           </p>
@@ -63,11 +63,11 @@ export const TryIt = () => {
         <div className="window">
           <img
             src="assets/screens/delivery-presets.png"
-            alt="The Vocello delivery menu open, listing all twelve presets from Neutral to News"
+            alt="The Vocello delivery menu open, listing all ten presets from Neutral to Excited"
           />
         </div>
         <figcaption className="try-shot-caption">
-          All twelve presets, each with subtle, normal, and strong intensity, live in the app.
+          All ten presets, each with subtle, normal, and strong intensity, live in the app.
         </figcaption>
       </figure>
       </div>

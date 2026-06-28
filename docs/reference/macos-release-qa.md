@@ -21,7 +21,7 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoice \
      -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData
    ```
-   10 tests: launch/markers, sidebar + Cmd-key navigation, composer typing (strict char-count),
+   11 tests: launch/markers, sidebar + Cmd-key navigation, composer typing (strict char-count),
    a REAL generation through to the player bar (no engine error/crash states), mid-generation
    cancel, History/Voices/Settings surfaces, enroll + batch sheets. Tests run against the debug
    data dir (`QWENVOICE_DEBUG=1` in `launchEnvironment`) and skip generation cells gracefully when
@@ -33,7 +33,7 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    ```
    Gate: audioQC pass on all cells; RTF within noise of the latest `benchmarks/HISTORY.md` rows;
    the **listening pass** (`vocello bench --review` / by ear) for any engine-adjacent change.
-4. **Static audits** (release-sized changesets): run the five Axiom auditors per CLAUDE.md routing
+4. **Static audits** (release-sized changesets): run the five Axiom auditors per AGENTS.md routing
    (swiftui-architecture, swiftui-performance, memory, concurrency, security-privacy) scoped to the
    changed surfaces; fix or explicitly defer findings.
 5. **Interactive matrix** (releases touching UI; drive via computer-use — never AppleScript):

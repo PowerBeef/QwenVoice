@@ -2,10 +2,8 @@
 
 > **Living document.** This is the unified, code-verified map of how Vocello fits
 > together: modules, dependencies, runtime architecture, the request/generation
-> lifecycle, persistence, model management, and telemetry. It merges the former
-> `docs/reference/technology-inventory.md` (the *what*) with an architecture map
-> (the *how it fits*). When this doc disagrees with the code, **the code wins** —
-> fix this doc.
+> lifecycle, persistence, model management, and telemetry. When this doc disagrees
+> with the code, **the code wins** — fix this doc.
 >
 > Last reviewed: 2026-06-22.
 
@@ -30,7 +28,7 @@ Stable macOS release: **Vocello 2.1.0**. iOS is on-device-capable on `main` but
 not yet distributed.
 
 > For repo conventions, build commands, engine invariants, and release process,
-> read [`CLAUDE.md`](../CLAUDE.md). This document is the *map*; `CLAUDE.md` is
+> read [`AGENTS.md`](../AGENTS.md). This document is the *map*; `AGENTS.md` is
 > the *operating manual*.
 
 ---
@@ -38,7 +36,7 @@ not yet distributed.
 ## 1. Module & target dependency graph
 
 The Xcode project is generated from [`project.yml`](../project.yml) (XcodeGen
-2.45.4). There are nine Swift targets split into **cross-platform frameworks**,
+2.45.4). There are ten Swift targets split into **cross-platform frameworks**,
 **macOS-only frameworks + XPC service**, and **apps/CLI/tests**.
 
 ```mermaid
@@ -246,15 +244,14 @@ actors that own the heavy, isolated work:
     - `.custom(speakerID:deliveryStyle:)`
     - `.design(voiceDescription:deliveryStyle:)`
     - `.clone(reference: CloneReference)`
-  - `CloneReference { audioPath, transcript: CloneTranscript{.inline/.sidecar/.none}, languageHint }`
-- `GenerationEvent { .progress(GenerationProgress), .chunk(StreamingAudioChunk), .completed(GenerationResult), .failed(GenerationError) }`
+  - `CloneReference { audioPath: String, transcript: String?, preparedVoiceID: String? }`
+- `GenerationEvent { .progress(GenerationProgress), .chunk(GenerationChunk), .completed(GenerationResult), .failed(String) }`
 - `GenerationResult { audioPath, durationSeconds, finishReason, telemetrySummary }`
-- `EngineLoadState { idle, starting, loaded(modelID), running, failed(error) }`
+- `EngineLoadState { idle, starting, loaded(modelID), running(modelID: String?, label: String?, fraction: Double?), failed(message: String) }`
 - `ClonePreparationState { idle, preparing(...), primed(...), failed(...) }`
 
 `EmotionPreset.swift` defines the delivery/tone presets (`neutral`, `happy`,
-`sad`, `angry`, `fearful`, `surprised`, `excited`, `calm`, `narrator`, `news`,
-`dramatic`, `whisper`), grouped by `DeliveryPresetCategory`.
+`sad`, `angry`, `fearful`, `surprised`, `excited`, `calm`, `whisper`, `dramatic`).
 
 ### 4.3 Factory & paths
 
@@ -512,11 +509,12 @@ goes to stderr. Full reference: [`reference/cli.md`](reference/cli.md).
 - State: a mix of `@Observable` and `ObservableObject`. Coordinators are
   `@MainActor @Observable`; `TTSEngineStore`, `AudioPlayerViewModel`, and
   `ModelManagerViewModel` are `ObservableObject`.
-- `Sources/Services/` — app-level services: `ModelManagerViewModel` (model
-  install/variant), `HuggingFaceDownloader` (SwiftHuggingFace + SHA-256),
-  `DatabaseService` (GRDB), `BatchGenerationRunner`, `GenerationTelemetryMerger`,
+- `Sources/Services/` — app-level services: `DatabaseService` (GRDB),
+  `BatchGenerationRunner`, `GenerationTelemetryMerger`,
   `MacGenerationWarmupCoordinator`, `MacEngineServiceLifecycleCoordinator`
   (idle XPC service retirement), `AudioService`, `WaveformService`.
+- `Sources/ViewModels/` — `ModelManagerViewModel` (model install/variant).
+- `Sources/QwenVoiceCore/` — `HuggingFaceDownloader` (SwiftHuggingFace + SHA-256).
 - `Sources/Models/` — `TTSModel`, `Generation` (GRDB record), `Voice`,
   `GenerationDrafts` (`CustomVoiceDraft` / `VoiceDesignDraft` /
   `VoiceCloningDraft`), `TTSContract` (contract loader).
@@ -734,7 +732,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
-- [`CLAUDE.md`](../CLAUDE.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
+- [`AGENTS.md`](../AGENTS.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.
 - [`PRODUCT.md`](../PRODUCT.md) — product/brand guidance.
 - Per-subsystem deep-dives in `docs/reference/`:

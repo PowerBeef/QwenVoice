@@ -7,7 +7,7 @@ touching `Sources/iOS/`. On-device only — the iOS Simulator is unsupported.
 
 > **Where this fits:** this is the canonical "what the app is + how to drive it" reference.
 > Running the tests lives in [`ios-device-testing.md`](ios-device-testing.md); the
-> generation-engine internals live in [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md);
+> generation-engine internals live in [`../ARCHITECTURE.md`](../ARCHITECTURE.md);
 > tone/delivery prompt-writing lives in [`../qwen_tone.md`](../qwen_tone.md).
 
 ---
@@ -59,7 +59,7 @@ gotcha in §5.
 | **Install CTA** | `textInput_installModelButton` | Shown instead of Generate when the model is **missing** (see §3) |
 | Cancel | `textInput_cancelButton` | Inside the generating progress bar |
 | Error retry | `textInput_generationError` | Retry bar on a failed generation |
-| Inline player | `studio_inlinePlayer` / `studioPlayerCard` | Live streaming preview + completed-take card |
+| Inline player | `studio_inlinePlayer` (completed take) / `studio_livePreviewPlayer` (live streaming preview) | Live streaming preview + completed-take card. `studioPlayerCard` is a SwiftUI view identity, not an accessibility identifier. |
 
 **Selector pills (chips)** — `studioChip_*`, but their ids are **shadowed** in Studio, so
 drive them by **label prefix** (§5 gotcha). Per mode:
@@ -80,7 +80,7 @@ confirm `voicePicker_confirm`. Selecting a row is **provisional** (sheet stays o
 tap Confirm to commit + dismiss. Preview plays audio without selecting/closing.
 
 **Language picker** — rows `languagePicker_<rawValue>` (e.g. `languagePicker_auto`,
-`languagePicker_en`), confirm `languagePicker_confirm`.
+`languagePicker_english`), confirm `languagePicker_confirm`.
 
 **Delivery picker** — confirm `deliveryPicker_confirm`; a 2-column preset grid over
 `EmotionPreset.all` (cells `deliveryPickerPreset_<presetID>`); an intensity row
@@ -114,7 +114,7 @@ Voice Models rows `iosModelRow_<modelID>` (full lifecycle — see §3). Prefs:
 `iosSettings_savedOutputsRow`, `iosSettings_storageRow`, `iosSettings_reduceMotionToggle`,
 `iosSettings_reduceTransparencyToggle`. About: `iosSettings_privacyPolicyRow`,
 `iosSettings_openSourceRow`, `iosSettings_openIOSSettingsRow`, `iosSettings_versionLabel`
-(the hidden 7-tap debug toggle — `UserDefaults QwenVoice.DebugModeEnabled`).
+(read-only version label; the 7-tap debug toggle is macOS-only).
 
 ### Player + overlays
 
@@ -123,7 +123,7 @@ Full-screen player (`Sources/iOS/Sheets/IOSPlayerSheet.swift`): `iosPlayer_save`
 minor gap). Recording overlay (`Sources/iOS/Overlays/IOSRecordingOverlay.swift`):
 `iosRecord_close`, `iosRecord_start` / `iosRecord_stop`, `iosRecord_retake`, `iosRecord_use`.
 Lifecycle toasts (`IOSEngineLifecycleToast.swift`) are transient ("Preparing runtime",
-"Model loading") and unlabeled.
+"Model loading") and labeled with `engineLifecycleToast_<id>`.
 
 ---
 
@@ -140,12 +140,12 @@ comes from `qwenvoice_ios_model_catalog.json`.
 |---|---|---|
 | Not installed | `iosModelDownload_<id>` ("Install") | Default; nothing staged |
 | Downloading | `iosModelCancel_<id>` ("Cancel") + progress bar | Active download |
-| Paused | `iosModelResume_<id>` ("Resume") | Paused (keeps partial data) |
+| Paused | `iosModelResume_<id>` ("Resume") | Reached by the runtime when a download stalls; not a user-facing pause button |
 | Failed/incomplete | `iosModelRetry_<id>` ("Retry") / `iosModelRepair_<id>` ("Repair") | Error or interrupted |
 | Installed | `iosModelDelete_<id>` (trash) | Ready to generate |
 
-Cancel/pause open a confirmation dialog: `iosModelPauseConfirmButton` (pause, keeps data)
-/ `iosModelCancelDownloadConfirmButton` (cancel, deletes data). Download progress
+Cancel opens a confirmation dialog: `iosModelCancelDownloadConfirmButton` (cancel, deletes data).
+There is no user-facing pause button; paused state is reached by the runtime. Download progress
 `iosModelProgress_<id>` (downloading / resuming / paused states).
 
 ### The Studio gates generation on the installed model
@@ -171,9 +171,8 @@ install/cancel/pause/resume/delete lifecycle.
 - **Install:** Settings → `iosModelDownload_<id>`.tap() → (wait for complete → `iosModelDelete_<id>`).
 - **Cancel:** `iosModelDownload_<id>`.tap() → `iosModelCancel_<id>`.tap() →
   `waitForConfirmationButton("iosModelCancelDownloadConfirmButton")` → tap it → Install reappears.
-- **Pause/resume/cancel:** Download → `iosModelCancel_<id>`.tap() →
-  `waitForConfirmationButton("iosModelPauseConfirmButton")` → tap (pause) →
-  `iosModelResume_<id>`.tap() → Cancel reappears → confirm cancel.
+- **Pause/resume/cancel:** The runtime may pause a download (showing `iosModelResume_<id>`). Tap
+  Resume, then tap Cancel and confirm with `iosModelCancelDownloadConfirmButton`.
 - **Delete:** `iosModelDelete_<id>`.tap() → `deleteModelSheet_confirm`.tap() → Install reappears.
 
 ---
@@ -302,7 +301,7 @@ them needs label/coordinate hacks or new ids):
 
 - **Player sheet scrubber + transcript** — `iosPlayer_save`/`_playPause`/`_download` exist, but the scrubber (a custom adjustable element) and the karaoke transcript are unlabeled.
 - **Mode meta labels** ("Built-in voice" / "Designed voice"), section headings, empty-state cards, sheet titles — low-value to drive; label by text if needed.
-- **Lifecycle toasts** — transient, unlabeled (read via os_log, not the UI).
+- **Lifecycle toasts** — transient, but labeled with `engineLifecycleToast_<id>`.
 
 A separate, optional follow-up is consolidating **all** ids (most are inline string
 literals today) into `Sources/iOS/IOSAccessibilityIdentifiers.swift` so they're grep-able

@@ -26,7 +26,7 @@
 - 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone a reference clip you have rights to (record it in the app, or import a file).
 - 🔒 **Private by default** — after a one-time model download, every line renders on your device. No scripts uploaded, no audio sent to a cloud service.
 - ⚡ **Fast, native Swift + MLX** — faster than realtime on Apple Silicon, down to 8 GB Macs. No Python runtime, no bundled weights, no cloud queue.
-- 🌍 **Speaks ten languages** — with automatic language detection, twelve delivery styles, and reproducible takes.
+- 🌍 **Speaks ten languages** — with automatic language detection, ten delivery styles, and reproducible takes.
 
 ## Get Vocello
 
@@ -41,7 +41,7 @@
 - **Private by default.** After models are installed, generation runs locally. Your scripts, history, recorded clips, and generated audio stay in local app storage unless you choose to export them.
 - **Faster than realtime, even on 8 GB Macs.** A native Swift + MLX engine (no Python runtime, no bundled weights) generates speech faster than it plays back on Apple Silicon. The 2.1 backend work pushed the entry-level 8 GB Mac past realtime, with smoother memory behavior while you generate.
 - **Ten languages, auto-detected.** Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian. The language selector shows the language detected from your script (`Language · Auto`) and lets you pin a specific one.
-- **Twelve delivery styles with intensity.** Neutral, Happy, Sad, Angry, Fearful, Surprised, Whisper, Dramatic, Calm, Excited, Narrator, and News — each at subtle, normal, or strong intensity, plus a free-text custom tone when you want to describe the delivery in your own words.
+- **Ten delivery styles with intensity.** Neutral, Happy, Sad, Angry, Fearful, Surprised, Whisper, Dramatic, Calm, and Excited — each at subtle, normal, or strong intensity, plus a free-text custom tone when you want to describe the delivery in your own words.
 - **A real voice library.** Record a reference clip with your Mac's microphone (or import one), let it transcribe on-device, save the result, and reuse it. Voice Design results can be saved and re-used for cloning, and the speaker and language pickers surface recommendations that follow the language you're writing in.
 - **Reproducible takes.** A variation control (Expressive, Balanced, Consistent) trades take-to-take variety against stability, every generation records its sampling seed, and multi-line batches share one seed so a batch reads as a single consistent performance.
 - **No subscription meter.** Download the models you want, then generate on your own hardware without paying per line or waiting on a cloud queue.
@@ -68,7 +68,7 @@
       <img src="docs/screenshots/vocello-voice-cloning.png" alt="Voice Cloning screen">
       <br>
       <strong>Voice Cloning</strong><br>
-      Record a short reference clip with your Mac's microphone, or import one (WAV, MP3, AIFF, M4A, FLAC, or OGG). The transcript can auto-fill with on-device transcription. Only clone voices you own or have permission to use.
+      Record a short reference clip with your Mac's microphone, or import one (WAV, MP3, AIFF, M4A, FLAC, OGG, or WebM). The transcript can auto-fill with on-device transcription. Only clone voices you own or have permission to use.
     </td>
     <td width="50%">
       <img src="docs/screenshots/vocello-model-downloads.png" alt="Model downloads settings screen">
@@ -84,10 +84,10 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/vocello-delivery-presets.png" alt="The delivery presets menu open, showing twelve styles">
+      <img src="docs/screenshots/vocello-delivery-presets.png" alt="The delivery presets menu open, showing ten styles">
       <br>
       <strong>Delivery presets</strong><br>
-      Twelve expressive styles — from Whisper and Calm to Dramatic, Narrator, and News — each with a subtle / normal / strong intensity, or describe a custom tone in your own words.
+      Ten expressive styles — from Whisper and Calm to Dramatic and Excited — each with a subtle / normal / strong intensity, or describe a custom tone in your own words.
     </td>
     <td width="50%">
       <img src="docs/screenshots/vocello-history.png" alt="The History screen listing past generations">
@@ -111,8 +111,8 @@ No Python setup or local server is required — install the app, download models
 The DMG is signed with an Apple Developer ID certificate and notarized with a stapled ticket, so the first launch opens with a double-click (no right-click bypass). To verify:
 
 ```sh
-xcrun stapler validate Vocello-macos26.dmg              # "The validate action worked!"
-spctl --assess --type install -vv Vocello-macos26.dmg   # accepted, source=Notarized Developer ID
+xcrun stapler validate Vocello-macos26.dmg                           # "The validate action worked!"
+spctl -a -vvv --type open --context context:primary-signature Vocello-macos26.dmg   # accepted, source=Notarized Developer ID
 ```
 
 A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, build number) is attached to the same release for build provenance.
@@ -141,7 +141,7 @@ Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 
 The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
 
-Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`CLAUDE.md`](CLAUDE.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`AGENTS.md`](AGENTS.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```sh
 git clone https://github.com/PowerBeef/QwenVoice.git
@@ -150,7 +150,7 @@ cd QwenVoice
 open QwenVoice.xcodeproj
 ```
 
-The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`CLAUDE.md`](CLAUDE.md).
+The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`AGENTS.md`](AGENTS.md).
 
 Useful checks:
 
@@ -164,7 +164,7 @@ Useful checks:
 More technical detail:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — unified architecture map: modules, dependencies, runtime (XPC vs in-process), and the generation lifecycle
-- [`CLAUDE.md`](CLAUDE.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
+- [`AGENTS.md`](AGENTS.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
 - [`docs/reference/cli.md`](docs/reference/cli.md) — the headless `vocello` command-line tool
 - [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) — local storage and deletion details
 
