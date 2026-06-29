@@ -42,7 +42,14 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    Full procedure: [`benchmarking-procedure.md`](benchmarking-procedure.md) §4.1.
    Gate: audioQC pass on all cells; RTF within noise of the latest `benchmarks/HISTORY.md` rows;
    a **manual listening pass by ear** for any engine-adjacent change (there is no
-   `vocello bench --review` subcommand).
+   `vocello bench --review` subcommand). Optional regression compare against a committed baseline:
+   ```sh
+   python3 scripts/summarize_generation_telemetry.py \
+     ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
+     --compare-baseline benchmarks/baseline-2026-06-16-45720dd-streaming-default.md \
+     --label "release-QA"
+   ```
+   Investigate any highlighted cell before shipping.
 4. **Static audits** (release-sized changesets): run the five Axiom auditors per `.agents/release-qa-engineer.md` routing
    (swiftui-architecture, swiftui-performance, memory, concurrency, security-privacy) scoped to the
    changed surfaces; fix or explicitly defer findings.

@@ -110,20 +110,20 @@ QWENVOICE_DEBUG=1 ./build/vocello bench \
 
 ### P1 — important
 
-| ID | Domain | Finding |
-|----|--------|---------|
-| P1-1 | Performance | `--ledger` runs summarizer twice |
-| P1-2 | Performance | Verbose mode double-runs PCM limiter per chunk |
-| P1-3 | Performance | Preview PCM not disabled in bench (`QWENVOICE_STREAMING_PREVIEW_DATA=off`) | **Fixed** (same as P0-4) |
-| P1-4 | Memory | `timeToPeakMS` tracks RSS not physFootprint peak |
-| P1-5 | Memory | Floor-tier 500 ms sampler cadence misses short spikes |
-| P1-6 | Memory | `IOSMemoryPressureBand` not persisted on engine rows |
-| P1-7 | Codable | Swift merger strict vs Python lenient — silent row drops |
-| P1-8 | Security | Ungated `generation-failures.jsonl` on all failures |
-| P1-9 | Security | Ungated `native-events.jsonl` on macOS XPC |
-| P1-10 | Testing | BenchCommand silently skips clone when voice missing (partial matrix) | **Fixed** — fail fast |
-| P1-11 | Testing | Fixture Speed-only vs default Quality variant mismatch |
-| P1-12 | Testing | `macos_test.sh profile` ignores bench non-zero exit |
+| ID | Domain | Finding | Status |
+|----|--------|---------|--------|
+| P1-1 | Performance | `--ledger` runs summarizer twice | **Fixed** — `--emit-ledger-row` single pass |
+| P1-2 | Performance | Verbose mode double-runs PCM limiter per chunk | **Open** |
+| P1-3 | Performance | Preview PCM not disabled in bench | **Fixed** (same as P0-4) |
+| P1-4 | Memory | `timeToPeakMS` tracks RSS not physFootprint peak | **Open** |
+| P1-5 | Memory | Floor-tier 500 ms sampler cadence misses short spikes | **Open** |
+| P1-6 | Memory | `IOSMemoryPressureBand` not persisted on engine rows | **Open** |
+| P1-7 | Codable | Swift merger strict vs Python lenient — silent row drops | **Open** |
+| P1-8 | Security | Ungated `generation-failures.jsonl` on all failures | **Fixed** — `TelemetryGate.resolvedEnabled` |
+| P1-9 | Security | Ungated `native-events.jsonl` on macOS XPC | **Fixed** — gated in engine-service + iOS writer |
+| P1-10 | Testing | BenchCommand silently skips clone when voice missing | **Fixed** — fail fast |
+| P1-11 | Testing | Fixture Speed-only vs default Quality variant mismatch | **Open** |
+| P1-12 | Testing | `macos_test.sh profile` ignores bench non-zero exit | **Fixed** — fail unless opt-out |
 
 ### P2 — polish / long-term
 
@@ -201,12 +201,14 @@ Priority order from the audit; implementation status:
 |---|------|--------|
 | 1 | P0-4 — event drain + preview-off in `BenchCommand` | **Fixed** |
 | 2 | P0-7 — summarizer `finishReason` filter | **Fixed** |
-| 3 | P1-8/P1-9 — gate failure/native-event writers | **Open** |
+| 3 | P1-8/P1-9 — gate failure/native-event writers | **Fixed** |
 | 4 | P1-10 — strict clone fixture in bench preflight | **Fixed** |
 | 5 | P0-2 — `--telemetry off` mode | **Fixed** |
 | 6 | P0-3 — decoder drain in stage marks / timings | **Fixed** |
 | 7 | P0-5 — opt-in gate bench (`QWENVOICE_GATE_BENCH=1`) | **Fixed** |
 | 8 | Summarizer v5 env columns (thermal, GPU WS ratio) | **Fixed** |
+| 9 | P1-1 — single summarizer pass for `--ledger` | **Fixed** |
+| 10 | P1-12 — profile fails on bench non-zero | **Fixed** |
 
 ---
 

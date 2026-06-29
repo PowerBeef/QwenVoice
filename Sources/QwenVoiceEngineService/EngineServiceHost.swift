@@ -51,6 +51,7 @@ private actor ServiceActiveGenerationCoordinator {
 /// interleave partial lines or race on file-handle creation.
 private actor DiagnosticEventRecorder {
     func append(line: String, to url: URL) {
+        guard TelemetryGate.resolvedEnabled else { return }
         let diagnosticsDirectory = url.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(at: diagnosticsDirectory, withIntermediateDirectories: true)

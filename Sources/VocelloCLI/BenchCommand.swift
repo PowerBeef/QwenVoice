@@ -229,15 +229,15 @@ enum BenchCommand {
         let diagDir = resolvedDataDir.appendingPathComponent("diagnostics", isDirectory: true)
         let label = args.string("label") ?? ""
         if !args.flag("no-summary"), !telemetryOff {
-            runSummarizer(diagnostics: diagDir, label: label)
+            runSummarizer(diagnostics: diagDir, label: label, appendLedger: args.flag("ledger"))
             // Prosody analysis for --delivery takes: deterministic, reference-free,
             // complements audioQC with tone/cadence deltas vs the paired neutral take.
             if !deliveryItems.isEmpty {
                 runDeliveryProsodyAnalysis(diagnostics: diagDir, profilePath: prosodyProfilePath)
             }
         }
-        if args.flag("ledger"), !telemetryOff {
-            appendLedgerRow(diagnostics: diagDir, label: label)
+        if args.flag("ledger"), telemetryOff {
+            note("(--ledger skipped: --telemetry off)")
         }
 
         // Optional engine first-chunk-latency probe. Runs AFTER the summary so its
@@ -322,7 +322,7 @@ enum BenchCommand {
         corpus.first { $0.len == len }?.text
     }
 
-    private static func runSummarizer(diagnostics: URL, label: String) {
+    private static func runSummarizer(diagnostics: URL, label: String, appendLedger: Bool = false) {
         guard let scriptURL = locateSummarizer() else {
             note("(summarizer scripts/summarize_generation_telemetry.py not found from \(FileManager.default.currentDirectoryPath); run it manually on \(diagnostics.path))")
             return
@@ -332,9 +332,48 @@ enum BenchCommand {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         var pargs = ["python3", scriptURL.path, diagnostics.path]
         if !label.isEmpty { pargs += ["--label", label] }
+        if appendLedger { pargs += ["--emit-ledger-row"] }
         p.arguments = pargs
-        try? p.run()
-        p.waitUntilExit()
+
+        if appendLedger {
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            do { try p.run() } catch {
+                note("(summarizer: \(error.localizedDescription))")
+                return
+            }
+            p.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return }
+            var ledgerRow: String?
+            var replay: [String] = []
+            var captureLedger = false
+            for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+                if line == "# ledger-row" {
+                    captureLedger = true
+                    continue
+                }
+                if captureLedger {
+                    ledgerRow = String(line)
+                    captureLedger = false
+                    continue
+                }
+                replay.append(String(line))
+            }
+            if !replay.isEmpty {
+                var text = replay.joined(separator: "\n")
+                if !text.hasSuffix("\n") { text += "\n" }
+                FileHandle.standardOutput.write(Data(text.utf8))
+            }
+            if let ledgerRow, !ledgerRow.isEmpty {
+                appendLedgerRowToHistory(ledgerRow)
+            } else if p.terminationStatus != 0 {
+                note("(--ledger: summarizer exit \(p.terminationStatus))")
+            }
+        } else {
+            try? p.run()
+            p.waitUntilExit()
+        }
     }
 
     /// Resolve the repo-relative summarizer by walking up from cwd (mirrors
@@ -371,11 +410,8 @@ enum BenchCommand {
         p.waitUntilExit()
     }
 
-    /// --ledger: capture the summarizer's one-line Markdown ledger row and append
-    /// it to benchmarks/HISTORY.md (the perf-over-time ledger). The committed-log
-    /// guard caps benchmarks/ files at 256 KB — a ledger of rows stays well under.
-    private static func appendLedgerRow(diagnostics: URL, label: String) {
-        guard let scriptURL = locateSummarizer() else { note("(--ledger: summarizer not found; skip)"); return }
+    /// Append a preformatted HISTORY.md ledger row (from `--emit-ledger-row`).
+    private static func appendLedgerRowToHistory(_ row: String) {
         let cwd = FileManager.default.currentDirectoryPath
         let historyURL: URL?
         if FileManager.default.fileExists(atPath: cwd + "/benchmarks/HISTORY.md") {
@@ -384,22 +420,6 @@ enum BenchCommand {
             historyURL = CLIRuntime.findUpwards(relativePath: "benchmarks/HISTORY.md", from: cwd)
         }
         guard let historyURL else { note("(--ledger: benchmarks/HISTORY.md not found; skip)"); return }
-
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        var pargs = ["python3", scriptURL.path, diagnostics.path, "--ledger-row"]
-        if !label.isEmpty { pargs += ["--label", label] }
-        p.arguments = pargs
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        do { try p.run() } catch { note("(--ledger: \(error.localizedDescription))"); return }
-        p.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard p.terminationStatus == 0,
-              let row = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !row.isEmpty else {
-            note("(--ledger: summarizer produced no row)"); return
-        }
         if let fh = try? FileHandle(forWritingTo: historyURL) {
             defer { try? fh.close() }
             fh.seekToEndOfFile()

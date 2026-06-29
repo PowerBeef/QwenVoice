@@ -78,7 +78,10 @@ scripts/macos_test.sh profile custom:speed    # xctrace the vocello CLI (engine 
 
 Profiles the `vocello` CLI during a bench — the **deterministic engine profile** (same
 engine code as the XPC service). Default template: Time Profiler; override via
-`QVOICE_MAC_PROFILE_TEMPLATE` / `QVOICE_MAC_PROFILE_DURATION`. The engine emits
+`QVOICE_MAC_PROFILE_TEMPLATE` / `QVOICE_MAC_PROFILE_DURATION`. The lane **fails** if
+`vocello bench` exits non-zero unless you pass `--allow-bench-fail` or set
+`QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL=1` (useful when you only want the trace artifact).
+The engine emits
 `OSSignpost` intervals under `com.qwenvoice.app` / `performance`. To profile the XPC
 service specifically (the production path): launch the app, `xctrace record --attach
 QwenVoiceEngineService`, and generate via the UI.

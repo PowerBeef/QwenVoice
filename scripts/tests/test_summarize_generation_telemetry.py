@@ -474,6 +474,28 @@ def test_load_runs_skips_non_success_finish_reason():
         assert [r["generationID"] for r in runs] == ["gen-ok"]
 
 
+def test_emit_ledger_row_with_table(monkeypatch):
+    """--emit-ledger-row prints the full table plus a ledger marker and row."""
+    fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "telemetry_variants.jsonl")
+    with tempfile.TemporaryDirectory() as tmp:
+        engine_dir = os.path.join(tmp, "engine")
+        os.makedirs(engine_dir)
+        shutil.copy(fixture_path, os.path.join(engine_dir, "generations.jsonl"))
+
+        monkeypatch.setattr(
+            sys, "argv",
+            ["summarize_generation_telemetry.py", tmp, "--emit-ledger-row", "--label", "test"],
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = sgt.main()
+        assert rc == 0
+        text = out.getvalue()
+        assert "Telemetry summary" in text
+        assert "# ledger-row" in text
+        assert "| 2026-" in text.split("# ledger-row")[-1]
+
+
 def test_mimi_decoder_breakdown_aggregation():
     """mimiDecoderBreakdownMS per-chunk fields are aggregated into cell medians."""
     with tempfile.TemporaryDirectory() as tmp:

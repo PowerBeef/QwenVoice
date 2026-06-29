@@ -25,6 +25,8 @@ public final class GenerationFailureDiagnosticLogger: @unchecked Sendable {
         underlyingError: Error,
         request: GenerationRequest? = nil
     ) {
+        guard TelemetryGate.resolvedEnabled else { return }
+
         let entry = FailureEntry(
             timestamp: Date(),
             surfacedMessage: surfacedMessage,

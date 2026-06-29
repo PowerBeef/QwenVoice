@@ -129,6 +129,14 @@ cmd_logs() {
 # specifically — the production path — launch the app, 'xctrace record --attach
 # QwenVoiceEngineService', and generate via the UI; see macos-testing.md.)
 cmd_profile() {
+  local allow_bench_fail=0
+  if [[ "${1:-}" == "--allow-bench-fail" ]]; then
+    allow_bench_fail=1
+    shift
+  fi
+  if [[ "${QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL:-0}" == "1" ]]; then
+    allow_bench_fail=1
+  fi
   local spec="${1:-custom:speed:Profile autorun.}"
   [[ "$spec" == *:* ]] || spec="custom:speed:$spec"
   local mode="${spec%%:*}"
@@ -147,8 +155,16 @@ cmd_profile() {
     --time-limit "${duration}s" --output "$trace" &
   local xcpid=$!
   sleep 2
+  local bench_rc=0
   QWENVOICE_DEBUG=1 "$ROOT_DIR/build/vocello" bench --modes "$mode" --variants "$variant" \
-    --lengths medium --warm 1 --label "profile" >&2 || warn "vocello bench returned non-zero (trace may still be useful)"
+    --lengths medium --warm 1 --label "profile" >&2 || bench_rc=$?
+  if (( bench_rc != 0 )); then
+    if (( allow_bench_fail )); then
+      warn "vocello bench returned non-zero (exit $bench_rc; trace may still be useful)"
+    else
+      die "vocello bench failed (exit $bench_rc); set QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL=1 or pass --allow-bench-fail to continue"
+    fi
+  fi
   wait "$xcpid" || true
   [[ -d "$trace" ]] || die "no trace produced at $trace"
   note "trace → $trace"

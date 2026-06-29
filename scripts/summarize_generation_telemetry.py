@@ -752,13 +752,11 @@ def fmt_ui_stall(group):
     return f"{fmt(stalls, 0)}/{fmt(max_ms, 0)}ms"
 
 
-def emit_ledger_row(cells, label):
-    """Print one Markdown table row for benchmarks/HISTORY.md. Columns match the
-    table header seeded in that file. `cells` is a dict of finalized cell summaries."""
+def format_ledger_row(cells, label):
+    """Return one Markdown table row for benchmarks/HISTORY.md, or None if no headline cell."""
     key = select_headline_cell(cells, label.get("cell"))
     if key is None:
-        print("| (no rows) |")
-        return 1
+        return None
     mode, model_id, state, lb = key
     summary = cells[key]
     cell = f"{mode}/{short_model(model_id)}/{state}/{lb}"
@@ -774,11 +772,19 @@ def emit_ledger_row(cells, label):
         fmt_trims(summary),
         cell_qc(summary),
         note or "—",
-        # UI-responsiveness KPI (added 2026-06; trailing so older rows stay
-        # aligned). "—" for CLI bench rows (no UI process).
         fmt(summary["uiMaxStallMS"], 0),
     ]
-    print("| " + " | ".join(cols) + " |")
+    return "| " + " | ".join(cols) + " |"
+
+
+def emit_ledger_row(cells, label):
+    """Print one Markdown table row for benchmarks/HISTORY.md. Columns match the
+    table header seeded in that file. `cells` is a dict of finalized cell summaries."""
+    row = format_ledger_row(cells, label)
+    if row is None:
+        print("| (no rows) |")
+        return 1
+    print(row)
     return 0
 
 
@@ -926,6 +932,8 @@ def main():
                         help="free-form note stamped on the output / ledger row")
     parser.add_argument("--ledger-row", action="store_true",
                         help="print ONE Markdown row for benchmarks/HISTORY.md instead of the table")
+    parser.add_argument("--emit-ledger-row", action="store_true",
+                        help="after the full table, print a # ledger-row marker and one HISTORY row")
     parser.add_argument("--cell", default="",
                         help="ledger cell selector 'mode/model/state' (model = substring)")
     parser.add_argument("--show-variance", action="store_true",
@@ -1206,6 +1214,14 @@ def main():
         print_regressions(regressions)
         if regressions:
             return 2
+
+    if args.emit_ledger_row:
+        row = format_ledger_row(cells, {"note": args.label, "cell": args.cell})
+        print("\n# ledger-row")
+        if row is None:
+            print("| (no rows) |")
+            return 1
+        print(row)
 
     return 0
 

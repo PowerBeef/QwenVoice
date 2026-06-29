@@ -1479,7 +1479,8 @@ private actor NativeDiagnosticEventJSONLWriter {
         appSupportDirectoryURL: URL?,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
-        guard NativeTelemetryMode.current(environment: environment) != .off else {
+        guard NativeTelemetryMode.current(environment: environment) != .off,
+              TelemetryGate.resolvedEnabled else {
             return
         }
         guard let appSupportDirectoryURL else {
