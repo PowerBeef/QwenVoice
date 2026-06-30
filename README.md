@@ -21,6 +21,10 @@
 
 <p align="center"><em>Formerly QwenVoice — now Vocello 2.1.</em></p>
 
+**Contents:** [Get Vocello](#get-vocello) · [Why Vocello](#why-vocello) · [Workflows](#three-voice-workflows) · [Install](#install-macos) · [System requirements](#system-requirements) · [Privacy](#local-first-privacy) · [Build from source](#build-from-source) · [CLI](#command-line-tool-vocello) · [iPhone](#-vocello-for-iphone--arriving-soon) · [Contributing](#contributing) · [License](#license)
+
+**Releases:** [v2.1.0 (latest)](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) · [All releases](https://github.com/PowerBeef/QwenVoice/releases) · [What's new in 2.1.0](docs/releases/v2.1.0.md)
+
 ---
 
 - 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone a reference clip you have rights to (record it in the app, or import a file).
@@ -123,6 +127,7 @@ A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, bui
 
 - **macOS 26.0+** on an Apple Silicon Mac — available now.
 - **iPhone (iOS 26.0+)** on Apple Silicon — arriving soon via App Store / TestFlight.
+- **8 GB RAM minimum** (16 GB+ recommended for Quality variants and heavy batches).
 - Voice models installed from **Settings → Model downloads**.
 
 **Speed** models are smaller 4-bit packages for faster startup and lower memory use — the recommended default, and what runs faster than realtime on an 8 GB Mac. **Quality** models are larger 8-bit packages for devices with more headroom.
@@ -139,7 +144,9 @@ Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 
 ## Build from source
 
-The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
+The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) ([release notes](docs/releases/v2.1.0.md)).
+
+**Requires Xcode 26** on macOS 26+ (Apple Silicon) to build from source.
 
 Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`AGENTS.md`](AGENTS.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -159,7 +166,7 @@ Useful checks:
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 scripts/macos_test.sh models ensure   # one-time Speed model for macOS UI/bench tests
-scripts/macos_test.sh test            # macOS UI smoke (12 tests, 3-mode real generation)
+scripts/macos_test.sh test            # macOS UI smoke (12 tests; -only-testing scoped via script)
 scripts/ios_device.sh ui-test         # on-device iOS UI-flow smoke (requires paired iPhone)
 ```
 
@@ -195,7 +202,6 @@ build/vocello custom --variant speed --text "The train left at dawn."
 echo "Hello there." | build/vocello generate --variant speed --stream --json
 
 # Discover modes/speakers/models, then bulk synth (one model load)
-# Discover modes/speakers/models, then bulk synth (one model load)
 build/vocello modes
 build/vocello speakers list
 build/vocello models list
@@ -220,6 +226,14 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
     </td>
   </tr>
 </table>
+
+## Contributing
+
+- **Report bugs or request features:** [GitHub Issues](https://github.com/PowerBeef/QwenVoice/issues)
+- **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (commands in §8, testing in §12)
+- **Release QA checklist:** [`docs/reference/macos-release-qa.md`](docs/reference/macos-release-qa.md)
+
+**Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitHub → **Settings → General → Social preview** so link cards use the Vocello artwork.
 
 ## License
 
