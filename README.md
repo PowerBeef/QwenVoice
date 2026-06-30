@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/readme_banner_vocello.png" alt="Vocello banner with abstract voice waves and the Vocello logo" width="920">
+  <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/readme_banner_vocello.png" alt="Vocello banner with abstract voice waves and the Vocello logo" width="920">
 </p>
 
 <p align="center"><em>Formerly QwenVoice — now Vocello 2.1.</em></p>
@@ -55,13 +55,13 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/vocello-custom-voice.png" alt="Custom Voice screen">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-custom-voice.png" alt="Custom Voice screen">
       <br>
       <strong>Custom Voice</strong><br>
       Pick one of nine built-in Qwen3 speaker presets, choose a delivery style and intensity, and generate a clean spoken line. The fastest path when you want a consistent voice right away.
     </td>
     <td width="50%">
-      <img src="docs/screenshots/vocello-voice-design.png" alt="Voice Design screen">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-voice-design.png" alt="Voice Design screen">
       <br>
       <strong>Voice Design</strong><br>
       Describe the voice you want in plain language — character, age, accent, texture — then write the script. Vocello shapes the take from that brief, and you can save the result to reuse later.
@@ -69,13 +69,13 @@
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/vocello-voice-cloning.png" alt="Voice Cloning screen">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-voice-cloning.png" alt="Voice Cloning screen">
       <br>
       <strong>Voice Cloning</strong><br>
       Record a short reference clip with your Mac's microphone, or import one (WAV, MP3, AIFF, M4A, FLAC, OGG, or WebM). The transcript can auto-fill with on-device transcription. Only clone voices you own or have permission to use.
     </td>
     <td width="50%">
-      <img src="docs/screenshots/vocello-model-downloads.png" alt="Model downloads settings screen">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-model-downloads.png" alt="Model downloads settings screen">
       <br>
       <strong>Model downloads</strong><br>
       Install and manage the Speed and Quality package for each voice mode from Settings. Generation screens own the Speed/Quality choice while you write.
@@ -88,13 +88,13 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/vocello-delivery-presets.png" alt="The delivery presets menu open, showing ten styles">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-delivery-presets.png" alt="The delivery presets menu open, showing ten styles">
       <br>
       <strong>Delivery presets</strong><br>
       Ten expressive styles — from Whisper and Calm to Dramatic and Excited — each with a subtle / normal / strong intensity, or describe a custom tone in your own words.
     </td>
     <td width="50%">
-      <img src="docs/screenshots/vocello-history.png" alt="The History screen listing past generations">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-history.png" alt="The History screen listing past generations">
       <br>
       <strong>History &amp; library</strong><br>
       Every generation is saved locally with its mode, voice, and length. Replay it, save it to your voice library, export the audio, or search back through past takes. Clear-all lets you keep the audio files or delete them too.
@@ -216,7 +216,7 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 <table>
   <tr>
     <td width="300" valign="top">
-      <img src="docs/screenshots/vocello-ios-studio.png" alt="Vocello running on iPhone — the Studio screen with Custom / Design / Clone modes" width="300">
+      <img src="https://raw.githubusercontent.com/PowerBeef/QwenVoice/main/docs/screenshots/vocello-ios-studio.png" alt="Vocello running on iPhone — the Studio screen with Custom / Design / Clone modes" width="300">
     </td>
     <td valign="top">
       <p>Vocello is coming to iPhone — the <strong>same local, private engine</strong>, running <strong>fully on-device</strong> on Apple Silicon. Write a script, pick or describe a voice, and generate speech without a cloud round-trip, exactly like the Mac app.</p>
