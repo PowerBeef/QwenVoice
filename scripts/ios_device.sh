@@ -76,6 +76,7 @@ PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 
 # Reuse the shared storage-bloat advisory (warn-only; never deletes).
 . "$ROOT_DIR/scripts/lib/build_cache.sh"
+. "$ROOT_DIR/scripts/lib/xcresult_shots.sh"
 
 note() { printf '\033[0;36m==>\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
@@ -1057,6 +1058,16 @@ cmd_review() {
 
   local src="$DERIVED/uitest-screenshots"
   [[ -d "$src" ]] && cp -R "$src/." "$shots/" 2>/dev/null || true
+  # Fallback: on-device runners cannot write Mac paths — recover the tour captures
+  # from the .xcresult attachments instead.
+  if ! ls "$shots"/*.png >/dev/null 2>&1; then
+    local xcresult; xcresult="$(_ui_test_latest_xcresult || true)"
+    if [[ -n "$xcresult" ]]; then
+      export_xcresult_shots "$xcresult" "$shots" "review-" >/dev/null 2>&1 \
+        && note "captures recovered from xcresult attachments" \
+        || true
+    fi
+  fi
   note "captures → $shots"
 
   if (( baseline_mode == 1 )); then

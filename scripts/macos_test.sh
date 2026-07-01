@@ -29,6 +29,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
 . "$SCRIPT_DIR/lib/test_models.sh"
 . "$SCRIPT_DIR/lib/uitest_signing.sh"
+. "$SCRIPT_DIR/lib/xcresult_shots.sh"
 test_models_init "$ROOT_DIR"
 APP_NAME="Vocello"
 BUNDLE_ID="com.qwenvoice.app"
@@ -475,8 +476,12 @@ cmd_review() {
   note "review: macOS capture catalog (subset=$subset runID=$run_id)"
   load_uitest_signing_args
   set +e
+  # TEST_RUNNER_ prefix: xcodebuild strips it and passes the var into the test-runner
+  # process (plain env vars do NOT propagate). Keep the un-prefixed vars for older habits.
   MAC_TEST_SCREENSHOT_DIR="$shots" \
   QVOICE_MAC_REVIEW_SUBSET="$subset" \
+  TEST_RUNNER_MAC_TEST_SCREENSHOT_DIR="$shots" \
+  TEST_RUNNER_QVOICE_MAC_REVIEW_SUBSET="$subset" \
   xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" \
     -scheme QwenVoice -configuration Release -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$ROOT_DIR/build/DerivedData" \
@@ -485,6 +490,17 @@ cmd_review() {
     > "$shots/tour.log" 2>&1
   local st=$?
   set -e
+  # Fallback: recover captures from the .xcresult attachments (always present even
+  # when the runner could not write PNGs to disk).
+  if ! ls "$shots"/*.png >/dev/null 2>&1; then
+    local xcresult
+    xcresult="$(find "$ROOT_DIR/build/DerivedData/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1 || true)"
+    if [[ -n "$xcresult" ]]; then
+      export_xcresult_shots "$xcresult" "$shots" "review-" >/dev/null 2>&1 \
+        && note "captures recovered from xcresult attachments" \
+        || true
+    fi
+  fi
   note "captures → $shots"
   if (( baseline_mode == 1 )); then
     if ls "$shots"/*.png >/dev/null 2>&1; then

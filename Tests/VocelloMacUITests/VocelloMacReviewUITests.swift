@@ -77,6 +77,9 @@ final class VocelloMacReviewUITests: VocelloMacHumanTestCase {
             try skipIfDisabled("voiceDesign")
             navigateSidebar("voiceDesign")
             fillVoiceBrief()
+            // Readiness requires BOTH a voice brief and script text (canGenerate
+            // gates on draft.hasText && draft.hasVoiceDescription).
+            typeScript("Review ready state.")
             _ = VocelloMacUIQuery.waitForMarkerValue(
                 app,
                 identifier: "voiceDesign_readiness",
