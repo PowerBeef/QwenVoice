@@ -15,7 +15,7 @@ If anything here disagrees with the code, the code wins — fix this file.
 > committed benchmark/QC scripts, baselines, and summaries are permitted (bounded by the
 > `benchmarks/` cap). The **retired** surface is agent/computer-use UI driving (replaced by
 > deterministic XCUITest). **Tier-A** fake-backend XCUITest runs on the iOS Simulator and in
-> CI ([`.gitlab-ci.yml`](../../.gitlab-ci.yml)); **Tier-B** real-engine UI and headless generation remain
+> CI (`.github/workflows/ci.yml`); **Tier-B** real-engine UI and headless generation remain
 > device-only. See [`testing-runbook.md`](testing-runbook.md) and
 > [`ios-device-testing.md`](ios-device-testing.md).
 

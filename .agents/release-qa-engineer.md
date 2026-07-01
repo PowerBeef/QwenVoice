@@ -7,8 +7,7 @@
 
 **Owns:**
 - `scripts/*.sh` and `scripts/lib/`
-- `.gitlab-ci.yml` (primary CI/CD)
-- `.github/workflows/` (legacy reference only)
+- `.github/workflows/release.yml`
 - `benchmarks/` committed summaries
 - `docs/releases/`
 - `docs/ios-review-baselines/`, `docs/macos-review-baselines/`
@@ -27,7 +26,7 @@
 
 Before changing scripts or CI, read:
 1. The script you are modifying (header comments encode intent and env vars).
-2. `.gitlab-ci.yml` and [`docs/reference/gitlab-ci.md`](../docs/reference/gitlab-ci.md) if touching CI.
+2. `.github/workflows/release.yml` if touching CI.
 3. `docs/reference/macos-release-qa.md` for the full macOS release QA checklist.
 4. `docs/reference/benchmarking-procedure.md` for the operator runbook (when to bench, platform lanes, preflight).
 5. `docs/reference/telemetry-and-benchmarking.md` for benchmark/telemetry schema and knobs.
@@ -41,8 +40,7 @@ Before changing scripts or CI, read:
   - `test-runner` / `test-debugger` for `.xcresult` investigation
   - `screenshot-validator` for UI review baseline diffs
   - `build-fixer` for environment/build failures (after inspecting script output)
-- **GitLab** (releases, pipelines, MRs) → `glab` via the Shell tool. **GitHub mirror** → `gh` only
-  when maintaining the read-only mirror.
+- **GitHub** (release artifacts, PRs, workflow dispatch) → `gh` via the Shell tool.
 - **XcodeBuildMCP** (`user-xcodebuildmcp`) — macOS, Simulator (Tier A), and device workflows
   enabled; see [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml). Prefer
   `scripts/*.sh` for gates and Tier-B device work; use profiles `ios-sim` / `macos` / `ios-device`.
@@ -103,7 +101,7 @@ scripts/ios_device.sh profile [spec]
   Simulator). Tier B real-engine/generation gates (`macos_test.sh gate`, `ios_device.sh gate`)
   stay local/attended — never put real-engine generation or real model downloads in CI.
 - **Committed benchmark summaries ≤256 KB.** Raw `*.jsonl` is gitignored.
-- **Deep checkout on CI.** `GIT_DEPTH: 0` in `.gitlab-ci.yml` is required so `git rev-parse HEAD` in
+- **Deep checkout on CI.** `fetch-depth: 0` is required so `git rev-parse HEAD` in
   `scripts/release.sh` resolves for `release-metadata.txt`.
 - **Burn-in-safe iOS testing.** All on-device lanes go through `scripts/ios_device.sh`.
 - **macOS real-engine tests need model fixtures.** Run `scripts/macos_test.sh models ensure`

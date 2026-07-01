@@ -487,8 +487,8 @@ Auto-pruned: `generations.jsonl` ~8 MB cap; verbose sidecars newest-48 / 64 MB.
 
 ### CI / automation
 
-- `.gitlab-ci.yml` — Tier-A iOS fake UI only; **no bench**
-- `.gitlab-ci.yml` `package` job — packaging; **no bench**
+- `.github/workflows/ci.yml` — Tier-A iOS fake UI only; **no bench**
+- `.github/workflows/release.yml` — packaging; **no bench**
 - Pre-merge: `scripts/macos_test.sh gate` — UI smoke + models; **no bench**
 
 Engine regression net remains **manual local** until a self-hosted macOS bench job exists.

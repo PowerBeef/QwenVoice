@@ -1,7 +1,7 @@
 # Vocello macOS app — UI kit
 
 A hi-fi recreation of the Vocello 2.0 macOS shell. Built by reading
-[`VocelloApp/QwenVoice/Sources/Views/`](https://gitlab.com/VocelloApp/QwenVoice/-/tree/main/Sources/Views)
+[`PowerBeef/QwenVoice/Sources/Views/`](https://github.com/PowerBeef/QwenVoice/tree/main/Sources/Views)
 — specifically `AppTheme.swift`, `LayoutConstants.swift`, and the four core
 view trees. The kit covers the entire app surface area:
 

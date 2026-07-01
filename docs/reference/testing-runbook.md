@@ -1,7 +1,7 @@
 # Testing runbook (Vocello / QwenVoice)
 
 > **Single source of truth for how Vocello is tested.** Tests are run by the checked-in
-> `scripts/*.sh` + `xcodebuild` and by [`.gitlab-ci.yml`](../../.gitlab-ci.yml) — **never** by an agent
+> `scripts/*.sh` + `xcodebuild` and by `.github/workflows/ci.yml` — **never** by an agent
 > driving the screen. The previous agent-driven UI harness (Anthropic "Fable" model + a
 > computer-use / desktop-MCP loop) is gone; nothing here depends on it. Everything below is
 > deterministic and self-driving.
@@ -121,15 +121,16 @@ scripts/build_foundation_targets.sh ios
 
 ## 4. CI
 
-[`.gitlab-ci.yml`](../../.gitlab-ci.yml) runs on push to `main` and on every
-MR:
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on push to `main` and on every
+PR:
 
 - **`ios-tier-a-ui`** (always): selects an available iPhone simulator, regenerates the project,
-  and runs the Tier-A suites on the iOS 26 Simulator (GitLab macOS SaaS runner, Xcode 26). This is the automated
+  and runs the Tier-A suites on the iOS 26 Simulator (Xcode 26). This is the automated
   pre-merge UI signal.
-- **macOS UI smoke** is **not** in CI yet (GitLab macOS runners can't launch a macOS-26-targeted app
-  reliably for full smoke); run locally via `scripts/macos_test.sh test` until a dedicated runner
-  image exists.
+- **`macos-ui-smoke`** (manual `workflow_dispatch` only): GitHub runners can't launch a
+  macOS-26-targeted app yet (same reason `release.yml` sets `QWENVOICE_SKIP_LAUNCH_SMOKE=1`),
+  so macOS UI smoke runs locally via `scripts/macos_test.sh test` until macOS-26 runner images
+  exist. Fire the dispatch input once they do.
 
 Tier B is **not** in CI (no physical iPhone on the runners); run it attended on device.
 

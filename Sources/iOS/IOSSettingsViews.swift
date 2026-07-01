@@ -169,7 +169,7 @@ private struct IOSSettingsView: View {
                             accessibilityIdentifier: "iosSettings_openSourceRow",
                             value: "",
                             showsChevron: true,
-                            action: { open("https://gitlab.com/VocelloApp/QwenVoice") }
+                            action: { open("https://github.com/PowerBeef/QwenVoice") }
                         )
 
                         IOSSettingsReferenceDivider()

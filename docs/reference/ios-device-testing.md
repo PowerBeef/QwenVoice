@@ -24,7 +24,7 @@ which drives the UI by pixels:
 
 Why this exists: **Tier B** on-device generation is the path that exercises real Jetsam,
 real model download, the in-process engine + increased-memory entitlement — and is **not**
-CI-tested. **Tier A** *is* CI-tested ([`.gitlab-ci.yml`](../../.gitlab-ci.yml) runs the fake-backend
+CI-tested. **Tier A** *is* CI-tested (`.github/workflows/ci.yml` runs the fake-backend
 suites on the iOS 26 Simulator on every push/PR). iPhone Mirroring is **not** the right tool
 for *scripted generation* (focus races, disconnects, engine-busy rejections, no headless
 trigger) — the headless harness is. See also: generation runs **in-process in the app** (since
@@ -204,7 +204,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI runs the same Tier-A suites automatically ([`.gitlab-ci.yml`](../../.gitlab-ci.yml)).
+CI runs the same Tier-A suites automatically (`.github/workflows/ci.yml`).
 
 ### Tier A + B on device (standing method)
 
@@ -332,7 +332,7 @@ screenshot, then closed — never dwell on a static high-contrast screen.
 |-------|---------|--------|
 | Compile (app) | `scripts/build_foundation_targets.sh ios` | the in-process engine + harness compile |
 | Compile (UI test) | `xcodebuild build-for-testing -scheme VocelloiOS -destination 'platform=iOS Simulator,…' -derivedDataPath build/ios` (Tier A) or `-destination 'id=<udid>'` (Tier B) | the test target compiles + is wired |
-| UI smoke (Tier A, Simulator/CI) | [`.gitlab-ci.yml`](../../.gitlab-ci.yml) or the Tier-A `xcodebuild test` block in [`testing-runbook.md`](testing-runbook.md) | fake-backend smoke/sheet/generate on Simulator |
+| UI smoke (Tier A, Simulator/CI) | `.github/workflows/ci.yml` or the Tier-A `xcodebuild test` block in [`testing-runbook.md`](testing-runbook.md) | fake-backend smoke/sheet/generate on Simulator |
 | UI smoke (device gate) | `scripts/ios_device.sh ui-test` (or `test`) | Tier A smoke/sheet + Tier B download cancel on hardware |
 | UI review | `scripts/ios_device.sh review` | screenshot tour vs `docs/ios-review-baselines/` |
 | Pre-merge gate | `scripts/ios_device.sh gate` | preflight → test → crashes → single verdict |

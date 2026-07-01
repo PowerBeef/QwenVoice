@@ -16,8 +16,10 @@ npm --prefix website run preview  # from repo root: serve the production build
 
 When already inside `website/`, the equivalent commands are `npm run dev`, `npm run build`, and `npm run preview`.
 
-No website-specific tests or lint config. The parent repo CI lives in [`.gitlab-ci.yml`](../.gitlab-ci.yml)
-(Tier-A iOS + release pipeline); this directory has no pipeline of its own. Behavioral verification is manual + browser-driven; Vercel deploys from GitLab (`VocelloApp/QwenVoice`, root `website/`).
+No website-specific tests or lint config. The parent repo has `.github/workflows/ci.yml`
+(iOS Tier-A UI) and `release.yml` (macOS DMG); this directory has no GitHub Actions workflow
+of its own. Behavioral verification is manual + browser-driven; Vercel owns deployment for
+this directory.
 
 ## Tooling for this directory
 

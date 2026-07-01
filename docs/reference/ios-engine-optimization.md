@@ -318,7 +318,7 @@ answers). A simulated row is labeled evidence, never proof.
 
 **P2 — signed-IPA / TestFlight lane.** The one deferred *distribution* piece. Needs (1) an iOS
 Distribution certificate in the team and (2) a sibling `archive-ios` CI job to the existing
-`compile-ios` job in [`.gitlab-ci.yml`](../../.gitlab-ci.yml). Local on-device build/test is already
+`compile-ios` job in `.github/workflows/release.yml`. Local on-device build/test is already
 established (`ios-device-testing.md`); on-device proof is **not** a public-release blocker (macOS-first).
 
 **P2 — evaluate the 0.6B variant for on-device.** OPTIMIZATION.md §F's net conclusion: backend speed

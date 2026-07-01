@@ -6,7 +6,6 @@ export const CREDITS = [
   { name: "Swift", href: "https://www.swift.org" },
 ];
 
-export const REPO = "https://gitlab.com/VocelloApp/QwenVoice";
-export const REPO_MIRROR = "https://github.com/PowerBeef/QwenVoice";
-export const RELEASE_LATEST = "https://gitlab.com/VocelloApp/QwenVoice/-/releases/permalink/latest";
-export const RELEASE_V1 = "https://gitlab.com/VocelloApp/QwenVoice/-/releases/v1.2.3";
+export const REPO = "https://github.com/PowerBeef/QwenVoice";
+export const RELEASE_LATEST = "https://github.com/PowerBeef/QwenVoice/releases/latest";
+export const RELEASE_V1 = "https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3";

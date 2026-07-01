@@ -7,16 +7,13 @@
 
 <p align="center">
   <a href="https://vocello.vercel.app/"><img src="https://img.shields.io/badge/Website-vocello.vercel.app-7b61ff?style=flat-square&logo=vercel" alt="Website"></a>
-  <a href="https://gitlab.com/VocelloApp/QwenVoice/-/releases/v2.1.0"><img src="https://img.shields.io/badge/Vocello-2.1.0-7b61ff?style=flat-square" alt="Vocello 2.1.0"></a>
-  <img src="https://gitlab.com/VocelloApp/QwenVoice/badges/main/pipeline.svg" alt="GitLab pipeline">
+  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0"><img src="https://img.shields.io/badge/Vocello-2.1.0-7b61ff?style=flat-square" alt="Vocello 2.1.0"></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-111827?style=flat-square&logo=apple" alt="macOS 26+">
   <img src="https://img.shields.io/badge/iPhone-arriving%20soon-7b61ff?style=flat-square&logo=apple" alt="iPhone — arriving soon">
   <img src="https://img.shields.io/badge/Apple%20Silicon-required-111827?style=flat-square&logo=apple" alt="Apple Silicon">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
+  <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0"><img src="https://img.shields.io/github/downloads/PowerBeef/QwenVoice/v2.1.0/total?label=2.1.0%20downloads&style=flat-square" alt="Downloads"></a>
 </p>
-
-<p align="center"><strong>Primary development:</strong> <a href="https://gitlab.com/VocelloApp/QwenVoice">GitLab</a>.
-<a href="https://github.com/PowerBeef/QwenVoice">GitHub</a> is a read-only mirror for discoverability — open issues and merge requests on GitLab.</p>
 
 <div align="center">
 
@@ -28,7 +25,7 @@
 
 **Contents:** [Get Vocello](#get-vocello) · [Why Vocello](#why-vocello) · [Workflows](#three-voice-workflows) · [Install](#install-macos) · [System requirements](#system-requirements) · [Privacy](#local-first-privacy) · [Build from source](#build-from-source) · [CLI](#command-line-tool-vocello) · [iPhone](#-vocello-for-iphone--arriving-soon) · [Contributing](#contributing) · [License](#license)
 
-**Releases:** [v2.1.0 (latest)](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v2.1.0) · [All releases](https://gitlab.com/VocelloApp/QwenVoice/-/releases) · [What's new in 2.1.0](docs/releases/v2.1.0.md)
+**Releases:** [v2.1.0 (latest)](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) · [All releases](https://github.com/PowerBeef/QwenVoice/releases) · [What's new in 2.1.0](docs/releases/v2.1.0.md)
 
 ---
 
@@ -41,8 +38,8 @@
 
 | Platform | Build | Notes |
 | --- | --- | --- |
-| **macOS 26+** (Apple Silicon) | **Vocello 2.1.0** — [Download DMG](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v2.1.0) | Signed, notarized, stable. Double-click to open. |
-| **macOS 15** | QwenVoice 1.2.3 — [Download legacy](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v1.2.3) | Legacy build. No 2.x backport planned. |
+| **macOS 26+** (Apple Silicon) | **Vocello 2.1.0** — [Download DMG](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) | Signed, notarized, stable. Double-click to open. |
+| **macOS 15** | QwenVoice 1.2.3 — [Download legacy](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3) | Legacy build. No 2.x backport planned. |
 | **iPhone** (iOS 26+, Apple Silicon) | **Arriving soon** | The same on-device engine; ships via App Store / TestFlight (not GitHub Releases). |
 
 ## Why Vocello
@@ -70,7 +67,7 @@
 
 ## Install (macOS)
 
-1. Download [`Vocello-macos26.dmg`](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v2.1.0) from the GitLab release assets.
+1. Download [`Vocello-macos26.dmg`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0).
 2. Open the DMG and drag `Vocello.app` to `/Applications`.
 3. Open Vocello.
 4. Go to **Settings → Model downloads** and install the voice models you want (the recommended Speed packages are ~7 GB total).
@@ -98,7 +95,7 @@ A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, bui
 
 **Speed** models are smaller 4-bit packages for faster startup and lower memory use — the recommended default, and what runs faster than realtime on an 8 GB Mac. **Quality** models are larger 8-bit packages for devices with more headroom.
 
-Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v1.2.3); no 2.x backport is planned. Every macOS GitLab Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
+Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every macOS GitHub Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
 
 ## Local-first privacy
 
@@ -110,14 +107,14 @@ Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice 
 
 ## Build from source
 
-The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://gitlab.com/VocelloApp/QwenVoice/-/releases/v2.1.0) ([release notes](docs/releases/v2.1.0.md)).
+The `main` branch contains the current Vocello codebase (macOS app, iPhone app, and the `vocello` CLI). The stable macOS release is tagged [`v2.1.0`](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) ([release notes](docs/releases/v2.1.0.md)).
 
 **Requires Xcode 26** on macOS 26+ (Apple Silicon) to build from source.
 
 Vocello's engine is **native Swift + MLX** — no Python, no bundled weights. On macOS it runs **out-of-process** in an isolated XPC service; on iPhone it runs **in-process**, fully on-device. Architecture, engine invariants, and release policy live in [`AGENTS.md`](AGENTS.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```sh
-git clone https://gitlab.com/VocelloApp/QwenVoice.git
+git clone https://github.com/PowerBeef/QwenVoice.git
 cd QwenVoice
 ./scripts/regenerate_project.sh
 open QwenVoice.xcodeproj
@@ -185,11 +182,11 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 
 ## Contributing
 
-- **Report bugs or request features:** [GitLab Issues](https://gitlab.com/VocelloApp/QwenVoice/-/issues)
+- **Report bugs or request features:** [GitHub Issues](https://github.com/PowerBeef/QwenVoice/issues)
 - **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (commands in §8, testing in §12)
 - **Release QA checklist:** [`docs/reference/macos-release-qa.md`](docs/reference/macos-release-qa.md)
 
-**Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitLab → **Settings → General → Social preview** (or the GitHub mirror project settings) so link cards use the Vocello artwork.
+**Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitHub → **Settings → General → Social preview** so link cards use the Vocello artwork.
 
 ## License
 
