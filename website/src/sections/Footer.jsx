@@ -1,5 +1,5 @@
 import React from "react";
-import { REPO } from "../data/credits.js";
+import { REPO, SPONSOR_GITHUB, SPONSOR_KOFI } from "../data/credits.js";
 
 export const Footer = () => (
   <footer className="footer">
@@ -33,6 +33,13 @@ export const Footer = () => (
               <li><a href={`${REPO}/releases`} target="_blank" rel="noreferrer">Releases</a></li>
               <li><a href={`${REPO}/blob/main/docs/qwen_tone.md`} target="_blank" rel="noreferrer">Docs</a></li>
               <li><a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT License</a></li>
+            </ul>
+          </div>
+          <div className="footer-col">
+            <h5>Support</h5>
+            <ul>
+              <li><a href={SPONSOR_GITHUB} target="_blank" rel="noreferrer">GitHub Sponsors</a></li>
+              <li><a href={SPONSOR_KOFI} target="_blank" rel="noreferrer">Ko-fi</a></li>
             </ul>
           </div>
         </div>

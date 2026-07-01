@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/Apple%20Silicon-required-111827?style=flat-square&logo=apple" alt="Apple Silicon">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <a href="https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0"><img src="https://img.shields.io/github/downloads/PowerBeef/QwenVoice/v2.1.0/total?label=2.1.0%20downloads&style=flat-square" alt="Downloads"></a>
+  <a href="https://github.com/sponsors/PowerBeef"><img src="https://img.shields.io/github/sponsors/PowerBeef?label=Sponsor&color=ea4aaa&style=flat-square" alt="Sponsor"></a>
 </p>
 
 <div align="center">
@@ -187,6 +188,15 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 - **Release QA checklist:** [`docs/reference/macos-release-qa.md`](docs/reference/macos-release-qa.md)
 
 **Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitHub → **Settings → General → Social preview** so link cards use the Vocello artwork.
+
+## Support
+
+If Vocello is useful to you, you can support development:
+
+- **[GitHub Sponsors](https://github.com/sponsors/PowerBeef)** — recurring or one-time sponsorship (GitHub account required; 100% goes to the maintainer).
+- **[Ko-fi](https://ko-fi.com/PowerBeef)** — quick one-time tip by card or PayPal (no account required).
+
+Maintainer setup checklist: [`docs/reference/donations-setup.md`](docs/reference/donations-setup.md).
 
 ## License
 
