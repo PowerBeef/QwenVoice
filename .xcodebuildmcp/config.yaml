@@ -5,22 +5,12 @@
 # (Settings → MCP → xcodebuildmcp → Restart) so new tools appear.
 schemaVersion: 1
 enabledWorkflows:
-  - simulator          # Tier-A iOS: build_sim, test_sim, build_run_sim, …
   - macos              # Vocello.app: build_macos, build_run_macos, test_macos, …
-  - device             # Tier-B iOS on paired iPhone: test_device, build_run_device, …
-  - debugging          # LLDB attach to Simulator (debug_attach_sim, breakpoints, …)
-  - ui-automation      # snapshot_ui, tap, screenshot (Simulator — Tier A only for Vocello)
+  - device             # iOS on paired iPhone: test_device, build_run_device, …
+  - debugging          # LLDB attach (device)
   - project-discovery  # discover_projs, list_schemes, show_build_settings
-activeSessionDefaultsProfile: ios-sim
+activeSessionDefaultsProfile: ios-device
 sessionDefaultsProfiles:
-  ios-sim:
-    projectPath: ./QwenVoice.xcodeproj
-    scheme: VocelloiOS
-    configuration: Release
-    useLatestOS: true
-    platform: iOS Simulator
-    bundleId: com.patricedery.vocello
-    arch: arm64
   macos:
     projectPath: ./QwenVoice.xcodeproj
     scheme: QwenVoice
@@ -36,4 +26,4 @@ sessionDefaultsProfiles:
     bundleId: com.patricedery.vocello
     arch: arm64
     # deviceId: set at runtime via session_set_defaults (never commit UDIDs).
-    # Prefer scripts/ios_device.sh for Tier-B real-engine work.
+    # Prefer scripts/ios_device.sh for all iOS UI tests and real-engine work.

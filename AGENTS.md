@@ -125,7 +125,7 @@ Generation modes: **Custom Voice** (built-in speakers + delivery prompt), **Voic
 
 ## 7. Hard rules (do not violate)
 
-- **Real-engine / generation iOS work is on-device only.** Any test or task that loads a model, runs Metal, or exercises actual synthesis/voice-cloning/real-download must run on a **paired physical iPhone** via `scripts/ios_device.sh` — never `xcodebuild -destination 'platform=iOS Simulator…'`, never XcodeBuildMCP simulator tools (`build_run_sim`, `snapshot_ui`, `screenshot`, …), never Axiom `xcui` / simulator-tester. The engine runs in-process on Metal, so generation on the Simulator is meaningless. **Exception — fake-backend (Tier A) UI tests** (launched with `QVOICE_FAKE_ENGINE=1`, which swaps in `FakeTTSEngine` + `FakeModelStatusProvider`: no model load, no Metal) **may run on the iOS Simulator and in CI.** See the Tier A / Tier B split in [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc) and the testing runbook. When in doubt, run on device.
+- **All iOS work is on-device only.** Any test or task that loads a model, runs Metal, or exercises synthesis/voice-cloning/download/UI must run on a **paired physical iPhone** via `scripts/ios_device.sh` — never `xcodebuild -destination 'platform=iOS Simulator…'`, never XcodeBuildMCP simulator tools (`build_run_sim`, `snapshot_ui`, `screenshot`, …), never Axiom `xcui` / simulator-tester. The MLX engine runs in-process on Metal and cannot initialize on the Simulator. GitHub CI runs **compile-only** for iOS (`build-for-testing` with `generic/platform=iOS`); the real pre-merge gate is `scripts/ios_device.sh gate` on your paired iPhone. See [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc) and the testing runbook.
 - **`project.yml` is the Xcode project source of truth.** Never edit `QwenVoice.xcodeproj/project.pbxproj` directly. Edit `project.yml`, then `./scripts/regenerate_project.sh`. (XcodeGen gotcha: the iOS target lists its bundled JSON/catalog/`voice-previews` under `sources:` with `buildPhase: resources`, **not** under `resources:` — XcodeGen silently drops them otherwise and iOS builds compile but crash on launch. See `project.yml`.)
 - **Single shippable config: `Release` only.** No `DEBUG` symbol, no Debug-vs-Release fork. `build.sh` compiles `-Onone` for the local loop; `release.sh` compiles the same config optimized. Debug capabilities are gated at runtime by `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1` env, or the hidden 7-tap version label in Settings → `UserDefaults QwenVoice.DebugModeEnabled`). Reserve `#if DEBUG` for test/sim scaffolding only.
 - **SPM deps are pinned exact for backend determinism.** Move `mlx-swift` and `mlx-swift-lm` **in lockstep** (never one alone); don't float pins without a benchmark-gated review on a throwaway branch (`vocello bench` + listening pass). MLX is the **only** Qwen3-TTS backend — do not pivot to Core ML.
@@ -237,9 +237,9 @@ desktop-MCP harness is gone — see the testing runbook). Full MCP inventory and
 - **Build / run / inspect** → the §8 scripts first. **`user-xcodebuildmcp`** exposes simulator,
   macOS, device, debugging, and UI-automation workflows (see [`.xcodebuildmcp/config.yaml`](.xcodebuildmcp/config.yaml);
   reload MCP after edits). Call `session_show_defaults` before the first MCP action; use profile
-  `macos` / `ios-sim` / `ios-device` via `session_use_defaults_profile`. **XcodeBuildMCP simulator
-  tools and Axiom `xcui`/`simulator-tester` remain off-limits for real-engine iOS work** (§7);
-  fake-backend Tier-A tests may use the Simulator via `test_sim` or `scripts/*.sh` + CI.
+  `macos` / `ios-device` via `session_use_defaults_profile`. **XcodeBuildMCP simulator tools and
+  Axiom `xcui`/`simulator-tester` are off-limits for iOS** (§7); use `scripts/ios_device.sh` or
+  MCP `ios-device` profile for on-device work.
 - **iOS on-device lanes** (`scripts/ios_device.sh`, one verb per lane): `test` / `crashes` /
   `profile` / `debug` / `review`. Inspect the resulting `.xcresult` / `.ips` with the Axiom
   crash + profiling skills (`xcsym`, `xcprof`, `xclog` ship in the Axiom plugin `bin/`). Full map:
@@ -288,10 +288,9 @@ the relevant role file path and the task; the subagent should read the role file
 - **Do not edit `QwenVoice.xcodeproj/project.pbxproj` directly.** Edit `project.yml`, then run
   `./scripts/regenerate_project.sh`.
 - **Single shippable config:** `Release` only. Use `#if DEBUG` only for test/sim scaffolding.
-- **Real-engine iOS work is on-device only.** Model load / Metal / real generation runs on a
-  paired iPhone via `scripts/ios_device.sh`; the iOS Simulator + XcodeBuildMCP simulator tools are
-  off-limits for it. **Fake-backend (Tier A) UI tests** (`QVOICE_FAKE_ENGINE=1`) may use the
-  Simulator/CI — see §7 and `.cursor/rules/testing.mdc`.
+- **All iOS work is on-device only.** Model load, Metal, UI tests, and generation run on a
+  paired iPhone via `scripts/ios_device.sh`; the iOS Simulator and XcodeBuildMCP simulator tools
+  are never used — see §7 and `.cursor/rules/testing.mdc`.
 - **SPM dependencies are pinned exact.** Move `mlx-swift` and `mlx-swift-lm` **in lockstep**;
   do not float pins without a benchmark-gated review on a throwaway branch.
 - **The build is the typecheck.** There is no formatter/linter. Follow existing Swift style,
@@ -330,14 +329,9 @@ the relevant role file path and the task; the subagent should read the role file
     (cold/warm relaunch, telemetry-flush markers).
   - Direct `xcodebuild test` without `-only-testing` runs the **entire** `VocelloMacUITests` target
     (smoke + journey + review + bench) — prefer the script lanes.
-- **iOS UI tests — two tiers** (`VocelloiOSUITests`):
-  - **Tier A — fake-backend UI** (`QVOICE_FAKE_ENGINE=1`): smoke, sheets, and the
-    backend-state Studio flow (install/generate/player/error) driven by `FakeTTSEngine` +
-    `FakeModelStatusProvider` — no model, no Metal. **May run on the iOS Simulator and in CI**
-    (and on device). This is the fast pre-merge signal.
-  - **Tier B — real-engine** (cold generation, real download, on-device memory): the real-path
-    gate that keeps the fake honest. **Paired physical iPhone only**, attended, via
-    `scripts/ios_device.sh test`.
+- **iOS UI tests** (`VocelloiOSUITests`) — **paired physical iPhone only** via
+  `scripts/ios_device.sh`. Default gate: Smoke + Sheet + OnDeviceDownload; add `--cold` for
+  ColdGeneration (needs Speed model on device). GitHub CI runs compile-only for iOS.
 - **Compile-safety:** `scripts/build_foundation_targets.sh macos|ios`.
 - **Perf/quality gate:** the `vocello` CLI benchmark plus telemetry summarizer:
   ```sh

@@ -14,13 +14,6 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
         try super.setUpWithError()
         continueAfterFailure = false
 
-        // Tier B: real in-process MLX engine on a paired iPhone. Skipped on the Simulator/CI
-        // (compile-time gate) because MLX can't initialize there.
-        try XCTSkipUnless(
-            UITestTier.canRunRealEngine,
-            "Tier B (real-engine cold generation) runs on a paired device only — MLX cannot run on the iOS Simulator."
-        )
-
         // Guarantee a cold start: terminate any app the shared coordinator may be holding.
         VocelloUITestApp.shared.forceTerminate()
         // Give the terminated process a moment to clean up on the device before we
@@ -29,7 +22,6 @@ final class VocelloiOSColdGenerationUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.0)
 
         app = XCUIApplication()
-        // Do NOT set QVOICE_FAKE_ENGINE — we want the real model load + generation.
         // Enable durable telemetry so the engine layer writes diagnostics we can pull.
         app.launchEnvironment["QWENVOICE_DEBUG"] = "1"
         app.launch()

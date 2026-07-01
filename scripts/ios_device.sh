@@ -264,8 +264,8 @@ build_sign_args() {
   fi
 }
 
-# Resolve the target device id. Prefer $QVOICE_IOS_DEVICE_ID; otherwise auto-pick the
-# single connected/paired CoreDevice. Errors with the device list when ambiguous.
+# Resolve the target device id. Prefer $QVOICE_IOS_DEVICE_ID; otherwise auto-pick a
+# connected/paired CoreDevice (prefers "iPhone 17 Pro" when multiple are paired).
 resolve_device() {
   if [[ -n "${QVOICE_IOS_DEVICE_ID:-}" ]]; then
     printf '%s' "$QVOICE_IOS_DEVICE_ID"
@@ -283,10 +283,16 @@ def connected(d):
     cp = d.get("connectionProperties") or {}
     return cp.get("pairingState") == "paired" or cp.get("tunnelState") in ("connected", "available")
 cands = [d for d in devs if connected(d)]
+if not cands:
+    sys.exit(3)
+preferred = "iPhone 17 Pro"
+for d in cands:
+    props = d.get("deviceProperties") or {}
+    if props.get("name") == preferred:
+        print(d.get("identifier", ""))
+        sys.exit(0)
 if len(cands) == 1:
     print(cands[0].get("identifier", ""))
-elif not cands:
-    sys.exit(3)
 else:
     for d in cands:
         props = d.get("deviceProperties") or {}
@@ -921,8 +927,8 @@ cmd_models() {
   case "$sub" in
     check|help|-h|--help)
       note "iOS models live in the App Group on the paired iPhone — not on this Mac."
-      note "Default ui-test (Smoke + Sheet + OnDeviceDownload): no pre-install required."
-      note "  Tier A uses QVOICE_FAKE_ENGINE=1; OnDeviceDownload uninstalls pro_custom in setUp."
+      note "Default ui-test (Smoke + Sheet + OnDeviceDownload): real engine on paired iPhone."
+      note "  OnDeviceDownload uninstalls pro_custom in setUp — do not pre-install for that gate."
       note "Cold generation (--cold), bench, and profile need Custom Voice (Speed) on device:"
       note "  Vocello iOS → Settings → Model Downloads (one-time ~2.3 GB)."
       ;;

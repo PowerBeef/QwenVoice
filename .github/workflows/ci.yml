@@ -1,22 +1,17 @@
 name: CI
 
-# Pre-merge CI for Vocello (QwenVoice). Runs the **Tier-A fake-backend** UI tests — the
-# deterministic, model-free, Metal-free suite (QVOICE_FAKE_ENGINE=1) — on every push to
-# main and every pull request. This is the automated signal that replaced the old
-# agent-driven (computer-use / desktop-MCP) UI harness; see docs/reference/testing-runbook.md.
+# Pre-merge CI for Vocello (QwenVoice).
 #
-# Scope rationale:
-#   - iOS Tier A runs on the **iOS 26 Simulator** shipped with Xcode 26. The MLX engine
-#     cannot run on the Simulator (it crashes enumerating the Metal GPU), but the fake
-#     backend bypasses MLX entirely, so the Studio backend-state flow runs deterministically.
-#   - Tier B (real model load / generation / download) stays **on-device only** and is NOT
-#     in CI — it runs attended via scripts/ios_device.sh.
-#   - macOS UI smoke is NOT here yet: GitHub runners cannot launch a macOS-26-targeted app
-#     (same reason release.yml sets QWENVOICE_SKIP_LAUNCH_SMOKE=1). It runs locally via
-#     scripts/macos_test.sh test until macOS-26 runner images exist. The manual
-#     `macos_ui_smoke` dispatch input is a placeholder for when they do.
+# iOS: compile-only on GitHub-hosted runners — `build-for-testing` against the device SDK
+# (no Simulator, no XCUITest). Real iOS UI tests run on a paired iPhone via
+# `scripts/ios_device.sh gate` locally before merge.
 #
-# Toolchain pinning mirrors release.yml: Xcode 26.0, XcodeGen + xcbeautify via Homebrew,
+# macOS UI smoke is NOT here yet: GitHub runners cannot launch a macOS-26-targeted app
+# (same reason release.yml sets QWENVOICE_SKIP_LAUNCH_SMOKE=1). It runs locally via
+# `scripts/macos_test.sh test`. The manual `macos_ui_smoke` dispatch input is a placeholder
+# for when macOS-26 runner images support it reliably.
+#
+# Toolchain pinning mirrors release.yml: Xcode 26, XcodeGen + xcbeautify via Homebrew,
 # SPM versions inherited from the committed Package.resolved.
 
 on:
@@ -39,17 +34,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-tier-a-ui:
-    name: iOS Tier-A fake-backend UI (Simulator)
+  ios-compile-check:
+    name: iOS compile check (device SDK)
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode 26
-        # macos-26 wires CoreSimulator to /Applications/Xcode.app. Side-by-side
-        # Xcode_26.0.app lists simctl devices but xcodebuild cannot match them (exit 70).
         run: |
           if [ -d /Applications/Xcode.app ]; then
             sudo xcode-select -s /Applications/Xcode.app
@@ -70,97 +63,24 @@ jobs:
         with:
           path: |
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-            build/foundation/local-builds/ios-sim-tierA-dd/SourcePackages
-          key: spm-ios-sim-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+            build/ci/ios-compile-dd/SourcePackages
+          key: spm-ios-compile-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
-            spm-ios-sim-${{ runner.os }}-xcode26-
+            spm-ios-compile-${{ runner.os }}-xcode26-
 
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
 
-      - name: Pick an available iPhone simulator (iOS 26)
-        id: sim
+      - name: Build VocelloiOS + VocelloiOSUITests for testing
         run: |
           set -euo pipefail
-          xcrun simctl list > /dev/null
-          UDID=$(python3 <<'PY'
-          import json, re, subprocess, sys
-          data = json.loads(subprocess.check_output(
-              ["xcrun", "simctl", "list", "devices", "available", "-j"], text=True
-          ))
-          prefs = ("iPhone 17 Pro", "iPhone 16 Pro", "iPhone 16")
-          candidates = []
-
-          def is_ios_26_runtime(runtime: str) -> bool:
-              if "SimRuntime.iOS-" not in runtime:
-                  return False
-              m = re.search(r"SimRuntime\.iOS-(\d+)", runtime)
-              return m is not None and int(m.group(1)) >= 26
-
-          for runtime, devices in data.get("devices", {}).items():
-              if not is_ios_26_runtime(runtime):
-                  continue
-              for d in devices:
-                  if not d.get("isAvailable", True):
-                      continue
-                  name = d.get("name", "")
-                  if "iPhone" in name:
-                      candidates.append((name, d["udid"]))
-          if not candidates:
-              print("no iOS 26 iPhone simulator", file=sys.stderr)
-              for runtime in data.get("devices", {}):
-                  if "SimRuntime.iOS-" in runtime:
-                      print(runtime, file=sys.stderr)
-              sys.exit(1)
-          for pref in prefs:
-              for name, udid in candidates:
-                  if name.startswith(pref):
-                      print(f"{name}\t{udid}")
-                      sys.exit(0)
-          name, udid = candidates[0]
-          print(f"{name}\t{udid}")
-          PY
-          )
-          [ -n "$UDID" ] || { echo "::error::no available iPhone simulator on this runner"; xcrun simctl list devices available; exit 1; }
-          SIM_NAME="${UDID%%$'\t'*}"
-          SIM_UDID="${UDID#*$'\t'}"
-          echo "Using simulator $SIM_NAME ($SIM_UDID)"
-          echo "udid=$SIM_UDID" >> "$GITHUB_OUTPUT"
-          echo "name=$SIM_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Boot selected simulator
-        run: |
-          set -euo pipefail
-          xcrun simctl boot "${{ steps.sim.outputs.udid }}" 2>/dev/null || true
-          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
-
-      - name: Run Tier-A fake-backend UI tests
-        # We -only-testing the Tier-A suites. The real-engine (Tier B) suites also self-skip
-        # on the Simulator via a compile-time gate (UITestTier.canRunRealEngine). The shared
-        # coordinator launches the app with QVOICE_FAKE_ENGINE=1.
-        run: |
-          set -euo pipefail
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project QwenVoice.xcodeproj \
             -scheme VocelloiOS \
             -configuration Release \
-            -destination "id=${{ steps.sim.outputs.udid }}" \
-            -derivedDataPath build/foundation/local-builds/ios-sim-tierA-dd \
-            -resultBundlePath build/ci/ios-tier-a.xcresult \
-            -only-testing:VocelloiOSUITests/VocelloiOSSmokeUITests \
-            -only-testing:VocelloiOSUITests/VocelloiOSSheetUITests \
-            -only-testing:VocelloiOSUITests/VocelloiOSFakeGenerationUITests \
-            -only-testing:VocelloiOSUITests/VocelloiOSFakeGenerationErrorUITests \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ci/ios-compile-dd \
             CODE_SIGNING_ALLOWED=NO | xcbeautify
-
-      - name: Upload xcresult on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-tier-a-xcresult
-          path: build/ci/ios-tier-a.xcresult
-          if-no-files-found: warn
-          retention-days: 14
 
   macos-ui-smoke:
     name: macOS UI smoke (manual; needs macOS-26 runner)

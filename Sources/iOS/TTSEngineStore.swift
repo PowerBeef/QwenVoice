@@ -486,11 +486,6 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     }
 
     private func guardModelAdmission(shouldSurfaceError: Bool, reason: String) async throws {
-        // The fake engine (Tier-A UI tests) loads no model and uses no MLX/Metal, so the
-        // memory dimension is meaningless — and on the iOS Simulator the headroom snapshot
-        // reports a bogus low value that would otherwise classify a critical band and block
-        // admission with `insufficientMemory`. Skip the gate entirely under the fake.
-        if FakeEngineConfig.isEnabled { return }
         let context = await refreshMemoryContext(reason: reason, source: "admission")
         diagnosticsRecorder?.recordMemoryContext(context, event: "model_admission_observed")
         guard memoryBudgetPolicy.allowsModelAdmission(for: context) else {
@@ -565,9 +560,6 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     }
 
     private func startActiveGenerationMemoryGuard(reason: String) {
-        // No real memory to guard under the fake engine; and the Simulator's bogus critical
-        // band would otherwise cancel the in-flight fake generation. (See guardModelAdmission.)
-        if FakeEngineConfig.isEnabled { return }
         stopActiveGenerationMemoryGuard(reason: "restart")
         activeGenerationPeakMemoryContext = nil
         activeGenerationMemoryGuardTask = Task { @MainActor [weak self] in

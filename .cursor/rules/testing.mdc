@@ -4,29 +4,28 @@ globs: Tests/**,scripts/macos_test.sh,scripts/ios_device.sh,scripts/lib/test_mod
 alwaysApply: false
 ---
 
-# Testing (deterministic XCUITest, two tiers)
+# Testing (deterministic XCUITest, on-device iOS)
 
 Tests are run by `scripts/*.sh` + `xcodebuild`, **never** by an agent driving the screen
 (the old computer-use / desktop-MCP harness is gone). Keep tests deterministic and
 self-driving. See [`AGENTS.md`](mdc:AGENTS.md) §12 and the testing runbook.
 
-## Two tiers (iOS)
+## iOS (on-device only)
 
-- **Tier A — fake backend** (`QVOICE_FAKE_ENGINE=1`): smoke, sheets, and the Studio
-  backend-state flow (generate → inline player, error surface). Driven by
-  [`FakeTTSEngine`](mdc:Sources/iOS/FakeTTSEngine.swift) + `FakeModelStatusProvider` — no
-  2.3 GB model, no Metal. The shared coordinator
-  [`VocelloUITestApp`](mdc:Tests/VocelloiOSUITests/VocelloUITestApp.swift) always launches
-  this. **Runs on the iOS Simulator and in CI**, and on device. This is the fast pre-merge
-  signal.
-- **Tier B — real engine** (cold generation, real download): needs the in-process MLX
-  engine on a **paired physical iPhone**. These suites self-launch their own app (no fake
-  flag) and are guarded with `XCTSkipUnless(UITestTier.canRunRealEngine, …)`.
+All `VocelloiOSUITests` run on a **paired physical iPhone** via `scripts/ios_device.sh`.
+The MLX engine cannot initialize on the iOS Simulator — never use `platform=iOS Simulator`,
+XcodeBuildMCP simulator tools, or Axiom `xcui` / simulator-tester for iOS work.
 
-`UITestTier.canRunRealEngine` is a **compile-time** gate (`#if targetEnvironment(simulator)`):
-false on the Simulator, true on device. No runner-env flag is needed — `scripts/ios_device.sh`
-selects which suites run on device (`--cold` for cold generation), and CI runs only the
-Tier-A suites on the Simulator via `-only-testing`.
+- **Warm path** — [`VocelloUITestApp`](mdc:Tests/VocelloiOSUITests/VocelloUITestApp.swift)
+  launches the real engine once per session for `Smoke`, `Sheet`, and `ReviewTour`.
+- **Cold / download** — `ColdGeneration` and `OnDeviceDownload` self-launch their own
+  `XCUIApplication` when they need a fresh instance or download-specific setup.
+
+Default device gate (`scripts/ios_device.sh test`): Smoke + Sheet + OnDeviceDownload.
+Add `--cold` for `ColdGeneration` (needs Speed model on device).
+
+GitHub CI runs **compile-only** (`build-for-testing` with `generic/platform=iOS`); the real
+pre-merge gate is `scripts/ios_device.sh gate` on your paired iPhone.
 
 ## macOS UI test drivers
 
@@ -58,9 +57,8 @@ macOS has **no fake-backend tier** — all `VocelloMacUITests` classes exercise 
 
 ## Real-engine work is on-device only
 
-The iOS Simulator cannot host the MLX/Metal engine, so real model load / generation /
-download is validated on a paired iPhone via `scripts/ios_device.sh`. The Simulator is
-allowed **only** for Tier-A fake-backend tests. macOS UI smoke runs via
+The iOS Simulator cannot host the MLX/Metal engine. All iOS UI tests and real generation/
+download validation run on a paired iPhone via `scripts/ios_device.sh`. macOS UI smoke runs via
 `scripts/macos_test.sh test` (calls `models ensure` first; exports
 `QVOICE_REQUIRE_TEST_MODELS=1` so missing weights fail instead of `XCTSkip`).
 

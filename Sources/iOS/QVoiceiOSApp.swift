@@ -48,9 +48,7 @@ struct QVoiceiOSApp: App {
                     }
                     .padding()
                 } else if let modelRegistry = deps.registry, let engine = deps.engine, let manager = deps.modelManager, let installer = deps.modelInstaller {
-                    // The fake engine (Tier-A UI tests) has no hardware/Metal dependency, so
-                    // let the UI mount on the iOS Simulator too by bypassing the device gate.
-                    if IOSDeviceSupport.isSupportedHardware || FakeEngineConfig.isEnabled {
+                    if IOSDeviceSupport.isSupportedHardware {
                         QVoiceiOSRootView(modelRegistry: modelRegistry)
                             .environmentObject(engine)
                             .environmentObject(audioPlayer)
@@ -293,12 +291,6 @@ struct QVoiceiOSApp: App {
     }
 
     private func configureNativeRuntimeMemoryCacheIfNeeded() {
-        // Skip all MLX touches under the fake engine. `NativeMemoryPolicyResolver.apply`
-        // sets `Memory.cacheLimit`, which is the first MLX/Metal call at launch and
-        // enumerates the GPU — that crashes (EXC_BAD_ACCESS on the GPUEnum queue) on the
-        // iOS Simulator, which can't host the MLX Metal device. Tier-A UI tests don't run
-        // the real engine, so there is nothing to tune.
-        guard !FakeEngineConfig.isEnabled else { return }
         NativeMemoryPolicyResolver.apply(
             NativeMemoryPolicyResolver.policy(
                 deviceClass: .iPhonePro,

@@ -1,10 +1,8 @@
 import XCTest
 
-/// On-device regression for the iOS model download manager (Tier B).
+/// On-device regression for the iOS model download manager.
 ///
-/// Runs on a real iPhone with the **real** backend (no `QVOICE_FAKE_ENGINE`) so it uses
-/// the production URLSession download stack. It is skipped on the Simulator/CI (compile-time
-/// gate) because the real engine can't initialize there. To avoid downloading the full ~2.3 GB
+/// Uses the production URLSession download stack. To avoid downloading the full ~2.3 GB
 /// model, the test only verifies the **cancel** path: start a download, tap Cancel, choose
 /// Cancel Download in the confirmation dialog, and confirm the Install button returns
 /// (Cancel discards the partial; there is no Pause/Resume).
@@ -15,16 +13,9 @@ final class VocelloiOSOnDeviceDownloadUITests: XCTestCase {
         try super.setUpWithError()
         continueAfterFailure = false
 
-        // Tier B: real download backend on a paired device only (compile-time gate).
-        try XCTSkipUnless(
-            UITestTier.canRunRealEngine,
-            "Tier B (real on-device download) runs on a paired device only — MLX cannot run on the iOS Simulator."
-        )
-
         installSystemAlertMonitor()
 
-        // Self-launch a fresh, real-engine app (no fake flag) so the production URLSession
-        // download stack is exercised. Skip onboarding so we land on Studio deterministically.
+        // Self-launch a fresh app so the production URLSession download stack is exercised.
         VocelloUITestApp.shared.forceTerminate()
         Thread.sleep(forTimeInterval: 1.0)
         app = XCUIApplication()

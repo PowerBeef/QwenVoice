@@ -10,13 +10,8 @@ Deep role guide: [`.agents/ios-engineer.md`](mdc:.agents/ios-engineer.md). Archi
 [`docs/ARCHITECTURE.md`](mdc:docs/ARCHITECTURE.md) §6 (iOS request lifecycle).
 
 - **Engine runs in-process** on Metal (`NativeRuntimeFactory` → `MLXTTSEngine`, wrapped in
-  `TTSEngineStore`). The iOS app deliberately does **not** link the macOS XPC stack. Real
-  generation is on-device only; the Simulator only runs the Tier-A fake backend.
-- **Fake-backend seam:** `QVOICE_FAKE_ENGINE=1` swaps in `FakeTTSEngine` +
-  `FakeModelStatusProvider` in [`IOSAppBootstrap`](mdc:Sources/iOS/IOSAppBootstrap.swift)
-  and bypasses the `IOSDeviceSupport.isSupportedHardware` gate in
-  [`QVoiceiOSApp`](mdc:Sources/iOS/QVoiceiOSApp.swift) so the UI mounts on the Simulator.
-  Production never sets these vars — keep that branch test-only.
+  `TTSEngineStore`). The iOS app deliberately does **not** link the macOS XPC stack. All
+  generation and UI tests are **on-device only** — the Simulator cannot host MLX/Metal.
 - **Cooperative cancel.** iOS does not conform to `ActiveGenerationCancellable` for real
   takes; the generate flow must discard the result on `Task.isCancelled` so cancelled takes
   never land in History.

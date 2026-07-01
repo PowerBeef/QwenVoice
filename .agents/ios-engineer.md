@@ -45,14 +45,13 @@ Before changing iOS UI or behavior, read:
   - `scripts/ios_device.sh review [--baseline]`
   - `scripts/ios_device.sh gate`
 - **Read-only investigation** → Task tool with `subagent_type: "explore"`.
-- **iOS Simulator (Tier A only)** — `user-xcodebuildmcp` profile `ios-sim` (`test_sim`, …) / CI /
-  `scripts/*.sh`. **Device (Tier B)** — profile `ios-device` + runtime `deviceId`, but prefer
+- **On-device only** — `user-xcodebuildmcp` profile `ios-device` + runtime `deviceId`, but prefer
   `scripts/ios_device.sh`. See [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml).
 
 ## Build / test commands
 
 ```sh
-# On-device only. Never use the iOS Simulator for Tier B.
+# On-device only. Never use the iOS Simulator.
 scripts/ios_device.sh preflight
 scripts/ios_device.sh models check    # tier matrix: default gate needs no pre-install
 scripts/ios_device.sh ui-test         # default: Smoke + Sheet + OnDeviceDownload
@@ -65,10 +64,9 @@ scripts/ios_device.sh gate
 
 ## Invariants (do not regress)
 
-- **Real-engine work is on-device only.** The MLX engine runs in-process on Metal, which the
-  iOS Simulator cannot host — all generation/download/memory validation happens on a paired
-  physical device via `scripts/ios_device.sh`. Tier A fake-backend UI tests
-  (`QVOICE_FAKE_ENGINE=1`) may run on the Simulator/CI.
+- **All iOS work is on-device only.** The MLX engine runs in-process on Metal, which the
+  iOS Simulator cannot host — all UI tests, generation, and download validation happen on a
+  paired physical device via `scripts/ios_device.sh`.
 - **Cooperative cancel.** iOS does not conform to `ActiveGenerationCancellable`. The generate
   flow must discard the result on `Task.isCancelled` so cancelled takes never land in History.
 - **Use `IOSScrollView`.** iOS vertical scroll surfaces use `IOSScrollView`, not raw `ScrollView`.
@@ -87,8 +85,8 @@ scripts/ios_device.sh gate
 
 ## Common mistakes
 
-- Running **real-engine** iOS work on the Simulator. Simulator use is limited to Tier A
-  fake-backend UI tests; real generation/download must run on a paired device.
+- Running **any** iOS work on the Simulator. All iOS tests and real generation/download must
+  run on a paired device.
 - Rethrowing `CancellationError` early inside `MLXTTSEngine.generate`.
 - Using raw `ScrollView` instead of `IOSScrollView`.
 - Making color the only indicator for mode or state.

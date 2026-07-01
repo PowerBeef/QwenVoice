@@ -3,12 +3,11 @@
 A consolidated map of the Vocello iOS app: what every screen/element/option does (user
 view) and how to drive it in tests like a human (identifier/label → action → expected).
 Use this to author accurate, human-like XCUITest flows and to understand the app before
-touching `Sources/iOS/`. **Real-engine** work (Tier B: cold generation, real download) is
-**on-device only** — MLX cannot initialize on the iOS Simulator. **Tier A** fake-backend UI
-tests (`QVOICE_FAKE_ENGINE=1`) run on the Simulator, CI, and device.
+touching `Sources/iOS/`. All iOS UI tests and real-engine work run **on-device only** via
+`scripts/ios_device.sh` — MLX cannot initialize on the iOS Simulator.
 
 > **Where this fits:** this is the canonical "what the app is + how to drive it" reference.
-> The testing strategy (two tiers, fake backend, CI) lives in [`testing-runbook.md`](testing-runbook.md);
+> The testing strategy lives in [`testing-runbook.md`](testing-runbook.md);
 > device lanes (`scripts/ios_device.sh`) in [`ios-device-testing.md`](ios-device-testing.md);
 > generation-engine internals in [`../ARCHITECTURE.md`](../ARCHITECTURE.md);
 > tone/delivery prompt-writing in [`../qwen_tone.md`](../qwen_tone.md).
@@ -242,13 +241,9 @@ Italian. The instruction/brief language is independent of the spoken-text langua
 | `captureScreenshot(named:)` | Attach to `.xcresult` (+ disk if `UI_TEST_SCREENSHOT_DIR` set) |
 | `isSelectedEventually(e)` | Poll `isSelected` (the trait updates a beat after tap) |
 
-Env knobs (Tier A warm tests set these via `VocelloUITestApp.launch()`):
-- `QVOICE_FAKE_ENGINE=1` — master switch: swaps in `FakeTTSEngine` + `FakeModelStatusProvider`
-  (no model load, no Metal; enables Simulator/CI).
-- `QVOICE_FAKE_ENGINE_SCENARIO=generateError` — `generate` throws (error-surface tests).
-- `QVOICE_FAKE_MODEL_STATE=notInstalled` — report model as not installed (Install CTA tests).
+Env knobs (warm tests set these via `VocelloUITestApp.launch()`):
 - `QVOICE_IOS_SKIP_ONBOARDING=1` — skip first-run onboarding.
-- `QWENVOICE_DEBUG=1` — telemetry on (Tier B cold-gen sets this).
+- `QWENVOICE_DEBUG=1` — telemetry on (cold-gen sets this).
 
 ### Per-element driving map (identifier/label → action → expected)
 
@@ -263,7 +258,7 @@ Env knobs (Tier A warm tests set these via `VocelloUITestApp.launch()`):
 | Custom tone | `element("deliveryPickerSheet_customTone")` → `_editor`.tap().typeText() | type | counter `_charCount` updates (`/500`) |
 | Voice brief | `element("voiceBrief_editor")`.tap().typeText() | type | confirm `voiceBrief_confirm` |
 | Composer | `element("textInput_textEditor")` | tap/type | `typeText("\n")` to dismiss keyboard before Generate |
-| **Generate** | `element("textInput_generateButton")` — only when model installed | tap | wait for `studio_inlinePlayer` (Tier A: ~20s; Tier B cold: ≤120s) |
+| **Generate** | `element("textInput_generateButton")` — only when model installed | tap | wait for `studio_inlinePlayer` (cold gen: ≤120s) |
 | **Install (model missing)** | `textInput_installModelButton` | tap | routes to Settings download |
 | Model install/cancel/… | `iosModel{Download,Cancel,Resume,Retry,Delete,Repair}_<id>` | per §3 | confirms via `waitForConfirmationButton` |
 
@@ -296,8 +291,8 @@ from the Voices tab) → (model check) → compose → Generate.
 4. **Dismiss keyboard before Generate** — the composer's Return key is "Done"; `typeText("\n")` then wait for the keyboard to vanish before tapping Generate.
 5. **Cold-launch segment lag** — `generateSection_*` may resolve slowly after a cold launch; fall back to label matching.
 6. **Confirm-dialog timing** — SwiftUI attach lags; use `waitForConfirmationButton`.
-7. **Fake backend (Tier A)** — `VocelloUITestApp` always sets `QVOICE_FAKE_ENGINE=1`. Tier B
-   suites (ColdGeneration, OnDeviceDownload) self-launch without it and skip on the Simulator.
+7. **On-device only** — all iOS UI tests run on a paired iPhone via `scripts/ios_device.sh`.
+   ColdGeneration and OnDeviceDownload self-launch fresh app instances when needed.
 8. **Unlock once** — XCUITest needs the iPhone unlocked once for the automation auth handshake (`preflight` surfaces this); then it can lock again.
 
 ---

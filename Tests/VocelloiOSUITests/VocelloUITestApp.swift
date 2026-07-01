@@ -1,34 +1,10 @@
 import XCTest
 
-/// Test tiers for `VocelloiOSUITests`.
+/// Shared app coordinator for warm `VocelloiOSUITests` classes (Smoke, Sheet, ReviewTour).
 ///
-/// - **Tier A**: fake-backend UI tests. The app launches with `QVOICE_FAKE_ENGINE=1`, which
-///   swaps in `FakeTTSEngine` + `FakeModelStatusProvider` (no 2.3 GB model, no Metal) **and**
-///   bypasses the on-device hardware gate, so these run on the iOS Simulator and in CI as
-///   well as on device.
-/// - **Tier B**: real-engine tests (cold generation, real download). They need the in-process
-///   MLX engine, which **cannot initialize on the iOS Simulator** (it crashes enumerating the
-///   Metal GPU), so they run on a paired iPhone only.
-///
-/// Tier B is gated at **compile time**: the UI test bundle is built for its run destination,
-/// so `targetEnvironment(simulator)` is false on device and true on the Simulator. That makes
-/// the gate reliable with no runner-env plumbing — `scripts/ios_device.sh` selects which
-/// suites run on device, and CI runs only the Tier-A suites on the Simulator.
-enum UITestTier {
-    static var canRunRealEngine: Bool {
-        #if targetEnvironment(simulator)
-        false
-        #else
-        true
-        #endif
-    }
-}
-
-/// Shared app coordinator for the whole `VocelloiOSUITests` target.
-///
-/// The shared instance always drives the **Tier-A fake backend** (`QVOICE_FAKE_ENGINE=1`):
-/// fast, hermetic, and Simulator/CI-runnable. Real-engine (Tier-B) suites do not use this
-/// coordinator — they launch their own `XCUIApplication` with the real engine on device.
+/// Launches the real in-process MLX engine on a paired iPhone. Cold-generation and
+/// on-device download suites self-launch their own `XCUIApplication` when they need a
+/// fresh instance or a download-specific setup.
 final class VocelloUITestApp: @unchecked Sendable {
     static let shared = VocelloUITestApp()
     private init() {}
@@ -214,16 +190,7 @@ final class VocelloUITestApp: @unchecked Sendable {
 
     private func launch() {
         app = XCUIApplication()
-        // Tier A: the deterministic fake backend (FakeTTSEngine + FakeModelStatusProvider).
-        // This avoids the ~2.3 GB model load + Metal warmup (slow/flaky and contends with
-        // the accessibility server) *and* bypasses the on-device hardware gate so the UI
-        // mounts on the iOS Simulator and in CI. The fake reports the model as installed and
-        // produces a canned clip, so backend-dependent UI (Studio generate → player, error
-        // surface) is exercised live and instantly. Real model load + generation is covered
-        // by the Tier-B cold-launch suite, which launches its own app without this flag.
-        app.launchEnvironment["QVOICE_FAKE_ENGINE"] = "1"
-        // Keep tests hermetic: skip the first-run onboarding cover so every test
-        // starts on the Studio surface deterministically.
+        // Skip first-run onboarding so warm tests start on the Studio surface deterministically.
         app.launchEnvironment["QVOICE_IOS_SKIP_ONBOARDING"] = "1"
 
         app.launch()

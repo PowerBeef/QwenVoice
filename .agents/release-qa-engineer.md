@@ -41,9 +41,9 @@ Before changing scripts or CI, read:
   - `screenshot-validator` for UI review baseline diffs
   - `build-fixer` for environment/build failures (after inspecting script output)
 - **GitHub** (release artifacts, PRs, workflow dispatch) → `gh` via the Shell tool.
-- **XcodeBuildMCP** (`user-xcodebuildmcp`) — macOS, Simulator (Tier A), and device workflows
-  enabled; see [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml). Prefer
-  `scripts/*.sh` for gates and Tier-B device work; use profiles `ios-sim` / `macos` / `ios-device`.
+- **XcodeBuildMCP** (`user-xcodebuildmcp`) — macOS and on-device iOS workflows enabled; see
+  [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml). Prefer `scripts/*.sh` for
+  gates; use profiles `macos` / `ios-device`.
 
 ## Build / test commands
 
@@ -97,9 +97,9 @@ scripts/ios_device.sh profile [spec]
   `QwenVoice.xcodeproj/project.pbxproj` directly.
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
-- **CI runs Tier A only.** The CI lane runs Tier A fake-backend UI tests (macOS UI runner + iOS
-  Simulator). Tier B real-engine/generation gates (`macos_test.sh gate`, `ios_device.sh gate`)
-  stay local/attended — never put real-engine generation or real model downloads in CI.
+- **CI runs compile-only for iOS.** GitHub CI builds `VocelloiOS` + `VocelloiOSUITests` with
+  `generic/platform=iOS` (no XCUITest). Real iOS UI gates (`ios_device.sh gate`) stay
+  local/attended on a paired iPhone.
 - **Committed benchmark summaries ≤256 KB.** Raw `*.jsonl` is gitignored.
 - **Deep checkout on CI.** `fetch-depth: 0` is required so `git rev-parse HEAD` in
   `scripts/release.sh` resolves for `release-metadata.txt`.
@@ -111,8 +111,8 @@ scripts/ios_device.sh profile [spec]
 ## Common mistakes
 
 - Adding a `Debug` configuration or `#if DEBUG` scaffolding in scripts.
-- Running **real-engine** iOS tests (generation/download) in the simulator or CI. Only Tier A
-  fake-backend UI tests (`QVOICE_FAKE_ENGINE=1`) belong there.
+- Running iOS UI tests in the Simulator or expecting CI to run XCUITest. Use
+  `scripts/ios_device.sh gate` on a paired iPhone before merge.
 - Committing raw `.jsonl` telemetry to `benchmarks/`.
 - Forgetting to preserve dSYMs (`scripts/build.sh` copies them to `build/macos/dsyms`).
 - Changing signing/notarization env vars without updating the workflow secret docs.

@@ -109,43 +109,6 @@ extension QVoiceiOSApp {
         // generation runs in-process here, wrapped in `TTSEngineStore`. The iOS
         // Simulator is intentionally unsupported (the project is on-device only).
 
-        // Tier-A UI tests: swap in the deterministic fake backend (no model load, no Metal).
-        // Handled BEFORE the shared-container guard because the fake path needs neither the
-        // App Group nor a real model: `AppPaths` falls back to a local app-support dir when
-        // the App Group container is unavailable (e.g. an unsigned iOS Simulator build), and
-        // `FakeModelStatusProvider` reports the model installed regardless of on-disk files.
-        // This is what lets Tier A mount and run on the Simulator/CI. Production never enters
-        // this branch (QVOICE_FAKE_ENGINE is unset).
-        if FakeEngineConfig.isEnabled {
-            let modelAssetStore = LocalModelAssetStore(
-                modelRegistry: registry,
-                rootDirectory: AppPaths.modelsDir,
-                storeVersionSeed: modelAssetStoreSeed()
-            )
-            let modelManager = ModelManagerViewModel(
-                modelRegistry: registry,
-                statusProvider: FakeModelStatusProvider(installed: FakeEngineConfig.modelInstalled)
-            )
-            let engineStore = TTSEngineStore(
-                backend: AnyTTSEngineBackend(
-                    engine: FakeTTSEngine(modelRegistry: registry),
-                    supportsSavedVoiceMutation: true,
-                    supportsModelManagementMutation: true,
-                    supportedModes: [.custom, .design, .clone]
-                )
-            )
-            let modelInstaller = IOSModelInstallerViewModel(
-                modelAssetStore: modelAssetStore,
-                modelManager: modelManager
-            )
-            modelInstaller.onModelInstalled = nil
-            return SelectedBackend(
-                engineStore: engineStore,
-                modelManager: modelManager,
-                modelInstaller: modelInstaller
-            )
-        }
-
         guard AppPaths.isUsingSharedContainer else {
             throw IOSBackendBootstrapError.missingSharedContainer(
                 AppPaths.sharedAppGroupIdentifier

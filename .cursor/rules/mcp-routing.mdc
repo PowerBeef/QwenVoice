@@ -27,32 +27,26 @@ filesystem first). Use the **Shell** tool for terminal commands — not a separa
 Read the **`xcodebuildmcp`** skill (`SKILL.md`) before first use.
 
 **Enabled workflows** (see repo [`.xcodebuildmcp/config.yaml`](mdc:.xcodebuildmcp/config.yaml)):
-`simulator`, `macos`, `device`, `debugging`, `ui-automation`, `project-discovery`.
+`macos`, `device`, `debugging`, `project-discovery`.
 Reload the MCP server after editing that file (Cursor → Settings → MCP → xcodebuildmcp → Restart).
 
-Tools include `session_show_defaults`, `session_use_defaults_profile`, `build_sim`,
-`test_sim`, `build_macos`, `build_run_macos`, `test_macos`, `test_device`, `debug_attach_sim`,
-`snapshot_ui`, `list_devices`, etc. Extra workflows (coverage, xcode-ide, …) can be added to
-`enabledWorkflows` — see https://xcodebuildmcp.com/docs/configuration
+Tools include `session_show_defaults`, `session_use_defaults_profile`, `build_macos`,
+`build_run_macos`, `test_macos`, `test_device`, `list_devices`, etc.
 
 **Session discipline (required):**
 
 1. Call `session_show_defaults` before the first build/run/test in a session.
-2. Switch profiles with `session_use_defaults_profile`: `ios-sim` (Tier-A Simulator),
-   `macos` (`QwenVoice`), `ios-device` (Tier-B — set `deviceId` via `session_set_defaults`).
+2. Switch profiles with `session_use_defaults_profile`: `macos` (`QwenVoice`),
+   `ios-device` (set `deviceId` via `session_set_defaults`).
 3. Use `discover_projs` only when defaults are missing or wrong — never speculatively.
-4. Prefer combined tools (`build_run_sim`, `build_run_macos`) over separate build + launch chains.
 
 **Vocello routing:**
 
 - **macOS app (`QwenVoice` scheme):** `./scripts/build.sh` remains primary; MCP
   `build_run_macos` / `test_macos` are OK for quick checks (`session_use_defaults_profile: macos`).
-- **Tier-A iOS fake-backend tests (`VocelloiOS`, `QVOICE_FAKE_ENGINE=1`):** MCP simulator
-  tools (`test_sim`, `build_run_sim`, `snapshot_ui`) OK on the Simulator and in CI
-  (profile `ios-sim`).
-- **Tier-B real-engine iOS (MLX/Metal/generation/download):** prefer `scripts/ios_device.sh`
-  on a paired iPhone. MCP `device` tools are optional helpers (profile `ios-device` + runtime
-  `deviceId`) — never the Simulator or simulator UI tools.
+- **iOS (`VocelloiOS`):** prefer `scripts/ios_device.sh` on a paired iPhone for all UI tests
+  and real-engine work. MCP `device` tools are optional helpers (profile `ios-device` + runtime
+  `deviceId`). **Never** use Simulator or simulator UI tools for iOS.
 
 ## Context7 (`user-context7`)
 
@@ -87,7 +81,8 @@ build/test automation.
 
 Subagents via the **Task** tool (`crash-analyzer`, `build-fixer`, `test-runner`,
 `concurrency-auditor`, …) or `/axiom:audit <domain>`. Binaries (`xcsym`, `xcprof`, `xclog`)
-ship in the Axiom plugin. **Do not** drive app UI through Axiom `xcui` / `simulator-tester` for real-engine iOS work** — use deterministic XCUITest + `scripts/*.sh`.
+ship in the Axiom plugin. **Do not** drive app UI through Axiom `xcui` / `simulator-tester`
+for iOS — use deterministic XCUITest + `scripts/ios_device.sh`.
 
 ## UI review baselines (vision diff)
 
@@ -100,4 +95,4 @@ vs `docs/*-review-baselines/` using the **`screenshot-validator`** Axiom subagen
 
 - Agent/computer-use screen driving — gone; see [`testing-runbook.md`](mdc:docs/reference/testing-runbook.md).
 - **`plugin-xcodebuildmcp-sentry`** — removed; use `user-xcodebuildmcp`.
-- Real-engine iOS on Simulator — off-limits (§7 in root [`AGENTS.md`](mdc:AGENTS.md)).
+- iOS Simulator for any Vocello test or agent workflow — off-limits (§7 in root [`AGENTS.md`](mdc:AGENTS.md)).

@@ -105,7 +105,7 @@ graph.)
 | `QwenVoiceNative` | framework.static | macOS | `QwenVoiceNative` | `com.qwenvoice.native` | macOS app-facing XPC client/coordinator/store bridging XPC to SwiftUI. |
 | `QwenVoiceEngineService` | xpc-service | macOS | `QwenVoiceEngineService` | `com.qwenvoice.app.engine-service` | Out-of-process engine host for crash isolation + memory containment. |
 | `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | macOS XCUITest: smoke, journey, review catalog, XPC bench matrix (real engine). |
-| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | iOS XCUITest: Tier A (fake backend, Simulator/CI/device) + Tier B (real engine, device-only). |
+| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | iOS XCUITest on paired iPhone only (real in-process engine). |
 
 **Two schemes**: `QwenVoice` (macOS app + `VocelloMacUITests`) and `VocelloiOS`
 (iOS app + `VocelloiOSUITests`). A single shippable config, **`Release`**, is
@@ -464,9 +464,8 @@ sequenceDiagram
 ```
 
 iOS casts the engine to capability protocols at runtime
-(`TTSEngineRuntimeControlling`, `NativeMemoryReporting`; `FakeTTSEngine` also
-conforms to `ActiveGenerationCancellable` under Tier-A fake-backend tests) rather
-than depending on a concrete type. Key iOS behaviors:
+(`TTSEngineRuntimeControlling`, `NativeMemoryReporting`) rather than depending on a
+concrete type. Key iOS behaviors:
 
 - **Batch = sequential streaming** (`IOSBatchGenerationCoordinator`): each line
   is generated with `shouldStream: true` so per-item peak stays flat; the model
@@ -478,8 +477,6 @@ than depending on a concrete type. Key iOS behaviors:
 - **Clone load profile**: `.fullCapabilities` vs `.iOSProductionDefault`
 (`.withoutCloneEncoders`) depending on the entitled memory limit.
 - **Hardware gate**: `IOSDeviceSupport.isSupportedHardware` (iPhone 15 Pro+).
-  **`FakeEngineConfig.isEnabled` bypasses it** so Tier-A UI tests mount on the
-  iOS Simulator (`QVoiceiOSApp.swift`).
 
 ---
 
@@ -528,12 +525,7 @@ goes to stderr. Full reference: [`reference/cli.md`](reference/cli.md).
 - Dependencies container: `IOSAppDependenciesContainer` / `IOSAppBootstrap`
   (`@ObservableObject`) holding `registry`, `engine` (`TTSEngineStore`),
   `modelManager`, `modelInstaller`. Built via `makeBackend(...)`.
-  When `QVOICE_FAKE_ENGINE=1`, `makeBackend` injects `FakeTTSEngine` +
-  `FakeModelStatusProvider` **before** the App-Group shared-container guard — no
-  model load, no Metal, Simulator-safe (see [`reference/testing-runbook.md`](reference/testing-runbook.md)).
 - Model downloads: `IOSModelDownloadCoordinator` (shared download engine wrapper).
-- Fake-backend test seam: `Sources/iOS/FakeTTSEngine.swift` (`FakeEngineConfig`,
-  `FakeTTSEngine`, `FakeModelStatusProvider`).
 - Studio: `IOSStudioCanvas.swift` with a mode segmented control
   (custom/design/clone), input area, generate button, and live-preview rail.
   Sheets under `Sources/iOS/Sheets/` (e.g. `IOSVoicePreviewPlayer`).
