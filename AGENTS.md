@@ -383,6 +383,7 @@ regenerate the project after changing them.
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — **start here**: unified, code-verified map of modules,
   dependencies, runtime (XPC vs in-process), request lifecycles, persistence, model management, telemetry.
+- [`docs/post-mortem/2026-06-post-fable-development-hell.md`](docs/post-mortem/2026-06-post-fable-development-hell.md) — **historical**: commit-backed post-mortem of the June 2026 post-v2.1.0 development churn (Fable → harness fragmentation → Cursor stabilization).
 - [`docs/reference/ios-app-guide.md`](docs/reference/ios-app-guide.md) — **iOS UI**: app map + how to drive it in tests.
 - [`docs/reference/macos-app-guide.md`](docs/reference/macos-app-guide.md) — **macOS UI**: app map + how to drive it in tests.
 - [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md) — **macOS lanes**: test/debug/profile/review/xpc/gate + XPC lifecycle.
