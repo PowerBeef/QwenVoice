@@ -69,6 +69,15 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     private var criticalMemoryActionInFlight = false
     private var lastLoggedMemoryBand: IOSMemoryPressureBand?
     private var debugForceCriticalOnceArmed = false
+    /// Sustained-load thermal policy (roadmap P3): serious/critical thermal state
+    /// gates PROACTIVE warm work (prewarm, clone priming) so the device can cool
+    /// between takes. Generation itself is never thermally blocked — that would
+    /// need a maintainer decision. `QVOICE_IOS_THERMAL_GATE=off` disables the gate.
+    private var latestThermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
+    /// nonisolated(unsafe): written once during MainActor init, read only in deinit
+    /// (when no other references remain) — satisfies strict concurrency for the
+    /// non-Sendable NSObjectProtocol token.
+    nonisolated(unsafe) private var thermalObserverToken: NSObjectProtocol?
 
     init(
         backend: AnyTTSEngineBackend,
@@ -104,11 +113,59 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
                 }
             }
         startChunkForwardingIfAvailable()
+        startThermalObservation()
     }
 
     deinit {
         chunkForwardTask?.cancel()
         activeGenerationMemoryGuardTask?.cancel()
+        if let thermalObserverToken {
+            NotificationCenter.default.removeObserver(thermalObserverToken)
+        }
+    }
+
+    /// Track `ProcessInfo.thermalState` transitions: record them to diagnostics
+    /// (they explain sustained-load RTF sag in pulled telemetry) and feed the
+    /// proactive-warm gate. Recording is diagnostics-gated; the gate is always on
+    /// unless QVOICE_IOS_THERMAL_GATE=off.
+    private func startThermalObservation() {
+        thermalObserverToken = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let state = ProcessInfo.processInfo.thermalState
+                let previous = self.latestThermalState
+                self.latestThermalState = state
+                guard state != previous else { return }
+                self.diagnosticsRecorder?.recordAction(
+                    event: "thermal_state_changed",
+                    reason: Self.thermalLabel(state),
+                    context: self.latestMemoryContext,
+                    message: "thermal \(Self.thermalLabel(previous)) → \(Self.thermalLabel(state))"
+                )
+            }
+        }
+    }
+
+    private static func thermalLabel(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private var thermalAllowsProactiveWarm: Bool {
+        if ProcessInfo.processInfo.environment["QVOICE_IOS_THERMAL_GATE"] == "off" { return true }
+        switch latestThermalState {
+        case .serious, .critical: return false
+        default: return true
+        }
     }
 
     /// For in-process engines (iOS), drain the FULL ordered event stream and forward each
@@ -517,6 +574,17 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
                 reason: "\(reason)_env_disabled",
                 context: latestMemoryContext,
                 message: "Proactive warm disabled via QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH."
+            )
+            return false
+        }
+        // Sustained-load thermal gate (roadmap P3): don't add prewarm/priming heat
+        // when the device is already serious/critical — generation still runs.
+        if !thermalAllowsProactiveWarm {
+            diagnosticsRecorder?.recordAction(
+                event: "proactive_warm_blocked",
+                reason: "\(reason)_thermal_\(Self.thermalLabel(latestThermalState))",
+                context: latestMemoryContext,
+                message: "Proactive warm blocked by thermal state \(Self.thermalLabel(latestThermalState))."
             )
             return false
         }

@@ -122,11 +122,19 @@ tiers). On iPhone hard-trim / unload / failure, `NativeEngineRuntime.clearQwen3M
 calls `Qwen3TTSMemoryCaches.clearAll()` — **iPhone-only**; macOS deliberately preserves Qwen3
 prepared/conditioning/decoder cache warmth across trims so warm-after-idle stays fast.
 
-**Admission is records-only, by design.** `TTSEngineStore.guardModelAdmission(...)` refreshes the
-memory context and records a `model_admission_observed` event — it does **not** block. (The
-records-only posture was chosen to measure real Jetsam behavior on device rather than pre-emptively
-refusing generation; there is **no** Quality→Speed OOM fallback on any tier — picking a variant loads
-that variant and surfaces the real error if it can't fit.)
+**Admission semantics (corrected 2026-07-02 to match code).**
+`TTSEngineStore.guardModelAdmission(...)` refreshes the memory context, records a
+`model_admission_observed` event, and **throws `insufficientMemory` when the headroom/GPU
+band is critical** (`allowsModelAdmission(for:)` with `includesAggregatePressure: false`).
+Two nuances:
+
+- **Footprint-only critical does NOT block admission** — the aggregate (footprint) band is
+  excluded from the admission decision; it still elevates `pressureBand` for warm gating,
+  post-generation trim, and the in-flight critical-cancel guard.
+- The earlier "records-only" description dated from before the critical-headroom block
+  landed; measuring real Jetsam behavior remains the intent for the footprint dimension.
+  There is **no** Quality→Speed OOM fallback on any tier — picking a variant loads that
+  variant and surfaces the real error if it can't fit.
 
 ---
 
@@ -364,8 +372,10 @@ memctx cosmetic cleanup (`72c95fc`).
   cache warmth. Don't make macOS clear, don't stop iPhone clearing.
 - **No Quality→Speed OOM fallback** — iPhone is Speed-only by contract; picking a variant loads it and
   surfaces the real error (no silent downgrade).
-- **Admission stays records-only** (`guardModelAdmission` → `model_admission_observed`) — by design,
-  to measure real Jetsam; don't turn it into a hard pre-emptive block without a maintainer decision.
+- **Admission blocks on critical headroom/GPU only** (`guardModelAdmission` throws
+  `insufficientMemory` at critical headroom band; footprint-only critical never blocks — it
+  gates warmth/trim/in-flight-cancel instead). Don't widen the block to the footprint band
+  without a maintainer decision.
 - **The footprint-based aggregate band is live, not dead** — it's a distinct criterion from the
   headroom band even on the single in-process process (§2.3). Don't remove it as "redundant."
 - **Inline PCM preview is emitted by default on every platform** — `QWENVOICE_STREAMING_PREVIEW_DATA=off`

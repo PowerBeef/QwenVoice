@@ -1,0 +1,218 @@
+[
+  {
+    "cellKey": [
+      "custom",
+      "pro_custom_speed",
+      "cold",
+      "medium"
+    ],
+    "mode": "custom",
+    "modelID": "pro_custom_speed",
+    "warmState": "cold",
+    "lenBucket": "medium",
+    "n": 1,
+    "rtf": 0.9762639131017836,
+    "tokps": 12.203519725553733,
+    "ttfcMS": null,
+    "physFootMB": 2456.2214279174805,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "custom",
+      "pro_custom_speed",
+      "warm",
+      "short"
+    ],
+    "mode": "custom",
+    "modelID": "pro_custom_speed",
+    "warmState": "warm",
+    "lenBucket": "short",
+    "n": 3,
+    "rtf": 0.9388911371914204,
+    "tokps": 11.722367730080306,
+    "ttfcMS": null,
+    "physFootMB": 2468.2995529174805,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "custom",
+      "pro_custom_speed",
+      "warm",
+      "medium"
+    ],
+    "mode": "custom",
+    "modelID": "pro_custom_speed",
+    "warmState": "warm",
+    "lenBucket": "medium",
+    "n": 3,
+    "rtf": 1.0462776659959758,
+    "tokps": 13.076705761330484,
+    "ttfcMS": null,
+    "physFootMB": 2486.6120529174805,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "custom",
+      "pro_custom_speed",
+      "warm",
+      "long"
+    ],
+    "mode": "custom",
+    "modelID": "pro_custom_speed",
+    "warmState": "warm",
+    "lenBucket": "long",
+    "n": 3,
+    "rtf": 1.0583047525722686,
+    "tokps": 13.232768172384679,
+    "ttfcMS": null,
+    "physFootMB": 2860.2995529174805,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "design",
+      "pro_design_speed",
+      "cold",
+      "medium"
+    ],
+    "mode": "design",
+    "modelID": "pro_design_speed",
+    "warmState": "cold",
+    "lenBucket": "medium",
+    "n": 1,
+    "rtf": 1.0802139037433154,
+    "tokps": 13.495195428326333,
+    "ttfcMS": null,
+    "physFootMB": 3550.862258911133,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "design",
+      "pro_design_speed",
+      "warm",
+      "short"
+    ],
+    "mode": "design",
+    "modelID": "pro_design_speed",
+    "warmState": "warm",
+    "lenBucket": "short",
+    "n": 3,
+    "rtf": 0.9945945945945945,
+    "tokps": 12.41536636105825,
+    "ttfcMS": null,
+    "physFootMB": 2976.393508911133,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "design",
+      "pro_design_speed",
+      "warm",
+      "medium"
+    ],
+    "mode": "design",
+    "modelID": "pro_design_speed",
+    "warmState": "warm",
+    "lenBucket": "medium",
+    "n": 3,
+    "rtf": 1.0890180483328236,
+    "tokps": 13.613854062787146,
+    "ttfcMS": null,
+    "physFootMB": 3760.799758911133,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "design",
+      "pro_design_speed",
+      "warm",
+      "long"
+    ],
+    "mode": "design",
+    "modelID": "pro_design_speed",
+    "warmState": "warm",
+    "lenBucket": "long",
+    "n": 3,
+    "rtf": 1.1092769891053154,
+    "tokps": 13.865394224831892,
+    "ttfcMS": null,
+    "physFootMB": 3805.596633911133,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "clone",
+      "pro_clone_speed",
+      "cold",
+      "short"
+    ],
+    "mode": "clone",
+    "modelID": "pro_clone_speed",
+    "warmState": "cold",
+    "lenBucket": "short",
+    "n": 1,
+    "rtf": 0.7505211952744962,
+    "tokps": 9.386961798759595,
+    "ttfcMS": null,
+    "physFootMB": 3852.596954345703,
+    "qcVerdict": "warn:dropout"
+  },
+  {
+    "cellKey": [
+      "clone",
+      "pro_clone_speed",
+      "warm",
+      "short"
+    ],
+    "mode": "clone",
+    "modelID": "pro_clone_speed",
+    "warmState": "warm",
+    "lenBucket": "short",
+    "n": 2,
+    "rtf": 0.7112955400497741,
+    "tokps": 8.887314836537486,
+    "ttfcMS": null,
+    "physFootMB": 3763.0422439575195,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "clone",
+      "pro_clone_speed",
+      "warm",
+      "medium"
+    ],
+    "mode": "clone",
+    "modelID": "pro_clone_speed",
+    "warmState": "warm",
+    "lenBucket": "medium",
+    "n": 3,
+    "rtf": 0.7681603117172279,
+    "tokps": 9.596916857519894,
+    "ttfcMS": null,
+    "physFootMB": 4211.518829345703,
+    "qcVerdict": "pass"
+  },
+  {
+    "cellKey": [
+      "clone",
+      "pro_clone_speed",
+      "warm",
+      "long"
+    ],
+    "mode": "clone",
+    "modelID": "pro_clone_speed",
+    "warmState": "warm",
+    "lenBucket": "long",
+    "n": 3,
+    "rtf": 0.7953176106042348,
+    "tokps": 9.941205303709639,
+    "ttfcMS": null,
+    "physFootMB": 4589.550033569336,
+    "qcVerdict": "pass"
+  }
+]
