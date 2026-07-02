@@ -315,6 +315,41 @@ public struct IOSMemoryBudgetPolicy: Hashable, Codable, Sendable {
         aggregateCriticalFootprintBytes: 5_200 * 1_048_576
     )
 
+    /// Worst pressure band over a whole generation, computed from the telemetry
+    /// sampler's summary extremes (headroom minimum, physFootprint peak, GPU
+    /// working-set usage peak). Used to persist the band on engine telemetry rows
+    /// (audit P1-6) — mirrors `band(for:)` + `aggregateBand` thresholds.
+    public func worstBand(
+        headroomMinMB: Double?,
+        physFootprintPeakMB: Double?,
+        gpuWorkingSetUsageRatioPeak: Double?
+    ) -> IOSMemoryPressureBand? {
+        guard headroomMinMB != nil || physFootprintPeakMB != nil || gpuWorkingSetUsageRatioPeak != nil else {
+            return nil
+        }
+        var band = IOSMemoryPressureBand.healthy
+        if let ratio = gpuWorkingSetUsageRatioPeak, ratio >= criticalGPUWorkingSetUsageRatio {
+            band = .critical
+        }
+        if let headroomMinMB {
+            let headroomBytes = UInt64(max(headroomMinMB, 0) * 1_048_576)
+            if headroomBytes < guardedHeadroomBytes {
+                band = maxBand(band, .critical)
+            } else if headroomBytes < healthyHeadroomBytes {
+                band = maxBand(band, .guarded)
+            }
+        }
+        if let physFootprintPeakMB {
+            let footprintBytes = UInt64(max(physFootprintPeakMB, 0) * 1_048_576)
+            if let aggregateCriticalFootprintBytes, footprintBytes >= aggregateCriticalFootprintBytes {
+                band = maxBand(band, .critical)
+            } else if let aggregateGuardedFootprintBytes, footprintBytes >= aggregateGuardedFootprintBytes {
+                band = maxBand(band, .guarded)
+            }
+        }
+        return band
+    }
+
     public func band(for snapshot: IOSMemorySnapshot) -> IOSMemoryPressureBand {
         if let gpuAllocated = snapshot.gpuAllocatedBytes,
            let gpuRecommendedWorkingSet = snapshot.gpuRecommendedWorkingSetBytes,

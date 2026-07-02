@@ -1,13 +1,17 @@
 # Testing runbook (Vocello / QwenVoice)
 
-> **Single source of truth for how Vocello is tested.** Tests are run by the checked-in
-> `scripts/*.sh` + `xcodebuild` and by `.github/workflows/ci.yml` — **never** by an agent
-> driving the screen. The previous agent-driven UI harness (Anthropic "Fable" model + a
-> computer-use / desktop-MCP loop) is gone; nothing here depends on it. Everything below is
-> deterministic and self-driving.
+> **Single source of truth for how Vocello is tested.** Regression gates are run by the
+> checked-in `scripts/*.sh` + `xcodebuild` and by `.github/workflows/ci.yml` — never by an
+> agent driving the screen. Separate from the gates, **exploratory agent-driven UI QA**
+> exists again (Jul 2026): Peekaboo/mirroir MCPs drive the UI while the deterministic
+> measurement shell [`scripts/uitest_measure.sh`](../../scripts/uitest_measure.sh) verifies
+> results from OSSignposts + `history.sqlite` + the WAV on disk — see
+> [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md). Measurement never depends on how the UI
+> was driven.
 >
 > Subsystem deep-dives: [`ios-device-testing.md`](ios-device-testing.md),
-> [`macos-testing.md`](macos-testing.md), [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md).
+> [`macos-testing.md`](macos-testing.md), [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md),
+> [`ui-test-surface.md`](ui-test-surface.md) (generated identifier catalog).
 
 ## 1. The model: on-device iOS + macOS smoke
 
@@ -31,7 +35,7 @@ the device for generation and bench paths. Download tests intentionally remove o
 | --- | --- | --- |
 | macOS `test` / `gate` / `profile` | `pro_custom_speed` in **debug** context (`QWENVOICE_DEBUG=1`) | `scripts/macos_test.sh models ensure` (install once to canonical `~/Library/Application Support/QwenVoice/models`, symlink `QwenVoice-Debug/models` → canonical) |
 | macOS ad-hoc `xcodebuild test` | same (tests skip if missing) | `models ensure` before running, or tolerate `XCTSkip` |
-| iOS default `test` / `gate` | **none** for Smoke/Sheet; `OnDeviceDownload` uninstalls in `setUp` | — |
+| iOS default `test` / `gate` | Smoke/Sheet need none; `OnDeviceDownload` uninstalls `pro_custom` in `setUp`; the gate's **generation step needs Voice Design (Speed)** on device (`QVOICE_GATE_SKIP_GENERATION=1` to skip) | Install Voice Design (Speed) once on iPhone: Settings → Model Downloads |
 | iOS `--cold`, `bench`, `profile` | Speed model **on the device** (App Group) | Install once on iPhone: Settings → Model Downloads |
 | CI (GitHub) | none (compile-only) | `build-for-testing` with `generic/platform=iOS` |
 
@@ -57,8 +61,9 @@ are paired, `scripts/ios_device.sh` prefers **iPhone 17 Pro**.
 scripts/macos_test.sh models ensure   # one-time Speed model + debug symlink
 scripts/macos_test.sh models check    # read-only status (debug context)
 scripts/macos_test.sh test            # ensures models, then VocelloMacSmokeUITests
-scripts/macos_test.sh gate            # pre-merge gate (includes model ensure)
-# optional bounded engine bench: QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate
+scripts/macos_test.sh gate            # pre-merge gate (includes model ensure; new .ips during the run are gate-fatal)
+# optional bounded engine bench + regression compare vs benchmarks/baselines/mac-gate-bench.json:
+# QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate
 scripts/macos_test.sh profile [spec]  # Instruments + vocello bench; fails on bench error unless --allow-bench-fail
 ```
 

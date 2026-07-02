@@ -419,7 +419,16 @@ This is the **first stable testing and harness end-state** since June 25’s sim
 - Multi-hundred-line features without `ios_device.sh gate` / `macos_test.sh gate` first
 - Forge/tooling migrations during active product work
 
-### Computer-use gap (open)
+### Computer-use gap (closed 2026-07-01)
+
+> **Update (2026-07-01, rescue plan Phases 0–1):** the recommendations below were
+> executed — `scripts/uitest_measure.sh` restored the deterministic lifecycle/measurement
+> shell (verify-generation, streaming-preview-check, bench-compare), the Peekaboo MCP
+> loop was validated end-to-end on a real macOS generate (see
+> [`computer-use-mcp-pilot-log.md`](../reference/computer-use-mcp-pilot-log.md) §4), and
+> the runbooks were regenerated ([`ui-test-surface.md`](../reference/ui-test-surface.md),
+> [`ui-smoke-runbooks.md`](../reference/ui-smoke-runbooks.md)). The original
+> recommendation text is preserved below for the record.
 
 The Jul 1 stabilization gives a **deterministic regression backbone** (XCUITest + script gates). It does **not** replace exploratory agent-driven UI validation.
 

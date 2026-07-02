@@ -240,6 +240,14 @@ public actor NativeTelemetrySampler {
         let residentPeakSample = samples.max { lhs, rhs in
             (lhs.residentMB ?? 0) < (rhs.residentMB ?? 0)
         }
+        // timeToPeak tracks the physFootprint peak — the figure Jetsam judges —
+        // falling back to the RSS peak only when phys_footprint is unavailable.
+        let physFootprintPeakSample = samples.max { lhs, rhs in
+            (lhs.physFootprintMB ?? 0) < (rhs.physFootprintMB ?? 0)
+        }
+        let peakSample = (physFootprintPeakSample?.physFootprintMB != nil)
+            ? physFootprintPeakSample
+            : residentPeakSample
         let physFootprintPeakMB = samples.compactMap(\.physFootprintMB).max()
         let compressedPeakMB = samples.compactMap(\.compressedMB).max()
         let headroomStartMB = samples.first?.headroomMB
@@ -275,7 +283,7 @@ public actor NativeTelemetrySampler {
             gpuAllocatedPeakMB: gpuAllocatedPeakMB,
             gpuRecommendedWorkingSetMB: gpuRecommendedWorkingSetMB,
             gpuWorkingSetUsageRatioPeak: gpuWorkingSetUsageRatioPeak,
-            timeToPeakMS: residentPeakSample?.tMS,
+            timeToPeakMS: peakSample?.tMS,
             sampleCount: samples.count,
             stageMarks: stageMarks,
             thermalState: thermalSnapshot

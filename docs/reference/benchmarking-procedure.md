@@ -371,7 +371,8 @@ Useful flags:
 |------|---------|
 | `--show-variance` | IQR / outlier hints per cell |
 | `--merged` | Cross-layer first-chunk table from `generations-merged.jsonl` |
-| `--compare-baseline PATH` | Percent deltas vs committed baseline markdown |
+| `--save-baseline PATH` | Write the current per-cell summary as a **JSON** baseline |
+| `--compare-baseline PATH` | Regression compare vs a **JSON** baseline from `--save-baseline` (exit 2 on >5% regression; RTF **drop**, tok/s drop, TTFC/physFoot rise, QC worsening). Markdown snapshots cannot be fed to this flag — diff those with `git diff`. |
 | `--ledger-row` | One HISTORY.md row (pipe to `>> benchmarks/HISTORY.md`) |
 | `--cell mode/model/state[/len]` | Headline cell for ledger (default `custom/quality/warm`) |
 
@@ -434,12 +435,38 @@ python3 scripts/summarize_generation_telemetry.py --label "stepeval fix" \
 
 Compare with `git diff`. No auto-fail gate — maintainer judgment.
 
-### Baseline comparison
+### Baseline comparison (JSON, machine-gated)
 
 ```sh
-python3 scripts/summarize_generation_telemetry.py \
-  --compare-baseline benchmarks/baseline-2026-06-16-45720dd-streaming-default.md
+# Seed / reseed a baseline (after an intentional, reviewed perf change):
+python3 scripts/summarize_generation_telemetry.py <diag-dir> \
+  --save-baseline benchmarks/baselines/mac-gate-bench.json
+
+# Compare (exit 2 on regression — usable in scripts/gates):
+python3 scripts/summarize_generation_telemetry.py <diag-dir> \
+  --compare-baseline benchmarks/baselines/mac-gate-bench.json
 ```
+
+The committed **`benchmarks/baselines/mac-gate-bench.json`** (custom/speed/medium,
+cold+warm) is what `QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate` compares against —
+the gate isolates its own run's rows by `recordedAt` before comparing. Markdown snapshots
+(`benchmarks/baseline-*.md`) remain the human-readable full-matrix references; diff them
+with `git diff`, not `--compare-baseline`.
+
+### Like-for-like comparison rules (ledger discipline)
+
+Never compare numbers across topologies — each is a different measurement, not a
+regression signal:
+
+| Lane | Build | Topology | Headline custom/speed/medium warm |
+|------|-------|----------|-----------------------------------|
+| `build.sh` CLI bench | `-Onone` | in-process | RTF ≈ 1.0 |
+| local release / `-O` CLI | optimized | in-process | RTF ≈ 1.7 |
+| macOS `bench-ui` | Release app | app + XPC service | RTF ≈ 1.7 |
+| iOS `ios_device.sh bench` | `-Onone` device | in-process on iPhone | RTF ≈ 1.6–1.9 |
+
+Compare a row only against a baseline from the **same lane** (HISTORY.md rows carry the
+label; keep the lane in the label text).
 
 ---
 

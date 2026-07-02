@@ -162,12 +162,12 @@ so older rows still decode.
 | `stageMarks` | `[{tMS, tNS?, sequence?, stage, metadata}]` | Lifecycle timeline with optional nanosecond timestamps and monotonic sequence numbers (see §6). |
 | `timingsMS` | `[String: Int]` | **Engine layer: the full MLX decode breakdown + counters** (see §6). |
 | `counters` | `[String: Int]` | e.g. `chunkCount`; middle layer: `chunksForwarded`, `chunkGaps`; **app layer: `uiStallCount50`/`uiStallCount250`/`uiMaxStallMS`/`uiHeartbeats`** — the UI‑responsiveness KPI from `MainThreadStallWatchdog` (100 ms main‑thread heartbeat during generations; the summarizer surfaces it as the `UIstall` column, `—` for CLI runs which have no UI process). |
-| `derivedMetrics` | `[String: Double]?` | Headline KPIs (see §7). |
+| `derivedMetrics` | `[String: Double]?` | Headline KPIs (see §7). Includes `kvCacheEstimatedPeakMB` (2026‑07‑01, audit P1‑2) — the peak of the per‑chunk KV‑cache footprint estimates, surfaced at row level so regression tooling doesn't walk the chunk timeline. |
 | `mlxMemoryByStage` | `[String: {activeMB, cacheMB, peakMB}]?` | MLX GPU memory at each stage (see §8). |
 | `chunkTimeline` | `[GenerationChunkTelemetry]?` | Per‑chunk decode substages, with `arrivalNS` (v5) and optional `mimiDecoderBreakdownMS` (v5) (see §6.3). |
 | `audioQC` | `AudioQCReport?` | Reference‑free quality verdict + flags, plus defect sample offsets and optional per‑chunk QC (`chunkQC`) in verbose mode (see "Guarding output quality"). |
-| `summary` | `TelemetrySummary?` | Process memory curve summary (see §8). |
-| `notes` | `[String: String]` | Freeform (e.g. error messages, `deviceClass`, `promptChars`). |
+| `summary` | `TelemetrySummary?` | Process memory curve summary (see §8). `timeToPeakMS` tracks the **physFootprint** peak (the Jetsam‑relevant figure; falls back to RSS only when phys_footprint is unavailable — audit P1‑4, 2026‑07‑01). |
+| `notes` | `[String: String]` | Freeform (e.g. error messages, `deviceClass`, `promptChars`). Includes `memoryPressureBandWorst` (`healthy`/`guarded`/`critical`, audit P1‑6, 2026‑07‑01) — the worst pressure band over the generation derived from the sampler extremes with the shipping `IOSMemoryBudgetPolicy` thresholds. |
 | `recordedAt` / `processName` / `processIdentifier` | | Provenance. |
 
 ---

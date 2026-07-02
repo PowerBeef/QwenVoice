@@ -90,7 +90,7 @@ QWENVOICE_DEBUG=1 ./build/vocello bench \
 | P1.3 variance / outliers | **Partial** — `--show-variance`, IQR in code; not default |
 | P1.6 `--compare-baseline` | **Fixed** |
 | P1.1 GPU eval split | **Open** |
-| P1.2 KV-cache footprint | **Open** |
+| P1.2 KV-cache footprint | **Fixed 2026-07-01** — `derivedMetrics.kvCacheEstimatedPeakMB` (peak of per-chunk KV diagnostics) |
 | J1 crash mid-generation row loss | **Open** |
 | Q1 audioQC defect localization | **Fixed** in v5 |
 | P6 summarizer stream-only | **Partial** — `iter_jsonl` for engine; still materializes `runs[]` |
@@ -108,7 +108,7 @@ QWENVOICE_DEBUG=1 ./build/vocello bench \
 | P0-2 | Performance | `vocello bench` always enables telemetry — no `--telemetry off` control run | **Fixed** — `--telemetry off` |
 | P0-3 | Performance | `generateTime` / stage marks exclude pipelined decoder drain | **Fixed** — `decoderDrainMS` + stage mark |
 | P0-4 | Concurrency | Default streaming bench never drains unbounded `engine.events`; preview PCM retained per chunk | **Fixed** — preview off + event drain |
-| P0-5 | Testing | Engine bench absent from CI and `macos_test.sh gate` | **Partial** — opt-in `QWENVOICE_GATE_BENCH=1` |
+| P0-5 | Testing | Engine bench absent from CI and `macos_test.sh gate` | **Partial** — opt-in `QWENVOICE_GATE_BENCH=1`; since 2026-07-01 also regression-compares vs committed `benchmarks/baselines/mac-gate-bench.json` |
 | P0-6 | Testing | CI macOS smoke skips generation tests (no `QVOICE_REQUIRE_TEST_MODELS`) | **Open** — blocked on macOS 26 CI runners |
 | P0-7 | Codable | Failed/superseded runs pollute cell medians (no `finishReason` filter) | **Fixed** — summarizer filter |
 
@@ -119,10 +119,10 @@ QWENVOICE_DEBUG=1 ./build/vocello bench \
 | P1-1 | Performance | `--ledger` runs summarizer twice | **Fixed** — `--emit-ledger-row` single pass |
 | P1-2 | Performance | Verbose mode double-runs PCM limiter per chunk | **Open** |
 | P1-3 | Performance | Preview PCM not disabled in bench | **Fixed** (same as P0-4) |
-| P1-4 | Memory | `timeToPeakMS` tracks RSS not physFootprint peak | **Open** |
+| P1-4 | Memory | `timeToPeakMS` tracks RSS not physFootprint peak | **Fixed 2026-07-01** — physFoot peak, RSS fallback |
 | P1-5 | Memory | Floor-tier 500 ms sampler cadence misses short spikes | **Open** |
-| P1-6 | Memory | `IOSMemoryPressureBand` not persisted on engine rows | **Open** |
-| P1-7 | Codable | Swift merger strict vs Python lenient — silent row drops | **Open** |
+| P1-6 | Memory | `IOSMemoryPressureBand` not persisted on engine rows | **Fixed 2026-07-01** — `notes.memoryPressureBandWorst` from sampler extremes |
+| P1-7 | Codable | Swift merger strict vs Python lenient — silent row drops | **Fixed 2026-07-01** — decode failures on matching rows logged loudly |
 | P1-8 | Security | Ungated `generation-failures.jsonl` on all failures | **Fixed** — `TelemetryGate.resolvedEnabled` |
 | P1-9 | Security | Ungated `native-events.jsonl` on macOS XPC | **Fixed** — gated in engine-service + iOS writer |
 | P1-10 | Testing | BenchCommand silently skips clone when voice missing | **Fixed** — fail fast |

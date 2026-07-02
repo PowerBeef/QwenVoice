@@ -165,8 +165,9 @@ So "is this mode ready to generate?" is **test-readable from the Studio surface*
 **Always confirm the mode's model is installed before composing/generating.** In a test:
 either pre-install via Settings, or assert the readiness signal (`textInput_generateButton`
 present) before typing/tapping Generate. `VocelloiOSColdGenerationUITests` skips when the
-Speed model isn't installed; `VocelloiOSOnDeviceDownloadUITests` drives the full
-install/cancel/pause/resume/delete lifecycle.
+Speed model isn't installed; `VocelloiOSOnDeviceDownloadUITests` drives the
+install→cancel lifecycle (it uninstalls `pro_custom` in `setUp` — that is the test's
+contract; there is no user-facing pause).
 
 ### Driving sequences (from `VocelloiOSOnDeviceDownloadUITests`)
 

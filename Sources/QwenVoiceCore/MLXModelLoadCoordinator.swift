@@ -420,8 +420,8 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
     }
 
     /// Returns the id of the currently loaded asset, or `nil` when no model
-    /// has been loaded since init / the last `unloadModel()`. Used by the
-    /// mock-backed engine test suite for readiness-state assertions.
+    /// has been loaded since init / the last `unloadModel()`. Used for
+    /// readiness-state checks (e.g. warm/cold attribution, idle-unload probes).
     func currentLoadedModelID() async -> String? {
         loadedDescriptor?.id
     }

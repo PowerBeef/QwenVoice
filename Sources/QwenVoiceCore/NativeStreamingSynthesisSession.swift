@@ -1573,6 +1573,29 @@ private struct StreamingExecutionContext: Sendable {
         let policyNotes = NativeMemoryPolicyResolver.currentPolicyNotes(for: memoryPolicy)
         tierNotes.merge(policyNotes) { _, policy in policy }
 
+        // Worst memory pressure band over the generation (audit P1-6): derived from
+        // the sampler summary extremes with the shipping policy thresholds, so
+        // Jetsam-adjacent runs are visible directly on the row.
+        if let worstBand = IOSMemoryBudgetPolicy.iPhoneShippingDefault.worstBand(
+            headroomMinMB: summary.headroomMinMB,
+            physFootprintPeakMB: summary.physFootprintPeakMB,
+            gpuWorkingSetUsageRatioPeak: summary.gpuWorkingSetUsageRatioPeak
+        ) {
+            tierNotes["memoryPressureBandWorst"] = worstBand.rawValue
+        }
+
+        // Row-level KV-cache footprint (audit P1-2): the per-chunk diagnostics carry
+        // an estimated footprint; surface the peak as a headline derived metric so
+        // regression tooling doesn't need to walk the chunk timeline.
+        var derivedWithKV = derivedMetrics
+        if let kvPeakMB = chunkTimeline?
+            .compactMap({ $0.kvCacheDiagnostics?.estimatedFootprintMB })
+            .max() {
+            derivedWithKV = (derivedWithKV ?? [:]).merging(
+                ["kvCacheEstimatedPeakMB": kvPeakMB]
+            ) { current, _ in current }
+        }
+
         // Adherence ground-truth for bench analysis (dev-gated diagnostics only —
         // this whole writer is behind TelemetryGate; never ships). These notes let
         // post-processing scripts pair instruct/design takes with their expected
@@ -1610,7 +1633,7 @@ private struct StreamingExecutionContext: Sendable {
             timingsMS: timingsMS ?? timingOverridesMS,
             counters: counters,
             notes: notesWithTier,
-            derivedMetrics: derivedMetrics,
+            derivedMetrics: derivedWithKV,
             mlxMemoryByStage: mlxMemoryByStage,
             chunkTimeline: chunkTimeline,
             audioQC: audioQC

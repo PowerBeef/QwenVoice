@@ -19,7 +19,7 @@ Development is **100% in Cursor**. Prefer **checked-in `scripts/*.sh`** for buil
 | `plugin-huggingface-skills-huggingface-skills` | huggingface-skills | Hub model/dataset/paper lookup (`hub_repo_search`, `hub_repo_details`, …) |
 | `cursor-app-control` | cursor-app-control | Cursor IDE control (`open_resource`, `move_agent_to_root`, `rename_chat`, …) |
 | `peekaboo` | peekaboo | **User-global** macOS desktop automation (`see`, `image`, `click`, `type`, `hotkey`, …) — exploratory QA only |
-| `mirroir` | mirroir | **User-global** iPhone Mirroring drive (`describe_screen`, `tap`, `swipe`, …) — exploratory QA on real device |
+| `mirroir` | mirroir | **User-global** iPhone Mirroring drive (`describe_screen`, `tap`, `swipe`, …) — exploratory QA on real device. French macOS needs `~/.mirroir-mcp/settings.json` → `mirroringProcessName: "Recopie de l'iPhone"` (pilot log §5) |
 
 Configured in **`~/.cursor/mcp.json`** (not committed). Both launch via
 `$HOME/.cursor/bin/mcp_stdio_wrapper.sh` (Cursor spawn env fix). Setup:

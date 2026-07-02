@@ -83,6 +83,20 @@ macOS may show a Screen Recording prompt from Cursor **even when Cursor is alrea
 
 **Fix:** Click **Allow** when the prompt appears during an Agent tool call, Cmd+Q Cursor, reopen, confirm Settings → Tools & MCP shows green for `peekaboo` and `mirroir`. Run `peekaboo permissions status --all-sources` in Terminal if still stuck.
 
+### mirroir on localized macOS (e.g. French)
+
+mirroir-mcp locates the Mirroring window by process name **"iPhone Mirroring"**; localized
+systems rename it (French: **"Recopie de l'iPhone"**) and every tool fails with
+*"'iphone' is not open"*. Fix once in `~/.mirroir-mcp/settings.json`:
+
+```json
+{ "mirroringProcessName": "Recopie de l'iPhone" }
+```
+
+(Use the exact localized name from `System Events`, including the typographic apostrophe.)
+Restart Cursor so the MCP server re-reads settings. Reference:
+[mirroir configuration](https://github.com/jfarcand/mirroir-mcp/blob/main/docs/configuration.md).
+
 ### Verify
 
 - Settings → MCP → **peekaboo** + **mirroir** Connected
@@ -171,7 +185,7 @@ Official **`appium/appium-mcp`**: real-device prep, gestures, screenshots, optio
 | macOS regression | `scripts/macos_test.sh gate` |
 | iOS regression | `scripts/ios_device.sh gate` |
 | iOS observation screenshot | `scripts/ios_device.sh shot` (no agent clicks in shell) |
-| Deterministic bench timing | Restore minimal `uitest.sh`-style shell separately — no MCP replaces OSSignpost bench-step |
+| Deterministic bench timing / generation verification | `scripts/uitest_measure.sh` (verify-generation, streaming-preview-check, bench-compare) — no MCP replaces it |
 
 ---
 
@@ -182,7 +196,7 @@ Official **`appium/appium-mcp`**: real-device prep, gestures, screenshots, optio
 | Vision macOS loop | Built-in | Peekaboo |
 | iPhone Mirroring drive | CC + Fable | mirroir-mcp |
 | iOS AX tree | No (mirror) | Appium (Option 2) |
-| Measurement shell | Deleted `uitest.sh` | Still missing |
+| Measurement shell | Deleted `uitest.sh` | **Restored** — `scripts/uitest_measure.sh` (2026-07-01) |
 | Zero setup | Yes | User `mcp.json` + TCC |
 
 ---

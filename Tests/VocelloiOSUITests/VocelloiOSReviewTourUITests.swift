@@ -6,9 +6,9 @@ import XCTest
 /// `docs/ios-review-baselines/`. Run via `scripts/ios_device.sh review`.
 ///
 /// Burns-in aware: each sheet is opened only long enough to capture, then dismissed
-/// (capture-and-dismiss) — the tour never dwells on a static high-contrast screen. No
-/// audio is generated (the engine stays disabled), so the Studio composer is captured
-/// idle.
+/// (capture-and-dismiss) — the tour never dwells on a static high-contrast screen. The
+/// app launches its real in-process engine as usual; the tour simply never triggers a
+/// generation, so the Studio composer is captured idle.
 ///
 /// Accessibility: the tour doubles as a reachability pass — every screen/sheet is reached
 /// by tapping a real, hittable, identified control (tabs via `rootTab_*`, the sheet via

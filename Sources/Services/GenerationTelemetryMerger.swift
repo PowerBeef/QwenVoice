@@ -64,6 +64,11 @@ enum GenerationTelemetryMerger {
     }
 
     /// Returns the last row matching `generationID` in a per-layer JSONL file.
+    ///
+    /// Audit P1-7: a decode failure on a MATCHING row must not be a silent drop
+    /// (the Python summarizer is lenient; this Swift path was strict and quiet,
+    /// so schema drift produced merged rows that silently lost a layer). Rows
+    /// that contain the generationID but fail Codable decoding are logged loudly.
     private static func latestRecord(
         for generationID: String,
         in url: URL
@@ -75,12 +80,22 @@ enum GenerationTelemetryMerger {
         let decoder = JSONDecoder()
         var match: GenerationTelemetryRecord?
         for line in text.split(separator: "\n") {
-            guard let lineData = line.data(using: .utf8),
-                  let record = try? decoder.decode(GenerationTelemetryRecord.self, from: lineData),
-                  record.generationID == generationID else {
+            // Cheap substring pre-filter: only decode candidate lines.
+            guard line.contains(generationID), let lineData = line.data(using: .utf8) else {
                 continue
             }
-            match = record
+            do {
+                let record = try decoder.decode(GenerationTelemetryRecord.self, from: lineData)
+                if record.generationID == generationID {
+                    match = record
+                }
+            } catch {
+                print(
+                    "[GenerationTelemetryMerger] Row matching '\(generationID)' in "
+                    + "\(url.lastPathComponent) failed to decode and was skipped "
+                    + "(schema drift? \(error.localizedDescription))"
+                )
+            }
         }
         return match
     }

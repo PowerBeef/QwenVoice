@@ -176,6 +176,15 @@ scripts/macos_test.sh profile [spec]     # models ensure → Instruments on voce
 scripts/macos_test.sh review [--baseline] [--subset resting|full]  # catalog captures + baseline diff
 scripts/macos_test.sh xpc [--crash-isolation] # XPC lifecycle / crash isolation
 
+# Deterministic measurement shell (agent-driven / exploratory UI runs — see
+# docs/reference/ui-smoke-runbooks.md; measurement is decoupled from HOW the UI was driven)
+scripts/uitest_measure.sh prep|finish     # debug-data-mode launch (persisted flag) / quit + clear flag
+scripts/uitest_measure.sh reset [--full]  # clean generations + outputs (debug data dir)
+scripts/uitest_measure.sh smoke-check <mode>  # models (+ clone voice) preconditions
+scripts/uitest_measure.sh verify-generation <mode> --artifacts-dir <d> --since "$(scripts/uitest_measure.sh now)"
+scripts/uitest_measure.sh streaming-preview-check [--since …]  # live-preview health signposts
+scripts/uitest_measure.sh bench-compare --baseline benchmarks/baselines/<name>.json
+
 # macOS UI smoke (VocelloMacSmokeUITests only — use scripts/macos_test.sh test for -only-testing)
 xcodebuild test -project QwenVoice.xcodeproj -scheme QwenVoice \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData
@@ -393,7 +402,9 @@ regenerate the project after changing them.
 - [`docs/reference/ios-app-guide.md`](docs/reference/ios-app-guide.md) — **iOS UI**: app map + how to drive it in tests.
 - [`docs/reference/macos-app-guide.md`](docs/reference/macos-app-guide.md) — **macOS UI**: app map + how to drive it in tests.
 - [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md) — **macOS lanes**: test/debug/profile/review/xpc/gate + XPC lifecycle.
-- [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) — **bench runbook**: when/how to bench, platform lanes, signpost profile, HISTORY ledger.
+- [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) — **generated** accessibilityIdentifier catalog (regenerate: `python3 scripts/generate_ui_test_surface.py`).
+- [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) — agent-driven exploratory smoke procedures (Peekaboo/mirroir + `scripts/uitest_measure.sh`).
+- [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) — **bench runbook**: when/how to bench, platform lanes, like-for-like rules, JSON baselines, HISTORY ledger.
 - [`docs/reference/`](docs/reference/) — per-subsystem reading list:
   - `mlx-guide.md`, `qwen3-tts-guide.md`, `mimi-codec-guide.md`, `metal-guide.md`
   - `swift-performance-guide.md`, `ios-engine-optimization.md`
