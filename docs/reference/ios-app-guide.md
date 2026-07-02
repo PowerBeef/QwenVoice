@@ -303,7 +303,7 @@ from the Voices tab) → (model check) → compose → Generate.
 Most interactive controls now carry an `accessibilityIdentifier`. Still missing (driving
 them needs label/coordinate hacks or new ids):
 
-- **Player sheet scrubber + transcript** — `iosPlayer_save`/`_playPause`/`_download` exist, but the scrubber (a custom adjustable element) and the karaoke transcript are unlabeled.
+- ~~Player sheet scrubber + transcript~~ — **closed 2026-07-02**: the scrubber is an adjustable VoiceOver element (`iosPlayer_scrubber`, "Playback position" + value) and the karaoke transcript reads as one prose element (`iosPlayer_transcript`).
 - **Mode meta labels** ("Built-in voice" / "Designed voice"), section headings, empty-state cards, sheet titles — low-value to drive; label by text if needed.
 - **Lifecycle toasts** — transient, but labeled with `engineLifecycleToast_<id>`.
 

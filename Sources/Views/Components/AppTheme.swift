@@ -6,13 +6,10 @@ enum AppTheme {
         case liquid
     }
 
-    static let uiProfile: UIProfile = {
-        #if QW_UI_LIQUID
-        return .liquid
-        #else
-        return .liquid
-        #endif
-    }()
+    // QW_UI_LIQUID is always set (project.yml) and .liquid is the only profile —
+    // the enum + conditional survive as the seam for a future non-liquid profile,
+    // but there is deliberately NO behavioral fork today (2026-07-02 review).
+    static let uiProfile: UIProfile = .liquid
 
     static let vocelloGold = Color(red: 0.93, green: 0.80, blue: 0.54)
     static let accent = vocelloGold

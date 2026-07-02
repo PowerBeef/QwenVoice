@@ -53,6 +53,19 @@ Fail doomed on-device runs fast instead of burning tokens on timeouts:
 - P4: UI P0/P1 (batch decision, ScrollView ×2, Reduce Motion routing, tab-lock) · AppModel phases 3b/5/6 · macOS Liquid Glass · a11y pass
 - P5: release train
 
+## Phase 4 findings — Liquid Glass audit item resolved as mostly false-positive (2026-07-02)
+
+The UI audit flagged CustomVoice/VoiceDesign/VoiceCloning/Settings as "no glass" from a
+grep for `#if QW_UI_LIQUID` in those files. Code review shows the generate surfaces ARE
+glassed — they feed `modeGlassTint`/`modeCanvasBackdrop` into the shared
+`GenerationWorkflowView`/`profileGroupBoxStyle` chrome where the glass lives.
+`StartupDiagnosticsView` uses `profileGroupBoxStyle` (glassed). `SettingsView` is an
+intentionally NATIVE grouped Form ("modeled on macOS System Settings") — adding custom
+glass there would fight the system idiom; left native by design. `EmotionPickerView` has
+no chrome of its own (hosted inside glassed panels). Only real cleanup: the dead
+`AppTheme.uiProfile` fallback (both #if branches returned .liquid) simplified with a
+documented seam comment.
+
 ## Attended-device prerequisites (blocking iOS gate green)
 
 1. **Unlock the iPhone** when starting `scripts/ios_device.sh gate` (XCUITest auth

@@ -11,7 +11,7 @@ refactors. They are the semantic reference for what to look for on screen — us
 XCUITest suites, the Peekaboo/mirroir exploratory loops, and the review runbooks.
 Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\(id)`).
 
-## macOS (Vocello.app) — 135 identifiers
+## macOS (Vocello.app) — 136 identifiers
 
 | Identifier | Declared in |
 |---|---|
@@ -105,6 +105,7 @@ Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\(id)`).
 | `startupDiagnostics_copyButton` | `StartupDiagnosticsView.swift` |
 | `startupDiagnostics_retryButton` | `StartupDiagnosticsView.swift` |
 | `startupDiagnostics_view` | `StartupDiagnosticsView.swift` |
+| `textInput_batchButton` | `TextInputView.swift` |
 | `textInput_charCount` | `TextInputView.swift` |
 | `voiceCloning_activeReference` | `VoiceCloningView.swift` |
 | `voiceCloning_consentNotice` | `VoiceCloningView.swift` |
@@ -151,13 +152,10 @@ Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\(id)`).
 | `voices_enrollButton` | `ContentView.swift` |
 | `voices_retryButton` | `VoicesView.swift` |
 
-## iOS (VocelloiOS) — 87 identifiers
+## iOS (VocelloiOS) — 86 identifiers
 
 | Identifier | Declared in |
 |---|---|
-| `batchSheet_cancel` | `IOSBatchSheet.swift` |
-| `batchSheet_done` | `IOSBatchSheet.swift` |
-| `batchSheet_row_\(item.index)` | `IOSBatchSheet.swift` |
 | `bottomSheet_close` | `IOSDesignSystemPrimitives.swift` |
 | `deleteModelSheet_confirm` | `IOSBottomSheets.swift` |
 | `deliveryPickerIntensity_\(level)` | `IOSBottomSheets.swift` |
@@ -193,6 +191,8 @@ Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\(id)`).
 | `iosPlayer_download` | `IOSPlayerSheet.swift` |
 | `iosPlayer_playPause` | `IOSPlayerSheet.swift` |
 | `iosPlayer_save` | `IOSPlayerSheet.swift` |
+| `iosPlayer_scrubber` | `IOSPlayerSheet.swift` |
+| `iosPlayer_transcript` | `IOSPlayerSheet.swift` |
 | `iosRecord_close` | `IOSRecordingOverlay.swift` |
 | `iosRecord_retake` | `IOSRecordingOverlay.swift` |
 | `iosRecord_start` | `IOSRecordingOverlay.swift` |
@@ -243,12 +243,11 @@ Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\(id)`).
 | `voicesSearchField` | `IOSVoicesView.swift` |
 | `voices_saveNewVoice` | `IOSVoicesView.swift` |
 
-## Shared (both platforms) — 9 identifiers
+## Shared (both platforms) — 8 identifiers
 
 | Identifier | Declared in |
 |---|---|
 | `screen_voices` | `VoicesView.swift`, `IOSVoicesView.swift` |
-| `textInput_batchButton` | `TextInputView.swift`, `IOSStudioCanvas.swift` |
 | `textInput_cancelButton` | `TextInputView.swift`, `IOSStudioCanvas.swift` |
 | `textInput_generateButton` | `TextInputView.swift`, `IOSStudioCanvas.swift` |
 | `textInput_textEditor` | `TextInputView.swift`, `IOSStudioCanvas.swift`, `IOSFlexibleTextEditor.swift` |

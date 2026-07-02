@@ -253,6 +253,7 @@ struct IOSPlayerSheet: View {
                 .accessibilityElement()
                 .accessibilityLabel("Playback position")
                 .accessibilityValue(controller.formatted(time: controller.currentTime))
+                .accessibilityIdentifier("iosPlayer_scrubber")
                 .accessibilityAdjustableAction { direction in
                     let step = 0.05
                     switch direction {
@@ -292,6 +293,12 @@ struct IOSPlayerSheet: View {
                 alignment: .center
             )
             .frame(maxWidth: .infinity)
+            // VoiceOver: read the transcript as one prose element (the karaoke
+            // spans are visual-only highlighting, not separate semantics).
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Transcript")
+            .accessibilityValue(item.transcript)
+            .accessibilityIdentifier("iosPlayer_transcript")
         }
         .frame(maxHeight: .infinity)
         .padding(.horizontal, 8)
