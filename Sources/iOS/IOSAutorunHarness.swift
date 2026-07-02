@@ -62,6 +62,10 @@ enum IOSAutorunHarness {
             fatalError("QVOICE_IOS_CRASH_TEST: deliberate crash for the on-device crash-capture lane")
         }
         let spec = parseSpec(ProcessInfo.processInfo.environment[environmentKey] ?? "")
+        // Record calls + lifecycle transitions for the sentinel so a doomed run
+        // self-reports its cause ("call arrived at t=42s"). Autorun-only → inert
+        // on user launches.
+        IOSInterruptionRecorder.shared.start()
         Task { @MainActor in
             await run(spec: spec, engine: engine)
         }
@@ -182,6 +186,10 @@ enum IOSAutorunHarness {
         }
 
         record.finishedAt = ISO8601DateFormatter().string(from: Date())
+        let interruptions = IOSInterruptionRecorder.shared.snapshot()
+        if !interruptions.isEmpty {
+            record.interruptions = interruptions
+        }
         writeSentinel(record, runID: runID)
     }
 
@@ -378,6 +386,9 @@ enum IOSAutorunHarness {
         var realtimeFactor: Double?
         var finishReason: String?
         var error: String?
+        /// Calls + lifecycle transitions observed during the run (see
+        /// `IOSInterruptionRecorder`) — explains doomed runs. Omitted when clean.
+        var interruptions: [IOSInterruptionRecorder.Event]?
         let deviceModel: String
         let systemName: String
         let systemVersion: String

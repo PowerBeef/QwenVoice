@@ -87,6 +87,7 @@ on the Mac with the phone locked + screen-dark (OLED-safe). Opt out with `QVOICE
 | `pull [dest]` | `devicectl device copy from --domain-type appDataContainer --source Library/Caches/Vocello/diagnostics` (the app's pullable mirror — the App-Group container is NOT devicectl-readable). Default dest `build/ios-diagnostics`. |
 | `bench [spec] [--label "note"]` | The full loop: `build → install → launch-with-autorun → poll the sentinel → pull diagnostics → summarize`. Exits non-zero if the generation failed. |
 | `ui-test [--all\|--cold] [target]` | Run `VocelloiOSUITests` on the device (see §2). **Default:** Smoke + Sheet + OnDeviceDownload. `--cold` runs cold generation only (`ui-test` alone: **skips** when Speed model missing). `--all` runs every class (debug). Optional `target` scopes further. |
+| `device-state [--json]` | Interference probe: `MIRROR_ACTIVE` (0) / `PHONE_IN_USE` (10) / `CALL_ACTIVE` (11) / `MIRROR_CONNECTING` (12) / `MIRROR_DISCONNECTED` (13) / `DEVICE_UNREACHABLE` (14). Visual (window screenshot + Vision OCR, fr+en) — the Mirroring window has no accessibility content. |
 | `preflight [--cold]` | One-shot readiness check (mirror + device reachable + signing + app + dSYM) + unlock advisory. `--cold` adds device-model install advisory. |
 | `uitest-doctor [--enable-gate1]` | Mac Gate 1 + device doctor + iPhone unlock/passcode guidance for unattended ui-test. |
 | `models` | `models check` — which ui-test/bench tiers need Speed on device (Mac cannot verify App Group files). |
@@ -171,6 +172,26 @@ is append-only + size-capped (auto-pruned oldest-first), so it accumulates acros
 the sentinel is the authoritative single-run record.
 
 ---
+
+## 1c. Interference states (fail doomed runs fast)
+
+Three real-world situations doom an in-flight run: **you pick up and use the phone**
+(the app under test backgrounds; the mirror session pauses), **an incoming call**, and
+**a dead/paused Mirroring session**. `scripts/lib/ios_device_state.sh` probes them by
+screenshotting the Mirroring window (`screencapture -l`, no focus steal) and OCR-classifying
+it (Vision, French + English keywords) — the window exposes no accessibility content.
+
+How the lanes react:
+
+| Lane | Reaction |
+| --- | --- |
+| `ensure_device_ready` (ui-test/test/gate preflight) | `CALL_ACTIVE` → immediate abort. `PHONE_IN_USE` → warn only (the unlock handshake legitimately needs the phone in hand). |
+| `bench` / gate generation sentinel polls | `CALL_ACTIVE`/`MIRROR_DISCONNECTED`/`DEVICE_UNREACHABLE` → abort that poll cycle; `PHONE_IN_USE` for 2 consecutive polls (≈20 s) → abort. Cause named in the error. |
+| `ui-test` retry loop | Before the one retry: probe; `PHONE_IN_USE`/`CALL_ACTIVE` → die with the cause instead of a doomed second attempt. Final failures print the device state. |
+| `ensure_mirror` | A paused session ("Connection paused / Resume") gets one automatic Resume nudge (activate + Return — the pause overlay is macOS chrome, not mirrored iOS content). |
+| Autorun harness (on device) | `IOSInterruptionRecorder` (CXCallObserver + UIApplication lifecycle) stamps `interruptions: [{type, atMS}]` into `autorun-done.json`; `bench`/gate print them ("call_incoming at t=42.0s"). Autorun-only — ships inert. |
+
+Probe one-shot: `scripts/ios_device.sh device-state [--json]` (exit code = verdict).
 
 ## 2. XCUITest — on-device only
 

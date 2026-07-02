@@ -37,6 +37,7 @@
 #   scripts/ios_device.sh models check             # which tiers need device models
 #   scripts/ios_device.sh test [--all|--cold] [only] # ui-test + single verdict + build/ios/uitest-artifacts/
 #   scripts/ios_device.sh review [--baseline]        # on-device UI capture tour + baseline diff (burn-in-aware)
+#   scripts/ios_device.sh device-state [--json]    # interference probe: phone-in-use / call / mirror state
 #   scripts/ios_device.sh uitest-doctor [--enable-gate1]  # Mac Gate 1 + iPhone unlock advisory
 #   scripts/ios_device.sh gate                 # pre-merge gate: preflight → test → generation → crashes → verdict
 #                                              # (generation needs Speed on device; QVOICE_GATE_SKIP_GENERATION=1 to skip)
@@ -78,6 +79,7 @@ PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 # Reuse the shared storage-bloat advisory (warn-only; never deletes).
 . "$ROOT_DIR/scripts/lib/build_cache.sh"
 . "$ROOT_DIR/scripts/lib/xcresult_shots.sh"
+. "$ROOT_DIR/scripts/lib/ios_device_state.sh"
 
 note() { printf '\033[0;36m==>\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
@@ -103,15 +105,31 @@ ensure_mirror() {
   open -a "$MIRROR_APP" >/dev/null 2>&1 || warn "could not launch iPhone Mirroring ($MIRROR_APP)"
   local waited=0
   local sleep_s=3
+  local nudged=0
   while (( waited < max_wait )); do
     if xcrun devicectl list devices 2>/dev/null | grep -qi "available"; then
       note "iPhone Mirroring up; device reachable."
       return 0
     fi
+    # A paused session ("Connection paused / Resume") never reconnects on its
+    # own — nudge it once. The pause overlay is macOS chrome (not mirrored iOS
+    # content) and Resume is its default button, so activate + Return presses
+    # it without any coordinate driving.
+    if (( nudged == 0 )); then
+      local state; state="$(probe_device_state 2>/dev/null || true)"
+      if [[ "${state%%|*}" == "MIRROR_CONNECTING" ]]; then
+        note "mirroring session paused — nudging Resume…"
+        osascript -e "tell application \"$MIRROR_APP\" to activate" \
+                  -e 'delay 0.5' \
+                  -e 'tell application "System Events" to keystroke return' >/dev/null 2>&1 || true
+        nudged=1
+      fi
+    fi
     sleep "$sleep_s"; waited=$((waited + sleep_s))
     if (( sleep_s < 6 )); then sleep_s=$((sleep_s + 1)); fi
   done
   warn "device not 'available' yet — LOCK your iPhone (or wait for Auto-Lock) so iPhone Mirroring connects, then re-run."
+  warn "$(probe_device_state 2>/dev/null || true)"
 }
 
 # Strict preflight for XCUITest: mirroring + devicectl availability + unlock guidance.
@@ -146,11 +164,55 @@ PY
     die "device readiness check failed (exit $code)"
   fi
   rm -f "$tmp"
+
+  # Interference probe. CALL_ACTIVE is always fatal (a call dooms any lane).
+  # PHONE_IN_USE only warns here: the XCUITest auth handshake legitimately
+  # NEEDS the phone unlocked once, so "in use" right before ui-test may be the
+  # operator doing exactly that.
+  local state verdict
+  state="$(probe_device_state "$dev" 2>/dev/null || true)"
+  verdict="${state%%|*}"
+  case "$verdict" in
+    CALL_ACTIVE)
+      die "a phone call is active on the iPhone (${state#*|}) — finish/decline it, then re-run"
+      ;;
+    PHONE_IN_USE)
+      warn "iPhone is currently in use (${state#*|}) — fine if that's you doing the unlock handshake; otherwise lock the phone or the run will fail"
+      ;;
+  esac
+
   note "XCUITest preflight OK on $dev — unlock the iPhone once before tests start (automation auth handshake). bench/launch work with a locked phone."
 }
 
 # mirror: start/foreground iPhone Mirroring + confirm the device is reachable (manual use).
 cmd_mirror() { ensure_mirror; }
+
+# device-state [--json]: one-shot interference probe (see scripts/lib/ios_device_state.sh).
+# Exit codes: 0 MIRROR_ACTIVE · 10 PHONE_IN_USE · 11 CALL_ACTIVE · 12 MIRROR_CONNECTING ·
+# 13 MIRROR_DISCONNECTED · 14 DEVICE_UNREACHABLE. Use before/around expensive lanes to
+# fail doomed runs fast instead of timing out.
+cmd_device_state() {
+  local as_json=0
+  [[ "${1:-}" == "--json" ]] && as_json=1
+  local dev; dev="$(resolve_device 2>/dev/null || true)"
+  local line verdict detail
+  line="$(probe_device_state "$dev")"
+  verdict="${line%%|*}"
+  detail="${line#*|}"
+  if (( as_json )); then
+    VERDICT="$verdict" DETAIL="$detail" ADVICE="$(device_state_advice "$verdict")" python3 -c '
+import json, os
+print(json.dumps({
+    "verdict": os.environ["VERDICT"],
+    "detail": os.environ["DETAIL"],
+    "advice": os.environ["ADVICE"],
+}))'
+  else
+    note "device state: $verdict — $detail"
+    note "  $(device_state_advice "$verdict")"
+  fi
+  exit "$(device_state_exit_code "$verdict")"
+}
 
 # shot [out.png]: capture the iPhone Mirroring window (the live device screen) to a PNG, for
 # visual UI review on REAL hardware. devicectl has no screenshot and this Mac has no
@@ -506,6 +568,7 @@ cmd_bench() {
   rm -rf "$dest"
   note "waiting for autorun sentinel (runID=$run_id, timeout=${timeout}s)…"
   local waited=0 sentinel=""
+  local interference_streak=0 interference_state=""
   while (( waited < timeout )); do
     sleep 10; waited=$((waited + 10))
     cmd_pull "$dest" >/dev/null 2>&1 || true
@@ -515,10 +578,32 @@ cmd_bench() {
       note "sentinel found after ${waited}s"
       break
     fi
+    # Interference probe: abort fast instead of polling to the full timeout.
+    # Two consecutive hits (≈20 s) tolerate a brief glance at the phone; a call
+    # or a dead mirror session dooms the run immediately.
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    case "$verdict" in
+      CALL_ACTIVE|MIRROR_DISCONNECTED|DEVICE_UNREACHABLE)
+        die "run doomed at ${waited}s — $verdict: $(device_state_advice "$verdict") (${state#*|})"
+        ;;
+      PHONE_IN_USE)
+        interference_streak=$((interference_streak + 1))
+        interference_state="$state"
+        if (( interference_streak >= 2 )); then
+          die "run doomed at ${waited}s — PHONE_IN_USE for ${interference_streak} consecutive checks: $(device_state_advice PHONE_IN_USE) (${interference_state#*|})"
+        fi
+        warn "iPhone appears in use (${state#*|}) — will abort if it persists"
+        ;;
+      *)
+        interference_streak=0
+        ;;
+    esac
     note "…still generating (${waited}s)"
   done
 
-  [[ -n "$sentinel" && -f "$sentinel" ]] || die "no sentinel after ${timeout}s — autorun didn't write. Diagnose live with: $0 console \"$spec\""
+  [[ -n "$sentinel" && -f "$sentinel" ]] || die "no sentinel after ${timeout}s — autorun didn't write. Device state: $(probe_device_state 2>/dev/null || echo unknown). Diagnose live with: $0 console \"$spec\""
 
   # The summarizer reads <dir>/engine/generations.jsonl — find the dir that holds it.
   local diag="$dest"
@@ -541,6 +626,8 @@ if r.get("status") == "ok":
     print("  out      :", r.get("audioPath"))
 else:
     print("  error    :", r.get("error"))
+for e in r.get("interruptions") or []:
+    print("  ⚠ interruption: %s at t=%.1fs" % (e.get("type"), (e.get("atMS") or 0) / 1000.0))
 print("  device   :", r.get("deviceModel"), r.get("systemName"), r.get("systemVersion"))
 PY
 
@@ -723,6 +810,16 @@ cmd_ui_test() {
       return 0
     fi
     if (( attempt == 1 )) && _ui_test_log_needs_unlock_retry "$log"; then
+      # Before burning a second multi-minute attempt: if the phone is actively
+      # in use or on a call, the retry is doomed — name the cause and stop.
+      local state verdict
+      state="$(probe_device_state "$dev" 2>/dev/null || true)"
+      verdict="${state%%|*}"
+      case "$verdict" in
+        CALL_ACTIVE|PHONE_IN_USE)
+          die "not retrying — $verdict: $(device_state_advice "$verdict") (${state#*|})"
+          ;;
+      esac
       attempt=$((attempt + 1))
       continue
     fi
@@ -733,6 +830,7 @@ cmd_ui_test() {
   [[ -n "$xcresult" ]] && warn "xcresult bundle: $xcresult"
   warn "ui-test log: $log"
   [[ -d "$UI_TEST_SCREENSHOT_DIR" ]] && warn "screenshots: $UI_TEST_SCREENSHOT_DIR"
+  warn "device state at failure: $(probe_device_state "$dev" 2>/dev/null || echo unknown)"
   die "device UI tests did not report TEST SUCCEEDED (exit ${status:-1}; see $log)"
 }
 
@@ -1148,7 +1246,7 @@ cmd_gate() {
   if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
     echo "test: PASS" | tee -a "$verdict"
   else
-    echo "test: FAIL (see test.log)" | tee -a "$verdict"; overall=1
+    echo "test: FAIL (see test.log; device state: $(probe_device_state 2>/dev/null || echo unknown))" | tee -a "$verdict"; overall=1
   fi
 
   if [[ "$skip_generation" != "1" ]]; then
@@ -1211,18 +1309,39 @@ _gate_generation_check() {
   local dest="$gate_dir/.gen-diagnostics"
   rm -rf "$dest"
   local waited=0 sentinel=""
+  local interference_streak=0
   while (( waited < timeout )); do
     sleep 10; waited=$((waited + 10))
     ( cmd_pull "$dest" ) >/dev/null 2>&1 || true
     sentinel="$(find "$dest" -name autorun-done.json -path "*/${run_id}/*" 2>/dev/null | head -1)"
     [[ -n "$sentinel" && -f "$sentinel" ]] && break
+    # Fast-abort on interference (same policy as cmd_bench's poll loop).
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    case "$verdict" in
+      CALL_ACTIVE|MIRROR_DISCONNECTED|DEVICE_UNREACHABLE)
+        echo "aborted at ${waited}s — $verdict: $(device_state_advice "$verdict")"
+        return 1
+        ;;
+      PHONE_IN_USE)
+        interference_streak=$((interference_streak + 1))
+        if (( interference_streak >= 2 )); then
+          echo "aborted at ${waited}s — PHONE_IN_USE persisted: $(device_state_advice PHONE_IN_USE)"
+          return 1
+        fi
+        ;;
+      *) interference_streak=0 ;;
+    esac
   done
-  [[ -n "$sentinel" && -f "$sentinel" ]] || { echo "no autorun sentinel after ${timeout}s"; return 1; }
+  [[ -n "$sentinel" && -f "$sentinel" ]] || { echo "no autorun sentinel after ${timeout}s (device state: $(probe_device_state 2>/dev/null || echo unknown))"; return 1; }
   cp "$sentinel" "$gate_dir/generation-sentinel.json" 2>/dev/null || true
   python3 - "$sentinel" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
 print(f"status={r.get('status')} mode={r.get('mode')} rtf={r.get('realtimeFactor')} wall={r.get('wallSeconds')}s error={r.get('error')}")
+for e in r.get("interruptions") or []:
+    print(f"interruption: {e.get('type')} at t={(e.get('atMS') or 0) / 1000.0:.1f}s")
 sys.exit(0 if r.get("status") == "ok" else 1)
 PY
 }
@@ -1241,6 +1360,7 @@ main() {
     launch)  cmd_launch "$@" ;;
     console) cmd_console "$@" ;;
     mirror)  cmd_mirror "$@" ;;
+    device-state) cmd_device_state "$@" ;;
     shot)    cmd_shot "$@" ;;
     pull)    cmd_pull "$@" ;;
     bench)   cmd_bench "$@" ;;
@@ -1257,7 +1377,7 @@ main() {
     uitest-doctor) cmd_uitest_doctor "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|shot|pull|bench|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|device-state|shot|pull|bench|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
   esac
 }
 

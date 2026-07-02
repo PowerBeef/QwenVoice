@@ -117,3 +117,4 @@ exploratory UX review only; the sentinel/telemetry files are the ground truth.
 | Preview underrun/chunk gap | `streaming-preview-check` output names the failing signpost; escalate to the backend-mlx role |
 | Focus stolen mid-run | `scripts/uitest_measure.sh activate`, re-`see`, continue |
 | mirroir taps landing wrong | Re-run `describe_screen` (window may have moved); check Mirroring window wasn't resized |
+| Run died mid-flight for no code reason | `scripts/ios_device.sh device-state` — phone in use / call / mirror paused are named verdicts; bench sentinels also carry `interruptions` events |

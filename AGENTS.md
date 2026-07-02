@@ -199,7 +199,8 @@ scripts/ios_device.sh crashes [--test]   # pull + symbolicate MetricKit diagnost
 scripts/ios_device.sh debug [spec]       # get-task-allow build + LLDB attach
 scripts/ios_device.sh logs [spec]        # attached launch → retained log
 scripts/ios_device.sh gate               # pre-merge gate: preflight → test → generation → crashes (fatal)
-scripts/ios_device.sh doctor|launch|console|pull|shot|mirror
+scripts/ios_device.sh doctor|launch|console|pull|shot|mirror|device-state
+# device-state: interference probe (phone-in-use / call / mirror state) — exit code = verdict
 
 # Perf/quality gate (deterministic driver; listening pass is mandatory pre-merge)
 # Full operator procedure: docs/reference/benchmarking-procedure.md §4.1
