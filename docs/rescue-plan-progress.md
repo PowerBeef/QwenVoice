@@ -68,10 +68,27 @@ Compile-verified (`build_foundation_targets.sh ios` BUILD SUCCEEDED). On-device
 > `761c1a4` is pushed. Do the steps below exactly; each has its own verification.
 > If a step fails twice the same way, STOP and report — do not improvise new tools.
 
-### Step 1 — Read the J1 verification result (macOS, no phone needed)
+### Step 1 — J1 verification (macOS, no phone needed)
 
-A `scripts/macos_test.sh bench-ui --label "j1-verify-round3"` run was IN FLIGHT at
-handoff (log: `/tmp/bench-ui-j5.log`, ~20 min). When it prints the gate line:
+**Status at handoff:** the `j1-verify-round3` run FAILED EARLY (log:
+`/tmp/bench-ui-j5.log`, artifacts `build/macos/bench-ui-xpc-bench-20260702-142137/`)
+with a NEW signature, not the J1 row loss: take #1 (custom/medium/cold) died at
+`VocelloMacUIQuery.clearScriptEditor` (line 111) — app launched fine, sidebar
+navigation worked, the editor was clicked, but `textInput_charCount` never appeared
+(3 retries) and the test failed at t≈56 s with 0 telemetry rows. Two possibilities:
+
+- **Flake/environment** (a stray `sysmond service not found` appeared; earlier same-day
+  runs passed this step twice). → Rerun once:
+  `scripts/macos_test.sh bench-ui --label "j1-verify-round3b"` (idle machine first:
+  `pgrep -x xcodebuild`).
+- **Regression from `761c1a4`** (it touched `Sources/ContentView.swift` marker block +
+  made `MacUITestSurfaceMarkers` an `@Observable` class). If the rerun fails the same
+  way: run `scripts/macos_test.sh test` (smoke) — if smoke also fails around the
+  composer, inspect the ContentView `HiddenWindowMarkers` change first; `git revert`
+  of the ContentView/MacUITestSurfaceMarkers hunks is acceptable ONLY as a last resort
+  (it reintroduces frozen markers — J1 round 2 — so prefer a forward fix).
+
+When a rerun completes normally, judge the gate line:
 
 - `expected=29 engine=29 service=29 app=29 merged=29` + PASS → J1 is CLOSED. Update
   this doc (§3b round-3 entry → "verified PASS <date>"), commit, push. Done.
