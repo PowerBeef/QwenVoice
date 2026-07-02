@@ -29,8 +29,8 @@ this doc.** All claims below are cited to a file or commit; re-verify before rel
   entitled per-app limit ≈ **~6 GB** on the 17 Pro, ~5–5.5 GB on 8 GB devices. No hard
   `Memory.memoryLimit` on any tier (§2).
 - **Remaining work (§9):** the design-mode `fail:dropout` / `warn:clicks` audioQC lead (listening
-  pass), an 8 GB-device proof (only the 17 Pro is measured), the signed-IPA/TestFlight lane, the 0.6B
-  variant evaluation, and the gated mlx-swift 0.31 bump.
+  pass), an 8 GB-device proof (only the 17 Pro is measured), the signed-IPA/TestFlight lane, and the
+  gated mlx-swift 0.31 bump. (The 0.6B variant evaluation was **ruled out 2026-07-02** — see §9 P2.)
 
 ---
 
@@ -219,9 +219,11 @@ improvable:
 - **Talker-KV sliding window is ~0 RAM benefit** — the talker KV is tens of MB, not GB (the streaming
   path already keeps peak flat); shipped env-only/off (§3).
 
-**Net:** the realistic path to better *iPhone* speed/footprint is not micro-optimizing the 1.7B decode
-loop — it's evaluating the smaller/faster **0.6B variant** (§9), since 1.7B-4bit is already
-faster-than-realtime on device (§6).
+**Net:** 1.7B-4bit is already faster-than-realtime on device (§6) and the decode loop is
+bounded (§5). The smaller 0.6B variant was considered as the next speed/footprint lever but
+**ruled out by maintainer decision (2026-07-02)** — Voice Design requires the 1.7B model, and
+the product ships one model family across all three modes. iPhone speed work therefore
+focuses on 1.7B variants only (mlx-swift bump when gated review passes, kernel-level work).
 
 ---
 
@@ -329,12 +331,12 @@ Distribution certificate in the team and (2) a sibling `archive-ios` CI job to t
 `compile-ios` job in `.github/workflows/release.yml`. Local on-device build/test is already
 established (`ios-device-testing.md`); on-device proof is **not** a public-release blocker (macOS-first).
 
-**P2 — evaluate the 0.6B variant for on-device.** OPTIMIZATION.md §F's net conclusion: backend speed
-for 1.7B-4bit is bounded (§5), so the realistic lever for *better* iPhone RTF / lower footprint is the
-smaller **0.6B** Qwen3-TTS variant (verified but intentionally unlisted; the contract `platforms`
-array currently lists 1.7B Speed for iOS). Blocked on: an on-device RTF/quality bench of 0.6B vs the
-1.7B Speed tier + a UI/catalog slot. Only pursue if it meaningfully beats 1.7B-4bit on RTF/footprint
-*without* a quality regression by ear.
+**P2 — 0.6B variant: RULED OUT (maintainer decision, 2026-07-02).** The 0.6B checkpoints exist
+(`Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`; mlx-community publishes a 4-bit of the Base only), but
+**Voice Design is only available with the 1.7B model** — shipping a 0.6B tier would fragment the
+mode matrix (Custom-only tier) for a speed win the 1.7B doesn't need (already >1× realtime on
+device). Vocello stays **1.7B-variants-only** (Speed 4-bit / Quality 8-bit). Do not resurrect
+without a new maintainer decision.
 
 **P3 — mlx-swift 0.31.x / mlx-swift-lm 2.31.x bump (gated).** Deferred — **stay pinned at 0.30.6 /
 2.30.6**. 0.31 changes the quantization API (`Quantizable.toQuantized` gains a `QuantizationMode`;
@@ -347,7 +349,10 @@ sites in lockstep (`project.yml` *and* vendored `third_party_patches/mlx-audio-s
 **P3 — thermal-state monitoring + automatic fallback.** Not implemented. Map to the `iPhonePro` case in
 `NativeMemoryPolicyResolver` + a `ProcessInfo.thermalState` observer; only worth it if sustained
 on-device generation shows thermal throttling (not yet observed in the short benches). Pairs naturally
-with the 0.6B variant as the fallback target.
+with a reduced-length/cooldown policy as the fallback (the 0.6B fallback target was ruled out
+2026-07-02 — Voice Design needs 1.7B). Update 2026-07-02: the observer + proactive-warm gate
+shipped (`TTSEngineStore.startThermalObservation`, serious/critical blocks prewarm/priming;
+`QVOICE_IOS_THERMAL_GATE=off` escape hatch).
 
 **Research question — Quality (8-bit) on a 12 GB iPhone.** Currently iPhone is Speed-4bit-only by
 contract (`platforms: ["iOS","macOS"]` for Speed, `["macOS"]` for Quality). The 17 Pro's ~6 GB

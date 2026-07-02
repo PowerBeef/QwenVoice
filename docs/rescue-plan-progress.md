@@ -50,14 +50,10 @@ Fail doomed on-device runs fast instead of burning tokens on timeouts:
 ## Phases 3–5 — status
 
 - P3 done: thermal gate (proactive-warm blocked at serious/critical, QVOICE_IOS_THERMAL_GATE=off) ·
-  admission-doc fix. **Remaining P3 (attended):** design-mode audioQC listening pass on device ·
-  0.6B on-device spike.
-- **0.6B spike prep (desk half done 2026-07-02):** checkpoints confirmed on the Hub —
-  `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` (official, bf16 ≈1.2 GB) and
-  `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit` (MLX 4-bit of the BASE only; no 4-bit
-  CustomVoice conversion published). Spike plan: throwaway branch, add a contract entry
-  for 0.6B CustomVoice (bf16 first; 4-bit via mlx-audio convert if promising), then
-  `ios_device.sh bench` matrix + listening pass vs the 1.7B reference.
+  admission-doc fix. **Remaining P3 (attended):** design-mode audioQC listening pass on device.
+- **0.6B spike: CANCELLED (maintainer decision, 2026-07-02)** — Voice Design is only available
+  with the 1.7B model; Vocello ships **1.7B variants only** (Speed 4-bit / Quality 8-bit).
+  Docs updated (OPTIMIZATION.md §F, ios-engine-optimization.md §9 P2).
 - P4 done: batch removed (maintainer decision) · tab lock relaxed (maintainer decision) ·
   ScrollView + Reduce Motion routing (iOS + macOS live re-read) · a11y (scrubber/transcript) ·
   Liquid Glass audit resolved · AppModel phases 3b/5/6 (see commit for scope).
@@ -70,8 +66,7 @@ Fail doomed on-device runs fast instead of burning tokens on timeouts:
 2. **Install Custom Voice (Speed)** on device → `scripts/ios_device.sh bench` per mode → listening
    pass (incl. the design dropout/clicks investigation on the pulled WAVs).
 3. **Restart Cursor** → run the mirroir Studio tour (pilot log §5).
-4. Decide on the 0.6B spike branch when you have the device time.
-5. XPC bench-ui merged-row follow-up (row loss across cold relaunches — J1 family).
+4. XPC bench-ui merged-row follow-up (row loss across cold relaunches — J1 family).
 
 ## Phase 4 findings — Liquid Glass audit item resolved as mostly false-positive (2026-07-02)
 

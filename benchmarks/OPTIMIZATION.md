@@ -179,9 +179,9 @@ table collapses because the engine reuses `OS_SIGNPOST_ID_EXCLUSIVE`):
 - **Net (revised after the compile spike):** backend speed gains for 1.7B 4-bit on this stack are **limited**
   — GPU compute (61%) is fixed at this precision, and the build overhead (22%) is not compile-attackable
   (regresses). The primary iPhone RAM unlock is the **entitlement**; transparent backend RAM cuts are modest.
-  The realistic path to acceptable **iPhone RTF** is therefore the entitlement + evaluating the smaller/faster
-  **0.6B variant** for on-device use ([.agents/backend-mlx.md](../.agents/backend-mlx.md) notes it's verified but unlisted), **not** backend
-  micro-optimization of the 1.7B decode loop. Worth confirming with one more os_signpost capture whether the
+  The realistic path to acceptable **iPhone RTF** is therefore the entitlement, **not** backend
+  micro-optimization of the 1.7B decode loop. (A 0.6B-variant evaluation was considered and
+  **ruled out 2026-07-02** — Voice Design requires 1.7B; Vocello ships 1.7B variants only.) Worth confirming with one more os_signpost capture whether the
   ~13% inter-frame gap (Code2Wav/plumbing) hides any cheap win before closing speed work.
 
 ### F.1 — STREAMING vs NON-STREAMING peak RAM (2026-06-01) — the RAM premise was wrong
@@ -265,9 +265,9 @@ dormant dev/insurance capability that activates only if the token ceiling is eve
 iPhone is no longer compile-safe-only: on-device build/validation tooling is established, the entitlement is
 enabled, and generation works on device (in-process). The `os_proc_available_memory()` gating + per-tier
 policy are implemented (`NativeMemoryPolicyResolver` iPhonePro case + `IOSMemoryBudgetPolicy`); no hard
-`memoryLimit` (reverted `b77c08e`). The remaining iOS levers (thermal-state monitoring + automatic 0.6B
-fallback, the 0.6B variant evaluation, an 8 GB-device proof, the signed-IPA/TestFlight lane) + the full
-progress record live in
+`memoryLimit` (reverted `b77c08e`). The remaining iOS levers (an 8 GB-device proof, the signed-IPA/TestFlight lane; thermal
+observation + proactive-warm gate shipped 2026-07-02; the 0.6B evaluation was ruled out the same
+day — Voice Design requires 1.7B) + the full progress record live in
 [`../docs/reference/ios-engine-optimization.md`](../docs/reference/ios-engine-optimization.md). Entitlement
 detail: [`../docs/reference/ios-increased-memory-entitlement-request.md`](../docs/reference/ios-increased-memory-entitlement-request.md).
 
