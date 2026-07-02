@@ -24,6 +24,12 @@ XcodeBuildMCP simulator tools, or Axiom `xcui` / simulator-tester for iOS work.
 Default device gate (`scripts/ios_device.sh test`): Smoke + Sheet + OnDeviceDownload.
 Add `--cold` for `ColdGeneration` (needs Speed model on device).
 
+- **Interference detection:** `scripts/ios_device.sh device-state` (exit code = verdict)
+  probes for phone-in-use / active call / paused-or-dead Mirroring via window screenshot
+  + Vision OCR. Preflight, bench/gate sentinel polls, and the ui-test retry all consult it
+  and abort doomed runs fast with the cause named — see
+  [`ios-device-testing.md`](mdc:docs/reference/ios-device-testing.md) §1c.
+
 GitHub CI runs **compile-only** (`build-for-testing` with `generic/platform=iOS`); the real
 pre-merge gate is `scripts/ios_device.sh gate` on your paired iPhone.
 
