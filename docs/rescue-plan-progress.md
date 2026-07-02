@@ -1,11 +1,16 @@
 # Rescue plan — continuation guide
 
-> **Read this first if you are picking up the rescue work.** It is written to be self-contained: current state, exact remaining steps with commands and expected outputs, and the guardrails that previous sessions learned the hard way. Follow it literally; when this doc disagrees with the code, the code wins. Delete this filemod when Phase 5 (release) ships.
+> **Read this first if you are picking up the rescue work.** It is written to be self-contained: current state, exact remaining steps with commands and expected outputs, and the guardrails that previous sessions learned the hard way. Follow it literally; when this doc disagrees with the code, the code wins. Delete this file when Phase 5 (release) ships.
 >
 > Context: [post-mortem](post-mortem/2026-06-post-fable-development-hell.md) → four
 > audits (2026-07-01) → phased remediation. Onboarding: `[AGENTS.md](../AGENTS.md)`.
+>
+> **HANDOFF (2026-07-02 ~14:20, Fable 5 → Composer 2.5, same thread):** everything
+> through `761c1a4` is committed and pushed; the working tree should be clean apart
+> from this doc. One background run may still be in flight (§2 Step 1). Start at §2
+> and do the steps in order.
 
-## 1. Current state (2026-07-02, `main` @ 42aa64e+)
+## 1. Current state (2026-07-02, `main` @ 761c1a4)
 
 ### Done and verified
 
@@ -13,7 +18,7 @@
 | Area                    | What landed                                                                                                                                                                                                        | Key commits          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
 | Visual regression net   | 8 macOS + 7 iOS review-baseline PNGs seeded (`docs/*-review-baselines/`); xcresult-attachment fallback in both review lanes                                                                                        | `6586592`            |
-| Measurement shell       | `scripts/uitest_measure.sh` (prep/finish, he click was me ignore reset, smoke-check, bench-wait, verify-generation, streaming-preview-check, bench-compare) — validated live end-to-end                            | `6586592`, `b899d64` |
+| Measurement shell       | `scripts/uitest_measure.sh` (prep/finish, reset, smoke-check, bench-wait, verify-generation, streaming-preview-check, bench-compare) — validated live end-to-end                            | `6586592`, `b899d64` |
 | Bench regression gating | `benchmarks/baselines/mac-gate-bench.json` + `benchmarks/baselines/full-matrix-speed.json`; `QWENVOICE_GATE_BENCH=1 macos_test.sh gate` compares and fails on >5% regression; summarizer RTF direction fixed       | `5b96bbf`, `846721f` |
 | Hardened gates          | New crashes during a gate run are gate-fatal (both platforms); iOS gate gained a headless generation step (design:speed — the download test uninstalls pro_custom BY DESIGN)                                       | `5b96bbf`            |
 | Agent-driven UI loop    | Peekaboo macOS generate loop verified (see pilot log §4); runbooks regenerated (`ui-test-surface.md` generated catalog + `ui-smoke-runbooks.md`)                                                                   | `b899d64`            |
@@ -57,47 +62,79 @@ Compile-verified (`build_foundation_targets.sh ios` BUILD SUCCEEDED). On-device
 | iPhone 17 Pro on-device | RTF 1.6–1.9, physFoot 2.4–3.3 GB, 0 trims | `docs/reference/ios-engine-optimization.md` §6      |
 
 
-## 2. Remaining work — exact steps
+## 2. NEXT ACTIONS — do these IN ORDER (handout for the continuing model)
 
-### A. Attended-device items (need the human; do these first when the phone is available)
+> Written 2026-07-02 ~14:20 for the Composer 2.5 handoff. Everything up to commit
+> `761c1a4` is pushed. Do the steps below exactly; each has its own verification.
+> If a step fails twice the same way, STOP and report — do not improvise new tools.
 
-1. **Green iOS gate.** Phone unlocked, nearby; install **Voice Design (Speed)** on the
-  phone (Vocello → Settings → Model Downloads, ~2.3 GB, one-time).
-   If the XCTest passcode dialog appears on the phone, the human enters it (Apple
-   security — cannot be automated; see ios-device-testing.md §"Unattended").
-2. **iOS bench + design QC listening pass.** Install **Custom Voice (Speed)** on device.
-  ```sh
-   scripts/ios_device.sh bench "custom:speed:" --label "post-rescue check"
-   scripts/ios_device.sh bench "design:speed:" --label "design QC investigation"
-   scripts/ios_device.sh bench "clone:speed:"  --label "post-rescue check"
-  ```
-   Pull WAVs land under the app's outputs; the design-mode `fail:dropout`/`warn:clicks`
-   from `ios-engine-optimization.md` §6 needs EARS: listen to the design takes; if
-   dropouts are audible (not just QC-flagged), file the defect with the chunkTimeline
-   row (the v5 telemetry localizes the silence window) before touching engine code.
-   Append `--ledger` rows to HISTORY for one cell per mode.
-3. **mirroir tour** (after any Cursor restart): `~/.mirroir-mcp/settings.json` already
-  maps the French window name. Run pilot log §5's tour; update
-   `docs/reference/computer-use-mcp-pilot-log.md` §5 with results.
+### Step 1 — Read the J1 verification result (macOS, no phone needed)
 
-### B. XPC bench-ui merged-row follow-up (desk work, medium)
+A `scripts/macos_test.sh bench-ui --label "j1-verify-round3"` run was IN FLIGHT at
+handoff (log: `/tmp/bench-ui-j5.log`, ~20 min). When it prints the gate line:
 
-Symptom (reproduced twice): `scripts/macos_test.sh bench-ui` → engine rows 29/29 but
-engine-service 27–28 and app 27 → `check_macos_xpc_bench.py` FAILs. Rows pending
-async flush die when the bench's cold takes relaunch the app (audit J1 family).
+- `expected=29 engine=29 service=29 app=29 merged=29` + PASS → J1 is CLOSED. Update
+  this doc (§3b round-3 entry → "verified PASS <date>"), commit, push. Done.
+- Rows still missing → find which takes lost rows:
 
-Fix direction (pick ONE, smallest first):
+```sh
+cd "$HOME/Library/Application Support/QwenVoice-Debug/diagnostics" && python3 - <<'EOF'
+import json
+def ids(p):
+    out = {}
+    for line in open(p):
+        try:
+            r = json.loads(line); out[r["generationID"]] = r.get("recordedAt", "")
+        except Exception: pass
+    return out
+eng = ids("engine/generations.jsonl"); svc = ids("engine-service/generations.jsonl"); app = ids("app/generations.jsonl")
+for i, (g, t) in enumerate(sorted(eng.items(), key=lambda kv: kv[1]), 1):
+    f = ("" if g in svc else " NO-SVC") + ("" if g in app else " NO-APP")
+    if f: print(f"take#{i} {t} {g}{f}")
+EOF
+```
 
-1. In `VocelloMacUIBase.relaunchForColdTake`/`relaunchForWarmSession`
-  (Tests/VocelloMacUITests), wait on the `mainWindow_lastTelemetryFlushed` marker for
-   the LAST generationID before `app.terminate()` (the marker exists; bench uses it
-   per-take — the gap is the terminate racing the app/service layer writes).
-2. If rows still drop: make `GenerationTelemetryJSONLSink` flush synchronously when
-  `QWENVOICE_UI_TEST_HOOKS=1`.
+  Then apply the NEXT lever, already scoped: make
+  `GenerationTelemetryJSONLSink.write` synchronous (await, not detached) when
+  `QWENVOICE_UI_TEST_HOOKS=1` — touch ONLY the write scheduling, re-run the same
+  bench-ui command, expect 29/29/29/29. All prior J1 fixes are described in §3b; do
+  not revert them.
 
-Verify: `scripts/macos_test.sh bench-ui --label "j1-fix"` → gate PASS (29/29/29/29).
+### Step 2 — iOS bench-ui shakeout (needs the phone: mirror ACTIVE, unlocked)
 
-### C. Release train (Phase 5 — after A is green)
+Preconditions and full procedure: `docs/reference/testing-runbook.md` §3b (iOS).
+Quick loop:
+
+```sh
+scripts/ios_device.sh device-state          # must print MIRROR_ACTIVE / exit 0
+scripts/ios_device.sh bench-ui --modes custom --lengths short --warm 1 --label shakeout
+```
+
+- PASS (gate prints per-cell row + PASS) → lane works; go to Step 3.
+- Install error `CoreDeviceError 3002` / `Connection interrupted` → phone
+  locked/unreachable; ask the user to unlock + keep the mirror active, retry ONCE.
+- A take times out → grep the log for `iosStudio_generationError`; model missing →
+  reinstall Custom Voice on the phone (a `gate` run uninstalls it — known behavior).
+
+### Step 3 — Full iOS UI-driven matrix (phone, ~40 min, thermal-sensitive)
+
+```sh
+scripts/ios_device.sh bench-ui --label "ios-ui-bench-baseline"
+```
+
+Clone cells auto-skip unless a saved voice is enrolled ON the phone (mic does not
+work through Mirroring — ask the user to enroll one via Voices → Save a new voice).
+On PASS: append one HISTORY.md row per mode cell (medium/warm) with the label, and
+record the run dir in this doc. Numbers should match §1b (RTF 1.6–1.9, 0 trims);
+>5% RTF drop vs those references = investigate before committing anything.
+
+### Step 4 — Design-mode listening pass (HUMAN ears; cannot be automated)
+
+Takes live in the app's History on the phone. Ask the user to listen to the design
+takes for dropouts/clicks. If audible: file the defect with the chunkTimeline row
+(v5 telemetry localizes the silence window) BEFORE touching engine code.
+
+### Step 5 — Release train (Phase 5; only after Steps 1–4 are green)
 
 ```sh
 QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # PASS required
