@@ -1079,8 +1079,6 @@ struct IOSVoiceCloningView: View {
     @Binding var selectedTab: IOSAppTab
     @Binding var draft: VoiceCloningDraft
     @Binding var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
-    @Binding var isReferenceRecorderPresented: Bool
-    @Binding var pendingRecordedReferenceURL: URL?
 
     @State private var transcriptLoadError: String?
     @State private var hydratedSavedVoiceID: String?
@@ -1203,6 +1201,7 @@ struct IOSVoiceCloningView: View {
             && allowsExecution
             && isModelAvailable
             && draft.referenceAudioPath != nil
+            && !draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !scriptLimitState.trimmedIsEmpty
             && !scriptLimitState.isOverLimit
             && !ttsEngine.hasActiveGeneration
@@ -1214,6 +1213,9 @@ struct IOSVoiceCloningView: View {
         }
         if draft.referenceAudioPath == nil {
             return "Choose a saved voice or record a reference clip on this iPhone."
+        }
+        if draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Reference transcript is required. Wait a moment after recording, or pick a saved voice with a transcript."
         }
         if let cloneContextStatus {
             switch cloneContextStatus {
@@ -1280,40 +1282,12 @@ struct IOSVoiceCloningView: View {
                 syncSavedVoiceSelectionState()
             }
             .onChange(of: pendingSavedVoiceHandoff) { _, _ in
-                guard isActive else { return }
                 consumePendingSavedVoiceHandoffIfNeeded()
             }
             .onChange(of: savedVoicesViewModel.voices) { _, _ in
                 guard isActive else { return }
                 syncSavedVoiceSelectionState()
             }
-            .onChange(of: pendingRecordedReferenceURL) { _, url in
-                guard let url else { return }
-                applyRecordedReferenceAudio(at: url)
-                pendingRecordedReferenceURL = nil
-            }
-    }
-
-    /// Track H landing point for freshly-recorded reference clips. Route
-    /// through `ttsEngine.importReferenceAudio(from:)` so recordings are
-    /// materialized under `AppPaths.importedReferenceAudioDir` instead of
-    /// staying in `tmp/`.
-    private func applyRecordedReferenceAudio(at url: URL) {
-        do {
-            let imported = try ttsEngine.importReferenceAudio(from: url)
-            draft.selectedSavedVoiceID = nil
-            hydratedSavedVoiceID = nil
-            transcriptLoadError = nil
-            draft.referenceAudioPath = imported.materializedPath
-            draft.referenceTranscript = ""
-            coordinator.errorMessage = nil
-            if let transcriptSidecarURL = imported.transcriptSidecarURL,
-               let transcript = try? String(contentsOf: transcriptSidecarURL, encoding: .utf8) {
-                draft.referenceTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        } catch {
-            coordinator.fail("Couldn't import the reference recording: \(error.localizedDescription)")
-        }
     }
 
     @ViewBuilder
@@ -1398,13 +1372,7 @@ struct IOSVoiceCloningView: View {
                         }
                     ),
                     onRequestRecord: {
-                        dismiss()
-                        Task { @MainActor in
-                            // Present after the bottom panel + focus backdrop finish
-                            // dismissing — same-runloop presentation often drops the cover.
-                            try? await Task.sleep(for: .milliseconds(350))
-                            isReferenceRecorderPresented = true
-                        }
+                        appModel.requestCloneReferenceRecording(afterDismiss: dismiss)
                     },
                     onDismiss: dismiss,
                     presentation: .edgeToEdge(
@@ -1468,18 +1436,51 @@ struct IOSVoiceCloningView: View {
 
     private func consumePendingSavedVoiceHandoffIfNeeded() {
         guard let pendingSavedVoiceHandoff else { return }
-        draft.applySavedVoiceSelection(
-            id: pendingSavedVoiceHandoff.savedVoiceID,
-            wavPath: pendingSavedVoiceHandoff.wavPath,
-            transcript: pendingSavedVoiceHandoff.transcript
-        )
-        // Auto-set the Clone language to the detected reference language (record→enroll flow).
+        defer { self.pendingSavedVoiceHandoff = nil }
+
+        if let voice = savedVoices.first(where: { $0.id == pendingSavedVoiceHandoff.savedVoiceID }) {
+            applySavedVoice(voice)
+            let handoffTranscript = pendingSavedVoiceHandoff.transcript
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !handoffTranscript.isEmpty {
+                draft.referenceTranscript = handoffTranscript
+            }
+        } else {
+            draft.applySavedVoiceSelection(
+                id: pendingSavedVoiceHandoff.savedVoiceID,
+                wavPath: pendingSavedVoiceHandoff.wavPath,
+                transcript: pendingSavedVoiceHandoff.transcript
+            )
+            hydratedSavedVoiceID = pendingSavedVoiceHandoff.savedVoiceID
+        }
+
         if pendingSavedVoiceHandoff.language != .auto {
             draft.selectedLanguage = pendingSavedVoiceHandoff.language
         }
         transcriptLoadError = pendingSavedVoiceHandoff.transcriptLoadError
-        hydratedSavedVoiceID = pendingSavedVoiceHandoff.savedVoiceID
-        self.pendingSavedVoiceHandoff = nil
+        autoTranscribeReferenceIfNeeded()
+    }
+
+    /// Best-effort on-device transcription when the reference sidecar / handoff
+    /// transcript is still empty (record→enroll before auto-transcribe finished).
+    private func autoTranscribeReferenceIfNeeded() {
+        let trimmed = draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty else { return }
+        guard let path = draft.referenceAudioPath else { return }
+        Task {
+            guard let result = await VoiceClipTranscriber.transcribe(
+                url: URL(fileURLWithPath: path)
+            ) else { return }
+            guard !Task.isCancelled else { return }
+            guard draft.referenceAudioPath == path else { return }
+            if draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                draft.referenceTranscript = result.text
+            }
+            if draft.selectedLanguage == .auto, result.language != .auto {
+                draft.selectedLanguage = result.language
+            }
+        }
     }
 
     private func generate() {
@@ -1491,6 +1492,12 @@ struct IOSVoiceCloningView: View {
         guard let model = cloneModel else { return }
         guard isModelAvailable else {
             coordinator.fail("Install \(model.name) in Settings to generate audio.")
+            return
+        }
+        guard !draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            coordinator.fail(
+                "Reference transcript is required for voice cloning. Wait for auto-transcription after recording, or pick a saved voice with a transcript."
+            )
             return
         }
 

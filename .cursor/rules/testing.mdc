@@ -18,8 +18,8 @@ XcodeBuildMCP simulator tools, or Axiom `xcui` / simulator-tester for iOS work.
 
 - **Warm path** — [`VocelloUITestApp`](mdc:Tests/VocelloiOSUITests/VocelloUITestApp.swift)
   launches the real engine once per session for `Smoke`, `Sheet`, and `ReviewTour`.
-- **Cold / download** — `ColdGeneration` and `OnDeviceDownload` self-launch their own
-  `XCUIApplication` when they need a fresh instance or download-specific setup.
+- **Cold / download** — `ColdGeneration` self-launches for cold-start generation tests.
+  `OnDeviceDownload` is **opt-in** (`ui-test --download`) — it uninstalls `pro_custom` in setUp.
 - **UI bench** — `VocelloiOSBenchUITests` (full matrix through the real Studio UI) runs
   ONLY via `scripts/ios_device.sh bench-ui`; gate `scripts/check_ios_ui_bench.py`. Its
   corpus must stay IDENTICAL to `BenchMatrixSpec.corpus`. Debug hooks
@@ -29,8 +29,9 @@ XcodeBuildMCP simulator tools, or Axiom `xcui` / simulator-tester for iOS work.
   under `QWENVOICE_UI_TEST_HOOKS=1`. Clone cells need a saved voice enrolled ON the
   phone — the iPhone mic is unavailable through iPhone Mirroring.
 
-Default device gate (`scripts/ios_device.sh test`): Smoke + Sheet + OnDeviceDownload.
-Add `--cold` for `ColdGeneration` (needs Speed model on device).
+Default device gate (`scripts/ios_device.sh test`): Smoke + Sheet + ColdGeneration.
+Requires **all three Speed models** on device (Custom + Design + Clone). OnDeviceDownload:
+`ui-test --download` (separate lane; uninstalls Custom Voice).
 
 - **Interference detection:** `scripts/ios_device.sh device-state` (exit code = verdict)
   probes for phone-in-use / active call / paused-or-dead Mirroring via window screenshot

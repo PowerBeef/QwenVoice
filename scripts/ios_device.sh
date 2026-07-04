@@ -29,8 +29,8 @@
 #   scripts/ios_device.sh bench-ui [--modes m,..] [--lengths l,..] [--warm N] [--label "note"]
 #                                                 # full-matrix UI-DRIVEN bench (XCUITest)
 #                                                 # build→install→autorun→pull→summarize
-#   scripts/ios_device.sh ui-test [--all|--cold] [only]
-#                                                 # device-safe UI tests (default: Smoke+Sheet+OnDeviceDownload)
+#   scripts/ios_device.sh ui-test [--all|--cold|--download] [only]
+#                                                 # device-safe UI tests (default: Smoke+Sheet+ColdGeneration; needs all Speed models)
 #   scripts/ios_device.sh crashes [--test]         # pull + symbolicate on-device crash/hang diagnostics (MetricKit)
 #   scripts/ios_device.sh debug [spec]             # attached launch + LLDB attach guidance (get-task-allow build)
 #   scripts/ios_device.sh logs [spec]              # attached launch teeing stdout → build/ios-logs/<run>.log
@@ -757,6 +757,9 @@ cmd_bench_ui() {
 UI_TEST_DEFAULT_CLASSES=(
   "VocelloiOSUITests/VocelloiOSSmokeUITests"
   "VocelloiOSUITests/VocelloiOSSheetUITests"
+  "VocelloiOSUITests/VocelloiOSColdGenerationUITests"
+)
+UI_TEST_DOWNLOAD_CLASSES=(
   "VocelloiOSUITests/VocelloiOSOnDeviceDownloadUITests"
 )
 UI_TEST_COLD_CLASSES=(
@@ -835,9 +838,10 @@ _run_ui_test_once() {
   return "$status"
 }
 
-# ui-test [--all|--cold] [only]: run VocelloiOSUITests on the device (signed XCUITest).
-# Default scope is the device-safe trio (Smoke + Sheet + OnDeviceDownload). Optional
-# [only] scopes to one class or method, e.g. VocelloiOSUITests/VocelloiOSSheetUITests.
+# ui-test [--all|--cold|--download] [only]: run VocelloiOSUITests on the device (signed XCUITest).
+# Default scope is Smoke + Sheet + ColdGeneration (all three Speed models must be installed
+# on device first). OnDeviceDownload is opt-in via --download (it uninstalls pro_custom).
+# Optional [only] scopes to one class or method.
 cmd_ui_test() {
   require_team
   local scope="default"
@@ -847,8 +851,9 @@ cmd_ui_test() {
     case "$1" in
       --all) scope="all"; shift ;;
       --cold) scope="cold"; shift ;;
+      --download) scope="download"; shift ;;
       --skip-uitest-doctor) skip_doctor=1; shift ;;
-      -*) die "unknown ui-test flag: $1 (try --all, --cold, --skip-uitest-doctor, or a VocelloiOSUITests/… target)" ;;
+      -*) die "unknown ui-test flag: $1 (try --all, --cold, --download, --skip-uitest-doctor, or a VocelloiOSUITests/… target)" ;;
       *) only="$1"; shift ;;
     esac
   done
@@ -884,6 +889,8 @@ cmd_ui_test() {
     run_targets=( "${UI_TEST_DEFAULT_CLASSES[@]}" )
   elif [[ "$scope" == "cold" ]]; then
     run_targets=( "${UI_TEST_COLD_CLASSES[@]}" )
+  elif [[ "$scope" == "download" ]]; then
+    run_targets=( "${UI_TEST_DOWNLOAD_CLASSES[@]}" )
   else
     run_targets=( "" )
   fi
@@ -1162,9 +1169,10 @@ PY
   fi
 
   note "unlock advisory: ui-test needs the iPhone UNLOCKED once (automation auth handshake); bench/launch/profile/crashes/logs work locked."
+  note "models: default test/gate needs ALL Speed models on device (Custom + Design + Clone)."
+  note "  Vocello → Settings → Model Downloads (~6.9 GB). Mac cannot verify App Group files."
   if (( cold == 1 )); then
-    note "cold generation requires Custom Voice (Speed) on the device (Settings → Model Downloads, one-time ~2.3 GB)."
-    note "The Mac cannot inspect App Group model files — install on device; bench/autorun fails cleanly if missing."
+    note "(--cold is an alias for ColdGeneration-only; default scope already includes it.)"
   fi
   (( rc == 0 )) && note "preflight OK" || die "preflight not ready (see above)"
 }
@@ -1175,10 +1183,10 @@ cmd_models() {
   case "$sub" in
     check|help|-h|--help)
       note "iOS models live in the App Group on the paired iPhone — not on this Mac."
-      note "Default ui-test (Smoke + Sheet + OnDeviceDownload): real engine on paired iPhone."
-      note "  OnDeviceDownload uninstalls pro_custom in setUp — do not pre-install for that gate."
-      note "Cold generation (--cold), bench, and profile need Custom Voice (Speed) on device:"
-      note "  Vocello iOS → Settings → Model Downloads (one-time ~2.3 GB)."
+      note "Default ui-test / gate (Smoke + Sheet + ColdGeneration): install ALL Speed models once:"
+      note "  pro_custom, pro_design, pro_clone — Vocello → Settings → Model Downloads (~6.9 GB)."
+      note "bench-ui also needs all three; clone cells need a saved voice enrolled on the phone."
+      note "OnDeviceDownload is opt-in (ui-test --download) — it uninstalls pro_custom in setUp."
       ;;
     *)
       die "unknown models subcommand '$sub' (try: check)"
@@ -1211,6 +1219,7 @@ cmd_test() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --cold) cold=1; ui_args+=("$1"); shift ;;
+      --download) ui_args+=("--download"); shift ;;
       --all) ui_args+=("$1"); shift ;;
       -*) die "unknown test flag: $1" ;;
       *) ui_args+=("$1"); shift ;;
@@ -1235,8 +1244,8 @@ cmd_test() {
   } >"$artifacts/verdict.json"
   cat "$artifacts/verdict.json" >&2
 
-  if (( cold == 1 )) && _ios_check_cold_generation_model_skip "$xcresult"; then
-    die "ColdGeneration skipped — install Custom Voice (Speed) on device once (Settings → Model Downloads). See: $0 models check"
+  if _ios_check_cold_generation_model_skip "$xcresult"; then
+    die "ColdGeneration skipped — install all Speed models on device (Custom + Design + Clone). See: $0 models check"
   fi
 
   local shots="$DERIVED/uitest-screenshots"
@@ -1323,10 +1332,9 @@ cmd_review() {
 # a verdict.txt under build/ios/gate-<run>/. Burns-in safe. Deeper dives (profile, review,
 # bench/listening-pass) are separate verbs — run them pre-release, not on every merge.
 #
-# Generation step prerequisite: Voice Design (Speed) installed on the device
-# (Settings → Model Downloads — NOT Custom Voice: the download test uninstalls
-# pro_custom by design). Escape hatch for download/management-UX work on a
-# model-less device: QVOICE_GATE_SKIP_GENERATION=1.
+# Generation step prerequisite: all Speed models installed on the device
+# (Settings → Model Downloads). Uses Custom Voice (Speed) headless autorun.
+# Escape hatch: QVOICE_GATE_SKIP_GENERATION=1.
 cmd_gate() {
   require_team
   local run_id="ios-gate-$(date +%Y%m%d-%H%M%S)"
@@ -1371,7 +1379,7 @@ cmd_gate() {
     if _gate_generation_check "$gate_dir" >>"$gate_dir/generation.log" 2>&1; then
       echo "generation: PASS (see generation.log)" | tee -a "$verdict"
     else
-      echo "generation: FAIL (see generation.log — needs Voice Design (Speed) on device: $0 models check)" | tee -a "$verdict"
+      echo "generation: FAIL (see generation.log — needs all Speed models on device: $0 models check)" | tee -a "$verdict"
       overall=1
     fi
   else
@@ -1413,15 +1421,13 @@ cmd_gate() {
 # installed (no rebuild), launch with a bounded autorun spec, poll the sentinel,
 # and pass/fail on its status. Same mechanism as `bench` minus build/install/summary.
 #
-# Uses DESIGN (Speed) deliberately: the default-gate OnDeviceDownloadUITests
-# uninstalls pro_custom in its setUp (that's what it tests), so custom-mode
-# generation can never survive a default gate run. pro_design is untouched —
-# install Voice Design (Speed) on the device ONCE and the gate stays repeatable.
+# Headless Custom Voice (Speed) generation — default gate assumes all Speed models
+# are installed on device (OnDeviceDownload is opt-in and not in default scope).
 _gate_generation_check() {
   local gate_dir="$1"
   [[ -d "$APP_PATH" ]] || cmd_install >/dev/null 2>&1 || true
   local run_id
-  run_id="$(cmd_launch "design:speed:Gate generation smoke." | tail -1)"
+  run_id="$(cmd_launch "custom:speed:Gate generation smoke." | tail -1)"
   local timeout="${QVOICE_IOS_BENCH_TIMEOUT:-300}"
   local dest="$gate_dir/.gen-diagnostics"
   rm -rf "$dest"

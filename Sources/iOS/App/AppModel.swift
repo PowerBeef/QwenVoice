@@ -107,6 +107,13 @@ final class AppModel {
     /// need the reference backdrop + liquid-glass bottom surface.
     var bottomPanelItem: IOSBottomPanelPresentation?
 
+    /// Studio Clone → Record reference clip. Hosted by `RootView` at app
+    /// chrome level so the recorder does not race the bottom-panel overlay.
+    /// Presents `IOSRecordVoiceSheet` (same enroll flow as the Voices tab).
+    var isCloneReferenceRecorderPresented = false
+
+    private var cloneReferenceRecordingPresentationTask: Task<Void, Never>?
+
     // MARK: - Modal backdrop
 
     /// True while a native bottom sheet wants the app chrome behind it
@@ -161,6 +168,23 @@ final class AppModel {
     func dismissBottomPanel() {
         bottomPanelItem = nil
         isFocusBackdropPresented = false
+    }
+
+    /// Dismiss the reference picker, then present the recorder from `RootView`
+    /// after the bottom-panel overlay tears down (avoids nested presentation races).
+    func requestCloneReferenceRecording(afterDismiss dismiss: @escaping @MainActor () -> Void) {
+        cloneReferenceRecordingPresentationTask?.cancel()
+        dismiss()
+        cloneReferenceRecordingPresentationTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            isCloneReferenceRecorderPresented = true
+        }
+    }
+
+    func cancelCloneReferenceRecording() {
+        cloneReferenceRecordingPresentationTask?.cancel()
+        isCloneReferenceRecorderPresented = false
     }
 
     // MARK: - Init

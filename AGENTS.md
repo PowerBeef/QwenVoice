@@ -352,8 +352,8 @@ the relevant role file path and the task; the subagent should read the role file
   - Direct `xcodebuild test` without `-only-testing` runs the **entire** `VocelloMacUITests` target
     (smoke + journey + review + bench) — prefer the script lanes.
 - **iOS UI tests** (`VocelloiOSUITests`) — **paired physical iPhone only** via
-  `scripts/ios_device.sh`. Default gate: Smoke + Sheet + OnDeviceDownload; add `--cold` for
-  ColdGeneration (needs Speed model on device). GitHub CI runs compile-only for iOS.
+  `scripts/ios_device.sh`. Default gate: Smoke + Sheet + ColdGeneration (all Speed models
+  on device). GitHub CI runs compile-only for iOS.
 - **iOS UI-driven bench** — `scripts/ios_device.sh bench-ui` runs `VocelloiOSBenchUITests`
   (full matrix through the real Studio UI; gate `scripts/check_ios_ui_bench.py`). Step-by-step
   procedure for both platforms' UI benches: `docs/reference/testing-runbook.md` §3b.

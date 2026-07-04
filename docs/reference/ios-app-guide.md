@@ -276,8 +276,11 @@ present, else install the model via §3) → `button(labelPrefix:"Voice: ").tap(
 **(c) Design** — `generateSection_design`.tap() → `button(labelPrefix:"Voice brief:").tap()` →
 `voiceBrief_editor`.typeText("…") → `voiceBrief_confirm`.tap() → (model check) → compose → Generate.
 
-**(d) Clone** — `generateSection_clone`.tap() → record a reference or pick a saved voice
-(from the Voices tab) → (model check) → compose → Generate.
+**(d) Clone** — `generateSection_clone`.tap() → `studioChip_reference`.tap() → **Record new clip**
+(`iosRecord_start` → record ≥10 s → `iosRecord_stop` → naming sheet → Save) **on the physical iPhone**
+(not via Mirroring — the device mic is unavailable through Mirroring). Expect the Reference chip to
+show the **saved voice name** after enroll; transcript is filled during the naming sheet when Speech
+permission is granted. Alternatively pick a saved voice from the list → (model check) → compose → Generate.
 
 **(e) History** — `rootTab_history`.tap() → (optional `historyModeFilter_*`) → `historyRowTap_<id>`.tap() (opens player).
 
@@ -296,6 +299,11 @@ present, else install the model via §3) → `button(labelPrefix:"Voice: ").tap(
 7. **On-device only** — all iOS UI tests run on a paired iPhone via `scripts/ios_device.sh`.
    ColdGeneration and OnDeviceDownload self-launch fresh app instances when needed.
 8. **Unlock once** — XCUITest needs the iPhone unlocked once for the automation auth handshake (`preflight` surfaces this); then it can lock again.
+9. **Clone reference recording** — present `IOSRecordVoiceSheet` from `RootView` via `AppModel`
+   (same enroll flow as Voices tab: record → Stop → naming sheet with transcript → Save).
+   Record on the **physical phone**; Mirroring cannot drive mic capture. Virtual mic for
+   automation: `QWENVOICE_FAKE_MIC_WAV` with an **on-device** path — see
+   [`ios-device-testing.md`](ios-device-testing.md) §3.
 
 ---
 

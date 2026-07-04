@@ -84,11 +84,6 @@ struct IOSGenerateContainerView: View {
     @Binding var voiceCloningDraft: VoiceCloningDraft
     @Binding var pendingVoiceCloningHandoff: PendingVoiceCloningHandoff?
 
-    /// Hoisted above the bottom-panel overlay so Clone reference recording
-    /// doesn't race `AppModel.dismissBottomPanel()` presentation.
-    @State private var isCloneReferenceRecorderPresented = false
-    @State private var pendingCloneReferenceRecordingURL: URL?
-
     private var hasAnyInstalledModel: Bool {
         modelManager.statuses.values.contains { status in
             if case .installed = status { return true }
@@ -137,9 +132,7 @@ struct IOSGenerateContainerView: View {
                         isActive: selectedSection == .clone,
                         selectedTab: $selectedTab,
                         draft: $voiceCloningDraft,
-                        pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff,
-                        isReferenceRecorderPresented: $isCloneReferenceRecorderPresented,
-                        pendingRecordedReferenceURL: $pendingCloneReferenceRecordingURL
+                        pendingSavedVoiceHandoff: $pendingVoiceCloningHandoff
                     )
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -157,20 +150,6 @@ struct IOSGenerateContainerView: View {
         // Leaf presence marker (see `screenPresenceMarker`): keeps `screen_generateStudio`
         // queryable without shadowing the composer/pill ids beneath it.
         .screenPresenceMarker("screen_generateStudio")
-        .fullScreenCover(isPresented: $isCloneReferenceRecorderPresented) {
-            IOSRecordingOverlay(
-                onComplete: { url in
-                    guard let stable = ReferenceClipRecordingStash.copyToStableTemp(url) else {
-                        appModel.cloneCoordinator.fail("Couldn't save the reference recording.")
-                        isCloneReferenceRecorderPresented = false
-                        return
-                    }
-                    pendingCloneReferenceRecordingURL = stable
-                    isCloneReferenceRecorderPresented = false
-                },
-                onCancel: { isCloneReferenceRecorderPresented = false }
-            )
-        }
     }
 }
 

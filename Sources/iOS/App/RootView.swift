@@ -107,6 +107,24 @@ struct RootView: View {
         .fullScreenCover(isPresented: $appModel.isOnboardingPresented) {
             IOSOnboardingFlow(isPresented: $appModel.isOnboardingPresented)
         }
+        .fullScreenCover(isPresented: $appModel.isCloneReferenceRecorderPresented) {
+            IOSRecordVoiceSheet(
+                onEnrolled: { voice, transcript, language in
+                    appModel.isCloneReferenceRecorderPresented = false
+                    appModel.pendingVoiceCloningHandoff = PendingVoiceCloningHandoff(
+                        savedVoiceID: voice.id,
+                        wavPath: voice.wavPath,
+                        transcript: transcript,
+                        transcriptLoadError: nil,
+                        language: language
+                    )
+                    appModel.studioMode = .clone
+                },
+                onDismiss: {
+                    appModel.cancelCloneReferenceRecording()
+                }
+            )
+        }
         .sheet(item: $appModel.playerSheetItem) { item in
             IOSPlayerSheet(
                 item: item,

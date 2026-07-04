@@ -35,7 +35,7 @@ the device for generation and bench paths. Download tests intentionally remove o
 | --- | --- | --- |
 | macOS `test` / `gate` / `profile` | `pro_custom_speed` in **debug** context (`QWENVOICE_DEBUG=1`) | `scripts/macos_test.sh models ensure` (install once to canonical `~/Library/Application Support/QwenVoice/models`, symlink `QwenVoice-Debug/models` → canonical) |
 | macOS ad-hoc `xcodebuild test` | same (tests skip if missing) | `models ensure` before running, or tolerate `XCTSkip` |
-| iOS default `test` / `gate` | Smoke/Sheet need none; `OnDeviceDownload` uninstalls `pro_custom` in `setUp`; the gate's **generation step needs Voice Design (Speed)** on device (`QVOICE_GATE_SKIP_GENERATION=1` to skip) | Install Voice Design (Speed) once on iPhone: Settings → Model Downloads |
+| iOS default `test` / `gate` | Smoke + Sheet + ColdGeneration + Custom Voice headless generation | Install **all three Speed models** on iPhone once: Settings → Model Downloads (~6.9 GB). `QVOICE_GATE_SKIP_GENERATION=1` to skip generation step. |
 | iOS `--cold`, `bench`, `profile` | Speed model **on the device** (App Group) | Install once on iPhone: Settings → Model Downloads |
 | CI (GitHub) | none (compile-only) | `build-for-testing` with `generic/platform=iOS` |
 
@@ -71,7 +71,8 @@ scripts/macos_test.sh profile [spec]  # Instruments + vocello bench; fails on be
 ```sh
 scripts/ios_device.sh preflight           # device + signing + app + dSYM readiness
 scripts/ios_device.sh models check        # which lanes need device models
-scripts/ios_device.sh test                # default trio: Smoke + Sheet + OnDeviceDownload
+scripts/ios_device.sh test                # default: Smoke + Sheet + ColdGeneration (all Speed models on device)
+scripts/ios_device.sh ui-test --download  # OnDeviceDownload only (uninstalls pro_custom)
 scripts/ios_device.sh test --cold         # ColdGeneration (needs Speed model on device)
 scripts/ios_device.sh gate                # pre-merge gate (device)
 ```
@@ -108,7 +109,8 @@ gated afterwards). Follow these procedures literally.
      fix per the printed advice (phone locked nearby, Mirroring resumed, no call).
    - All three Speed models installed on the phone (Settings → Model Downloads):
      Custom Voice, Voice Design, Voice Cloning. `scripts/ios_device.sh models check`.
-     Note: the `gate`'s OnDeviceDownload test UNINSTALLS Custom Voice — reinstall before
+     Note: `ui-test --download` (OnDeviceDownload) UNINSTALLS Custom Voice — run it separately
+     from the default gate; reinstall Custom Voice before the next default `test` / `gate`.
      benching if a gate ran since the last install. Downloads are serial (queued), ~4 min each.
    - Clone cells additionally need a **saved voice enrolled on the phone** (Voices →
      Save a new voice, attended — the mic does not work through iPhone Mirroring).

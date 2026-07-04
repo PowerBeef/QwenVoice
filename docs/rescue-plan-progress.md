@@ -23,8 +23,8 @@
 | 4 design listening | **OWED (human)** | Maintainer listens to History design takes on phone |
 | 5a gates + macOS review | **PASS** | `gate-mac-gate-20260702-163644`; `mac-review-20260702-164903` |
 | 5b release train | **PENDING** | Version bump / tag / DMG — after Step 4 + clone fix committed |
-| Clone reference recording | **IN FLIGHT (uncommitted)** | Voices tab record works; Studio Clone path did not. Root cause: `IOSRecordingOverlay.onDisappear` deleted temp WAV before import. Fix: hoist recorder to `IOSGenerateContainerView`, `didHandOffClip` guard, deferred presentation (~350 ms after bottom-sheet dismiss), shared `ReferenceClipRecordingStash`; iOS-only "Import from Files" removed from clone reference sheet |
-| Clone fix verification | **PARTIAL** | `build_foundation_targets.sh ios` PASS; `ios_device.sh test` PASS once (`ios-test-20260703-005411`); maintainer still reported Clone record broken → second-pass fix applied; **not manually re-verified on physical phone**; one later test run hit device auth timeout (`com.apple.sharing.authentication error 12`) — environment, not compile |
+| Clone reference recording | **FIXED (uncommitted)** | Both entry points use `IOSRecordVoiceSheet` (record → review → transcribe → name → enroll). Studio presents from `RootView` via `AppModel.requestCloneReferenceRecording`; result lands via `pendingVoiceCloningHandoff` (same as Voices tab). Prior silent-import path removed |
+| Clone fix verification | **PARTIAL** | `build_foundation_targets.sh ios` PASS; `ios_device.sh test` PASS (`ios-test-20260704-020412`); `ios_device.sh gate` PASS (`gate-ios-gate-20260704-020900`); maintainer manual Studio → Clone → Record → naming sheet → Save still owed |
 
 ### Session update (2026-07-03 ~00:30) — bench + gate closure
 
@@ -140,13 +140,14 @@ takes for dropouts/clicks. If audible: file the defect with the chunkTimeline ro
 
 ### Step A — Clone reference recording (before release) — IN FLIGHT
 
-Uncommitted fix for Studio → Clone → Reference → Record (Voices tab record already works).
-Verify on the **physical phone** — mic is unavailable through Mirroring.
+Uncommitted fix: Studio → Clone → Record now uses the same `IOSRecordVoiceSheet` enroll
+flow as the Voices tab (naming sheet + transcript after Stop). Verify on the **physical phone**
+— mic is unavailable through Mirroring.
 
 ```sh
 ./scripts/regenerate_project.sh
 ./scripts/build_foundation_targets.sh ios
-# rebuild/install on phone, then manual: Studio → Clone → Reference → Record → Use this clip → Generate
+# rebuild/install on phone, then manual: Studio → Clone → Reference → Record → Stop → Save → Generate
 scripts/ios_device.sh test    # retry if device auth flake (error 12)
 # commit + push when green
 ```
@@ -228,7 +229,7 @@ recording/enrollment is NOT broken in the app — it works when operated directl
 phone (maintainer-confirmed same day). Never triage recording as an app defect from a
 mirror session, and never drive record/enroll flows via the mirror; that step is
 attended, on the physical phone.
-- **Reference clip handoff:** copy the recorded WAV to a stable temp path (`ReferenceClipRecordingStash`) **before** dismissing `IOSRecordingOverlay`. The overlay's `onDisappear` must not call `stopWithoutSaving` after a successful handoff — use `didHandOffClip` / `handOffClip(at:)`. Studio Clone hoists the recorder above the bottom sheet; defer fullScreenCover presentation (~350 ms) after bottom-panel dismiss to avoid presentation races.
+- **Reference clip handoff:** `ReferenceClipRecordingStash` + `didHandOffClip` guard temp WAV deletion in `IOSRecordingOverlay`. **Studio Clone record presents `IOSRecordVoiceSheet` from `RootView`** via `AppModel.requestCloneReferenceRecording` (after bottom-panel dismiss) — same enroll flow as Voices tab; result via `pendingVoiceCloningHandoff`. Do not nest recorders under `IOSGenerateContainerView` while the bottom panel is active.
 
 ## 3b. Active work (2026-07-03)
 
@@ -240,11 +241,11 @@ attended, on the physical phone.
   → 29/29/29/29 PASS. Length-aware flush timeout + inline app JSONL when hooks on.
 - **iOS gate — PASS.** `gate-ios-gate-20260703-003025`. Design dropout did NOT
   reproduce in benches; perceptual listening pass still owed (Step 4).
-- **Clone reference recording — IN FLIGHT (uncommitted).** Symptom: Voices tab
-  record/save works; Studio Clone → Reference → Record did not apply the clip.
-  Root cause: overlay deleted temp file on dismiss before import; nested recorder +
-  simultaneous sheet/fullScreenCover presentation. Fix landed locally; awaiting
-  on-phone verify + commit.
+- **Clone reference recording — FIXED (uncommitted; manual verify owed).** Studio Clone
+  record now uses `IOSRecordVoiceSheet` (identical to Voices tab): Stop → naming sheet with
+  transcript → enroll → `pendingVoiceCloningHandoff`. Present from `RootView` via
+  `AppModel.requestCloneReferenceRecording`. Automated: `gate-ios-gate-20260704-020900` PASS.
+  Maintainer: Studio → Clone → Record on the **physical phone** — confirm naming sheet after Stop.
 - **"Recording broken through mirror" — RESOLVED (not an app defect).** Mic unavailable
   via Mirroring; physical-phone operation confirmed separately.
 

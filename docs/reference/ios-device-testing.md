@@ -38,12 +38,12 @@ hardware; git history preserves it).
   `$(QWENVOICE_DEVELOPMENT_TEAM)`. **Never commit the team id.**
 - Optional `export QVOICE_IOS_DEVICE_ID=<id|name|udid>` to pin the target device;
   otherwise the driver auto-discovers the single connected device.
-- **Device models (lane-dependent):** the default ui-test gate (`Smoke` + `Sheet` +
-  `OnDeviceDownload`) does **not** require a pre-installed model — `OnDeviceDownload`
-  uninstalls `pro_custom` in `setUp` to exercise the cancel path. **`--cold`**, **`bench`**,
-  and **`profile`** require Custom Voice (Speed) installed once on the iPhone (Settings →
-  Model Downloads). Run `scripts/ios_device.sh models check` for the matrix; the Mac cannot
-  verify App Group files remotely.
+- **Device models (required for default gate):** install **all three Speed models**
+  (`pro_custom`, `pro_design`, `pro_clone`) on the paired iPhone once via Settings →
+  Model Downloads (~6.9 GB). Default `test` / `gate` runs Smoke + Sheet + ColdGeneration
+  plus headless Custom Voice generation. `OnDeviceDownload` is opt-in (`ui-test --download`;
+  uninstalls `pro_custom` in setUp). Run `scripts/ios_device.sh models check` for the matrix;
+  the Mac cannot verify App Group files remotely.
 
 The increased-memory entitlement is enabled + verified on the app's App ID (the engine is
 in-process — there is no extension App ID) — see
@@ -87,18 +87,18 @@ on the Mac with the phone locked + screen-dark (OLED-safe). Opt out with `QVOICE
 | `pull [dest]` | `devicectl device copy from --domain-type appDataContainer --source Library/Caches/Vocello/diagnostics` (the app's pullable mirror — the App-Group container is NOT devicectl-readable). Default dest `build/ios-diagnostics`. |
 | `bench [spec] [--label "note"]` | The full loop: `build → install → launch-with-autorun → poll the sentinel → pull diagnostics → summarize`. Exits non-zero if the generation failed. |
 | `bench-ui [--modes m,…] [--lengths l,…] [--warm N] [--label "note"]` | **Full-matrix UI-DRIVEN bench** (`VocelloiOSBenchUITests`, iOS counterpart of `macos_test.sh bench-ui`): drives the real Studio UI per take (default 29-take custom/design/clone matrix), engine telemetry stamped `notes.benchRunID`, gated by `scripts/check_ios_ui_bench.py` against the test's `VOCELLO-BENCH-UI-MANIFEST` take count. Needs all Speed models installed; **clone cells need a saved voice enrolled on the phone** (mic is unavailable through Mirroring) and are skipped otherwise. Debug hooks: `Sources/iOS/Studio/IOSStudioBenchHooks.swift` (`iosStudio_lastGenerationComplete` / `iosStudio_generationError` / `iosStudio_benchClearScript`, active only under `QWENVOICE_UI_TEST_HOOKS=1`). |
-| `ui-test [--all\|--cold] [target]` | Run `VocelloiOSUITests` on the device (see §2). **Default:** Smoke + Sheet + OnDeviceDownload. `--cold` runs cold generation only (`ui-test` alone: **skips** when Speed model missing). `--all` runs every class (debug). Optional `target` scopes further. |
+| `ui-test [--all\|--cold\|--download] [target]` | Run `VocelloiOSUITests` on the device (see §2). **Default:** Smoke + Sheet + ColdGeneration (all Speed models on device). `--download` runs OnDeviceDownload only. `--cold` is ColdGeneration-only. `--all` runs every class. |
 | `device-state [--json]` | Interference probe: `MIRROR_ACTIVE` (0) / `PHONE_IN_USE` (10) / `CALL_ACTIVE` (11) / `MIRROR_CONNECTING` (12) / `MIRROR_DISCONNECTED` (13) / `DEVICE_UNREACHABLE` (14). Visual (window screenshot + Vision OCR, fr+en) — the Mirroring window has no accessibility content. |
 | `preflight [--cold]` | One-shot readiness check (mirror + device reachable + signing + app + dSYM) + unlock advisory. `--cold` adds device-model install advisory. |
 | `uitest-doctor [--enable-gate1]` | Mac Gate 1 + device doctor + iPhone unlock/passcode guidance for unattended ui-test. |
 | `models` | `models check` — which ui-test/bench tiers need Speed on device (Mac cannot verify App Group files). |
-| `test [--all\|--cold] [target]` | `ui-test` wrapper + verdict artifacts. **`test --cold` fails** if ColdGeneration was skipped for missing Speed model (post-xcresult check). Default gate needs **no** pre-installed model. |
+| `test [--all\|--cold\|--download] [target]` | `ui-test` wrapper + verdict artifacts. **Fails** if ColdGeneration skipped (missing Speed models). |
 | `crashes [--test]` | Pull + `xcsym`-symbolicate MetricKit crash/hang diagnostics (see §3). `--test` deliberately crashes to verify the lane. |
 | `debug [spec]` | `get-task-allow` build + attached launch + the LLDB attach command. |
 | `logs [spec]` | Attached launch teeing stdout/stderr → `build/ios-logs/<run>.log`. |
 | `profile [spec]` | Instruments/xctrace trace of an autorun generation → `build/ios/profile-<ts>.trace`. |
 | `review [--baseline]` | On-device UI capture tour + baseline pairs (see §3); `--baseline` seeds `docs/ios-review-baselines/`. |
-| `gate` | One-command pre-merge gate: preflight → test → **generation (headless autorun)** → crashes (**gate-fatal on new payloads**) → verdict (`build/ios/gate-<run>/`). Generation needs Speed on device; skip with `QVOICE_GATE_SKIP_GENERATION=1`. |
+| `gate` | One-command pre-merge gate: preflight → test → **generation (Custom Voice headless autorun)** → crashes (**gate-fatal on new payloads**) → verdict. Needs all Speed models on device; skip generation with `QVOICE_GATE_SKIP_GENERATION=1`. |
 
 ```sh
 export QWENVOICE_DEVELOPMENT_TEAM=<team-id>
@@ -209,9 +209,9 @@ Run UI tests on hardware with **`scripts/ios_device.sh ui-test`**
 
 | Command | Classes | Notes |
 |---------|---------|-------|
-| `scripts/ios_device.sh ui-test` | Smoke, Sheet, OnDeviceDownload | Default (~1–2 min). Real engine; **OnDeviceDownload uninstalls `pro_custom` in setUp** — do not pre-install for this gate. |
-| `scripts/ios_device.sh ui-test --cold` | ColdGeneration | Real cold launch; **skips** when Speed model not installed on device. |
-| `scripts/ios_device.sh test --cold` | ColdGeneration (via wrapper) | Same suite as `--cold`, but **fails the run** if ColdGeneration skipped for missing Speed model. |
+| `scripts/ios_device.sh ui-test` | Smoke, Sheet, ColdGeneration | Default (~1–2 min). Requires all Speed models on device. |
+| `scripts/ios_device.sh ui-test --download` | OnDeviceDownload | Download/cancel UX; **uninstalls `pro_custom` in setUp**. |
+| `scripts/ios_device.sh ui-test --cold` | ColdGeneration only | Same cold-launch test as default scope. |
 | `scripts/ios_device.sh ui-test --all` | All classes | Debug/soak only. Cold gen skips without model unless using `test --cold`. |
 
 **Preflight:** `ui-test` runs `ios_uitest_doctor` (Mac Gate 1 check), then `ensure_device_ready`
@@ -343,6 +343,31 @@ committed `docs/ios-review-baselines/`. The tour doubles as an a11y reachability
 stays dark/locked — headless lanes (`bench`/`profile`/`crashes`/`logs`) never light it.
 The UI-review tour is **capture-and-dismiss**: each sheet is opened only long enough to
 screenshot, then closed — never dwell on a static high-contrast screen.
+
+### Virtual microphone (`QWENVOICE_FAKE_MIC_WAV`) on device
+
+[`ReferenceClipRecorder`](../../Sources/SharedSupport/ViewModels/ReferenceClipRecorder.swift)
+supports the same virtual-mic env var as macOS: when set to a **readable on-device path**,
+Record simulates capture from that WAV (elapsed time + level meter from the clip envelope;
+no mic TCC prompt).
+
+**macOS paths do not work on iPhone.** Stage a 10–20 s mono WAV into the app container,
+then launch with the device-local path:
+
+```sh
+# 1. Push a fixture WAV into the app data container (example destination — adjust after pull)
+xcrun devicectl device copy to --device <udid> \
+  --destination "Library/Caches/Vocello/fake-mic.wav" \
+  --source /path/on/mac/to/reference-clip.wav \
+  --domain-type appDataContainer --domain-identifier com.patricedery.vocello
+
+# 2. Launch with the ON-DEVICE path (ios_device.sh launch forwards QWENVOICE_* env vars)
+QWENVOICE_FAKE_MIC_WAV="Library/Caches/Vocello/fake-mic.wav" \
+  scripts/ios_device.sh launch
+```
+
+**Recording on the physical phone** (real mic) is required for manual Clone QA — iPhone
+Mirroring does not expose the device microphone to the Mac.
 
 ---
 
