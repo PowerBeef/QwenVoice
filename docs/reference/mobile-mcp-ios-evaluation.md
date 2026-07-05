@@ -24,7 +24,7 @@ Related: [on-device-ui-testing-research-report.md](on-device-ui-testing-research
 | macOS exploratory | Peekaboo | **Unchanged** |
 
 **Hard rule:** MLX engine tests run on **real device only** — never mobile-mcp iOS Simulator
-for Vocello engine work ([`AGENTS.md`](../../AGENTS.md) §7).
+for Vocello engine work ([`AGENTS.md`](../../AGENTS.md) Hard rules).
 
 ---
 

@@ -19,7 +19,7 @@
 **Consults:**
 - `docs/ARCHITECTURE.md` §6 (iOS request lifecycle)
 - `docs/reference/{ios-app-guide,ios-device-testing,ios-engine-optimization,ios-appstore-submission,ios-increased-memory-entitlement-request}.md`
-- Root `AGENTS.md` §7 (hard rules)
+- Root `AGENTS.md` (Hard rules) + [`.cursor/rules/project-structure.mdc`](../.cursor/rules/project-structure.mdc)
 
 ## Required pre-read
 

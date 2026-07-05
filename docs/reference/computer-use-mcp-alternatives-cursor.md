@@ -291,7 +291,7 @@ Mirror driving (Tier B) is **observation only** — do not extend for agent benc
 | --- | --- |
 | Cursor cloud agent computer use | Remote VM — no local MLX |
 | cursor-ide-browser | Web only |
-| XcodeBuildMCP simulator tools | Off-limits for real MLX iOS (AGENTS.md §7) |
+| XcodeBuildMCP simulator tools | Off-limits for real MLX iOS ([`AGENTS.md`](../../AGENTS.md) Hard rules) |
 | Axiom xcui / simulator-tester | Same |
 
 ---

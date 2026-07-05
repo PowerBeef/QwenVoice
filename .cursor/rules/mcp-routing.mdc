@@ -129,4 +129,4 @@ manual visual pass. The retired `zai-mcp-server` `ui_diff_check` tool is no long
 - **Axiom Cursor plugin** — removed; superseded by Axiom MCP (`axiom` / `user-axiom`). Do not
   use `/axiom:*` slash commands, plugin skill paths, or plugin `bin/` routing.
 - **`plugin-xcodebuildmcp-sentry`** — removed; use `user-xcodebuildmcp`.
-- iOS Simulator for any Vocello test or agent workflow — off-limits (§7 in root [`AGENTS.md`](mdc:AGENTS.md)).
+- iOS Simulator for any Vocello test or agent workflow — off-limits (Hard rules in root [`AGENTS.md`](mdc:AGENTS.md)).

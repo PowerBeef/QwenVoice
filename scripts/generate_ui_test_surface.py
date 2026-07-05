@@ -50,7 +50,7 @@ def render(groups: dict[str, list[tuple[str, list[str]]]]) -> str:
         "python3 scripts/generate_ui_test_surface.py",
         "```",
         "",
-        "These identifiers are **stable test surface area** (AGENTS.md §7) and must survive",
+        "These identifiers are **stable test surface area** (AGENTS.md Hard rules) and must survive",
         "refactors. They are the semantic reference for what to look for on screen — used by",
         "XCUITest suites, the Peekaboo/mirroir exploratory loops, and the review runbooks.",
         "Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\\(id)`).",

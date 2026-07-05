@@ -20,7 +20,7 @@
 **Consults:**
 - `docs/ARCHITECTURE.md` §4 (engine core), §9 (model management), §11 (telemetry)
 - `docs/reference/{mlx-guide,qwen3-tts-guide,mimi-codec-guide,metal-guide,swift-performance-guide,ios-engine-optimization,telemetry-and-benchmarking}.md`
-- Root `AGENTS.md` §7 (hard rules + engine invariants)
+- Root `AGENTS.md` (Hard rules) + [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) (engine invariants)
 
 ## Required pre-read
 

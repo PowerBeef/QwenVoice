@@ -5,9 +5,9 @@ alwaysApply: true
 
 # Project structure & non-negotiables
 
-Authoritative onboarding is [`AGENTS.md`](mdc:AGENTS.md) and
-[`docs/ARCHITECTURE.md`](mdc:docs/ARCHITECTURE.md). When a doc disagrees with the code, the
-code wins. These are the invariants that must hold for **every** change:
+[`AGENTS.md`](mdc:AGENTS.md) is the **navigation index** (workflows, role routing, deep links).
+**Enforceable invariants** live here and in [`docs/ARCHITECTURE.md`](mdc:docs/ARCHITECTURE.md).
+When a doc disagrees with the code, the code wins. These invariants must hold for **every** change:
 
 - **`project.yml` is the Xcode project source of truth.** Never hand-edit
   `QwenVoice.xcodeproj/project.pbxproj`. Edit `project.yml`, then run

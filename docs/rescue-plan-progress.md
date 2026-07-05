@@ -259,7 +259,7 @@ attended, on the physical phone.
 
 | Need                                  | Location                                                                            |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| Build/test commands                   | `AGENTS.md` §8                                                                      |
+| Build/test commands                   | `AGENTS.md` (Workflows + Commands)                                                  |
 | Testing lanes + gates                 | `docs/reference/testing-runbook.md`, `macos-testing.md`, `ios-device-testing.md`    |
 | Deterministic measurement             | `scripts/uitest_measure.sh` (header = manual)                                       |
 | Device interference probe             | `scripts/ios_device.sh device-state`; lib `scripts/lib/ios_device_state.sh`         |

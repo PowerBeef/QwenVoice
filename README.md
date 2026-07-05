@@ -186,7 +186,7 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 ## Contributing
 
 - **Report bugs or request features:** [GitHub Issues](https://github.com/PowerBeef/QwenVoice/issues)
-- **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (commands in §8, testing in §12)
+- **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (Workflows + Commands; testing in [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc))
 - **Release QA checklist:** [`docs/reference/macos-release-qa.md`](docs/reference/macos-release-qa.md)
 
 **Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitHub → **Settings → General → Social preview** so link cards use the Vocello artwork.

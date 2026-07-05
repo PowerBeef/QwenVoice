@@ -8,7 +8,7 @@ alwaysApply: false
 
 Tests are run by `scripts/*.sh` + `xcodebuild`, **never** by an agent driving the screen
 (the old computer-use / desktop-MCP harness is gone). Keep tests deterministic and
-self-driving. See [`AGENTS.md`](mdc:AGENTS.md) §12 and the testing runbook.
+self-driving. See [`AGENTS.md`](mdc:AGENTS.md) (Workflows) and the testing runbook.
 
 ## iOS (on-device only)
 

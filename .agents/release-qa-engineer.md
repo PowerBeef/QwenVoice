@@ -20,7 +20,7 @@
 **Consults:**
 - `docs/reference/{macos-release-qa,telemetry-and-benchmarking,cli,macos-testing,ios-device-testing}.md`
 - `docs/ARCHITECTURE.md` §12 (telemetry)
-- Root `AGENTS.md` §8 (commands), §12 (testing), §13 (deployment)
+- Root `AGENTS.md` (Workflows, Commands) + [`.cursor/rules/testing.mdc`](../.cursor/rules/testing.mdc)
 
 ## Required pre-read
 

@@ -23,7 +23,7 @@
 **Consults:**
 - `docs/ARCHITECTURE.md` §3 (runtime architecture), §5 (macOS request lifecycle), §8 (macOS app surfaces)
 - `docs/reference/{macos-app-guide,macos-testing,macos-release-qa,macos-permissions,privacy-storage}.md`
-- Root `AGENTS.md` §7 (hard rules)
+- Root `AGENTS.md` (Hard rules) + [`.cursor/rules/project-structure.mdc`](../.cursor/rules/project-structure.mdc)
 
 ## Required pre-read
 
