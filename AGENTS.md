@@ -70,12 +70,12 @@ scripts/ios_device.sh lang-bench --subset quick --label "…"  # Phases 2–3 �
 scripts/ios_device.sh lang-bench --subset full --label "…"   # full 19-cell matrix (hint + output gates)
 ```
 
-**Verify:** core-test + offline fixtures exit 0; lang-bench prints `hint_gate=PASS` and
-`check_language_hints.py` matches `notes.languageHint` to
-`config/language-bench-matrix.json`. Phase 3 adds locale-locked ASR output verification via
-`check_language_output.py` (on-device Speech assets required for DE/ES/ZH/JA — install dictation
-languages in iOS Settings and wait for Wi‑Fi asset download). Runbook:
-[`docs/reference/language-bench.md`](docs/reference/language-bench.md).
+**Verify:** core-test + offline fixtures exit 0. iOS lang-bench must print **`hint_gate=PASS`**
+and **`output_gate=PASS`** (quick: 6/6 output cells; full: 18/18 — negative control is hint-only).
+`check_language_hints.py` matches `notes.languageHint` to `config/language-bench-matrix.json`.
+Phase 3 adds locale-locked ASR via `check_language_output.py`. **DE/ES/ZH/JA output cells**
+require on-device Speech assets — setup: [`language-bench.md`](docs/reference/language-bench.md)
+§ Phase 3 prerequisites (dictation languages + Wi‑Fi download on the phone).
 
 ### Pre-merge — iOS
 

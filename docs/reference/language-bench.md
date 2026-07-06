@@ -19,8 +19,30 @@ Cells tagged `"quick": true` form the **quick** subset (English + French + negat
 
 Requires Custom Voice **Speed** installed on the paired iPhone.
 
-**Speech Recognition:** Phase 3 transcribes each output WAV in the app process. Grant
+**Speech Recognition (app):** Phase 3 transcribes each output WAV in the app process. Grant
 **Settings → Privacy → Speech Recognition → Vocello** once before the first output-gated run.
+
+### Phase 3 prerequisites (on-device Speech assets)
+
+Output verification uses **on-device Speech** in the locale of each cell. EN/FR work out of the
+box; **DE, ES, ZH, JA** need system dictation languages and downloaded voice assets on the
+phone. Without them, cells fail with `transcription_failed` in `check_language_output.py` even
+when hint gate and synthesis succeed.
+
+**One-time setup (on the iPhone — Settings app, not Vocello):**
+
+1. **Keyboards:** Settings → General → Keyboard → Keyboards → Add keyboard — e.g.
+   Allemand, Espagnol, Japonais (Romaji), Chinois simplifié (Pinyin QWERTY).
+2. **Dictation languages:** Settings → search *dictée* → **Langues de Dictée** — enable
+   Allemand, Espagnol, Japonais, Mandarin (and any variants listed for your locale).
+3. **Wi‑Fi download:** Keep the phone on Wi‑Fi until Settings no longer shows that voice
+   content for those languages will download later (French UI: *sera téléchargé plus tard
+   lorsque l'iPhone sera connecté au Wi‑Fi*).
+4. **Re-run** after assets finish: `scripts/ios_device.sh lang-bench --subset full --label "lang-full-output-v3"`.
+
+Agent-driven setup (exploratory): mirroir native taps in Settings — see
+[`ios-agent-ui-tour.md`](ios-agent-ui-tour.md) is for Vocello UI; Settings flows are ad-hoc OCR.
+Prefer manual confirmation on device for speech-pack readiness.
 
 ```sh
 scripts/ios_device.sh lang-bench --subset quick --label "lang-smoke"
@@ -48,12 +70,16 @@ Gates:
 
 ### Validated (2026-07-06)
 
-Quick subset **7/7 PASS** hint gate (`ios-lang-bench-20260706-110143`).
+| Run | Subset | Hint gate | Output gate | Notes |
+| --- | --- | --- | --- | --- |
+| `ios-lang-bench-20260706-110143` | quick | **7/7 PASS** | — | Hint only (pre–Phase 3 output) |
+| `ios-lang-bench-20260706-112319` | quick | **7/7 PASS** | **6/6 PASS** | Locale-locked ASR + stored `pass`; negative control hint-only |
+| `ios-lang-bench-20260706-135146` | full | **19/19 PASS** | **7/18 FAIL** | DE/ES/ZH/JA `transcription_failed` — Speech Wi‑Fi assets pending on device |
 
-Phase 3 output gate **6/6 PASS** after locale-locked ASR + stored `pass` field
-(`ios-lang-bench-20260706-112319`). Negative control `custom-fr-text-en-pinned` is
-**hint-only** (`skipOutputVerification`) — pinned English hint is sent, but synthesis
-still speaks French for a French script today.
+Negative control `custom-fr-text-en-pinned` is **hint-only** (`skipOutputVerification`) — pinned
+English hint is sent, but synthesis still speaks French for a French script today.
+
+Re-run full output gate after Phase 3 prerequisites above are satisfied on the phone.
 
 ## macOS (in-process CLI)
 
@@ -71,6 +97,7 @@ Uses `QWENVOICE_DEBUG=1`, `vocello generate --language …`, and the hint gate a
 
 ```sh
 python3 scripts/test_check_language_hints.py
+python3 scripts/test_check_language_output.py
 ```
 
 ## Related

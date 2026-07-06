@@ -1,6 +1,6 @@
 ---
 description: Vocello testing tiers, determinism, and the no-agent-screen-driving rule
-globs: Tests/**,scripts/macos_test.sh,scripts/ios_device.sh,scripts/lib/test_models.sh,scripts/build_foundation_targets.sh,scripts/check_language_hints.py,scripts/test_check_language_hints.py,config/language-bench-*.json
+globs: Tests/**,scripts/macos_test.sh,scripts/ios_device.sh,scripts/lib/test_models.sh,scripts/build_foundation_targets.sh,scripts/check_language_hints.py,scripts/check_language_output.py,scripts/test_check_language_hints.py,scripts/test_check_language_output.py,config/language-bench-*.json
 alwaysApply: false
 ---
 
@@ -44,11 +44,13 @@ Requires **all three Speed models** on device (Custom + Design + Clone). OnDevic
   [`ios-device-testing.md`](mdc:docs/reference/ios-device-testing.md) § Interference states.
 - **iOS bench-ui typing:** `VocelloiOSBenchUITests` validates composer input via
   `textInput_lengthCount` (iOS), not macOS `textInput_charCount`.
-- **Language hint bench (Phase 2):** `scripts/ios_device.sh lang-bench [--subset quick|full]`
-  — headless autorun matrix; gate `scripts/check_language_hints.py` on
-  `notes.languageHint` vs `config/language-bench-matrix.json`. Requires Custom Speed on
-  device. macOS CLI parity: `scripts/macos_test.sh lang-bench`. Runbook:
-  [`language-bench.md`](mdc:docs/reference/language-bench.md).
+- **Language bench (Phases 2–3):** `scripts/ios_device.sh lang-bench [--subset quick|full]`
+  — headless autorun matrix; **Phase 2** gate `scripts/check_language_hints.py` on
+  `notes.languageHint`; **Phase 3** gate `scripts/check_language_output.py` on
+  `outputVerification` (on-device Speech assets required for DE/ES/ZH/JA — see
+  [`language-bench.md`](mdc:docs/reference/language-bench.md) § Phase 3 prerequisites).
+  Skip output: `QVOICE_LANG_BENCH_SKIP_OUTPUT=1`. Requires Custom Speed on device.
+  macOS CLI hint parity: `scripts/macos_test.sh lang-bench` (no iOS output gate).
 
 GitHub CI runs **compile-only** (`build-for-testing` with `generic/platform=iOS`); the real
 pre-merge gate is `scripts/ios_device.sh gate` on your paired iPhone.
@@ -100,9 +102,10 @@ download validation run on a paired iPhone via `scripts/ios_device.sh`. macOS UI
 
 - **`core-test`:** `VocelloCoreTests` — language semantics unit tests (no models/XPC).
   Included in **`gate`** (step 3, after foundation build).
-- **`lang-bench`:** headless language-hint matrix via in-process `vocello generate`
-  (`--language`); gate `scripts/check_language_hints.py`. Quick subset = 7 cells.
-  See [`language-bench.md`](mdc:docs/reference/language-bench.md).
+- **`lang-bench`:** headless language matrix via in-process `vocello generate`
+  (`--language`); **Phase 2** gate `scripts/check_language_hints.py`. Quick subset = 7 cells.
+  **Phase 3 output verification is iOS autorun only** — not this CLI lane. See
+  [`language-bench.md`](mdc:docs/reference/language-bench.md).
 - **`gate`:** default = model ensure → inputs → foundation build → **core-test** → UI smoke → crash check.
   Opt-in bounded engine bench + baseline compare: `QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate`
   (compares vs `benchmarks/baselines/mac-gate-bench.json`; reseed with `--save-baseline` after intentional perf changes)

@@ -69,12 +69,15 @@ scripts/macos_test.sh bench-ui --label xpc-bench-full
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
   --run-id xpc-bench-YYYYMMDD-HHMMSS
 
-# Language-path verification (optional pre-release; see docs/reference/language-bench.md)
+# Language-path verification (optional pre-release; Phases 1–3)
 scripts/macos_test.sh core-test
-scripts/macos_test.sh lang-bench --subset quick
-scripts/ios_device.sh lang-bench --subset quick --label "release-QA"
+python3 scripts/test_check_language_hints.py
+python3 scripts/test_check_language_output.py
+scripts/macos_test.sh lang-bench --subset quick              # Phase 2 hint gate (CLI)
+scripts/ios_device.sh lang-bench --subset quick --label "release-QA"   # Phases 2–3 on device
 # Full 19-cell iOS matrix: scripts/ios_device.sh lang-bench --subset full --label "…"
-# Status + blockers: docs/rescue-plan-progress.md
+# Phase 3 output (DE/ES/ZH/JA): language-bench.md § Phase 3 prerequisites — Speech Wi‑Fi assets
+# Latest full run (2026-07-06): hint 19/19 PASS; output 7/18 until assets download — rescue-plan-progress.md
 
 # Human journey + review (optional pre-release)
 scripts/macos_test.sh journey

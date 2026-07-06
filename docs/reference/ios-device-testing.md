@@ -391,7 +391,7 @@ or auto-discovery.
 | Test | `test` / `ui-test` | **~4–6 min** | **unlock once** | all Speed | Smoke + Sheet + ColdGeneration (batched) | `build/ios/uitest-artifacts/` | `axiom_get_agent` → `test-runner` |
 | Gate | `gate` | **~7–12 min** | unlock for test step | all Speed | preflight → test → headless gen → crash delta | `build/ios/gate-<runID>/` | — |
 | Bench | `bench [spec]` | ~3–6 min | locked OK | Custom Speed min. | headless RTF / audioQC / telemetry | `build/ios-diagnostics/` | summarizer |
-| Lang bench | `lang-bench [--subset quick\|full]` | ~15–45 min | locked OK | Custom Speed min. | language-hint matrix (autorun × N) | `build/ios/lang-bench-<runID>/` | `check_language_hints.py` |
+| Lang bench | `lang-bench [--subset quick\|full]` | ~15–45 min | locked OK | Custom Speed min. | hint + output gates (autorun × N); DE/ES/ZH/JA need Speech assets — [`language-bench.md`](language-bench.md) § Phase 3 prerequisites | `build/ios/lang-bench-<runID>/` | `check_language_hints.py` + `check_language_output.py` |
 | Bench UI | `bench-ui` | **~20+ min** | unlock once | all Speed + clone voice | 29-take UI matrix; optional `--profile` | `build/ios/bench-ui-<runID>/` | `check_ios_ui_bench.py` |
 | Crash | `crashes [--test]` | ~1 min | locked OK | — | MetricKit payloads | `build/ios-diagnostics/` | `axiom_xcsym_crash` |
 | Debug / logs | `debug`, `logs`, `console` | varies | locked OK | — | stdout / LLDB attach | `build/ios-logs/` | `build-fixer` |
@@ -576,7 +576,7 @@ See [diagram 7 — Headless bench + data pull](#diagram-bench).
 | `console [spec]` | Attached launch — streams `[autorun]` stdout live. |
 | `pull [dest]` | Copy diagnostics mirror from app container (default `build/ios-diagnostics`). |
 | `bench [spec] [--label]` | `build → install → launch-with-autorun → poll sentinel → pull → summarize`. |
-| `lang-bench [--subset quick\|full] [--label]` | Headless language-hint matrix — one autorun per cell; gated by `check_language_hints.py`. See [`language-bench.md`](language-bench.md). |
+| `lang-bench [--subset quick\|full] [--label]` | Headless language matrix (Phases 2–3) — one autorun per cell; hint gate `check_language_hints.py`, output gate `check_language_output.py`. **Phase 3** needs on-device Speech assets for DE/ES/ZH/JA — see [`language-bench.md`](language-bench.md) § Phase 3 prerequisites. |
 
 ```sh
 scripts/ios_device.sh bench "custom:speed:Hello from Vocello on device" --label "in-process engine"
