@@ -6,11 +6,26 @@
 > audits (2026-07-01) → phased remediation. Onboarding: `[AGENTS.md](../AGENTS.md)`.
 >
 > **HANDOFF (2026-07-05):** device-state reliability overhaul + bench-ui composer fix
-> landed in this commit. Full iOS matrix **29/29 PASS**
-> (`ios-bench-ui-20260705-200615`). Start at **§2 Step 4** (human design listening)
+> landed in `d72c272`. Full iOS matrix **29/29 PASS**
+> (`ios-bench-ui-20260705-200615`). **Language-path verification Phases 1–2** landed in
+> this commit (`VocelloCoreTests`, `lang-bench`, `check_language_hints.py`) — device
+> lang-bench not yet run on phone. Start at **§2 Step 4** (human design listening)
 > or **§2 Step A** (manual clone record verify on phone), then **§2 Step 5b** (release).
+> Optional before release: `scripts/ios_device.sh lang-bench --subset quick`.
 
 ## 1. Current state (2026-07-05, `main` + this commit)
+
+### Session update (2026-07-05 late) — language-path verification Phases 1–2
+
+| Step | Status | Notes |
+| --- | --- | --- |
+| Phase 1 — `VocelloCoreTests` | **LANDED** | 20 macOS unit tests: `qwenLanguageHint`, `PromptLanguageDetector`, `LanguageSelectionPresentation`; `scripts/macos_test.sh core-test`; gate step 3 |
+| Phase 2 — lang-bench + hint gate | **LANDED (code)** | `config/language-bench-{corpus,matrix}.json`; `QVOICE_IOS_AUTORUN_LANG`; `ios_device.sh lang-bench`; `macos_test.sh lang-bench`; `check_language_hints.py`; offline `test_check_language_hints.py` |
+| Phase 2 — device validation | **OWED** | Run `scripts/ios_device.sh lang-bench --subset quick` on paired iPhone (Custom Speed required) |
+| Phase 3 — Speech round-trip | **NOT STARTED** | In-app output language + WER gate (no human ears) |
+| Phase 4 — UI integration tests | **NOT STARTED** | Picker → marker → telemetry wiring |
+
+Runbook: [`language-bench.md`](reference/language-bench.md). Semantics reference: [`qwen3-tts-guide.md`](reference/qwen3-tts-guide.md) §7.
 
 ### Session update (2026-07-05 evening)
 

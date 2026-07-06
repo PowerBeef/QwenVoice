@@ -53,10 +53,26 @@ Full invariant list: [`.cursor/rules/project-structure.mdc`](.cursor/rules/proje
 
 ```sh
 scripts/macos_test.sh models ensure   # once per machine if needed
+scripts/macos_test.sh core-test       # VocelloCoreTests (language semantics; also gate step 3)
 scripts/macos_test.sh gate
 ```
 
 **Verify:** exit 0; no new `.ips` during the run (gate-fatal).
+
+### Language-path verification (Phases 1–2)
+
+```sh
+scripts/macos_test.sh core-test                              # Phase 1 — macOS unit tests (no models)
+python3 scripts/test_check_language_hints.py                 # offline hint-gate fixtures
+scripts/macos_test.sh lang-bench --subset quick              # Phase 2 — macOS CLI (needs models)
+scripts/ios_device.sh lang-bench --subset quick --label "…"  # Phase 2 — on-device (needs Speed)
+```
+
+**Verify:** core-test + offline fixtures exit 0; lang-bench prints `PASS` and
+`check_language_hints.py` matches `notes.languageHint` to
+`config/language-bench-matrix.json`. Runbook:
+[`docs/reference/language-bench.md`](docs/reference/language-bench.md). Phase 3 (in-app Speech
+round-trip) not yet implemented.
 
 ### Pre-merge — iOS
 
@@ -86,7 +102,9 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | `Sources/iOS/`, `iOSSupport/` | iOS app |
 | `Sources/SharedSupport/` | Shared player, persistence, transcriber |
 | `scripts/*.sh` | Build, test, release |
+| `config/language-bench-*.json` | Language hint bench corpus + matrix |
 | `Tests/Vocello*UITests/` | XCUITest smoke/bench |
+| `Tests/VocelloCoreTests/` | macOS unit tests (language semantics) |
 | `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
 
 Module graph and lifecycles: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -96,8 +114,11 @@ Module graph and lifecycles: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ```sh
 ./scripts/build.sh run
 ./scripts/build.sh cli --help
+scripts/macos_test.sh core-test
+scripts/macos_test.sh lang-bench --subset quick
 scripts/macos_test.sh test
 scripts/ios_device.sh test
+scripts/ios_device.sh lang-bench --subset quick
 scripts/macos_test.sh review [--baseline]
 scripts/ios_device.sh review [--baseline]
 ```
@@ -129,6 +150,7 @@ Dispatch large work via Cursor `Task`; pass the role file path.
 | [`docs/reference/ios-agent-ui-tour.md`](docs/reference/ios-agent-ui-tour.md) | mirroir driving (Appendix B) |
 | [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) | exploratory smokes |
 | [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) | accessibilityIdentifier catalog |
+| [`docs/reference/language-bench.md`](docs/reference/language-bench.md) | language hint bench (Phases 1–2) |
 | [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) | bench protocol |
 | [`docs/reference/ios-device-probe.md`](docs/reference/ios-device-probe.md) | layered device-state / mirror probe |
 | [`docs/reference/`](docs/reference/) | subsystem guides |

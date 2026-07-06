@@ -38,6 +38,7 @@ schemes:
     test:
       config: Release
       targets:
+        - VocelloCoreTests
         - VocelloMacUITests
     profile:
       config: Release
@@ -390,6 +391,26 @@ targets:
         product: MLX
       - package: SwiftHuggingFace
         product: HuggingFace
+
+  # Pure logic unit tests for QwenVoiceCore language semantics (no models, no XPC).
+  # Run: scripts/macos_test.sh core-test
+  VocelloCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/VocelloCoreTests
+      - path: Sources/SharedSupport/Services/LanguageSelectionPresentation.swift
+    dependencies:
+      - target: QwenVoiceCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.core.tests
+        PRODUCT_NAME: VocelloCoreTests
+        PRODUCT_MODULE_NAME: VocelloCoreTests
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: YES
 
   # Thin XCUITest UI-flow smoke (host = VocelloiOS). Asserts launch + the 4-tab IA +
   # the Studio composer/mode-control via the stable accessibilityIdentifiers. The

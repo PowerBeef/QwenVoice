@@ -26,6 +26,8 @@
 #   scripts/ios_device.sh shot [out.png]          # capture the iPhone Mirroring window (device screen) → PNG
 #   scripts/ios_device.sh pull [dest]             # pull the app-container diagnostics mirror
 #   scripts/ios_device.sh bench [spec] [--label "note"]
+#   scripts/ios_device.sh lang-bench [--subset quick|full] [--label "note"]
+#                                                 # headless language-hint matrix (autorun)
 #   scripts/ios_device.sh bench-ui [--modes m,..] [--lengths l,..] [--warm N] [--label "note"] [--profile]
 #                                                 # full-matrix UI-DRIVEN bench (XCUITest)
 #   scripts/ios_device.sh bench-ui-mirroir --agent-drive [--modes …] [--warm N] …
@@ -542,11 +544,12 @@ cmd_install() {
 }
 
 # launch [spec]: with a spec, set the autorun + telemetry env; without, a plain launch.
+# Optional QVOICE_LAUNCH_RUN_ID overrides the per-launch diagnostics run id (lang-bench).
 cmd_launch() {
   local spec="${1:-}"
   local dev; dev="$(resolve_device)"
   if [[ -n "$spec" ]]; then
-    local run_id="ios-$(date +%Y%m%d-%H%M%S)"
+    local run_id="${QVOICE_LAUNCH_RUN_ID:-ios-$(date +%Y%m%d-%H%M%S)}"
     note "launching with autorun ($spec), runID=$run_id"
     local env_json
     # Benchmark A/B passthrough: any caller-set QWENVOICE_*/QVOICE_* tuning env
@@ -610,6 +613,167 @@ cmd_pull() {
     --source "Library/Caches/Vocello/diagnostics" --destination "$dest" 1>&2 \
     || die "could not pull diagnostics (has an autorun happened on THIS installed build?)"
   printf '%s\n' "$dest"
+}
+
+# wait_autorun_sentinel RUN_ID TIMEOUT DEST
+# Polls pulled diagnostics until autorun-done.json exists for RUN_ID.
+# Returns 0 and prints the sentinel path on success; dies on timeout/interference.
+wait_autorun_sentinel() {
+  local run_id="$1" timeout="${2:-300}" dest="$3"
+  local waited=0 sentinel=""
+  local interference_streak=0 interference_state=""
+  while (( waited < timeout )); do
+    sleep 10
+    waited=$((waited + 10))
+    cmd_pull "$dest" >/dev/null 2>&1 || true
+    sentinel="$(find "$dest" -name autorun-done.json -path "*/${run_id}/*" 2>/dev/null | head -1)"
+    if [[ -n "$sentinel" && -f "$sentinel" ]]; then
+      note "sentinel found after ${waited}s (runID=$run_id)"
+      printf '%s\n' "$sentinel"
+      return 0
+    fi
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    case "$verdict" in
+      CALL_ACTIVE|MIRROR_DISCONNECTED|DEVICE_UNREACHABLE)
+        die "run doomed at ${waited}s — $verdict: $(device_state_advice "$verdict") (${state#*|})"
+        ;;
+      PHONE_IN_USE)
+        interference_streak=$((interference_streak + 1))
+        interference_state="$state"
+        if (( interference_streak >= 2 )); then
+          die "run doomed at ${waited}s — PHONE_IN_USE for ${interference_streak} consecutive checks: $(device_state_advice PHONE_IN_USE) (${interference_state#*|})"
+        fi
+        warn "iPhone appears in use (${state#*|}) — will abort if it persists"
+        ;;
+      *)
+        interference_streak=0
+        ;;
+    esac
+    note "…still generating (${waited}s / runID=$run_id)"
+  done
+  die "no sentinel after ${timeout}s for runID=$run_id — Device state: $(probe_device_state 2>/dev/null || echo unknown)"
+}
+
+# lang-bench [--subset quick|full] [--label "note"]:
+# Headless on-device language matrix — one autorun per cell, gated by
+# scripts/check_language_hints.py on notes.languageHint vs config/language-bench-matrix.json.
+cmd_lang_bench() {
+  require_team
+  note "lang-bench requires Custom Voice (Speed) on device — install via Settings → Model Downloads if autorun fails"
+  local subset="full" label=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --subset) subset="${2:-full}"; shift 2 ;;
+      --subset=*) subset="${1#*=}"; shift ;;
+      --label) label="${2:-}"; shift 2 ;;
+      --label=*) label="${1#*=}"; shift ;;
+      *) die "unknown lang-bench arg '$1' (try --subset quick|full --label \"note\")" ;;
+    esac
+  done
+  [[ "$subset" == "quick" || "$subset" == "full" ]] || die "--subset must be quick or full"
+
+  local matrix="$ROOT_DIR/config/language-bench-matrix.json"
+  local corpus="$ROOT_DIR/config/language-bench-corpus.json"
+  [[ -f "$matrix" && -f "$corpus" ]] || die "missing language bench config (expected $matrix and $corpus)"
+
+  local run_id="ios-lang-bench-$(date +%Y%m%d-%H%M%S)"
+  local artifacts="$ROOT_DIR/build/ios/lang-bench-$run_id"
+  local dest="$ROOT_DIR/build/ios-diagnostics"
+  local cell_timeout="${QVOICE_IOS_LANG_BENCH_CELL_TIMEOUT:-240}"
+  mkdir -p "$artifacts"
+  rm -rf "$dest"
+
+  cmd_build
+  cmd_install
+
+  export QVOICE_MAC_BENCH_RUN_ID="$run_id"
+  note "lang-bench: runID=$run_id subset=$subset → $artifacts"
+
+  local cell_json cell_count=0 cell_fail=0
+  while IFS= read -r cell_json; do
+    [[ -n "$cell_json" ]] || continue
+    cell_count=$((cell_count + 1))
+    local cell_id mode variant ui_hint text child_run_id spec sentinel st
+    cell_id="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["id"])')"
+    mode="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["mode"])')"
+    variant="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"]).get("variant","speed"))')"
+    ui_hint="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"]).get("uiHint","auto"))')"
+    text="$(CELL="$cell_json" CORPUS="$corpus" python3 -c '
+import json, os
+cell = json.loads(os.environ["CELL"])
+corpus = json.load(open(os.environ["CORPUS"]))
+scripts = {e["id"]: e["script"] for e in corpus["languages"]}
+print(scripts[cell["scriptLang"]], end="")')"
+    child_run_id="${run_id}--${cell_id}"
+    spec="${mode}:${variant}:${text}"
+
+    note "lang-bench cell $cell_count: $cell_id ($mode, uiHint=$ui_hint)"
+    export QVOICE_LAUNCH_RUN_ID="$child_run_id"
+    export QVOICE_MAC_BENCH_CELL="$cell_id"
+    if [[ "$ui_hint" == "auto" ]]; then
+      unset QVOICE_IOS_AUTORUN_LANG
+    else
+      export QVOICE_IOS_AUTORUN_LANG="$ui_hint"
+    fi
+
+    cmd_launch "$spec" >/dev/null
+    set +e
+    sentinel="$({ wait_autorun_sentinel "$child_run_id" "$cell_timeout" "$dest"; })"
+    wait_st=$?
+    set -e
+    if (( wait_st != 0 )) || [[ -z "$sentinel" || ! -f "$sentinel" ]]; then
+      warn "lang-bench cell $cell_id: timed out or failed (runID=$child_run_id)"
+      cell_fail=$((cell_fail + 1))
+      continue
+    fi
+    if ! python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status")=="ok" else 1)' "$sentinel"; then
+      warn "lang-bench cell $cell_id: autorun status != ok (see $sentinel)"
+      cell_fail=$((cell_fail + 1))
+    fi
+  done < <(python3 - "$matrix" "$corpus" "$subset" <<'PY'
+import json, sys
+matrix_path, corpus_path, subset = sys.argv[1:4]
+cells = json.load(open(matrix_path))["cells"]
+if subset == "quick":
+    cells = [c for c in cells if c.get("quick")]
+corpus = {e["id"]: e["script"] for e in json.load(open(corpus_path))["languages"]}
+for cell in cells:
+    cell = dict(cell)
+    cell["script"] = corpus[cell["scriptLang"]]
+    print(json.dumps(cell, ensure_ascii=False))
+PY
+)
+
+  unset QVOICE_LAUNCH_RUN_ID QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_CELL QVOICE_IOS_AUTORUN_LANG
+
+  [[ "$cell_count" -gt 0 ]] || die "lang-bench: no cells for subset=$subset"
+
+  local engine_jsonl diag="$dest"
+  engine_jsonl="$(find "$dest" -path '*/engine/generations.jsonl' 2>/dev/null | head -1)"
+  [[ -n "$engine_jsonl" ]] && diag="$(dirname "$(dirname "$engine_jsonl")")"
+
+  note "lang-bench: pulled $cell_count cells ($cell_fail autorun failures) — hint gate"
+  cp -R "$dest" "$artifacts/diagnostics" 2>/dev/null || true
+
+  local gate_st=0 hint_st=0
+  python3 "$ROOT_DIR/scripts/check_language_hints.py" "$diag" \
+    --run-id "$run_id" --matrix "$matrix" --corpus "$corpus" --subset "$subset" \
+    | tee "$artifacts/hint-gate.txt" || hint_st=$?
+
+  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
+    ${label:+--label "$label"} >"$artifacts/summary.txt" 2>&1 || true
+
+  {
+    echo "lang-bench runID=$run_id subset=$subset cells=$cell_count autorun_fail=$cell_fail"
+    echo "hint_gate=$([[ $hint_st -eq 0 ]] && echo PASS || echo FAIL)"
+  } | tee "$artifacts/verdict.txt"
+
+  if (( cell_fail > 0 || hint_st != 0 )); then
+    die "lang-bench FAIL · $artifacts"
+  fi
+  note "lang-bench PASS · $artifacts"
 }
 
 cmd_bench() {
@@ -1713,7 +1877,7 @@ main() {
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
   # locked device reachable). `mirror` calls ensure_mirror itself; help/none skip it.
   case "$sub" in
-    doctor|build|install|launch|console|pull|bench|vision-launch|shot|crashes|debug|logs|profile) ensure_mirror ;;
+    doctor|build|install|launch|console|pull|bench|lang-bench|vision-launch|shot|crashes|debug|logs|profile) ensure_mirror ;;
   esac
   case "$sub" in
     doctor)  cmd_doctor "$@" ;;
@@ -1726,6 +1890,7 @@ main() {
     shot)    cmd_shot "$@" ;;
     pull)    cmd_pull "$@" ;;
     bench)   cmd_bench "$@" ;;
+    lang-bench) cmd_lang_bench "$@" ;;
     bench-ui) cmd_bench_ui "$@" ;;
     bench-ui-mirroir) cmd_bench_ui_mirroir "$@" ;;
     bench-ui-mcp) cmd_bench_ui_mcp "$@" ;;
@@ -1746,7 +1911,7 @@ main() {
     uitest-doctor) cmd_uitest_doctor "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|device-state|shot|pull|bench|bench-ui|bench-ui-mirroir|bench-ui-mcp|bench-ui-vision|vision-launch|vision-now|vision-bench-wait|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|device-state|shot|pull|bench|lang-bench|bench-ui|bench-ui-mirroir|bench-ui-mcp|bench-ui-vision|vision-launch|vision-now|vision-bench-wait|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
   esac
 }
 

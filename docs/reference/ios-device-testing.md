@@ -391,6 +391,7 @@ or auto-discovery.
 | Test | `test` / `ui-test` | **~4–6 min** | **unlock once** | all Speed | Smoke + Sheet + ColdGeneration (batched) | `build/ios/uitest-artifacts/` | `axiom_get_agent` → `test-runner` |
 | Gate | `gate` | **~7–12 min** | unlock for test step | all Speed | preflight → test → headless gen → crash delta | `build/ios/gate-<runID>/` | — |
 | Bench | `bench [spec]` | ~3–6 min | locked OK | Custom Speed min. | headless RTF / audioQC / telemetry | `build/ios-diagnostics/` | summarizer |
+| Lang bench | `lang-bench [--subset quick\|full]` | ~15–45 min | locked OK | Custom Speed min. | language-hint matrix (autorun × N) | `build/ios/lang-bench-<runID>/` | `check_language_hints.py` |
 | Bench UI | `bench-ui` | **~20+ min** | unlock once | all Speed + clone voice | 29-take UI matrix; optional `--profile` | `build/ios/bench-ui-<runID>/` | `check_ios_ui_bench.py` |
 | Crash | `crashes [--test]` | ~1 min | locked OK | — | MetricKit payloads | `build/ios-diagnostics/` | `axiom_xcsym_crash` |
 | Debug / logs | `debug`, `logs`, `console` | varies | locked OK | — | stdout / LLDB attach | `build/ios-logs/` | `build-fixer` |
@@ -575,6 +576,7 @@ See [diagram 7 — Headless bench + data pull](#diagram-bench).
 | `console [spec]` | Attached launch — streams `[autorun]` stdout live. |
 | `pull [dest]` | Copy diagnostics mirror from app container (default `build/ios-diagnostics`). |
 | `bench [spec] [--label]` | `build → install → launch-with-autorun → poll sentinel → pull → summarize`. |
+| `lang-bench [--subset quick\|full] [--label]` | Headless language-hint matrix — one autorun per cell; gated by `check_language_hints.py`. See [`language-bench.md`](language-bench.md). |
 
 ```sh
 scripts/ios_device.sh bench "custom:speed:Hello from Vocello on device" --label "in-process engine"
@@ -588,8 +590,10 @@ Fires only when `QVOICE_IOS_AUTORUN` is set — inert on normal user launch.
 | Env var | Purpose |
 | --- | --- |
 | `QVOICE_IOS_AUTORUN` | `<mode>:<variant>:<text>`. `mode ∈ custom\|design\|clone`, `variant ∈ speed\|quality`. |
+| `QVOICE_IOS_AUTORUN_LANG` | Optional UI language hint (`english`, `french`, `auto`, …). Omitted = Auto. Set by `lang-bench`. |
 | `QWENVOICE_DEBUG=1` | Engine telemetry JSONL (runtime-gated, not `#if DEBUG`). |
 | `QVOICE_IOS_DEVICE_RUN_ID` | Tags run; sentinel at `diagnostics/<runID>/autorun-done.json`. |
+| `QVOICE_MAC_BENCH_RUN_ID` / `QVOICE_MAC_BENCH_CELL` | Bench metadata stamped into `notes.benchRunID` / `notes.benchCell` (lang-bench + UI bench). |
 
 Sentinel example:
 

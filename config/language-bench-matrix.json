@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "description": "Phase 2a headless language-hint matrix (custom + design, pinned + auto).",
+  "cells": [
+    {
+      "id": "custom-en-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "english",
+      "scriptLang": "english",
+      "expectedHint": "english",
+      "quick": true
+    },
+    {
+      "id": "custom-en-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "english",
+      "expectedHint": "english",
+      "quick": true
+    },
+    {
+      "id": "design-en-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "english",
+      "expectedHint": "english",
+      "quick": true
+    },
+    {
+      "id": "custom-fr-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "french",
+      "scriptLang": "french",
+      "expectedHint": "french",
+      "quick": true
+    },
+    {
+      "id": "custom-fr-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "french",
+      "expectedHint": "french",
+      "quick": true
+    },
+    {
+      "id": "design-fr-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "french",
+      "expectedHint": "french",
+      "quick": true
+    },
+    {
+      "id": "custom-fr-text-en-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "english",
+      "scriptLang": "french",
+      "expectedHint": "english",
+      "quick": true,
+      "note": "negative control — pinned hint wins over French script"
+    },
+    {
+      "id": "custom-de-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "german",
+      "scriptLang": "german",
+      "expectedHint": "german"
+    },
+    {
+      "id": "custom-de-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "german",
+      "expectedHint": "german"
+    },
+    {
+      "id": "design-de-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "german",
+      "expectedHint": "german"
+    },
+    {
+      "id": "custom-es-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "spanish",
+      "scriptLang": "spanish",
+      "expectedHint": "spanish"
+    },
+    {
+      "id": "custom-es-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "spanish",
+      "expectedHint": "spanish"
+    },
+    {
+      "id": "design-es-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "spanish",
+      "expectedHint": "spanish"
+    },
+    {
+      "id": "custom-zh-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "chinese",
+      "scriptLang": "chinese",
+      "expectedHint": "chinese"
+    },
+    {
+      "id": "custom-zh-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "chinese",
+      "expectedHint": "chinese"
+    },
+    {
+      "id": "design-zh-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "chinese",
+      "expectedHint": "chinese"
+    },
+    {
+      "id": "custom-ja-pinned",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "japanese",
+      "scriptLang": "japanese",
+      "expectedHint": "japanese"
+    },
+    {
+      "id": "custom-ja-auto",
+      "mode": "custom",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "japanese",
+      "expectedHint": "japanese"
+    },
+    {
+      "id": "design-ja-auto",
+      "mode": "design",
+      "variant": "speed",
+      "uiHint": "auto",
+      "scriptLang": "japanese",
+      "expectedHint": "japanese"
+    }
+  ]
+}

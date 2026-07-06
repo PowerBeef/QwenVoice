@@ -176,6 +176,8 @@ verbs, not part of the every-merge gate.
 | Level | Command | Proves |
 |-------|---------|--------|
 | Compile | `scripts/build_foundation_targets.sh macos` | the app + frameworks compile |
+| Core unit | `scripts/macos_test.sh core-test` | `VocelloCoreTests` — language hint/detection (no models) |
+| Lang bench | `scripts/macos_test.sh lang-bench [--subset quick\|full]` | headless CLI language-hint matrix + `check_language_hints.py` |
 | Compile (test) | `xcodebuild build-for-testing -scheme QwenVoice -destination 'platform=macOS,arch=arm64'` | the test bundle compiles |
 | UI smoke | `scripts/macos_test.sh test` | ~12 smoke tests (`-only-testing:VocelloMacSmokeUITests`) |
 | Journey | `scripts/macos_test.sh journey` | phase-A compose → player → history |

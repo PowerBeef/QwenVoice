@@ -19,6 +19,10 @@ import UIKit
 /// a bare `1`/`on`/`true`/`yes`, a bare mode, or a partial spec all fall back to
 /// sensible defaults.
 ///
+/// Optional companion env `QVOICE_IOS_AUTORUN_LANG` sets the UI language picker
+/// equivalent (`english`, `french`, `auto`, …) on the generation request. Omitted
+/// behaves like Auto. `scripts/ios_device.sh lang-bench` sets it per matrix cell.
+///
 /// The harness drives the same in-process `TTSEngineStore.generate(_:)` the UI uses —
 /// no UI interaction — then writes `diagnostics/<runID>/autorun-done.json`. It never
 /// calls `exit()`; the app stays up so the script can pull the diagnostics container.
@@ -26,6 +30,7 @@ import UIKit
 enum IOSAutorunHarness {
     private static let environmentKey = "QVOICE_IOS_AUTORUN"
     private static let runIDKey = "QVOICE_IOS_DEVICE_RUN_ID"
+    private static let languageEnvKey = "QVOICE_IOS_AUTORUN_LANG"
 
     /// Default benchmark sentence — long enough to exercise streaming chunking,
     /// free of any personal/sensitive content.
@@ -62,12 +67,13 @@ enum IOSAutorunHarness {
             fatalError("QVOICE_IOS_CRASH_TEST: deliberate crash for the on-device crash-capture lane")
         }
         let spec = parseSpec(ProcessInfo.processInfo.environment[environmentKey] ?? "")
+        let uiLanguageHint = trimmedEnvironmentValue(languageEnvKey)
         // Record calls + lifecycle transitions for the sentinel so a doomed run
         // self-reports its cause ("call arrived at t=42s"). Autorun-only → inert
         // on user launches.
         IOSInterruptionRecorder.shared.start()
         Task { @MainActor in
-            await run(spec: spec, engine: engine)
+            await run(spec: spec, uiLanguageHint: uiLanguageHint, engine: engine)
         }
     }
 
@@ -100,11 +106,14 @@ enum IOSAutorunHarness {
 
     // MARK: - Run
 
-    private static func run(spec: Spec, engine: TTSEngineStore) async {
+    private static func run(spec: Spec, uiLanguageHint: String?, engine: TTSEngineStore) async {
         let runID = safeRunID(from: ProcessInfo.processInfo.environment[runIDKey]) ?? "autorun"
         let generationID = UUID()
         let startedAt = Date()
-        print("[autorun] start mode=\(spec.mode.rawValue) variant=\(spec.variant.rawValue) runID=\(runID) chars=\(spec.text.count)")
+        print(
+            "[autorun] start mode=\(spec.mode.rawValue) variant=\(spec.variant.rawValue) "
+            + "runID=\(runID) lang=\(uiLanguageHint ?? "auto") chars=\(spec.text.count)"
+        )
 
         // Device/bundle fields read here (MainActor) — UIDevice is MainActor-isolated,
         // so they cannot be struct property defaults under Swift 6 strict concurrency.
@@ -116,6 +125,7 @@ enum IOSAutorunHarness {
             variant: spec.variant.rawValue,
             text: spec.text,
             startedAt: ISO8601DateFormatter().string(from: startedAt),
+            uiLanguageHint: uiLanguageHint,
             deviceModel: device.model,
             systemName: device.systemName,
             systemVersion: device.systemVersion,
@@ -155,11 +165,13 @@ enum IOSAutorunHarness {
                 outputPath: outputPath,
                 shouldStream: true,
                 streamingInterval: GenerationSemantics.appStreamingInterval,
+                languageHint: uiLanguageHint,
                 payload: payload,
                 generationID: generationID
             )
+            record.resolvedLanguageHint = GenerationSemantics.qwenLanguageHint(for: request)
 
-            print("[autorun] generating…")
+            print("[autorun] generating… resolvedLanguage=\(record.resolvedLanguageHint ?? "?")")
             let t0 = Date()
             let result = try await engine.generate(request)
             let wall = Date().timeIntervalSince(t0)
@@ -262,6 +274,15 @@ enum IOSAutorunHarness {
         return nil
     }
 
+    private static func trimmedEnvironmentValue(_ key: String) -> String? {
+        guard let raw = ProcessInfo.processInfo.environment[key]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return nil
+        }
+        return raw
+    }
+
     // MARK: - Paths & sentinel
 
     private static func makeOutputPath(runID: String, model: ModelDescriptor) -> String {
@@ -347,6 +368,8 @@ enum IOSAutorunHarness {
         let startedAt: String
         var finishedAt: String?
         var status = "error"
+        var uiLanguageHint: String?
+        var resolvedLanguageHint: String?
         var modelID: String?
         var modelName: String?
         var audioPath: String?

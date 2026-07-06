@@ -10,6 +10,9 @@
 #   scripts/macos_test.sh preflight [--strict-models]  # Xcode + app + dSYMs + XPC + model status
 #   scripts/macos_test.sh uitest-doctor [--open-accessibility]  # UI automation readiness (Gate 1–3)
 #   scripts/macos_test.sh bench-ui [--modes …] [--lengths …] [--warm 3] [--label …] [--profile] [--keep]
+#   scripts/macos_test.sh core-test                 # VocelloCoreTests (language semantics, no models)
+#   scripts/macos_test.sh lang-bench [--subset quick|full] [--label "note"]
+#                                                 # headless macOS language-hint matrix (vocello CLI)
 #   scripts/macos_test.sh test                      # models ensure → VocelloMacSmokeUITests (~12 tests)
 #   scripts/macos_test.sh journey                   # VocelloMacHumanJourneyUITests (phase-A flows)
 #   scripts/macos_test.sh crashes [--test]          # collect + xcsym-symbolicate .ips (app + XPC service)
@@ -242,6 +245,124 @@ EOF
       die "unknown models subcommand '$sub' (try: check|ensure|install|help)"
       ;;
   esac
+}
+
+# core-test: VocelloCoreTests (language semantics, no models).
+cmd_core_test() {
+  note "core-test: VocelloCoreTests (QwenVoiceCore language semantics, no models)"
+  set +e
+  xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
+    -configuration Release -destination 'platform=macOS,arch=arm64' \
+    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
+    CODE_SIGN_IDENTITY="-" \
+    -only-testing:VocelloCoreTests \
+    > "$ROOT_DIR/build/macos/core-test.log" 2>&1
+  local st=$?
+  set -e
+  if (( st == 0 )); then
+    note "core-test PASS"
+  else
+    warn "core-test FAIL (see build/macos/core-test.log)"
+  fi
+  return "$st"
+}
+
+cmd_lang_bench() {
+  local subset="full" label=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --subset) subset="${2:-full}"; shift 2 ;;
+      --subset=*) subset="${1#*=}"; shift ;;
+      --label) label="${2:-}"; shift 2 ;;
+      --label=*) label="${1#*=}"; shift ;;
+      *) die "unknown lang-bench arg '$1' (try --subset quick|full --label \"note\")" ;;
+    esac
+  done
+  [[ "$subset" == "quick" || "$subset" == "full" ]] || die "--subset must be quick or full"
+
+  local matrix="$ROOT_DIR/config/language-bench-matrix.json"
+  local corpus="$ROOT_DIR/config/language-bench-corpus.json"
+  [[ -f "$matrix" && -f "$corpus" ]] || die "missing language bench config"
+
+  ensure_mac_test_models --require
+  "$SCRIPT_DIR/build.sh" cli >/dev/null
+
+  local run_id="mac-lang-bench-$(date +%Y%m%d-%H%M%S)"
+  local artifacts="$ROOT_DIR/build/macos/lang-bench-$run_id"
+  local diag_root
+  diag_root="${HOME}/Library/Application Support/QwenVoice-Debug/diagnostics"
+  mkdir -p "$artifacts"
+
+  export QWENVOICE_DEBUG=1
+  export QVOICE_MAC_BENCH_RUN_ID="$run_id"
+  note "lang-bench: runID=$run_id subset=$subset (macOS in-process CLI)"
+
+  local cell_json cell_count=0 cell_fail=0 voice_brief="A clear, steady narrator with a natural conversational tone."
+  while IFS= read -r cell_json; do
+    [[ -n "$cell_json" ]] || continue
+    cell_count=$((cell_count + 1))
+    local cell_id mode ui_hint text lang_args
+    cell_id="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["id"])')"
+    mode="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["mode"])')"
+    ui_hint="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"]).get("uiHint","auto"))')"
+    text="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["script"], end="")')"
+    export QVOICE_MAC_BENCH_CELL="$cell_id"
+    lang_args=()
+    if [[ "$ui_hint" != "auto" ]]; then
+      lang_args=(--language "$ui_hint")
+    fi
+    note "lang-bench cell $cell_count: $cell_id ($mode, uiHint=$ui_hint)"
+    set +e
+    if [[ "$mode" == "design" ]]; then
+      "$ROOT_DIR/build/vocello" generate --mode design --variant speed \
+        --voice-brief "$voice_brief" --text "$text" "${lang_args[@]}" \
+        >>"$artifacts/generate.log" 2>&1
+    else
+      "$ROOT_DIR/build/vocello" generate --mode custom --variant speed \
+        --text "$text" "${lang_args[@]}" \
+        >>"$artifacts/generate.log" 2>&1
+    fi
+    st=$?
+    set -e
+    if (( st != 0 )); then
+      warn "lang-bench cell $cell_id: vocello generate exit $st"
+      cell_fail=$((cell_fail + 1))
+    fi
+  done < <(python3 - "$matrix" "$corpus" "$subset" <<'PY'
+import json, sys
+matrix_path, corpus_path, subset = sys.argv[1:4]
+cells = json.load(open(matrix_path))["cells"]
+if subset == "quick":
+    cells = [c for c in cells if c.get("quick")]
+corpus = {e["id"]: e["script"] for e in json.load(open(corpus_path))["languages"]}
+for cell in cells:
+    cell = dict(cell)
+    cell["script"] = corpus[cell["scriptLang"]]
+    print(json.dumps(cell, ensure_ascii=False))
+PY
+)
+
+  unset QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_CELL
+
+  [[ "$cell_count" -gt 0 ]] || die "lang-bench: no cells for subset=$subset"
+
+  local hint_st=0
+  python3 "$ROOT_DIR/scripts/check_language_hints.py" "$diag_root" \
+    --run-id "$run_id" --matrix "$matrix" --corpus "$corpus" --subset "$subset" \
+    | tee "$artifacts/hint-gate.txt" || hint_st=$?
+
+  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag_root" \
+    ${label:+--label "$label"} >"$artifacts/summary.txt" 2>&1 || true
+
+  {
+    echo "lang-bench runID=$run_id subset=$subset cells=$cell_count generate_fail=$cell_fail"
+    echo "hint_gate=$([[ $hint_st -eq 0 ]] && echo PASS || echo FAIL)"
+  } | tee "$artifacts/verdict.txt"
+
+  if (( cell_fail > 0 || hint_st != 0 )); then
+    die "lang-bench FAIL · $artifacts"
+  fi
+  note "lang-bench PASS · $artifacts"
 }
 
 # test: run VocelloMacSmokeUITests (macOS, arm64) → a single verdict + artifacts under
@@ -696,8 +817,8 @@ cmd_gate() {
   local overall=0
   local gate_bench=0
   [[ "${QWENVOICE_GATE_BENCH:-0}" == "1" ]] && gate_bench=1
-  local total_steps=5
-  (( gate_bench )) && total_steps=6
+  local total_steps=6
+  (( gate_bench )) && total_steps=7
   { echo "Vocello macOS gate — $run_id"; echo; } | tee "$verdict"
 
   # Marker for the gate-fatal crash-delta check: only .ips files newer than this
@@ -722,12 +843,17 @@ cmd_gate() {
     echo "build_foundation macos: PASS" | tee -a "$verdict"
   else echo "build_foundation macos: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 3/$total_steps: test (VocelloMacSmokeUITests)"
+  note "gate step 3/$total_steps: core-test (VocelloCoreTests)"
+  if ( cmd_core_test ) >>"$gate_dir/core-test.log" 2>&1; then
+    echo "core-test: PASS" | tee -a "$verdict"
+  else echo "core-test: FAIL" | tee -a "$verdict"; overall=1; fi
+
+  note "gate step 4/$total_steps: test (VocelloMacSmokeUITests)"
   if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
     echo "test: PASS" | tee -a "$verdict"
   else echo "test: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 4/$total_steps: crashes (GATE-FATAL on new .ips during this run)"
+  note "gate step 5/$total_steps: crashes (GATE-FATAL on new .ips during this run)"
   if ( cmd_crashes ) >>"$gate_dir/crashes.log" 2>&1; then
     local dr="$HOME/Library/Logs/DiagnosticReports"
     local new_ips
@@ -745,7 +871,7 @@ cmd_gate() {
   fi
 
   if (( gate_bench )); then
-    note "gate step 5/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
+    note "gate step 6/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
     if run_gate_bench "$gate_dir"; then
       echo "bench: PASS (see bench.log)" | tee -a "$verdict"
     else
@@ -771,6 +897,8 @@ main() {
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
     preflight) cmd_preflight "$@" ;;
+    core-test) cmd_core_test "$@" ;;
+    lang-bench) cmd_lang_bench "$@" ;;
     test)      cmd_test "$@" ;;
     journey)   cmd_journey "$@" ;;
     bench-ui)  cmd_bench_ui "$@" ;;
@@ -782,7 +910,7 @@ main() {
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
-    *) die "unknown subcommand '$sub' (try: preflight|test|journey|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|uitest-doctor|help)" ;;
+    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|journey|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|uitest-doctor|help)" ;;
   esac
 }
 

@@ -540,6 +540,14 @@ Punctuation-aware pause budget avoids false positives on natural delivery.
 
 `scripts/prosody_quality_gate.py`, `scripts/delivery_adherence.py` on bench WAVs when using `--delivery`.
 
+### Layer 2.5 — Language hint contract (Phase 2, optional)
+
+Headless matrix (`scripts/ios_device.sh lang-bench` or `scripts/macos_test.sh lang-bench`)
+stamps `notes.languageHint` (resolved Qwen3 token, not raw UI picker). Gate with
+`scripts/check_language_hints.py` against `config/language-bench-matrix.json`.
+Offline fixture self-test: `python3 scripts/test_check_language_hints.py`.
+Does **not** verify spoken output — see [`language-bench.md`](language-bench.md).
+
 ### Layer 3 — Listening pass (mandatory pre-merge for engine)
 
 Play takes; judge timbre, prosody, artifacts. Record verdict in snapshot note or HISTORY.md.

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Native script snippets for language-bench (long enough for NLL + streaming smoke).",
+  "languages": [
+    {
+      "id": "english",
+      "script": "The train left the station at dawn."
+    },
+    {
+      "id": "french",
+      "script": "Le train a quitté la gare à l'aube."
+    },
+    {
+      "id": "german",
+      "script": "Der Zug verließ den Bahnhof bei Tagesanbruch."
+    },
+    {
+      "id": "spanish",
+      "script": "El tren salió de la estación al amanecer."
+    },
+    {
+      "id": "chinese",
+      "script": "火车在黎明时分离开了车站。"
+    },
+    {
+      "id": "japanese",
+      "script": "列車は夜明けに駅を出発した。"
+    }
+  ]
+}

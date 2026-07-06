@@ -115,6 +115,7 @@ enum GenerateCommand {
             // Match the app's interactive streaming cadence so --stream exercises
             // the same engine chunk path the UI uses (CustomVoiceCoordinator et al.).
             streamingInterval: streaming ? GenerationSemantics.appStreamingInterval : nil,
+            languageHint: args.string("language"),
             payload: payload, generationID: UUID(),
             seed: try parseSeed(args),
             variation: try parseVariation(args))
@@ -312,6 +313,7 @@ enum GenerateCommand {
           --reference    (clone) path to a reference .wav (alternative to --voice)
           --transcript   (clone) transcript of the --reference clip
           --delivery     optional delivery style
+          --language     Qwen3 language hint (english, french, auto, …); omitted = Auto
           --seed         deterministic sampling seed — same request + seed
                          reproduces the same take
           --variation    expressive (default, official) | balanced | consistent
