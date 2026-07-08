@@ -1,0 +1,2246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vocello — Project Map</title>
+<meta name="description" content="Interactive architecture map of Vocello: features, modules, dependencies, pipelines, and tooling." />
+<style>
+/* =========================================================================
+   Vocello Project Map — tokens from website/src/tokens.css
+   ========================================================================= */
+:root {
+  color-scheme: dark;
+
+  --gold-50: #F8EFDC;
+  --gold-100: #F0DFB7;
+  --gold-200: #E7CD8E;
+  --gold-300: #EDCC8A;
+  --gold-400: #D4A85A;
+  --gold-500: #B5832E;
+
+  --lavender-200: #DCD1EE;
+  --lavender-300: #BFAADB;
+  --lavender-500: #856BB8;
+
+  --terracotta-200: #ECCAB6;
+  --terracotta-300: #DBA887;
+  --terracotta-500: #D46B33;
+
+  --charcoal-1000: #0D0E12;
+  --charcoal-950: #111318;
+  --charcoal-900: #16181E;
+  --charcoal-850: #171920;
+  --charcoal-800: #1C1E26;
+  --charcoal-700: #23262F;
+  --charcoal-600: #2A2C36;
+  --charcoal-500: #3A3D48;
+  --charcoal-300: #6F7280;
+  --charcoal-200: #8C8F9B;
+  --charcoal-100: #C9CBD4;
+
+  --status-ready: #4CC38A;
+  --status-warn: #E8943A;
+  --status-danger: #E5483B;
+
+  --accent: var(--gold-300);
+  --accent-strong: var(--gold-200);
+  --accent-wash: rgba(237, 204, 138, 0.14);
+  --accent-stroke: rgba(237, 204, 138, 0.34);
+
+  --mode-custom: var(--gold-300);
+  --mode-design: var(--lavender-300);
+  --mode-clone: var(--terracotta-300);
+
+  --bg-canvas: var(--charcoal-900);
+  --bg-stage: var(--charcoal-800);
+  --bg-rail: var(--charcoal-850);
+  --bg-card: var(--charcoal-1000);
+  --bg-inline: var(--charcoal-950);
+  --bg-field: var(--charcoal-600);
+
+  --stroke: rgba(255, 255, 255, 0.12);
+  --stroke-strong: rgba(255, 255, 255, 0.18);
+  --stroke-soft: rgba(255, 255, 255, 0.07);
+
+  --fg-primary: #F5F6F8;
+  --fg-secondary: rgba(245, 246, 248, 0.68);
+  --fg-tertiary: rgba(245, 246, 248, 0.42);
+  --fg-muted: rgba(245, 246, 248, 0.28);
+
+  --font-display: ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", system-ui, sans-serif;
+  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-serif: "New York", ui-serif, Georgia, "Iowan Old Style", serif;
+
+  --ease: cubic-bezier(0.32, 0.08, 0.24, 1);
+  --nav-h: 56px;
+  --max: 1120px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 16px); }
+body {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--fg-primary);
+  background:
+    radial-gradient(ellipse 90% 50% at 10% -10%, rgba(237, 204, 138, 0.07), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 90% 5%, rgba(191, 170, 219, 0.05), transparent 50%),
+    radial-gradient(ellipse 60% 35% at 50% 100%, rgba(219, 168, 135, 0.04), transparent 45%),
+    var(--bg-canvas);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-strong); }
+code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
+::selection { background: var(--accent-wash); color: var(--fg-primary); }
+
+/* ---- Nav ---- */
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 24px;
+  background: rgba(22, 24, 30, 0.82);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid var(--stroke-soft);
+}
+.topnav-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+  color: var(--fg-primary);
+}
+.topnav-brand .wordmark {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.topnav-brand .tag {
+  font-size: 11px;
+  color: var(--fg-tertiary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.topnav-links {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+.topnav-links::-webkit-scrollbar { display: none; }
+.topnav-links a {
+  color: var(--fg-tertiary);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.topnav-links a:hover,
+.topnav-links a.active {
+  color: var(--fg-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+.topnav-links a.active { color: var(--accent); }
+
+/* ---- Layout ---- */
+.wrap {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 24px 96px;
+}
+section.map-section {
+  padding-top: 64px;
+  scroll-margin-top: calc(var(--nav-h) + 12px);
+}
+.section-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 3.5vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  line-height: 1.2;
+}
+.section-lede {
+  color: var(--fg-secondary);
+  max-width: 62ch;
+  margin: 0 0 32px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* ---- Hero ---- */
+.hero {
+  padding: 72px 0 24px;
+  position: relative;
+}
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-tertiary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.hero-kicker::before {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: var(--accent);
+}
+.hero h1 {
+  font-family: var(--font-serif);
+  font-size: clamp(40px, 7vw, 64px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+  line-height: 1.05;
+}
+.hero h1 span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(18px, 2.5vw, 22px);
+  font-weight: 500;
+  color: var(--fg-secondary);
+  letter-spacing: -0.01em;
+  margin-top: 12px;
+}
+.hero-lede {
+  color: var(--fg-secondary);
+  font-size: 17px;
+  max-width: 54ch;
+  margin: 20px 0 28px;
+  line-height: 1.55;
+}
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fg-secondary);
+}
+.badge strong { color: var(--fg-primary); font-weight: 560; }
+.badge.gold { border-color: var(--accent-stroke); color: var(--accent); }
+.badge.gold strong { color: var(--accent-strong); }
+.badge.lavender { border-color: rgba(191, 170, 219, 0.35); color: var(--lavender-300); }
+.badge.terra { border-color: rgba(219, 168, 135, 0.35); color: var(--terracotta-300); }
+
+/* ---- Mode strip ---- */
+.mode-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 40px 0 0;
+}
+.mode-panel {
+  padding: 20px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke-soft);
+  background: linear-gradient(160deg, rgba(255,255,255,0.03), transparent 60%), var(--bg-inline);
+  position: relative;
+  overflow: hidden;
+}
+.mode-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--mode-color);
+  opacity: 0.85;
+}
+.mode-panel[data-mode="custom"] { --mode-color: var(--mode-custom); }
+.mode-panel[data-mode="design"] { --mode-color: var(--mode-design); }
+.mode-panel[data-mode="clone"] { --mode-color: var(--mode-clone); }
+.mode-panel h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mode-color);
+}
+.mode-panel p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+  line-height: 1.45;
+}
+
+/* ---- Host cards ---- */
+.host-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.host-card {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 22px 20px;
+  background: var(--bg-inline);
+}
+.host-card h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.host-card .meta {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 12px;
+  font-family: var(--font-mono);
+}
+.host-card p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--fg-secondary);
+  line-height: 1.5;
+}
+.host-card ul {
+  margin: 12px 0 0;
+  padding: 0 0 0 16px;
+  color: var(--fg-tertiary);
+  font-size: 12.5px;
+}
+.host-card li { margin-bottom: 4px; }
+
+.invariant-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 28px;
+}
+.invariant {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-soft);
+  background: rgba(0, 0, 0, 0.2);
+}
+.invariant .mark {
+  flex-shrink: 0;
+  width: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  align-self: stretch;
+}
+.invariant h4 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.invariant p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-tertiary);
+  line-height: 1.4;
+}
+
+/* ---- Feature matrix ---- */
+.matrix-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-inline);
+}
+table.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 640px;
+}
+table.matrix th,
+table.matrix td {
+  padding: 11px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--stroke-soft);
+  vertical-align: top;
+}
+table.matrix th {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.25);
+  position: sticky;
+  top: 0;
+}
+table.matrix tr:last-child td { border-bottom: none; }
+table.matrix td:first-child {
+  font-weight: 560;
+  color: var(--fg-primary);
+  white-space: nowrap;
+}
+table.matrix .yes { color: var(--status-ready); }
+table.matrix .partial { color: var(--status-warn); }
+table.matrix .no { color: var(--fg-muted); }
+table.matrix .note {
+  display: block;
+  font-size: 11.5px;
+  color: var(--fg-tertiary);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.feature-bands {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+.feature-band {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke-soft);
+  background: var(--bg-inline);
+}
+.feature-band .band-label {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+  padding-top: 2px;
+}
+.feature-band h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.feature-band p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chip {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke-soft);
+  color: var(--fg-secondary);
+}
+.chip.mode-c { border-color: rgba(237, 204, 138, 0.3); color: var(--mode-custom); }
+.chip.mode-d { border-color: rgba(191, 170, 219, 0.3); color: var(--mode-design); }
+.chip.mode-k { border-color: rgba(219, 168, 135, 0.3); color: var(--mode-clone); }
+
+/* ---- Module graph ---- */
+.graph-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+.graph-canvas {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px),
+    var(--bg-inline);
+  background-size: 28px 28px, 28px 28px, auto;
+  overflow: hidden;
+  min-height: 520px;
+  position: relative;
+}
+.graph-canvas svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--stroke-soft);
+  font-size: 11px;
+  color: var(--fg-tertiary);
+}
+.graph-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.detail-panel {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: var(--bg-inline);
+  padding: 18px;
+  min-height: 280px;
+  position: sticky;
+  top: calc(var(--nav-h) + 16px);
+}
+.detail-panel .empty {
+  color: var(--fg-tertiary);
+  font-size: 13px;
+  margin: 40px 0;
+  text-align: center;
+}
+.detail-panel .kind {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.detail-panel h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.detail-panel .bundle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-tertiary);
+  margin-bottom: 14px;
+  word-break: break-all;
+}
+.detail-panel p {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--fg-secondary);
+  line-height: 1.5;
+}
+.detail-panel h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+}
+.detail-panel ul {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.detail-panel li {
+  font-size: 12.5px;
+  color: var(--fg-secondary);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--stroke-soft);
+  font-family: var(--font-mono);
+}
+.detail-panel li:last-child { border-bottom: none; }
+.detail-panel .files li { font-size: 11.5px; color: var(--fg-tertiary); }
+
+.node-app { fill: rgba(237, 204, 138, 0.12); stroke: var(--gold-300); }
+.node-fw { fill: rgba(76, 195, 138, 0.1); stroke: #4CC38A; }
+.node-mac { fill: rgba(229, 72, 59, 0.1); stroke: #E5483B; }
+.node-spm { fill: rgba(191, 170, 219, 0.1); stroke: var(--lavender-300); stroke-dasharray: 4 3; }
+.node-test { fill: rgba(140, 143, 155, 0.12); stroke: var(--charcoal-200); }
+.edge { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1.25; fill: none; }
+.edge.hot { stroke: var(--accent); stroke-width: 2; }
+.node-hit { cursor: pointer; }
+.node-hit.dim { opacity: 0.28; }
+.node-hit.hot rect, .node-hit.hot polygon { filter: brightness(1.25); }
+.node-label {
+  fill: var(--fg-primary);
+  font-family: var(--font-text);
+  font-size: 11px;
+  font-weight: 560;
+  pointer-events: none;
+}
+.node-sub {
+  fill: var(--fg-tertiary);
+  font-family: var(--font-text);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+/* ---- Pipeline ---- */
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-inline);
+}
+.pipe-step {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 0 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--stroke-soft);
+  position: relative;
+}
+.pipe-step:last-child { border-bottom: none; }
+.pipe-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--accent-stroke);
+  background: var(--accent-wash);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.pipe-step h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.pipe-step p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+.pipe-step .path-tag {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--fg-tertiary);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.path-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+.path-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--bg-inline);
+}
+.path-card h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.path-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.path-flow .pf {
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  color: var(--fg-secondary);
+  padding: 8px 10px;
+  border-left: 2px solid var(--stroke);
+  background: rgba(0, 0, 0, 0.15);
+}
+.path-flow .pf + .pf { margin-top: -1px; }
+.path-flow .pf.accent { border-left-color: var(--accent); color: var(--accent); }
+.path-flow .pf.lavender { border-left-color: var(--lavender-300); color: var(--lavender-200); }
+
+/* ---- Source tree ---- */
+.tree {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-inline);
+  padding: 8px 0;
+  font-size: 13px;
+}
+.tree-item {
+  border-bottom: 1px solid var(--stroke-soft);
+}
+.tree-item:last-child { border-bottom: none; }
+.tree-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 220px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px 16px;
+  cursor: default;
+}
+.tree-row.folder { cursor: pointer; }
+.tree-row.folder:hover { background: rgba(255, 255, 255, 0.03); }
+.tree-toggle {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--fg-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.tree-toggle:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.tree-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--fg-primary);
+}
+.tree-name .plat {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-family: var(--font-text);
+  color: var(--fg-tertiary);
+  letter-spacing: 0.03em;
+}
+.tree-desc {
+  font-size: 12.5px;
+  color: var(--fg-tertiary);
+  line-height: 1.4;
+}
+.tree-children {
+  display: none;
+  padding-left: 20px;
+  background: rgba(0, 0, 0, 0.15);
+}
+.tree-item.open > .tree-children { display: block; }
+.tree-item.open > .tree-row .tree-toggle { color: var(--accent); border-color: var(--accent-stroke); }
+
+/* ---- Deps ---- */
+.dep-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.dep-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--bg-inline);
+}
+.dep-card.direct { border-color: var(--accent-stroke); }
+.dep-card h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-family: var(--font-mono);
+}
+.dep-card .ver {
+  font-size: 12px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+.dep-card p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-secondary);
+}
+.dep-card .tag {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--stroke-soft);
+}
+
+/* ---- Tooling ---- */
+.tool-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.tool-tab {
+  font-size: 12px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--fg-tertiary);
+  cursor: pointer;
+  font-family: var(--font-text);
+  transition: all 0.15s var(--ease);
+}
+.tool-tab:hover { color: var(--fg-primary); border-color: var(--stroke-strong); }
+.tool-tab.active {
+  color: var(--accent);
+  border-color: var(--accent-stroke);
+  background: var(--accent-wash);
+}
+.tool-panel {
+  display: none;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-inline);
+  overflow: hidden;
+}
+.tool-panel.active { display: block; }
+.tool-row {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--stroke-soft);
+  font-size: 13px;
+}
+.tool-row:last-child { border-bottom: none; }
+.tool-row code {
+  color: var(--accent);
+  font-size: 12px;
+}
+.tool-row span { color: var(--fg-secondary); }
+
+.gate-box {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.gate-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--bg-inline);
+}
+.gate-card h4 { margin: 0 0 8px; font-size: 14px; }
+.gate-card pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-secondary);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+/* ---- Contracts ---- */
+.contract-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.contract-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg-inline);
+}
+.contract-card h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--mode-color, var(--accent));
+}
+.contract-card[data-mode="custom"] { --mode-color: var(--mode-custom); }
+.contract-card[data-mode="design"] { --mode-color: var(--mode-design); }
+.contract-card[data-mode="clone"] { --mode-color: var(--mode-clone); }
+.contract-card dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.contract-card dt {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-tertiary);
+}
+.contract-card dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-secondary);
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.storage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.storage-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--bg-inline);
+}
+.storage-card h4 { margin: 0 0 8px; font-size: 14px; }
+.storage-card code {
+  display: block;
+  font-size: 11.5px;
+  color: var(--fg-tertiary);
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+.storage-card ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 12.5px;
+  color: var(--fg-secondary);
+}
+
+.speaker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+}
+.speaker {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-soft);
+  background: rgba(0, 0, 0, 0.2);
+}
+.speaker strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.speaker span {
+  font-size: 11.5px;
+  color: var(--fg-tertiary);
+}
+
+/* ---- Distribution ---- */
+.dist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.dist-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--bg-inline);
+}
+.dist-card h4 { margin: 0 0 6px; font-size: 14px; }
+.dist-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+  line-height: 1.45;
+}
+.dist-card .status {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(76, 195, 138, 0.35);
+  color: var(--status-ready);
+}
+.dist-card .status.soon {
+  border-color: rgba(232, 148, 58, 0.35);
+  color: var(--status-warn);
+}
+
+/* ---- Footer ---- */
+.map-footer {
+  margin-top: 80px;
+  padding: 28px 0 0;
+  border-top: 1px solid var(--stroke-soft);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--fg-tertiary);
+}
+.map-footer a { color: var(--fg-secondary); }
+
+/* ---- Responsive ---- */
+@media (max-width: 960px) {
+  .mode-strip,
+  .host-grid,
+  .contract-grid,
+  .dist-grid,
+  .dep-grid,
+  .path-compare,
+  .gate-box,
+  .storage-grid,
+  .invariant-list {
+    grid-template-columns: 1fr;
+  }
+  .graph-shell { grid-template-columns: 1fr; }
+  .detail-panel { position: static; }
+  .feature-band { grid-template-columns: 1fr; gap: 6px; }
+  .speaker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tool-row { grid-template-columns: 1fr; gap: 4px; }
+  .tree-row { grid-template-columns: 28px minmax(0, 1fr); }
+  .tree-desc { grid-column: 2 / -1; }
+}
+@media (max-width: 640px) {
+  .topnav { padding: 0 12px; gap: 10px; }
+  .wrap { padding: 0 14px 72px; }
+  .hero { padding-top: 40px; }
+  .speaker-grid { grid-template-columns: 1fr; }
+  .topnav-brand .tag { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<nav class="topnav" aria-label="Section navigation">
+  <a class="topnav-brand" href="#top">
+    <span class="wordmark">Vocello</span>
+    <span class="tag">Project Map</span>
+  </a>
+  <div class="topnav-links" id="navLinks">
+    <a href="#glance">Glance</a>
+    <a href="#features">Features</a>
+    <a href="#modules">Modules</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#sources">Sources</a>
+    <a href="#deps">Deps</a>
+    <a href="#tooling">Tooling</a>
+    <a href="#contracts">Contracts</a>
+    <a href="#distribution">Ship</a>
+  </div>
+</nav>
+
+<div class="wrap" id="top">
+
+  <!-- ========== HERO ========== -->
+  <header class="hero">
+    <div class="hero-kicker">Architecture · Features · Dependencies</div>
+    <h1>
+      Vocello
+      <span>Interactive project map for the QwenVoice monorepo</span>
+    </h1>
+    <p class="hero-lede">
+      Local-first text-to-speech on Apple Silicon. One engine core
+      (<code>QwenVoiceCore</code> / <code>MLXTTSEngine</code>) hosted three ways:
+      macOS out-of-process XPC, iOS in-process, and a headless CLI. Models download
+      from Hugging Face; nothing is bundled.
+    </p>
+    <div class="badge-row">
+      <span class="badge gold"><strong>2.1.0</strong> · build 18</span>
+      <span class="badge"><strong>macOS</strong> 26+ · Apple Silicon</span>
+      <span class="badge"><strong>iOS</strong> 26+ · on-device capable</span>
+      <span class="badge"><strong>Swift</strong> 6 · Xcode 26</span>
+      <span class="badge"><strong>MLX</strong> Qwen3-TTS 1.7B</span>
+      <span class="badge gold">Release-only config</span>
+    </div>
+
+    <div class="mode-strip" aria-label="Generation modes">
+      <article class="mode-panel" data-mode="custom">
+        <h3>Custom Voice</h3>
+        <p>Built-in speakers with controllable delivery. Nine voices across English, Chinese, Japanese, and Korean.</p>
+      </article>
+      <article class="mode-panel" data-mode="design">
+        <h3>Voice Design</h3>
+        <p>Invent a voice from a natural-language brief. Save the result as a Clone reference.</p>
+      </article>
+      <article class="mode-panel" data-mode="clone">
+        <h3>Voice Cloning</h3>
+        <p>Speak in a voice from a 10–20&nbsp;s reference clip. Delivery follows the reference; no emotion picker.</p>
+      </article>
+    </div>
+  </header>
+
+  <!-- ========== AT A GLANCE ========== -->
+  <section class="map-section" id="glance">
+    <p class="section-label">01 · Runtime</p>
+    <h2 class="section-title">Three hosts, one engine</h2>
+    <p class="section-lede">
+      All hosts share <code>MLXTTSEngine</code> built by <code>NativeRuntimeFactory</code>.
+      They differ only in where the engine lives and how the UI talks to it.
+    </p>
+
+    <div class="host-grid">
+      <article class="host-card">
+        <h3>macOS · Vocello.app</h3>
+        <div class="meta">out-of-process XPC</div>
+        <p>SwiftUI app links the full XPC stack. Engine runs in <code>QwenVoiceEngineService</code> for crash isolation and memory containment.</p>
+        <ul>
+          <li>Module <code>QwenVoice</code></li>
+          <li>Bundle <code>com.qwenvoice.app</code></li>
+          <li>Sidebar: Custom · Design · Clone · History · Voices · Settings</li>
+          <li>Speed + Quality variants</li>
+        </ul>
+      </article>
+      <article class="host-card">
+        <h3>iOS · Vocello</h3>
+        <div class="meta">in-process MLX</div>
+        <p>SwiftUI app reaches the engine through <code>QwenVoiceCore</code> alone. No XPC frameworks linked by design.</p>
+        <ul>
+          <li>Module <code>QVoiceiOS</code></li>
+          <li>Bundle <code>com.patricedery.vocello</code></li>
+          <li>Tabs: Studio · Voices · History · Settings</li>
+          <li>Speed only · App Group storage</li>
+        </ul>
+      </article>
+      <article class="host-card">
+        <h3>CLI · vocello</h3>
+        <div class="meta">in-process headless</div>
+        <p>Same engine contract for generate, batch, bench, voices, and model install. Built via <code>./scripts/build.sh cli</code>.</p>
+        <ul>
+          <li>Module <code>VocelloCLI</code></li>
+          <li>Commands: generate · custom/design/clone · batch · bench</li>
+          <li>Streaming default · JSON output</li>
+          <li>Not shipped in the DMG</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="invariant-list">
+      <div class="invariant">
+        <div class="mark"></div>
+        <div>
+          <h4>project.yml is source of truth</h4>
+          <p>Never hand-edit <code>project.pbxproj</code>. Regenerate with <code>./scripts/regenerate_project.sh</code>.</p>
+        </div>
+      </div>
+      <div class="invariant">
+        <div class="mark"></div>
+        <div>
+          <h4>Release-only config</h4>
+          <p>No Debug config. Runtime debug via <code>DebugMode.isEnabled</code> / <code>QWENVOICE_DEBUG=1</code>.</p>
+        </div>
+      </div>
+      <div class="invariant">
+        <div class="mark"></div>
+        <div>
+          <h4>MLX pins in lockstep</h4>
+          <p><code>mlx-swift</code> 0.30.6 and <code>mlx-swift-lm</code> 2.30.6 move together. No Core ML pivot.</p>
+        </div>
+      </div>
+      <div class="invariant">
+        <div class="mark"></div>
+        <div>
+          <h4>iOS = physical device only</h4>
+          <p>Gates never use Simulator. Agent UI driving is exploratory smoke, never a pre-merge gate.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FEATURES ========== -->
+  <section class="map-section" id="features">
+    <p class="section-label">02 · Product</p>
+    <h2 class="section-title">Features across platforms</h2>
+    <p class="section-lede">
+      Three generation modes share one chrome. Library surfaces (Voices, History, Models)
+      are first-class. Platform deltas are intentional, not incomplete ports.
+    </p>
+
+    <div class="matrix-wrap">
+      <table class="matrix" id="featureMatrix">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>macOS</th>
+            <th>iOS</th>
+            <th>CLI</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="feature-bands" id="featureBands"></div>
+  </section>
+
+  <!-- ========== MODULES ========== -->
+  <section class="map-section" id="modules">
+    <p class="section-label">03 · Modules</p>
+    <h2 class="section-title">Target dependency graph</h2>
+    <p class="section-lede">
+      Eleven Swift targets from <code>project.yml</code>. Click a node for details.
+      Hover highlights connected edges. Layering rule:
+      <code>BackendCore</code> ← <code>Core</code> ← apps / XPC / CLI.
+    </p>
+
+    <div class="graph-shell">
+      <div class="graph-canvas" id="graphCanvas">
+        <div class="graph-legend">
+          <span><i style="background:rgba(237,204,138,0.4);border:1px solid var(--gold-300)"></i> App / CLI</span>
+          <span><i style="background:rgba(76,195,138,0.35);border:1px solid #4CC38A"></i> Cross-platform FW</span>
+          <span><i style="background:rgba(229,72,59,0.3);border:1px solid #E5483B"></i> macOS XPC stack</span>
+          <span><i style="background:rgba(191,170,219,0.35);border:1px solid var(--lavender-300)"></i> SPM / vendored</span>
+          <span><i style="background:rgba(140,143,155,0.3);border:1px solid var(--charcoal-200)"></i> Tests</span>
+        </div>
+        <svg id="moduleGraph" viewBox="0 0 860 560" role="img" aria-label="Module dependency graph"></svg>
+      </div>
+      <aside class="detail-panel" id="detailPanel" aria-live="polite">
+        <div class="empty">Select a module to inspect its type, platform, dependencies, and key files.</div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ========== PIPELINE ========== -->
+  <section class="map-section" id="pipeline">
+    <p class="section-label">04 · Generation</p>
+    <h2 class="section-title">Synthesis pipeline</h2>
+    <p class="section-lede">
+      End-to-end path inside <code>MLXTTSEngine</code> → <code>NativeStreamingSynthesisSession</code>.
+      Output is 24&nbsp;kHz mono Int16 WAV with audio QC telemetry.
+    </p>
+
+    <div class="pipeline" id="pipelineSteps"></div>
+
+    <div class="path-compare">
+      <article class="path-card">
+        <h4>macOS request path (XPC)</h4>
+        <div class="path-flow">
+          <div class="pf">SwiftUI View / Coordinator</div>
+          <div class="pf">TTSEngineStore (QwenVoiceNative)</div>
+          <div class="pf accent">XPCNativeEngineClient → NSXPCConnection</div>
+          <div class="pf accent">EngineServiceHost (XPC process)</div>
+          <div class="pf">MLXTTSEngine → events via handleEvent</div>
+          <div class="pf">GenerationChunkBroker → UI / player</div>
+        </div>
+      </article>
+      <article class="path-card">
+        <h4>iOS request path (in-process)</h4>
+        <div class="path-flow">
+          <div class="pf">Studio View / StudioGenerationCoordinator</div>
+          <div class="pf lavender">TTSEngineStore (Sources/iOS)</div>
+          <div class="pf lavender">MLXTTSEngine (same process)</div>
+          <div class="pf">GenerationEvent stream → inline player</div>
+          <div class="pf">GenerationPersistence → App Group DB</div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ========== SOURCES ========== -->
+  <section class="map-section" id="sources">
+    <p class="section-label">05 · Codebase</p>
+    <h2 class="section-title">Source layout</h2>
+    <p class="section-lede">
+      <code>Sources/</code> is the product source of truth. SharedSupport compiles into both apps;
+      the XPC stack is macOS-only; iOS has a parallel support layer under <code>iOSSupport/</code>.
+    </p>
+    <div class="tree" id="sourceTree"></div>
+  </section>
+
+  <!-- ========== DEPS ========== -->
+  <section class="map-section" id="deps">
+    <p class="section-label">06 · Packages</p>
+    <h2 class="section-title">SPM &amp; vendored dependencies</h2>
+    <p class="section-lede">
+      Exact pins in <code>project.yml</code> and <code>Package.resolved</code>.
+      <code>mlx-audio-swift</code> is a Qwen3-TTS-only fork under <code>third_party_patches/</code>.
+    </p>
+    <div class="dep-grid" id="depGrid"></div>
+  </section>
+
+  <!-- ========== TOOLING ========== -->
+  <section class="map-section" id="tooling">
+    <p class="section-label">07 · Tooling</p>
+    <h2 class="section-title">Scripts, tests &amp; CI</h2>
+    <p class="section-lede">
+      Development is 100% in Cursor via checked-in scripts. The build is the typecheck.
+      Pre-merge gates are local; CI covers compile safety and release packaging.
+    </p>
+
+    <div class="tool-tabs" id="toolTabs" role="tablist"></div>
+    <div id="toolPanels"></div>
+
+    <div class="gate-box">
+      <article class="gate-card">
+        <h4>macOS pre-merge gate</h4>
+        <pre>scripts/macos_test.sh models ensure
+scripts/macos_test.sh core-test
+scripts/macos_test.sh gate</pre>
+      </article>
+      <article class="gate-card">
+        <h4>iOS pre-merge gate</h4>
+        <pre>scripts/ios_device.sh preflight
+scripts/ios_device.sh gate</pre>
+      </article>
+    </div>
+  </section>
+
+  <!-- ========== CONTRACTS ========== -->
+  <section class="map-section" id="contracts">
+    <p class="section-label">08 · Data</p>
+    <h2 class="section-title">Model contract &amp; storage</h2>
+    <p class="section-lede">
+      Schema lives in <code>Sources/Resources/qwenvoice_contract.json</code>.
+      Three modes × Speed (4-bit) / Quality (8-bit). iOS downloads Speed only.
+    </p>
+
+    <div class="contract-grid" id="contractGrid"></div>
+
+    <div class="speaker-grid" id="speakerGrid"></div>
+
+    <div class="storage-grid">
+      <article class="storage-card">
+        <h4>macOS storage</h4>
+        <code>~/Library/Application Support/QwenVoice/</code>
+        <ul>
+          <li><code>models/</code> — downloaded HF weights</li>
+          <li><code>history.sqlite</code> — GRDB generations</li>
+          <li><code>voices/</code> — enrolled clone references</li>
+          <li>Debug: <code>QwenVoice-Debug/</code> when <code>QWENVOICE_DEBUG=1</code></li>
+        </ul>
+      </article>
+      <article class="storage-card">
+        <h4>iOS storage</h4>
+        <code>group.com.patricedery.vocello.shared/Vocello/</code>
+        <ul>
+          <li>App Group container for models + DB</li>
+          <li>Increased memory limit entitlement</li>
+          <li>Hardware floor: iPhone 15 Pro+</li>
+          <li>Onboarding: Welcome → Install → Ready</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- ========== DISTRIBUTION ========== -->
+  <section class="map-section" id="distribution">
+    <p class="section-label">09 · Ship</p>
+    <h2 class="section-title">Website &amp; distribution</h2>
+    <p class="section-lede">
+      macOS ships via notarized GitHub Release DMG. iOS is on-device-capable on
+      <code>main</code> with an optional TestFlight CI lane. Marketing site deploys from <code>website/</code>.
+    </p>
+
+    <div class="dist-grid">
+      <article class="dist-card">
+        <h4>macOS release</h4>
+        <p>Signed Developer ID + notarized + stapled DMG (<code>Vocello-macos26.dmg</code>) via <code>scripts/release.sh</code> and <code>.github/workflows/release.yml</code>.</p>
+        <span class="status">Shipped · 2.1.0</span>
+      </article>
+      <article class="dist-card">
+        <h4>iOS distribution</h4>
+        <p>App Store / TestFlight path exists as a manual CI job (<code>archive_ios</code>). Not on GitHub Releases yet.</p>
+        <span class="status soon">Arriving soon</span>
+      </article>
+      <article class="dist-card">
+        <h4>Marketing site</h4>
+        <p>React 18 + Vite 7 single page at <code>website/</code>. Deployed on Vercel. Brand tokens: gold / lavender / terracotta.</p>
+        <span class="status">vocello.vercel.app</span>
+      </article>
+    </div>
+
+    <div class="feature-bands" style="margin-top:24px">
+      <div class="feature-band">
+        <div class="band-label">External</div>
+        <div>
+          <h4>Services the product touches</h4>
+          <p>Hugging Face (model download), GitHub Releases (DMG), Apple Notarization / ASC API, optional TestFlight, Vercel (site). No cloud TTS. No bundled weights. No Python runtime in the shippable app.</p>
+          <div class="chip-row">
+            <span class="chip">Hugging Face</span>
+            <span class="chip">GitHub Releases</span>
+            <span class="chip">notarytool</span>
+            <span class="chip">App Store Connect</span>
+            <span class="chip">Vercel</span>
+            <span class="chip">CoreDevice</span>
+          </div>
+        </div>
+      </div>
+      <div class="feature-band">
+        <div class="band-label">Docs index</div>
+        <div>
+          <h4>Where to go deeper</h4>
+          <p>
+            <code>docs/ARCHITECTURE.md</code> ·
+            <code>AGENTS.md</code> ·
+            <code>docs/reference/macos-app-guide.md</code> ·
+            <code>docs/reference/ios-app-guide.md</code> ·
+            <code>docs/reference/cli.md</code> ·
+            <code>docs/reference/testing-runbook.md</code> ·
+            <code>docs/reference/language-bench.md</code>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="map-footer">
+    <div>Vocello project map · sourced from <code>docs/ARCHITECTURE.md</code>, <code>project.yml</code>, and the model contract · static snapshot</div>
+    <div>MIT · QwenVoice monorepo</div>
+  </footer>
+</div>
+
+<!-- ===================== DATA ===================== -->
+<script id="mapData" type="application/json">
+{
+  "features": [
+    {"name": "Custom Voice", "macos": "yes", "ios": "yes", "cli": "yes", "note": "9 built-in speakers"},
+    {"name": "Voice Design", "macos": "yes", "ios": "yes", "cli": "yes", "note": "NL brief + save as voice"},
+    {"name": "Voice Cloning", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Record / import / enroll"},
+    {"name": "Delivery presets", "macos": "yes", "ios": "yes", "cli": "yes", "note": "10 presets × intensities; Clone excluded"},
+    {"name": "Language pin / Auto", "macos": "yes", "ios": "yes", "cli": "yes", "note": "10 languages + Auto"},
+    {"name": "Speed (4-bit) models", "macos": "yes", "ios": "yes", "cli": "yes", "note": "~2.3 GB / mode"},
+    {"name": "Quality (8-bit) models", "macos": "yes", "ios": "no", "cli": "yes", "note": "macOS + CLI only"},
+    {"name": "Streaming live preview", "macos": "yes", "ios": "yes", "cli": "partial", "note": "CLI streams by default"},
+    {"name": "Batch generation", "macos": "yes", "ios": "no", "cli": "yes", "note": "Removed from iOS 2026-07-02"},
+    {"name": "Saved Voices library", "macos": "yes", "ios": "yes", "cli": "yes", "note": "enroll / list / delete"},
+    {"name": "Generation History", "macos": "yes", "ios": "yes", "cli": "no", "note": "GRDB history.sqlite"},
+    {"name": "On-device transcription", "macos": "yes", "ios": "yes", "cli": "no", "note": "Speech framework"},
+    {"name": "Model download / repair", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Hugging Face hub"},
+    {"name": "Variation / seed control", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Expressive / Balanced / Consistent"},
+    {"name": "Onboarding flow", "macos": "no", "ios": "yes", "cli": "no", "note": "Welcome → Install → Ready"},
+    {"name": "XPC engine isolation", "macos": "yes", "ios": "no", "cli": "no", "note": "QwenVoiceEngineService"}
+  ],
+  "featureBands": [
+    {
+      "label": "Studio",
+      "title": "Compose → Generate → Review",
+      "body": "Script editor (0/150), mode-specific chips (voice, delivery, language, brief, reference), Generate gate, cancel, streaming player. macOS uses sidebar screens; iOS uses a Studio tab with mode segment.",
+      "chips": [
+        {"t": "Custom", "c": "mode-c"},
+        {"t": "Design", "c": "mode-d"},
+        {"t": "Clone", "c": "mode-k"},
+        {"t": "textInput_*", "c": ""},
+        {"t": "studioChip_*", "c": ""}
+      ]
+    },
+    {
+      "label": "Delivery",
+      "title": "Emotion presets & custom tone",
+      "body": "Neutral, Happy, Sad, Angry, Fearful, Surprised, Excited, Calm, Whisper, Dramatic. Non-neutral intensities: Subtle / Normal / Strong. Custom tone up to 500 characters. Clone has no delivery control.",
+      "chips": [
+        {"t": "EmotionPreset.swift", "c": ""},
+        {"t": "deliveryPickerPreset_*", "c": ""}
+      ]
+    },
+    {
+      "label": "Languages",
+      "title": "Ten spoken languages + Auto",
+      "body": "English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian. Auto uses Unicode heuristics and NLLanguageRecognizer. Language bench gates hint + on-device ASR output.",
+      "chips": [
+        {"t": "Qwen3SupportedLanguage", "c": ""},
+        {"t": "lang-bench", "c": ""}
+      ]
+    },
+    {
+      "label": "Library",
+      "title": "Voices · History · Models",
+      "body": "Enroll reference clips (record or import), optional auto-transcript, save Design results as Clone voices. History search/filter/play/export. Per-mode model install with cancel, resume, repair, delete.",
+      "chips": [
+        {"t": "voicesRow_*", "c": ""},
+        {"t": "historyRow_*", "c": ""},
+        {"t": "iosModel*", "c": ""}
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "QwenVoice",
+      "label": "QwenVoice",
+      "sub": "macOS app",
+      "kind": "app",
+      "type": "application",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.app",
+      "desc": "Vocello.app — SwiftUI shell, sidebar IA, coordinators, GRDB, XPC client wiring.",
+      "depends": ["QwenVoiceNative", "QwenVoiceEngineService", "QwenVoiceEngineSupport", "QwenVoiceCore", "GRDB"],
+      "files": ["Sources/QwenVoiceApp.swift", "Sources/ContentView.swift", "Sources/Views/", "Sources/ViewModels/", "Sources/Services/"]
+    },
+    {
+      "id": "VocelloiOS",
+      "label": "VocelloiOS",
+      "sub": "iOS app",
+      "kind": "app",
+      "type": "application",
+      "platform": "iOS",
+      "bundle": "com.patricedery.vocello",
+      "desc": "Vocello iOS — in-process engine, four-tab shell, App Group storage. Does not link the XPC stack.",
+      "depends": ["QwenVoiceCore", "GRDB"],
+      "files": ["Sources/iOS/QVoiceiOSApp.swift", "Sources/iOS/App/RootView.swift", "Sources/iOS/Studio/", "Sources/iOSSupport/"]
+    },
+    {
+      "id": "VocelloCLI",
+      "label": "VocelloCLI",
+      "sub": "vocello",
+      "kind": "app",
+      "type": "tool",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.cli",
+      "desc": "Headless CLI for generate, batch, bench, voices, and model install. Engine in-process.",
+      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
+      "files": ["Sources/VocelloCLI/VocelloMain.swift", "Sources/VocelloCLI/CLIRuntime.swift", "Sources/VocelloCLI/GenerateCommand.swift"]
+    },
+    {
+      "id": "QwenVoiceCore",
+      "label": "QwenVoiceCore",
+      "sub": "engine core",
+      "kind": "fw",
+      "type": "framework.static",
+      "platform": "iOS + macOS",
+      "bundle": "com.qwenvoice.core",
+      "desc": "TTSEngine protocol, MLXTTSEngine, generation semantics, runtime, memory policy, telemetry, downloads.",
+      "depends": ["QwenVoiceBackendCore", "MLXAudio", "MLXSwift", "SwiftHuggingFace"],
+      "files": ["Sources/QwenVoiceCore/MLXTTSEngine.swift", "Sources/QwenVoiceCore/NativeRuntimeFactory.swift", "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"]
+    },
+    {
+      "id": "QwenVoiceBackendCore",
+      "label": "BackendCore",
+      "sub": "MLX primitives",
+      "kind": "fw",
+      "type": "framework.static",
+      "platform": "iOS + macOS",
+      "bundle": "com.qwenvoice.backend-core",
+      "desc": "Low-level MLX and audio primitives: Qwen3 generation config and policy types.",
+      "depends": ["MLXAudio", "MLXSwift"],
+      "files": ["Sources/QwenVoiceBackendCore/"]
+    },
+    {
+      "id": "QwenVoiceNative",
+      "label": "QwenVoiceNative",
+      "sub": "XPC bridge",
+      "kind": "mac",
+      "type": "framework.static",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.native",
+      "desc": "App-facing XPC client, TTSEngineStore, GenerationChunkBroker bridging XPC events to SwiftUI.",
+      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
+      "files": ["Sources/QwenVoiceNative/TTSEngineStore.swift", "Sources/QwenVoiceNative/XPCNativeEngineClient.swift"]
+    },
+    {
+      "id": "QwenVoiceEngineSupport",
+      "label": "EngineSupport",
+      "sub": "XPC protocol",
+      "kind": "mac",
+      "type": "framework.static",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.engine-support",
+      "desc": "XPC wire protocol: EngineCommand, envelopes, codec shared by client and service.",
+      "depends": ["QwenVoiceCore"],
+      "files": ["Sources/QwenVoiceEngineSupport/EngineServiceIPC.swift"]
+    },
+    {
+      "id": "QwenVoiceEngineService",
+      "label": "EngineService",
+      "sub": "XPC host",
+      "kind": "mac",
+      "type": "xpc-service",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.app.engine-service",
+      "desc": "Out-of-process engine host. Runs MLXTTSEngine for crash isolation and memory containment.",
+      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
+      "files": ["Sources/QwenVoiceEngineService/main.swift", "Sources/QwenVoiceEngineService/EngineServiceHost.swift"]
+    },
+    {
+      "id": "VocelloCoreTests",
+      "label": "CoreTests",
+      "sub": "unit",
+      "kind": "test",
+      "type": "bundle.unit-test",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.core.tests",
+      "desc": "Language semantics unit tests. No models, no XPC. Part of macOS gate.",
+      "depends": ["QwenVoiceCore"],
+      "files": ["Tests/VocelloCoreTests/"]
+    },
+    {
+      "id": "VocelloMacUITests",
+      "label": "MacUITests",
+      "sub": "XCUITest",
+      "kind": "test",
+      "type": "bundle.ui-testing",
+      "platform": "macOS",
+      "bundle": "com.qwenvoice.app.uitests",
+      "desc": "Smoke, journey, review, and XPC bench matrix against the real engine.",
+      "depends": ["QwenVoice", "QwenVoiceCore"],
+      "files": ["Tests/VocelloMacUITests/"]
+    },
+    {
+      "id": "VocelloiOSUITests",
+      "label": "iOSUITests",
+      "sub": "XCUITest",
+      "kind": "test",
+      "type": "bundle.ui-testing",
+      "platform": "iOS",
+      "bundle": "com.patricedery.vocello.uitests",
+      "desc": "Device-only UI tests: smoke, sheets, cold generation, bench matrix, review tour.",
+      "depends": ["VocelloiOS"],
+      "files": ["Tests/VocelloiOSUITests/"]
+    },
+    {
+      "id": "MLXAudio",
+      "label": "MLXAudio",
+      "sub": "vendored",
+      "kind": "spm",
+      "type": "local package",
+      "platform": "iOS + macOS",
+      "bundle": "third_party_patches/mlx-audio-swift",
+      "desc": "Qwen3-TTS-only fork: MLXAudioCore, MLXAudioCodecs, MLXAudioTTS for load, tokenize, decode.",
+      "depends": ["MLXSwift", "mlx-swift-lm"],
+      "files": ["third_party_patches/mlx-audio-swift/Package.swift"]
+    },
+    {
+      "id": "MLXSwift",
+      "label": "mlx-swift",
+      "sub": "0.30.6",
+      "kind": "spm",
+      "type": "SPM package",
+      "platform": "iOS + macOS",
+      "bundle": "github.com/ml-explore/mlx-swift",
+      "desc": "MLX runtime bindings (MLX, MLXRandom). Exact pin; move in lockstep with mlx-swift-lm.",
+      "depends": [],
+      "files": []
+    },
+    {
+      "id": "SwiftHuggingFace",
+      "label": "SwiftHuggingFace",
+      "sub": "0.9.0",
+      "kind": "spm",
+      "type": "SPM package",
+      "platform": "iOS + macOS",
+      "bundle": "github.com/huggingface/swift-huggingface",
+      "desc": "Hugging Face hub client for on-demand model download.",
+      "depends": [],
+      "files": []
+    },
+    {
+      "id": "GRDB",
+      "label": "GRDB.swift",
+      "sub": "7.10.0",
+      "kind": "spm",
+      "type": "SPM package",
+      "platform": "iOS + macOS",
+      "bundle": "github.com/groue/GRDB.swift",
+      "desc": "SQLite persistence for history.sqlite and related app records.",
+      "depends": [],
+      "files": []
+    }
+  ],
+  "edges": [
+    ["QwenVoice", "QwenVoiceNative"],
+    ["QwenVoice", "QwenVoiceEngineService"],
+    ["QwenVoice", "QwenVoiceEngineSupport"],
+    ["QwenVoice", "QwenVoiceCore"],
+    ["QwenVoice", "GRDB"],
+    ["VocelloiOS", "QwenVoiceCore"],
+    ["VocelloiOS", "GRDB"],
+    ["VocelloCLI", "QwenVoiceCore"],
+    ["VocelloCLI", "QwenVoiceEngineSupport"],
+    ["QwenVoiceNative", "QwenVoiceCore"],
+    ["QwenVoiceNative", "QwenVoiceEngineSupport"],
+    ["QwenVoiceEngineService", "QwenVoiceCore"],
+    ["QwenVoiceEngineService", "QwenVoiceEngineSupport"],
+    ["QwenVoiceEngineSupport", "QwenVoiceCore"],
+    ["QwenVoiceCore", "QwenVoiceBackendCore"],
+    ["QwenVoiceCore", "MLXAudio"],
+    ["QwenVoiceCore", "MLXSwift"],
+    ["QwenVoiceCore", "SwiftHuggingFace"],
+    ["QwenVoiceBackendCore", "MLXAudio"],
+    ["QwenVoiceBackendCore", "MLXSwift"],
+    ["MLXAudio", "MLXSwift"],
+    ["VocelloCoreTests", "QwenVoiceCore"],
+    ["VocelloMacUITests", "QwenVoice"],
+    ["VocelloiOSUITests", "VocelloiOS"]
+  ],
+  "pipeline": [
+    {
+      "title": "Begin user model operation",
+      "body": "MLXTTSEngine.generate acquires an operation slot, sets loadState to running, and prepares cancellation / telemetry scopes.",
+      "path": "MLXTTSEngine.generate → beginUserModelOperation"
+    },
+    {
+      "title": "Prepare generation",
+      "body": "NativeEngineRuntime validates the prompt, seeds MLXRandom, ensures the model is loaded, and builds mode-specific conditioning (speaker, brief, or clone reference).",
+      "path": "runtime.prepareGeneration(for:)"
+    },
+    {
+      "title": "Mode conditioning",
+      "body": "Custom: prewarmCustomVoice. Design: warmDesignConditioning. Clone: NativeCloneSupport (normalize → MLXArray → prompt artifact, three-level cache).",
+      "path": "NativeEngineRuntime / NativeCloneSupport"
+    },
+    {
+      "title": "MLX inference stream",
+      "body": "UnsafeSpeechGenerationModel wraps vendored SpeechGenerationModel streams: generateCustomVoiceStream, generateVoiceDesignStream, generateVoiceCloneStream.",
+      "path": "MLXAudioTTS · Qwen3-TTS 12Hz 1.7B"
+    },
+    {
+      "title": "Mimi codec → PCM",
+      "body": "MLXAudioCodecs decode speech tokens to PCM. PCM16StreamLimiter and defect detection watch for clip, click, slew, dropout, nan/inf.",
+      "path": "MLXAudioCodecs + QC"
+    },
+    {
+      "title": "Write WAV + result",
+      "body": "AtomicPCM16WAVWriter emits 24 kHz mono Int16 WAV. GenerationResult and AudioQCReport feed persistence, player, and telemetry.",
+      "path": "NativeStreamingSynthesisSession.run"
+    }
+  ],
+  "sources": [
+    {
+      "name": "Sources/QwenVoiceBackendCore/",
+      "plat": "iOS+macOS",
+      "desc": "MLX/audio primitives and Qwen3 generation config.",
+      "children": []
+    },
+    {
+      "name": "Sources/QwenVoiceCore/",
+      "plat": "iOS+macOS",
+      "desc": "Engine core: TTSEngine, MLXTTSEngine, runtime, memory, downloads, semantics.",
+      "children": [
+        {"name": "MLXTTSEngine.swift", "desc": "Primary engine implementation"},
+        {"name": "NativeRuntimeFactory.swift", "desc": "Wires registry, asset store, engine"},
+        {"name": "NativeStreamingSynthesisSession.swift", "desc": "One generation end-to-end"},
+        {"name": "SemanticTypes.swift", "desc": "GenerationMode, Request, Event"}
+      ]
+    },
+    {
+      "name": "Sources/QwenVoiceEngineSupport/",
+      "plat": "macOS",
+      "desc": "XPC wire protocol and macOS runtime helpers.",
+      "children": []
+    },
+    {
+      "name": "Sources/QwenVoiceNative/",
+      "plat": "macOS",
+      "desc": "XPC client, TTSEngineStore, chunk broker.",
+      "children": []
+    },
+    {
+      "name": "Sources/QwenVoiceEngineService/",
+      "plat": "macOS",
+      "desc": "Out-of-process XPC engine host.",
+      "children": []
+    },
+    {
+      "name": "Sources/VocelloCLI/",
+      "plat": "macOS",
+      "desc": "Headless vocello binary commands.",
+      "children": []
+    },
+    {
+      "name": "Sources/iOS/",
+      "plat": "iOS",
+      "desc": "SwiftUI app: Studio, Voices, History, Settings, sheets, design system.",
+      "children": [
+        {"name": "App/", "desc": "RootView, AppModel, TabDock"},
+        {"name": "Studio/", "desc": "Studio screen + inline player"},
+        {"name": "Voices/ · History/ · Settings/", "desc": "Library tabs"},
+        {"name": "TTSEngineStore.swift", "desc": "In-process engine wrapper"}
+      ]
+    },
+    {
+      "name": "Sources/iOSSupport/",
+      "plat": "iOS",
+      "desc": "App Group paths, model install, DB, device support.",
+      "children": []
+    },
+    {
+      "name": "Sources/SharedSupport/",
+      "plat": "both apps",
+      "desc": "Player, persistence, transcriber, telemetry helpers.",
+      "children": []
+    },
+    {
+      "name": "Sources/Views/ · ViewModels/ · Services/ · Models/",
+      "plat": "macOS",
+      "desc": "macOS UI, coordinators, GRDB, XPC lifecycle services.",
+      "children": []
+    },
+    {
+      "name": "Sources/Resources/",
+      "plat": "bundled",
+      "desc": "qwenvoice_contract.json, iOS catalog, voice-previews.",
+      "children": []
+    },
+    {
+      "name": "website/",
+      "plat": "web",
+      "desc": "Marketing site (React + Vite) → Vercel.",
+      "children": []
+    },
+    {
+      "name": "scripts/",
+      "plat": "dev",
+      "desc": "Build, gates, release, benches, device tooling.",
+      "children": []
+    },
+    {
+      "name": "Tests/",
+      "plat": "test",
+      "desc": "VocelloCoreTests, VocelloMacUITests, VocelloiOSUITests.",
+      "children": []
+    }
+  ],
+  "deps": [
+    {"name": "mlx-swift", "ver": "exact 0.30.6", "role": "MLX runtime (MLX, MLXRandom)", "tag": "direct", "direct": true},
+    {"name": "mlx-swift-lm", "ver": "exact 2.30.6", "role": "LM utilities via vendored MLXAudio (lockstep with mlx-swift)", "tag": "transitive", "direct": false},
+    {"name": "mlx-audio-swift", "ver": "vendored fork", "role": "Qwen3-TTS load / tokenize / decode (MLXAudioCore, Codecs, TTS)", "tag": "vendored", "direct": true},
+    {"name": "GRDB.swift", "ver": "exact 7.10.0", "role": "SQLite for history.sqlite", "tag": "direct", "direct": true},
+    {"name": "SwiftHuggingFace", "ver": "exact 0.9.0", "role": "Hugging Face model download client", "tag": "direct", "direct": true},
+    {"name": "swift-transformers", "ver": "1.1.9", "role": "Tokenizer (transitive)", "tag": "transitive", "direct": false},
+    {"name": "swift-jinja", "ver": "2.3.5", "role": "Chat/template formatting", "tag": "transitive", "direct": false},
+    {"name": "swift-nio", "ver": "2.98.0", "role": "Networking via SwiftHuggingFace", "tag": "transitive", "direct": false},
+    {"name": "swift-crypto", "ver": "4.4.0", "role": "Hashing", "tag": "transitive", "direct": false},
+    {"name": "swift-collections", "ver": "1.4.1", "role": "Deque / OrderedSet", "tag": "transitive", "direct": false},
+    {"name": "yyjson", "ver": "0.12.0", "role": "Fast JSON parser", "tag": "transitive", "direct": false},
+    {"name": "EventSource", "ver": "1.4.1", "role": "Server-sent events", "tag": "transitive", "direct": false}
+  ],
+  "tooling": {
+    "Build": [
+      {"cmd": "scripts/build.sh build|run|cli", "desc": "Primary local build; Release at -Onone for iterate"},
+      {"cmd": "scripts/regenerate_project.sh", "desc": "XcodeGen from project.yml"},
+      {"cmd": "scripts/check_project_inputs.sh", "desc": "pbxproj / resource invariants"},
+      {"cmd": "scripts/build_foundation_targets.sh ios", "desc": "iOS compile-only safety"},
+      {"cmd": "scripts/release.sh", "desc": "Optimized Release, sign, DMG, notarize"}
+    ],
+    "macOS test": [
+      {"cmd": "macos_test.sh gate", "desc": "Pre-merge gate (core + smoke + crashes)"},
+      {"cmd": "macos_test.sh core-test", "desc": "VocelloCoreTests language semantics"},
+      {"cmd": "macos_test.sh test|journey|bench-ui", "desc": "XCUITest smoke / journey / matrix"},
+      {"cmd": "macos_test.sh lang-bench", "desc": "CLI language hint gate"},
+      {"cmd": "macos_test.sh models ensure", "desc": "Speed model fixtures"}
+    ],
+    "iOS test": [
+      {"cmd": "ios_device.sh gate", "desc": "Pre-merge on paired iPhone"},
+      {"cmd": "ios_device.sh test|ui-test", "desc": "Smoke + sheets + cold generation"},
+      {"cmd": "ios_device.sh bench-ui|lang-bench", "desc": "UI matrix / language output gates"},
+      {"cmd": "ios_mirroir_preflight.sh", "desc": "Exploratory mirroir QA only"},
+      {"cmd": "ios_device.sh launch", "desc": "RESET primary for agent tours"}
+    ],
+    "CI / release": [
+      {"cmd": "ci.yml · ios-compile-check", "desc": "build-for-testing VocelloiOS on macos-26"},
+      {"cmd": "ci.yml · macos-ui-smoke", "desc": "Manual workflow_dispatch only"},
+      {"cmd": "release.yml · package", "desc": "Notarized DMG + GitHub Release attach"},
+      {"cmd": "release.yml · archive-ios", "desc": "Optional TestFlight archive lane"}
+    ],
+    "Bench": [
+      {"cmd": "vocello bench", "desc": "Headless perf/quality matrix + telemetry"},
+      {"cmd": "uitest_measure.sh", "desc": "Deterministic macOS UI measurement"},
+      {"cmd": "check_language_hints.py", "desc": "Phase 2 hint gate fixtures"},
+      {"cmd": "check_language_output.py", "desc": "Phase 3 ASR output gate"}
+    ]
+  },
+  "contracts": [
+    {
+      "mode": "custom",
+      "title": "Custom Voice · pro_custom",
+      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "quality": "…-CustomVoice-8bit",
+      "ios": "Speed only (~2.31 GB)",
+      "notes": "supportsInstructionControl · 9 speakers"
+    },
+    {
+      "mode": "design",
+      "title": "Voice Design · pro_design",
+      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "quality": "…-VoiceDesign-8bit",
+      "ios": "Speed only (~2.31 GB)",
+      "notes": "NL voice brief conditioning"
+    },
+    {
+      "mode": "clone",
+      "title": "Voice Cloning · pro_clone",
+      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "quality": "…-Base-8bit",
+      "ios": "Speed only (~2.31 GB)",
+      "notes": "requiresSpeakerEncoder · no delivery"
+    }
+  ],
+  "speakers": [
+    {"name": "Aiden", "lang": "English · default"},
+    {"name": "Ryan", "lang": "English"},
+    {"name": "Vivian", "lang": "Chinese"},
+    {"name": "Serena", "lang": "Chinese"},
+    {"name": "Uncle Fu", "lang": "Chinese"},
+    {"name": "Dylan", "lang": "Chinese · Beijing"},
+    {"name": "Eric", "lang": "Chinese · Sichuan"},
+    {"name": "Ono Anna", "lang": "Japanese"},
+    {"name": "Sohee", "lang": "Korean"}
+  ]
+}
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  const DATA = JSON.parse(document.getElementById("mapData").textContent);
+
+  /* ---------- Feature matrix ---------- */
+  const tbody = document.querySelector("#featureMatrix tbody");
+  const cell = (v) => {
+    if (v === "yes") return '<span class="yes">yes</span>';
+    if (v === "partial") return '<span class="partial">partial</span>';
+    return '<span class="no">—</span>';
+  };
+  DATA.features.forEach((f) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${f.name}<span class="note">${f.note || ""}</span></td>` +
+      `<td>${cell(f.macos)}</td>` +
+      `<td>${cell(f.ios)}</td>` +
+      `<td>${cell(f.cli)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const bands = document.getElementById("featureBands");
+  DATA.featureBands.forEach((b) => {
+    const el = document.createElement("div");
+    el.className = "feature-band";
+    el.innerHTML =
+      `<div class="band-label">${b.label}</div>` +
+      `<div><h4>${b.title}</h4><p>${b.body}</p>` +
+      `<div class="chip-row">${b.chips
+        .map((c) => `<span class="chip ${c.c || ""}">${c.t}</span>`)
+        .join("")}</div></div>`;
+    bands.appendChild(el);
+  });
+
+  /* ---------- Pipeline ---------- */
+  const pipe = document.getElementById("pipelineSteps");
+  DATA.pipeline.forEach((s, i) => {
+    const el = document.createElement("div");
+    el.className = "pipe-step";
+    el.innerHTML =
+      `<div class="pipe-num">${i + 1}</div>` +
+      `<div><h4>${s.title}</h4><p>${s.body}</p>` +
+      `<span class="path-tag">${s.path}</span></div>`;
+    pipe.appendChild(el);
+  });
+
+  /* ---------- Source tree ---------- */
+  const tree = document.getElementById("sourceTree");
+  DATA.sources.forEach((s) => {
+    const item = document.createElement("div");
+    item.className = "tree-item" + (s.children && s.children.length ? "" : "");
+    const hasKids = s.children && s.children.length;
+    item.innerHTML =
+      `<div class="tree-row${hasKids ? " folder" : ""}">` +
+      `<button class="tree-toggle" ${hasKids ? "" : "disabled"} aria-label="Toggle">${hasKids ? "+" : "·"}</button>` +
+      `<div class="tree-name">${s.name}<span class="plat">${s.plat}</span></div>` +
+      `<div class="tree-desc">${s.desc}</div></div>`;
+    if (hasKids) {
+      const kids = document.createElement("div");
+      kids.className = "tree-children";
+      s.children.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "tree-row";
+        row.innerHTML =
+          `<button class="tree-toggle" disabled>·</button>` +
+          `<div class="tree-name">${c.name}</div>` +
+          `<div class="tree-desc">${c.desc}</div>`;
+        kids.appendChild(row);
+      });
+      item.appendChild(kids);
+      item.querySelector(".tree-row.folder").addEventListener("click", () => {
+        item.classList.toggle("open");
+        item.querySelector(".tree-toggle").textContent = item.classList.contains("open") ? "−" : "+";
+      });
+    }
+    tree.appendChild(item);
+  });
+
+  /* ---------- Deps ---------- */
+  const depGrid = document.getElementById("depGrid");
+  DATA.deps.forEach((d) => {
+    const el = document.createElement("article");
+    el.className = "dep-card" + (d.direct ? " direct" : "");
+    el.innerHTML =
+      `<h4>${d.name}</h4>` +
+      `<div class="ver">${d.ver}</div>` +
+      `<p>${d.role}</p>` +
+      `<span class="tag">${d.tag}</span>`;
+    depGrid.appendChild(el);
+  });
+
+  /* ---------- Tooling tabs ---------- */
+  const tabs = document.getElementById("toolTabs");
+  const panels = document.getElementById("toolPanels");
+  const categories = Object.keys(DATA.tooling);
+  categories.forEach((cat, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "tool-tab" + (idx === 0 ? " active" : "");
+    btn.type = "button";
+    btn.setAttribute("role", "tab");
+    btn.textContent = cat;
+    btn.addEventListener("click", () => {
+      tabs.querySelectorAll(".tool-tab").forEach((t) => t.classList.remove("active"));
+      panels.querySelectorAll(".tool-panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tool-" + idx).classList.add("active");
+    });
+    tabs.appendChild(btn);
+
+    const panel = document.createElement("div");
+    panel.className = "tool-panel" + (idx === 0 ? " active" : "");
+    panel.id = "tool-" + idx;
+    panel.setAttribute("role", "tabpanel");
+    DATA.tooling[cat].forEach((row) => {
+      const r = document.createElement("div");
+      r.className = "tool-row";
+      r.innerHTML = `<code>${row.cmd}</code><span>${row.desc}</span>`;
+      panel.appendChild(r);
+    });
+    panels.appendChild(panel);
+  });
+
+  /* ---------- Contracts + speakers ---------- */
+  const cg = document.getElementById("contractGrid");
+  DATA.contracts.forEach((c) => {
+    const el = document.createElement("article");
+    el.className = "contract-card";
+    el.dataset.mode = c.mode;
+    el.innerHTML =
+      `<h4>${c.title}</h4>` +
+      `<dl>` +
+      `<div><dt>Speed (4-bit)</dt><dd>${c.speed}</dd></div>` +
+      `<div><dt>Quality (8-bit)</dt><dd>${c.quality}</dd></div>` +
+      `<div><dt>iOS</dt><dd>${c.ios}</dd></div>` +
+      `<div><dt>Notes</dt><dd>${c.notes}</dd></div>` +
+      `</dl>`;
+    cg.appendChild(el);
+  });
+
+  const sg = document.getElementById("speakerGrid");
+  DATA.speakers.forEach((s) => {
+    const el = document.createElement("div");
+    el.className = "speaker";
+    el.innerHTML = `<strong>${s.name}</strong><span>${s.lang}</span>`;
+    sg.appendChild(el);
+  });
+
+  /* ---------- Module graph ---------- */
+  const positions = {
+    QwenVoice: [70, 70],
+    VocelloiOS: [280, 70],
+    VocelloCLI: [490, 70],
+    VocelloMacUITests: [70, 160],
+    VocelloiOSUITests: [280, 160],
+    VocelloCoreTests: [490, 160],
+    QwenVoiceNative: [70, 270],
+    QwenVoiceEngineService: [250, 270],
+    QwenVoiceEngineSupport: [430, 270],
+    QwenVoiceCore: [250, 380],
+    QwenVoiceBackendCore: [250, 470],
+    GRDB: [620, 70],
+    MLXAudio: [620, 320],
+    MLXSwift: [620, 420],
+    SwiftHuggingFace: [620, 220]
+  };
+
+  const byId = Object.fromEntries(DATA.modules.map((m) => [m.id, m]));
+  const svg = document.getElementById("moduleGraph");
+  const NS = "http://www.w3.org/2000/svg";
+
+  function el(name, attrs) {
+    const n = document.createElementNS(NS, name);
+    Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, v));
+    return n;
+  }
+
+  const edgeLayer = el("g", { id: "edges" });
+  const nodeLayer = el("g", { id: "nodes" });
+  svg.appendChild(edgeLayer);
+  svg.appendChild(nodeLayer);
+
+  const edgeEls = [];
+  DATA.edges.forEach(([from, to]) => {
+    const a = positions[from];
+    const b = positions[to];
+    if (!a || !b) return;
+    const x1 = a[0] + 70;
+    const y1 = a[1] + 22;
+    const x2 = b[0] + 70;
+    const y2 = b[1] + 10;
+    const midY = (y1 + y2) / 2;
+    const path = el("path", {
+      class: "edge",
+      d: `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`,
+      "data-from": from,
+      "data-to": to
+    });
+    edgeLayer.appendChild(path);
+    edgeEls.push(path);
+  });
+
+  const nodeEls = {};
+  DATA.modules.forEach((m) => {
+    const pos = positions[m.id];
+    if (!pos) return;
+    const g = el("g", {
+      class: "node-hit",
+      "data-id": m.id,
+      tabindex: "0",
+      role: "button",
+      "aria-label": m.label
+    });
+    const w = 140;
+    const h = 44;
+    const cls =
+      m.kind === "app"
+        ? "node-app"
+        : m.kind === "fw"
+          ? "node-fw"
+          : m.kind === "mac"
+            ? "node-mac"
+            : m.kind === "test"
+              ? "node-test"
+              : "node-spm";
+    const rect = el("rect", {
+      x: pos[0],
+      y: pos[1],
+      width: w,
+      height: h,
+      rx: 8,
+      class: cls
+    });
+    const label = el("text", {
+      x: pos[0] + 12,
+      y: pos[1] + 18,
+      class: "node-label"
+    });
+    label.textContent = m.label;
+    const sub = el("text", {
+      x: pos[0] + 12,
+      y: pos[1] + 34,
+      class: "node-sub"
+    });
+    sub.textContent = m.sub;
+    g.appendChild(rect);
+    g.appendChild(label);
+    g.appendChild(sub);
+    nodeLayer.appendChild(g);
+    nodeEls[m.id] = g;
+
+    const activate = () => selectModule(m.id);
+    g.addEventListener("click", activate);
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    });
+    g.addEventListener("mouseenter", () => highlight(m.id));
+    g.addEventListener("mouseleave", () => {
+      if (selectedId !== m.id) clearHighlight();
+      else highlight(selectedId);
+    });
+  });
+
+  let selectedId = null;
+  const detail = document.getElementById("detailPanel");
+
+  function connected(id) {
+    const set = new Set([id]);
+    DATA.edges.forEach(([a, b]) => {
+      if (a === id || b === id) {
+        set.add(a);
+        set.add(b);
+      }
+    });
+    return set;
+  }
+
+  function highlight(id) {
+    const set = connected(id);
+    Object.entries(nodeEls).forEach(([nid, g]) => {
+      g.classList.toggle("dim", !set.has(nid));
+      g.classList.toggle("hot", nid === id);
+    });
+    edgeEls.forEach((e) => {
+      const hot = e.getAttribute("data-from") === id || e.getAttribute("data-to") === id;
+      e.classList.toggle("hot", hot);
+    });
+  }
+
+  function clearHighlight() {
+    Object.values(nodeEls).forEach((g) => {
+      g.classList.remove("dim", "hot");
+    });
+    edgeEls.forEach((e) => e.classList.remove("hot"));
+  }
+
+  function selectModule(id) {
+    selectedId = id;
+    highlight(id);
+    const m = byId[id];
+    if (!m) return;
+    detail.innerHTML =
+      `<div class="kind">${m.type} · ${m.platform}</div>` +
+      `<h3>${m.label}</h3>` +
+      `<div class="bundle">${m.bundle}</div>` +
+      `<p>${m.desc}</p>` +
+      `<h4>Depends on</h4>` +
+      `<ul>${
+        m.depends.length
+          ? m.depends.map((d) => `<li>${d}</li>`).join("")
+          : "<li>(none)</li>"
+      }</ul>` +
+      (m.files && m.files.length
+        ? `<h4>Key paths</h4><ul class="files">${m.files
+            .map((f) => `<li>${f}</li>`)
+            .join("")}</ul>`
+        : "");
+  }
+
+  /* ---------- Sticky nav active state ---------- */
+  const links = [...document.querySelectorAll("#navLinks a")];
+  const sections = links
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const id = "#" + entry.target.id;
+        links.forEach((l) => l.classList.toggle("active", l.getAttribute("href") === id));
+      });
+    },
+    { rootMargin: "-20% 0px -65% 0px", threshold: 0 }
+  );
+  sections.forEach((s) => io.observe(s));
+})();
+</script>
+</body>
+</html>
