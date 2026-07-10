@@ -5,13 +5,12 @@
 > Historical context only: [`docs/post-mortem/`](../post-mortem/),
 > [`docs/releases/`](../releases/), [`on-device-ui-testing-research-report.md`](on-device-ui-testing-research-report.md).
 >
-> Regression gates are run by the checked-in `scripts/*.sh` + `xcodebuild` and by
-> `.github/workflows/ci.yml` — **never** by an agent driving the screen. Separate from the
-> gates, **exploratory agent-driven UI QA** exists again (Jul 2026): **mirroir native** on iOS
-> (`describe_screen` → `tap`); **Peekaboo** on macOS — while the deterministic measurement shell
-> [`scripts/uitest_measure.sh`](../../scripts/uitest_measure.sh) verifies results from
-> OSSignposts + `history.sqlite` + the WAV on disk — see [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md).
-> Measurement never depends on how the UI was driven.
+> Deterministic gates are run by checked-in scripts and CI. macOS frontend acceptance is the
+> explicit semantic layer: `$vocello-macos-ui-qa` uses Codex Computer Use, while
+> `scripts/macos_agent_ui.sh` makes its fresh structured attestation gate-bearing through typed
+> XPC/backend probes, History, WAV, fingerprints, and cleanup. iOS remains physical-device
+> XCUITest for gates and mirroir for exploratory QA. Measurement never depends only on how the UI
+> was driven.
 >
 > Subsystem deep-dives: [`ios-device-testing.md`](ios-device-testing.md),
 > [`macos-testing.md`](macos-testing.md), [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md),
@@ -26,7 +25,7 @@ is not used for any Vocello iOS test or agent workflow.
 | Platform | Backend | Where it runs | Suites |
 | --- | --- | --- | --- |
 | **iOS UI** | real in-process MLX engine | **paired iPhone only** | `Smoke`, `Sheet`, `OnDeviceDownload`, `ColdGeneration`, `ReviewTour` |
-| **macOS UI smoke** | real (out-of-process XPC) | **local macOS 26 host** (not CI yet) | `VocelloMacSmokeUITests` (12 tests) |
+| **macOS frontend** | real (out-of-process XPC) | **local macOS 26 host** | Computer Use quick/full/benchmark scenarios + typed attestation |
 
 Warm-path suites (`Smoke`, `Sheet`, `ReviewTour`) share [`VocelloUITestApp`](../../Tests/VocelloiOSUITests/VocelloUITestApp.swift) — one app session with the real engine. `ColdGeneration` and `OnDeviceDownload` self-launch fresh instances when they need cold starts or download-specific setup.
 
@@ -37,8 +36,8 @@ the device for generation and bench paths. Download tests intentionally remove o
 
 | Lane | Models required | How to prepare |
 | --- | --- | --- |
-| macOS `test` / `gate` / `profile` | `pro_custom_speed` in **debug** context (`QWENVOICE_DEBUG=1`) | `scripts/macos_test.sh models ensure` (install once to canonical `~/Library/Application Support/QwenVoice/models`, symlink `QwenVoice-Debug/models` → canonical) |
-| macOS ad-hoc `xcodebuild test` | same (tests skip if missing) | `models ensure` before running, or tolerate `XCTSkip` |
+| macOS Computer Use / profile / UI benchmark | relevant Speed models in **debug** context (`QWENVOICE_DEBUG=1`) | `scripts/macos_test.sh models ensure` (canonical store + debug symlink) |
+| macOS deterministic `test` | no model weights | Core, injectable XPC, vendored runtime and harness contracts |
 | iOS default `test` / `gate` | Smoke + Sheet + ColdGeneration + Custom Voice headless generation | Install **all three Speed models** on iPhone once: Settings → Model Downloads (~6.9 GB). `QVOICE_GATE_SKIP_GENERATION=1` to skip generation step. |
 | iOS `--cold`, `bench`, `profile` | Speed model **on the device** (App Group) | Install once on iPhone: Settings → Model Downloads |
 | CI (GitHub) | none (compile-only) | `build-for-testing` with `generic/platform=iOS` |
@@ -60,12 +59,15 @@ are paired, `scripts/ios_device.sh` prefers **iPhone 17 Pro**.
 
 ## 3. Commands
 
-### macOS UI smoke (local)
+### macOS deterministic + frontend acceptance (local)
 ```sh
 scripts/macos_test.sh models ensure   # one-time Speed model + debug symlink
 scripts/macos_test.sh models check    # read-only status (debug context)
-scripts/macos_test.sh test            # ensures models, then VocelloMacSmokeUITests
-scripts/macos_test.sh gate            # pre-merge gate (includes model ensure; new .ips during the run are gate-fatal)
+scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime + harness
+scripts/macos_agent_ui.sh impact      # selects none / quick / full / benchmark
+# Invoke $vocello-macos-ui-qa <selected-suite>, then validate its report:
+scripts/macos_test.sh ui-report --suite full
+scripts/macos_test.sh gate            # deterministic/crash checks + impact-selected attestation
 # optional bounded engine bench + regression compare vs benchmarks/baselines/mac-gate-bench.json:
 # QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate
 scripts/macos_test.sh profile [spec]  # Instruments + vocello bench; fails on bench error unless --allow-bench-fail
@@ -87,9 +89,8 @@ scripts/ios_device.sh gate                # pre-merge gate (device)
 
 ## 3b. UI-driven benchmark lanes — step-by-step (any agent can run these)
 
-Both platforms have a **full-matrix benchmark driven through the real UI** (XCUITest taps
-the actual mode segments, composer, and Generate button; the engine's durable telemetry is
-gated afterwards). Follow these procedures literally.
+Both platforms have a full matrix through the real UI, with different drivers: Computer Use on
+macOS and physical-device XCUITest on iOS. Durable telemetry is gated afterward.
 
 ### macOS: `scripts/macos_test.sh bench-ui`
 
@@ -97,18 +98,16 @@ gated afterwards). Follow these procedures literally.
    - Idle machine — `pgrep -x xcodebuild` must print nothing (a concurrent build
      contaminates RTF).
    - Models: `scripts/macos_test.sh models ensure` once per machine.
-   - Unattended automation ready: `scripts/macos_test.sh uitest-doctor` reports Gates 1–3 OK.
-2. **Run:** `scripts/macos_test.sh bench-ui --label "<why-you-are-running>"`
-   (default 29-take matrix: custom/design/clone × short/medium/long, 1 cold + 3 warm;
-   scope down with `--modes custom --lengths medium --warm 1` for a smoke).
-   Duration ≈ 20 min full matrix. Do NOT touch the machine while it runs.
-3. **Verdict:** printed XPC gate — `expected=N engine=N service=N app=N merged=N` then
-   `PASS`/`FAIL`. Artifacts: `build/macos/bench-ui-<runID>/` (log, summary, verdict).
-4. **Triage:** missing service/app rows = audit J1 family (see
-   `docs/rescue-plan-progress.md` §3b) — **closed 2026-07-02** (length-aware flush
-   timeouts; was 12 s warm vs long takes still generating after player bar). Frozen
-   markers (`did not advance` in the log) = `MacUITestSurfaceMarkers` observability. A take stuck on generate = check
-   `sidebar_backendStatus_error`/`_crashed` in the log, then `scripts/macos_test.sh crashes`.
+   - Exact app built: `./scripts/build.sh build`.
+   - Computer Use permissions: `scripts/macos_agent_ui.sh doctor --suite benchmark --json`.
+2. **Run:** invoke `$vocello-macos-ui-qa benchmark`. Computer Use drives each semantic action;
+   the shell harness owns the take manifest, timestamps, cold/warm labels and deterministic checks.
+3. **Verdict:** `scripts/macos_test.sh bench-ui --report <run>` validates the report, typed
+   app/XPC/backend rows, fingerprints, cleanup and merged matrix. Artifacts live under
+   `build/macos/agent-ui/<runID>/`.
+4. **Triage:** inspect `probe-verdict.json`, `events.jsonl`, generation assertions, layer JSONL,
+   app/service logs, and `scripts/macos_test.sh crashes`. A coordinate fallback is an automation
+   warning, never silent proof.
 
 ### iOS: `scripts/ios_device.sh bench-ui` (paired iPhone; NEVER the Simulator)
 
@@ -142,13 +141,12 @@ gated afterwards). Follow these procedures literally.
    `ios_device.sh bench` (same `-Onone` build). Never compare against macOS or CLI lanes
    (see `benchmarking-procedure.md` §7 like-for-like table).
 
-### Agent-driven exploratory UI QA (not a gate)
+### Agent-driven UI QA
 
 | Platform | Driver | Entry | Gate? |
 | --- | --- | --- | --- |
-| **iOS** | **mirroir native** (`describe_screen` → `tap` / `type_text`) | [`ios-agent-ui-tour.md`](ios-agent-ui-tour.md) Appendix B; `scripts/ios_mirroir_preflight.sh` | **Never** |
-| **iOS agent matrix** | mirroir + `bench-ui-mirroir --agent-drive` | [`ios-device-testing.md`](ios-device-testing.md) Playbook G | **Never** |
-| **macOS** | Peekaboo + `uitest_measure.sh` | [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) | **Never** |
+| **iOS** | **mirroir native** (`describe_screen` → `tap` / `type_text`) + `measure-*` | [`ios-agent-ui-tour.md`](ios-agent-ui-tour.md) Appendix B; [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) | **Never** |
+| **macOS** | `$vocello-macos-ui-qa` Computer Use + typed harness | [`macos-testing.md`](macos-testing.md) | **Impact-selected** |
 
 **Mirror observation (iOS):** `scripts/ios_device.sh mirror` / `shot` / `device-state` keep the
 CoreDevice tunnel alive and capture evidence — **no taps**. Mirror window may sit anywhere on the
@@ -156,19 +154,19 @@ display; run `scripts/lib/ios_vision_bridge.sh calibrate` after move/resize (Pee
 only — deprecated when mirroir OCR works). iPhone mic is unavailable through Mirroring —
 recording/enroll flows are attended, on the phone.
 
-**Retired / deferred agent lanes:** `bench-ui-vision` (deprecated Peekaboo mirror coords),
-`bench-ui-mcp` (deferred WDA), deleted `scripts/uitest.sh` (use `uitest_measure.sh` on macOS).
+**Retired / deferred agent lanes:** iOS `bench-ui-mirroir`, `bench-ui-vision`, and `bench-ui-mcp`;
+retired macOS Peekaboo, `uitest_measure.sh`, `VocelloMacUITests`, `journey`, and `uitest-doctor`.
 
 ### Harness matrix (canonical)
 
 | Layer | iOS | macOS | Pre-merge gate? |
 | --- | --- | --- | --- |
-| **Gate** | `ios_device.sh gate` (XCUITest + headless generation + crashes) | `macos_test.sh gate` (models + core-test + XCUITest + crashes) | **Yes** |
-| **UI smoke** | `ios_device.sh test` / `ui-test` | `macos_test.sh test` | Used by gate |
-| **UI matrix** | `ios_device.sh bench-ui` (XCUITest) | `macos_test.sh bench-ui` (XCUITest) | No |
+| **Gate** | `ios_device.sh gate` (XCUITest + headless generation + crashes) | `macos_test.sh gate` (deterministic tests + crashes + typed attestation) | **Yes** |
+| **UI smoke** | `ios_device.sh test` / `ui-test` | `$vocello-macos-ui-qa quick\|full` + `ui-report` | Impact-selected on macOS |
+| **UI matrix** | `ios_device.sh bench-ui` (XCUITest) | `$vocello-macos-ui-qa benchmark` + `macos_test.sh bench-ui` | Backend-impact/release evidence |
 | **Lang verification** | `ios_device.sh lang-bench` (hint + output) | `macos_test.sh lang-bench` (hint) | No |
 | **Headless engine** | `ios_device.sh bench` | `vocello bench` / `macos_test.sh profile` | Optional in gate |
-| **Agent exploratory** | mirroir + tour doc | Peekaboo + `uitest_measure.sh` | **Never** |
+| **Agent operator** | mirroir + tour doc | Computer Use + repository skill | iOS never; macOS structured reports can gate |
 | **Mirror infra** | `mirror` / `shot` / `device-state` | — | Support only |
 
 Other docs should **link here** for lane semantics instead of re-describing the matrix.
@@ -187,26 +185,26 @@ PR:
 - **`ios-compile-check`** (always): regenerates the project and runs `build-for-testing` for
   `VocelloiOS` + `VocelloiOSUITests` against `generic/platform=iOS` (compile/link only — no
   Simulator, no XCUITest). This catches Swift/SPM/XcodeGen regressions without a physical device.
-- **`macos-ui-smoke`** (manual `workflow_dispatch` only): GitHub runners can't launch a
-  macOS-26-targeted app yet (same reason `release.yml` sets `QWENVOICE_SKIP_LAUNCH_SMOKE=1`),
-  so macOS UI smoke runs locally via `scripts/macos_test.sh test`. Fire the dispatch input once
-  they do.
+- **`macos-deterministic-tests`**: runs Core/XPC/runtime/harness tests, builds the exact-path app
+  for fingerprinting, and validates the impact-selected committed attestation. CI does not claim
+  to execute Computer Use.
 
 **Pre-merge iOS quality gate:** run `scripts/ios_device.sh gate` locally on your paired iPhone
 before merging.
 
-## 5. Determinism rules (keep tests un-flaky)
+## 5. Determinism rules
 
-- Wait with `waitForExistence` / `XCTNSPredicateExpectation`, **never** `usleep` / `Thread.sleep`
+- iOS XCUITest waits with `waitForExistence` / `XCTNSPredicateExpectation`, never `usleep` / `Thread.sleep`
   / RunLoop polling.
-- Register `installSystemAlertMonitor()` in `setUp` so permission/automation dialogs can't stall
-  a run.
+- iOS permission/automation alert handling remains owned by the physical-device suite.
 - Query by stable `accessibilityIdentifier` (`voicesRow_*`, `textInput_*`, `studioChip_*`, …);
   these are surface area and must survive refactors. Never let a `screen_*` container shadow its
   descendants — use the `screenPresenceMarker(_:)` leaf marker
   ([`IOSAccessibility`](../../Sources/iOS/IOSAccessibility.swift)).
 - A failing assertion should explain itself (capture the error-surface text / a screenshot), so a
   single run diagnoses the cause.
+- macOS Computer Use always re-observes before and after one logical action, resolves fresh element
+  indices, and records screenshots/coordinates as warnings when accessibility cannot expose a control.
 
 ## 6. Perf / quality gate (real engine, mandatory pre-merge listening pass)
 ```sh

@@ -1,5 +1,330 @@
+import CryptoKit
 import Foundation
 @preconcurrency import MLXAudioCore
+
+public enum GenerationTerminalReason: String, Hashable, Codable, Sendable {
+    case eos
+    case maxTokens
+    case cancelled
+    case failed
+    case completed
+    case superseded
+    case unknown
+
+    public init(compatibilityValue: String?) {
+        switch compatibilityValue?.replacingOccurrences(of: "_", with: "").lowercased() {
+        case "eos": self = .eos
+        case "maxtokens": self = .maxTokens
+        case "cancelled", "canceled": self = .cancelled
+        case "failed": self = .failed
+        case "completed": self = .completed
+        case "superseded": self = .superseded
+        default: self = .unknown
+        }
+    }
+}
+
+public enum GenerationCancellationState: String, Hashable, Codable, Sendable {
+    case notRequested
+    case requested
+    case acknowledged
+    case completed
+}
+
+public enum GenerationTransportState: String, Hashable, Codable, Sendable {
+    case connected
+    case interrupted
+    case expectedRetirement
+    case reconnected
+}
+
+public enum BackendTimingKey: String, Hashable, Codable, Sendable {
+    case modelLoad
+    case prepareGeneration
+    case explicitPrewarm
+    case cloneConditioning
+    case generationStream
+    case qualityFirstGeneration
+    case tokenLoop
+    case talkerForward
+    case codePredictor
+    case audioDecoder
+    case streamStepEval
+    case streamStepEOSRead
+    case audioChunkEval
+    case finalWAVFinish
+}
+
+public struct BackendTimingMetric: Hashable, Codable, Sendable {
+    public let key: BackendTimingKey
+    public let milliseconds: Double
+
+    public init(key: BackendTimingKey, milliseconds: Double) {
+        self.key = key
+        self.milliseconds = milliseconds
+    }
+}
+
+public enum BackendCounterKey: String, Hashable, Codable, Sendable {
+    case generatedCodes
+    case decoderCalls
+    case chunkCount
+    case pendingCodePeak
+}
+
+public struct BackendCounterMetric: Hashable, Codable, Sendable {
+    public let key: BackendCounterKey
+    public let value: Int
+
+    public init(key: BackendCounterKey, value: Int) {
+        self.key = key
+        self.value = value
+    }
+}
+
+public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
+    public let submitToFirstChunkMS: Int?
+    public let submitToFirstAudibleMS: Int?
+    public let submitToCompletedMS: Int?
+    public let firstChunkToAudibleMS: Int?
+    public let mainThreadStallCount50MS: Int
+    public let mainThreadStallCount250MS: Int
+    public let mainThreadMaximumStallMS: Int
+
+    public init(
+        submitToFirstChunkMS: Int? = nil,
+        submitToFirstAudibleMS: Int? = nil,
+        submitToCompletedMS: Int? = nil,
+        firstChunkToAudibleMS: Int? = nil,
+        mainThreadStallCount50MS: Int = 0,
+        mainThreadStallCount250MS: Int = 0,
+        mainThreadMaximumStallMS: Int = 0
+    ) {
+        self.submitToFirstChunkMS = submitToFirstChunkMS
+        self.submitToFirstAudibleMS = submitToFirstAudibleMS
+        self.submitToCompletedMS = submitToCompletedMS
+        self.firstChunkToAudibleMS = firstChunkToAudibleMS
+        self.mainThreadStallCount50MS = mainThreadStallCount50MS
+        self.mainThreadStallCount250MS = mainThreadStallCount250MS
+        self.mainThreadMaximumStallMS = mainThreadMaximumStallMS
+    }
+}
+
+public struct EngineTransportCounters: Hashable, Codable, Sendable {
+    public let chunksForwarded: Int
+    public let chunkGaps: Int
+    public let duplicateChunks: Int
+    public let outOfOrderChunks: Int
+
+    public init(
+        chunksForwarded: Int = 0,
+        chunkGaps: Int = 0,
+        duplicateChunks: Int = 0,
+        outOfOrderChunks: Int = 0
+    ) {
+        self.chunksForwarded = chunksForwarded
+        self.chunkGaps = chunkGaps
+        self.duplicateChunks = duplicateChunks
+        self.outOfOrderChunks = outOfOrderChunks
+    }
+}
+
+public struct EngineTransportMetrics: Hashable, Codable, Sendable {
+    public let finishReason: GenerationTerminalReason
+    public let firstChunkToTerminalMS: Int?
+    public let counters: EngineTransportCounters
+    public let cancellation: GenerationCancellationState
+    public let lifecycle: GenerationTransportState
+    public let requestAccepted: Bool
+    public let sessionIdentity: String?
+    public let firstChunkSequence: UInt64?
+    public let lastChunkSequence: UInt64?
+    public let lifecycleEvents: [GenerationTransportState]
+
+    public init(
+        finishReason: GenerationTerminalReason,
+        firstChunkToTerminalMS: Int? = nil,
+        counters: EngineTransportCounters,
+        cancellation: GenerationCancellationState = .notRequested,
+        lifecycle: GenerationTransportState = .connected,
+        requestAccepted: Bool = false,
+        sessionIdentity: String? = nil,
+        firstChunkSequence: UInt64? = nil,
+        lastChunkSequence: UInt64? = nil,
+        lifecycleEvents: [GenerationTransportState] = [.connected]
+    ) {
+        self.finishReason = finishReason
+        self.firstChunkToTerminalMS = firstChunkToTerminalMS
+        self.counters = counters
+        self.cancellation = cancellation
+        self.lifecycle = lifecycle
+        self.requestAccepted = requestAccepted
+        self.sessionIdentity = sessionIdentity
+        self.firstChunkSequence = firstChunkSequence
+        self.lastChunkSequence = lastChunkSequence
+        self.lifecycleEvents = lifecycleEvents
+    }
+}
+
+public struct BackendGenerationMetrics: Hashable, Codable, Sendable {
+    public let finishReason: GenerationTerminalReason
+    public let warmState: EngineWarmState?
+    public let usedStreaming: Bool?
+    public let stages: [NativeTelemetryStageMark]
+    public let timings: [BackendTimingMetric]
+    public let counters: [BackendCounterMetric]
+    public let finalChunkBarrierObserved: Bool?
+
+    public init(
+        finishReason: GenerationTerminalReason,
+        warmState: EngineWarmState?,
+        usedStreaming: Bool?,
+        stages: [NativeTelemetryStageMark],
+        timings: [BackendTimingMetric],
+        counters: [BackendCounterMetric],
+        finalChunkBarrierObserved: Bool? = nil
+    ) {
+        self.finishReason = finishReason
+        self.warmState = warmState
+        self.usedStreaming = usedStreaming
+        self.stages = stages
+        self.timings = timings
+        self.counters = counters
+        self.finalChunkBarrierObserved = finalChunkBarrierObserved
+    }
+}
+
+public struct GenerationOutputMetrics: Hashable, Codable, Sendable {
+    public let durationSeconds: Double?
+    public let readableWAV: Bool?
+    public let atomicallyPublished: Bool?
+    public let audioQC: AudioQCReport?
+
+    public init(
+        durationSeconds: Double? = nil,
+        readableWAV: Bool? = nil,
+        atomicallyPublished: Bool? = nil,
+        audioQC: AudioQCReport? = nil
+    ) {
+        self.durationSeconds = durationSeconds
+        self.readableWAV = readableWAV
+        self.atomicallyPublished = atomicallyPublished
+        self.audioQC = audioQC
+    }
+}
+
+public enum GenerationTelemetryCompatibilityAdapter {
+    public static func frontend(
+        timingsMS: [String: Int],
+        counters: [String: Int]
+    ) -> FrontendGenerationMetrics {
+        FrontendGenerationMetrics(
+            submitToFirstChunkMS: timingsMS["submitToFirstChunkMS"],
+            submitToFirstAudibleMS: timingsMS["submitToFirstAudibleMS"],
+            submitToCompletedMS: timingsMS["submitToCompletedMS"],
+            firstChunkToAudibleMS: timingsMS["chunkForwardingSpanMS"],
+            mainThreadStallCount50MS: counters["uiStallCount50"] ?? 0,
+            mainThreadStallCount250MS: counters["uiStallCount250"] ?? 0,
+            mainThreadMaximumStallMS: counters["uiMaxStallMS"] ?? 0
+        )
+    }
+
+    public static func transport(
+        finishReason: String?,
+        timingsMS: [String: Int],
+        counters: [String: Int]
+    ) -> EngineTransportMetrics {
+        EngineTransportMetrics(
+            finishReason: GenerationTerminalReason(compatibilityValue: finishReason),
+            firstChunkToTerminalMS: timingsMS["chunkForwardingSpanMS"],
+            counters: EngineTransportCounters(
+                chunksForwarded: counters["chunksForwarded"] ?? 0,
+                chunkGaps: counters["chunkGaps"] ?? 0,
+                duplicateChunks: counters["duplicateChunks"] ?? 0,
+                outOfOrderChunks: counters["outOfOrderChunks"] ?? 0
+            ),
+            cancellation: GenerationTerminalReason(compatibilityValue: finishReason) == .cancelled
+                ? .completed : .notRequested,
+            requestAccepted: counters["chunksForwarded", default: 0] > 0
+        )
+    }
+
+    public static func backend(
+        finishReason: String?,
+        warmState: EngineWarmState?,
+        usedStreaming: Bool?,
+        stages: [NativeTelemetryStageMark],
+        timingsMS: [String: Int],
+        counters: [String: Int],
+        notes: [String: String]
+    ) -> BackendGenerationMetrics {
+        let timingKeys: [(BackendTimingKey, [String])] = [
+            (.modelLoad, ["native_model_load_ms"]),
+            (.prepareGeneration, ["native_prepare_generation_ms"]),
+            (.explicitPrewarm, ["native_explicit_prewarm_ms"]),
+            (.cloneConditioning, ["native_clone_conditioning_ms"]),
+            (.generationStream, ["native_generation_stream_ms"]),
+            (.qualityFirstGeneration, ["native_quality_first_generation_ms"]),
+            (.tokenLoop, ["qwen_token_loop_total"]),
+            (.talkerForward, ["qwen_talker_forward_total"]),
+            (.codePredictor, ["qwen_code_predictor_total"]),
+            (.audioDecoder, ["qwen_stream_decoder_total"]),
+            (.streamStepEval, ["qwen_stream_step_eval_total"]),
+            (.streamStepEOSRead, ["qwen_stream_step_eos_read_total"]),
+            (.audioChunkEval, ["qwen_audio_chunk_eval_total"]),
+            (.finalWAVFinish, ["native_final_wav_finish_ms"]),
+        ]
+        let typedTimings = timingKeys.compactMap { key, compatibilityKeys -> BackendTimingMetric? in
+            guard let value = compatibilityKeys.lazy.compactMap({ timingsMS[$0] }).first else { return nil }
+            return BackendTimingMetric(key: key, milliseconds: Double(value))
+        }
+        let counterKeys: [(BackendCounterKey, [String])] = [
+            (.generatedCodes, ["qwen_generated_code_count", "generatedCodeCount"]),
+            (.decoderCalls, ["qwen_stream_decoder_calls", "decoderCalls"]),
+            (.chunkCount, ["chunkCount"]),
+            (.pendingCodePeak, ["pendingCodePeak"]),
+        ]
+        let typedCounters = counterKeys.compactMap { key, compatibilityKeys -> BackendCounterMetric? in
+            guard let value = compatibilityKeys.lazy.compactMap({ counters[$0] ?? timingsMS[$0] }).first else { return nil }
+            return BackendCounterMetric(key: key, value: value)
+        }
+        return BackendGenerationMetrics(
+            finishReason: GenerationTerminalReason(compatibilityValue: finishReason),
+            warmState: warmState,
+            usedStreaming: usedStreaming,
+            stages: stages,
+            timings: typedTimings,
+            counters: typedCounters,
+            finalChunkBarrierObserved: notes["finalChunkBarrierObserved"].flatMap(Bool.init)
+        )
+    }
+
+    public static func output(
+        notes: [String: String],
+        audioQC: AudioQCReport?
+    ) -> GenerationOutputMetrics {
+        GenerationOutputMetrics(
+            durationSeconds: audioQC?.durationSeconds,
+            readableWAV: notes["outputReadableWAV"].flatMap(Bool.init),
+            atomicallyPublished: notes["outputAtomicallyPublished"].flatMap(Bool.init),
+            audioQC: audioQC
+        )
+    }
+}
+
+public enum GenerationTelemetryPrivacy {
+    /// Converts a potentially path- or content-bearing runtime failure into bounded,
+    /// correlation-safe metadata. Call only while telemetry is enabled.
+    public static func failureNotes(message: String) -> [String: String] {
+        let digest = SHA256.hash(data: Data(message.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return [
+            "failureMessageLength": String(message.count),
+            "failureMessageDigest": digest,
+        ]
+    }
+}
 
 /// One durable telemetry row for a single generation, written by one layer.
 ///
@@ -26,7 +351,7 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
     /// high-resolution `mach_absolute_time` nanoseconds (`clockSource`, stage-mark
     /// `tNS`/`sequence`, sample `tNS`/`actualElapsedNS`, chunk `arrivalNS`). All
     /// optional, so older rows still decode.
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public let clockSource: String? = "mach_absolute_time"
 
@@ -70,6 +395,12 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
     /// for backend changes; nil when not computed. Perceptual quality still needs the
     /// listening pass — this catches gross defects, not subtle "sounds worse".
     public let audioQC: AudioQCReport?
+    /// Typed v6 payloads. The legacy dictionaries above remain encoded for
+    /// historical tools; new validators use these stable fields.
+    public let frontendMetrics: FrontendGenerationMetrics?
+    public let transportMetrics: EngineTransportMetrics?
+    public let backendMetrics: BackendGenerationMetrics?
+    public let outputMetrics: GenerationOutputMetrics?
 
     public init(
         generationID: String,
@@ -90,6 +421,10 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
         mlxMemoryByStage: [String: NativeMLXMemorySnapshot]? = nil,
         chunkTimeline: [GenerationChunkTelemetry]? = nil,
         audioQC: AudioQCReport? = nil,
+        frontendMetrics: FrontendGenerationMetrics? = nil,
+        transportMetrics: EngineTransportMetrics? = nil,
+        backendMetrics: BackendGenerationMetrics? = nil,
+        outputMetrics: GenerationOutputMetrics? = nil,
         schemaVersion: Int = GenerationTelemetryRecord.currentSchemaVersion,
         processName: String = ProcessInfo.processInfo.processName,
         processIdentifier: Int32 = ProcessInfo.processInfo.processIdentifier
@@ -115,6 +450,30 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
         self.mlxMemoryByStage = mlxMemoryByStage
         self.chunkTimeline = chunkTimeline
         self.audioQC = audioQC
+        self.frontendMetrics = frontendMetrics ?? (layer == .app
+            ? GenerationTelemetryCompatibilityAdapter.frontend(timingsMS: timingsMS, counters: counters)
+            : nil)
+        self.transportMetrics = transportMetrics ?? (layer == .engineService
+            ? GenerationTelemetryCompatibilityAdapter.transport(
+                finishReason: finishReason,
+                timingsMS: timingsMS,
+                counters: counters
+            )
+            : nil)
+        self.backendMetrics = backendMetrics ?? (layer == .engine
+            ? GenerationTelemetryCompatibilityAdapter.backend(
+                finishReason: finishReason,
+                warmState: warmState,
+                usedStreaming: usedStreaming,
+                stages: stageMarks,
+                timingsMS: timingsMS,
+                counters: counters,
+                notes: notes
+            )
+            : nil)
+        self.outputMetrics = outputMetrics ?? (layer == .engine
+            ? GenerationTelemetryCompatibilityAdapter.output(notes: notes, audioQC: audioQC)
+            : nil)
     }
 }
 

@@ -2,8 +2,8 @@
 # On-device iOS XCUITest readiness: Mac Authorization Services (Gate 1) + device reachability +
 # the iPhone-side unlock handshake Apple still requires on physical hardware.
 #
-# Complements scripts/macos_uitest_doctor.sh (Accessibility + signing). Gate 1 is shared —
-# fixing it once on the Mac helps both macOS and iOS XCUITest on this machine.
+# This is iOS-only. macOS frontend acceptance uses Codex Computer Use and
+# scripts/macos_agent_ui.sh rather than an XCTest runner.
 #
 # usage:
 #   scripts/ios_uitest_doctor.sh
@@ -22,7 +22,7 @@ usage() {
 }
 
 section_mac_gate1() {
-  echo "==> Mac Gate 1 — Authorization Services (shared by macOS + on-device iOS XCUITest)"
+  echo "==> Mac Gate 1 — Authorization Services for on-device iOS XCUITest"
   if ! command -v automationmodetool >/dev/null 2>&1; then
     warn "automationmodetool not found"
     return 0

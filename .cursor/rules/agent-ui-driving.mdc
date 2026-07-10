@@ -29,7 +29,8 @@ Authoritative loop: [`docs/reference/ios-agent-ui-tour.md`](mdc:docs/reference/i
 - `requestSmartModeApproval: true` on `tap` / `press_key` when Auto-review blocks.
 - Evidence (`ios_device.sh shot`) only when OCR fails or user asks.
 
-**UI bench matrix (agent):** `scripts/ios_device.sh bench-ui-mirroir --agent-drive` — Appendix **B.6d** in the tour doc; not a pre-merge gate. Unattended matrix stays XCUITest `bench-ui`.
+**UI bench matrix:** XCUITest `scripts/ios_device.sh bench-ui` only — agents never drive matrices.
+**Agent smokes:** mirroir drive → `measure-now` before Generate → `measure-wait` / `measure-verify`.
 
 Context map: [`.mirroir-mcp/skills/apps/Vocello/APP.md`](mdc:.mirroir-mcp/skills/apps/Vocello/APP.md).
 

@@ -5,18 +5,25 @@
 > Context: [post-mortem](post-mortem/2026-06-post-fable-development-hell.md) → four
 > audits (2026-07-01) → phased remediation. Onboarding: `[AGENTS.md](../AGENTS.md)`.
 >
-> **HANDOFF (2026-07-06):** Language-path Phases 1–3 quick subset **PASS** on device
-> (`ios-lang-bench-20260706-112319`: hint 7/7, output 6/6 + negative control hint-only).
-> Full matrix `ios-lang-bench-20260706-135146`: **hint 19/19 PASS**, **output 7/18 FAIL**
-> (DE/ES/ZH/JA `transcription_failed` — on-device Speech assets still pending Wi‑Fi download;
-> keyboards + dictation langs configured via mirroir 2026-07-06). Re-run output gate after assets
-> finish downloading on Wi‑Fi. Mirror workflow report implemented (left-edge 218×486 recalibration).
+> **HANDOFF (2026-07-07):** iOS UI testing harness **simplified** — agent matrix
+> (`bench-ui-mirroir`) retired; full matrix = XCUITest `bench-ui` only; agent smokes =
+> mirroir 1-clip + `measure-*`. Lang Phase 4 UI tests **de-scoped** (headless lang-bench
+> covers semantics). Re-run lang-bench full output gate when Speech assets finish on Wi‑Fi.
 > Start at **§2 Step 4** (human design listening) or **§2 Step A** (manual clone record verify),
 > then **§2 Step 5b** (release).
 
-## 1. Current state (2026-07-06, `main`)
+## 1. Current state (2026-07-07, `main`)
 
-### Session update (2026-07-05 late) — language-path verification Phases 1–2
+### Session update (2026-07-07) — iOS UI testing simplification
+
+| Step | Status | Notes |
+| --- | --- | --- |
+| Agent matrix retired | **LANDED** | `bench-ui-mirroir` / `bench-ui-vision` hard-fail; Playbooks collapsed to 3 |
+| iOS measure shell | **LANDED** | `measure-prep`, `measure-now`, `measure-wait`, `measure-verify` on `ios_device.sh` |
+| Lang Phase 4 UI tests | **DE-SCOPED** | Picker→telemetry covered by headless `lang-bench`; no new XCUITest lane pre-release |
+| Lang full output gate | **BLOCKED** | `ios-lang-bench-20260706-135146`: 7/18 — DE/ES/ZH/JA Speech assets pending Wi‑Fi |
+
+### Session update (2026-07-06) — language-path verification
 
 | Step | Status | Notes |
 | --- | --- | --- |
@@ -24,7 +31,7 @@
 | Phase 2 — lang-bench + hint gate | **LANDED + quick PASS** | Device `ios-lang-bench-20260706-110143` 7/7 hints; `check_language_hints.py` accepts `finishReason=eos` |
 | Phase 2 — device validation (full) | **hint PASS / output BLOCKED** | `ios-lang-bench-20260706-135146`: hint 19/19; output 7/18 — DE/ES/ZH/JA need Speech Wi‑Fi assets |
 | Phase 3 — Speech round-trip | **LANDED + quick PASS** | Locale-locked ASR (`transcribeForVerification`), stored `pass` in sentinel; device `ios-lang-bench-20260706-112319` output 6/6; negative control `skipOutputVerification` |
-| Phase 4 — UI integration tests | **NOT STARTED** | Picker → marker → telemetry wiring |
+| Phase 4 — UI integration tests | **DE-SCOPED** | Headless lang-bench covers picker semantics; no pre-release XCUITest lane |
 
 Runbook: [`language-bench.md`](reference/language-bench.md). Semantics reference: [`qwen3-tts-guide.md`](reference/qwen3-tts-guide.md) §7.
 
@@ -185,11 +192,18 @@ scripts/ios_device.sh test    # retry if device auth flake (error 12)
 | macOS review | **PASS** | `mac-review-20260702-164903` (8 PNG diffs — visual pass) |
 | iOS gate | **PASS** | `gate-ios-gate-20260703-003025` |
 
-Optional re-gate after Step A lands:
+Optional re-gate after Step A lands (2026-07-07 attempt):
+
+| Lane | Status | Artifact / notes |
+| --- | --- | --- |
+| macOS gate | **FAIL (flake)** | `gate-mac-gate-20260707-134920` — 6/12 XCUITest failures (element not ready / event timeout); unrelated to harness simplification (docs/scripts only) |
+| iOS gate | **BLOCKED** | `device-state` exit 12 `MIRROR_CONNECTING` — resume iPhone Mirroring on phone, then re-run |
+| iOS lang-bench full | **BLOCKED** | Same mirror blocker; prior full run `ios-lang-bench-20260706-135146` output 7/18 pending Speech assets |
 
 ```sh
-QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate
-scripts/ios_device.sh gate
+QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # retry when Mac UI tests idle
+scripts/ios_device.sh gate                          # after mirror active + unlock once
+scripts/ios_device.sh lang-bench --subset full --label "lang-full-output-v3"
 scripts/macos_test.sh review && scripts/ios_device.sh review
 ```
 
@@ -271,18 +285,16 @@ attended, on the physical phone.
   → 29/29/29/29 PASS. Length-aware flush timeout + inline app JSONL when hooks on.
 - **iOS gate — PASS.** `gate-ios-gate-20260703-003025`. Design dropout did NOT
   reproduce in benches; perceptual listening pass still owed (Step 4).
-- **Clone reference recording — FIXED (uncommitted; manual verify owed).** Studio Clone
-  record now uses `IOSRecordVoiceSheet` (identical to Voices tab): Stop → naming sheet with
-  transcript → enroll → `pendingVoiceCloningHandoff`. Present from `RootView` via
-  `AppModel.requestCloneReferenceRecording`. Automated: `gate-ios-gate-20260704-020900` PASS.
+- **Clone reference recording — COMMITTED (`a250ec1`+; manual verify owed).** Studio Clone
+  record uses `IOSRecordVoiceSheet` (identical to Voices tab). Present from `RootView` via
+  `AppModel.requestCloneReferenceRecording`. Automated: `gate-ios-gate-20260703-003025` PASS.
   Maintainer: Studio → Clone → Record on the **physical phone** — confirm naming sheet after Stop.
 - **"Recording broken through mirror" — RESOLVED (not an app defect).** Mic unavailable
   via Mirroring; physical-phone operation confirmed separately.
-- **iOS agent UI driving — mirroir native (2026-07-04).** Validated exploratory driver:
-  **mirroir** (`describe_screen` → `tap` / `type_text`) per
-  [`docs/reference/ios-agent-ui-tour.md`](reference/ios-agent-ui-tour.md) Appendix B.5–B.8 and
-  [`computer-use-mcp-pilot-log.md`](reference/computer-use-mcp-pilot-log.md) §10.2–§10.3 (nine-clip
-  multi-mode Custom/Design/Clone validated 2026-07-04).
+- **iOS agent UI driving — mirroir native (2026-07-04, simplified 2026-07-07).** Exploratory
+  smokes only (`describe_screen` → `tap` / `type_text` + `measure-*`). Full matrix = XCUITest
+  `bench-ui` only. See [`ios-agent-ui-tour.md`](reference/ios-agent-ui-tour.md) Appendix B.5–B.8 and
+  [`computer-use-mcp-pilot-log.md`](reference/computer-use-mcp-pilot-log.md) §10.2–§10.3.
   **mobile-mcp** (WDA) remains **deferred** — see
   [`docs/reference/mobile-mcp-ios-evaluation.md`](reference/mobile-mcp-ios-evaluation.md).
 
@@ -293,7 +305,8 @@ attended, on the physical phone.
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
 | Build/test commands                   | `AGENTS.md` (Workflows + Commands)                                                  |
 | Testing lanes + gates                 | `docs/reference/testing-runbook.md`, `macos-testing.md`, `ios-device-testing.md`    |
-| Deterministic measurement             | `scripts/uitest_measure.sh` (header = manual)                                       |
+| Deterministic measurement (macOS) | `scripts/uitest_measure.sh` (header = manual) |
+| Deterministic measurement (iOS smokes) | `scripts/ios_device.sh measure-*` |
 | Device interference probe             | `scripts/ios_device.sh device-state`; libs `ios_device_state.sh`, `ios_coredevice_probe.py`, `mirror_state_ocr.swift` |
 | Agent-driven UI smoke procedure       | `docs/reference/ui-smoke-runbooks.md`                                               |
 | Identifier catalog (generated)        | `docs/reference/ui-test-surface.md` (`python3 scripts/generate_ui_test_surface.py`) |

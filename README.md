@@ -129,7 +129,10 @@ Useful checks:
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
 scripts/macos_test.sh models ensure   # one-time Speed model for macOS UI/bench tests
-scripts/macos_test.sh test            # macOS UI smoke (12 tests)
+scripts/macos_test.sh test            # deterministic Core + XPC + Qwen3 runtime tests (no UI)
+scripts/macos_agent_ui.sh impact      # selects none / quick / full / benchmark evidence
+# In Codex: invoke $vocello-macos-ui-qa <selected-suite>
+scripts/macos_test.sh ui-report --suite full  # validate Computer Use + typed probes
 scripts/macos_test.sh gate            # macOS pre-merge gate
 scripts/ios_device.sh test            # iOS UI smoke (paired iPhone; default suites)
 scripts/ios_device.sh bench-ui        # iOS full-matrix UI bench (XCUITest)
@@ -138,11 +141,12 @@ scripts/ios_device.sh device-state      # interference probe: phone-in-use / cal
 scripts/ios_device.sh gate              # iOS pre-merge gate (XCUITest + headless generation + crashes)
 ```
 
-On-device testing runbook: [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md). Exploratory agent QA (mirroir / Peekaboo) is **not** a gate — see [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md).
+Testing runbook: [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md). macOS frontend acceptance is driven by the repository Codex Computer Use skill and can gate through its typed attestation; iOS mirroir remains exploratory while physical-device XCUITest stays authoritative. See [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md).
 
 More technical detail:
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — unified architecture map: modules, dependencies, runtime (XPC vs in-process), and the generation lifecycle
+- [`docs/project-map.html`](docs/project-map.html) — canonical interactive project map: features, targets, dependencies, flows, source ownership, contracts, and development routes
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture reference: runtime design, engine invariants, and request lifecycles
 - [`AGENTS.md`](AGENTS.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
 - [`docs/reference/cli.md`](docs/reference/cli.md) — the headless `vocello` command-line tool
 - [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) — local storage and deletion details
@@ -190,7 +194,7 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 ## Contributing
 
 - **Report bugs or request features:** [GitHub Issues](https://github.com/PowerBeef/QwenVoice/issues)
-- **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (Workflows + Commands; testing in [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc))
+- **Build, test, and architecture:** [`AGENTS.md`](AGENTS.md) (Workflows + Commands; testing in [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md))
 - **Release QA checklist:** [`docs/reference/macos-release-qa.md`](docs/reference/macos-release-qa.md)
 
 **Social preview (maintainers):** upload [`docs/social_preview.png`](docs/social_preview.png) under GitHub → **Settings → General → Social preview** so link cards use the Vocello artwork.

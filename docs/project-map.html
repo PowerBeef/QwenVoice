@@ -4,7 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Vocello — Project Map</title>
-<meta name="description" content="Interactive architecture map of Vocello: features, modules, dependencies, pipelines, and tooling." />
+<meta name="description" content="Canonical engineering atlas for Vocello: product features, components, dependencies, runtime flows, operations, and Codex development routes." />
+<!-- Canonical project map. Update this file when project.yml, Package.resolved, model contracts, platform surfaces, or gate commands change. -->
 <style>
 /* =========================================================================
    Vocello Project Map — tokens from website/src/tokens.css
@@ -154,6 +155,35 @@ code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
 .topnav-links a.active {
   color: var(--fg-primary);
   background: rgba(255, 255, 255, 0.05);
+}
+.mobile-nav { display: none; margin-left: auto; position: relative; }
+.mobile-nav summary {
+  cursor: pointer;
+  color: var(--fg-secondary);
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--stroke);
+  border-radius: 7px;
+  list-style: none;
+}
+.mobile-nav summary::-webkit-details-marker { display: none; }
+.mobile-nav-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(220px, calc(100vw - 28px));
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.34);
+}
+.mobile-nav-menu a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--fg-secondary);
+  font-size: 13px;
 }
 .topnav-links a.active { color: var(--accent); }
 
@@ -368,6 +398,30 @@ section.map-section {
 }
 
 /* ---- Feature matrix ---- */
+.feature-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--fg-tertiary);
+  font-size: 12px;
+}
+.feature-filter {
+  appearance: none;
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: var(--bg-inline);
+  color: var(--fg-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.feature-filter[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent-stroke);
+  background: var(--accent-wash);
+}
 .matrix-wrap {
   overflow-x: auto;
   border: 1px solid var(--stroke);
@@ -1018,6 +1072,10 @@ table.matrix .note {
 }
 @media (max-width: 640px) {
   .topnav { padding: 0 12px; gap: 10px; }
+  .topnav-links { display: none; }
+  .mobile-nav { display: block; }
+  .graph-canvas { overflow-x: auto; overscroll-behavior-x: contain; }
+  .graph-canvas svg { min-width: 760px; }
   .wrap { padding: 0 14px 72px; }
   .hero { padding-top: 40px; }
   .speaker-grid { grid-template-columns: 1fr; }
@@ -1031,9 +1089,138 @@ table.matrix .note {
     transition-duration: 0.01ms !important;
   }
 }
+
+[hidden] { display: none !important; }
+
+.noscript {
+  max-width: 900px;
+  margin: 24px auto;
+  padding: 20px;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-inline);
+}
+
+.subsection-title {
+  margin: 32px 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.system-flow-grid,
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.system-flow,
+.info-card {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--bg-inline);
+}
+
+.system-flow h3,
+.info-card h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.system-flow ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--fg-secondary);
+  font-size: 12.5px;
+}
+
+.system-flow li + li { margin-top: 6px; }
+
+.system-flow .flow-note,
+.info-card p {
+  margin: 12px 0 0;
+  color: var(--fg-tertiary);
+  font-size: 12px;
+}
+
+.info-card code {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.language-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.language {
+  padding: 10px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  text-align: center;
+  font-size: 12px;
+}
+
+.reading-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.reading-links a { color: var(--accent); }
+
+.tree-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent-stroke);
+}
+
+.node-hit:focus-visible rect { stroke-width: 3; }
+
+.tool-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-color: var(--accent-stroke);
+  background: var(--accent-wash);
+}
+
+.feature-filter:focus-visible,
+.tree-toggle:focus-visible,
+.tool-tab:focus-visible,
+.topnav a:focus-visible,
+.mobile-nav summary:focus-visible,
+.reading-links a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 960px) {
+  .system-flow-grid,
+  .info-grid { grid-template-columns: 1fr; }
+  .language-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .language-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>
 </head>
 <body>
+<noscript>
+  <section class="noscript" aria-label="Project map summary">
+    <h1>Vocello project map</h1>
+    <p>JavaScript enhances the target graph and inventories, but the core architecture remains:</p>
+    <ul>
+      <li>macOS: SwiftUI → QwenVoiceNative → XPC EngineServiceHost → MLXTTSEngine.</li>
+      <li>iOS: SwiftUI → in-process TTSEngineStore → MLXTTSEngine; physical-device testing only.</li>
+      <li>CLI: vocello → CLIRuntime → MLXTTSEngine; built from source and not bundled in the DMG.</li>
+      <li>Sources/ and project.yml outrank documentation. Use AGENTS.md for Codex rules and scripts/* for gates.</li>
+    </ul>
+  </section>
+</noscript>
 
 <nav class="topnav" aria-label="Section navigation">
   <a class="topnav-brand" href="#top">
@@ -1045,12 +1232,22 @@ table.matrix .note {
     <a href="#features">Features</a>
     <a href="#modules">Modules</a>
     <a href="#pipeline">Pipeline</a>
+    <a href="#systems">Systems</a>
     <a href="#sources">Sources</a>
     <a href="#deps">Deps</a>
     <a href="#tooling">Tooling</a>
     <a href="#contracts">Contracts</a>
     <a href="#distribution">Ship</a>
   </div>
+  <details class="mobile-nav">
+    <summary>Sections</summary>
+    <div class="mobile-nav-menu">
+      <a href="#glance">Glance</a><a href="#features">Features</a><a href="#modules">Modules</a>
+      <a href="#pipeline">Pipeline</a><a href="#systems">Systems</a><a href="#sources">Sources</a>
+      <a href="#deps">Dependencies</a><a href="#tooling">Tooling</a><a href="#contracts">Contracts</a>
+      <a href="#distribution">Distribution</a>
+    </div>
+  </details>
 </nav>
 
 <div class="wrap" id="top">
@@ -1065,8 +1262,8 @@ table.matrix .note {
     <p class="hero-lede">
       Local-first text-to-speech on Apple Silicon. One engine core
       (<code>QwenVoiceCore</code> / <code>MLXTTSEngine</code>) hosted three ways:
-      macOS out-of-process XPC, iOS in-process, and a headless CLI. Models download
-      from Hugging Face; nothing is bundled.
+      macOS out-of-process XPC, iOS in-process, and a headless CLI. Model weights download
+      from Hugging Face; only metadata, privacy resources, UI assets, and iOS voice previews are bundled.
     </p>
     <div class="badge-row">
       <span class="badge gold"><strong>2.1.0</strong> · build 18</span>
@@ -1117,7 +1314,7 @@ table.matrix .note {
       <article class="host-card">
         <h3>iOS · Vocello</h3>
         <div class="meta">in-process MLX</div>
-        <p>SwiftUI app reaches the engine through <code>QwenVoiceCore</code> alone. No XPC frameworks linked by design.</p>
+        <p>SwiftUI app hosts <code>MLXTTSEngine</code> in-process through its platform store. It links the shared engine/packages but deliberately excludes the macOS XPC frameworks.</p>
         <ul>
           <li>Module <code>QVoiceiOS</code></li>
           <li>Bundle <code>com.patricedery.vocello</code></li>
@@ -1132,7 +1329,7 @@ table.matrix .note {
         <ul>
           <li>Module <code>VocelloCLI</code></li>
           <li>Commands: generate · custom/design/clone · batch · bench</li>
-          <li>Streaming default · JSON output</li>
+          <li>Streaming synthesis by default · event reporting, no live audio player</li>
           <li>Not shipped in the DMG</li>
         </ul>
       </article>
@@ -1164,7 +1361,7 @@ table.matrix .note {
         <div class="mark"></div>
         <div>
           <h4>iOS = physical device only</h4>
-          <p>Gates never use Simulator. Agent UI driving is exploratory smoke, never a pre-merge gate.</p>
+          <p>Gates never use Simulator. iOS agent driving remains exploratory; physical-device XCUITest is unchanged.</p>
         </div>
       </div>
     </div>
@@ -1178,6 +1375,14 @@ table.matrix .note {
       Three generation modes share one chrome. Library surfaces (Voices, History, Models)
       are first-class. Platform deltas are intentional, not incomplete ports.
     </p>
+
+    <div class="feature-filters" role="group" aria-label="Filter features by platform">
+      <span>Show:</span>
+      <button type="button" class="feature-filter" data-platform="all" aria-pressed="true">All</button>
+      <button type="button" class="feature-filter" data-platform="macos" aria-pressed="false">macOS</button>
+      <button type="button" class="feature-filter" data-platform="ios" aria-pressed="false">iOS</button>
+      <button type="button" class="feature-filter" data-platform="cli" aria-pressed="false">CLI</button>
+    </div>
 
     <div class="matrix-wrap">
       <table class="matrix" id="featureMatrix">
@@ -1215,7 +1420,7 @@ table.matrix .note {
           <span><i style="background:rgba(191,170,219,0.35);border:1px solid var(--lavender-300)"></i> SPM / vendored</span>
           <span><i style="background:rgba(140,143,155,0.3);border:1px solid var(--charcoal-200)"></i> Tests</span>
         </div>
-        <svg id="moduleGraph" viewBox="0 0 860 560" role="img" aria-label="Module dependency graph"></svg>
+        <svg id="moduleGraph" viewBox="0 0 860 620" role="img" aria-labelledby="moduleGraphTitle moduleGraphDesc"><title id="moduleGraphTitle">Vocello build dependency graph</title><desc id="moduleGraphDesc">Eleven Xcode targets and their direct package dependencies. Select a node for exact dependencies and key paths.</desc></svg>
       </div>
       <aside class="detail-panel" id="detailPanel" aria-live="polite">
         <div class="empty">Select a module to inspect its type, platform, dependencies, and key files.</div>
@@ -1259,9 +1464,20 @@ table.matrix .note {
     </div>
   </section>
 
+  <!-- ========== SYSTEM FLOWS ========== -->
+  <section class="map-section" id="systems">
+    <p class="section-label">05 · Systems</p>
+    <h2 class="section-title">Downloads, persistence, telemetry &amp; release</h2>
+    <p class="section-lede">
+      Generation is only one lifecycle. These companion flows explain how models arrive,
+      how local artifacts persist, how diagnostics join, and how releases leave the repository.
+    </p>
+    <div class="system-flow-grid" id="systemFlows"></div>
+  </section>
+
   <!-- ========== SOURCES ========== -->
   <section class="map-section" id="sources">
-    <p class="section-label">05 · Codebase</p>
+    <p class="section-label">06 · Codebase</p>
     <h2 class="section-title">Source layout</h2>
     <p class="section-lede">
       <code>Sources/</code> is the product source of truth. SharedSupport compiles into both apps;
@@ -1272,32 +1488,38 @@ table.matrix .note {
 
   <!-- ========== DEPS ========== -->
   <section class="map-section" id="deps">
-    <p class="section-label">06 · Packages</p>
+    <p class="section-label">07 · Dependencies</p>
     <h2 class="section-title">SPM &amp; vendored dependencies</h2>
     <p class="section-lede">
       Exact pins in <code>project.yml</code> and <code>Package.resolved</code>.
       <code>mlx-audio-swift</code> is a Qwen3-TTS-only fork under <code>third_party_patches/</code>.
     </p>
     <div class="dep-grid" id="depGrid"></div>
+    <h3 class="subsection-title">Apple frameworks and native services</h3>
+    <div class="info-grid" id="nativeFrameworkGrid"></div>
+    <h3 class="subsection-title">External systems</h3>
+    <div class="info-grid" id="externalSystemGrid"></div>
   </section>
 
   <!-- ========== TOOLING ========== -->
   <section class="map-section" id="tooling">
-    <p class="section-label">07 · Tooling</p>
+    <p class="section-label">08 · Tooling</p>
     <h2 class="section-title">Scripts, tests &amp; CI</h2>
     <p class="section-lede">
-      Development is 100% in Cursor via checked-in scripts. The build is the typecheck.
-      Pre-merge gates are local; CI covers compile safety and release packaging.
+      Development is Codex-first and scripts remain the executable source of truth.
+      Native builds are the typecheck. Computer Use is the sole macOS frontend driver and its typed attestation can block the gate; iOS remains physical-device XCUITest.
     </p>
 
-    <div class="tool-tabs" id="toolTabs" role="tablist"></div>
+    <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Build, test, release, and Codex workflow categories"></div>
     <div id="toolPanels"></div>
 
     <div class="gate-box">
       <article class="gate-card">
         <h4>macOS pre-merge gate</h4>
         <pre>scripts/macos_test.sh models ensure
-scripts/macos_test.sh core-test
+	scripts/macos_test.sh test
+	scripts/macos_agent_ui.sh impact
+	# $vocello-macos-ui-qa &lt;suite&gt; when required
 scripts/macos_test.sh gate</pre>
       </article>
       <article class="gate-card">
@@ -1310,7 +1532,7 @@ scripts/ios_device.sh gate</pre>
 
   <!-- ========== CONTRACTS ========== -->
   <section class="map-section" id="contracts">
-    <p class="section-label">08 · Data</p>
+    <p class="section-label">09 · Data</p>
     <h2 class="section-title">Model contract &amp; storage</h2>
     <p class="section-lede">
       Schema lives in <code>Sources/Resources/qwenvoice_contract.json</code>.
@@ -1319,35 +1541,17 @@ scripts/ios_device.sh gate</pre>
 
     <div class="contract-grid" id="contractGrid"></div>
 
+    <h3 class="subsection-title">Built-in speakers</h3>
     <div class="speaker-grid" id="speakerGrid"></div>
-
-    <div class="storage-grid">
-      <article class="storage-card">
-        <h4>macOS storage</h4>
-        <code>~/Library/Application Support/QwenVoice/</code>
-        <ul>
-          <li><code>models/</code> — downloaded HF weights</li>
-          <li><code>history.sqlite</code> — GRDB generations</li>
-          <li><code>voices/</code> — enrolled clone references</li>
-          <li>Debug: <code>QwenVoice-Debug/</code> when <code>QWENVOICE_DEBUG=1</code></li>
-        </ul>
-      </article>
-      <article class="storage-card">
-        <h4>iOS storage</h4>
-        <code>group.com.patricedery.vocello.shared/Vocello/</code>
-        <ul>
-          <li>App Group container for models + DB</li>
-          <li>Increased memory limit entitlement</li>
-          <li>Hardware floor: iPhone 15 Pro+</li>
-          <li>Onboarding: Welcome → Install → Ready</li>
-        </ul>
-      </article>
-    </div>
+    <h3 class="subsection-title">Language semantics</h3>
+    <div class="language-grid" id="languageGrid"></div>
+    <h3 class="subsection-title">Storage and privacy</h3>
+    <div class="storage-grid" id="storageGrid"></div>
   </section>
 
   <!-- ========== DISTRIBUTION ========== -->
   <section class="map-section" id="distribution">
-    <p class="section-label">09 · Ship</p>
+    <p class="section-label">10 · Ship</p>
     <h2 class="section-title">Website &amp; distribution</h2>
     <p class="section-lede">
       macOS ships via notarized GitHub Release DMG. iOS is on-device-capable on
@@ -1392,14 +1596,15 @@ scripts/ios_device.sh gate</pre>
         <div class="band-label">Docs index</div>
         <div>
           <h4>Where to go deeper</h4>
-          <p>
-            <code>docs/ARCHITECTURE.md</code> ·
-            <code>AGENTS.md</code> ·
-            <code>docs/reference/macos-app-guide.md</code> ·
-            <code>docs/reference/ios-app-guide.md</code> ·
-            <code>docs/reference/cli.md</code> ·
-            <code>docs/reference/testing-runbook.md</code> ·
-            <code>docs/reference/language-bench.md</code>
+          <p class="reading-links">
+            <a href="ARCHITECTURE.md">Architecture</a>
+            <a href="../AGENTS.md">Codex onboarding</a>
+            <a href="reference/macos-app-guide.md">macOS app</a>
+            <a href="reference/ios-app-guide.md">iOS app</a>
+            <a href="reference/cli.md">CLI</a>
+            <a href="reference/testing-runbook.md">Testing</a>
+            <a href="reference/language-bench.md">Language bench</a>
+            <a href="rescue-plan-progress.md">Current rescue status</a>
           </p>
         </div>
       </div>
@@ -1407,7 +1612,7 @@ scripts/ios_device.sh gate</pre>
   </section>
 
   <footer class="map-footer">
-    <div>Vocello project map · sourced from <code>docs/ARCHITECTURE.md</code>, <code>project.yml</code>, and the model contract · static snapshot</div>
+    <div>Canonical Vocello engineering atlas · code and manifests win over this map · reviewed 2026-07-09</div>
     <div>MIT · QwenVoice monorepo</div>
   </footer>
 </div>
@@ -1415,487 +1620,519 @@ scripts/ios_device.sh gate</pre>
 <!-- ===================== DATA ===================== -->
 <script id="mapData" type="application/json">
 {
+  "meta": {
+    "title": "Vocello project map",
+    "reviewed": "2026-07-09",
+    "canonicalPath": "docs/project-map.html",
+    "sourcesOfTruth": [
+      "Sources/",
+      "project.yml",
+      "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+      "Sources/Resources/qwenvoice_contract.json",
+      "Sources/Resources/qwenvoice_ios_model_catalog.json",
+      "scripts/",
+      ".github/workflows/"
+    ]
+  },
   "features": [
-    {"name": "Custom Voice", "macos": "yes", "ios": "yes", "cli": "yes", "note": "9 built-in speakers"},
-    {"name": "Voice Design", "macos": "yes", "ios": "yes", "cli": "yes", "note": "NL brief + save as voice"},
-    {"name": "Voice Cloning", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Record / import / enroll"},
-    {"name": "Delivery presets", "macos": "yes", "ios": "yes", "cli": "yes", "note": "10 presets × intensities; Clone excluded"},
-    {"name": "Language pin / Auto", "macos": "yes", "ios": "yes", "cli": "yes", "note": "10 languages + Auto"},
-    {"name": "Speed (4-bit) models", "macos": "yes", "ios": "yes", "cli": "yes", "note": "~2.3 GB / mode"},
-    {"name": "Quality (8-bit) models", "macos": "yes", "ios": "no", "cli": "yes", "note": "macOS + CLI only"},
-    {"name": "Streaming live preview", "macos": "yes", "ios": "yes", "cli": "partial", "note": "CLI streams by default"},
-    {"name": "Batch generation", "macos": "yes", "ios": "no", "cli": "yes", "note": "Removed from iOS 2026-07-02"},
-    {"name": "Saved Voices library", "macos": "yes", "ios": "yes", "cli": "yes", "note": "enroll / list / delete"},
-    {"name": "Generation History", "macos": "yes", "ios": "yes", "cli": "no", "note": "GRDB history.sqlite"},
-    {"name": "On-device transcription", "macos": "yes", "ios": "yes", "cli": "no", "note": "Speech framework"},
-    {"name": "Model download / repair", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Hugging Face hub"},
-    {"name": "Variation / seed control", "macos": "yes", "ios": "yes", "cli": "yes", "note": "Expressive / Balanced / Consistent"},
-    {"name": "Onboarding flow", "macos": "no", "ios": "yes", "cli": "no", "note": "Welcome → Install → Ready"},
-    {"name": "XPC engine isolation", "macos": "yes", "ios": "no", "cli": "no", "note": "QwenVoiceEngineService"}
+    {"name":"Custom Voice","macos":"yes","ios":"yes","cli":"yes","note":"9 built-in speakers; delivery and language control"},
+    {"name":"Voice Design","macos":"yes","ios":"yes","cli":"yes","note":"Natural-language brief; result can become a Saved Voice"},
+    {"name":"Voice Cloning","macos":"yes","ios":"yes","cli":"yes","note":"Reference import/enrollment; microphone recording in apps"},
+    {"name":"Delivery presets / custom tone","macos":"yes","ios":"yes","cli":"yes","note":"10 presets × intensity; Clone follows its reference"},
+    {"name":"Language pin / Auto","macos":"yes","ios":"yes","cli":"yes","note":"10 spoken languages plus Auto"},
+    {"name":"Speed (4-bit) models","macos":"yes","ios":"yes","cli":"yes","note":"iOS production tier; about 2.31–2.34 GB per mode"},
+    {"name":"Quality (8-bit) models","macos":"yes","ios":"no","cli":"yes","note":"macOS and source-built CLI only"},
+    {"name":"Streaming synthesis","macos":"yes","ios":"yes","cli":"partial","note":"Apps play live preview; CLI reports events without a live player"},
+    {"name":"Batch generation","macos":"yes","ios":"no","cli":"yes","note":"Intentionally removed from iOS"},
+    {"name":"Saved Voices","macos":"yes","ios":"yes","cli":"yes","note":"List, enroll, use, and delete prepared voices"},
+    {"name":"Generation History","macos":"yes","ios":"yes","cli":"no","note":"GRDB history.sqlite; search, playback, export, delete"},
+    {"name":"Microphone recording","macos":"yes","ios":"yes","cli":"no","note":"AVFoundation; physical device required for iOS verification"},
+    {"name":"Local transcription","macos":"yes","ios":"yes","cli":"no","note":"Speech + NaturalLanguage; also powers language output gates"},
+    {"name":"Model install / status","macos":"yes","ios":"yes","cli":"yes","note":"Hugging Face downloads with integrity validation"},
+    {"name":"Incomplete-install repair","macos":"yes","ios":"partial","cli":"partial","note":"macOS repair; iOS background reattachment; CLI reinstall"},
+    {"name":"Variation / deterministic seed","macos":"yes","ios":"yes","cli":"yes","note":"Expressive, Balanced, Consistent plus optional seed"},
+    {"name":"Onboarding and hardware gate","macos":"no","ios":"yes","cli":"no","note":"Welcome → Install → Ready; iPhone 15 Pro+ support gate"},
+    {"name":"XPC engine isolation","macos":"yes","ios":"no","cli":"no","note":"Single-envelope macOS service boundary"},
+    {"name":"Accessibility preferences","macos":"yes","ios":"yes","cli":"no","note":"Reduce Motion/Transparency and stable identifiers"},
+    {"name":"Telemetry and benchmark gates","macos":"yes","ios":"yes","cli":"yes","note":"Runtime-gated JSONL, merged records, audio QC, language and perf lanes"}
   ],
   "featureBands": [
     {
-      "label": "Studio",
-      "title": "Compose → Generate → Review",
-      "body": "Script editor (0/150), mode-specific chips (voice, delivery, language, brief, reference), Generate gate, cancel, streaming player. macOS uses sidebar screens; iOS uses a Studio tab with mode segment.",
-      "chips": [
-        {"t": "Custom", "c": "mode-c"},
-        {"t": "Design", "c": "mode-d"},
-        {"t": "Clone", "c": "mode-k"},
-        {"t": "textInput_*", "c": ""},
-        {"t": "studioChip_*", "c": ""}
+      "label":"Studio",
+      "title":"Compose → Generate → Review",
+      "body":"Mode-specific setup, script composer, readiness gate, cooperative cancel, streaming player, persistence, and replay. iOS enforces a 150-character spoken-script limit; macOS warns on long scripts rather than sharing that device gate.",
+      "chips":[
+        {"t":"GenerationStudioShell","c":""},
+        {"t":"StudioGenerationCoordinator","c":""},
+        {"t":"textInput_*","c":""},
+        {"t":"studioChip_*","c":""}
       ]
     },
     {
-      "label": "Delivery",
-      "title": "Emotion presets & custom tone",
-      "body": "Neutral, Happy, Sad, Angry, Fearful, Surprised, Excited, Calm, Whisper, Dramatic. Non-neutral intensities: Subtle / Normal / Strong. Custom tone up to 500 characters. Clone has no delivery control.",
-      "chips": [
-        {"t": "EmotionPreset.swift", "c": ""},
-        {"t": "deliveryPickerPreset_*", "c": ""}
+      "label":"Delivery",
+      "title":"Emotion presets and free-form direction",
+      "body":"Neutral, Happy, Sad, Angry, Fearful, Surprised, Excited, Calm, Whisper, and Dramatic. Non-neutral presets have Subtle, Normal, and Strong intensity; custom direction is capped at 500 characters. Clone has no delivery picker.",
+      "chips":[
+        {"t":"EmotionPreset.swift","c":""},
+        {"t":"IOSDeliveryPickerSheet","c":""},
+        {"t":"EmotionPickerView","c":""}
       ]
     },
     {
-      "label": "Languages",
-      "title": "Ten spoken languages + Auto",
-      "body": "English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian. Auto uses Unicode heuristics and NLLanguageRecognizer. Language bench gates hint + on-device ASR output.",
-      "chips": [
-        {"t": "Qwen3SupportedLanguage", "c": ""},
-        {"t": "lang-bench", "c": ""}
+      "label":"Languages",
+      "title":"Ten spoken languages plus Auto",
+      "body":"English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian. Auto combines prompt heuristics with NaturalLanguage; language benches gate requested hints and locale-locked ASR output.",
+      "chips":[
+        {"t":"Qwen3SupportedLanguage","c":""},
+        {"t":"PromptLanguageDetector","c":""},
+        {"t":"lang-bench","c":""}
       ]
     },
     {
-      "label": "Library",
-      "title": "Voices · History · Models",
-      "body": "Enroll reference clips (record or import), optional auto-transcript, save Design results as Clone voices. History search/filter/play/export. Per-mode model install with cancel, resume, repair, delete.",
-      "chips": [
-        {"t": "voicesRow_*", "c": ""},
-        {"t": "historyRow_*", "c": ""},
-        {"t": "iosModel*", "c": ""}
+      "label":"Library",
+      "title":"Saved Voices · History · Models",
+      "body":"Record or import references, optionally transcribe locally, cache prepared clone prompts, replay/export generations, and manage per-mode model packages. iOS background-session reattachment is not the same as the macOS repair affordance.",
+      "chips":[
+        {"t":"PreparedVoice","c":""},
+        {"t":"GenerationPersistence","c":""},
+        {"t":"IOSModelDownloadCoordinator","c":""},
+        {"t":"ModelManagerViewModel","c":""}
       ]
     }
   ],
   "modules": [
     {
-      "id": "QwenVoice",
-      "label": "QwenVoice",
-      "sub": "macOS app",
-      "kind": "app",
-      "type": "application",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.app",
-      "desc": "Vocello.app — SwiftUI shell, sidebar IA, coordinators, GRDB, XPC client wiring.",
-      "depends": ["QwenVoiceNative", "QwenVoiceEngineService", "QwenVoiceEngineSupport", "QwenVoiceCore", "GRDB"],
-      "files": ["Sources/QwenVoiceApp.swift", "Sources/ContentView.swift", "Sources/Views/", "Sources/ViewModels/", "Sources/Services/"]
+      "id":"QwenVoice","label":"QwenVoice","sub":"macOS app","kind":"app","type":"application","platform":"macOS","bundle":"com.qwenvoice.app",
+      "desc":"Vocello.app: SwiftUI sidebar shell, generation coordinators, library, settings, playback, persistence, and XPC wiring.",
+      "depends":["GRDB","QwenVoiceCore","QwenVoiceEngineService","QwenVoiceEngineSupport","QwenVoiceNative","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources"],
+      "files":["Sources/QwenVoiceApp.swift","Sources/ContentView.swift","Sources/Views/","Sources/ViewModels/","Sources/Services/"]
     },
     {
-      "id": "VocelloiOS",
-      "label": "VocelloiOS",
-      "sub": "iOS app",
-      "kind": "app",
-      "type": "application",
-      "platform": "iOS",
-      "bundle": "com.patricedery.vocello",
-      "desc": "Vocello iOS — in-process engine, four-tab shell, App Group storage. Does not link the XPC stack.",
-      "depends": ["QwenVoiceCore", "GRDB"],
-      "files": ["Sources/iOS/QVoiceiOSApp.swift", "Sources/iOS/App/RootView.swift", "Sources/iOS/Studio/", "Sources/iOSSupport/"]
+      "id":"VocelloiOS","label":"VocelloiOS","sub":"iOS app","kind":"app","type":"application","platform":"iOS","bundle":"com.patricedery.vocello",
+      "desc":"Four-tab iPhone app with onboarding, in-process engine, App Group storage, model delivery, diagnostics, and physical-device gates.",
+      "depends":["GRDB","QwenVoiceCore","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources/iOS","Sources/iOSSupport","Sources/SharedSupport","Sources/Resources/qwenvoice_contract.json","Sources/Resources/qwenvoice_ios_model_catalog.json","Sources/Resources/voice-previews","Sources/Assets.xcassets","Sources/PrivacyInfo.xcprivacy"],
+      "files":["Sources/iOS/QVoiceiOSApp.swift","Sources/iOS/App/RootView.swift","Sources/iOS/Studio/","Sources/iOSSupport/","Sources/SharedSupport/"]
     },
     {
-      "id": "VocelloCLI",
-      "label": "VocelloCLI",
-      "sub": "vocello",
-      "kind": "app",
-      "type": "tool",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.cli",
-      "desc": "Headless CLI for generate, batch, bench, voices, and model install. Engine in-process.",
-      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
-      "files": ["Sources/VocelloCLI/VocelloMain.swift", "Sources/VocelloCLI/CLIRuntime.swift", "Sources/VocelloCLI/GenerateCommand.swift"]
+      "id":"VocelloCLI","label":"VocelloCLI","sub":"source-built tool","kind":"app","type":"tool","platform":"macOS","bundle":"com.qwenvoice.cli",
+      "desc":"Headless generation, batch, model management, voices, catalogs, language/performance benches, and machine-readable output. Not included in the DMG.",
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources/VocelloCLI","Sources/Resources/qwenvoice_contract.json"],
+      "files":["Sources/VocelloCLI/VocelloMain.swift","Sources/VocelloCLI/CLIRuntime.swift","Sources/VocelloCLI/GenerateCommand.swift","Sources/VocelloCLI/BenchCommand.swift"]
     },
     {
-      "id": "QwenVoiceCore",
-      "label": "QwenVoiceCore",
-      "sub": "engine core",
-      "kind": "fw",
-      "type": "framework.static",
-      "platform": "iOS + macOS",
-      "bundle": "com.qwenvoice.core",
-      "desc": "TTSEngine protocol, MLXTTSEngine, generation semantics, runtime, memory policy, telemetry, downloads.",
-      "depends": ["QwenVoiceBackendCore", "MLXAudio", "MLXSwift", "SwiftHuggingFace"],
-      "files": ["Sources/QwenVoiceCore/MLXTTSEngine.swift", "Sources/QwenVoiceCore/NativeRuntimeFactory.swift", "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"]
+      "id":"QwenVoiceCore","label":"QwenVoiceCore","sub":"engine core","kind":"fw","type":"framework.static","platform":"iOS + macOS","bundle":"com.qwenvoice.core",
+      "desc":"TTSEngine contracts, MLXTTSEngine, model registry/assets/downloads, semantics, clone cache, streaming synthesis, memory policy, telemetry, and QC.",
+      "depends":["QwenVoiceBackendCore","MLXAudioCore","MLXAudioTTS","MLX","MLXRandom","HuggingFace"],
+      "sourceRoots":["Sources/QwenVoiceCore"],
+      "files":["Sources/QwenVoiceCore/TTSEngine.swift","Sources/QwenVoiceCore/MLXTTSEngine.swift","Sources/QwenVoiceCore/NativeRuntimeFactory.swift","Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"]
     },
     {
-      "id": "QwenVoiceBackendCore",
-      "label": "BackendCore",
-      "sub": "MLX primitives",
-      "kind": "fw",
-      "type": "framework.static",
-      "platform": "iOS + macOS",
-      "bundle": "com.qwenvoice.backend-core",
-      "desc": "Low-level MLX and audio primitives: Qwen3 generation config and policy types.",
-      "depends": ["MLXAudio", "MLXSwift"],
-      "files": ["Sources/QwenVoiceBackendCore/"]
+      "id":"QwenVoiceBackendCore","label":"BackendCore","sub":"generation policy","kind":"fw","type":"framework.static","platform":"iOS + macOS","bundle":"com.qwenvoice.backend-core",
+      "desc":"Small low-level backend contract: Qwen3 generation configuration, finish reasons, policy, and synthesis-backend protocol.",
+      "depends":["MLXAudioCore","MLXAudioTTS","MLX"],
+      "sourceRoots":["Sources/QwenVoiceBackendCore"],
+      "files":["Sources/QwenVoiceBackendCore/QwenVoiceBackendCore.swift"]
     },
     {
-      "id": "QwenVoiceNative",
-      "label": "QwenVoiceNative",
-      "sub": "XPC bridge",
-      "kind": "mac",
-      "type": "framework.static",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.native",
-      "desc": "App-facing XPC client, TTSEngineStore, GenerationChunkBroker bridging XPC events to SwiftUI.",
-      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
-      "files": ["Sources/QwenVoiceNative/TTSEngineStore.swift", "Sources/QwenVoiceNative/XPCNativeEngineClient.swift"]
+      "id":"QwenVoiceNative","label":"QwenVoiceNative","sub":"XPC client","kind":"mac","type":"framework.static","platform":"macOS","bundle":"com.qwenvoice.native",
+      "desc":"App-facing macOS store, XPC transport/coordinator, expected-retirement handling, and streaming chunk broker.",
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources/QwenVoiceNative"],
+      "files":["Sources/QwenVoiceNative/TTSEngineStore.swift","Sources/QwenVoiceNative/XPCNativeEngineClient.swift","Sources/QwenVoiceNative/GenerationChunkBroker.swift"]
     },
     {
-      "id": "QwenVoiceEngineSupport",
-      "label": "EngineSupport",
-      "sub": "XPC protocol",
-      "kind": "mac",
-      "type": "framework.static",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.engine-support",
-      "desc": "XPC wire protocol: EngineCommand, envelopes, codec shared by client and service.",
-      "depends": ["QwenVoiceCore"],
-      "files": ["Sources/QwenVoiceEngineSupport/EngineServiceIPC.swift"]
+      "id":"QwenVoiceEngineSupport","label":"EngineSupport","sub":"XPC contract","kind":"mac","type":"framework.static","platform":"macOS","bundle":"com.qwenvoice.engine-support",
+      "desc":"Single-envelope XPC command/reply/event protocol, wire codec, domain models, and trust policy.",
+      "depends":["QwenVoiceCore","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources/QwenVoiceEngineSupport"],
+      "files":["Sources/QwenVoiceEngineSupport/EngineServiceIPC.swift","Sources/QwenVoiceEngineSupport/EngineDomainModels.swift","Sources/QwenVoiceEngineSupport/EngineServiceTrustPolicy.swift"]
     },
     {
-      "id": "QwenVoiceEngineService",
-      "label": "EngineService",
-      "sub": "XPC host",
-      "kind": "mac",
-      "type": "xpc-service",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.app.engine-service",
-      "desc": "Out-of-process engine host. Runs MLXTTSEngine for crash isolation and memory containment.",
-      "depends": ["QwenVoiceCore", "QwenVoiceEngineSupport"],
-      "files": ["Sources/QwenVoiceEngineService/main.swift", "Sources/QwenVoiceEngineService/EngineServiceHost.swift"]
+      "id":"QwenVoiceEngineService","label":"EngineService","sub":"XPC host","kind":"mac","type":"xpc-service","platform":"macOS","bundle":"com.qwenvoice.app.engine-service",
+      "desc":"Out-of-process MLXTTSEngine host, command dispatcher, off-MainActor event forwarding, diagnostics, and idle retirement.",
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "sourceRoots":["Sources/QwenVoiceEngineService","Sources/Resources/qwenvoice_contract.json","Sources/PrivacyInfo.xcprivacy"],
+      "files":["Sources/QwenVoiceEngineService/main.swift","Sources/QwenVoiceEngineService/EngineServiceHost.swift"]
     },
     {
-      "id": "VocelloCoreTests",
-      "label": "CoreTests",
-      "sub": "unit",
-      "kind": "test",
-      "type": "bundle.unit-test",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.core.tests",
-      "desc": "Language semantics unit tests. No models, no XPC. Part of macOS gate.",
-      "depends": ["QwenVoiceCore"],
-      "files": ["Tests/VocelloCoreTests/"]
+      "id":"VocelloCoreTests","label":"CoreTests","sub":"unit","kind":"test","type":"bundle.unit-test","platform":"macOS","bundle":"com.qwenvoice.core.tests",
+      "desc":"Language semantics, typed telemetry compatibility, and atomic readable output contracts with no model requirement.",
+      "depends":["QwenVoiceCore"],"sourceRoots":["Tests/VocelloCoreTests","Sources/SharedSupport/Services/LanguageSelectionPresentation.swift","Sources/SharedSupport/Services/VoiceClipTranscriber.swift"],"testHost":null,"files":["Tests/VocelloCoreTests/"]
     },
     {
-      "id": "VocelloMacUITests",
-      "label": "MacUITests",
-      "sub": "XCUITest",
-      "kind": "test",
-      "type": "bundle.ui-testing",
-      "platform": "macOS",
-      "bundle": "com.qwenvoice.app.uitests",
-      "desc": "Smoke, journey, review, and XPC bench matrix against the real engine.",
-      "depends": ["QwenVoice", "QwenVoiceCore"],
-      "files": ["Tests/VocelloMacUITests/"]
+      "id":"VocelloEngineIntegrationTests","label":"EngineIntegration","sub":"XPC unit","kind":"test","type":"bundle.unit-test","platform":"macOS","bundle":"com.qwenvoice.engine.integration-tests",
+      "desc":"Injectable XPC request/reply, timeout, cancellation, retirement, interruption, and reconnection contracts. Never launches frontend UI.",
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","QwenVoiceNative"],"sourceRoots":["Tests/VocelloEngineIntegrationTests"],"testHost":null,"files":["Tests/VocelloEngineIntegrationTests/"]
     },
     {
-      "id": "VocelloiOSUITests",
-      "label": "iOSUITests",
-      "sub": "XCUITest",
-      "kind": "test",
-      "type": "bundle.ui-testing",
-      "platform": "iOS",
-      "bundle": "com.patricedery.vocello.uitests",
-      "desc": "Device-only UI tests: smoke, sheets, cold generation, bench matrix, review tour.",
-      "depends": ["VocelloiOS"],
-      "files": ["Tests/VocelloiOSUITests/"]
+      "id":"VocelloiOSUITests","label":"iOSUITests","sub":"device XCUITest","kind":"test","type":"bundle.ui-testing","platform":"iOS","bundle":"com.patricedery.vocello.uitests",
+      "desc":"Physical-device smoke, sheet, download lifecycle, cold generation, review, and bench suites.",
+      "depends":["VocelloiOS"],"sourceRoots":["Tests/VocelloiOSUITests"],"testHost":"VocelloiOS","files":["Tests/VocelloiOSUITests/"]
     },
     {
-      "id": "MLXAudio",
-      "label": "MLXAudio",
-      "sub": "vendored",
-      "kind": "spm",
-      "type": "local package",
-      "platform": "iOS + macOS",
-      "bundle": "third_party_patches/mlx-audio-swift",
-      "desc": "Qwen3-TTS-only fork: MLXAudioCore, MLXAudioCodecs, MLXAudioTTS for load, tokenize, decode.",
-      "depends": ["MLXSwift", "mlx-swift-lm"],
-      "files": ["third_party_patches/mlx-audio-swift/Package.swift"]
+      "id":"MLXAudio","label":"MLXAudio","sub":"vendored fork","kind":"spm","type":"local package","platform":"iOS + macOS","bundle":"third_party_patches/mlx-audio-swift",
+      "desc":"Qwen3-TTS-only fork exposing MLXAudioCore, MLXAudioCodecs, and MLXAudioTTS; owns the Mimi codec and Qwen3 wrappers.",
+      "depends":["mlx-swift","mlx-swift-lm","SwiftHuggingFace"],"files":["third_party_patches/mlx-audio-swift/Package.swift"]
     },
     {
-      "id": "MLXSwift",
-      "label": "mlx-swift",
-      "sub": "0.30.6",
-      "kind": "spm",
-      "type": "SPM package",
-      "platform": "iOS + macOS",
-      "bundle": "github.com/ml-explore/mlx-swift",
-      "desc": "MLX runtime bindings (MLX, MLXRandom). Exact pin; move in lockstep with mlx-swift-lm.",
-      "depends": [],
-      "files": []
+      "id":"MLXSwift","label":"mlx-swift","sub":"0.30.6","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/ml-explore/mlx-swift",
+      "desc":"MLX arrays, neural-network layers, Metal compute, random seeding, and memory interfaces.","depends":[],"files":[]
     },
     {
-      "id": "SwiftHuggingFace",
-      "label": "SwiftHuggingFace",
-      "sub": "0.9.0",
-      "kind": "spm",
-      "type": "SPM package",
-      "platform": "iOS + macOS",
-      "bundle": "github.com/huggingface/swift-huggingface",
-      "desc": "Hugging Face hub client for on-demand model download.",
-      "depends": [],
-      "files": []
+      "id":"MLXLM","label":"mlx-swift-lm","sub":"2.30.6","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/ml-explore/mlx-swift-lm",
+      "desc":"Language-model utilities consumed by the vendored audio stack; pinned in lockstep with mlx-swift.",
+      "depends":["mlx-swift","swift-transformers","swift-jinja"],"files":[]
     },
     {
-      "id": "GRDB",
-      "label": "GRDB.swift",
-      "sub": "7.10.0",
-      "kind": "spm",
-      "type": "SPM package",
-      "platform": "iOS + macOS",
-      "bundle": "github.com/groue/GRDB.swift",
-      "desc": "SQLite persistence for history.sqlite and related app records.",
-      "depends": [],
-      "files": []
+      "id":"SwiftHuggingFace","label":"SwiftHuggingFace","sub":"0.9.0","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/huggingface/swift-huggingface",
+      "desc":"Hub/client dependency in the package graph; application repository downloads are implemented by HuggingFaceDownloader over URLSession.",
+      "depends":["swift-nio","swift-crypto"],"files":["Sources/QwenVoiceCore/HuggingFaceDownloader.swift"]
+    },
+    {
+      "id":"GRDB","label":"GRDB.swift","sub":"7.10.0","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/groue/GRDB.swift",
+      "desc":"SQLite persistence for generation history and related local records.","depends":[],"files":["Sources/SharedSupport/Database/","Sources/SharedSupport/Services/GenerationPersistence.swift"]
     }
   ],
   "edges": [
-    ["QwenVoice", "QwenVoiceNative"],
-    ["QwenVoice", "QwenVoiceEngineService"],
-    ["QwenVoice", "QwenVoiceEngineSupport"],
-    ["QwenVoice", "QwenVoiceCore"],
-    ["QwenVoice", "GRDB"],
-    ["VocelloiOS", "QwenVoiceCore"],
-    ["VocelloiOS", "GRDB"],
-    ["VocelloCLI", "QwenVoiceCore"],
-    ["VocelloCLI", "QwenVoiceEngineSupport"],
-    ["QwenVoiceNative", "QwenVoiceCore"],
-    ["QwenVoiceNative", "QwenVoiceEngineSupport"],
-    ["QwenVoiceEngineService", "QwenVoiceCore"],
-    ["QwenVoiceEngineService", "QwenVoiceEngineSupport"],
-    ["QwenVoiceEngineSupport", "QwenVoiceCore"],
-    ["QwenVoiceCore", "QwenVoiceBackendCore"],
-    ["QwenVoiceCore", "MLXAudio"],
-    ["QwenVoiceCore", "MLXSwift"],
-    ["QwenVoiceCore", "SwiftHuggingFace"],
-    ["QwenVoiceBackendCore", "MLXAudio"],
-    ["QwenVoiceBackendCore", "MLXSwift"],
-    ["MLXAudio", "MLXSwift"],
-    ["VocelloCoreTests", "QwenVoiceCore"],
-    ["VocelloMacUITests", "QwenVoice"],
-    ["VocelloiOSUITests", "VocelloiOS"]
+    ["QwenVoice","QwenVoiceNative"],["QwenVoice","QwenVoiceEngineService"],["QwenVoice","QwenVoiceEngineSupport"],["QwenVoice","QwenVoiceCore"],["QwenVoice","GRDB"],["QwenVoice","MLXAudio"],["QwenVoice","MLXSwift"],["QwenVoice","SwiftHuggingFace"],
+    ["VocelloiOS","QwenVoiceCore"],["VocelloiOS","GRDB"],["VocelloiOS","MLXAudio"],["VocelloiOS","MLXSwift"],["VocelloiOS","SwiftHuggingFace"],
+    ["VocelloCLI","QwenVoiceCore"],["VocelloCLI","QwenVoiceEngineSupport"],["VocelloCLI","MLXAudio"],["VocelloCLI","MLXSwift"],["VocelloCLI","SwiftHuggingFace"],
+    ["QwenVoiceNative","QwenVoiceCore"],["QwenVoiceNative","QwenVoiceEngineSupport"],["QwenVoiceNative","MLXAudio"],["QwenVoiceNative","MLXSwift"],["QwenVoiceNative","SwiftHuggingFace"],
+    ["QwenVoiceEngineSupport","QwenVoiceCore"],["QwenVoiceEngineSupport","MLXAudio"],["QwenVoiceEngineSupport","MLXSwift"],["QwenVoiceEngineSupport","SwiftHuggingFace"],
+    ["QwenVoiceEngineService","QwenVoiceCore"],["QwenVoiceEngineService","QwenVoiceEngineSupport"],["QwenVoiceEngineService","MLXAudio"],["QwenVoiceEngineService","MLXSwift"],["QwenVoiceEngineService","SwiftHuggingFace"],
+    ["QwenVoiceCore","QwenVoiceBackendCore"],["QwenVoiceCore","MLXAudio"],["QwenVoiceCore","MLXSwift"],["QwenVoiceCore","SwiftHuggingFace"],
+    ["QwenVoiceBackendCore","MLXAudio"],["QwenVoiceBackendCore","MLXSwift"],["MLXAudio","MLXSwift"],["MLXAudio","MLXLM"],["MLXAudio","SwiftHuggingFace"],
+    ["VocelloCoreTests","QwenVoiceCore"],["VocelloEngineIntegrationTests","QwenVoiceCore"],["VocelloEngineIntegrationTests","QwenVoiceEngineSupport"],["VocelloEngineIntegrationTests","QwenVoiceNative"],["VocelloiOSUITests","VocelloiOS"]
   ],
   "pipeline": [
+    {"title":"Acquire operation ownership","body":"MLXTTSEngine.generate enters the user-model operation gate, sets visible engine activity, and establishes cancellation and telemetry scopes.","path":"MLXTTSEngine.generate → beginUserModelOperation"},
+    {"title":"Validate and load","body":"NativeEngineRuntime validates the request, applies deterministic MLXRandom seeding when supplied, resolves the contract-backed model variant, and ensures it is loaded.","path":"NativeEngineRuntime.prepareGeneration(for:)"},
+    {"title":"Build mode conditioning","body":"Custom resolves speaker and delivery; Design warms natural-language brief conditioning; Clone normalizes the reference and reuses decoded audio/prompt artifacts through NativeCloneSupport.","path":"GenerationRequest.Payload → NativeEngineRuntime / NativeCloneSupport"},
+    {"title":"Run Qwen3-TTS inference","body":"UnsafeSpeechGenerationModel delegates to the vendored Qwen3 custom, design, or clone streaming generator with the resolved language hint and sampling policy.","path":"MLXAudioTTS · Qwen3-TTS 12Hz 1.7B"},
+    {"title":"Decode and quality-check PCM","body":"The Mimi speech tokenizer decodes tokens to PCM. PCM16StreamLimiter and AudioQCReport track clipping, clicks, slew, dropout, and non-finite samples.","path":"MLXAudioCodecs → PCM16StreamLimiter"},
+    {"title":"Publish WAV, events, and result","body":"NativeStreamingSynthesisSession atomically writes 24 kHz mono Int16 WAV, emits ordered progress/chunk/completion events, trims per policy, and returns GenerationResult.","path":"NativeStreamingSynthesisSession.run"}
+  ],
+  "systemFlows": [
     {
-      "title": "Begin user model operation",
-      "body": "MLXTTSEngine.generate acquires an operation slot, sets loadState to running, and prepares cancellation / telemetry scopes.",
-      "path": "MLXTTSEngine.generate → beginUserModelOperation"
+      "title":"macOS XPC request lifecycle",
+      "steps":[
+        "A generation coordinator submits GenerationRequest to QwenVoiceNative.TTSEngineStore",
+        "XPCNativeEngineClient encodes EngineCommand.generate in the single perform(_:withReply:) envelope",
+        "EngineServiceHost dispatches to MLXTTSEngine in the out-of-process service",
+        "Reverse-XPC handleEvent(_:) forwards progress and chunks to GenerationChunkBroker",
+        "The reply returns GenerationResult for persistence and autoplay"
+      ],
+      "note":"Engine events drain off MainActor. Expected shutdownWhenIdle retirement is non-fatal; the client reconnects lazily on the next request."
     },
     {
-      "title": "Prepare generation",
-      "body": "NativeEngineRuntime validates the prompt, seeds MLXRandom, ensures the model is loaded, and builds mode-specific conditioning (speaker, brief, or clone reference).",
-      "path": "runtime.prepareGeneration(for:)"
+      "title":"iOS in-process request lifecycle",
+      "steps":[
+        "StudioGenerationCoordinator builds and submits GenerationRequest",
+        "The iOS TTSEngineStore calls the in-process MLXTTSEngine directly",
+        "A bufferingNewest(64) stream updates preview and player state",
+        "GenerationResult is persisted asynchronously through GenerationPersistence and GRDB",
+        "Cooperative cancellation discards a late result before History persistence"
+      ],
+      "note":"No macOS XPC modules are linked. Proactive warm work is thermally gated; generation itself is not blocked, and batch is intentionally absent."
     },
     {
-      "title": "Mode conditioning",
-      "body": "Custom: prewarmCustomVoice. Design: warmDesignConditioning. Clone: NativeCloneSupport (normalize → MLXArray → prompt artifact, three-level cache).",
-      "path": "NativeEngineRuntime / NativeCloneSupport"
+      "title":"Model install",
+      "steps":["Read the model contract or iOS catalog","List the pinned Hugging Face revision","Download into .qwenvoice-downloads staging","Verify required paths, sizes, and integrity metadata","Atomically move into models/ and refresh inventory"],
+      "note":"macOS exposes repair for incomplete installs. iOS reattaches background URLSession transfers and treats explicit cancel as discard."
     },
     {
-      "title": "MLX inference stream",
-      "body": "UnsafeSpeechGenerationModel wraps vendored SpeechGenerationModel streams: generateCustomVoiceStream, generateVoiceDesignStream, generateVoiceCloneStream.",
-      "path": "MLXAudioTTS · Qwen3-TTS 12Hz 1.7B"
+      "title":"Persistence and playback",
+      "steps":["Publish the generated WAV","Write generation metadata asynchronously through GRDB","Expose History search, replay, save-as voice, export, and delete","Feed completed or streaming audio into AudioPlayerViewModel"],
+      "note":"App data stays local. The CLI writes directly to its requested output and does not maintain app History."
     },
     {
-      "title": "Mimi codec → PCM",
-      "body": "MLXAudioCodecs decode speech tokens to PCM. PCM16StreamLimiter and defect detection watch for clip, click, slew, dropout, nan/inf.",
-      "path": "MLXAudioCodecs + QC"
+      "title":"Telemetry join",
+      "steps":["Gate sampling and durable writes with TelemetryGate.resolvedEnabled","Record schema-v6 typed app, XPC transport, backend, and output metrics using one generation ID","Validate terminal agreement, monotonic stages, sequence integrity, final barrier, readable WAV, and History row","Merge backward-readable JSONL records and summarize benches/gate verdicts"],
+      "note":"v1–v5 rows and legacy maps remain readable. Raw script, transcript, path, and voice description are never persisted; raw JSONL remains untracked."
     },
     {
-      "title": "Write WAV + result",
-      "body": "AtomicPCM16WAVWriter emits 24 kHz mono Int16 WAV. GenerationResult and AudioQCReport feed persistence, player, and telemetry.",
-      "path": "NativeStreamingSynthesisSession.run"
+      "title":"Release and distribution",
+      "steps":["Build optimized Release configuration","Sign the macOS app and embedded XPC service","Create, notarize, staple, and verify the DMG","Attach artifacts to GitHub Release","Optionally compile/archive iOS for TestFlight/App Store"],
+      "note":"The marketing site deploys separately from website/ to Vercel. The source-built vocello CLI is not bundled in the DMG."
     }
   ],
   "sources": [
     {
-      "name": "Sources/QwenVoiceBackendCore/",
-      "plat": "iOS+macOS",
-      "desc": "MLX/audio primitives and Qwen3 generation config.",
-      "children": []
+      "name":"Sources/QwenVoiceBackendCore/","plat":"iOS + macOS","desc":"Backend provenance, generation policy, finish reason, and synthesis protocol.",
+      "children":[{"name":"QwenVoiceBackendCore.swift","desc":"Entire low-level backend module"}]
     },
     {
-      "name": "Sources/QwenVoiceCore/",
-      "plat": "iOS+macOS",
-      "desc": "Engine core: TTSEngine, MLXTTSEngine, runtime, memory, downloads, semantics.",
-      "children": [
-        {"name": "MLXTTSEngine.swift", "desc": "Primary engine implementation"},
-        {"name": "NativeRuntimeFactory.swift", "desc": "Wires registry, asset store, engine"},
-        {"name": "NativeStreamingSynthesisSession.swift", "desc": "One generation end-to-end"},
-        {"name": "SemanticTypes.swift", "desc": "GenerationMode, Request, Event"}
+      "name":"Sources/QwenVoiceCore/","plat":"iOS + macOS","desc":"Engine contracts, semantics, loading, downloads, synthesis, memory, telemetry, and audio preparation/QC.",
+      "children":[
+        {"name":"TTSEngine.swift","desc":"Frontend/runtime/cancellation protocols"},
+        {"name":"SemanticTypes.swift","desc":"Requests, results, events, models, speakers, memory and streaming types"},
+        {"name":"NativeEngineRuntime.swift","desc":"Load/prewarm/conditioning coordinator"},
+        {"name":"NativeCloneSupport.swift","desc":"Reference normalization and prepared prompt caches"},
+        {"name":"NativeStreamingSynthesisSession.swift","desc":"Inference, PCM/QC, atomic WAV publication"},
+        {"name":"HuggingFaceDownloader.swift","desc":"Native repository download and staging"}
       ]
     },
     {
-      "name": "Sources/QwenVoiceEngineSupport/",
-      "plat": "macOS",
-      "desc": "XPC wire protocol and macOS runtime helpers.",
-      "children": []
-    },
-    {
-      "name": "Sources/QwenVoiceNative/",
-      "plat": "macOS",
-      "desc": "XPC client, TTSEngineStore, chunk broker.",
-      "children": []
-    },
-    {
-      "name": "Sources/QwenVoiceEngineService/",
-      "plat": "macOS",
-      "desc": "Out-of-process XPC engine host.",
-      "children": []
-    },
-    {
-      "name": "Sources/VocelloCLI/",
-      "plat": "macOS",
-      "desc": "Headless vocello binary commands.",
-      "children": []
-    },
-    {
-      "name": "Sources/iOS/",
-      "plat": "iOS",
-      "desc": "SwiftUI app: Studio, Voices, History, Settings, sheets, design system.",
-      "children": [
-        {"name": "App/", "desc": "RootView, AppModel, TabDock"},
-        {"name": "Studio/", "desc": "Studio screen + inline player"},
-        {"name": "Voices/ · History/ · Settings/", "desc": "Library tabs"},
-        {"name": "TTSEngineStore.swift", "desc": "In-process engine wrapper"}
+      "name":"Sources/QwenVoiceEngineSupport/","plat":"macOS","desc":"XPC envelopes, commands, replies, events, domain types, and trust policy.",
+      "children":[
+        {"name":"EngineServiceIPC.swift","desc":"Single perform(_:withReply:) envelope protocol"},
+        {"name":"EngineDomainModels.swift","desc":"Transport-facing models"},
+        {"name":"EngineServiceTrustPolicy.swift","desc":"Client/service validation"}
       ]
     },
     {
-      "name": "Sources/iOSSupport/",
-      "plat": "iOS",
-      "desc": "App Group paths, model install, DB, device support.",
-      "children": []
+      "name":"Sources/QwenVoiceNative/","plat":"macOS","desc":"XPC client transport, expected retirement, UI-facing store, and chunk broker.",
+      "children":[
+        {"name":"XPCNativeEngineClient.swift","desc":"Connection coordinator and request transport"},
+        {"name":"TTSEngineStore.swift","desc":"SwiftUI-facing facade"},
+        {"name":"GenerationChunkBroker.swift","desc":"Streaming preview fan-out"}
+      ]
     },
     {
-      "name": "Sources/SharedSupport/",
-      "plat": "both apps",
-      "desc": "Player, persistence, transcriber, telemetry helpers.",
-      "children": []
+      "name":"Sources/QwenVoiceEngineService/","plat":"macOS","desc":"Out-of-process engine host and process entrypoint.",
+      "children":[
+        {"name":"EngineServiceHost.swift","desc":"Command dispatch and event forwarding"},
+        {"name":"main.swift","desc":"NSXPCListener entrypoint"}
+      ]
     },
     {
-      "name": "Sources/Views/ · ViewModels/ · Services/ · Models/",
-      "plat": "macOS",
-      "desc": "macOS UI, coordinators, GRDB, XPC lifecycle services.",
-      "children": []
+      "name":"Sources/Views/ · ViewModels/ · Services/ · Models/","plat":"macOS","desc":"Six-surface SwiftUI app, coordinators, model manager, lifecycle, history, playback, and batch.",
+      "children":[
+        {"name":"Views/Generate/","desc":"Custom, Design, Clone and GenerationStudioShell"},
+        {"name":"Views/Library/","desc":"History, Saved Voices, recording and save sheets"},
+        {"name":"Views/Settings/","desc":"Model downloads and preferences"},
+        {"name":"Services/","desc":"Database, audio, telemetry merge, XPC lifecycle, batch and warmup"}
+      ]
     },
     {
-      "name": "Sources/Resources/",
-      "plat": "bundled",
-      "desc": "qwenvoice_contract.json, iOS catalog, voice-previews.",
-      "children": []
+      "name":"Sources/iOS/","plat":"iOS","desc":"App shell, Studio, Voices, History, Settings, overlays, sheets, design system, and in-process engine store.",
+      "children":[
+        {"name":"App/","desc":"RootView, AppModel, TabDock"},
+        {"name":"Studio/","desc":"StudioScreen, coordinator, inline player and bench hooks"},
+        {"name":"Sheets/IOSBottomSheets.swift","desc":"Delivery, language, voice, reference and delete-model sheet types"},
+        {"name":"Voices/ · History/ · Settings/","desc":"Four-tab content surfaces"},
+        {"name":"TTSEngineStore.swift","desc":"Bounded event stream and cooperative-cancel facade"},
+        {"name":"IOSAutorunHarness.swift","desc":"Headless on-device bench/language generation"}
+      ]
     },
     {
-      "name": "website/",
-      "plat": "web",
-      "desc": "Marketing site (React + Vite) → Vercel.",
-      "children": []
+      "name":"Sources/iOSSupport/","plat":"iOS","desc":"App Group paths, persistence, model delivery, diagnostics, crashes/interruption recording, and support view models.",
+      "children":[
+        {"name":"Services/IOSModelDeliverySupport.swift","desc":"Catalog and integrity rules"},
+        {"name":"Services/IOSCrashObserver.swift","desc":"MetricKit/crash diagnostics"},
+        {"name":"Models/GenerationDrafts.swift","desc":"Mode drafts and clone readiness"}
+      ]
     },
     {
-      "name": "scripts/",
-      "plat": "dev",
-      "desc": "Build, gates, release, benches, device tooling.",
-      "children": []
+      "name":"Sources/SharedSupport/","plat":"both apps","desc":"GRDB, persistence, playback, recording, transcription, language presentation, telemetry, and shared views.",
+      "children":[
+        {"name":"Database/","desc":"GRDB schema and queue"},
+        {"name":"Services/GenerationPersistence.swift","desc":"Async History writes"},
+        {"name":"Services/VoiceClipTranscriber.swift","desc":"Local Speech transcription"},
+        {"name":"ViewModels/AudioPlayerViewModel.swift","desc":"Streaming and completed playback"}
+      ]
     },
     {
-      "name": "Tests/",
-      "plat": "test",
-      "desc": "VocelloCoreTests, VocelloMacUITests, VocelloiOSUITests.",
-      "children": []
+      "name":"Sources/VocelloCLI/","plat":"macOS","desc":"Generate, shortcuts, batch, voices, speakers, deliveries, models, and bench commands.",
+      "children":[
+        {"name":"CLIRuntime.swift","desc":"Contract/path/engine bootstrap"},
+        {"name":"GenerateCommand.swift","desc":"Single-take synthesis and event observation"},
+        {"name":"BenchCommand.swift","desc":"Performance, language, and quality matrices"}
+      ]
+    },
+    {
+      "name":"Sources/Resources/","plat":"bundled metadata","desc":"Canonical model contract, iOS catalog, privacy manifest, and iOS voice-preview WAVs.",
+      "children":[
+        {"name":"qwenvoice_contract.json","desc":"Model/speaker/capability source of truth"},
+        {"name":"qwenvoice_ios_model_catalog.json","desc":"iOS-downloadable Speed catalog"}
+      ]
+    },
+    {
+      "name":"third_party_patches/mlx-audio-swift/","plat":"vendored","desc":"Qwen3-TTS-only MLXAudio fork with Core, Mimi Codecs, and TTS products.",
+      "children":[{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
+    },
+    {
+      "name":"Tests/","plat":"macOS + device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, iOS device UI suites, and probe fixtures.",
+      "children":[
+        {"name":"VocelloCoreTests/","desc":"Language, schema-v6 compatibility, and atomic WAV tests"},
+        {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"},
+        {"name":"VocelloiOSUITests/","desc":"Smoke, sheets, download, cold generation, review, bench"}
+      ]
+    },
+    {
+      "name":"scripts/ · config/ · benchmarks/","plat":"operations","desc":"Build, gates, device tooling, benchmark matrices, analyzers, baselines, and release verification.",
+      "children":[
+        {"name":"macos_test.sh","desc":"macOS test/gate/review/profile router"},
+        {"name":"macos_agent_ui.sh","desc":"Exact-path Computer Use session, probes, report, attestation, and impact harness"},
+        {"name":"macos-ui-scenarios.json · macos-test-impact.json · backend-risk-spine.json","desc":"Tracked scenario, evidence-selection, and report-risk contracts"},
+        {"name":"ios_device.sh","desc":"Physical-device build/test/bench/gate router"},
+        {"name":"release.sh","desc":"Optimized signing/notarization packaging"}
+      ]
+    },
+    {
+      "name":"website/","plat":"web","desc":"React/Vite marketing site and Vercel deployment surface.",
+      "children":[
+        {"name":"src/sections/","desc":"Hero, capabilities, workflows, samples, privacy, limitations"},
+        {"name":"public/assets/","desc":"Screenshots, samples and brand assets"}
+      ]
+    },
+    {
+      "name":".github/workflows/","plat":"CI","desc":"iOS compile safety, macOS package/release, and optional iOS archive jobs.",
+      "children":[
+        {"name":"ci.yml","desc":"Compile checks and manual macOS smoke"},
+        {"name":"release.yml","desc":"DMG release, iOS compile, optional archive"}
+      ]
     }
   ],
   "deps": [
-    {"name": "mlx-swift", "ver": "exact 0.30.6", "role": "MLX runtime (MLX, MLXRandom)", "tag": "direct", "direct": true},
-    {"name": "mlx-swift-lm", "ver": "exact 2.30.6", "role": "LM utilities via vendored MLXAudio (lockstep with mlx-swift)", "tag": "transitive", "direct": false},
-    {"name": "mlx-audio-swift", "ver": "vendored fork", "role": "Qwen3-TTS load / tokenize / decode (MLXAudioCore, Codecs, TTS)", "tag": "vendored", "direct": true},
-    {"name": "GRDB.swift", "ver": "exact 7.10.0", "role": "SQLite for history.sqlite", "tag": "direct", "direct": true},
-    {"name": "SwiftHuggingFace", "ver": "exact 0.9.0", "role": "Hugging Face model download client", "tag": "direct", "direct": true},
-    {"name": "swift-transformers", "ver": "1.1.9", "role": "Tokenizer (transitive)", "tag": "transitive", "direct": false},
-    {"name": "swift-jinja", "ver": "2.3.5", "role": "Chat/template formatting", "tag": "transitive", "direct": false},
-    {"name": "swift-nio", "ver": "2.98.0", "role": "Networking via SwiftHuggingFace", "tag": "transitive", "direct": false},
-    {"name": "swift-crypto", "ver": "4.4.0", "role": "Hashing", "tag": "transitive", "direct": false},
-    {"name": "swift-collections", "ver": "1.4.1", "role": "Deque / OrderedSet", "tag": "transitive", "direct": false},
-    {"name": "yyjson", "ver": "0.12.0", "role": "Fast JSON parser", "tag": "transitive", "direct": false},
-    {"name": "EventSource", "ver": "1.4.1", "role": "Server-sent events", "tag": "transitive", "direct": false}
+    {"name":"MLXAudio","ver":"vendored local fork","role":"MLXAudioCore, MLXAudioCodecs, and MLXAudioTTS for Qwen3-TTS/Mimi","tag":"vendored","direct":true},
+    {"name":"mlx-swift","ver":"0.30.6","role":"MLX arrays, Metal compute, NN layers, MLXRandom","tag":"direct","direct":true},
+    {"name":"mlx-swift-lm","ver":"2.30.6","role":"MLXLMCommon used by vendored audio stack; lockstep pin","tag":"vendored direct","direct":true},
+    {"name":"GRDB.swift","ver":"7.10.0","role":"SQLite persistence for History","tag":"direct","direct":true},
+    {"name":"SwiftHuggingFace","ver":"0.9.0","role":"Hub/model utilities in the package graph","tag":"direct","direct":true},
+    {"name":"EventSource","ver":"1.4.1","role":"Transitive server-sent events support","tag":"transitive","direct":false},
+    {"name":"swift-asn1","ver":"1.7.0","role":"Transitive ASN.1 primitives","tag":"transitive","direct":false},
+    {"name":"swift-atomics","ver":"1.3.0","role":"Transitive atomic primitives","tag":"transitive","direct":false},
+    {"name":"swift-collections","ver":"1.4.1","role":"Transitive collections","tag":"transitive","direct":false},
+    {"name":"swift-crypto","ver":"4.4.0","role":"Transitive cryptographic primitives","tag":"transitive","direct":false},
+    {"name":"swift-jinja","ver":"2.3.5","role":"Template rendering used by model utilities","tag":"transitive","direct":false},
+    {"name":"swift-nio","ver":"2.98.0","role":"Transitive networking/event-loop stack","tag":"transitive","direct":false},
+    {"name":"swift-numerics","ver":"1.1.1","role":"Transitive numeric utilities","tag":"transitive","direct":false},
+    {"name":"swift-system","ver":"1.6.4","role":"Transitive system interfaces","tag":"transitive","direct":false},
+    {"name":"swift-transformers","ver":"1.1.9","role":"Tokenizer/model utilities","tag":"transitive","direct":false},
+    {"name":"yyjson","ver":"0.12.0","role":"Fast JSON parsing in the package graph","tag":"transitive","direct":false}
+  ],
+  "nativeFrameworks": [
+    {"name":"SwiftUI · Observation · Combine","role":"Platform UI, observable state, and event delivery","owners":"macOS/iOS app layers"},
+    {"name":"AppKit · UIKit","role":"Native windows, controls, panels, representables, and device UI","owners":"platform app layers"},
+    {"name":"AVFoundation","role":"Recording, playback, audio files, PCM/WAV handling","owners":"apps, shared support, engine prep"},
+    {"name":"Speech · NaturalLanguage","role":"Local transcript fill, prompt detection, and output verification","owners":"shared support and tests"},
+    {"name":"CryptoKit","role":"SHA-256 integrity and reference hashes","owners":"core and iOS support"},
+    {"name":"Metal · MLX","role":"Apple Silicon GPU inference and memory telemetry","owners":"core and vendored backend"},
+    {"name":"UniformTypeIdentifiers","role":"Reference import and generated-audio export types","owners":"macOS/iOS views"},
+    {"name":"OSLog · os_signpost","role":"Runtime logs, performance intervals, and diagnostics","owners":"core, apps, XPC service"},
+    {"name":"NSXPCConnection","role":"macOS app-to-engine-service isolation","owners":"QwenVoiceNative / EngineService"},
+    {"name":"MetricKit · CallKit","role":"iOS crash/hang and interruption diagnostics","owners":"iOSSupport"}
+  ],
+  "externalSystems": [
+    {"name":"Hugging Face","role":"Pinned model repository downloads over HTTPS","boundary":"No inference or user-script upload"},
+    {"name":"GitHub Actions / Releases","role":"Compile safety, DMG packaging, artifacts, and release attachment","boundary":"Real iOS UI gates stay local"},
+    {"name":"Apple Developer services","role":"Developer ID signing, notarytool, App Store Connect, optional TestFlight","boundary":"Secrets stay in CI or local keychains"},
+    {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, XCUITest, and profiling","boundary":"Simulator is prohibited"},
+    {"name":"Vercel","role":"Marketing-site deployment from website/","boundary":"Separate from native app runtime"},
+    {"name":"On-device Speech assets","role":"Locale-locked language-output verification","boundary":"Some locales require Wi-Fi asset download"}
   ],
   "tooling": {
-    "Build": [
-      {"cmd": "scripts/build.sh build|run|cli", "desc": "Primary local build; Release at -Onone for iterate"},
-      {"cmd": "scripts/regenerate_project.sh", "desc": "XcodeGen from project.yml"},
-      {"cmd": "scripts/check_project_inputs.sh", "desc": "pbxproj / resource invariants"},
-      {"cmd": "scripts/build_foundation_targets.sh ios", "desc": "iOS compile-only safety"},
-      {"cmd": "scripts/release.sh", "desc": "Optimized Release, sign, DMG, notarize"}
+    "Build":[
+      {"cmd":"./scripts/regenerate_project.sh","desc":"Regenerate QwenVoice.xcodeproj from project.yml after manifest changes"},
+      {"cmd":"./scripts/check_project_inputs.sh","desc":"Validate generated inputs and resource conventions"},
+      {"cmd":"./scripts/build.sh build|run|cli","desc":"Primary macOS app/CLI local loop; Release config at -Onone"},
+      {"cmd":"./scripts/build_foundation_targets.sh macos|ios","desc":"Compile-safety for shared framework targets"},
+      {"cmd":"./scripts/release.sh","desc":"Optimized signing, DMG creation, notarization and verification"}
     ],
-    "macOS test": [
-      {"cmd": "macos_test.sh gate", "desc": "Pre-merge gate (core + smoke + crashes)"},
-      {"cmd": "macos_test.sh core-test", "desc": "VocelloCoreTests language semantics"},
-      {"cmd": "macos_test.sh test|journey|bench-ui", "desc": "XCUITest smoke / journey / matrix"},
-      {"cmd": "macos_test.sh lang-bench", "desc": "CLI language hint gate"},
-      {"cmd": "macos_test.sh models ensure", "desc": "Speed model fixtures"}
+    "macOS test":[
+      {"cmd":"scripts/macos_test.sh models ensure","desc":"Prepare real-engine Speed model fixtures"},
+      {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, owned Qwen3 runtime, and harness tests; no frontend driving"},
+      {"cmd":"scripts/macos_agent_ui.sh impact","desc":"Select none, quick, full, or benchmark Computer Use evidence"},
+      {"cmd":"$vocello-macos-ui-qa quick|full|benchmark","desc":"Sole macOS frontend driver; observe-act-observe with typed evidence"},
+      {"cmd":"scripts/macos_test.sh ui-report|review|bench-ui","desc":"Validate semantic reports, probes, fingerprints, cleanup, and benchmark matrix"},
+      {"cmd":"scripts/macos_test.sh gate","desc":"Pre-merge build/deterministic/crash gate plus impact-selected attestation"}
     ],
-    "iOS test": [
-      {"cmd": "ios_device.sh gate", "desc": "Pre-merge on paired iPhone"},
-      {"cmd": "ios_device.sh test|ui-test", "desc": "Smoke + sheets + cold generation"},
-      {"cmd": "ios_device.sh bench-ui|lang-bench", "desc": "UI matrix / language output gates"},
-      {"cmd": "ios_mirroir_preflight.sh", "desc": "Exploratory mirroir QA only"},
-      {"cmd": "ios_device.sh launch", "desc": "RESET primary for agent tours"}
+    "iOS device":[
+      {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, and model readiness"},
+      {"cmd":"scripts/ios_device.sh test|ui-test","desc":"Physical-device smoke, sheets, cold generation, optional download"},
+      {"cmd":"scripts/ios_device.sh bench-ui|lang-bench","desc":"XCUITest matrix and hint/output gates"},
+      {"cmd":"scripts/ios_device.sh review|profile|crashes","desc":"Captures, profiling, and crash collection"},
+      {"cmd":"scripts/ios_device.sh gate","desc":"Standing attended physical-device pre-merge gate"}
     ],
-    "CI / release": [
-      {"cmd": "ci.yml · ios-compile-check", "desc": "build-for-testing VocelloiOS on macos-26"},
-      {"cmd": "ci.yml · macos-ui-smoke", "desc": "Manual workflow_dispatch only"},
-      {"cmd": "release.yml · package", "desc": "Notarized DMG + GitHub Release attach"},
-      {"cmd": "release.yml · archive-ios", "desc": "Optional TestFlight archive lane"}
+    "Bench":[
+      {"cmd":"QWENVOICE_DEBUG=1 ./build/vocello bench … --ledger","desc":"Headless perf/quality matrix and bounded committed summary"},
+      {"cmd":"python3 scripts/check_language_hints.py","desc":"Validate requested language hints"},
+      {"cmd":"python3 scripts/check_language_output.py","desc":"Validate locale-locked ASR output"},
+      {"cmd":"python3 scripts/summarize_generation_telemetry.py …","desc":"Merge and compare generation telemetry"}
     ],
-    "Bench": [
-      {"cmd": "vocello bench", "desc": "Headless perf/quality matrix + telemetry"},
-      {"cmd": "uitest_measure.sh", "desc": "Deterministic macOS UI measurement"},
-      {"cmd": "check_language_hints.py", "desc": "Phase 2 hint gate fixtures"},
-      {"cmd": "check_language_output.py", "desc": "Phase 3 ASR output gate"}
+    "CI / release":[
+      {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build-for-testing"},
+      {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests and attestation validation; never claims Computer Use execution"},
+      {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized DMG and GitHub Release"},
+      {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual archive"}
+    ],
+    "Codex workflow":[
+      {"cmd":"AGENTS.md → .agents/<role>.md","desc":"Durable repo rules first, then the subsystem playbook"},
+      {"cmd":"Use matching installed skills/plugins","desc":"Read the selected SKILL.md completely before acting"},
+      {"cmd":"$vocello-macos-ui-qa","desc":"Computer Use is the sole macOS UI driver; scripts provide deterministic XPC/backend proof"},
+      {"cmd":"GitHub plugin / gh fallback","desc":"Use connector-backed repository context; use gh for Actions logs or local branch gaps"},
+      {"cmd":"Physical-device invariant","desc":"Do not use simulator-oriented Codex skills or simulator MCP tools for Vocello iOS"}
     ]
   },
   "contracts": [
     {
-      "mode": "custom",
-      "title": "Custom Voice · pro_custom",
-      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
-      "quality": "…-CustomVoice-8bit",
-      "ios": "Speed only (~2.31 GB)",
-      "notes": "supportsInstructionControl · 9 speakers"
+      "id":"pro_custom","mode":"custom","title":"Custom Voice · pro_custom",
+      "speed":"mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit · 2,312,057,897 B",
+      "quality":"mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit · 3,080,141,538 B",
+      "ios":"Speed eligible; Quality macOS only","notes":"instruction control · 9 speakers · 24 kHz / 12.5 Hz tokenizer",
+      "capabilities":{"familyType":"custom_voice","supportsInstructionControl":true,"supportsVoiceClone":false,"requiresSpeakerEncoder":false,"sampleRateHz":24000,"frameRateHz":12.5},
+      "variants":[
+        {"id":"speed","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit","revision":"f35faf19b0cc2160865af64ecf0f22f83d335135","estimatedDownloadBytes":2312057897,"platforms":["iOS","macOS"],"iosDownloadEligible":true},
+        {"id":"quality","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit","revision":"41d3337e8b7f2843a75841595fc14e4b9a7a4b96","estimatedDownloadBytes":3080141538,"platforms":["macOS"],"iosDownloadEligible":false}
+      ]
     },
     {
-      "mode": "design",
-      "title": "Voice Design · pro_design",
-      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
-      "quality": "…-VoiceDesign-8bit",
-      "ios": "Speed only (~2.31 GB)",
-      "notes": "NL voice brief conditioning"
+      "id":"pro_design","mode":"design","title":"Voice Design · pro_design",
+      "speed":"mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit · 2,312,057,276 B",
+      "quality":"mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit · 3,080,140,867 B",
+      "ios":"Speed eligible; Quality macOS only","notes":"natural-language voice brief · instruction control",
+      "capabilities":{"familyType":"voice_design","supportsInstructionControl":true,"supportsVoiceClone":false,"requiresSpeakerEncoder":false,"sampleRateHz":24000,"frameRateHz":12.5},
+      "variants":[
+        {"id":"speed","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit","revision":"5c390979e4b93af5f2932f90742ca99c7dd04687","estimatedDownloadBytes":2312057276,"platforms":["iOS","macOS"],"iosDownloadEligible":true},
+        {"id":"quality","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit","revision":"f90d617701d9f7f4ca499291e0b57f2b3c2fd2ee","estimatedDownloadBytes":3080140867,"platforms":["macOS"],"iosDownloadEligible":false}
+      ]
     },
     {
-      "mode": "clone",
-      "title": "Voice Cloning · pro_clone",
-      "speed": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
-      "quality": "…-Base-8bit",
-      "ios": "Speed only (~2.31 GB)",
-      "notes": "requiresSpeakerEncoder · no delivery"
+      "id":"pro_clone","mode":"clone","title":"Voice Cloning · pro_clone",
+      "speed":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit · 2,336,075,167 B",
+      "quality":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit · 3,104,158,788 B",
+      "ios":"Speed eligible; Quality macOS only","notes":"speaker encoder required · transcript-backed prompt preferred · no delivery control",
+      "capabilities":{"familyType":"base_clone","supportsInstructionControl":false,"supportsVoiceClone":true,"requiresSpeakerEncoder":true,"sampleRateHz":24000,"frameRateHz":12.5},
+      "variants":[
+        {"id":"speed","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit","revision":"37e955a1deb861c088ae5f3a67043185f3d1a60c","estimatedDownloadBytes":2336075167,"platforms":["iOS","macOS"],"iosDownloadEligible":true},
+        {"id":"quality","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit","revision":"e7dd0585652209fa0d7783659aad4e8a324de11c","estimatedDownloadBytes":3104158788,"platforms":["macOS"],"iosDownloadEligible":false}
+      ]
     }
   ],
   "speakers": [
-    {"name": "Aiden", "lang": "English · default"},
-    {"name": "Ryan", "lang": "English"},
-    {"name": "Vivian", "lang": "Chinese"},
-    {"name": "Serena", "lang": "Chinese"},
-    {"name": "Uncle Fu", "lang": "Chinese"},
-    {"name": "Dylan", "lang": "Chinese · Beijing"},
-    {"name": "Eric", "lang": "Chinese · Sichuan"},
-    {"name": "Ono Anna", "lang": "Japanese"},
-    {"name": "Sohee", "lang": "Korean"}
+    {"id":"aiden","name":"Aiden","nativeLanguage":"English","isEnglishNative":true,"default":true,"lang":"English · default"},
+    {"id":"ryan","name":"Ryan","nativeLanguage":"English","isEnglishNative":true,"default":false,"lang":"English"},
+    {"id":"vivian","name":"Vivian","nativeLanguage":"Chinese","isEnglishNative":false,"default":false,"lang":"Chinese"},
+    {"id":"serena","name":"Serena","nativeLanguage":"Chinese","isEnglishNative":false,"default":false,"lang":"Chinese"},
+    {"id":"uncle_fu","name":"Uncle Fu","nativeLanguage":"Chinese","isEnglishNative":false,"default":false,"lang":"Chinese"},
+    {"id":"dylan","name":"Dylan","nativeLanguage":"Chinese","isEnglishNative":false,"default":false,"lang":"Chinese · Beijing"},
+    {"id":"eric","name":"Eric","nativeLanguage":"Chinese","isEnglishNative":false,"default":false,"lang":"Chinese · Sichuan"},
+    {"id":"ono_anna","name":"Ono Anna","nativeLanguage":"Japanese","isEnglishNative":false,"default":false,"lang":"Japanese"},
+    {"id":"sohee","name":"Sohee","nativeLanguage":"Korean","isEnglishNative":false,"default":false,"lang":"Korean"}
+  ],
+  "languages":["Auto","English","Chinese","Japanese","Korean","German","French","Russian","Portuguese","Spanish","Italian"],
+  "storage": [
+    {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and prepared artifacts","history.sqlite","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
+    {"title":"macOS debug","root":"~/Library/Application Support/QwenVoice-Debug/","items":["Same logical layout as release","Model fixtures may symlink to the canonical store","Raw diagnostics remain gitignored"]},
+    {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages and staging","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
+    {"title":"Privacy boundary","root":"local-first runtime","items":["No cloud TTS or bundled model weights","Recording, transcription, generation, playback, and History stay local","Network use is model download, release/CI, and website delivery","Production telemetry is disabled by default"]}
+  ],
+  "invariants": [
+    "project.yml is the only project-manifest source; never hand-edit project.pbxproj",
+    "iOS real-engine work and UI tests use a paired physical device, never Simulator",
+    "mlx-swift and mlx-swift-lm pins move together after benchmark review",
+    "macOS event draining stays off MainActor; expected XPC retirement is not an error",
+    "iOS cancellation is cooperative and cancelled results never persist",
+    "macOS events are unbounded; iOS events use bufferingNewest(64)",
+    "No hard production Memory.memoryLimit, no Quality-to-Speed OOM fallback, no Core ML backend",
+    "Stable accessibilityIdentifier values survive refactors",
+    "Production telemetry stays runtime-gated through TelemetryGate.resolvedEnabled",
+    "macOS frontend acceptance uses Computer Use only; no macOS XCUITest or hidden UI-test markers",
+    "Batch generation stays absent from iOS unless a device-proven sequential streaming design replaces it"
   ]
 }
 </script>
@@ -1905,341 +2142,365 @@ scripts/ios_device.sh gate</pre>
   "use strict";
 
   const DATA = JSON.parse(document.getElementById("mapData").textContent);
+  const escapeHTML = (value) => String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
-  /* ---------- Feature matrix ---------- */
   const tbody = document.querySelector("#featureMatrix tbody");
-  const cell = (v) => {
-    if (v === "yes") return '<span class="yes">yes</span>';
-    if (v === "partial") return '<span class="partial">partial</span>';
+  const platformCell = (value) => {
+    if (value === "yes") return '<span class="yes">yes</span>';
+    if (value === "partial") return '<span class="partial">partial</span>';
     return '<span class="no">—</span>';
   };
-  DATA.features.forEach((f) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      `<td>${f.name}<span class="note">${f.note || ""}</span></td>` +
-      `<td>${cell(f.macos)}</td>` +
-      `<td>${cell(f.ios)}</td>` +
-      `<td>${cell(f.cli)}</td>`;
-    tbody.appendChild(tr);
+  DATA.features.forEach((feature) => {
+    const row = document.createElement("tr");
+    row.dataset.macos = feature.macos;
+    row.dataset.ios = feature.ios;
+    row.dataset.cli = feature.cli;
+    row.innerHTML =
+      "<td>" + escapeHTML(feature.name) +
+      '<span class="note">' + escapeHTML(feature.note || "") + "</span></td>" +
+      "<td>" + platformCell(feature.macos) + "</td>" +
+      "<td>" + platformCell(feature.ios) + "</td>" +
+      "<td>" + platformCell(feature.cli) + "</td>";
+    tbody.appendChild(row);
+  });
+  const featureFilters = Array.from(document.querySelectorAll(".feature-filter"));
+  featureFilters.forEach((button) => {
+    button.addEventListener("click", () => {
+      const platform = button.dataset.platform;
+      featureFilters.forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
+      Array.from(tbody.rows).forEach((row) => {
+        row.hidden = platform !== "all" && row.dataset[platform] === "no";
+      });
+    });
   });
 
   const bands = document.getElementById("featureBands");
-  DATA.featureBands.forEach((b) => {
-    const el = document.createElement("div");
-    el.className = "feature-band";
-    el.innerHTML =
-      `<div class="band-label">${b.label}</div>` +
-      `<div><h4>${b.title}</h4><p>${b.body}</p>` +
-      `<div class="chip-row">${b.chips
-        .map((c) => `<span class="chip ${c.c || ""}">${c.t}</span>`)
-        .join("")}</div></div>`;
-    bands.appendChild(el);
+  DATA.featureBands.forEach((band) => {
+    const article = document.createElement("article");
+    article.className = "feature-band";
+    const chips = band.chips.map((chip) =>
+      '<span class="chip ' + escapeHTML(chip.c || "") + '">' + escapeHTML(chip.t) + "</span>"
+    ).join("");
+    article.innerHTML =
+      '<div class="band-label">' + escapeHTML(band.label) + "</div>" +
+      "<div><h4>" + escapeHTML(band.title) + "</h4><p>" + escapeHTML(band.body) + "</p>" +
+      '<div class="chip-row">' + chips + "</div></div>";
+    bands.appendChild(article);
   });
 
-  /* ---------- Pipeline ---------- */
-  const pipe = document.getElementById("pipelineSteps");
-  DATA.pipeline.forEach((s, i) => {
-    const el = document.createElement("div");
-    el.className = "pipe-step";
-    el.innerHTML =
-      `<div class="pipe-num">${i + 1}</div>` +
-      `<div><h4>${s.title}</h4><p>${s.body}</p>` +
-      `<span class="path-tag">${s.path}</span></div>`;
-    pipe.appendChild(el);
+  const pipeline = document.getElementById("pipelineSteps");
+  DATA.pipeline.forEach((step, index) => {
+    const article = document.createElement("article");
+    article.className = "pipe-step";
+    article.innerHTML =
+      '<div class="pipe-num">' + (index + 1) + "</div>" +
+      "<div><h4>" + escapeHTML(step.title) + "</h4><p>" + escapeHTML(step.body) + "</p>" +
+      '<span class="path-tag">' + escapeHTML(step.path) + "</span></div>";
+    pipeline.appendChild(article);
   });
 
-  /* ---------- Source tree ---------- */
+  const systems = document.getElementById("systemFlows");
+  DATA.systemFlows.forEach((flow) => {
+    const article = document.createElement("article");
+    article.className = "system-flow";
+    article.innerHTML =
+      "<h3>" + escapeHTML(flow.title) + "</h3>" +
+      "<ol>" + flow.steps.map((step) => "<li>" + escapeHTML(step) + "</li>").join("") + "</ol>" +
+      '<p class="flow-note">' + escapeHTML(flow.note) + "</p>";
+    systems.appendChild(article);
+  });
+
   const tree = document.getElementById("sourceTree");
-  DATA.sources.forEach((s) => {
-    const item = document.createElement("div");
-    item.className = "tree-item" + (s.children && s.children.length ? "" : "");
-    const hasKids = s.children && s.children.length;
+  DATA.sources.forEach((source, sourceIndex) => {
+    const item = document.createElement("section");
+    item.className = "tree-item";
+    const hasChildren = Boolean(source.children && source.children.length);
+    const childrenID = "source-children-" + sourceIndex;
     item.innerHTML =
-      `<div class="tree-row${hasKids ? " folder" : ""}">` +
-      `<button class="tree-toggle" ${hasKids ? "" : "disabled"} aria-label="Toggle">${hasKids ? "+" : "·"}</button>` +
-      `<div class="tree-name">${s.name}<span class="plat">${s.plat}</span></div>` +
-      `<div class="tree-desc">${s.desc}</div></div>`;
-    if (hasKids) {
-      const kids = document.createElement("div");
-      kids.className = "tree-children";
-      s.children.forEach((c) => {
+      '<div class="tree-row' + (hasChildren ? " folder" : "") + '">' +
+      '<button type="button" class="tree-toggle" ' + (hasChildren ? "" : "disabled") +
+      ' aria-label="' + (hasChildren ? "Show " + escapeHTML(source.name) + " details" : "No child entries") +
+      '" aria-expanded="false" aria-controls="' + childrenID + '">' + (hasChildren ? "+" : "·") + "</button>" +
+      '<div class="tree-name">' + escapeHTML(source.name) +
+      '<span class="plat">' + escapeHTML(source.plat) + "</span></div>" +
+      '<div class="tree-desc">' + escapeHTML(source.desc) + "</div></div>";
+    if (hasChildren) {
+      const children = document.createElement("div");
+      children.className = "tree-children";
+      children.id = childrenID;
+      children.hidden = true;
+      source.children.forEach((child) => {
         const row = document.createElement("div");
         row.className = "tree-row";
         row.innerHTML =
-          `<button class="tree-toggle" disabled>·</button>` +
-          `<div class="tree-name">${c.name}</div>` +
-          `<div class="tree-desc">${c.desc}</div>`;
-        kids.appendChild(row);
+          '<span aria-hidden="true"></span><div class="tree-name">' + escapeHTML(child.name) + "</div>" +
+          '<div class="tree-desc">' + escapeHTML(child.desc) + "</div>";
+        children.appendChild(row);
       });
-      item.appendChild(kids);
-      item.querySelector(".tree-row.folder").addEventListener("click", () => {
-        item.classList.toggle("open");
-        item.querySelector(".tree-toggle").textContent = item.classList.contains("open") ? "−" : "+";
+      item.appendChild(children);
+      const button = item.querySelector(".tree-toggle");
+      button.addEventListener("click", () => {
+        const wasOpen = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!wasOpen));
+        button.setAttribute("aria-label", (wasOpen ? "Show " : "Hide ") + source.name + " details");
+        button.textContent = wasOpen ? "+" : "−";
+        children.hidden = wasOpen;
+        item.classList.toggle("open", !wasOpen);
       });
     }
     tree.appendChild(item);
   });
 
-  /* ---------- Deps ---------- */
-  const depGrid = document.getElementById("depGrid");
-  DATA.deps.forEach((d) => {
-    const el = document.createElement("article");
-    el.className = "dep-card" + (d.direct ? " direct" : "");
-    el.innerHTML =
-      `<h4>${d.name}</h4>` +
-      `<div class="ver">${d.ver}</div>` +
-      `<p>${d.role}</p>` +
-      `<span class="tag">${d.tag}</span>`;
-    depGrid.appendChild(el);
+  const dependencies = document.getElementById("depGrid");
+  DATA.deps.forEach((dependency) => {
+    const article = document.createElement("article");
+    article.className = "dep-card" + (dependency.direct ? " direct" : "");
+    article.innerHTML =
+      "<h4>" + escapeHTML(dependency.name) + "</h4>" +
+      '<div class="ver">' + escapeHTML(dependency.ver) + "</div>" +
+      "<p>" + escapeHTML(dependency.role) + "</p>" +
+      '<span class="tag">' + escapeHTML(dependency.tag) + "</span>";
+    dependencies.appendChild(article);
   });
 
-  /* ---------- Tooling tabs ---------- */
-  const tabs = document.getElementById("toolTabs");
+  const renderInfoCards = (targetID, rows) => {
+    const target = document.getElementById(targetID);
+    rows.forEach((row) => {
+      const article = document.createElement("article");
+      article.className = "info-card";
+      article.innerHTML =
+        "<h4>" + escapeHTML(row.name) + "</h4><p>" + escapeHTML(row.role) + "</p>" +
+        "<code>" + escapeHTML(row.owners || row.boundary || "") + "</code>";
+      target.appendChild(article);
+    });
+  };
+  renderInfoCards("nativeFrameworkGrid", DATA.nativeFrameworks);
+  renderInfoCards("externalSystemGrid", DATA.externalSystems);
+
+  const tabList = document.getElementById("toolTabs");
   const panels = document.getElementById("toolPanels");
   const categories = Object.keys(DATA.tooling);
-  categories.forEach((cat, idx) => {
-    const btn = document.createElement("button");
-    btn.className = "tool-tab" + (idx === 0 ? " active" : "");
-    btn.type = "button";
-    btn.setAttribute("role", "tab");
-    btn.textContent = cat;
-    btn.addEventListener("click", () => {
-      tabs.querySelectorAll(".tool-tab").forEach((t) => t.classList.remove("active"));
-      panels.querySelectorAll(".tool-panel").forEach((p) => p.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById("tool-" + idx).classList.add("active");
+  const tabButtons = [];
+  const activateTab = (selectedIndex, shouldFocus) => {
+    tabButtons.forEach((button, index) => {
+      const selected = index === selectedIndex;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      document.getElementById("tool-" + index).hidden = !selected;
     });
-    tabs.appendChild(btn);
+    if (shouldFocus) tabButtons[selectedIndex].focus();
+  };
+  categories.forEach((category, index) => {
+    const button = document.createElement("button");
+    const tabID = "tool-tab-" + index;
+    const panelID = "tool-" + index;
+    button.className = "tool-tab" + (index === 0 ? " active" : "");
+    button.type = "button";
+    button.id = tabID;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-controls", panelID);
+    button.setAttribute("aria-selected", String(index === 0));
+    button.tabIndex = index === 0 ? 0 : -1;
+    button.textContent = category;
+    button.addEventListener("click", () => activateTab(index, false));
+    button.addEventListener("keydown", (event) => {
+      let nextIndex = index;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % categories.length;
+      else if (event.key === "ArrowLeft") nextIndex = (index - 1 + categories.length) % categories.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = categories.length - 1;
+      else return;
+      event.preventDefault();
+      activateTab(nextIndex, true);
+    });
+    tabList.appendChild(button);
+    tabButtons.push(button);
 
-    const panel = document.createElement("div");
-    panel.className = "tool-panel" + (idx === 0 ? " active" : "");
-    panel.id = "tool-" + idx;
+    const panel = document.createElement("section");
+    panel.className = "tool-panel" + (index === 0 ? " active" : "");
+    panel.id = panelID;
     panel.setAttribute("role", "tabpanel");
-    DATA.tooling[cat].forEach((row) => {
-      const r = document.createElement("div");
-      r.className = "tool-row";
-      r.innerHTML = `<code>${row.cmd}</code><span>${row.desc}</span>`;
-      panel.appendChild(r);
+    panel.setAttribute("aria-labelledby", tabID);
+    panel.hidden = index !== 0;
+    DATA.tooling[category].forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = "tool-row";
+      item.innerHTML = "<code>" + escapeHTML(entry.cmd) + "</code><span>" + escapeHTML(entry.desc) + "</span>";
+      panel.appendChild(item);
     });
     panels.appendChild(panel);
   });
 
-  /* ---------- Contracts + speakers ---------- */
-  const cg = document.getElementById("contractGrid");
-  DATA.contracts.forEach((c) => {
-    const el = document.createElement("article");
-    el.className = "contract-card";
-    el.dataset.mode = c.mode;
-    el.innerHTML =
-      `<h4>${c.title}</h4>` +
-      `<dl>` +
-      `<div><dt>Speed (4-bit)</dt><dd>${c.speed}</dd></div>` +
-      `<div><dt>Quality (8-bit)</dt><dd>${c.quality}</dd></div>` +
-      `<div><dt>iOS</dt><dd>${c.ios}</dd></div>` +
-      `<div><dt>Notes</dt><dd>${c.notes}</dd></div>` +
-      `</dl>`;
-    cg.appendChild(el);
+  const contracts = document.getElementById("contractGrid");
+  DATA.contracts.forEach((contract) => {
+    const article = document.createElement("article");
+    article.className = "contract-card";
+    article.dataset.mode = contract.mode;
+    article.innerHTML =
+      "<h4>" + escapeHTML(contract.title) + "</h4><dl>" +
+      "<div><dt>Speed (4-bit)</dt><dd>" + escapeHTML(contract.speed) + "</dd></div>" +
+      "<div><dt>Quality (8-bit)</dt><dd>" + escapeHTML(contract.quality) + "</dd></div>" +
+      "<div><dt>iOS</dt><dd>" + escapeHTML(contract.ios) + "</dd></div>" +
+      "<div><dt>Capabilities</dt><dd>" + escapeHTML(contract.notes) + "</dd></div></dl>";
+    contracts.appendChild(article);
   });
 
-  const sg = document.getElementById("speakerGrid");
-  DATA.speakers.forEach((s) => {
-    const el = document.createElement("div");
-    el.className = "speaker";
-    el.innerHTML = `<strong>${s.name}</strong><span>${s.lang}</span>`;
-    sg.appendChild(el);
+  const speakers = document.getElementById("speakerGrid");
+  DATA.speakers.forEach((speaker) => {
+    const item = document.createElement("div");
+    item.className = "speaker";
+    item.innerHTML = "<strong>" + escapeHTML(speaker.name) + "</strong><span>" + escapeHTML(speaker.lang) + "</span>";
+    speakers.appendChild(item);
   });
 
-  /* ---------- Module graph ---------- */
+  const languages = document.getElementById("languageGrid");
+  DATA.languages.forEach((language) => {
+    const item = document.createElement("div");
+    item.className = "language";
+    item.textContent = language;
+    languages.appendChild(item);
+  });
+
+  const storageGrid = document.getElementById("storageGrid");
+  DATA.storage.forEach((storage) => {
+    const article = document.createElement("article");
+    article.className = "storage-card";
+    article.innerHTML =
+      "<h4>" + escapeHTML(storage.title) + "</h4><code>" + escapeHTML(storage.root) + "</code>" +
+      "<ul>" + storage.items.map((item) => "<li>" + escapeHTML(item) + "</li>").join("") + "</ul>";
+    storageGrid.appendChild(article);
+  });
+
   const positions = {
-    QwenVoice: [70, 70],
-    VocelloiOS: [280, 70],
-    VocelloCLI: [490, 70],
-    VocelloMacUITests: [70, 160],
-    VocelloiOSUITests: [280, 160],
-    VocelloCoreTests: [490, 160],
-    QwenVoiceNative: [70, 270],
-    QwenVoiceEngineService: [250, 270],
-    QwenVoiceEngineSupport: [430, 270],
-    QwenVoiceCore: [250, 380],
-    QwenVoiceBackendCore: [250, 470],
-    GRDB: [620, 70],
-    MLXAudio: [620, 320],
-    MLXSwift: [620, 420],
-    SwiftHuggingFace: [620, 220]
+    QwenVoice:[50,60], VocelloiOS:[250,60], VocelloCLI:[450,60],
+    VocelloEngineIntegrationTests:[50,145], VocelloiOSUITests:[250,145], VocelloCoreTests:[450,145],
+    QwenVoiceNative:[40,255], QwenVoiceEngineService:[220,255], QwenVoiceEngineSupport:[400,255],
+    QwenVoiceCore:[220,365], QwenVoiceBackendCore:[220,465],
+    GRDB:[650,55], SwiftHuggingFace:[650,155], MLXAudio:[650,285], MLXSwift:[650,390], MLXLM:[650,495]
   };
-
-  const byId = Object.fromEntries(DATA.modules.map((m) => [m.id, m]));
+  const moduleByID = Object.fromEntries(DATA.modules.map((module) => [module.id, module]));
   const svg = document.getElementById("moduleGraph");
-  const NS = "http://www.w3.org/2000/svg";
-
-  function el(name, attrs) {
-    const n = document.createElementNS(NS, name);
-    Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, v));
-    return n;
-  }
-
-  const edgeLayer = el("g", { id: "edges" });
-  const nodeLayer = el("g", { id: "nodes" });
-  svg.appendChild(edgeLayer);
-  svg.appendChild(nodeLayer);
-
-  const edgeEls = [];
+  const namespace = "http://www.w3.org/2000/svg";
+  const svgElement = (name, attributes) => {
+    const node = document.createElementNS(namespace, name);
+    Object.entries(attributes || {}).forEach(([key, value]) => node.setAttribute(key, value));
+    return node;
+  };
+  const edgeLayer = svgElement("g", {id:"edges"});
+  const nodeLayer = svgElement("g", {id:"nodes"});
+  svg.append(edgeLayer, nodeLayer);
+  const edgeElements = [];
   DATA.edges.forEach(([from, to]) => {
-    const a = positions[from];
-    const b = positions[to];
-    if (!a || !b) return;
-    const x1 = a[0] + 70;
-    const y1 = a[1] + 22;
-    const x2 = b[0] + 70;
-    const y2 = b[1] + 10;
-    const midY = (y1 + y2) / 2;
-    const path = el("path", {
-      class: "edge",
-      d: `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`,
-      "data-from": from,
-      "data-to": to
+    const start = positions[from];
+    const end = positions[to];
+    if (!start || !end) return;
+    const x1 = start[0] + 70;
+    const y1 = start[1] + 22;
+    const x2 = end[0] + 70;
+    const y2 = end[1] + 10;
+    const middleY = (y1 + y2) / 2;
+    const path = svgElement("path", {
+      class:"edge",
+      d:"M " + x1 + " " + y1 + " C " + x1 + " " + middleY + ", " + x2 + " " + middleY + ", " + x2 + " " + y2,
+      "data-from":from,
+      "data-to":to
     });
     edgeLayer.appendChild(path);
-    edgeEls.push(path);
+    edgeElements.push(path);
   });
 
-  const nodeEls = {};
-  DATA.modules.forEach((m) => {
-    const pos = positions[m.id];
-    if (!pos) return;
-    const g = el("g", {
-      class: "node-hit",
-      "data-id": m.id,
-      tabindex: "0",
-      role: "button",
-      "aria-label": m.label
-    });
-    const w = 140;
-    const h = 44;
-    const cls =
-      m.kind === "app"
-        ? "node-app"
-        : m.kind === "fw"
-          ? "node-fw"
-          : m.kind === "mac"
-            ? "node-mac"
-            : m.kind === "test"
-              ? "node-test"
-              : "node-spm";
-    const rect = el("rect", {
-      x: pos[0],
-      y: pos[1],
-      width: w,
-      height: h,
-      rx: 8,
-      class: cls
-    });
-    const label = el("text", {
-      x: pos[0] + 12,
-      y: pos[1] + 18,
-      class: "node-label"
-    });
-    label.textContent = m.label;
-    const sub = el("text", {
-      x: pos[0] + 12,
-      y: pos[1] + 34,
-      class: "node-sub"
-    });
-    sub.textContent = m.sub;
-    g.appendChild(rect);
-    g.appendChild(label);
-    g.appendChild(sub);
-    nodeLayer.appendChild(g);
-    nodeEls[m.id] = g;
-
-    const activate = () => selectModule(m.id);
-    g.addEventListener("click", activate);
-    g.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        activate();
-      }
-    });
-    g.addEventListener("mouseenter", () => highlight(m.id));
-    g.addEventListener("mouseleave", () => {
-      if (selectedId !== m.id) clearHighlight();
-      else highlight(selectedId);
-    });
-  });
-
-  let selectedId = null;
+  const nodeElements = {};
+  let selectedID = null;
   const detail = document.getElementById("detailPanel");
-
-  function connected(id) {
+  const connected = (id) => {
     const set = new Set([id]);
-    DATA.edges.forEach(([a, b]) => {
-      if (a === id || b === id) {
-        set.add(a);
-        set.add(b);
+    DATA.edges.forEach(([from, to]) => {
+      if (from === id || to === id) {
+        set.add(from);
+        set.add(to);
       }
     });
     return set;
-  }
-
-  function highlight(id) {
-    const set = connected(id);
-    Object.entries(nodeEls).forEach(([nid, g]) => {
-      g.classList.toggle("dim", !set.has(nid));
-      g.classList.toggle("hot", nid === id);
+  };
+  const highlight = (id) => {
+    const connectedIDs = connected(id);
+    Object.entries(nodeElements).forEach(([nodeID, group]) => {
+      group.classList.toggle("dim", !connectedIDs.has(nodeID));
+      group.classList.toggle("hot", nodeID === id);
+      group.setAttribute("aria-pressed", String(nodeID === id));
     });
-    edgeEls.forEach((e) => {
-      const hot = e.getAttribute("data-from") === id || e.getAttribute("data-to") === id;
-      e.classList.toggle("hot", hot);
+    edgeElements.forEach((edge) => {
+      edge.classList.toggle("hot", edge.dataset.from === id || edge.dataset.to === id);
     });
-  }
-
-  function clearHighlight() {
-    Object.values(nodeEls).forEach((g) => {
-      g.classList.remove("dim", "hot");
-    });
-    edgeEls.forEach((e) => e.classList.remove("hot"));
-  }
-
-  function selectModule(id) {
-    selectedId = id;
+  };
+  const clearHighlight = () => {
+    Object.values(nodeElements).forEach((group) => group.classList.remove("dim", "hot"));
+    edgeElements.forEach((edge) => edge.classList.remove("hot"));
+  };
+  const selectModule = (id) => {
+    selectedID = id;
     highlight(id);
-    const m = byId[id];
-    if (!m) return;
+    const module = moduleByID[id];
     detail.innerHTML =
-      `<div class="kind">${m.type} · ${m.platform}</div>` +
-      `<h3>${m.label}</h3>` +
-      `<div class="bundle">${m.bundle}</div>` +
-      `<p>${m.desc}</p>` +
-      `<h4>Depends on</h4>` +
-      `<ul>${
-        m.depends.length
-          ? m.depends.map((d) => `<li>${d}</li>`).join("")
-          : "<li>(none)</li>"
-      }</ul>` +
-      (m.files && m.files.length
-        ? `<h4>Key paths</h4><ul class="files">${m.files
-            .map((f) => `<li>${f}</li>`)
-            .join("")}</ul>`
-        : "");
-  }
+      '<div class="kind">' + escapeHTML(module.type) + " · " + escapeHTML(module.platform) + "</div>" +
+      "<h3>" + escapeHTML(module.label) + '</h3><div class="bundle">' + escapeHTML(module.bundle) + "</div>" +
+      "<p>" + escapeHTML(module.desc) + "</p><h4>Direct dependencies</h4>" +
+      "<ul>" + (module.depends.length ? module.depends.map((dependency) => "<li>" + escapeHTML(dependency) + "</li>").join("") : "<li>(none)</li>") + "</ul>" +
+      (module.testHost ? '<h4>Test host</h4><ul><li>' + escapeHTML(module.testHost) + "</li></ul>" : "") +
+      (module.sourceRoots && module.sourceRoots.length ? '<h4>project.yml source roots</h4><ul class="files">' + module.sourceRoots.map((source) => "<li>" + escapeHTML(source) + "</li>").join("") + "</ul>" : "") +
+      (module.files.length ? '<h4>Key paths</h4><ul class="files">' + module.files.map((file) => "<li>" + escapeHTML(file) + "</li>").join("") + "</ul>" : "");
+  };
 
-  /* ---------- Sticky nav active state ---------- */
-  const links = [...document.querySelectorAll("#navLinks a")];
-  const sections = links
-    .map((a) => document.querySelector(a.getAttribute("href")))
-    .filter(Boolean);
+  DATA.modules.forEach((module) => {
+    const position = positions[module.id];
+    if (!position) return;
+    const group = svgElement("g", {
+      class:"node-hit",
+      "data-id":module.id,
+      tabindex:"0",
+      role:"button",
+      "aria-label":module.label + ": " + module.desc,
+      "aria-pressed":"false"
+    });
+    const nodeClass = module.kind === "app" ? "node-app" :
+      module.kind === "fw" ? "node-fw" :
+      module.kind === "mac" ? "node-mac" :
+      module.kind === "test" ? "node-test" : "node-spm";
+    group.appendChild(svgElement("rect", {x:position[0],y:position[1],width:140,height:44,rx:8,class:nodeClass}));
+    const label = svgElement("text", {x:position[0]+12,y:position[1]+18,class:"node-label"});
+    label.textContent = module.label;
+    const sub = svgElement("text", {x:position[0]+12,y:position[1]+34,class:"node-sub"});
+    sub.textContent = module.sub;
+    group.append(label, sub);
+    nodeLayer.appendChild(group);
+    nodeElements[module.id] = group;
+    group.addEventListener("click", () => selectModule(module.id));
+    group.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectModule(module.id);
+      }
+    });
+    group.addEventListener("mouseenter", () => highlight(module.id));
+    group.addEventListener("mouseleave", () => selectedID ? highlight(selectedID) : clearHighlight());
+  });
 
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const id = "#" + entry.target.id;
-        links.forEach((l) => l.classList.toggle("active", l.getAttribute("href") === id));
-      });
-    },
-    { rootMargin: "-20% 0px -65% 0px", threshold: 0 }
-  );
-  sections.forEach((s) => io.observe(s));
+  const navLinks = [...document.querySelectorAll("#navLinks a")];
+  const sections = navLinks.map((link) => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+  const observer = new IntersectionObserver((entries) => {
+    const visible = entries.filter((entry) => entry.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    const id = "#" + visible.target.id;
+    navLinks.forEach((link) => link.classList.toggle("active", link.getAttribute("href") === id));
+  }, {rootMargin:"-20% 0px -65% 0px",threshold:[0.05,0.25,0.5]});
+  sections.forEach((section) => observer.observe(section));
 })();
 </script>
 </body>

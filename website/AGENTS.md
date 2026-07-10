@@ -23,12 +23,12 @@ this directory.
 
 ## Tooling for this directory
 
-- This is a **non-app, non-native zone** — do not run Axiom Swift/iOS auditors here (including via **`user-axiom`** MCP). For React/Vite/library API questions use the **`user-context7`** MCP (`resolve-library-id` then `query-docs`); your training data may lag the installed versions.
-- For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first and use the `chrome-devtools` MCP to verify the running site.
-- For browser verification of the running dev/preview server, use the `chrome-devtools` MCP
-  (e.g. `navigate_page`, `take_screenshot`, `take_snapshot`, `list_console_messages`) or the
-  `cursor-ide-browser` MCP (`browser_navigate`, `browser_snapshot`, etc.).
-- Run `npm`/`node` commands through the Shell tool.
+- This is a **non-app, non-native zone** — do not run Swift/iOS/macOS skills or audits here.
+- For React, Vite, or library API questions, use authoritative current documentation and a
+  relevant installed Codex skill/plugin when available.
+- For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first, then use the Browser skill
+  against the running dev/preview server. Computer Use is an exploratory fallback.
+- Run `npm`/`node` commands through the shell.
 
 ## Architecture
 

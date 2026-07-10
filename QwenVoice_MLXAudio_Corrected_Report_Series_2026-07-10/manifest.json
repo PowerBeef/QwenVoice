@@ -1,0 +1,20 @@
+{
+  "directory": "/mnt/data/QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10",
+  "files": [
+    "01_Evidence_Method_and_Corrections.md",
+    "02_Exhaustive_Current_State_Delta_Catalogue.md",
+    "03_Performance_Memory_Streaming_Optimizations.md",
+    "04_Correctness_Risk_and_Findings.md",
+    "05_Upstream_Sync_and_Ownership_Strategy.md",
+    "06_Verification_Test_and_Benchmark_Matrix.md",
+    "README.md",
+    "SOURCE_MAP.md",
+    "backend_delta_ledger.csv",
+    "backend_delta_ledger.json"
+  ],
+  "ledger_entries": 127,
+  "test_matrix_rows": 74,
+  "local_commit": "05bd2b6d24b3f43351f3b388622a72d8f0d6ecce",
+  "upstream_head": "d302a5c6080d2bb97bae38c7418f82abb76013b6",
+  "upstream_baseline": "fcbd04daa1bfebe881932f630af2ba6ce9af3274"
+}

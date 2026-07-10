@@ -19,7 +19,7 @@
 **Consults:**
 - `docs/ARCHITECTURE.md` §6 (iOS request lifecycle)
 - `docs/reference/{ios-app-guide,ios-device-testing,ios-engine-optimization,ios-appstore-submission,ios-increased-memory-entitlement-request}.md`
-- Root `AGENTS.md` (Hard rules) + [`.cursor/rules/project-structure.mdc`](../.cursor/rules/project-structure.mdc)
+- Root `AGENTS.md` (Hard rules) + [`docs/project-map.html`](../docs/project-map.html)
 
 ## Required pre-read
 
@@ -29,15 +29,9 @@ Before changing iOS UI or behavior, read:
 3. `docs/ARCHITECTURE.md` §6 — iOS request lifecycle, cooperative cancel, memory posture (batch was removed from iOS 2026-07-02).
 4. `docs/reference/ios-engine-optimization.md` if the change affects generation performance or memory.
 
-## Tools and skills (Cursor)
+## Tools and skills (Codex)
 
-- **Apple framework APIs / iOS 26 / post-cutoff APIs** → **`user-axiom`** MCP
-  (`axiom_get_catalog` → `axiom_read_skill` for `axiom-apple-docs`, `axiom-swiftui`,
-  `axiom-concurrency`, …).
-- **Crash / profile / test debugging** → **`user-axiom`** MCP tools and agents:
-  `axiom_xcsym_crash`, `axiom_xcprof_analyze`, `axiom_xclog_*`; or `axiom_get_agent` for
-  `crash-analyzer`, `performance-profiler`, `test-runner`, `test-debugger`.
-- **Shell tool / scripts** — the only way to build/test/run real-engine iOS work on device:
+- **Shell scripts** are the only way to build/test/run real-engine iOS work on device:
   - `scripts/ios_device.sh preflight`
   - `scripts/ios_device.sh models check`
   - `scripts/ios_device.sh test` / `ui-test`
@@ -45,10 +39,13 @@ Before changing iOS UI or behavior, read:
   - `scripts/ios_device.sh crashes`
   - `scripts/ios_device.sh review [--baseline]`
   - `scripts/ios_device.sh gate`
-- **Exploratory agent QA (not gates):** mirroir native driving — [`docs/reference/ios-agent-ui-tour.md`](../docs/reference/ios-agent-ui-tour.md) Appendix B; preflight `scripts/ios_mirroir_preflight.sh`. Unattended UI matrix stays XCUITest `bench-ui`; agent matrix is `bench-ui-mirroir --agent-drive`. See [`testing-runbook.md`](../docs/reference/testing-runbook.md) harness matrix.
-- **Read-only investigation** → Task tool with `subagent_type: "explore"`.
-- **On-device only** — `user-xcodebuildmcp` profile `ios-device` + runtime `deviceId`, but prefer
-  `scripts/ios_device.sh`. See [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml).
+- Use relevant installed iOS/SwiftUI Codex skills for code structure and code-first review only.
+  Do not use any simulator-oriented workflow, even when a skill generally supports Simulator.
+- Use authoritative Apple documentation for current framework APIs. GitHub integration may be
+  used for repository context; scripts remain the test interface.
+- **Exploratory agent QA (not gates):** mirroir native driving — [`docs/reference/ios-agent-ui-tour.md`](../docs/reference/ios-agent-ui-tour.md) Appendix B; preflight `scripts/ios_mirroir_preflight.sh`. Smoke verify: `measure-*` on `ios_device.sh`. UI matrix: XCUITest `bench-ui` only. See [`testing-runbook.md`](../docs/reference/testing-runbook.md) harness matrix.
+- Browser, Computer Use, or mirroring may support exploratory review only. They never substitute
+  for `ios_device.sh` or XCUITest and must not route through an iOS Simulator.
 
 ## Build / test commands
 

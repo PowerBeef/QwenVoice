@@ -29,9 +29,9 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "4342C5A6FEF870F69F428B8A"
-               BuildableName = "VocelloMacUITests.xctest"
-               BlueprintName = "VocelloMacUITests"
+               BlueprintIdentifier = "ABFED323E033822F645DDE92"
+               BuildableName = "VocelloEngineIntegrationTests.xctest"
+               BlueprintName = "VocelloEngineIntegrationTests"
                ReferencedContainer = "container:QwenVoice.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -69,9 +69,9 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "4342C5A6FEF870F69F428B8A"
-               BuildableName = "VocelloMacUITests.xctest"
-               BlueprintName = "VocelloMacUITests"
+               BlueprintIdentifier = "ABFED323E033822F645DDE92"
+               BuildableName = "VocelloEngineIntegrationTests.xctest"
+               BlueprintName = "VocelloEngineIntegrationTests"
                ReferencedContainer = "container:QwenVoice.xcodeproj">
             </BuildableReference>
          </TestableReference>

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Hub
 import HuggingFace
@@ -626,7 +627,22 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         public let artifactMetadata: ArtifactMetadata?
     }
 
+    public struct ArtifactFileIntegrity: Codable, Hashable, Sendable {
+        public let byteCount: Int
+        public let sha256: String
+        public let tensorKey: String?
+        public let shape: [Int]?
+        public let dataType: String?
+    }
+
+    public struct IntegrityManifest: Codable, Hashable, Sendable {
+        public let schemaVersion: Int
+        public let files: [String: ArtifactFileIntegrity]
+    }
+
     public static let schemaVersion = 2
+    public static let integritySchemaVersion = 1
+    public static let integrityFilename = "integrity.json"
     public let refCodes: MLXArray?
     public let speakerEmbedding: MLXArray?
     public let refText: String?
@@ -694,12 +710,38 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         } else if fileManager.fileExists(atPath: speakerEmbeddingURL.path) {
             try fileManager.removeItem(at: speakerEmbeddingURL)
         }
+
+        var integrityFiles: [String: ArtifactFileIntegrity] = [:]
+        integrityFiles["manifest.json"] = try Self.integrity(for: directory.appendingPathComponent("manifest.json"))
+        if let refCodes {
+            integrityFiles["ref_codes.safetensors"] = try Self.integrity(
+                for: refCodesURL,
+                tensorKey: "ref_codes",
+                array: refCodes
+            )
+        }
+        if let speakerEmbedding {
+            integrityFiles["speaker_embedding.safetensors"] = try Self.integrity(
+                for: speakerEmbeddingURL,
+                tensorKey: "speaker_embedding",
+                array: speakerEmbedding
+            )
+        }
+        let integrityManifest = IntegrityManifest(
+            schemaVersion: Self.integritySchemaVersion,
+            files: integrityFiles
+        )
+        try encoder.encode(integrityManifest).write(
+            to: directory.appendingPathComponent(Self.integrityFilename),
+            options: .atomic
+        )
     }
 
     public static func load(
         from directory: URL,
         expectedMetadata: ArtifactMetadata? = nil
     ) throws -> Qwen3TTSVoiceClonePrompt {
+        let integrity = try Self.validateIntegrity(in: directory)
         let manifestURL = directory.appendingPathComponent("manifest.json")
         let manifest = try JSONDecoder().decode(
             Manifest.self,
@@ -720,10 +762,15 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         let refCodesURL = directory.appendingPathComponent("ref_codes.safetensors")
         let speakerEmbeddingURL = directory.appendingPathComponent("speaker_embedding.safetensors")
 
-        let refCodes = try Self.loadSingleArray(named: "ref_codes", from: refCodesURL)
+        let refCodes = try Self.loadSingleArray(
+            named: "ref_codes",
+            from: refCodesURL,
+            expected: integrity.files["ref_codes.safetensors"]
+        )
         let speakerEmbedding = try Self.loadSingleArray(
             named: "speaker_embedding",
-            from: speakerEmbeddingURL
+            from: speakerEmbeddingURL,
+            expected: integrity.files["speaker_embedding.safetensors"]
         )
 
         return Qwen3TTSVoiceClonePrompt(
@@ -736,12 +783,80 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         )
     }
 
-    private static func loadSingleArray(named key: String, from url: URL) throws -> MLXArray? {
+    private static func loadSingleArray(
+        named key: String,
+        from url: URL,
+        expected: ArtifactFileIntegrity?
+    ) throws -> MLXArray? {
         guard FileManager.default.fileExists(atPath: url.path) else {
+            guard expected == nil else {
+                throw AudioGenerationError.modelNotInitialized("Qwen3 clone prompt artifact is missing \(url.lastPathComponent).")
+            }
             return nil
         }
         let arrays = try MLX.loadArrays(url: url)
-        return arrays[key]
+        guard arrays.count == 1, let array = arrays[key] else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen3 clone prompt artifact \(url.lastPathComponent) must contain only tensor '\(key)'."
+            )
+        }
+        if let expected {
+            guard expected.tensorKey == key,
+                  expected.shape == array.shape,
+                  expected.dataType == String(describing: array.dtype) else {
+                throw AudioGenerationError.modelNotInitialized(
+                    "Qwen3 clone prompt tensor metadata does not match \(url.lastPathComponent)."
+                )
+            }
+        }
+        return array
+    }
+
+    private static func integrity(
+        for url: URL,
+        tensorKey: String? = nil,
+        array: MLXArray? = nil
+    ) throws -> ArtifactFileIntegrity {
+        let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+        return ArtifactFileIntegrity(
+            byteCount: data.count,
+            sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+            tensorKey: tensorKey,
+            shape: array?.shape,
+            dataType: array.map { String(describing: $0.dtype) }
+        )
+    }
+
+    private static func validateIntegrity(in directory: URL) throws -> IntegrityManifest {
+        let integrityURL = directory.appendingPathComponent(Self.integrityFilename)
+        let integrity = try JSONDecoder().decode(
+            IntegrityManifest.self,
+            from: Data(contentsOf: integrityURL)
+        )
+        guard integrity.schemaVersion == Self.integritySchemaVersion else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Unsupported Qwen3 clone prompt integrity version: \(integrity.schemaVersion)"
+            )
+        }
+        let actualFiles = Set(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path)
+                .filter { $0 != Self.integrityFilename }
+        )
+        guard actualFiles == Set(integrity.files.keys) else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen3 clone prompt artifact contains a missing or unexpected file."
+            )
+        }
+        for (filename, expected) in integrity.files {
+            let actual = try Self.integrity(for: directory.appendingPathComponent(filename))
+            guard actual.byteCount == expected.byteCount,
+                  actual.sha256 == expected.sha256 else {
+                throw AudioGenerationError.modelNotInitialized(
+                    "Qwen3 clone prompt artifact failed integrity verification for \(filename)."
+                )
+            }
+        }
+        return integrity
     }
 }
 
@@ -871,7 +986,7 @@ public enum Qwen3TTSMemoryCaches {
     }
 }
 
-private actor Qwen3TTSGenerationGate {
+actor Qwen3TTSGenerationGate {
     private struct Waiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, Error>
@@ -879,6 +994,11 @@ private actor Qwen3TTSGenerationGate {
 
     private var isHeld = false
     private var waiters: [Waiter] = []
+    private let afterTransferHook: (@Sendable () async -> Void)?
+
+    init(afterTransferHook: (@Sendable () async -> Void)? = nil) {
+        self.afterTransferHook = afterTransferHook
+    }
 
     func acquire() async throws {
         let id = UUID()
@@ -896,9 +1016,14 @@ private actor Qwen3TTSGenerationGate {
                 // waitForTurn only returns if the continuation was resumed normally
                 // by release(), so the gate has been transferred to us.
                 gateAcquired = true
+                await afterTransferHook?()
             } onCancel: {
                 Task { await self.cancelWaiter(id: id) }
             }
+            // Keep the post-transfer cancellation check inside the scope whose
+            // catch releases ownership. A cancellation between continuation
+            // resume and acquire() return must never strand the gate held.
+            try Task.checkCancellation()
         } catch {
             // Only release the gate if it was actually transferred to us. If we
             // were cancelled while still queued, cancelWaiter removed us and the
@@ -909,7 +1034,6 @@ private actor Qwen3TTSGenerationGate {
             throw error
         }
 
-        try Task.checkCancellation()
     }
 
     func release() {
@@ -921,6 +1045,8 @@ private actor Qwen3TTSGenerationGate {
         let waiter = waiters.removeFirst()
         waiter.continuation.resume()
     }
+
+    var queuedWaiterCount: Int { waiters.count }
 
     private func waitForTurn(id: UUID) async throws {
         try Task.checkCancellation()
@@ -939,6 +1065,19 @@ private actor Qwen3TTSGenerationGate {
         }
         let waiter = waiters.remove(at: index)
         waiter.continuation.resume(throwing: CancellationError())
+    }
+}
+
+enum Qwen3LearnedComponentWeights {
+    static func requireNonEmpty(
+        _ count: Int,
+        component: String
+    ) throws {
+        guard count > 0 else {
+            throw AudioGenerationError.invalidInput(
+                "Requested learned component '\(component)' has no verified weights."
+            )
+        }
     }
 }
 
@@ -4443,32 +4582,32 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             var speakerWeights = Qwen3TTSSpeakerEncoder.sanitize(weights: talkerSourceWeights)
             talkerSourceWeights.removeAll(keepingCapacity: false)
             Memory.clearCache()
-            if !speakerWeights.isEmpty {
-                var speakerPairs = speakerWeights.map { ($0.key, $0.value) }
-                let speakerUpdateStartedAt = ContinuousClock.now
-                try speakerEncoder.update(
-                    parameters: ModuleParameters.unflattened(speakerPairs),
-                    verify: .all
-                )
-                talkerTimingsMS["speaker_encoder_update"] = speakerUpdateStartedAt.elapsedMilliseconds
-                speakerPairs.removeAll(keepingCapacity: false)
-                speakerWeights.removeAll(keepingCapacity: false)
-                Memory.clearCache()
+            try Qwen3LearnedComponentWeights.requireNonEmpty(
+                speakerWeights.count,
+                component: "speaker_encoder"
+            )
+            var speakerPairs = speakerWeights.map { ($0.key, $0.value) }
+            let speakerUpdateStartedAt = ContinuousClock.now
+            try speakerEncoder.update(
+                parameters: ModuleParameters.unflattened(speakerPairs),
+                verify: .all
+            )
+            talkerTimingsMS["speaker_encoder_update"] = speakerUpdateStartedAt.elapsedMilliseconds
+            speakerPairs.removeAll(keepingCapacity: false)
+            speakerWeights.removeAll(keepingCapacity: false)
+            Memory.clearCache()
 
-                let speakerEvalStartedAt = ContinuousClock.now
-                eval(speakerEncoder.parameters())
-                talkerTimingsMS["speaker_encoder_eval"] = speakerEvalStartedAt.elapsedMilliseconds
-                qwen3TTSLog("Loaded speaker encoder")
-                Memory.clearCache()
-            } else {
-                speakerWeights.removeAll(keepingCapacity: false)
-                Memory.clearCache()
-                qwen3TTSLog("Warning: speaker encoder weights missing, skipping speaker encoder load")
-            }
+            let speakerEvalStartedAt = ContinuousClock.now
+            eval(speakerEncoder.parameters())
+            talkerTimingsMS["speaker_encoder_eval"] = speakerEvalStartedAt.elapsedMilliseconds
+            qwen3TTSLog("Loaded speaker encoder")
+            Memory.clearCache()
         } else if shouldLoadSpeakerEncoder {
             talkerSourceWeights.removeAll(keepingCapacity: false)
             Memory.clearCache()
-            qwen3TTSLog("Warning: speaker encoder config missing, skipping speaker encoder load")
+            throw AudioGenerationError.invalidInput(
+                "Requested learned component 'speaker_encoder' has no configuration."
+            )
         } else {
             talkerSourceWeights.removeAll(keepingCapacity: false)
             Memory.clearCache()
@@ -4940,6 +5079,11 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var tokenizerWeights = try loadWeights(
             from: path,
             directSafetensorsFileName: "model.safetensors"
+        )
+
+        try Qwen3LearnedComponentWeights.requireNonEmpty(
+            tokenizerWeights.count,
+            component: "speech_tokenizer"
         )
 
         if !tokenizerWeights.isEmpty {

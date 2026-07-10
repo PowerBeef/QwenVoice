@@ -1,94 +1,40 @@
-# UI smoke runbooks — agent-driven exploratory loops
+# UI smoke runbooks — Codex frontend routes
 
-Per-mode smoke procedures for **agent-driven** UI validation in Cursor, pairing
-**mirroir** on iOS (native iPhone Mirroring OCR) and **Peekaboo + uitest_measure** on macOS.
-See [`computer-use-mcp-alternatives-cursor.md`](computer-use-mcp-alternatives-cursor.md).
-**mobile-mcp** (WDA) remains **deferred** — see [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md).
+macOS frontend acceptance is gate-bearing and uses the repository-owned
+`$vocello-macos-ui-qa` Computer Use skill. iOS remains on its existing split: physical-device
+XCUITest for gates and mirroir for exploratory smokes.
 
-Successor to the per-mode smoke runbooks deleted at `6d1cca4`. The core design rule
-survives: **measurement never depends on how the agent clicked.** Pass/fail comes from
-OSSignposts + `history.sqlite` + the WAV on disk via `verify-generation` — the MCP only
-drives the UI like a human.
+The shared rule is unchanged: screen observation never proves generation. Deterministic success
+comes from typed telemetry joined by `generationID`, `history.sqlite`, and the readable WAV.
 
-**These runbooks are exploratory QA, not gates.** Regression gates stay
-`scripts/macos_test.sh gate` and `scripts/ios_device.sh gate`.
-
-**Driving discipline:** [`.cursor/rules/agent-ui-driving.mdc`](../../.cursor/rules/agent-ui-driving.mdc)
-— **Observe → act once → verify** on every step; OCR/AX ids only; poll don't sleep.
-
-Identifier reference: [`ui-test-surface.md`](ui-test-surface.md) (generated catalog).
+Identifier reference: [`ui-test-surface.md`](ui-test-surface.md).
 
 ---
 
-## macOS — shared skeleton
+## macOS — Computer Use frontend acceptance
 
-Every macOS smoke follows the same lifecycle:
+Use [`macos-testing.md`](macos-testing.md) for the complete contract. The short route is:
 
 ```sh
-scripts/build.sh build                       # if build/Vocello.app is stale
-scripts/uitest_measure.sh smoke-check <mode> # models (+ clone voice) present?
-scripts/uitest_measure.sh reset              # clean generations + outputs
-scripts/uitest_measure.sh prep               # fresh launch, QWENVOICE_DEBUG=1
-ART=$(scripts/uitest_measure.sh artifacts-dir)
-T0=$(scripts/uitest_measure.sh now)          # capture BEFORE clicking Generate
-# … agent drives the UI via Peekaboo (see per-mode steps) …
-scripts/uitest_measure.sh verify-generation <mode> --artifacts-dir "$ART" --since "$T0"
-scripts/uitest_measure.sh streaming-preview-check --since "$T0" --artifacts-dir "$ART"  # optional
+./scripts/build.sh build
+scripts/macos_agent_ui.sh doctor --suite quick --json
+scripts/macos_agent_ui.sh impact
+# Invoke $vocello-macos-ui-qa quick|full|benchmark as selected.
+scripts/macos_test.sh ui-report --suite quick|full|benchmark
 ```
 
-Peekaboo driving pattern (**O-A-V loop** — match iOS mirroir discipline in Appendix **B.5–B.8**):
+The skill launches only the exact `build/Vocello.app`, observes fresh accessibility state before
+and after every action, resolves fresh element indices, and records coordinate/screenshot fallbacks
+as automation warnings. It always finishes with `verify-generation`, `verify-history`,
+`verify-probes`, cleanup, report validation, and a compact attestation.
 
-1. **`see`** with `app: Vocello` — observe AX map (`accessibilityIdentifier`s on elements).
-2. **Act once** — click by element id from `see`; keyboard-first script replace (Cmd+A, Delete, type).
-3. **`see` again** — verify state before the next action. No back-to-back clicks.
-4. SwiftUI pickers re-anchor after first open — re-`see` before the second picker interaction.
-5. Watch `*_readiness` markers (`ready=true` in element value) before Generate.
-6. **Generate wait:** re-`see` every few seconds for player bar — no multi-minute fixed sleeps.
-7. Fallback: `image` + click-by-sight only when AX id missing.
+Quick covers Custom generation/playback/history plus semantic layout and accessibility. Full adds
+Design, Clone, batch, controls, History/Saved Voices, reversible Settings, reference import, and
+XPC kill/recovery. Benchmark covers the full mode × length × cold/warm matrix. Destructive work is
+never selected automatically and requires explicit authorization plus action-time confirmation.
 
-### macOS — Custom Voice multi-clip (O-A-V)
-
-Same skeleton as single-clip; between clips on Studio → Custom:
-
-- **Do not** navigate away from Custom Voice screen.
-- Replace script via keyboard (Cmd+A, Delete, type).
-- Cmd+Return to generate; re-`see` until player appears.
-- Dismiss/clear player if it blocks Generate before the next clip.
-
-## macOS — Custom Voice smoke
-
-1. Skeleton above with `<mode> = custom`.
-2. `see` → click `sidebar_customVoice` → confirm `screen_customVoice`.
-3. Click `textInput_textEditor`, type a short script (≥ a full sentence).
-4. Wait for `customVoice_readiness` value to contain `ready=true`.
-5. Capture `T0`, then `Cmd+Return`.
-6. `verify-generation custom …` — expect `pass: true` in `$ART/result.json`.
-7. Evidence: `see`/`image` of the player bar (`sidebarPlayer_bar`).
-
-## macOS — Voice Design smoke
-
-1. Skeleton with `<mode> = design`.
-2. Click `sidebar_voiceDesign`.
-3. Fill the brief: click `voiceDesign_briefStarters` → pick `voiceDesign_briefStarter_0`
-   (or type a custom brief into the brief field).
-4. Type script text into `textInput_textEditor` — **readiness needs BOTH brief and text**.
-5. Wait for `voiceDesign_readiness` → `ready=true`; capture `T0`; `Cmd+Return`.
-6. `verify-generation design …`.
-
-## macOS — Voice Cloning smoke
-
-1. Skeleton with `<mode> = clone` (smoke-check also asserts a saved voice exists —
-   `scripts/macos_test.sh models ensure` seeds `A_warm_elderly_woman`).
-2. Navigate to Voices (`sidebar_voices`), open the saved voice's "use in clone" action
-   (row ids `voicesRow_*`), which hands off to the Clone screen with the reference staged.
-3. Type script text; wait for readiness; capture `T0`; `Cmd+Return`.
-4. `verify-generation clone …` (default timeout 120 s — clone prefill is slower).
-
-## macOS — settings / download UX tour (no generation)
-
-1. `prep`, then `see` → `sidebar_settings` → confirm `settings_modelDownloadsSummary`.
-2. Tour model rows; screenshot evidence per state. Do **not** start real downloads in a
-   smoke unless the run is explicitly about download UX (bandwidth + state mutation).
+Do not use the removed Peekaboo, `uitest_measure.sh`, macOS XCUITest, runner-signing, `journey`, or
+`uitest-doctor` workflows for new macOS work.
 
 ---
 
@@ -100,10 +46,10 @@ Same skeleton as single-clip; between clips on Studio → Custom:
 | **9-clip multi-mode smoke** | This file § multi-mode below + pilot log §10.3 |
 | **Driving invariants (always on)** | [`.cursor/rules/agent-ui-driving.mdc`](../../.cursor/rules/agent-ui-driving.mdc) |
 | **App map + XCTest ids** | [`ios-app-guide.md`](ios-app-guide.md) |
-| **Device lanes / gates** | [`ios-device-testing.md`](ios-device-testing.md) Playbooks A–G |
+| **Device lanes / gates** | [`ios-device-testing.md`](ios-device-testing.md) Playbooks 1–3 |
 | **Preflight** | `scripts/ios_mirroir_preflight.sh --native-only` |
-| **Full UI matrix (unattended)** | XCUITest `scripts/ios_device.sh bench-ui` |
-| **Full UI matrix (agent)** | `scripts/ios_device.sh bench-ui-mirroir --agent-drive` — Appendix **B.6d** |
+| **Full UI matrix** | XCUITest `scripts/ios_device.sh bench-ui` only |
+| **Agent smoke verify** | `measure-prep` → mirroir drive → `measure-now` → Generate → `measure-verify` |
 | **mobile-mcp (WDA)** | **Deferred** — [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md) |
 
 ---
@@ -141,41 +87,28 @@ Drive via **mirroir MCP** (not Peekaboo on the mirror) — **Appendix B.5–B.8*
 
 **Evidence:** `scripts/ios_device.sh shot` **only** when `describe_screen` fails or the user asks.
 
-**Generation proof (not agent-driven):** `scripts/ios_device.sh gate`, `test --cold`, or headless `bench` — for ad-hoc smokes after mirroir driving. **Full UI matrix:** XCUITest `bench-ui` (unattended) or agent `bench-ui-mirroir --agent-drive` (B.6d).
-
-Legacy Peekaboo + `ios_vision_bridge.sh` — fallback only when `describe_screen` fails.
-
----
-
-## iOS — mirroir UI bench (agent matrix)
-
-Distinct from [exploratory smokes](#ios--mirroir-studio-smoke-primary): same 29-take matrix as XCUITest `bench-ui`, driven by **native mirroir** with shell orchestration and `check_ios_ui_bench.py` gate. Authoritative procedure: [`ios-agent-ui-tour.md`](ios-agent-ui-tour.md) Appendix **B.6d**; benchmarking context: [`benchmarking-procedure.md`](benchmarking-procedure.md) §4.7c.
+**Generation proof (deterministic):** capture `SINCE=$(scripts/ios_device.sh measure-now)` **before** Generate, then:
 
 ```sh
-scripts/ios_device.sh device-state
-scripts/ios_mirroir_preflight.sh --native-only
-scripts/ios_device.sh models check --strict
-scripts/ios_device.sh bench-ui-mirroir --agent-drive \
-  --warm 1 --lengths medium --modes custom --label mirroir-bench-pilot
+ART=$(scripts/ios_device.sh measure-artifacts-dir --run-id "$RUN_ID")
+scripts/ios_device.sh measure-verify --run-id "$RUN_ID" --since "$SINCE" --artifacts-dir "$ART"
 ```
 
-Shell prints **`MIRROIR_BENCH_TAKE_BEGIN`** per take and blocks until agent `touch take-N.done`. Per take:
-
-1. Mode prep when `needsModePrep=1` (Custom / Design / Clone segment + sheets per B.6d)
-2. Tap OCR **`Clear script`** (`iosStudio_benchClearScript`) — or `vision-launch` fallback
-3. Type **corpus from take JSON** → SCRIPT_VERIFY `N > 0`
-4. `SINCE=$(scripts/ios_device.sh vision-now)` → tap **Generate** → `vision-bench-wait --run-id … --since "$SINCE"`
-5. `touch build/ios/bench-ui-mirroir-<runID>/take-N.done`
-
-**Completion proof:** telemetry via `vision-bench-wait` (not OCR `"Just now"`). **Design dismiss not required** between warm takes when Clear script succeeds. **Illegal during bench:** Design share `*`, **Save as voice**, Voices tab mid-matrix.
-
-**Do not** mix agent mirroir taps with XCUITest `bench-ui` on the same device session.
+Expect `pass: true` in `$ART/result.json`. Pre-merge gates stay `ios_device.sh gate` / `test --cold` / headless `bench`. **Full UI matrix:** XCUITest `bench-ui` only.
 
 Legacy Peekaboo + `ios_vision_bridge.sh` — fallback only when `describe_screen` fails.
 
 ---
 
 ## iOS — archived procedures (do not use for new smokes)
+
+<details>
+<summary>Deprecated — mirroir agent UI bench matrix (retired 2026-07)</summary>
+
+Full matrix = XCUITest `bench-ui` only. Historical `bench-ui-mirroir` procedure:
+[`computer-use-mcp-pilot-log.md`](computer-use-mcp-pilot-log.md) §Archived agent bench.
+
+</details>
 
 <details>
 <summary>RETIRED hybrid mirroir + Peekaboo (Jul 2026) — superseded by native mirroir above</summary>
@@ -190,7 +123,7 @@ Use native **`tap`/`type_text`** from `describe_screen` coords instead.
 <summary>mobile-mcp exploratory (deferred — WDA signing blocked)</summary>
 
 Use [mirroir smoke](#ios--mirroir-studio-smoke-primary) for exploratory QA. When WDA unblocks,
-see [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md) and Playbook F in
+see [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md) and Playbook 3 in
 [`ios-device-testing.md`](ios-device-testing.md).
 
 </details>
@@ -227,7 +160,7 @@ Workflow map: [`ios-app-guide.md`](ios-app-guide.md).
 
 ## iOS — vision bench-ui matrix (DEPRECATED — historical reference)
 
-> **Deprecated 2026-07 — do not run for new work.** Superseded by [`bench-ui-mirroir --agent-drive`](#ios--mirroir-ui-bench-agent-matrix) (native mirroir) or XCUITest `bench-ui`. Kept only so agents recognize the old lane name if it appears in logs.
+> **Deprecated 2026-07 — do not run for new work.** Superseded by XCUITest `bench-ui`. Kept only so agents recognize the old lane name if it appears in logs.
 
 Human-like full-matrix bench: **mirroir sees**, **Peekaboo clicks/types** on the Mac-side
 Mirroring window, **shell proves** via pulled `generations.jsonl`.
@@ -300,10 +233,10 @@ Gate: same `scripts/check_ios_ui_bench.py` as XCUITest `bench-ui` (driver runs a
 
 | Symptom | Do |
 | --- | --- |
-| `verify-generation` timeout | `scripts/uitest_measure.sh logs` (signpost stream); check `sidebar_backendStatus_error` via `see` |
-| WAV/DB mismatch | Inspect `$ART/result.json` reason; `scripts/uitest_measure.sh db "SELECT id,mode,audioPath,duration FROM generations ORDER BY createdAt DESC LIMIT 3"` |
-| Preview underrun/chunk gap | `streaming-preview-check` output names the failing signpost; escalate to the backend-mlx role |
-| Focus stolen mid-run | `scripts/uitest_measure.sh activate`, re-`see`, continue |
+| macOS generation timeout | Inspect the run's `events.jsonl`, app/service logs, and `generation-*.json`; record a functional/environment issue before continuing independent scenarios |
+| macOS WAV/DB mismatch | Re-run `scripts/macos_agent_ui.sh verify-generation` / `verify-history`; the deterministic assertion names the missing row, path, duration, or WAV failure |
+| macOS probe gap/duplicate/mismatch | Inspect `probe-verdict.json` and layer JSONL; escalate to macOS + backend owners |
+| macOS focus stolen | Re-observe with Computer Use and act once on the fresh tree; never reuse the prior element index |
 | mirroir taps landing wrong | Re-run `describe_screen`; `scripts/lib/ios_vision_bridge.sh calibrate`; Peekaboo `window` focus Mirroring app |
 | vision-bench-wait timeout | `ios_device.sh pull`; grep `engine/generations.jsonl` for `benchRunID`; check mirror still active (`device-state`) |
 | Run died mid-flight for no code reason | `scripts/ios_device.sh device-state` — phone in use / call / mirror paused are named verdicts; bench sentinels also carry `interruptions` events |

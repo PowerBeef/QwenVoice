@@ -276,9 +276,6 @@ private extension VoiceDesignView {
             isBusy: isGenerationActive,
             accessibilityIdentifier: "voiceDesign_readiness"
         )
-        .onChange(of: canGenerate) { _, ready in
-            MacUITestSurfaceMarkers.setComposeReady(mode: "design", ready: ready && !isGenerationActive)
-        }
     }
 
     var readinessTitle: String {

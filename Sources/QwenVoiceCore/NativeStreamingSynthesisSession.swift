@@ -320,10 +320,20 @@ private enum PCM16WAVWriter {
 
 private enum AtomicFilePublisher {
     static func temporaryURL(for finalURL: URL) -> URL {
-        let filename = finalURL.lastPathComponent
+        let extensionName = finalURL.pathExtension
+        let stem = finalURL.deletingPathExtension().lastPathComponent
+        let temporaryName: String
+        if extensionName.isEmpty {
+            temporaryName = ".\(stem).\(UUID().uuidString).tmp"
+        } else {
+            // AVAudioFile chooses its container from the filename extension.
+            // Keep `.wav` last so an atomic staging file cannot silently become
+            // CAF bytes that are later published under a misleading WAV name.
+            temporaryName = ".\(stem).\(UUID().uuidString).tmp.\(extensionName)"
+        }
         return finalURL
             .deletingLastPathComponent()
-            .appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
+            .appendingPathComponent(temporaryName)
     }
 
     static func publishAtomically(temporaryURL: URL, finalURL: URL) throws {
@@ -341,7 +351,7 @@ private enum AtomicFilePublisher {
     }
 }
 
-private enum AtomicPCM16WAVWriter {
+enum AtomicPCM16WAVWriter {
     static func write(
         pcmSamples: [Int16],
         sampleRate: Int,
@@ -760,10 +770,13 @@ private final class PCM16ChunkFileWriter {
     }
 }
 
-private final class IncrementalPCM16WAVFileWriter {
+final class IncrementalPCM16WAVFileWriter {
     private var file: AVAudioFile?
     private let format: AVAudioFormat
     private var reusableBuffer: AVAudioPCMBuffer?
+    private let finalURL: URL
+    private let temporaryURL: URL
+    private var published = false
 
     init(sampleRate: Int, outputURL: URL) throws {
         let createSignpost = NativeStreamingSignposts.signposter.beginInterval(
@@ -776,8 +789,11 @@ private final class IncrementalPCM16WAVFileWriter {
             )
         }
         self.format = try PCM16WAVWriter.makeFormat(sampleRate: sampleRate)
+        self.finalURL = outputURL
+        self.temporaryURL = AtomicFilePublisher.temporaryURL(for: outputURL)
+        try? FileManager.default.removeItem(at: temporaryURL)
         self.file = try AVAudioFile(
-            forWriting: outputURL,
+            forWriting: temporaryURL,
             settings: format.settings,
             commonFormat: format.commonFormat,
             interleaved: format.isInterleaved
@@ -811,16 +827,33 @@ private final class IncrementalPCM16WAVFileWriter {
         )
     }
 
-    func finish() {
+    func finish() throws {
         let finalizeSignpost = NativeStreamingSignposts.signposter.beginInterval(
             "Native Final WAV AVAudioFile Finalize"
         )
         reusableBuffer = nil
         file = nil
+        try AtomicFilePublisher.publishAtomically(
+            temporaryURL: temporaryURL,
+            finalURL: finalURL
+        )
+        published = true
         NativeStreamingSignposts.signposter.endInterval(
             "Native Final WAV AVAudioFile Finalize",
             finalizeSignpost
         )
+    }
+
+    func discard() {
+        reusableBuffer = nil
+        file = nil
+        try? FileManager.default.removeItem(at: temporaryURL)
+    }
+
+    deinit {
+        if !published {
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
     }
 }
 
@@ -926,7 +959,9 @@ private struct StreamingExecutionContext: Sendable {
                 usedStreaming: false,
                 finishReason: "failed",
                 counters: [:],
-                notes: ["message": error.localizedDescription]
+                notes: TelemetryGate.resolvedEnabled
+                    ? GenerationTelemetryPrivacy.failureNotes(message: error.localizedDescription)
+                    : [:]
             )
             Memory.clearCache()
             throw error
@@ -995,6 +1030,9 @@ private struct StreamingExecutionContext: Sendable {
                 sampleRate: sampleRate,
                 outputURL: outputURL
             )
+            guard Self.isReadableWAV(at: outputURL) else {
+                throw MLXTTSEngineError.generationFailed("The finalized WAV could not be reopened for reading.")
+            }
         } catch {
             Memory.clearCache()
             throw error
@@ -1038,7 +1076,10 @@ private struct StreamingExecutionContext: Sendable {
             usedStreaming: false,
             finishReason: finishReason.rawValue,
             counters: [:],
-            notes: [:],
+            notes: [
+                "outputReadableWAV": "true",
+                "outputAtomicallyPublished": "true",
+            ],
             timingsMS: finalTimingsMS,
             derivedMetrics: derivedMetrics,
             mlxMemoryByStage: telemetryActive ? mlxMemorySnapshots : nil,
@@ -1226,7 +1267,7 @@ private struct StreamingExecutionContext: Sendable {
             outputURL: outputURL
         )
         defer {
-            finalWriter.finish()
+            finalWriter.discard()
         }
 
         let streamingInterval = NativeMemoryPolicyResolver.effectiveStreamingInterval(
@@ -1379,9 +1420,11 @@ private struct StreamingExecutionContext: Sendable {
                 usedStreaming: true,
                 finishReason: "failed",
                 counters: ["chunkCount": chunkIndex],
-                notes: ["message": error.localizedDescription]
+                notes: TelemetryGate.resolvedEnabled
+                    ? GenerationTelemetryPrivacy.failureNotes(message: error.localizedDescription)
+                    : [:]
             )
-            finalWriter.finish()
+            finalWriter.discard()
             try? FileManager.default.removeItem(at: outputURL)
             try? FileManager.default.removeItem(at: sessionDirectory)
             Memory.clearCache()
@@ -1408,7 +1451,10 @@ private struct StreamingExecutionContext: Sendable {
 
         let finalWriteSignpost = NativeStreamingSignposts.signposter.beginInterval("Native Final WAV Finish")
         let finalWAVFinishStartedAt = ContinuousClock.now
-        finalWriter.finish()
+        try finalWriter.finish()
+        guard Self.isReadableWAV(at: outputURL) else {
+            throw MLXTTSEngineError.generationFailed("The finalized streaming WAV could not be reopened for reading.")
+        }
         NativeStreamingSignposts.signposter.endInterval("Native Final WAV Finish", finalWriteSignpost)
         signpostTimingsMS["native_final_wav_finish_ms"] = finalWAVFinishStartedAt.elapsedMilliseconds
         mlxMemorySnapshots["after_final_write"] = NativeMemoryPolicyResolver.snapshot()
@@ -1468,7 +1514,11 @@ private struct StreamingExecutionContext: Sendable {
             usedStreaming: true,
             finishReason: resolvedFinishReason.rawValue,
             counters: ["chunkCount": chunkIndex],
-            notes: [:],
+            notes: [
+                "finalChunkBarrierObserved": "true",
+                "outputReadableWAV": "true",
+                "outputAtomicallyPublished": "true",
+            ],
             timingsMS: finalTimingsMS,
             derivedMetrics: derivedMetrics,
             mlxMemoryByStage: telemetryActive ? mlxMemorySnapshots : nil,
@@ -1510,6 +1560,11 @@ private struct StreamingExecutionContext: Sendable {
         case .mid16GBMac, .highMemoryMac:
             return 0.4
         }
+    }
+
+    private static func isReadableWAV(at url: URL) -> Bool {
+        guard let file = try? AVAudioFile(forReading: url) else { return false }
+        return file.fileFormat.sampleRate > 0 && file.length > 0
     }
 
     /// Persists the rescued sampler `TelemetrySummary` + stage timeline as the
@@ -1603,13 +1658,13 @@ private struct StreamingExecutionContext: Sendable {
         switch request.payload {
         case .design(let voiceDescription, let deliveryStyle):
             let desc = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !desc.isEmpty { tierNotes["voiceDescription"] = desc }
+            if !desc.isEmpty { tierNotes["voiceDescriptionChars"] = String(desc.count) }
             if let d = deliveryStyle?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
-                tierNotes["deliveryInstruction"] = d
+                tierNotes["deliveryInstructionChars"] = String(d.count)
             }
         case .custom(_, let deliveryStyle):
             if let d = deliveryStyle?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
-                tierNotes["deliveryInstruction"] = d
+                tierNotes["deliveryInstructionChars"] = String(d.count)
             }
         case .clone:
             break

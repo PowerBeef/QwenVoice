@@ -20,7 +20,7 @@
 **Consults:**
 - `docs/reference/{macos-release-qa,telemetry-and-benchmarking,cli,macos-testing,ios-device-testing}.md`
 - `docs/ARCHITECTURE.md` §12 (telemetry)
-- Root `AGENTS.md` (Workflows, Commands) + [`.cursor/rules/testing.mdc`](../.cursor/rules/testing.mdc)
+- Root `AGENTS.md` (Workflows, Commands) + [`docs/project-map.html`](../docs/project-map.html)
 
 ## Required pre-read
 
@@ -31,29 +31,20 @@ Before changing scripts or CI, read:
 4. `docs/reference/benchmarking-procedure.md` for the operator runbook (when to bench, platform lanes, preflight).
 5. `docs/reference/telemetry-and-benchmarking.md` for benchmark/telemetry schema and knobs.
 
-## Tools and skills (Cursor)
+## Tools and skills (Codex)
 
-- **Shell tool** — scripts are the source of truth; run them directly.
-- **Axiom MCP (`user-axiom`)** for post-run analysis (read tool schema first):
-
-  | Need | MCP path |
-  | --- | --- |
-  | Crash triage | `axiom_xcsym_crash` or `axiom_get_agent` → `crash-analyzer` |
-  | Profile analysis | `axiom_xcprof_analyze` or `axiom_get_agent` → `performance-profiler` |
-  | Test failure | `axiom_get_agent` → `test-runner` / `test-debugger` |
-  | UI baseline diff | `axiom_get_agent` → `screenshot-validator` |
-  | Build/env failure | `axiom_get_agent` → `build-fixer` (after reading script output) |
-  | Static audits | `axiom_get_agent` → named auditors (`concurrency-auditor`, `memory-auditor`, …) |
-
-  **iOS artifact paths** (see [`ios-device-testing.md` § Agent + MCP workflow](../docs/reference/ios-device-testing.md#agent--mcp-workflow)):
+- **Shell scripts are the source of truth**; run them directly and preserve their artifacts.
+- Use the installed GitHub integration for PR, release, and Actions context; use `gh` only when
+  connector coverage is insufficient.
+- Use relevant installed Codex skills for test triage, performance, signing, packaging, or
+  telemetry after reading their instructions. Start from script output and generated artifacts.
+- macOS frontend acceptance is driven only by `$vocello-macos-ui-qa`; its report is validated by
+  scripts and joined to typed XPC/backend probes. iOS remains physical-device XCUITest until the
+  later iOS migration.
+- **iOS artifact paths** (see [`ios-device-testing.md`](../docs/reference/ios-device-testing.md)):
   `build/ios/Logs/Test/*.xcresult` (UI tests), `build/ios/bench-ui-<runID>/` (UI bench),
   `build/ios-diagnostics/` (telemetry + crashes + `models-status.json`),
   `build/ios/gate-<runID>/verdict.txt`, `build/ios/profile-*.trace` / `bench-ui-*/vocello.trace`.
-
-- **GitHub** (release artifacts, PRs, workflow dispatch) → `gh` via the Shell tool.
-- **XcodeBuildMCP** (`user-xcodebuildmcp`) — macOS and on-device iOS workflows enabled; see
-  [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml). Prefer `scripts/*.sh` for
-  gates; use profiles `macos` / `ios-device`.
 
 ## Build / test commands
 
@@ -63,11 +54,14 @@ scripts/macos_test.sh models ensure   # one-time per machine before first real-e
 scripts/macos_test.sh gate
 QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # optional: bounded custom/speed/medium bench + audioQC
 
-# Supplementary XPC UI matrix (when Native/Services/Views/XPC changed — not CI by default)
-scripts/macos_test.sh uitest-doctor
-scripts/macos_test.sh bench-ui --label xpc-bench-full
+# macOS Computer Use evidence (suite selected by impact)
+scripts/macos_agent_ui.sh doctor --suite full --json
+scripts/macos_agent_ui.sh impact
+# Invoke $vocello-macos-ui-qa full or benchmark, then validate:
+scripts/macos_test.sh ui-report --suite full
+scripts/macos_test.sh bench-ui --report <benchmark-run>
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --run-id xpc-bench-YYYYMMDD-HHMMSS
+  --run-id mac-ui-benchmark-YYYYMMDD-HHMMSS
 
 # Language-path verification (optional pre-release; Phases 1–3)
 scripts/macos_test.sh core-test
@@ -79,9 +73,8 @@ scripts/ios_device.sh lang-bench --subset quick --label "release-QA"   # Phases 
 # Phase 3 output (DE/ES/ZH/JA): language-bench.md § Phase 3 prerequisites — Speech Wi‑Fi assets
 # Latest full run (2026-07-06): hint 19/19 PASS; output 7/18 until assets download — rescue-plan-progress.md
 
-# Human journey + review (optional pre-release)
-scripts/macos_test.sh journey
-scripts/macos_test.sh review --subset resting
+# Semantic frontend review (Computer Use report required)
+scripts/macos_test.sh review --report <full-run>
 scripts/ios_device.sh gate
 
 # Model fixture helpers
@@ -127,6 +120,8 @@ scripts/ios_device.sh profile [spec]
 - **macOS real-engine tests need model fixtures.** Run `scripts/macos_test.sh models ensure`
   once per machine; see [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh) and
   [`docs/reference/testing-runbook.md`](../docs/reference/testing-runbook.md) §1b.
+- **No macOS XCUITest frontend.** `VocelloMacUITests`, runner signing, coordinate hooks, and
+  hidden UI-test markers must not return. Static accessibility-catalog checks remain required.
 
 ## Common mistakes
 

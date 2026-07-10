@@ -23,7 +23,7 @@
 **Consults:**
 - `docs/ARCHITECTURE.md` §3 (runtime architecture), §5 (macOS request lifecycle), §8 (macOS app surfaces)
 - `docs/reference/{macos-app-guide,macos-testing,macos-release-qa,macos-permissions,privacy-storage}.md`
-- Root `AGENTS.md` (Hard rules) + [`.cursor/rules/project-structure.mdc`](../.cursor/rules/project-structure.mdc)
+- Root `AGENTS.md` (Hard rules) + [`docs/project-map.html`](../docs/project-map.html)
 
 ## Required pre-read
 
@@ -33,23 +33,21 @@ Before changing macOS app or XPC code, read:
 3. `docs/ARCHITECTURE.md` §5 — macOS request lifecycle and XPC wire protocol.
 4. `docs/reference/privacy-storage.md` if the change touches on-disk data locations.
 
-## Tools and skills (Cursor)
+## Tools and skills (Codex)
 
 - **Shell tool / scripts** (the source of truth for the local loop):
   - `./scripts/build.sh build|run|cli`
-  - `scripts/macos_test.sh models check|ensure|test|gate|crashes|debug|logs|profile|review|xpc`
+  - `scripts/macos_test.sh models check|ensure|test|gate|crashes|debug|logs|profile|ui-report|review|xpc`
+  - `scripts/macos_agent_ui.sh doctor|impact|verify-probes|validate-report|attest`
   - `./scripts/regenerate_project.sh` after `project.yml` changes
-- **Apple framework APIs / SwiftUI / concurrency** → **`user-axiom`** MCP
-  (`axiom_read_skill` for `axiom-apple-docs`, `axiom-swiftui`, `axiom-concurrency`).
-- **Crash / profile / test / UI-review** → **`user-axiom`** MCP tools and agents:
-  `axiom_xcsym_crash`, `axiom_xcprof_analyze`, `axiom_xclog_*`; or `axiom_get_agent` for
-  `crash-analyzer`, `performance-profiler`, `test-runner`, `test-debugger`,
-  `screenshot-validator`.
-- **XcodeBuildMCP** (`user-xcodebuildmcp` via `CallMcpTool`) — macOS + device
-  workflows enabled in [`.xcodebuildmcp/config.yaml`](../.xcodebuildmcp/config.yaml). Use profile
-  `macos` for quick checks; `./scripts/build.sh` / `scripts/macos_test.sh` remain primary. Call
-  `session_show_defaults` before the first MCP action.
-- **XPC lifecycle investigations** → Task tool with `subagent_type: "explore"`.
+- Use relevant installed macOS Codex skills for SwiftUI/AppKit structure, builds, test triage,
+  telemetry, performance, signing, or packaging after reading the selected skill. Shell scripts
+  remain the source of truth for gates.
+- Use authoritative Apple documentation where current framework behavior matters and the GitHub
+  integration for repository/CI context.
+- For macOS frontend work, invoke the repository skill `$vocello-macos-ui-qa` with the suite
+  selected by `scripts/macos_agent_ui.sh impact`. Computer Use is the sole UI driver; the skill's
+  structured report and typed probes are the gate evidence. Never add a macOS XCUITest target.
 
 ## Build / test commands
 
@@ -61,13 +59,15 @@ Before changing macOS app or XPC code, read:
 # macOS smoke tests (models ensure symlinks QwenVoice-Debug/models → canonical store)
 scripts/macos_test.sh models ensure   # one-time per machine
 scripts/macos_test.sh test
+scripts/macos_agent_ui.sh impact
+# Invoke $vocello-macos-ui-qa quick|full|benchmark when required.
 scripts/macos_test.sh gate
 
 # XPC lifecycle / crash isolation
-scripts/macos_test.sh xpc --crash-isolation
+scripts/macos_test.sh xpc status
 
 # UI capture + baseline diff
-scripts/macos_test.sh review [--baseline]
+scripts/macos_test.sh review [--report <run>]
 ```
 
 ## Invariants (do not regress)

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "evidence": {
+    "reportDirectory": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10",
+    "reportCommit": "05bd2b6d24b3f43351f3b388622a72d8f0d6ecce",
+    "validatedAgainst": "current-source-at-test-time"
+  },
+  "items": [
+    {"id": "H1", "title": "Generation-gate cancellation transfer", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["fifo-transfer", "queued-cancellation", "cancellation-after-transfer", "holder-failure", "deterministic-stress"], "status": "implemented", "remaining": []},
+    {"id": "H2", "title": "Dedicated fork runtime tests", "source": "third_party_patches/mlx-audio-swift/Package.swift", "tests": ["qwen3-runtime-test-target"], "status": "implemented", "remaining": []},
+    {"id": "MH1", "title": "Requested learned components require weights", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["missing-speaker-weights", "missing-tokenizer-weights"], "status": "implemented", "remaining": []},
+    {"id": "MH2", "title": "Clone tensor integrity", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["atomic-replacement", "shape-dtype", "digest", "exact-file-set"], "status": "implemented", "remaining": []},
+    {"id": "M3", "title": "Typed telemetry schema", "source": "Sources/QwenVoiceCore/GenerationTelemetryRecord.swift", "tests": ["schema-v6-round-trip", "legacy-v5-decode", "cross-layer-merge", "telemetry-disabled"], "status": "partial", "remaining": ["measured telemetry-off/lightweight/verbose overhead parity"]},
+    {"id": "STREAM", "title": "Streaming ordering and bounded retention", "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift", "tests": ["bounded-retention", "timing-before-audio", "final-barrier", "consumer-termination"], "status": "partial", "remaining": ["decoder-backed partition and consumer-termination fixtures"]},
+    {"id": "DECODER", "title": "Decoder partition invariance", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift", "tests": ["partition-invariance", "reset", "timing-parity"], "status": "future", "remaining": ["deterministic Metal-backed decoder fixture"]},
+    {"id": "XPC", "title": "Transport lifecycle and correlation", "source": "Sources/QwenVoiceNative/XPCNativeEngineClient.swift", "tests": ["request-reply-correlation", "timeout-cleanup", "cancellation-order", "gap-detection", "expected-retirement", "reconnection", "single-terminal"], "status": "implemented", "remaining": []},
+    {"id": "OUTPUT", "title": "Atomic readable final output", "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift", "tests": ["atomic-final-wav", "readable-frame-count"], "status": "implemented", "remaining": []}
+  ],
+  "deferredMatrix": {
+    "source": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10/06_Verification_Test_and_Benchmark_Matrix.md",
+    "policy": "Track remaining rows explicitly; do not claim coverage without an executable test or validator."
+  }
+}

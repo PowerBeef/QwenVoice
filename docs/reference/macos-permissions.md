@@ -121,22 +121,21 @@ QWENVOICE_DEBUG=1 QWENVOICE_FAKE_MIC_WAV="$HOME/.../some_10-20s_clip.wav" ./scri
 5. Reading the TCC database from a terminal needs Full Disk Access for that
    terminal; the doctor degrades gracefully without it.
 
-## UI automation (XCUITest — separate from mic/speech TCC)
+## Computer Use permissions (separate from mic/speech TCC)
 
-macOS UI tests hit **Authorization Services** (password to enable UI Automation) and
-**TCC Accessibility** (Xcode, Xcode Helper, `VocelloMacUITests-Runner`). These are
-distinct from microphone/speech grants above.
+macOS frontend acceptance is driven by Codex Computer Use and needs Accessibility plus Screen
+Recording for the Codex host. There is no `VocelloMacUITests-Runner`, Authorization Services UI
+Automation mode, or runner-signing helper. These grants are distinct from microphone/speech above.
 
 ```sh
-scripts/macos_uitest_doctor.sh
-sudo /usr/bin/automationmodetool enable-automationmode-without-authentication   # Gate 1
+scripts/macos_agent_ui.sh doctor --suite full --json
 ```
 
-Full setup: [`macos-testing.md`](macos-testing.md) § UI test machine setup.
+Full setup: [`macos-testing.md`](macos-testing.md) § Prerequisites.
 
 ## Manual testing / TCC caveat
 
-TCC permission dialogs require a **human** to answer — automated UI tests cannot reliably
+TCC permission dialogs require a **human** to answer — autonomous Computer Use cannot reliably
 handle them, and synthetic keystrokes can land on a hidden prompt and dismiss it as
 "Don't Allow". After a permission reset: pause, let a human answer the prompt, and verify
 the outcome with the doctor (or the TCC query) instead of assuming. With stable dev signing

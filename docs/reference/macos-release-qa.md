@@ -16,22 +16,19 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    ./scripts/build.sh build
    ./scripts/build_foundation_targets.sh macos && ./scripts/build_foundation_targets.sh ios
    ```
-2. **Automated UI smoke** (always — the permanent `VocelloMacUITests` target):
+2. **Deterministic tests + Computer Use frontend acceptance** (always):
    ```sh
    scripts/macos_test.sh models ensure   # one-time per machine (~6.9 GB Speed trio; idempotent)
-   scripts/macos_test.sh test            # preferred: ensures models + runs 12 smoke tests
-   # Or the full one-command gate (includes model ensure):
+   scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime + harness
+   scripts/macos_agent_ui.sh impact      # release work normally selects full or benchmark
+   # Invoke $vocello-macos-ui-qa full (or benchmark for backend/performance changes), then:
+   scripts/macos_test.sh ui-report --suite full
    scripts/macos_test.sh gate
    ```
-   **~12 smoke tests** in `VocelloMacSmokeUITests` via `scripts/macos_test.sh test` (`-only-testing`
-   scoped — never runs review/journey/bench). Optional deeper flows: `scripts/macos_test.sh journey`.
-   REAL generation in Custom Voice, Voice Design, and Voice Cloning through to the player bar,
-   mid-generation cancel, History/Voices/Settings, enroll + batch sheets. Tests use the debug
-   data dir (`QWENVOICE_DEBUG=1`). **Script-driven** runs (`macos_test.sh test` / `gate`) set
-   `QVOICE_REQUIRE_TEST_MODELS=1` — missing Speed models or the clone voice fixture in debug
-   context **fails** the run, not `XCTSkip`. Ad-hoc bare `xcodebuild test` without the script
-   may still skip generation tests on model-less machines (legacy/tolerant path only). Expect
-   **0 failures** on the preferred script path after `models ensure`.
+   Computer Use is the sole macOS frontend driver and targets the exact `build/Vocello.app`.
+   The full report covers Custom/Design/Clone, playback, History/Voices/Settings, batch,
+   reference import, XPC recovery, and semantic visual/accessibility review. It only passes when
+   typed XPC/backend probes, the matching History row, readable WAV, fingerprints, and cleanup pass.
 3. **Engine regression net** (when any engine/Sources change since the last green bench):
    ```sh
    scripts/macos_test.sh models ensure   # Speed trio + clone voice A_warm_elderly_woman
@@ -50,12 +47,11 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
      --label "release-QA"
    ```
    Investigate any highlighted cell before shipping.
-4. **Static audits** (release-sized changesets): fetch the five Axiom auditors via **`user-axiom`**
-   `axiom_get_agent` per `.agents/release-qa-engineer.md` routing
-   (swiftui-architecture, swiftui-performance, memory, concurrency, security-privacy) scoped to the
-   changed surfaces; fix or explicitly defer findings.
-5. **Interactive matrix** (releases touching UI; human-driven manual pass — or
-   `scripts/macos_test.sh review` for screenshot baselines):
+4. **Static audits** (release-sized changesets): use the relevant installed Codex macOS skills
+   plus direct code review for SwiftUI architecture/performance, memory, concurrency, signing,
+   and security/privacy. Scope findings to changed surfaces; fix or explicitly defer them.
+5. **Interactive matrix** (releases touching UI; `$vocello-macos-ui-qa full` is required;
+   `scripts/macos_test.sh review` validates that structured report):
    | Flow | Key checks |
    |---|---|
    | Record→enroll | record sheet (virtual mic ok: `QWENVOICE_FAKE_MIC_WAV`), <10 s gate ("Need 10 s"), ≥10 s "Use This Clip", review player, **auto-transcription fills**, enrolled row |

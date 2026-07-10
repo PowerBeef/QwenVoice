@@ -90,7 +90,7 @@ def filter_run_id(rows: list[dict], run_id: str) -> list[dict]:
         notes = row.get("notes") or {}
         if notes.get("benchRunID") == run_id:
             filtered.append(row)
-    return filtered if filtered else rows
+    return filtered
 
 
 def main() -> int:
@@ -133,14 +133,14 @@ def main() -> int:
 
     failures: list[str] = []
 
-    if len(engine_rows) < expected:
-        failures.append(f"engine rows {len(engine_rows)} < expected {expected}")
-    if len(service_rows) < expected:
-        failures.append(f"engine-service rows {len(service_rows)} < expected {expected}")
-    if len(app_rows) < expected:
-        failures.append(f"app rows {len(app_rows)} < expected {expected}")
-    if len(merged_rows) < expected:
-        failures.append(f"merged rows {len(merged_rows)} < expected {expected}")
+    if len(engine_rows) != expected:
+        failures.append(f"engine rows {len(engine_rows)} != expected {expected}")
+    if len(service_rows) != expected:
+        failures.append(f"engine-service rows {len(service_rows)} != expected {expected}")
+    if len(app_rows) != expected:
+        failures.append(f"app rows {len(app_rows)} != expected {expected}")
+    if len(merged_rows) != expected:
+        failures.append(f"merged rows {len(merged_rows)} != expected {expected}")
 
     engine_ids = {r.get("generationID") for r in engine_rows if r.get("generationID")}
     for layer, rows in (("engine-service", service_rows), ("app", app_rows)):

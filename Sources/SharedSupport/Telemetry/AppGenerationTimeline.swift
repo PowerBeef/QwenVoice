@@ -130,41 +130,14 @@ final class AppGenerationTimeline {
             notes: notes
         )
         let appSupportDirectory = AppPaths.appSupportDir
-        if Self.shouldFlushAppRowSynchronously {
-            // Bench cold-relaunch terminates the app before a detached write lands
-            // (audit J1 takes #10/#29). Await the actor write on the MainActor task
-            // so the row is durable before scheduleMerge / the next relaunch.
-            await GenerationTelemetryJSONLSink.shared.write(
-                record: record,
-                appSupportDirectory: appSupportDirectory,
-                subdirectory: "app"
-            )
-            MacUITestSurfaceMarkers.markGenerationComplete(id: id)
-        } else {
-            Task { @MainActor in
-                MacUITestSurfaceMarkers.markGenerationComplete(id: id)
-            }
-            // .utility, not .background: under bench load a .background write can be
-            // starved long enough for the app to be relaunched first (audit J1),
-            // permanently losing the app-layer row.
-            Task.detached(priority: .utility) {
-                await GenerationTelemetryJSONLSink.shared.write(
-                    record: record,
-                    appSupportDirectory: appSupportDirectory,
-                    subdirectory: "app"
-                )
-            }
-        }
-    }
-
-    /// When UI-test hooks are on, the macOS bench driver relaunches between cold
-    /// cells — the app-layer row must land before `recordCompleted` returns.
-    private static var shouldFlushAppRowSynchronously: Bool {
-        #if os(macOS)
-        return MacUITestSurfaceMarkers.isEnabled
-        #else
-        return false
-        #endif
+        // A completed result is a durability boundary. Await the append before
+        // callers schedule the cross-layer merge or a benchmark starts another
+        // cold session; this no longer depends on frontend-only UI-test markers.
+        await GenerationTelemetryJSONLSink.shared.write(
+            record: record,
+            appSupportDirectory: appSupportDirectory,
+            subdirectory: "app"
+        )
     }
 
     private static func milliseconds(

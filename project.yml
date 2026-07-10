@@ -32,14 +32,14 @@ schemes:
     build:
       targets:
         QwenVoice: all
-        VocelloMacUITests: [test]
+        VocelloEngineIntegrationTests: [test]
     run:
       config: Release
     test:
       config: Release
       targets:
         - VocelloCoreTests
-        - VocelloMacUITests
+        - VocelloEngineIntegrationTests
     profile:
       config: Release
     analyze:
@@ -413,25 +413,22 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
 
-  # Thin XCUITest UI-flow smoke (host = VocelloiOS). Asserts launch + the 4-tab IA +
-  # the Studio composer/mode-control via the stable accessibilityIdentifiers. The
-  # durable replacement (with scripts/ios_device.sh) for the deprecated screen-mirror
-  # macOS UI smoke — the standing pre-release gate (docs/reference/macos-release-qa.md).
-  # Run: xcodebuild test -scheme QwenVoice -destination 'platform=macOS,arch=arm64'
-  VocelloMacUITests:
-    type: bundle.ui-testing
+  # Deterministic macOS XPC transport tests. Frontend journeys are driven only by
+  # the repository Codex Computer Use skill; this target never launches app UI.
+  VocelloEngineIntegrationTests:
+    type: bundle.unit-test
     platform: macOS
     sources:
-      - path: Tests/VocelloMacUITests
+      - path: Tests/VocelloEngineIntegrationTests
     dependencies:
-      - target: QwenVoice
       - target: QwenVoiceCore
+      - target: QwenVoiceEngineSupport
+      - target: QwenVoiceNative
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.uitests
-        PRODUCT_NAME: VocelloMacUITests
-        PRODUCT_MODULE_NAME: VocelloMacUITests
-        TEST_TARGET_NAME: QwenVoice
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.engine.integration-tests
+        PRODUCT_NAME: VocelloEngineIntegrationTests
+        PRODUCT_MODULE_NAME: VocelloEngineIntegrationTests
         SWIFT_VERSION: "6"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: "-"
