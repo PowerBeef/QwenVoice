@@ -83,11 +83,15 @@ fi
 MAC_ACTIVE=(
   AGENTS.md README.md .agents/backend-mlx.md .agents/macos-engineer.md
   .agents/release-qa-engineer.md docs/ARCHITECTURE.md docs/project-map.html
+  docs/development-progress.md
   docs/reference/macos-app-guide.md docs/reference/macos-testing.md
   docs/reference/macos-release-qa.md docs/reference/macos-permissions.md
   docs/reference/testing-runbook.md docs/reference/telemetry-and-benchmarking.md
   docs/reference/benchmarking-procedure.md
 )
+if out="$(rg -n 'rescue-plan-progress\.md' "${MAC_ACTIVE[@]}" 2>/dev/null || true)"; then
+  [[ -z "$out" ]] || fail "active guidance still links the replaced rescue tracker:\n$out"
+fi
 if out="$(rg -n -i 'VocelloMacUITests|macos_uitest_doctor|scripts/uitest_measure\.sh|macos_test\.sh journey|macos_test\.sh uitest-doctor|MacUITestSurfaceMarkers' "${MAC_ACTIVE[@]}" 2>/dev/null || true)"; then
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue

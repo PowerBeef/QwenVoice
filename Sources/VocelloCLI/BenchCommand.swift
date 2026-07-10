@@ -109,6 +109,7 @@ enum BenchCommand {
         let cloneVoiceName = args.string("voice") ?? defaultCloneVoice
         let ttfc = args.flag("ttfc")
         let noStream = args.flag("no-stream")
+        let seed = try GenerateCommand.parseSeed(args)
         // --delivery [list]: instruct-bearing cells on top of the plain matrix.
         // Value form picks the cells; the bare flag runs the default set.
         let deliveryItems: [DeliveryItem]
@@ -182,7 +183,7 @@ enum BenchCommand {
                 if mode != .clone, let coldLen, let coldText = text(for: coldLen) {
                     try await take(runtime, mode: mode, modelID: modelID, payload: payload,
                                    len: coldLen, text: coldText, state: "cold", n: 0, outDir: outDir,
-                                   shouldStream: !noStream)
+                                   shouldStream: !noStream, seed: seed)
                     total += 1
                 }
                 // Warm samples per requested length.
@@ -191,7 +192,7 @@ enum BenchCommand {
                     for n in 0..<warm {
                         try await take(runtime, mode: mode, modelID: modelID, payload: payload,
                                        len: len, text: t, state: "warm", n: n, outDir: outDir,
-                                       shouldStream: !noStream)
+                                       shouldStream: !noStream, seed: seed)
                         total += 1
                     }
                 }
@@ -210,7 +211,7 @@ enum BenchCommand {
                             deliveryStyle: item.instruction)
                         try await take(runtime, mode: mode, modelID: modelID, payload: deliveryPayload,
                                        len: "medium", text: deliveryText, state: "warm", n: 0,
-                                       outDir: outDir, delivery: item.id, shouldStream: !noStream)
+                                       outDir: outDir, delivery: item.id, shouldStream: !noStream, seed: seed)
                         total += 1
                     }
                 }
@@ -252,7 +253,7 @@ enum BenchCommand {
                     let request = GenerationRequest(
                         mode: mode, modelID: modelID, text: probeText, outputPath: out,
                         shouldStream: true, streamingInterval: GenerationSemantics.appStreamingInterval,
-                        payload: payload, generationID: UUID())
+                        payload: payload, generationID: UUID(), seed: seed)
                     let (_, ms, _) = try await GenerateCommand.generateObservingFirstChunk(runtime, request)
                     rows.append(TTFCRow(mode: mode.rawValue, variant: quality ? "quality" : "speed",
                                         modelID: modelID, firstChunkMS: ms))
@@ -270,7 +271,7 @@ enum BenchCommand {
     private static func take(_ runtime: CLIRuntime, mode: GenerationMode, modelID: String,
                              payload: GenerationRequest.Payload, len: String, text: String,
                              state: String, n: Int, outDir: URL, delivery: String? = nil,
-                             shouldStream: Bool = true) async throws {
+                             shouldStream: Bool = true, seed: UInt64? = nil) async throws {
         // Bucket the char count with the SAME function the summarizer uses, so
         // the filename and the telemetry row agree by construction regardless of
         // the bucket thresholds.
@@ -281,23 +282,26 @@ enum BenchCommand {
         let out = outDir.appendingPathComponent("\(mode.rawValue)_\(modelID)_\(lenToken)_\(stateToken)_\(n).wav").path
         let request = GenerationRequest(
             mode: mode, modelID: modelID, text: text, outputPath: out,
-            shouldStream: shouldStream, payload: payload, generationID: UUID())
+            shouldStream: shouldStream, payload: payload, generationID: UUID(), seed: seed)
         if let delivery { setenv("QWENVOICE_BENCH_DELIVERY", delivery, 1) }
         defer { if delivery != nil { unsetenv("QWENVOICE_BENCH_DELIVERY") } }
         let t0 = Date()
         let result: GenerationResult
+        var firstChunkMS: Double?
         if shouldStream {
             // Drain engine.events so the macOS unbounded stream does not retain preview/chunk
             // events across matrix takes (see GenerateCommand.generateObservingFirstChunk).
-            let (genResult, _, _) = try await GenerateCommand.generateObservingFirstChunk(runtime, request)
+            let (genResult, observedFirstChunkMS, _) = try await GenerateCommand.generateObservingFirstChunk(runtime, request)
             result = genResult
+            firstChunkMS = observedFirstChunkMS
         } else {
             result = try await runtime.engine.generate(request)
         }
         let wall = Date().timeIntervalSince(t0)
         let deliveryTag = delivery.map { "/\($0)" } ?? ""
+        let ttfcTag = firstChunkMS.map { "  ttfc=\(String(format: "%.1f", $0))ms" } ?? ""
         FileHandle.standardError.write(Data(
-            "  \(mode.rawValue)/\(modelID.hasSuffix("quality") ? "Q" : "S")/\(len)/\(state)\(deliveryTag)#\(n)  \(String(format: "%.2f", result.durationSeconds))s audio in \(String(format: "%.1f", wall))s\n".utf8))
+            "  \(mode.rawValue)/\(modelID.hasSuffix("quality") ? "Q" : "S")/\(len)/\(state)\(deliveryTag)#\(n)  \(String(format: "%.2f", result.durationSeconds))s audio in \(String(format: "%.1f", wall))s\(ttfcTag)\n".utf8))
     }
 
     private static func payload(for mode: GenerationMode, customSpeaker: String, designBrief: String,
@@ -560,6 +564,7 @@ enum BenchCommand {
           --ledger       append a one-line row to benchmarks/HISTORY.md (perf ledger)
           --force-class  run a constrained tier on any Mac: 8gb|16gb|high|iphone
           --telemetry    off | lightweight (default) | verbose (raw per-sample sidecars)
+          --seed         deterministic sampling seed applied to every take
           --no-stream    accumulate the full result before decoding (old bench behavior)
           --ttfc         add an engine first-chunk-latency probe per cell (warm
                          streaming) → table + diagnostics/bench-ttfc.json

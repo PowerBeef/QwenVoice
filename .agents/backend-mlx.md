@@ -40,8 +40,9 @@ Before changing anything in this layer, read:
   authoritative Apple, package, or Hugging Face documentation.
 - Browser and Computer Use may support exploratory inspection, but never replace benchmarks,
   compile checks, or physical-device iOS gates.
-- Runtime-affecting macOS changes additionally require the impact-selected full/benchmark
-  `$vocello-macos-ui-qa` attestation. Frontend observations do not prove backend completion;
+- Runtime-affecting macOS changes additionally require every suite and runtime check returned by
+  `scripts/macos_agent_ui.sh impact`. Full and benchmark are independent; telemetry-affecting work
+  also runs `scripts/macos_test.sh telemetry-overhead`. Frontend observations do not prove backend completion;
   `verify-probes` must join typed app/XPC/backend rows by `generationID`.
 
 ## Build / test commands

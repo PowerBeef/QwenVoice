@@ -1,4 +1,5 @@
 @testable import MLXAudioTTS
+import MLXAudioCore
 import XCTest
 
 final class Qwen3GenerationGateTests: XCTestCase {
@@ -110,25 +111,109 @@ final class Qwen3GenerationGateTests: XCTestCase {
         let peak = await tracker.peak
         XCTAssertEqual(peak, 1)
     }
+
+    func testHolderFailureReleasesPermitToNextWaiter() async throws {
+        enum FixtureError: Error { case failed }
+        let gate = Qwen3TTSGenerationGate()
+        do {
+            _ = try await gate.withPermit { () async throws -> Int in
+                throw FixtureError.failed
+            }
+            XCTFail("holder should throw")
+        } catch FixtureError.failed {
+            // Expected.
+        }
+
+        let value = try await gate.withPermit { 42 }
+        XCTAssertEqual(value, 42)
+    }
+
+    func testDeterministicMixedAcquireCancelThrowStress() async throws {
+        enum FixtureError: Error { case injected }
+        let gate = Qwen3TTSGenerationGate()
+        let tracker = OwnershipTracker()
+        var tasks: [Task<Void, Error>] = []
+
+        for index in 0..<240 {
+            let task = Task {
+                try await gate.withPermit {
+                    await tracker.enter()
+                    do {
+                        if index.isMultiple(of: 11) { throw FixtureError.injected }
+                        await Task.yield()
+                        await tracker.leave()
+                    } catch {
+                        await tracker.leave()
+                        throw error
+                    }
+                }
+            }
+            if index.isMultiple(of: 7) { task.cancel() }
+            tasks.append(task)
+        }
+
+        for task in tasks {
+            do { try await task.value }
+            catch is CancellationError { }
+            catch FixtureError.injected { }
+        }
+        while await tracker.currentCount != 0 { await Task.yield() }
+        let peak = await tracker.peak
+        let queued = await gate.queuedWaiterCount
+        XCTAssertEqual(peak, 1)
+        XCTAssertEqual(queued, 0)
+        _ = try await gate.withPermit { true }
+    }
 }
 
 final class Qwen3LearnedComponentWeightTests: XCTestCase {
-    func testRequestedLearnedComponentRejectsEmptyWeights() {
+    func testSpeakerComponentLoadingRejectsMissingWeights() {
         XCTAssertThrowsError(
-            try Qwen3LearnedComponentWeights.requireNonEmpty(
-                0,
-                component: "speech_tokenizer"
-            )
+            try Qwen3TTSModel.speakerEncoderWeightsForLoading([:])
         )
     }
 
-    func testRequestedLearnedComponentAcceptsVerifiedWeights() throws {
-        XCTAssertNoThrow(
-            try Qwen3LearnedComponentWeights.requireNonEmpty(
-                1,
-                component: "speaker_encoder"
+    func testSpeechTokenizerLoadingRejectsMissingWeights() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qwen3-tokenizer-empty-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = """
+        {
+          "decoder_config": {
+            "latent_dim": 8,
+            "codebook_dim": 8,
+            "codebook_size": 2048,
+            "decoder_dim": 16,
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "head_dim": 4,
+            "num_attention_heads": 2,
+            "num_hidden_layers": 1,
+            "num_key_value_heads": 2,
+            "num_quantizers": 16,
+            "num_semantic_quantizers": 1,
+            "semantic_codebook_size": 4096,
+            "upsample_rates": [2],
+            "upsampling_ratios": [2],
+            "vector_quantization_hidden_dimension": 8
+          }
+        }
+        """
+        try Data(config.utf8).write(to: directory.appendingPathComponent("config.json"))
+
+        do {
+            _ = try await Qwen3TTSModel.loadSpeechTokenizer(
+                path: directory,
+                trustPreparedCheckpoint: false,
+                includeEncoder: false,
+                skipSpeechTokenizerEval: true,
+                diagnosticEventSink: nil
             )
-        )
+            XCTFail("real speech-tokenizer loader must reject an empty weight directory")
+        } catch AudioGenerationError.invalidInput(let message) {
+            XCTAssertTrue(message.contains("speech_tokenizer"))
+        }
     }
 }
 
@@ -162,6 +247,7 @@ private actor TransferPause {
 private actor OwnershipTracker {
     private var current = 0
     private(set) var peak = 0
+    var currentCount: Int { current }
 
     func enter() {
         current += 1

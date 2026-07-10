@@ -108,7 +108,7 @@ jobs:
       - name: Validate impact-selected Computer Use attestation
         env:
           QVOICE_BASE_REF: ${{ github.event.pull_request.base.sha || 'HEAD^' }}
-        run: scripts/macos_agent_ui.sh impact --check
+        run: scripts/macos_agent_ui.sh impact --check --ci
 
       - name: Upload xcresult on failure
         if: failure()

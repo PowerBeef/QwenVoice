@@ -24,6 +24,14 @@ Inspect the requirement when uncertain:
 scripts/macos_agent_ui.sh impact
 ```
 
+Read both `requiredSuites` and `requiredRuntimeChecks`. Requirements are sets:
+
+- `quick` is satisfied by a current quick or full entry.
+- `full` requires an actual full entry.
+- `benchmark` requires an actual benchmark entry and never substitutes for full.
+- Mixed changes require every listed suite. Run each independently against the
+  same final source, build-input, and toolchain fingerprints.
+
 ## Start safely
 
 1. Read `config/macos-ui-scenarios.json` completely.
@@ -37,6 +45,13 @@ scripts/macos_agent_ui.sh impact
 
 If the run is interrupted, call `scripts/macos_agent_ui.sh cleanup` before any
 new start.
+
+Non-destructive runs snapshot debug preferences and saved voices; `finish` and
+`cleanup` restore both. A destructive run must use `--allow-destructive`; the
+harness creates a disposable `QWENVOICE_APP_SUPPORT_DIR` beneath the run
+directory and refuses production, debug-shared, or symlinked model/voice roots.
+Never execute destructive scenarios without the user's explicit request and
+the action-time Computer Use confirmations.
 
 ## Drive each scenario
 
@@ -132,3 +147,22 @@ Use `fail` or `blocked` instead of `pass` when appropriate. `finish` converts a
 requested pass to failure if probes, cleanup, or blocker or major severity fails.
 Only attest a passing, current report. Full evidence stays under
 `build/macos/agent-ui/`; the compact non-sensitive attestation is tracked.
+
+Schema-v2 attestation stores independent `quick`, `full`, and `benchmark`
+entries. Attesting one suite preserves another only when source, build-input,
+and toolchain identities match. Local validation also checks the raw SHA-256 of
+the exact executable Computer Use drove. CI rebuilds `build/Vocello.app` and
+checks source/build/toolchain identity, but intentionally does not compare its
+ad-hoc-signed executable hash with the locally signed executable.
+
+When `requiredRuntimeChecks` contains `telemetry-overhead`, run this after the
+final tracked edit and before the UI attestations:
+
+```sh
+scripts/macos_test.sh telemetry-overhead
+```
+
+It runs one warm-up plus five seeded Custom/Speed/medium warm takes in off,
+lightweight, and verbose modes. PCM must match exactly; median RTF and TTFC
+regressions are capped at 5% and 10%. The compact verdict is merged into the
+schema-v2 attestation without replacing valid suite entries.

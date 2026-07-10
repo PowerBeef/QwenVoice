@@ -798,40 +798,7 @@ actor NativePreparedCloneConditioningCache {
         _ prompt: Qwen3TTSVoiceClonePrompt,
         to directory: URL
     ) throws {
-        let fileManager = FileManager.default
-        let temporaryDirectory = directory
-            .deletingLastPathComponent()
-            .appendingPathComponent("\(directory.lastPathComponent).tmp.\(UUID().uuidString)", isDirectory: true)
-
-        if fileManager.fileExists(atPath: temporaryDirectory.path) {
-            try? fileManager.removeItem(at: temporaryDirectory)
-        }
-        defer {
-            if fileManager.fileExists(atPath: temporaryDirectory.path) {
-                try? fileManager.removeItem(at: temporaryDirectory)
-            }
-        }
-
-        try prompt.write(to: temporaryDirectory)
-        try fileManager.createDirectory(
-            at: directory.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        // Tier 3.6: Close the fileExists→moveItem TOCTOU window. If a
-        // concurrent writer lands the destination between our check and our
-        // move, `moveItem` throws `NSFileWriteFileExistsError` — fall back to
-        // `replaceItemAt` which handles that case atomically.
-        do {
-            try fileManager.moveItem(at: temporaryDirectory, to: directory)
-        } catch let error as NSError where error.code == NSFileWriteFileExistsError ||
-                                          error.domain == NSPOSIXErrorDomain && error.code == Int(EEXIST) {
-            _ = try fileManager.replaceItemAt(
-                directory,
-                withItemAt: temporaryDirectory,
-                backupItemName: nil,
-                options: []
-            )
-        }
+        try prompt.writeAtomically(to: directory)
     }
 }
 

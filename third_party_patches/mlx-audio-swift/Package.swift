@@ -31,6 +31,7 @@ let package = Package(
             name: "MLXAudioCore",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "HuggingFace", package: "swift-huggingface"),
             ],
@@ -77,6 +78,7 @@ let package = Package(
                 "MLXAudioCore",
                 "MLXAudioCodecs",
                 "MLXAudioTTS",
+                .product(name: "MLX", package: "mlx-swift"),
             ],
             path: "Tests/Qwen3RuntimeTests"
         ),

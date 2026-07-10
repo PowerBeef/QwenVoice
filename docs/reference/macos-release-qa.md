@@ -1,5 +1,8 @@
 # macOS Release QA — the desktop release gate
 
+> Before starting a release run, confirm the active acceptance state in
+> [`docs/development-progress.md`](../development-progress.md).
+
 The standing pre-release procedure for a macOS (Vocello.app / DMG) release. First executed in full
 for v2.1.0 (2026-06-09); rerun the automated gates for every release and the interactive matrix for
 releases that touched UI/engine surfaces. If this doc disagrees with the code, the code wins.
@@ -20,8 +23,9 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    ```sh
    scripts/macos_test.sh models ensure   # one-time per machine (~6.9 GB Speed trio; idempotent)
    scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime + harness
-   scripts/macos_agent_ui.sh impact      # release work normally selects full or benchmark
-   # Invoke $vocello-macos-ui-qa full (or benchmark for backend/performance changes), then:
+   scripts/macos_agent_ui.sh impact      # read requiredSuites + requiredRuntimeChecks
+   scripts/macos_test.sh telemetry-overhead  # when listed
+   # Invoke every listed $vocello-macos-ui-qa suite; full and benchmark are independent.
    scripts/macos_test.sh ui-report --suite full
    scripts/macos_test.sh gate
    ```
@@ -56,9 +60,9 @@ releases that touched UI/engine surfaces. If this doc disagrees with the code, t
    |---|---|
    | Record→enroll | record sheet (virtual mic ok: `QWENVOICE_FAKE_MIC_WAV`), <10 s gate ("Need 10 s"), ≥10 s "Use This Clip", review player, **auto-transcription fills**, enrolled row |
    | Clone handoff | voices row "Open in Cloning" hydrates source/reference/transcript |
-   | 3 modes e2e | generate per mode; streaming preview; player; no error states (`test` + `journey`) |
-   | Cancel | mid-generation cancel returns UI clean (`test`) |
-   | History replay | row appears + replay from history (`journey`) |
+   | 3 modes e2e | generate per mode; streaming preview; player; no error states (full Computer Use report + probes) |
+   | Cancel | cancellation and recovery are deterministic runtime contracts; frontend state is reviewed in the full report |
+   | History replay | row appears + replay from History in quick/full Computer Use scenarios |
    | Error paths | model-missing rows (Download CTA), output-dir fallback (delete chosen dir → orange badge + "no longer exists" caption + Reset), engine-busy readiness |
    | History CRUD | persistence across relaunch, search filter, delete + confirmation dialog |
    | Saved Voices | quality warnings, preview, use, delete |

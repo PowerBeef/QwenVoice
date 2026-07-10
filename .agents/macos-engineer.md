@@ -45,8 +45,9 @@ Before changing macOS app or XPC code, read:
   remain the source of truth for gates.
 - Use authoritative Apple documentation where current framework behavior matters and the GitHub
   integration for repository/CI context.
-- For macOS frontend work, invoke the repository skill `$vocello-macos-ui-qa` with the suite
-  selected by `scripts/macos_agent_ui.sh impact`. Computer Use is the sole UI driver; the skill's
+- For macOS frontend work, invoke the repository skill `$vocello-macos-ui-qa` for every suite
+  listed by `scripts/macos_agent_ui.sh impact`. Requirements are independent sets, not a rank.
+  Computer Use is the sole UI driver; the skill's
   structured report and typed probes are the gate evidence. Never add a macOS XCUITest target.
 
 ## Build / test commands

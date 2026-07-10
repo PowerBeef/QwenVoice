@@ -79,6 +79,56 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(decoded.timingsMS["qwen_token_loop_total"], 10)
     }
 
+    func testLegacyV1ThroughV5RowsRemainDecodable() throws {
+        for version in 1...5 {
+            let json = """
+            {
+              "schemaVersion": \(version),
+              "generationID": "legacy-\(version)",
+              "layer": "engine",
+              "processName": "fixture",
+              "processIdentifier": 1,
+              "recordedAt": "2026-07-10T00:00:00Z",
+              "stageMarks": [],
+              "timingsMS": {},
+              "counters": {},
+              "notes": {}
+            }
+            """
+            let decoded = try JSONDecoder().decode(
+                GenerationTelemetryRecord.self,
+                from: Data(json.utf8)
+            )
+            XCTAssertEqual(decoded.schemaVersion, version)
+            XCTAssertNil(decoded.frontendMetrics)
+            XCTAssertNil(decoded.transportMetrics)
+            XCTAssertNil(decoded.backendMetrics)
+            XCTAssertNil(decoded.outputMetrics)
+        }
+    }
+
+    func testTelemetryOffPlansNoSamplerSinkChunkQCOrDerivedDiagnostics() {
+        let off = NativeTelemetryWorkPlan(
+            mode: .off,
+            recorderPresent: true,
+            sampleIntervalAvailable: true
+        )
+        XCTAssertFalse(off.constructsSampler)
+        XCTAssertFalse(off.writesSink)
+        XCTAssertFalse(off.computesChunkQC)
+        XCTAssertFalse(off.computesDerivedDiagnostics)
+
+        let verbose = NativeTelemetryWorkPlan(
+            mode: .verbose,
+            recorderPresent: true,
+            sampleIntervalAvailable: true
+        )
+        XCTAssertTrue(verbose.constructsSampler)
+        XCTAssertTrue(verbose.writesSink)
+        XCTAssertTrue(verbose.computesChunkQC)
+        XCTAssertTrue(verbose.computesDerivedDiagnostics)
+    }
+
     func testTransportAdapterPreservesGapAndTerminalSemantics() {
         let metrics = GenerationTelemetryCompatibilityAdapter.transport(
             finishReason: "cancelled",

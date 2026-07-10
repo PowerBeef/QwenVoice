@@ -1,19 +1,50 @@
 {
-  "appBinarySHA256": "266f8f4dc9d1c79739ff26a0d25b902a97cc2c8de3e490fcde4402bc374065bc",
-  "buildInputFingerprint": "3806d82ead7d8fe026cad2a5c19689db63a2a7bd9fd771e4d31ffd8998789605",
-  "cleanupVerdict": "pass",
-  "completedAt": "2026-07-10T06:50:35Z",
-  "evidenceDigest": "1159831b2a73773a74a5c0b7121316654d995f822e1e098108bfa43366feb889",
-  "issues": {
-    "blocker": 0,
-    "major": 0,
-    "minor": 0,
-    "note": 0
+  "buildInputFingerprint": "77dcc0a3d8b749deba65438d633b9e7f6b7b838be2c20536cafcc99f8decd8c1",
+  "entries": {
+    "benchmark": null,
+    "full": null,
+    "quick": null
   },
-  "probeVerdict": "pass",
-  "runID": "mac-ui-benchmark-20260710-024121",
-  "schemaVersion": 1,
-  "sourceFingerprint": "23488a772fc75c6a0c7585d3e5ab21125cffebe301f5f123dee89a8c30525182",
-  "status": "pass",
-  "suite": "benchmark"
+  "runtimeChecks": {
+    "telemetry-overhead": {
+      "completedAt": "2026-07-10T17:00:06Z",
+      "evidenceDigest": "90ed5cb2fcbc6ac55a95f5ea6f227b223ae11a3261da23b79db003b1fb9b5517",
+      "status": "pass",
+      "summary": {
+        "measuredWarmTakesPerMode": 5,
+        "modes": {
+          "lightweight": {
+            "medianRTF": 1.0266666666666666,
+            "medianTTFCMS": 718.0,
+            "rtfRegressionPercent": 0.0,
+            "ttfcRegressionPercent": -6.27855371361441
+          },
+          "off": {
+            "medianRTF": 1.0266666666666666,
+            "medianTTFCMS": 766.1
+          },
+          "verbose": {
+            "medianRTF": 1.0440677966101695,
+            "medianTTFCMS": 664.9,
+            "rtfRegressionPercent": -1.6949152542372836,
+            "ttfcRegressionPercent": -13.209763738415358
+          }
+        },
+        "pcmParity": true,
+        "seed": 1264849675,
+        "thresholdsPercent": {
+          "lightweight": 5.0,
+          "verbose": 10.0
+        }
+      }
+    }
+  },
+  "schemaVersion": 2,
+  "sourceFingerprint": "3789035b5fa16b32a093ffdfe7122ab90e121b2f73349ba420070b745e7b833b",
+  "toolchainIdentity": {
+    "digest": "5580f2ac872ec4eb651104bf271797c791882623cd2c4e5fd5a4d1363f6c24e6",
+    "swift": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+    "xcode": "Xcode 26.6\nBuild version 17F113"
+  },
+  "updatedAt": "2026-07-10T17:00:07Z"
 }

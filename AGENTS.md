@@ -2,7 +2,7 @@
 
 > Durable onboarding for Codex. **Code wins over docs.** When scope, platform, or gate expectations are unclear, **ask before editing**.
 >
-> **Project map:** [`docs/project-map.html`](docs/project-map.html) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Role playbooks:** [`.agents/`](.agents/)
+> **Active progress:** [`docs/development-progress.md`](docs/development-progress.md) · **Project map:** [`docs/project-map.html`](docs/project-map.html) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Role playbooks:** [`.agents/`](.agents/)
 
 ## What this is
 
@@ -18,9 +18,17 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 
 ## Before you edit
 
-1. **Pick a role** — read [`.agents/<role>.md`](.agents/) (backend, iOS, macOS, release-qa, website).
-2. **Minimal diff** — no drive-by refactors; preserve module boundaries and stable `accessibilityIdentifier` values.
-3. **Ask** when the target platform, test gate, or commit/push expectation is ambiguous.
+1. **Resume active work** — read [`docs/development-progress.md`](docs/development-progress.md) when it exists, then confirm its checkpoint against the current checkout.
+2. **Pick a role** — read [`.agents/<role>.md`](.agents/) (backend, iOS, macOS, release-qa, website).
+3. **Minimal diff** — no drive-by refactors; preserve module boundaries and stable `accessibilityIdentifier` values.
+4. **Ask** when the target platform, test gate, or commit/push expectation is ambiguous.
+
+### After a Codex reinstall
+
+1. Restore a clean `main` from `origin/main`; never discard a dirty tree without reviewing it.
+2. Install/enable the bundled Computer Use plugin, start a new Codex task, and grant attended macOS Accessibility plus Screen & System Audio Recording permissions.
+3. Do not manually add a duplicate standalone `computer-use` MCP entry. Repository scripts and `.agents/skills/` define the project workflow; `~/.codex` remains user-scoped state.
+4. Run `scripts/macos_agent_ui.sh impact` and the required `doctor --suite … --json` checks before frontend acceptance. Full resume sequence: [`docs/development-progress.md`](docs/development-progress.md).
 
 ## Hard rules
 
@@ -32,7 +40,7 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Privacy** | No PII in tracked user-facing files. |
-| **macOS UI = Computer Use** | The repository skill `$vocello-macos-ui-qa` is the sole macOS frontend driver. Its fresh typed attestation is gate-blocking when `scripts/macos_agent_ui.sh impact` selects quick/full/benchmark. XCUITest remains iOS-only. → [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md) |
+| **macOS UI = Computer Use** | The repository skill `$vocello-macos-ui-qa` is the sole macOS frontend driver. `impact` returns independent `requiredSuites` and `requiredRuntimeChecks`: full and benchmark never substitute for one another; quick may be satisfied by quick or full. XCUITest remains iOS-only. → [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md) |
 
 `.cursor/rules/` is retained as historical Cursor configuration, not as automatically active
 Codex guidance. Every active invariant must live here, in a role playbook, or in an authoritative
@@ -56,8 +64,8 @@ reference document.
 ```sh
 scripts/macos_test.sh models ensure   # once per machine if needed
 scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime tests
-scripts/macos_agent_ui.sh impact      # none, quick, full, or benchmark
-# If UI evidence is required: invoke $vocello-macos-ui-qa <suite>
+scripts/macos_agent_ui.sh impact      # requirement sets, not a ranked suite
+# Run every required suite; run telemetry-overhead when listed as a runtime check.
 scripts/macos_test.sh gate
 ```
 
@@ -115,6 +123,7 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
 | `Tests/VocelloiOSUITests/` | Physical-device iOS XCUITest (unchanged) |
 | `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |
+| `docs/development-progress.md` | Active checkpoint, verified work, pending gates, and Codex reinstall/resume route |
 | `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
 
 Interactive feature/module map: [`docs/project-map.html`](docs/project-map.html). Deeper lifecycle
@@ -128,6 +137,7 @@ narrative: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 scripts/macos_test.sh core-test
 scripts/macos_test.sh lang-bench --subset quick
 scripts/macos_test.sh test
+scripts/macos_test.sh telemetry-overhead
 scripts/macos_test.sh ui-report --suite quick|full|benchmark
 scripts/ios_device.sh test
 scripts/ios_device.sh lang-bench --subset quick
@@ -142,7 +152,8 @@ Full lanes: [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md)
 **Scripts first** for build/test and deterministic proof. macOS frontend acceptance is the explicit
 exception: the repository Computer Use skill drives the real UI while the shell harness supplies
 typed, reproducible evidence. Before using a skill/plugin, read its instructions and keep actions
-inside the selected role's ownership boundary.
+inside the selected role's ownership boundary. User-scoped Codex configuration and plugin state
+are never repository sources of truth.
 
 | Work | Start here / use |
 | --- | --- |
@@ -159,7 +170,7 @@ inside the selected role's ownership boundary.
 
 | Doc | When |
 | --- | --- |
-| [`docs/rescue-plan-progress.md`](docs/rescue-plan-progress.md) | **Active rescue/QA** — read first |
+| [`docs/development-progress.md`](docs/development-progress.md) | **Active checkpoint** — resume state, verified work, and remaining gates |
 | [`docs/reference/ios-agent-ui-tour.md`](docs/reference/ios-agent-ui-tour.md) | mirroir driving (Appendix B) |
 | [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) | macOS Computer Use route + iOS exploratory smokes |
 | [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) | accessibilityIdentifier catalog |

@@ -737,6 +737,36 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         )
     }
 
+    /// Publishes a complete artifact directory with atomic replacement semantics.
+    /// A failed staging write never mutates the previously published artifact.
+    public func writeAtomically(
+        to directory: URL,
+        artifactMetadata: ArtifactMetadata? = nil,
+        beforePublish: (() throws -> Void)? = nil
+    ) throws {
+        let fileManager = FileManager.default
+        let parent = directory.deletingLastPathComponent()
+        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+        let staging = parent.appendingPathComponent(
+            ".\(directory.lastPathComponent).staging.\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? fileManager.removeItem(at: staging) }
+        try write(to: staging, artifactMetadata: artifactMetadata)
+        try beforePublish?()
+
+        if fileManager.fileExists(atPath: directory.path) {
+            _ = try fileManager.replaceItemAt(
+                directory,
+                withItemAt: staging,
+                backupItemName: nil,
+                options: []
+            )
+        } else {
+            try fileManager.moveItem(at: staging, to: directory)
+        }
+    }
+
     public static func load(
         from directory: URL,
         expectedMetadata: ArtifactMetadata? = nil
@@ -772,6 +802,20 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             from: speakerEmbeddingURL,
             expected: integrity.files["speaker_embedding.safetensors"]
         )
+
+        if manifest.xVectorOnlyMode, speakerEmbedding == nil {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen3 clone prompt x-vector mode requires a speaker embedding."
+            )
+        }
+        if manifest.iclMode {
+            guard refCodes != nil,
+                  manifest.refText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+                throw AudioGenerationError.modelNotInitialized(
+                    "Qwen3 clone prompt ICL mode requires reference codes and reference text."
+                )
+            }
+        }
 
         return Qwen3TTSVoiceClonePrompt(
             refCodes: refCodes,
@@ -1048,6 +1092,21 @@ actor Qwen3TTSGenerationGate {
 
     var queuedWaiterCount: Int { waiters.count }
 
+    func withPermit<T: Sendable>(
+        _ operation: @Sendable () async throws -> T
+    ) async throws -> T {
+        try await acquire()
+        do {
+            try Task.checkCancellation()
+            let result = try await operation()
+            release()
+            return result
+        } catch {
+            release()
+            throw error
+        }
+    }
+
     private func waitForTurn(id: UUID) async throws {
         try Task.checkCancellation()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1078,6 +1137,35 @@ enum Qwen3LearnedComponentWeights {
                 "Requested learned component '\(component)' has no verified weights."
             )
         }
+    }
+}
+
+struct Qwen3StreamChunkSchedule: Sendable {
+    let firstChunkSize: Int
+    let laterChunkSize: Int
+    private(set) var pendingCount = 0
+    private(set) var emittedChunkCount = 0
+    private(set) var peakPendingCount = 0
+
+    init(firstChunkSize: Int, laterChunkSize: Int) {
+        self.firstChunkSize = max(1, firstChunkSize)
+        self.laterChunkSize = max(1, laterChunkSize)
+    }
+
+    var requiredChunkSize: Int {
+        emittedChunkCount == 0 ? firstChunkSize : laterChunkSize
+    }
+
+    mutating func append() -> Bool {
+        pendingCount += 1
+        peakPendingCount = max(peakPendingCount, pendingCount)
+        return pendingCount >= requiredChunkSize
+    }
+
+    mutating func didEmit() {
+        precondition(pendingCount <= requiredChunkSize, "pending stream retention exceeded its bounded schedule")
+        pendingCount = 0
+        emittedChunkCount += 1
     }
 }
 
@@ -1955,19 +2043,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         self.speakerEncoder = speakerEncoder
     }
 
-    private func withGenerationGate<T>(
-        _ operation: () async throws -> T
+    private func withGenerationGate<T: Sendable>(
+        _ operation: @Sendable () async throws -> T
     ) async throws -> T {
-        try await generationGate.acquire()
-        do {
-            try Task.checkCancellation()
-            let result = try await operation()
-            await generationGate.release()
-            return result
-        } catch {
-            await generationGate.release()
-            throw error
-        }
+        try await generationGate.withPermit(operation)
     }
 
     // MARK: - SpeechGenerationModel protocol
@@ -2665,6 +2744,10 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             baseChunkSize: streamingChunkSize,
             customVoiceProfile: customVoiceProfile
         )
+        var streamChunkSchedule = Qwen3StreamChunkSchedule(
+            firstChunkSize: streamingChunkSize,
+            laterChunkSize: postFirstStreamingChunkSize
+        )
         if isStreaming {
             pendingStreamCodes.reserveCapacity(max(streamingChunkSize, postFirstStreamingChunkSize))
         }
@@ -2722,7 +2805,6 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var cloneGenerationStepsBeforeFirstChunk: Int?
         var cloneFirstChunkDecoderTokens: Int?
         var generationEndReason = "token_cap"
-        var emittedStreamChunk = false
         var cacheClearCount = 0
         func qwenTokenLoopUnattributedMS() -> Int {
             let attributedMS = talkerForwardTotalMS
@@ -3029,15 +3111,14 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             generatedCodeCount += 1
             if isStreaming {
                 pendingStreamCodes.append(allCodes)
+                _ = streamChunkSchedule.append()
             } else {
                 generatedCodes.append(allCodes)
             }
 
             // Streaming: decode and yield audio chunks during generation
             if let onAudioChunk {
-                let requiredStreamChunkSize = emittedStreamChunk
-                    ? postFirstStreamingChunkSize
-                    : streamingChunkSize
+                let requiredStreamChunkSize = streamChunkSchedule.requiredChunkSize
                 if pendingStreamCodes.count >= requiredStreamChunkSize {
                     try Task.checkCancellation()
                     let codesChunk = stacked(pendingStreamCodes, axis: 1)
@@ -3098,6 +3179,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     }
 
                     pendingStreamCodes.removeAll(keepingCapacity: true)
+                    streamChunkSchedule.didEmit()
                     if let onAudioChunkTimings {
                         let kvDiagnostics = makeChunkKVCacheDiagnostics()
                         let chunkMimiBreakdown = mimiDecoderBreakdownTotal.subtracting(lastChunkMimiDecoderBreakdown)
@@ -3126,7 +3208,6 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     }
                     try Task.checkCancellation()
                     onAudioChunk(audioChunk)
-                    emittedStreamChunk = true
                     if Qwen3StreamingMemoryTuning.clearCacheOnStreamChunkEmit {
                         clearGenerationCache()
                     }
@@ -3282,7 +3363,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                 }
                 try Task.checkCancellation()
                 onAudioChunk(audioChunk)
-                emittedStreamChunk = true
+                streamChunkSchedule.didEmit()
                 // Capture final KV-cache footprint before clearing; when the
                 // chunk-timing callback is not registered this is the only
                 // update the peak trackers get.
@@ -4579,13 +4660,9 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         ]
 
         if let speakerEncoder, shouldLoadSpeakerEncoder {
-            var speakerWeights = Qwen3TTSSpeakerEncoder.sanitize(weights: talkerSourceWeights)
+            var speakerWeights = try speakerEncoderWeightsForLoading(talkerSourceWeights)
             talkerSourceWeights.removeAll(keepingCapacity: false)
             Memory.clearCache()
-            try Qwen3LearnedComponentWeights.requireNonEmpty(
-                speakerWeights.count,
-                component: "speaker_encoder"
-            )
             var speakerPairs = speakerWeights.map { ($0.key, $0.value) }
             let speakerUpdateStartedAt = ContinuousClock.now
             try speakerEncoder.update(
@@ -5021,7 +5098,18 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         return mergedWeights
     }
 
-    private static func loadSpeechTokenizer(
+    static func speakerEncoderWeightsForLoading(
+        _ sourceWeights: [String: MLXArray]
+    ) throws -> [String: MLXArray] {
+        let weights = Qwen3TTSSpeakerEncoder.sanitize(weights: sourceWeights)
+        try Qwen3LearnedComponentWeights.requireNonEmpty(
+            weights.count,
+            component: "speaker_encoder"
+        )
+        return weights
+    }
+
+    static func loadSpeechTokenizer(
         path: URL,
         trustPreparedCheckpoint: Bool,
         includeEncoder: Bool,

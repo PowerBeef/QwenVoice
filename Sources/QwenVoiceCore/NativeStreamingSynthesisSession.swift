@@ -906,10 +906,17 @@ private struct StreamingExecutionContext: Sendable {
         let outputURL = URL(fileURLWithPath: request.outputPath)
         let sampleRate = model.sampleRate
         let telemetryMode = NativeTelemetryMode.current()
-        let telemetryActive = telemetryRecorder != nil
+        let telemetrySampleInterval = telemetryMode.sampleIntervalMS(for: memoryPolicy.deviceClass)
+        let telemetryWorkPlan = NativeTelemetryWorkPlan(
+            mode: telemetryMode,
+            recorderPresent: telemetryRecorder != nil,
+            sampleIntervalAvailable: telemetrySampleInterval != nil
+        )
+        let telemetryActive = telemetryWorkPlan.computesDerivedDiagnostics
         let telemetrySampler: NativeTelemetrySampler? = {
-            guard let clock = telemetryRecorder?.clock,
-                  let sampleIntervalMS = telemetryMode.sampleIntervalMS(for: memoryPolicy.deviceClass)
+            guard telemetryWorkPlan.constructsSampler,
+                  let clock = telemetryRecorder?.clock,
+                  let sampleIntervalMS = telemetrySampleInterval
             else { return nil }
             return NativeTelemetrySampler(
                 // Share the stage recorder's clock so samples and marks join on both
@@ -1084,12 +1091,12 @@ private struct StreamingExecutionContext: Sendable {
             derivedMetrics: derivedMetrics,
             mlxMemoryByStage: telemetryActive ? mlxMemorySnapshots : nil,
             chunkTimeline: nil,
-            audioQC: Self.makeAudioQCReport(
+            audioQC: telemetryActive ? Self.makeAudioQCReport(
                 metrics: scratchBuffer.limiterMetrics,
                 sampleRate: sampleRate,
                 durationSeconds: durationSeconds,
                 expectedPauseCount: Self.expectedPauseCount(in: request.text)
-            ),
+            ) : nil,
             rawSamples: telemetryMode.persistsRawSamples ? rawSamples : nil
         )
 
@@ -1213,9 +1220,16 @@ private struct StreamingExecutionContext: Sendable {
         let sampleRate = model.sampleRate
         let telemetryMode = NativeTelemetryMode.current()
         let telemetryClock = telemetryRecorder?.clock
+        let telemetrySampleInterval = telemetryMode.sampleIntervalMS(for: memoryPolicy.deviceClass)
+        let telemetryWorkPlan = NativeTelemetryWorkPlan(
+            mode: telemetryMode,
+            recorderPresent: telemetryRecorder != nil,
+            sampleIntervalAvailable: telemetrySampleInterval != nil
+        )
         let telemetrySampler: NativeTelemetrySampler? = {
-            guard let clock = telemetryClock,
-                  let sampleIntervalMS = telemetryMode.sampleIntervalMS(for: memoryPolicy.deviceClass)
+            guard telemetryWorkPlan.constructsSampler,
+                  let clock = telemetryClock,
+                  let sampleIntervalMS = telemetrySampleInterval
             else { return nil }
             return NativeTelemetrySampler(
                 // Share the stage recorder's clock so samples and marks join on both
@@ -1226,8 +1240,8 @@ private struct StreamingExecutionContext: Sendable {
         }()
         // Per-chunk decode timeline + final stats. Only populated when telemetry is
         // on (recorder non-nil), so there is zero per-chunk cost when gated off.
-        let telemetryActive = telemetryRecorder != nil
-        let chunkQCActive = telemetryMode == .verbose
+        let telemetryActive = telemetryWorkPlan.computesDerivedDiagnostics
+        let chunkQCActive = telemetryWorkPlan.computesChunkQC
         var chunkTimeline: [GenerationChunkTelemetry] = []
         var chunkQCReports: [AudioQCChunkReport] = []
         var pendingChunkTimings: ChunkSubstageTimings?
@@ -1523,13 +1537,13 @@ private struct StreamingExecutionContext: Sendable {
             derivedMetrics: derivedMetrics,
             mlxMemoryByStage: telemetryActive ? mlxMemorySnapshots : nil,
             chunkTimeline: chunkTimeline.isEmpty ? nil : chunkTimeline,
-            audioQC: Self.makeAudioQCReport(
+            audioQC: telemetryActive ? Self.makeAudioQCReport(
                 metrics: scratchBuffer.limiterMetrics,
                 sampleRate: sampleRate,
                 durationSeconds: durationSeconds,
                 expectedPauseCount: Self.expectedPauseCount(in: request.text),
                 chunkQC: chunkQCActive && !chunkQCReports.isEmpty ? chunkQCReports : nil
-            ),
+            ) : nil,
             rawSamples: telemetryMode.persistsRawSamples ? rawSamples : nil
         )
 

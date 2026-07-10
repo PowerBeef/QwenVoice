@@ -509,16 +509,20 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                                 appSupportDirectory: appSupportDirectory
                             )
                         }
-                        transport.gapCount += 1
                     }
                     expectedChunkSequence = max(expectedChunkSequence, sequence)
                 }
                 // Accumulate transport telemetry; flushes the engine-service record
                 // on terminal events (.completed/.failed) and on generation switch.
-                transport.observe(
-                    event: event,
-                    appSupportDirectory: appSupportDirectory
-                )
+                if let record = transport.observe(event: event) {
+                    Task.detached(priority: .background) {
+                        await GenerationTelemetryJSONLSink.shared.write(
+                            record: record,
+                            appSupportDirectory: appSupportDirectory,
+                            subdirectory: "engine-service"
+                        )
+                    }
+                }
                 let stripped = event.withoutPreviewAudioPayload()
                 self.publish(.generationChunk(event))
                 await MainActor.run {
@@ -746,155 +750,5 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             usedStreaming: false,
             finishReason: result.finishReason
         )
-    }
-}
-
-/// Accumulates middle-layer (XPC) transport telemetry for one generation as its
-/// events stream through the host's forwarding drain, then flushes the
-/// engine-service row of the unified telemetry artifact on the terminal event.
-///
-/// Only integer/Double arithmetic runs on the hot chunk-delivery path; the JSONL
-/// write is dispatched off-loop via `Task.detached`, so the unbounded `events`
-/// stream is never blocked on file I/O (preserves the no-drop streaming invariant).
-private struct EngineServiceTransportAccumulator {
-    private let sessionIdentity = UUID().uuidString
-    private var generationID: UUID?
-    private var mode: String?
-    private var firstChunkUptime: Double?
-    private var chunksForwarded = 0
-    private var firstChunkSequence: UInt64?
-    private var lastChunkSequence: UInt64?
-    private var duplicateChunks = 0
-    private var outOfOrderChunks = 0
-    /// Incremented by the drain's existing gap detector for the current generation.
-    var gapCount = 0
-
-    mutating func observe(event: GenerationEvent, appSupportDirectory: URL?) {
-        switch event {
-        case .chunk(let chunk):
-            if chunk.generationID != generationID {
-                // New generation: flush the prior one (covers a missing terminal
-                // event, e.g. an abrupt cancellation) before starting fresh.
-                flush(
-                    finishReason: "superseded",
-                    usedStreaming: true,
-                    notes: [:],
-                    appSupportDirectory: appSupportDirectory
-                )
-                generationID = chunk.generationID
-                mode = chunk.mode
-                firstChunkUptime = ProcessInfo.processInfo.systemUptime
-                chunksForwarded = 0
-                firstChunkSequence = nil
-                lastChunkSequence = nil
-                duplicateChunks = 0
-                outOfOrderChunks = 0
-                gapCount = 0
-            }
-            if let sequence = chunk.chunkSequence {
-                if firstChunkSequence == nil { firstChunkSequence = sequence }
-                if let previous = lastChunkSequence {
-                    if sequence == previous { duplicateChunks += 1 }
-                    if sequence < previous { outOfOrderChunks += 1 }
-                }
-                lastChunkSequence = max(lastChunkSequence ?? sequence, sequence)
-            }
-            chunksForwarded += 1
-        case .completed(let result):
-            flush(
-                finishReason: result.finishReason?.rawValue ?? "completed",
-                usedStreaming: result.usedStreaming,
-                notes: [:],
-                appSupportDirectory: appSupportDirectory
-            )
-            reset()
-        case .failed(let message):
-            flush(
-                finishReason: "failed",
-                usedStreaming: true,
-                notes: TelemetryGate.resolvedEnabled
-                    ? GenerationTelemetryPrivacy.failureNotes(message: message)
-                    : [:],
-                appSupportDirectory: appSupportDirectory
-            )
-            reset()
-        case .progress:
-            break
-        }
-    }
-
-    private mutating func reset() {
-        generationID = nil
-        mode = nil
-        firstChunkUptime = nil
-        chunksForwarded = 0
-        firstChunkSequence = nil
-        lastChunkSequence = nil
-        duplicateChunks = 0
-        outOfOrderChunks = 0
-        gapCount = 0
-    }
-
-    private func flush(
-        finishReason: String,
-        usedStreaming: Bool,
-        notes: [String: String],
-        appSupportDirectory: URL?
-    ) {
-        guard TelemetryGate.resolvedEnabled else { return }
-        guard let generationID, chunksForwarded > 0 else { return }
-        var timingsMS: [String: Int] = [:]
-        var stageMarks: [NativeTelemetryStageMark] = []
-        if let firstChunkUptime {
-            let spanSeconds = ProcessInfo.processInfo.systemUptime - firstChunkUptime
-            let spanMS = Int(spanSeconds * 1_000)
-            timingsMS["chunkForwardingSpanMS"] = max(0, spanMS)
-            let spanNS = UInt64(spanSeconds * 1_000_000_000)
-            timingsMS["chunkForwardingSpanNS"] = Int(min(UInt64(Int.max), spanNS))
-            stageMarks.append(NativeTelemetryStageMark(tMS: 0, stage: "firstChunk"))
-        }
-        let mergedNotes = notes
-            .merging(currentTaskQOSNotes()) { current, _ in current }
-            .merging(BenchRunContext.telemetryNotes()) { current, _ in current }
-        let record = GenerationTelemetryRecord(
-            generationID: generationID.uuidString,
-            layer: .engineService,
-            recordedAt: ISO8601DateFormatter().string(from: Date()),
-            mode: mode,
-            usedStreaming: usedStreaming,
-            finishReason: finishReason,
-            stageMarks: stageMarks,
-            timingsMS: timingsMS,
-            counters: [
-                "chunksForwarded": chunksForwarded,
-                "chunkGaps": gapCount,
-                "duplicateChunks": duplicateChunks,
-                "outOfOrderChunks": outOfOrderChunks,
-            ],
-            notes: mergedNotes,
-            transportMetrics: EngineTransportMetrics(
-                finishReason: GenerationTerminalReason(compatibilityValue: finishReason),
-                firstChunkToTerminalMS: timingsMS["chunkForwardingSpanMS"],
-                counters: EngineTransportCounters(
-                    chunksForwarded: chunksForwarded,
-                    chunkGaps: gapCount,
-                    duplicateChunks: duplicateChunks,
-                    outOfOrderChunks: outOfOrderChunks
-                ),
-                cancellation: GenerationTerminalReason(compatibilityValue: finishReason) == .cancelled
-                    ? .completed : .notRequested,
-                requestAccepted: true,
-                sessionIdentity: sessionIdentity,
-                firstChunkSequence: firstChunkSequence,
-                lastChunkSequence: lastChunkSequence
-            )
-        )
-        Task.detached(priority: .background) {
-            await GenerationTelemetryJSONLSink.shared.write(
-                record: record,
-                appSupportDirectory: appSupportDirectory,
-                subdirectory: "engine-service"
-            )
-        }
     }
 }

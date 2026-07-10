@@ -64,6 +64,21 @@ engine via environment — it is carried on the handshake, where the host calls
 | `lightweight` (default when gate on) | `lightweight` / `light` | device‑tiered cadence | no |
 | `verbose` | `verbose` / `full` / `deep` | device‑tiered cadence | **yes** (sidecar) |
 
+`NativeTelemetryWorkPlan` makes the off contract explicit: no sampler, sink,
+per-chunk QC, or expensive derived diagnostics are constructed. The deterministic
+overhead lane verifies that optimization and waveform parity:
+
+```sh
+scripts/macos_test.sh telemetry-overhead
+```
+
+It applies one fixed `vocello bench --seed`, one warm-up and five measured
+Custom/Speed/medium warm takes per mode. PCM SHA-256 must match across off,
+lightweight, and verbose. Median RTF and TTFC regression limits are 5% for
+lightweight and 10% for verbose. Raw evidence stays under `build/macos/`; the
+compact verdict enters `qa/macos-ui-attestation.json` as runtime check
+`telemetry-overhead`.
+
 Typical backend‑optimization invocation:
 
 ```sh
@@ -402,7 +417,8 @@ dominant `timingsMS` substage across your before/after.
 > One‑command flags fold in the manual workflow below: `--label "<note>"` stamps the summary,
 > `--ledger` appends a row to `benchmarks/HISTORY.md`, `--force-class 8gb|16gb|high|iphone` forces a
 > constrained tier on any Mac (the `QWENVOICE_FORCE_MEMORY_CLASS` knob), and `--telemetry verbose`
-> writes the raw per‑sample sidecars. Full CLI reference: [`cli.md`](cli.md). The computer‑use UI
+> writes the raw per‑sample sidecars. `--seed N` applies the same deterministic sampling seed to
+> every take. Full CLI reference: [`cli.md`](cli.md). The computer‑use UI
 > procedure below is retained for manual/visual runs only.
 
 A repeatable, accurate sweep over **mode × model variant × cold/warm**. The `vocello` CLI above is the

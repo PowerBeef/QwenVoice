@@ -113,7 +113,7 @@ graph.)
 | Layer | macOS | iOS | Pre-merge gate? |
 | --- | --- | --- | --- |
 | **Gate** | `macos_test.sh gate` | `ios_device.sh gate` | Yes |
-| **UI regression** | `$vocello-macos-ui-qa` Computer Use + typed attestation | XCUITest test/bench-ui/review | Impact-selected on macOS; used by iOS gate |
+| **UI regression** | `$vocello-macos-ui-qa` Computer Use + independent schema-v2 attestations | XCUITest test/bench-ui/review | Requirement-set selected on macOS; used by iOS gate |
 | **Middle/backend deterministic** | Core + XPC integration + `Qwen3RuntimeTests` | Core/on-device engine lanes | Yes on macOS |
 | **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` autorun | Optional in gate |
 | **Agent exploratory** | Same Computer Use operator, but only structured quick/full/benchmark reports count | mirroir MCP + tour doc | macOS reports can gate; iOS exploration cannot |
@@ -755,6 +755,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `XPCNativeEngineClient` | macOS XPC client conforming to `MacTTSEngine`; `XPCNativeEngineCoordinator` manages the connection. |
 | `EngineCommand` | The XPC command enum carried inside the single `perform(_:withReply:)` envelope. |
 | `GenerationChunkBroker` | Combine bridge delivering streaming events to SwiftUI (macOS). |
+| `EngineServiceTransportAccumulator` | Pure bounded XPC probe state: accepted chunks, gaps/duplicates/reordering, cancellation, and single terminal record. |
 | `ContractBackedModelRegistry` | Loads `qwenvoice_contract.json` and expands it per platform. |
 | `GenerationRequest` / `Payload` | The generation ask + its mode-specific payload (custom/design/clone). |
 | `CloneReference` | Reference audio + transcript + language for voice cloning. |
@@ -764,6 +765,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
+- [`development-progress.md`](development-progress.md) — active checkpoint: implemented work, verified gates, pending Computer Use evidence, and Codex resume route.
 - [`project-map.html`](project-map.html) — canonical interactive project map: product features, build graph, runtime flows, source ownership, dependencies, contracts, and Codex routes.
 - [`AGENTS.md`](../AGENTS.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.

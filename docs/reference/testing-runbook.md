@@ -15,6 +15,7 @@
 > Subsystem deep-dives: [`ios-device-testing.md`](ios-device-testing.md),
 > [`macos-testing.md`](macos-testing.md), [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md),
 > [`ui-test-surface.md`](ui-test-surface.md) (generated identifier catalog).
+> Active implementation and acceptance status: [`development-progress.md`](../development-progress.md).
 
 ## 1. The model: on-device iOS + macOS smoke
 

@@ -30,8 +30,7 @@ BUILD_ROOT = ROOT / "build" / "macos" / "agent-ui"
 APP = ROOT / "build" / "Vocello.app"
 APP_BINARY = APP / "Contents" / "MacOS" / "Vocello"
 DEBUG_ROOT = Path.home() / "Library" / "Application Support" / "QwenVoice-Debug"
-DB = DEBUG_ROOT / "history.sqlite"
-DIAGNOSTICS = DEBUG_ROOT / "diagnostics"
+PRODUCTION_ROOT = Path.home() / "Library" / "Application Support" / "QwenVoice"
 SCENARIOS = ROOT / "config" / "macos-ui-scenarios.json"
 IMPACT = ROOT / "config" / "macos-test-impact.json"
 RISK = ROOT / "config" / "backend-risk-spine.json"
@@ -43,7 +42,13 @@ DEBUG_KEY = "QwenVoice.DebugModeEnabled"
 APP_PROCESS = "Vocello"
 SERVICE_PROCESS = "QwenVoiceEngineService"
 SEVERITIES = ("blocker", "major", "minor", "note")
-SUITE_RANK = {"none": 0, "quick": 1, "full": 2, "benchmark": 3, "destructive": 0}
+SUITES = ("quick", "full", "benchmark", "destructive")
+ATTESTABLE_SUITES = ("quick", "full", "benchmark")
+SUITE_SATISFIERS = {
+    "quick": {"quick", "full"},
+    "full": {"full"},
+    "benchmark": {"benchmark"},
+}
 
 
 class HarnessError(RuntimeError):
@@ -128,16 +133,22 @@ def cleanup_processes() -> None:
     clear_debug_flag()
 
 
-def launch_exact_app(run_id: str, *, force_cold: bool = False) -> int:
+def exact_launch_command(run_id: str, app_support_root: Path, *, force_cold: bool = False) -> list[str]:
     launch = [
         "/usr/bin/open", "-n", "--env", "QWENVOICE_DEBUG=1",
         "--env", "QWENVOICE_NATIVE_TELEMETRY_MODE=verbose",
+        "--env", f"QWENVOICE_APP_SUPPORT_DIR={app_support_root}",
         "--env", f"QVOICE_MAC_BENCH_RUN_ID={run_id}",
         "--env", f"QVOICE_MAC_BENCH_LABEL={run_id}",
     ]
     if force_cold:
         launch.extend(["--env", "QWENVOICE_BENCH_FORCE_COLD=1"])
     launch.append(str(APP))
+    return launch
+
+
+def launch_exact_app(run_id: str, app_support_root: Path, *, force_cold: bool = False) -> int:
+    launch = exact_launch_command(run_id, app_support_root, force_cold=force_cold)
     run(launch)
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline and len(process_ids(APP_PROCESS)) != 1:
@@ -257,6 +268,37 @@ def sha256(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def toolchain_identity() -> dict:
+    values = {
+        "xcode": run(["/usr/bin/xcodebuild", "-version"]).stdout.strip(),
+        "swift": run(["/usr/bin/xcrun", "swift", "--version"]).stdout.strip(),
+    }
+    values["digest"] = hashlib.sha256(
+        json.dumps(values, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return values
+
+
+def executable_identity() -> dict:
+    return {
+        "path": str(APP),
+        "binaryPath": str(APP_BINARY),
+        "sha256": sha256(APP_BINARY),
+    }
+
+
+def report_support_root(report: dict) -> Path:
+    return Path((report.get("environment") or {}).get("appSupportRoot", DEBUG_ROOT))
+
+
+def report_db(report: dict) -> Path:
+    return report_support_root(report) / "history.sqlite"
+
+
+def report_diagnostics(report: dict) -> Path:
+    return report_support_root(report) / "diagnostics"
+
+
 def current_run_dir(explicit: str | None = None) -> Path:
     if explicit:
         candidate = Path(explicit)
@@ -279,11 +321,33 @@ def store_run(directory: Path, report: dict) -> None:
     write_json(directory / "run.json", report)
 
 
+def test_reference_exists(reference: str) -> bool:
+    parts = reference.split("/")
+    if len(parts) != 3:
+        return False
+    target, suite, test = parts
+    roots = {
+        "VocelloCoreTests": ROOT / "Tests" / "VocelloCoreTests",
+        "VocelloEngineIntegrationTests": ROOT / "Tests" / "VocelloEngineIntegrationTests",
+        "Qwen3RuntimeTests": ROOT / "third_party_patches" / "mlx-audio-swift" / "Tests" / "Qwen3RuntimeTests",
+        "HarnessTests": ROOT / "scripts",
+    }
+    root = roots.get(target)
+    if root is None or not root.is_dir():
+        return False
+    suffix = "*.py" if target == "HarnessTests" else "*.swift"
+    for path in root.rglob(suffix):
+        text = path.read_text(errors="ignore")
+        if suite in text and re.search(rf"\b(?:func\s+)?{re.escape(test)}\b", text):
+            return True
+    return False
+
+
 def validate_config() -> list[str]:
     errors: list[str] = []
     scenarios = read_json(SCENARIOS)
-    if scenarios.get("schemaVersion") != 1:
-        errors.append("macos-ui-scenarios schemaVersion must be 1")
+    if scenarios.get("schemaVersion") != 2:
+        errors.append("macos-ui-scenarios schemaVersion must be 2")
     scenario_ids = {item.get("id") for item in scenarios.get("scenarios", [])}
     if None in scenario_ids or len(scenario_ids) != len(scenarios.get("scenarios", [])):
         errors.append("scenario IDs must be present and unique")
@@ -291,16 +355,23 @@ def validate_config() -> list[str]:
         missing = set(suite.get("includes", [])) - scenario_ids
         if missing:
             errors.append(f"suite {name} references missing scenarios: {sorted(missing)}")
+        if name == "destructive" and not suite.get("requiresDisposableAppSupport"):
+            errors.append("destructive suite must require disposable app support")
     impact = read_json(IMPACT)
-    if impact.get("schemaVersion") != 1:
-        errors.append("macos-test-impact schemaVersion must be 1")
+    if impact.get("schemaVersion") != 2:
+        errors.append("macos-test-impact schemaVersion must be 2")
     risk = read_json(RISK)
-    if risk.get("schemaVersion") != 1:
-        errors.append("backend-risk-spine schemaVersion must be 1")
+    if risk.get("schemaVersion") != 2:
+        errors.append("backend-risk-spine schemaVersion must be 2")
     for item in risk.get("items", []):
         source = item.get("source")
         if not source or not (ROOT / source).exists():
             errors.append(f"risk item {item.get('id')} source missing: {source}")
+        missing_tests = [reference for reference in item.get("tests", []) if not test_reference_exists(reference)]
+        if missing_tests:
+            errors.append(f"risk item {item.get('id')} has unresolved tests: {missing_tests}")
+        if item.get("status") == "implemented" and item.get("remaining"):
+            errors.append(f"risk item {item.get('id')} is implemented but remaining is non-empty")
 
     source_text = "\n".join(
         path.read_text(errors="ignore")
@@ -311,10 +382,21 @@ def validate_config() -> list[str]:
         if prefix.endswith("_")
     }
     for scenario in scenarios.get("scenarios", []):
+        if "restorationPolicy" not in scenario:
+            errors.append(f"scenario {scenario.get('id')} is missing restorationPolicy")
+        if "timeoutSeconds" not in scenario:
+            errors.append(f"scenario {scenario.get('id')} is missing timeoutSeconds")
+        if "requiresActionTimeConfirmation" not in scenario:
+            errors.append(f"scenario {scenario.get('id')} is missing requiresActionTimeConfirmation")
         for step in scenario.get("steps", []):
-            target = step.get("target")
+            target = step.get("target") or step.get("targetPrefix")
+            for required in ("semanticResult", "deterministicPostcondition", "restorationPolicy", "timeoutSeconds", "confirmation"):
+                if required not in step:
+                    errors.append(f"scenario {scenario.get('id')} step {step.get('id')} is missing {required}")
+            if not step.get("id"):
+                errors.append(f"scenario {scenario.get('id')} contains a step without an id")
             target_is_dynamic = bool(target and any(target.startswith(prefix) for prefix in dynamic_prefixes))
-            if target and target not in {"system-file-panel"} and target not in source_text and not target_is_dynamic:
+            if target and target not in {"system-file-panel", "harness:xpc-kill", "harness:verify-probes"} and target not in source_text and not target_is_dynamic:
                 errors.append(f"scenario {scenario['id']} target not found in source: {target}")
     return errors
 
@@ -344,24 +426,85 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         raise HarnessError("doctor found blocking problems")
 
 
-def reset_runtime_state() -> None:
-    if DB.is_file():
+def reset_runtime_state(root: Path) -> None:
+    database = root / "history.sqlite"
+    diagnostics = root / "diagnostics"
+    if database.is_file():
         try:
-            connection = sqlite3.connect(DB)
+            connection = sqlite3.connect(database)
             connection.execute("DELETE FROM generations")
             connection.commit()
             connection.close()
         except sqlite3.Error as exc:
             raise HarnessError(f"could not clear debug history: {exc}") from exc
-    outputs = DEBUG_ROOT / "outputs"
+    outputs = root / "outputs"
     if outputs.is_dir():
         for path in outputs.rglob("*"):
             if path.is_file() or path.is_symlink():
                 path.unlink(missing_ok=True)
-    if DIAGNOSTICS.is_dir():
-        shutil.rmtree(DIAGNOSTICS)
+    if diagnostics.is_dir():
+        shutil.rmtree(diagnostics)
     for subdirectory in ("engine", "engine-service", "app"):
-        (DIAGNOSTICS / subdirectory).mkdir(parents=True, exist_ok=True)
+        (diagnostics / subdirectory).mkdir(parents=True, exist_ok=True)
+
+
+def snapshot_state(directory: Path, root: Path) -> dict:
+    state_dir = directory / "state-snapshot"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    preferences = state_dir / "preferences.plist"
+    exported = run(["/usr/bin/defaults", "export", BUNDLE_ID, str(preferences)], check=False)
+    if exported.returncode != 0:
+        preferences.unlink(missing_ok=True)
+    voices = root / "voices"
+    voices_snapshot = state_dir / "voices"
+    if voices.is_dir():
+        shutil.copytree(voices, voices_snapshot, symlinks=True)
+    return {
+        "preferencesExisted": preferences.is_file(),
+        "preferencesPath": str(preferences),
+        "voicesExisted": voices.is_dir(),
+        "voicesPath": str(voices_snapshot),
+        "restored": False,
+    }
+
+
+def restore_state(report: dict) -> None:
+    if "stateSnapshot" not in report:
+        return
+    snapshot = report.get("stateSnapshot") or {}
+    if snapshot.get("restored"):
+        return
+    preferences = Path(snapshot.get("preferencesPath", ""))
+    if snapshot.get("preferencesExisted") and preferences.is_file():
+        run(["/usr/bin/defaults", "import", BUNDLE_ID, str(preferences)], check=False)
+    else:
+        run(["/usr/bin/defaults", "delete", BUNDLE_ID], check=False)
+    root = report_support_root(report)
+    voices = root / "voices"
+    voices_snapshot = Path(snapshot.get("voicesPath", ""))
+    if voices.is_dir() or voices.is_symlink():
+        if voices.is_symlink() or voices.is_file():
+            voices.unlink(missing_ok=True)
+        else:
+            shutil.rmtree(voices)
+    if snapshot.get("voicesExisted") and voices_snapshot.is_dir():
+        shutil.copytree(voices_snapshot, voices, symlinks=True)
+    snapshot["restored"] = True
+    report["stateSnapshot"] = snapshot
+
+
+def destructive_root(directory: Path) -> Path:
+    root = (directory / "disposable-app-support").resolve()
+    forbidden = {PRODUCTION_ROOT.resolve(), DEBUG_ROOT.resolve()}
+    if root in forbidden or not root.is_relative_to(directory.resolve()):
+        raise HarnessError(f"destructive app-support root is unsafe: {root}")
+    root.mkdir(parents=True, exist_ok=False)
+    for name in ("models", "voices"):
+        candidate = root / name
+        candidate.mkdir()
+        if candidate.is_symlink() or candidate.resolve() in forbidden:
+            raise HarnessError(f"destructive {name} root is not disposable: {candidate}")
+    return root
 
 
 def cmd_start(args: argparse.Namespace) -> None:
@@ -374,15 +517,17 @@ def cmd_start(args: argparse.Namespace) -> None:
         raise HarnessError("invalid QA contracts: " + "; ".join(errors))
 
     cleanup_processes()
-    reset_runtime_state()
-    set_debug_flag()
     run_id = f"mac-ui-{args.suite}-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     directory = BUILD_ROOT / run_id
     directory.mkdir(parents=True, exist_ok=False)
     (directory / "screenshots").mkdir()
+    root = destructive_root(directory) if args.suite == "destructive" else DEBUG_ROOT
+    state_snapshot = snapshot_state(directory, root)
+    reset_runtime_state(root)
+    set_debug_flag()
     started = utc_now()
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "runID": run_id,
         "suite": args.suite,
         "status": "running",
@@ -393,10 +538,15 @@ def cmd_start(args: argparse.Namespace) -> None:
         "buildInputFingerprint": fingerprint(build_inputs_only=True),
         "appPath": str(APP),
         "appBinarySHA256": sha256(APP_BINARY),
+        "executableIdentity": executable_identity(),
         "environment": {
             "os": run(["/usr/bin/sw_vers", "-productVersion"]).stdout.strip(),
             "architecture": run(["/usr/bin/uname", "-m"]).stdout.strip(),
+            "appSupportRoot": str(root),
+            "disposableAppSupport": args.suite == "destructive",
+            "toolchain": toolchain_identity(),
         },
+        "stateSnapshot": state_snapshot,
         "scenarios": {},
         "issues": [],
         "deterministicAssertions": [],
@@ -416,8 +566,9 @@ def cmd_start(args: argparse.Namespace) -> None:
     append_jsonl(directory / "events.jsonl", {"timestamp": started, "event": "run-started", "suite": args.suite})
 
     try:
-        report["appPID"] = launch_exact_app(run_id)
+        report["appPID"] = launch_exact_app(run_id, root)
     except HarnessError:
+        restore_state(report)
         report["status"] = "blocked"
         report["cleanupVerdict"] = "pass"
         store_run(directory, report)
@@ -462,7 +613,9 @@ def cmd_benchmark_take(args: argparse.Namespace) -> None:
             terminate_process(APP_PROCESS)
             terminate_process(SERVICE_PROCESS)
             set_debug_flag()
-            report["appPID"] = launch_exact_app(report["runID"], force_cold=True)
+            report["appPID"] = launch_exact_app(
+                report["runID"], report_support_root(report), force_cold=True
+            )
         elif len(process_ids(APP_PROCESS)) != 1:
             raise HarnessError("warm benchmark take requires the existing exact-path app process")
         cell = f"{take['mode']}/{take['length']}/{take['warmState']}#{take['repetition']}"
@@ -562,10 +715,10 @@ def parse_since(value: str) -> dt.datetime:
         raise HarnessError("--since must be YYYY-MM-DD HH:MM:SS.mmm from the now command") from exc
 
 
-def latest_history(since: dt.datetime, expected_mode: str | None = None, expected_text: str | None = None) -> dict | None:
-    if not DB.is_file():
+def latest_history(database: Path, since: dt.datetime, expected_mode: str | None = None, expected_text: str | None = None) -> dict | None:
+    if not database.is_file():
         return None
-    connection = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     rows = connection.execute(
         "SELECT id, text, mode, modelTier, voice, audioPath, duration, createdAt FROM generations ORDER BY createdAt DESC"
@@ -598,7 +751,7 @@ def wav_metadata(path: Path) -> dict:
 
 def cmd_verify_history(args: argparse.Namespace) -> None:
     directory, report = load_run(args.run)
-    row = latest_history(parse_since(args.since), args.mode, args.text)
+    row = latest_history(report_db(report), parse_since(args.since), args.mode, args.text)
     if row is None:
         raise HarnessError("no matching history row after --since")
     assertion = {"kind": "history", "pass": True, "mode": row["mode"], "historyID": row["id"], "audioPathDigest": hashlib.sha256(row["audioPath"].encode()).hexdigest()}
@@ -613,7 +766,7 @@ def cmd_verify_generation(args: argparse.Namespace) -> None:
     deadline = time.monotonic() + args.timeout
     row = None
     while time.monotonic() < deadline:
-        row = latest_history(since, args.mode, args.text)
+        row = latest_history(report_db(report), since, args.mode, args.text)
         if row is not None:
             break
         time.sleep(1)
@@ -660,7 +813,7 @@ def recorded_after(row: dict, started: str) -> bool:
 
 
 def run_rows(report: dict, layer: str) -> list[dict]:
-    path = DIAGNOSTICS / layer / "generations.jsonl"
+    path = report_diagnostics(report) / layer / "generations.jsonl"
     rows = read_jsonl(path)
     run_id = report["runID"]
     return [
@@ -683,6 +836,20 @@ def validate_probe_rows(engine_rows: list[dict], transport_rows: list[dict]) -> 
         errors.append("missing middle-layer engine-service telemetry")
 
     for layer, rows in (("backend", engine_rows), ("transport", transport_rows)):
+        forbidden_keys = {"text", "transcript", "filepath", "audiopath", "voicedescription"}
+        for row in rows:
+            stack: list[object] = [row]
+            while stack:
+                value = stack.pop()
+                if isinstance(value, dict):
+                    for key, child in value.items():
+                        if key.lower() in forbidden_keys:
+                            errors.append(f"{layer} telemetry contains forbidden raw field: {key}")
+                        stack.append(child)
+                elif isinstance(value, list):
+                    stack.extend(value)
+                elif isinstance(value, str) and ("/Users/" in value or "file://" in value):
+                    errors.append(f"{layer} telemetry contains a raw local path")
         identities = [row.get("generationID") for row in rows if row.get("generationID")]
         duplicates = sorted({identity for identity in identities if identities.count(identity) > 1})
         if duplicates:
@@ -810,7 +977,9 @@ def issue_counts(report: dict) -> dict[str, int]:
 def cmd_cleanup(args: argparse.Namespace) -> None:
     directory, report = load_run(args.run)
     cleanup_processes()
+    restore_state(report)
     passed = not process_ids(APP_PROCESS) and not process_ids(SERVICE_PROCESS)
+    passed = passed and bool((report.get("stateSnapshot") or {}).get("restored"))
     report["cleanupVerdict"] = "pass" if passed else "fail"
     append_jsonl(directory / "events.jsonl", {"timestamp": utc_now(), "event": "cleanup", "pass": passed})
     store_run(directory, report)
@@ -821,7 +990,9 @@ def cmd_cleanup(args: argparse.Namespace) -> None:
 def cmd_finish(args: argparse.Namespace) -> None:
     directory, report = load_run(args.run)
     cleanup_processes()
+    restore_state(report)
     cleanup_ok = not process_ids(APP_PROCESS) and not process_ids(SERVICE_PROCESS)
+    cleanup_ok = cleanup_ok and bool((report.get("stateSnapshot") or {}).get("restored"))
     counts = issue_counts(report)
     severe = counts["blocker"] + counts["major"]
     scenarios = read_json(SCENARIOS).get("suites", {}).get(report.get("suite"), {}).get("includes", [])
@@ -830,8 +1001,15 @@ def cmd_finish(args: argparse.Namespace) -> None:
     final = requested
     if requested == "pass" and (severe or report.get("probeVerdict") != "pass" or not cleanup_ok or not scenarios_ok):
         final = "fail"
+    completed = utc_now()
     report["status"] = final
-    report["completedAt"] = utc_now()
+    report["completedAt"] = completed
+    try:
+        started_at = dt.datetime.fromisoformat(report["startedAt"].replace("Z", "+00:00"))
+        completed_at = dt.datetime.fromisoformat(completed.replace("Z", "+00:00"))
+        report["durationSeconds"] = max(0.0, (completed_at - started_at).total_seconds())
+    except (KeyError, TypeError, ValueError):
+        report["durationSeconds"] = None
     report["cleanupVerdict"] = "pass" if cleanup_ok else "fail"
     report["issueCounts"] = counts
     store_run(directory, report)
@@ -843,12 +1021,16 @@ def cmd_finish(args: argparse.Namespace) -> None:
 
 def validate_report(report: dict, *, required_suite: str | None = None, current_fingerprints: bool = True) -> list[str]:
     errors = []
-    required = ["schemaVersion", "runID", "suite", "status", "sourceFingerprint", "buildInputFingerprint", "appBinarySHA256", "probeVerdict", "cleanupVerdict"]
+    required = [
+        "schemaVersion", "runID", "suite", "status", "sourceFingerprint",
+        "buildInputFingerprint", "appBinarySHA256", "executableIdentity",
+        "environment", "probeVerdict", "cleanupVerdict",
+    ]
     for key in required:
         if key not in report:
             errors.append(f"missing report field: {key}")
-    if report.get("schemaVersion") != 1:
-        errors.append("report schemaVersion must be 1")
+    if report.get("schemaVersion") != 2:
+        errors.append(f"report schemaVersion {report.get('schemaVersion')} is diagnostic-only; schemaVersion 2 is required")
     if report.get("status") != "pass":
         errors.append(f"report status is {report.get('status')}, not pass")
     if report.get("probeVerdict") != "pass":
@@ -865,6 +1047,16 @@ def validate_report(report: dict, *, required_suite: str | None = None, current_
     ]
     if incomplete:
         errors.append("required scenarios are not passing: " + ", ".join(incomplete))
+    suite_contract = read_json(SCENARIOS).get("suites", {}).get(report.get("suite"), {})
+    budget_minutes = suite_contract.get("budgetMinutes")
+    if budget_minutes is not None:
+        duration = report.get("durationSeconds")
+        if not isinstance(duration, (int, float)):
+            errors.append("report is missing a numeric durationSeconds")
+        elif duration > float(budget_minutes) * 60:
+            errors.append(
+                f"suite duration {duration:.1f}s exceeds the {budget_minutes}-minute budget"
+            )
     if report.get("suite") == "benchmark":
         benchmark = report.get("benchmark") or {}
         takes = benchmark.get("takes") or []
@@ -873,8 +1065,8 @@ def validate_report(report: dict, *, required_suite: str | None = None, current_
             errors.append("benchmark take manifest is incomplete")
         elif any(take.get("status") != "pass" for take in takes):
             errors.append("benchmark contains an incomplete or failed take")
-    if required_suite and SUITE_RANK.get(report.get("suite"), -1) < SUITE_RANK.get(required_suite, 99):
-        errors.append(f"suite {report.get('suite')} is insufficient; require {required_suite}")
+    if required_suite and report.get("suite") not in SUITE_SATISFIERS.get(required_suite, set()):
+        errors.append(f"suite {report.get('suite')} is insufficient; require an actual {required_suite} report")
     if current_fingerprints:
         if report.get("sourceFingerprint") != fingerprint():
             errors.append("source fingerprint is stale")
@@ -882,6 +1074,8 @@ def validate_report(report: dict, *, required_suite: str | None = None, current_
             errors.append("build-input fingerprint is stale")
         if APP_BINARY.is_file() and report.get("appBinarySHA256") != sha256(APP_BINARY):
             errors.append("app binary SHA-256 is stale")
+        if (report.get("environment") or {}).get("toolchain") != toolchain_identity():
+            errors.append("toolchain identity is stale")
     return errors
 
 
@@ -913,19 +1107,69 @@ def cmd_attest(args: argparse.Namespace) -> None:
     if errors:
         raise HarnessError("cannot attest invalid report: " + "; ".join(errors))
     counts = issue_counts(report)
-    attestation = {
-        "schemaVersion": 1,
-        "status": report["status"],
-        "suite": report["suite"],
+    identity = {
         "sourceFingerprint": report["sourceFingerprint"],
         "buildInputFingerprint": report["buildInputFingerprint"],
-        "appBinarySHA256": report["appBinarySHA256"],
+        "toolchainIdentity": report["environment"]["toolchain"],
+    }
+    existing = read_json(ATTESTATION) if ATTESTATION.is_file() else {}
+    preserve = (
+        existing.get("schemaVersion") == 2
+        and all(existing.get(key) == value for key, value in identity.items())
+    )
+    entries = dict(existing.get("entries") or {}) if preserve else {}
+    runtime_checks = dict(existing.get("runtimeChecks") or {}) if preserve else {}
+    entries[report["suite"]] = {
+        "status": report["status"],
+        "suite": report["suite"],
         "runID": report["runID"],
         "completedAt": report["completedAt"],
         "issues": counts,
         "probeVerdict": report["probeVerdict"],
         "evidenceDigest": evidence_digest(directory),
         "cleanupVerdict": report["cleanupVerdict"],
+        "durationSeconds": report.get("durationSeconds"),
+        "executableIdentity": report["executableIdentity"],
+    }
+    attestation = {
+        "schemaVersion": 2,
+        **identity,
+        "entries": {suite: entries.get(suite) for suite in ATTESTABLE_SUITES},
+        "runtimeChecks": runtime_checks,
+        "updatedAt": utc_now(),
+    }
+    write_json(ATTESTATION, attestation)
+    print(json.dumps(attestation, indent=2))
+
+
+def cmd_attest_runtime(args: argparse.Namespace) -> None:
+    verdict = read_json(Path(args.file))
+    if verdict.get("schemaVersion") != 1 or verdict.get("status") != "pass":
+        raise HarnessError("runtime-check verdict must be schemaVersion 1 with status=pass")
+    identity = {
+        "sourceFingerprint": fingerprint(),
+        "buildInputFingerprint": fingerprint(build_inputs_only=True),
+        "toolchainIdentity": toolchain_identity(),
+    }
+    existing = read_json(ATTESTATION) if ATTESTATION.is_file() else {}
+    preserve = (
+        existing.get("schemaVersion") == 2
+        and all(existing.get(key) == value for key, value in identity.items())
+    )
+    entries = dict(existing.get("entries") or {}) if preserve else {}
+    runtime_checks = dict(existing.get("runtimeChecks") or {}) if preserve else {}
+    runtime_checks[args.name] = {
+        "status": "pass",
+        "completedAt": verdict.get("completedAt") or utc_now(),
+        "evidenceDigest": sha256(Path(args.file)),
+        "summary": verdict.get("attestationSummary") or verdict.get("summary") or {},
+    }
+    attestation = {
+        "schemaVersion": 2,
+        **identity,
+        "entries": {suite: entries.get(suite) for suite in ATTESTABLE_SUITES},
+        "runtimeChecks": runtime_checks,
+        "updatedAt": utc_now(),
     }
     write_json(ATTESTATION, attestation)
     print(json.dumps(attestation, indent=2))
@@ -943,62 +1187,84 @@ def changed_paths(base: str) -> list[str]:
     return sorted(paths)
 
 
-def classify_paths(paths: list[str], config: dict) -> tuple[str, list[dict]]:
-    ranks = config["rank"]
-    selected = config.get("default", "none")
+def classify_paths(paths: list[str], config: dict) -> tuple[list[str], list[str], list[dict]]:
+    suites: set[str] = set(config.get("defaultRequiredSuites") or [])
+    runtime_checks: set[str] = set(config.get("defaultRequiredRuntimeChecks") or [])
     matches: list[dict] = []
     for path in paths:
-        path_level = config.get("default", "none")
         for rule in config.get("rules", []):
             if any(fnmatch.fnmatch(path, pattern) for pattern in rule.get("patterns", [])):
-                if ranks[rule["level"]] > ranks[path_level]:
-                    path_level = rule["level"]
-        if ranks[path_level] > ranks[selected]:
-            selected = path_level
-        if path_level != "none":
-            matches.append({"path": path, "level": path_level})
-    return selected, matches
+                rule_suites = set(rule.get("requiredSuites") or [])
+                rule_checks = set(rule.get("requiredRuntimeChecks") or [])
+                suites.update(rule_suites)
+                runtime_checks.update(rule_checks)
+                matches.append({
+                    "path": path,
+                    "requiredSuites": sorted(rule_suites),
+                    "requiredRuntimeChecks": sorted(rule_checks),
+                })
+    return sorted(suites), sorted(runtime_checks), matches
+
+
+def validate_attestation(attestation: dict, required_suites: list[str], required_runtime_checks: list[str], *, ci: bool = False) -> list[str]:
+    errors: list[str] = []
+    if attestation.get("schemaVersion") != 2:
+        return [f"attestation schemaVersion {attestation.get('schemaVersion')} is diagnostic-only; schemaVersion 2 is required"]
+    if attestation.get("sourceFingerprint") != fingerprint():
+        errors.append("attestation source fingerprint is stale")
+    if attestation.get("buildInputFingerprint") != fingerprint(build_inputs_only=True):
+        errors.append("attestation build-input fingerprint is stale")
+    if attestation.get("toolchainIdentity") != toolchain_identity():
+        errors.append("attestation toolchain identity is stale")
+    entries = attestation.get("entries") or {}
+    for required in required_suites:
+        satisfiers = SUITE_SATISFIERS[required]
+        candidates = [entries.get(suite) for suite in satisfiers if entries.get(suite)]
+        valid = []
+        for entry in candidates:
+            entry_errors = []
+            if entry.get("status") != "pass":
+                entry_errors.append("status")
+            if entry.get("probeVerdict") != "pass":
+                entry_errors.append("probe")
+            if entry.get("cleanupVerdict") != "pass":
+                entry_errors.append("cleanup")
+            counts = entry.get("issues") or {}
+            if counts.get("blocker", 0) or counts.get("major", 0):
+                entry_errors.append("issues")
+            executable = entry.get("executableIdentity") or {}
+            if not ci and executable.get("sha256") != sha256(APP_BINARY):
+                entry_errors.append("local executable")
+            if not entry_errors:
+                valid.append(entry)
+        if not valid:
+            errors.append(f"missing valid {required} evidence (accepted suites: {', '.join(sorted(satisfiers))})")
+    runtime = attestation.get("runtimeChecks") or {}
+    for check in required_runtime_checks:
+        if (runtime.get(check) or {}).get("status") != "pass":
+            errors.append(f"missing passing runtime check: {check}")
+    if not APP_BINARY.is_file():
+        errors.append(f"current exact-path app binary is missing: {APP_BINARY}")
+    return errors
 
 
 def cmd_impact(args: argparse.Namespace) -> None:
     config = read_json(IMPACT)
     base = args.base or os.environ.get("QVOICE_BASE_REF") or "origin/main"
     paths = changed_paths(base)
-    selected, matches = classify_paths(paths, config)
-    result = {"schemaVersion": 1, "base": base, "requiredSuite": selected, "changedPaths": paths, "matches": matches}
+    suites, runtime_checks, matches = classify_paths(paths, config)
+    result = {
+        "schemaVersion": 2,
+        "base": base,
+        "requiredSuites": suites,
+        "requiredRuntimeChecks": runtime_checks,
+        "changedPaths": paths,
+        "matches": matches,
+    }
     print(json.dumps(result, indent=2))
-    if args.check and selected != "none":
+    if args.check and (suites or runtime_checks):
         attestation = read_json(ATTESTATION)
-        errors = []
-        required_fields = {
-            "schemaVersion", "status", "suite", "sourceFingerprint",
-            "buildInputFingerprint", "appBinarySHA256", "runID", "completedAt",
-            "issues", "probeVerdict", "evidenceDigest", "cleanupVerdict",
-        }
-        missing = sorted(required_fields - set(attestation))
-        if missing:
-            errors.append("attestation fields missing: " + ", ".join(missing))
-        if attestation.get("schemaVersion") != 1:
-            errors.append("attestation schemaVersion must be 1")
-        if attestation.get("status") != "pass":
-            errors.append("attestation status is not pass")
-        if attestation.get("probeVerdict") != "pass":
-            errors.append("attestation probe verdict is not pass")
-        if attestation.get("cleanupVerdict") != "pass":
-            errors.append("attestation cleanup verdict is not pass")
-        issue_counts = attestation.get("issues") or {}
-        if issue_counts.get("blocker", 0) or issue_counts.get("major", 0):
-            errors.append("attestation contains blocker or major issues")
-        if SUITE_RANK.get(attestation.get("suite"), -1) < SUITE_RANK[selected]:
-            errors.append(f"attestation suite {attestation.get('suite')} is insufficient; require {selected}")
-        if attestation.get("sourceFingerprint") != fingerprint():
-            errors.append("attestation source fingerprint is stale")
-        if attestation.get("buildInputFingerprint") != fingerprint(build_inputs_only=True):
-            errors.append("attestation build-input fingerprint is stale")
-        if not APP_BINARY.is_file():
-            errors.append(f"current app binary is missing: {APP_BINARY}")
-        elif attestation.get("appBinarySHA256") != sha256(APP_BINARY):
-            errors.append("attestation app binary SHA-256 is stale")
+        errors = validate_attestation(attestation, suites, runtime_checks, ci=args.ci)
         if errors:
             raise HarnessError("Computer Use attestation required: " + "; ".join(errors))
 
@@ -1008,7 +1274,7 @@ def parser() -> argparse.ArgumentParser:
     sub = root.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor")
-    doctor.add_argument("--suite", choices=SUITE_RANK, default="quick")
+    doctor.add_argument("--suite", choices=SUITES, default="quick")
     doctor.add_argument("--json", action="store_true")
     doctor.set_defaults(func=cmd_doctor)
 
@@ -1091,9 +1357,15 @@ def parser() -> argparse.ArgumentParser:
     attest.add_argument("--suite", choices=("quick", "full", "benchmark"))
     attest.set_defaults(func=cmd_attest)
 
+    attest_runtime = sub.add_parser("attest-runtime")
+    attest_runtime.add_argument("--name", required=True)
+    attest_runtime.add_argument("--file", required=True)
+    attest_runtime.set_defaults(func=cmd_attest_runtime)
+
     impact = sub.add_parser("impact")
     impact.add_argument("--base")
     impact.add_argument("--check", action="store_true")
+    impact.add_argument("--ci", action="store_true", help="skip local signed executable hash comparison")
     impact.set_defaults(func=cmd_impact)
     return root
 

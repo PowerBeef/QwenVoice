@@ -23,7 +23,7 @@
 
 <p align="center"><em>Formerly QwenVoice — now Vocello 2.1.</em></p>
 
-**Contents:** [Get Vocello](#get-vocello) · [Why Vocello](#why-vocello) · [Workflows](#three-voice-workflows) · [Install](#install-macos) · [System requirements](#system-requirements) · [Privacy](#local-first-privacy) · [Build from source](#build-from-source) · [CLI](#command-line-tool-vocello) · [iPhone](#-vocello-for-iphone--arriving-soon) · [Contributing](#contributing) · [License](#license)
+**Contents:** [Get Vocello](#get-vocello) · [Why Vocello](#why-vocello) · [Workflows](#three-voice-workflows) · [Install](#install-macos) · [System requirements](#system-requirements) · [Privacy](#local-first-privacy) · [Build from source](#build-from-source) · [Development](#development-checkpoint) · [CLI](#command-line-tool-vocello) · [iPhone](#-vocello-for-iphone--arriving-soon) · [Contributing](#contributing) · [License](#license)
 
 **Releases:** [v2.1.0 (latest)](https://github.com/PowerBeef/QwenVoice/releases/tag/v2.1.0) · [All releases](https://github.com/PowerBeef/QwenVoice/releases) · [What's new in 2.1.0](docs/releases/v2.1.0.md)
 
@@ -145,11 +145,20 @@ Testing runbook: [`docs/reference/testing-runbook.md`](docs/reference/testing-ru
 
 More technical detail:
 
+- [`docs/development-progress.md`](docs/development-progress.md) — active maintainer checkpoint: verified work, pending acceptance gates, and the Codex reinstall/resume sequence
 - [`docs/project-map.html`](docs/project-map.html) — canonical interactive project map: features, targets, dependencies, flows, source ownership, contracts, and development routes
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture reference: runtime design, engine invariants, and request lifecycles
 - [`AGENTS.md`](AGENTS.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
 - [`docs/reference/cli.md`](docs/reference/cli.md) — the headless `vocello` command-line tool
 - [`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md) — local storage and deletion details
+
+## Development checkpoint
+
+Active development on `main` is completing the macOS Computer Use frontend and typed runtime-probe
+overhaul. Deterministic tests and telemetry overhead/parity are green; fresh full and 29-take
+benchmark Computer Use attestations remain required before the work is release-ready. Maintainers
+and new Codex sessions should start with [`AGENTS.md`](AGENTS.md), then follow the exact checkpoint
+and reinstall/resume sequence in [`docs/development-progress.md`](docs/development-progress.md).
 
 ## Command-line tool (`vocello`)
 

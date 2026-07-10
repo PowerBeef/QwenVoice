@@ -169,6 +169,8 @@ actor XPCNativeEngineCoordinator {
     /// no auto-reconnect; the next command lazily relaunches the service.
     private var expectedRetirement = false
 
+    var pendingRequestCount: Int { pendingRequests.count }
+
     init(
         onSnapshot: @escaping @Sendable (TTSEngineSnapshot) -> Void,
         onChunk: @escaping @Sendable (GenerationEvent) -> Void,
@@ -814,6 +816,10 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
 
     public var snapshotPublisher: AnyPublisher<TTSEngineSnapshot, Never> {
         snapshotSubject.eraseToAnyPublisher()
+    }
+
+    var pendingRequestCount: Int {
+        get async { await coordinator.pendingRequestCount }
     }
 
     public func initialize(appSupportDirectory: URL) async throws {

@@ -28,6 +28,34 @@ final class XPCNativeEngineClientTests: XCTestCase {
         } catch {
             XCTFail("unexpected error: \(error)")
         }
+        let pendingAfterMismatch = await client.pendingRequestCount
+        XCTAssertEqual(pendingAfterMismatch, 0)
+    }
+
+    func testTimeoutCleansPendingRequestAndSendsGenerationCancellation() async throws {
+        let factory = FakeTransportFactory(mode: .holdGeneration)
+        let client = makeClient(factory: factory, timeout: .milliseconds(30))
+        let request = GenerationRequest(
+            mode: .custom,
+            modelID: "pro_custom_speed",
+            text: "Timeout cleanup fixture.",
+            outputPath: "/tmp/transport-timeout.wav",
+            shouldStream: true,
+            payload: .custom(speakerID: "aiden", deliveryStyle: nil)
+        )
+
+        do {
+            _ = try await client.generate(request)
+            XCTFail("held generation should time out")
+        } catch let error as EngineTransportError {
+            guard case .timedOut(commandName: "generate") = error else {
+                return XCTFail("unexpected transport error: \(error)")
+            }
+        }
+
+        try await waitUntil { factory.commands().contains(.cancelActiveGeneration) }
+        let pendingAfterTimeout = await client.pendingRequestCount
+        XCTAssertEqual(pendingAfterTimeout, 0)
     }
 
     func testCancelledGenerationSendsCleanupAfterCancellation() async throws {

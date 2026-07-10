@@ -1,23 +1,137 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "referenceFormat": "target/class/test",
   "evidence": {
     "reportDirectory": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10",
     "reportCommit": "05bd2b6d24b3f43351f3b388622a72d8f0d6ecce",
-    "validatedAgainst": "current-source-at-test-time"
+    "validatedAgainst": "current-source-at-test-time",
+    "policy": "implemented requires every resolvable test reference and an empty remaining list"
   },
   "items": [
-    {"id": "H1", "title": "Generation-gate cancellation transfer", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["fifo-transfer", "queued-cancellation", "cancellation-after-transfer", "holder-failure", "deterministic-stress"], "status": "implemented", "remaining": []},
-    {"id": "H2", "title": "Dedicated fork runtime tests", "source": "third_party_patches/mlx-audio-swift/Package.swift", "tests": ["qwen3-runtime-test-target"], "status": "implemented", "remaining": []},
-    {"id": "MH1", "title": "Requested learned components require weights", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["missing-speaker-weights", "missing-tokenizer-weights"], "status": "implemented", "remaining": []},
-    {"id": "MH2", "title": "Clone tensor integrity", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift", "tests": ["atomic-replacement", "shape-dtype", "digest", "exact-file-set"], "status": "implemented", "remaining": []},
-    {"id": "M3", "title": "Typed telemetry schema", "source": "Sources/QwenVoiceCore/GenerationTelemetryRecord.swift", "tests": ["schema-v6-round-trip", "legacy-v5-decode", "cross-layer-merge", "telemetry-disabled"], "status": "partial", "remaining": ["measured telemetry-off/lightweight/verbose overhead parity"]},
-    {"id": "STREAM", "title": "Streaming ordering and bounded retention", "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift", "tests": ["bounded-retention", "timing-before-audio", "final-barrier", "consumer-termination"], "status": "partial", "remaining": ["decoder-backed partition and consumer-termination fixtures"]},
-    {"id": "DECODER", "title": "Decoder partition invariance", "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift", "tests": ["partition-invariance", "reset", "timing-parity"], "status": "future", "remaining": ["deterministic Metal-backed decoder fixture"]},
-    {"id": "XPC", "title": "Transport lifecycle and correlation", "source": "Sources/QwenVoiceNative/XPCNativeEngineClient.swift", "tests": ["request-reply-correlation", "timeout-cleanup", "cancellation-order", "gap-detection", "expected-retirement", "reconnection", "single-terminal"], "status": "implemented", "remaining": []},
-    {"id": "OUTPUT", "title": "Atomic readable final output", "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift", "tests": ["atomic-final-wav", "readable-frame-count"], "status": "implemented", "remaining": []}
+    {
+      "id": "H1",
+      "title": "Generation-gate FIFO, cancellation transfer, holder failure, and deterministic stress",
+      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3GenerationGateTests/testWaitersAcquireInFIFOOrder",
+        "Qwen3RuntimeTests/Qwen3GenerationGateTests/testQueuedCancellationDoesNotReleaseCurrentOwner",
+        "Qwen3RuntimeTests/Qwen3GenerationGateTests/testCancellationImmediatelyAfterTransferReleasesPermit",
+        "Qwen3RuntimeTests/Qwen3GenerationGateTests/testHolderFailureReleasesPermitToNextWaiter",
+        "Qwen3RuntimeTests/Qwen3GenerationGateTests/testDeterministicMixedAcquireCancelThrowStress"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "H2",
+      "title": "Dedicated owned Qwen3 runtime target with Metal resources",
+      "source": "third_party_patches/mlx-audio-swift/Package.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testTimingInstrumentationDoesNotChangeWaveform"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "MH1",
+      "title": "Requested learned tokenizer and speaker components require real weights",
+      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3LearnedComponentWeightTests/testSpeakerComponentLoadingRejectsMissingWeights",
+        "Qwen3RuntimeTests/Qwen3LearnedComponentWeightTests/testSpeechTokenizerLoadingRejectsMissingWeights"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "MH2",
+      "title": "Clone artifact atomic publication, tensor round trip, integrity, and mode requirements",
+      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testNonEmptyTensorRoundTripPreservesShapeDTypeAndValues",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testAtomicReplacementPublishesOnlyCompleteNewArtifact",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testInterruptedStagingPreservesPriorArtifactAndRemovesStaging",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testDigestCorruptionFailsClosed",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testMissingAndExtraFilesFailClosed",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testShapeAndDTypeMetadataMismatchFailsClosed",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testModeRequirementsRejectIncompleteArtifacts"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "M3",
+      "title": "Typed telemetry v6 compatibility, privacy, disabled work, and measured overhead",
+      "source": "Sources/QwenVoiceCore/GenerationTelemetryRecord.swift",
+      "tests": [
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testSchemaV6RoundTripCarriesTypedBackendMetrics",
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testLegacyV1ThroughV5RowsRemainDecodable",
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testTelemetryOffPlansNoSamplerSinkChunkQCOrDerivedDiagnostics",
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testFailurePrivacyAdapterDoesNotPersistRawMessageOrPath",
+        "HarnessTests/ProbeValidationTests/test_accepts_correlated_monotonic_terminal_rows",
+        "HarnessTests/ProbeValidationTests/test_rejects_cross_layer_privacy_leaks"
+      ],
+      "runtimeChecks": ["telemetry-overhead"],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "STREAM",
+      "title": "Streaming bounded retention, scheduling, cancellation, and final barrier",
+      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3StreamingContractTests/testPendingRetentionIsBoundedAndFirstLaterSchedulingIsExact",
+        "Qwen3RuntimeTests/Qwen3StreamingContractTests/testCancellationStopsConsumerAndRunsTermination",
+        "Qwen3RuntimeTests/Qwen3StreamingContractTests/testFinalAudioBarrierOrdersLastChunkBeforeCompletion",
+        "VocelloCoreTests/AtomicWAVPublicationTests/testStreamingWriterKeepsPartialOutputHiddenUntilTerminalBarrier"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "DECODER",
+      "title": "Seeded Metal decoder partition invariance, reset isolation, and timing parity",
+      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testFixedAndRandomizedPartitionsAreWaveformInvariant",
+        "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testResetIsolationRestoresDeterministicWaveform",
+        "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testTimingInstrumentationDoesNotChangeWaveform"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "XPC",
+      "title": "Request correlation, cleanup, chunk ordering, cancellation, interruption, retirement, and reconnection",
+      "source": "Sources/QwenVoiceNative/XPCNativeEngineClient.swift",
+      "tests": [
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testRequestReplyCorrelationReturnsMatchingReply",
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testMismatchedReplyDoesNotCompletePendingRequest",
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testTimeoutCleansPendingRequestAndSendsGenerationCancellation",
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testCancelledGenerationSendsCleanupAfterCancellation",
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testInterruptionCreatesFreshConnectionAndReinitializes",
+        "VocelloEngineIntegrationTests/XPCNativeEngineClientTests/testExpectedRetirementDoesNotReconnectEagerly",
+        "VocelloEngineIntegrationTests/EngineServiceTransportAccumulatorTests/testDetectsMissingDuplicateAndOutOfOrderChunks",
+        "VocelloEngineIntegrationTests/EngineServiceTransportAccumulatorTests/testCancellationAndTerminalAgreementProducesOneTerminalRecord",
+        "VocelloEngineIntegrationTests/EngineServiceTransportAccumulatorTests/testGenerationSwitchPublishesSupersededTerminalBeforeNewChunks"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "OUTPUT",
+      "title": "Atomic readable frame-accurate final WAV publication",
+      "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+      "tests": [
+        "VocelloCoreTests/AtomicWAVPublicationTests/testOneShotWriterPublishesReadableFrameAccurateWAV",
+        "VocelloCoreTests/AtomicWAVPublicationTests/testStreamingWriterKeepsPartialOutputHiddenUntilTerminalBarrier"
+      ],
+      "status": "implemented",
+      "remaining": []
+    }
   ],
   "deferredMatrix": {
     "source": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10/06_Verification_Test_and_Benchmark_Matrix.md",
-    "policy": "Track remaining rows explicitly; do not claim coverage without an executable test or validator."
+    "policy": "The remaining corrected-report rows are explicitly deferred; no row is covered without an executable test or validator reference."
   }
 }

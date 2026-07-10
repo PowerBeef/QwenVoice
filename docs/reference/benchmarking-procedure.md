@@ -347,6 +347,17 @@ scripts/macos_test.sh bench-ui --report <run-id-or-directory>
 Artifacts live under `build/macos/agent-ui/<run-id>/`; the tracked attestation contains only
 fingerprints, verdicts, issue counts, evidence digest, and cleanup result.
 
+The benchmark attestation is independent: it never satisfies a required full semantic report.
+Likewise, full never satisfies benchmark. For telemetry/backend changes, run the seeded overhead
+parity lane before attesting the UI matrix:
+
+```sh
+scripts/macos_test.sh telemetry-overhead
+```
+
+This uses `vocello bench --seed` with one warm-up and five measured warm takes per telemetry mode,
+requires identical PCM, and gates median RTF/TTFC at 5% (lightweight) and 10% (verbose) versus off.
+
 Post-run gate:
 
 ```sh

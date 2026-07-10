@@ -13,6 +13,7 @@
 #   scripts/macos_test.sh lang-bench [--subset quick|full] [--label "note"]
 #                                                 # headless macOS language-hint matrix (vocello CLI)
 #   scripts/macos_test.sh test                      # Core + XPC transport + Qwen3 runtime tests (no UI)
+#   scripts/macos_test.sh telemetry-overhead        # seeded off/lightweight/verbose PCM + RTF/TTFC gate
 #   scripts/macos_test.sh ui-report --suite quick|full|benchmark [--report <run-dir>]
 #   scripts/macos_test.sh crashes [--test]          # collect + xcsym-symbolicate .ips (app + XPC service)
 #   scripts/macos_test.sh debug                     # LLDB attach guidance (app + XPC service PID)
@@ -382,10 +383,29 @@ cmd_test() {
     -only-testing:VocelloEngineIntegrationTests \
     > "$artifacts/transport.log" 2>&1 || transport_st=$?
 
-  note "test: Qwen3RuntimeTests (owned vendored runtime)"
-  swift test --package-path "$ROOT_DIR/third_party_patches/mlx-audio-swift" \
-    --filter Qwen3RuntimeTests \
-    > "$artifacts/runtime.log" 2>&1 || runtime_st=$?
+  note "test: Qwen3RuntimeTests (owned vendored runtime, seeded Metal fixture)"
+  local runtime_package="$ROOT_DIR/third_party_patches/mlx-audio-swift"
+  local mlx_bundle="$ROOT_DIR/build/DerivedData/Build/Products/Release/mlx-swift_Cmlx.bundle"
+  if swift build --package-path "$runtime_package" --build-tests \
+      > "$artifacts/runtime-build.log" 2>&1; then
+    local runtime_bin runtime_resources
+    runtime_bin="$(swift build --package-path "$runtime_package" --show-bin-path)"
+    runtime_resources="$runtime_bin/MLXAudioPackageTests.xctest/Contents/Resources"
+    if [[ -d "$mlx_bundle" ]]; then
+      mkdir -p "$runtime_resources"
+      rm -rf "$runtime_resources/mlx-swift_Cmlx.bundle"
+      cp -R "$mlx_bundle" "$runtime_resources/"
+      swift test --package-path "$runtime_package" --skip-build \
+        --filter Qwen3RuntimeTests \
+        > "$artifacts/runtime.log" 2>&1 || runtime_st=$?
+    else
+      echo "missing MLX Metal resource bundle after Xcode test build: $mlx_bundle" \
+        > "$artifacts/runtime.log"
+      runtime_st=1
+    fi
+  else
+    runtime_st=1
+  fi
 
   note "test: Computer Use harness contracts"
   python3 -m unittest "$ROOT_DIR/scripts/test_macos_agent_ui.py" \
@@ -401,6 +421,19 @@ cmd_test() {
     warn "test verdict: FAIL · artifacts → $artifacts"
     return 1
   fi
+}
+
+cmd_telemetry_overhead() {
+  ensure_mac_test_models --require
+  "$SCRIPT_DIR/build.sh" cli >/dev/null
+  local verdict_path
+  note "telemetry-overhead: Custom/Speed/medium, seed-fixed, warm-up×1 + measured×5 per mode"
+  verdict_path="$(python3 "$SCRIPT_DIR/telemetry_overhead.py" "$@")" \
+    || die "telemetry-overhead FAIL (raw evidence under build/macos/telemetry-overhead)"
+  [[ -f "$verdict_path" ]] || die "telemetry-overhead verdict missing: $verdict_path"
+  "$SCRIPT_DIR/macos_agent_ui.sh" attest-runtime \
+    --name telemetry-overhead --file "$verdict_path"
+  note "telemetry-overhead PASS · $verdict_path"
 }
 
 # Computer Use owns frontend driving. These lanes validate the resulting report;
@@ -680,6 +713,7 @@ main() {
     core-test) cmd_core_test "$@" ;;
     lang-bench) cmd_lang_bench "$@" ;;
     test)      cmd_test "$@" ;;
+    telemetry-overhead) cmd_telemetry_overhead "$@" ;;
     ui-report) cmd_ui_report "$@" ;;
     bench-ui)  cmd_bench_ui "$@" ;;
     review)    cmd_review "$@" ;;
@@ -689,7 +723,7 @@ main() {
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
-    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|ui-report|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|telemetry-overhead|ui-report|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|help)" ;;
   esac
 }
 

@@ -1,5 +1,8 @@
 # macOS testing — Computer Use frontend + typed runtime probes
 
+> Active rollout status and reinstall/resume sequence:
+> [`docs/development-progress.md`](../development-progress.md).
+
 macOS testing has two deliberately separate proof layers:
 
 1. `$vocello-macos-ui-qa` is the sole frontend driver. Codex Computer Use operates the
@@ -25,7 +28,8 @@ iOS is not part of this migration. Its physical-device XCUITest gates remain aut
 | --- | --- | --- |
 | Deterministic tests | `scripts/macos_test.sh test` | Core/output/telemetry tests, injectable XPC transport tests, owned Qwen3 runtime tests, harness contracts; no UI driving |
 | Core only | `scripts/macos_test.sh core-test` | `VocelloCoreTests`, including schema-v6 and atomic-WAV contracts |
-| UI impact | `scripts/macos_agent_ui.sh impact` | Required evidence level: `none`, `quick`, `full`, or `benchmark` |
+| UI impact | `scripts/macos_agent_ui.sh impact` | Independent `requiredSuites` and `requiredRuntimeChecks` sets |
+| Telemetry overhead | `scripts/macos_test.sh telemetry-overhead` | Seeded PCM parity plus off/lightweight/verbose median RTF and TTFC limits |
 | UI report | `scripts/macos_test.sh ui-report --suite quick\|full\|benchmark` | Validates a fresh Computer Use report, typed probes, fingerprints, findings, and cleanup |
 | Semantic review | `scripts/macos_test.sh review [--report <run>]` | Compatibility alias requiring a valid full report |
 | UI benchmark | `scripts/macos_test.sh bench-ui [--report <run>]` | Valid benchmark report plus merged XPC/backend take matrix |
@@ -84,12 +88,15 @@ finish
 cleanup
 validate-report
 attest
+attest-runtime
 impact
 ```
 
 `start` terminates stale app/service processes, resets only isolated debug history/output,
-preserves models and saved voices, enables verbose telemetry, launches one exact-path app
-process, and records source/build/app fingerprints. Evidence stays ignored under
+snapshots debug preferences and saved voices, preserves models, enables verbose telemetry,
+launches one exact-path app process, and records source/build/toolchain/executable fingerprints.
+Finish and cleanup restore the snapshot. Destructive runs instead receive a disposable app-support
+root below the run directory and refuse shared production/debug model or voice roots. Evidence stays ignored under
 `build/macos/agent-ui/<run-id>/`; the compact tracked attestation is
 [`qa/macos-ui-attestation.json`](../../qa/macos-ui-attestation.json).
 
@@ -99,7 +106,10 @@ while `complete` refuses to advance until the matching database row and readable
 recorded by `verify-generation`.
 
 A report fails when it is blocked, contains a blocker/major issue, lacks a typed probe layer,
-has stale source/build/app fingerprints, uses an insufficient suite, or fails cleanup.
+has stale source/build/toolchain/executable fingerprints, uses an insufficient suite, or fails cleanup.
+Schema-v2 attestation has independent quick/full/benchmark entries: quick accepts quick or full;
+full requires full; benchmark requires benchmark. Entries are preserved only while all shared
+fingerprints match. Schema-v1 evidence remains diagnostic-only.
 
 ## Typed middle/backend proof
 
@@ -130,8 +140,8 @@ report IDs to current symbols and executable coverage. The first owned targets a
 - `VocelloCoreTests`: telemetry schema/legacy decoding and atomic readable WAV publication.
 - `VocelloEngineIntegrationTests`: request/reply correlation, timeout cleanup, cancellation
   ordering, expected retirement, interruption and reconnection using injectable transport.
-- vendored `Qwen3RuntimeTests`: FIFO/cancellation/stress generation-gate behavior, learned
-  component fail-closed behavior, and clone artifact integrity.
+- vendored `Qwen3RuntimeTests`: FIFO/cancellation/throw stress, real learned-component loading,
+  atomic tensor artifact integrity, bounded streaming, and seeded Metal decoder partition/reset parity.
 - Python harness contracts: scenario/impact/report behavior and malformed cross-layer fixtures.
 
 The source report directory is research evidence and remains unchanged; automation consumes the
@@ -144,9 +154,10 @@ scripts/macos_test.sh gate
 ```
 
 The gate runs project-input checks, builds, deterministic tests and crash checks, then calls the
-impact classifier. `none` requires no UI report; the other levels require a matching fresh
-attestation. Headless CI can run deterministic tests and validate attestation schema/fingerprints,
-but it does not claim to execute Computer Use.
+impact classifier. It unions every matched suite and runtime check. Headless CI builds the exact
+app path and validates schema/source/build/toolchain identity, but it does not claim to execute
+Computer Use or compare its ad-hoc-signed binary hash with the locally signed executable. Local
+validation still requires the exact executable SHA used for Computer Use.
 
 ## XPC and crash diagnostics
 

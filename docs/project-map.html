@@ -1507,7 +1507,7 @@ table.matrix .note {
     <h2 class="section-title">Scripts, tests &amp; CI</h2>
     <p class="section-lede">
       Development is Codex-first and scripts remain the executable source of truth.
-      Native builds are the typecheck. Computer Use is the sole macOS frontend driver and its typed attestation can block the gate; iOS remains physical-device XCUITest.
+      Native builds are the typecheck. Computer Use is the sole macOS frontend driver; schema-v2 quick, full, and benchmark evidence is tracked independently. iOS remains physical-device XCUITest.
     </p>
 
     <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Build, test, release, and Codex workflow categories"></div>
@@ -1519,7 +1519,7 @@ table.matrix .note {
         <pre>scripts/macos_test.sh models ensure
 	scripts/macos_test.sh test
 	scripts/macos_agent_ui.sh impact
-	# $vocello-macos-ui-qa &lt;suite&gt; when required
+	# run every required suite and runtime check
 scripts/macos_test.sh gate</pre>
       </article>
       <article class="gate-card">
@@ -1604,7 +1604,7 @@ scripts/ios_device.sh gate</pre>
             <a href="reference/cli.md">CLI</a>
             <a href="reference/testing-runbook.md">Testing</a>
             <a href="reference/language-bench.md">Language bench</a>
-            <a href="rescue-plan-progress.md">Current rescue status</a>
+            <a href="development-progress.md">Development progress</a>
           </p>
         </div>
       </div>
@@ -2036,8 +2036,9 @@ scripts/ios_device.sh gate</pre>
     "macOS test":[
       {"cmd":"scripts/macos_test.sh models ensure","desc":"Prepare real-engine Speed model fixtures"},
       {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, owned Qwen3 runtime, and harness tests; no frontend driving"},
-      {"cmd":"scripts/macos_agent_ui.sh impact","desc":"Select none, quick, full, or benchmark Computer Use evidence"},
-      {"cmd":"$vocello-macos-ui-qa quick|full|benchmark","desc":"Sole macOS frontend driver; observe-act-observe with typed evidence"},
+      {"cmd":"scripts/macos_agent_ui.sh impact","desc":"Union independent requiredSuites and requiredRuntimeChecks for all changed paths"},
+      {"cmd":"$vocello-macos-ui-qa quick|full|benchmark","desc":"Sole macOS frontend driver; full and benchmark never substitute for one another"},
+      {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Seeded off/lightweight/verbose PCM parity and median RTF/TTFC gate"},
       {"cmd":"scripts/macos_test.sh ui-report|review|bench-ui","desc":"Validate semantic reports, probes, fingerprints, cleanup, and benchmark matrix"},
       {"cmd":"scripts/macos_test.sh gate","desc":"Pre-merge build/deterministic/crash gate plus impact-selected attestation"}
     ],
@@ -2049,14 +2050,14 @@ scripts/ios_device.sh gate</pre>
       {"cmd":"scripts/ios_device.sh gate","desc":"Standing attended physical-device pre-merge gate"}
     ],
     "Bench":[
-      {"cmd":"QWENVOICE_DEBUG=1 ./build/vocello bench … --ledger","desc":"Headless perf/quality matrix and bounded committed summary"},
+      {"cmd":"QWENVOICE_DEBUG=1 ./build/vocello bench … --seed N --ledger","desc":"Seedable headless perf/quality matrix and bounded committed summary"},
       {"cmd":"python3 scripts/check_language_hints.py","desc":"Validate requested language hints"},
       {"cmd":"python3 scripts/check_language_output.py","desc":"Validate locale-locked ASR output"},
       {"cmd":"python3 scripts/summarize_generation_telemetry.py …","desc":"Merge and compare generation telemetry"}
     ],
     "CI / release":[
       {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build-for-testing"},
-      {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests and attestation validation; never claims Computer Use execution"},
+      {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests plus source/build/toolchain attestation validation; local signed SHA is intentionally not compared"},
       {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized DMG and GitHub Release"},
       {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual archive"}
     ],
@@ -2118,6 +2119,7 @@ scripts/ios_device.sh gate</pre>
   "storage": [
     {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and prepared artifacts","history.sqlite","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
     {"title":"macOS debug","root":"~/Library/Application Support/QwenVoice-Debug/","items":["Same logical layout as release","Model fixtures may symlink to the canonical store","Raw diagnostics remain gitignored"]},
+    {"title":"macOS destructive QA","root":"build/macos/agent-ui/&lt;run&gt;/disposable-app-support/","items":["Never production or canonical shared storage","Model and voice roots may not be symlinks","Entire root is discarded after the explicitly authorized suite"]},
     {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages and staging","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
     {"title":"Privacy boundary","root":"local-first runtime","items":["No cloud TTS or bundled model weights","Recording, transcription, generation, playback, and History stay local","Network use is model download, release/CI, and website delivery","Production telemetry is disabled by default"]}
   ],
@@ -2131,7 +2133,9 @@ scripts/ios_device.sh gate</pre>
     "No hard production Memory.memoryLimit, no Quality-to-Speed OOM fallback, no Core ML backend",
     "Stable accessibilityIdentifier values survive refactors",
     "Production telemetry stays runtime-gated through TelemetryGate.resolvedEnabled",
+    "Telemetry-off constructs no sampler, sink, chunk QC, or expensive derived diagnostics",
     "macOS frontend acceptance uses Computer Use only; no macOS XCUITest or hidden UI-test markers",
+    "Quick accepts quick or full; full requires full; benchmark requires benchmark",
     "Batch generation stays absent from iOS unless a device-proven sequential streaming design replaces it"
   ]
 }

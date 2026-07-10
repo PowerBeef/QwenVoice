@@ -1,4 +1,23 @@
 import Foundation
+
+public struct NativeTelemetryWorkPlan: Equatable, Sendable {
+    public let constructsSampler: Bool
+    public let writesSink: Bool
+    public let computesChunkQC: Bool
+    public let computesDerivedDiagnostics: Bool
+
+    public init(
+        mode: NativeTelemetryMode,
+        recorderPresent: Bool,
+        sampleIntervalAvailable: Bool
+    ) {
+        let enabled = mode != .off && recorderPresent
+        constructsSampler = enabled && sampleIntervalAvailable
+        writesSink = enabled
+        computesChunkQC = enabled && mode == .verbose
+        computesDerivedDiagnostics = enabled
+    }
+}
 import OSLog
 
 public struct NativeTelemetryStageMark: Hashable, Codable, Sendable {

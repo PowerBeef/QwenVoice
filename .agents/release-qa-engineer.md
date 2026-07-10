@@ -57,7 +57,9 @@ QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # optional: bounded custom/s
 # macOS Computer Use evidence (suite selected by impact)
 scripts/macos_agent_ui.sh doctor --suite full --json
 scripts/macos_agent_ui.sh impact
-# Invoke $vocello-macos-ui-qa full or benchmark, then validate:
+# Run every required suite; full and benchmark are orthogonal.
+scripts/macos_test.sh telemetry-overhead   # when requiredRuntimeChecks lists it
+# Invoke $vocello-macos-ui-qa full and/or benchmark, then validate:
 scripts/macos_test.sh ui-report --suite full
 scripts/macos_test.sh bench-ui --report <benchmark-run>
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
@@ -71,7 +73,8 @@ scripts/macos_test.sh lang-bench --subset quick              # Phase 2 hint gate
 scripts/ios_device.sh lang-bench --subset quick --label "release-QA"   # Phases 2–3 on device
 # Full 19-cell iOS matrix: scripts/ios_device.sh lang-bench --subset full --label "…"
 # Phase 3 output (DE/ES/ZH/JA): language-bench.md § Phase 3 prerequisites — Speech Wi‑Fi assets
-# Latest full run (2026-07-06): hint 19/19 PASS; output 7/18 until assets download — rescue-plan-progress.md
+# Historical 2026-07-06 language run: hint 19/19 PASS; output 7/18 pending Speech assets.
+# Current acceptance state and resume commands: docs/development-progress.md
 
 # Semantic frontend review (Computer Use report required)
 scripts/macos_test.sh review --report <full-run>

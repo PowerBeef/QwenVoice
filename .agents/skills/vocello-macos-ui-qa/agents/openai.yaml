@@ -1,4 +1,4 @@
 interface:
   display_name: "Vocello macOS UI QA"
   short_description: "Run semantic macOS UI acceptance with Computer Use"
-  default_prompt: "Use $vocello-macos-ui-qa quick to run the blocking macOS frontend acceptance suite."
+  default_prompt: "Use $vocello-macos-ui-qa quick to run independent blocking macOS frontend acceptance."

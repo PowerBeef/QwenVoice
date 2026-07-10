@@ -178,6 +178,7 @@ instrumentation. Results land in `<data>/diagnostics` and are summarized by
 | `--ledger` | append a one-line row to `benchmarks/HISTORY.md` via a **single** summarizer pass (`--emit-ledger-row`) |
 | `--force-class` | **dev/diagnostic only** — force a constrained memory tier on any Mac: `8gb` · `16gb` · `high` · `iphone` (sets the `QWENVOICE_FORCE_MEMORY_CLASS` knob, relayed to the engine over the `initialize` handshake; stamps `notes.deviceClass`) |
 | `--telemetry` | `off` · `lightweight` (default) · `verbose` (raw per-sample sidecars) |
+| `--seed` | deterministic sampling seed applied to every benchmark take |
 | `--no-stream` | accumulate the full result before decoding (old bench behavior) |
 | `--ttfc` | add an engine first-chunk-latency probe per cell → table + `diagnostics/bench-ttfc.json` |
 | `--keep` / `--force` | append to existing diagnostics / allow clearing even the real app data dir |
