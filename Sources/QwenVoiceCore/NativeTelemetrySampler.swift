@@ -207,12 +207,7 @@ public actor NativeTelemetrySampler {
         samples: [TelemetrySample],
         stageMarks: [NativeTelemetryStageMark]
     ) -> [TelemetrySample] {
-        let sortedMarks = stageMarks.sorted { lhs, rhs in
-            if lhs.tMS == rhs.tMS {
-                return lhs.stage < rhs.stage
-            }
-            return lhs.tMS < rhs.tMS
-        }
+        let sortedMarks = stageMarks.sorted(by: NativeTelemetryStageMark.chronologicallyPrecedes)
 
         var nextMarkIndex = 0
         var currentStage: String?

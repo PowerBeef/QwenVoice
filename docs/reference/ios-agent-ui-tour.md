@@ -44,8 +44,8 @@ optional only (engine lifecycle toasts) — not blockers for Custom/Clone smokes
 | **Model prep in Settings** | Yes | Install **one model at a time** — simultaneous downloads **not** supported on iOS |
 | **Deterministic verification** | Yes | History row, duration, transcript, playable audio |
 | **Tone/delivery accuracy** | Partial | Requires **listening pass** — automation cannot certify |
-| **Full bench matrix (unattended)** | Procedure known | **XCUITest** `scripts/ios_device.sh bench-ui`; clone cells need saved voice on device |
-| **Full bench matrix (agent)** | **B.6d** validated | `scripts/ios_device.sh bench-ui-mirroir --agent-drive`; same telemetry gate as `bench-ui` |
+| **Full bench matrix** | **XCUITest only** | `scripts/ios_device.sh bench-ui` — agents never drive matrices |
+| **Agent smokes** | Yes | mirroir 1-clip + `measure-*` — [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) |
 | **Pre-merge gates** | Scripts only | `scripts/ios_device.sh gate` — not agent-driven |
 
 **Driving stack:** mirroir native **`tap`/`type_text`** when `check_health` + `describe_screen` pass
@@ -1238,9 +1238,8 @@ directly to **`tap`**.
 | Need | Driver |
 | --- | --- |
 | Exploratory smokes, owner tours, ad-hoc generate | **mirroir native** (this appendix) + [B.5–B.8](#b5-driving-invariants-mandatory) |
-| Full UI bench matrix (unattended) | **XCUITest** `scripts/ios_device.sh bench-ui` |
-| Full UI bench matrix (agent) | **`bench-ui-mirroir --agent-drive`** — Appendix **B.6d** |
-| Future WDA agent bench (deferred) | **mobile-mcp** — see [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md) |
+| Full UI bench matrix | **XCUITest** `scripts/ios_device.sh bench-ui` only |
+| Future WDA exploratory (deferred) | **mobile-mcp** — see [`mobile-mcp-ios-evaluation.md`](mobile-mcp-ios-evaluation.md) |
 | Pre-merge regression | **`scripts/ios_device.sh gate`** (XCUITest) — not agent-driven |
 
 Gates are unchanged regardless of exploratory driver.
@@ -1415,57 +1414,9 @@ Same O-A-V loop as B.6; differences:
 
 **Between mode blocks:** `launch` RESET recommended (clears inline player + stale composer). Tap target segment after RESET.
 
-### B.6d Agent UI bench (mirroir + `bench-ui-mirroir`)
-
-Full-matrix UI benchmark driven by **native mirroir** with shell orchestration and telemetry gate — distinct from exploratory smokes (§B.6–B.6c) and from unattended XCUITest `bench-ui`.
-
-**Not a pre-merge gate** until pilot-stable. XCUITest `bench-ui` remains the unattended matrix lane.
-
-#### Entry
-
-```sh
-scripts/ios_device.sh device-state
-scripts/ios_mirroir_preflight.sh --native-only
-scripts/ios_device.sh models check --strict
-scripts/ios_device.sh bench-ui-mirroir --agent-drive \
-  --warm 1 --lengths medium --modes custom --label mirroir-bench-pilot
-```
-
-Pilot subset first (`--modes custom --lengths medium --warm 1` → 2 takes: 1 cold + 1 warm). Full matrix default: 29 takes (~multi-hour agent session).
-
-Shell prints **`MIRROIR_BENCH_TAKE_BEGIN`** blocks and blocks until agent `touch take-N.done`. Artifacts: `build/ios/bench-ui-mirroir-<runID>/` + `check_ios_ui_bench.py` gate.
-
-#### Per-take loop (agent)
-
-1. Read take JSON from shell output (`mode`, `length`, `warmState`, `text`, `needsModePrep`).
-2. Shell already ran `vision-launch` when cold or mode block changes (`QWENVOICE_UI_TEST_HOOKS=1`).
-3. **Mode prep** (when `needsModePrep=1`):
-   - **custom:** tap **Custom** @ y ≈ 84 (218×486) or y ≈ 108 (326×720)
-   - **design:** tap **Design**; if **`+`** brief chip, tap first **STARTING POINTS** row (same as XCTest `voiceBrief_starter_0`) or type *A warm, calm middle-aged male narrator with a clear, measured pace.* → **Confirm**
-   - **clone:** tap **Clone**; **`+`** → **Reference clip** → first **SAVED VOICES** row; reuse chip for warm clone takes
-4. Tap OCR **`Clear script`** (top-leading overlay, `iosStudio_benchClearScript`) — clears drafts + dismisses inline player. Fallback: `scripts/ios_device.sh vision-launch --run-id <ID> --force-cold 0`
-5. Tap composer → `type_text` with **corpus from take JSON** (not ad-hoc smoke scripts) → **SCRIPT_VERIFY** `N > 0`
-6. `SINCE=$(scripts/ios_device.sh vision-now)` — **before** Generate
-7. Tap **Generate** @ OCR — e.g. **(114, 394)** at 218×486; re-OCR each session
-8. `scripts/ios_device.sh vision-bench-wait --run-id <ID> --since "$SINCE" --timeout <from take>`
-9. `touch build/ios/bench-ui-mirroir-<runID>/take-N.done`
-
-**Completion proof:** `vision-bench-wait` (engine telemetry by `benchRunID`) — **not** OCR `"Just now • …"`. Inline player dismiss between warm takes is **optional** when step 4 (**Clear script**) succeeds.
-
-#### Bench-only illegal taps
-
-| Target | Why |
-| --- | --- |
-| Design share `*` @ ~(240, 534) | Opens iOS share sheet |
-| **Save as voice** @ y ≈ 576 | Save flow — not bench dismiss |
-| **Voices tab** mid-matrix | Mode prep uses Studio chips / Reference clip only |
-
-#### OCR additions (bench hooks enabled)
-
-| Label | Role |
-| --- | --- |
-| `Clear script` | Warm-take composer reset (`iosStudio_benchClearScript`) |
-| `none` / filename on markers | `iosStudio_lastGenerationComplete` / `iosStudio_generationError` (XCUITest only; mirroir uses `vision-bench-wait`) |
+> **Deprecated 2026-07:** Agent full-matrix bench (`bench-ui-mirroir`) removed — use XCUITest
+> `bench-ui` only. Historical B.6d procedure archived in
+> [`computer-use-mcp-pilot-log.md`](computer-use-mcp-pilot-log.md) §Archived agent bench.
 
 ### B.7 Multi-clip reset and script entry
 

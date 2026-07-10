@@ -52,7 +52,7 @@ def render(groups: dict[str, list[tuple[str, list[str]]]]) -> str:
         "",
         "These identifiers are **stable test surface area** (AGENTS.md Hard rules) and must survive",
         "refactors. They are the semantic reference for what to look for on screen — used by",
-        "XCUITest suites, the Peekaboo/mirroir exploratory loops, and the review runbooks.",
+        "the macOS Computer Use scenarios, iOS XCUITest/mirroir routes, and review runbooks.",
         "Dynamic ids show their Swift interpolation pattern (e.g. `voicesRow_\\(id)`).",
         "",
     ]
@@ -78,7 +78,7 @@ def render(groups: dict[str, list[tuple[str, list[str]]]]) -> str:
         "- `generateSection_*` / `studioChip_*` — iOS Studio mode segments and setup chips.",
         "- `voicesRow_*`, `iosModel*` — dynamic per-item ids (interpolated).",
         "- `*_readiness` markers carry `ready=true/false` in their value for wait-loops.",
-        "- `mainWindow_*` markers (macOS) expose app state to UI tests (see MacUITestSurfaceMarkers).",
+        "- macOS scenarios inspect real screen/control state; hidden `mainWindow_*` test markers are prohibited.",
         "",
     ]
     return "\n".join(lines)

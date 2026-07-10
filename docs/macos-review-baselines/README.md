@@ -1,30 +1,19 @@
 # macOS UI review baselines
 
-Committed PNG baselines for macOS UI review. Each file is a screenshot captured by
-`VocelloMacReviewUITests` (catalog-driven; resting and post-generation states) and named with a
-stable key.
+Legacy committed PNG references for macOS UI review. They remain useful for historical visual
+context, but pixel comparison is diagnostic only. Current semantic review is performed by
+`$vocello-macos-ui-qa full`; there is no macOS XCUITest screenshot catalog.
 
 ## Workflow
 
 ```sh
-# 1. Capture the current macOS UI into build/macos/review-shots/<run>/ (catalog tour).
-scripts/macos_test.sh review                        # full catalog
-scripts/macos_test.sh review --subset resting       # fast PR pass (resting screens only)
-
-# 2. Seed/update the committed baselines from a known-good run, then review + commit.
-scripts/macos_test.sh review --baseline
-git add docs/macos-review-baselines && git commit
+# Invoke $vocello-macos-ui-qa full, which records named semantic reviews and screenshots.
+scripts/macos_test.sh review --report <full-run>
 ```
 
-On a normal `review` run, the verb prints each capture with its baseline pair (or `NEW`
-when no baseline exists yet). The **perceptual diff** is a vision-MCP step — run it on
-each `(baseline, actual)` pair:
-
-- **`user-axiom`** `axiom_get_agent` agent=`screenshot-validator`, or
-- the `impeccable` skill for a deeper UI pass.
-
-Update a baseline only when the UI change is intentional; a diff that flags an
-unintended delta is the signal that caught a regression.
+The report gates layout, copy, truncation, visibility, enabled state and accessibility semantics.
+Screenshots live in the ignored run directory and can be compared with these references manually,
+but a pixel delta is never the merge verdict.
 
 ## Capture keys
 
@@ -47,8 +36,6 @@ exist in older baselines; re-seed with `--baseline` after intentional UI changes
 
 ## Rules
 
-- macOS is the host — screenshots are direct XCUITest `app.screenshot()` (no iPhone
-  Mirroring chrome, no OLED burn-in concern).
-- `accessibilityIdentifier`s are stable surface area — the catalog drives `sidebar_*`
-  buttons and waits on `mainWindow_activeScreen` / readiness markers; identifier changes
-  are test-breaking changes.
+- macOS is the host, so screenshots contain no iPhone Mirroring chrome or OLED concern.
+- `accessibilityIdentifier`s are stable surface area. Computer Use observes the real tree and the
+  static catalog validator rejects scenario targets that disappear.

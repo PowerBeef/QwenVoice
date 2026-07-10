@@ -13,11 +13,10 @@ If anything here disagrees with the code, the code wins — fix this file.
 > drive a generation, then read the JSONL this system writes + aggregate with
 > `summarize_generation_telemetry.py`. Benchmarking + output‑quality checks are **first‑class**:
 > committed benchmark/QC scripts, baselines, and summaries are permitted (bounded by the
-> `benchmarks/` cap). **Pre-merge gates** use deterministic XCUITest + headless scripts only
-> (never agent screen control). **Exploratory** agent UI driving (mirroir on iOS, Peekaboo on
-> macOS) is restored for non-gate smokes — see [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) and
-> [`.cursor/rules/agent-ui-driving.mdc`](../../.cursor/rules/agent-ui-driving.mdc). iOS UI tests
-> and real-engine generation run **on-device only** via `scripts/ios_device.sh`; GitHub CI
+> `benchmarks/` cap). macOS frontend acceptance is driven only by the repository
+> `$vocello-macos-ui-qa` Computer Use skill; deterministic history/WAV/XPC/backend probes make its
+> structured attestation gate-bearing. iOS UI tests and real-engine generation remain
+> **on-device only** via `scripts/ios_device.sh`; mirroir is exploratory and GitHub CI
 > (`.github/workflows/ci.yml`) is **compile-only** for iOS (`build-for-testing`, no XCUITest).
 > See [`testing-runbook.md`](testing-runbook.md) and [`ios-device-testing.md`](ios-device-testing.md).
 
@@ -147,12 +146,12 @@ file) is front‑trimmed past ~8 MB (`QWENVOICE_DIAGNOSTICS_MAX_MB` scales it), 
 
 ## 5. The per‑generation record schema
 
-`GenerationTelemetryRecord` (schema v5). Optional fields are omitted from JSON when nil,
-so older rows still decode.
+`GenerationTelemetryRecord` (schema v6). Optional fields are omitted from JSON when nil and
+v1–v5 rows remain decodable.
 
 | Field | Type | Notes |
 |---|---|---|
-| `schemaVersion` | Int | 5 (v2 derived/memory/chunk; v3 `modelID`/`warmState`; v4 `audioQC`; v5 high‑resolution `mach_absolute_time` clock + defect localization + typed stage‑mark metadata). |
+| `schemaVersion` | Int | 6 (v2 derived/memory/chunk; v3 model/warm state; v4 audioQC; v5 high-resolution clock/stage metadata; v6 typed frontend/transport/backend/output payloads). |
 | `clockSource` | String? | `mach_absolute_time` when nanosecond timestamps are present. |
 | `generationID` | String | Correlation key (UUID). |
 | `layer` | String | `engine` / `engine-service` / `app` / `merged`. (The retired iOS `engine-extension` layer no longer emits — iOS runs in-process.) |
@@ -162,14 +161,17 @@ so older rows still decode.
 | `usedStreaming` | Bool? | Streaming vs quality‑first. |
 | `finishReason` | String? | `eos` / `maxTokens` / `failed` / `superseded`. |
 | `stageMarks` | `[{tMS, tNS?, sequence?, stage, metadata}]` | Lifecycle timeline with optional nanosecond timestamps and monotonic sequence numbers (see §6). |
-| `timingsMS` | `[String: Int]` | **Engine layer: the full MLX decode breakdown + counters** (see §6). |
-| `counters` | `[String: Int]` | e.g. `chunkCount`; middle layer: `chunksForwarded`, `chunkGaps`; **app layer: `uiStallCount50`/`uiStallCount250`/`uiMaxStallMS`/`uiHeartbeats`** — the UI‑responsiveness KPI from `MainThreadStallWatchdog` (100 ms main‑thread heartbeat during generations; the summarizer surfaces it as the `UIstall` column, `—` for CLI runs which have no UI process). |
+| `frontendMetrics` | `FrontendGenerationMetrics?` | Typed submit/first-chunk/audible/completed and main-thread-stall metrics. |
+| `transportMetrics` | `EngineTransportMetrics?` | Typed terminal/cancellation/lifecycle, opaque session identity, first/last sequence, forwarded/gap/duplicate/reordered counters and duration. |
+| `backendMetrics` | `BackendGenerationMetrics?` | Typed lifecycle stages, warm/streaming state, finish reason, timing/counter enums, and final-chunk barrier. |
+| `outputMetrics` | `GenerationOutputMetrics?` | Duration, readable-WAV verdict, atomic-publication verdict, and audio QC. |
+| `timingsMS` / `counters` | compatibility maps | Generated compatibility output for existing summarizers and old rows; new validators consume typed v6 payloads. |
 | `derivedMetrics` | `[String: Double]?` | Headline KPIs (see §7). Includes `kvCacheEstimatedPeakMB` (2026‑07‑01, audit P1‑2) — the peak of the per‑chunk KV‑cache footprint estimates, surfaced at row level so regression tooling doesn't walk the chunk timeline. |
 | `mlxMemoryByStage` | `[String: {activeMB, cacheMB, peakMB}]?` | MLX GPU memory at each stage (see §8). |
 | `chunkTimeline` | `[GenerationChunkTelemetry]?` | Per‑chunk decode substages, with `arrivalNS` (v5) and optional `mimiDecoderBreakdownMS` (v5) (see §6.3). |
 | `audioQC` | `AudioQCReport?` | Reference‑free quality verdict + flags, plus defect sample offsets and optional per‑chunk QC (`chunkQC`) in verbose mode (see "Guarding output quality"). |
 | `summary` | `TelemetrySummary?` | Process memory curve summary (see §8). `timeToPeakMS` tracks the **physFootprint** peak (the Jetsam‑relevant figure; falls back to RSS only when phys_footprint is unavailable — audit P1‑4, 2026‑07‑01). |
-| `notes` | `[String: String]` | Freeform (e.g. error messages, `deviceClass`, `promptChars`). Includes `memoryPressureBandWorst` (`healthy`/`guarded`/`critical`, audit P1‑6, 2026‑07‑01) — the worst pressure band over the generation derived from the sampler extremes with the shipping `IOSMemoryBudgetPolicy` thresholds. |
+| `notes` | `[String: String]` | Bounded compatibility metadata such as `deviceClass`, `promptChars`, and memory pressure. Raw script, transcript, voice description, file path, and failure message are forbidden; failures use length + SHA-256 digest. |
 | `recordedAt` / `processName` / `processIdentifier` | | Provenance. |
 
 ---
@@ -438,13 +440,13 @@ package does — and records — its own cold load**. Leave it unset for normal 
 - Custom Voice: the default speaker. Voice Design: one fixed voice description. Voice Cloning: a
   pre‑enrolled saved voice — enroll one once from a Custom Voice output clip (no external audio).
 
-**Driving each cell (UI or XCUITest):**
+**Driving each cell (frontend):**
 1. Select the mode (`sidebar_*`) and the variant — `{mode}_speedVariantButton` /
    `{mode}_qualityVariantButton`. Switching variant or mode forces the next load to be cold.
 2. Type the fixed script; `cmd+Return`; wait for "Ready" / the inline Player.
 3. That first run is the **cold** sample (`warmState=cold`). Repeat ×3 for the **warm** samples.
-   macOS: `VocelloMacUITests` drives the real engine via the same identifiers. iOS:
-   `VocelloiOSUITests` drives real generation on a paired iPhone via
+   macOS: `$vocello-macos-ui-qa benchmark` drives the exact app and the shell harness joins typed
+   app/XPC/backend rows before accepting the take. iOS: `VocelloiOSUITests` drives real generation on a paired iPhone via
    `scripts/ios_device.sh` (see [`testing-runbook.md`](testing-runbook.md)).
 
 **Storage‑safe order (disk‑tight machines):** process one cell at a time — download that package

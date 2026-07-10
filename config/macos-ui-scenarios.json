@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "appPath": "build/Vocello.app",
+  "defaultTimeoutSeconds": 30,
+  "suites": {
+    "quick": {
+      "budgetMinutes": 10,
+      "includes": ["launch-and-navigation", "custom-generation", "semantic-review"]
+    },
+    "full": {
+      "budgetMinutes": 40,
+      "includes": [
+        "launch-and-navigation",
+        "custom-generation",
+        "semantic-review",
+        "design-generation",
+        "clone-generation",
+        "batch-generation",
+        "history-and-voices",
+        "settings-round-trip",
+        "reference-import",
+        "xpc-recovery"
+      ]
+    },
+    "benchmark": {
+      "budgetMinutes": null,
+      "includes": ["generation-matrix"]
+    },
+    "destructive": {
+      "budgetMinutes": null,
+      "requiresExplicitAuthorization": true,
+      "includes": ["history-deletion", "voice-deletion", "model-lifecycle"]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "launch-and-navigation",
+      "title": "Launch and primary navigation",
+      "destructive": false,
+      "timeoutSeconds": 60,
+      "steps": [
+        {"action": "observe", "target": "screen_customVoice", "expect": "visible"},
+        {"action": "activate", "target": "sidebar_customVoice", "expect": "screen_customVoice"},
+        {"action": "activate", "target": "sidebar_voiceDesign", "expect": "screen_voiceDesign"},
+        {"action": "activate", "target": "sidebar_voiceCloning", "expect": "screen_voiceCloning"},
+        {"action": "activate", "target": "sidebar_history", "expect": "screen_history"},
+        {"action": "activate", "target": "sidebar_voices", "expect": "screen_voices"},
+        {"action": "activate", "target": "sidebar_settings", "expect": "screen_settings"}
+      ],
+      "probeAssertions": []
+    },
+    {
+      "id": "custom-generation",
+      "title": "Custom Voice generation, playback, and history replay",
+      "destructive": false,
+      "timeoutSeconds": 240,
+      "fixtureText": "Codex macOS quick acceptance generation.",
+      "steps": [
+        {"action": "activate", "target": "sidebar_customVoice", "expect": "screen_customVoice"},
+        {"action": "replaceText", "target": "textInput_textEditor", "expect": "textInput_charCount"},
+        {"action": "activate", "target": "textInput_generateButton", "expect": "sidebarPlayer_bar"},
+        {"action": "activate", "target": "sidebar_history", "expect": "screen_history"},
+        {"action": "activateFirst", "targetPrefix": "historyRow_play_", "expect": "sidebarPlayer_bar"}
+      ],
+      "probeAssertions": ["engine-present", "transport-present", "terminal-match", "chunk-order", "output-readable", "history-match"]
+    },
+    {
+      "id": "semantic-review",
+      "title": "Semantic visual and accessibility review",
+      "destructive": false,
+      "timeoutSeconds": 180,
+      "screens": ["customVoice", "history", "voices", "settings"],
+      "checks": ["no-clipping", "no-truncation", "readable-copy", "enabled-state", "focus-order", "accessibility-labels"],
+      "steps": [],
+      "probeAssertions": []
+    },
+    {
+      "id": "design-generation",
+      "title": "Voice Design generation",
+      "destructive": false,
+      "timeoutSeconds": 300,
+      "fixtureText": "Codex Voice Design acceptance generation.",
+      "steps": [
+        {"action": "activate", "target": "sidebar_voiceDesign", "expect": "screen_voiceDesign"},
+        {"action": "activate", "target": "voiceDesign_briefStarters", "expectPrefix": "voiceDesign_briefStarter_"},
+        {"action": "replaceText", "target": "textInput_textEditor", "expect": "textInput_charCount"},
+        {"action": "activate", "target": "textInput_generateButton", "expect": "sidebarPlayer_bar"}
+      ],
+      "probeAssertions": ["engine-present", "transport-present", "terminal-match", "output-readable"]
+    },
+    {
+      "id": "clone-generation",
+      "title": "Saved voice handoff and clone generation",
+      "destructive": false,
+      "timeoutSeconds": 300,
+      "fixtureText": "Codex Voice Clone acceptance generation.",
+      "steps": [
+        {"action": "activate", "target": "sidebar_voices", "expect": "screen_voices"},
+        {"action": "activate", "target": "voicesRow_use_A_warm_elderly_woman", "expect": "voiceCloning_activeReference"},
+        {"action": "replaceText", "target": "textInput_textEditor", "expect": "textInput_charCount"},
+        {"action": "activate", "target": "textInput_generateButton", "expect": "sidebarPlayer_bar"}
+      ],
+      "probeAssertions": ["engine-present", "transport-present", "terminal-match", "output-readable"]
+    },
+    {
+      "id": "batch-generation",
+      "title": "Two-line batch generation",
+      "destructive": false,
+      "timeoutSeconds": 420,
+      "fixtureText": "First Codex batch line.\nSecond Codex batch line.",
+      "steps": [
+        {"action": "activate", "target": "textInput_batchButton", "expect": "batch_textEditor"},
+        {"action": "replaceText", "target": "batch_textEditor", "expect": "batch_generateAllButton"},
+        {"action": "activate", "target": "batch_generateAllButton", "expect": "batch_doneButton"}
+      ],
+      "probeAssertions": ["two-generations", "engine-present", "transport-present", "output-readable"]
+    },
+    {
+      "id": "history-and-voices",
+      "title": "History search, sorting, replay, and saved voice handoff",
+      "destructive": false,
+      "timeoutSeconds": 180,
+      "steps": [
+        {"action": "activate", "target": "sidebar_history", "expect": "history_searchField"},
+        {"action": "replaceText", "target": "history_searchField", "expectPrefix": "historyRow_"},
+        {"action": "activate", "target": "history_sortPicker", "expect": "screen_history"},
+        {"action": "activate", "target": "sidebar_voices", "expect": "screen_voices"}
+      ],
+      "probeAssertions": ["history-match"]
+    },
+    {
+      "id": "settings-round-trip",
+      "title": "Reversible settings round trip",
+      "destructive": false,
+      "timeoutSeconds": 120,
+      "restoreOriginalValues": true,
+      "steps": [
+        {"action": "activate", "target": "sidebar_settings", "expect": "screen_settings"},
+        {"action": "toggleAndRestore", "target": "preferences_autoPlayToggle", "expect": "preferences_autoPlayToggle"}
+      ],
+      "probeAssertions": []
+    },
+    {
+      "id": "reference-import",
+      "title": "Reference voice import through the system file panel",
+      "destructive": false,
+      "timeoutSeconds": 180,
+      "fixturePath": "scripts/tests/fixtures/prosody/good_01.wav",
+      "requiresActionTimeConfirmation": true,
+      "steps": [
+        {"action": "activate", "target": "voices_enrollButton", "expect": "voicesEnroll_nameField"},
+        {"action": "activate", "target": "voicesEnroll_browseButton", "expect": "system-file-panel"}
+      ],
+      "probeAssertions": []
+    },
+    {
+      "id": "xpc-recovery",
+      "title": "XPC interruption and generation recovery",
+      "destructive": false,
+      "timeoutSeconds": 420,
+      "steps": [
+        {"action": "shell", "command": "xpc-kill", "expect": "app-running"},
+        {"action": "activate", "target": "sidebar_customVoice", "expect": "screen_customVoice"},
+        {"action": "replaceText", "target": "textInput_textEditor", "expect": "textInput_charCount"},
+        {"action": "activate", "target": "textInput_generateButton", "expect": "sidebarPlayer_bar"}
+      ],
+      "probeAssertions": ["transport-interruption", "transport-reconnection", "engine-present", "terminal-match", "output-readable"]
+    },
+    {
+      "id": "generation-matrix",
+      "title": "Computer Use generation benchmark matrix",
+      "destructive": false,
+      "timeoutSeconds": 10800,
+      "matrix": {
+        "modes": ["custom", "design", "clone"],
+        "lengths": ["short", "medium", "long"],
+        "warmRepetitions": 3,
+        "coldLength": "medium",
+        "coldModes": ["custom", "design"],
+        "designBrief": "A warm, calm middle-aged male narrator with a clear, measured pace.",
+        "cloneVoice": "A_warm_elderly_woman",
+        "corpus": {
+          "short": "The train left the station at dawn.",
+          "medium": "The morning train slipped quietly out of the station, carrying a handful of sleepy travelers toward the coast.",
+          "long": "The morning train slipped quietly out of the station, carrying a handful of sleepy travelers toward the coast. Outside the fogged windows, pale fields gave way to grey water, and the rhythm of the rails settled into a steady, hypnotic hum. By the time the sun finally broke through, most of the passengers had drifted into an unhurried silence."
+        }
+      },
+      "steps": [],
+      "probeAssertions": ["matrix-complete", "engine-present", "transport-present", "terminal-match", "chunk-order", "output-readable"]
+    },
+    {
+      "id": "history-deletion",
+      "title": "History deletion",
+      "destructive": true,
+      "requiresActionTimeConfirmation": true,
+      "steps": [],
+      "probeAssertions": []
+    },
+    {
+      "id": "voice-deletion",
+      "title": "Saved voice deletion",
+      "destructive": true,
+      "requiresActionTimeConfirmation": true,
+      "steps": [],
+      "probeAssertions": []
+    },
+    {
+      "id": "model-lifecycle",
+      "title": "Model cancel, repair, delete, and download",
+      "destructive": true,
+      "requiresActionTimeConfirmation": true,
+      "steps": [],
+      "probeAssertions": []
+    }
+  ]
+}

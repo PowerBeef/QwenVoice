@@ -1,0 +1,19 @@
+{
+  "appBinarySHA256": "266f8f4dc9d1c79739ff26a0d25b902a97cc2c8de3e490fcde4402bc374065bc",
+  "buildInputFingerprint": "3806d82ead7d8fe026cad2a5c19689db63a2a7bd9fd771e4d31ffd8998789605",
+  "cleanupVerdict": "pass",
+  "completedAt": "2026-07-10T06:50:35Z",
+  "evidenceDigest": "1159831b2a73773a74a5c0b7121316654d995f822e1e098108bfa43366feb889",
+  "issues": {
+    "blocker": 0,
+    "major": 0,
+    "minor": 0,
+    "note": 0
+  },
+  "probeVerdict": "pass",
+  "runID": "mac-ui-benchmark-20260710-024121",
+  "schemaVersion": 1,
+  "sourceFingerprint": "23488a772fc75c6a0c7585d3e5ab21125cffebe301f5f123dee89a8c30525182",
+  "status": "pass",
+  "suite": "benchmark"
+}

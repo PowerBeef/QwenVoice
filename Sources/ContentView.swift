@@ -153,25 +153,12 @@ struct ContentView: View {
     /// memory reclaim); plain @State — it publishes nothing.
     @State private var engineLifecycleCoordinator = MacEngineServiceLifecycleCoordinator()
 
-    private var currentWindowTitle: String {
-        selectedItem?.rawValue ?? "Vocello"
-    }
-
-    private var currentActiveScreenID: String {
-        selectedItem?.screenAccessibilityID ?? "screen_customVoice"
-    }
-
     private var disabledSidebarItems: Set<SidebarItem> {
         Set(SidebarItem.generationItems.filter { !$0.isAvailable(using: modelManager) })
     }
 
     private var canUseSavedVoicesInVoiceCloning: Bool {
         modelManager.hasInstalledVariant(for: .clone)
-    }
-
-    private var currentDisabledSidebarIdentifiers: String {
-        let identifiers = disabledSidebarItems.map(\.accessibilityID).sorted()
-        return identifiers.isEmpty ? "none" : identifiers.joined(separator: ",")
     }
 
     private var isPreservingLaunchOverrideSelection: Bool {
@@ -301,13 +288,6 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .profileBackground(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .topLeading) {
-            HiddenWindowMarkers(
-                windowTitle: currentWindowTitle,
-                activeScreenID: currentActiveScreenID,
-                disabledIdentifiers: currentDisabledSidebarIdentifiers
-            )
-        }
     }
 
     @ViewBuilder
@@ -607,70 +587,6 @@ private struct VoiceCloningScreenHost: View {
             modelManager: modelManager,
             savedVoicesViewModel: savedVoicesViewModel
         )
-    }
-}
-
-// MARK: - HiddenWindowMarkers
-
-private struct HiddenWindowMarkers: View {
-    let windowTitle: String
-    let activeScreenID: String
-    let disabledIdentifiers: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            hiddenMarker(
-                value: windowTitle,
-                identifier: "mainWindow_activeTitle"
-            )
-            hiddenMarker(
-                value: activeScreenID,
-                identifier: "mainWindow_activeScreen"
-            )
-            hiddenMarker(
-                value: disabledIdentifiers,
-                identifier: "mainWindow_disabledSidebarItems"
-            )
-            hiddenMarker(
-                value: "true",
-                identifier: "mainWindow_ready"
-            )
-            if MacUITestSurfaceMarkers.isEnabled {
-                let markers = MacUITestSurfaceMarkers.shared
-                hiddenMarker(
-                    value: markers.composeReadyCustom ? "true" : "false",
-                    identifier: "mainWindow_composeReady_custom"
-                )
-                hiddenMarker(
-                    value: markers.composeReadyDesign ? "true" : "false",
-                    identifier: "mainWindow_composeReady_design"
-                )
-                hiddenMarker(
-                    value: markers.composeReadyClone ? "true" : "false",
-                    identifier: "mainWindow_composeReady_clone"
-                )
-                hiddenMarker(
-                    value: markers.lastGenerationCompleteID ?? "none",
-                    identifier: "mainWindow_lastGenerationComplete"
-                )
-                hiddenMarker(
-                    value: markers.lastTelemetryFlushedID ?? "none",
-                    identifier: "mainWindow_lastTelemetryFlushed"
-                )
-            }
-        }
-    }
-
-    private func hiddenMarker(value: String, identifier: String) -> some View {
-        Text(value)
-            .font(.system(size: 1))
-            .opacity(0.01)
-            .frame(width: 1, height: 1)
-            .allowsHitTesting(false)
-            .accessibilityLabel(value)
-            .accessibilityValue(value)
-            .accessibilityIdentifier(identifier)
-            .accessibilityHidden(false)
     }
 }
 

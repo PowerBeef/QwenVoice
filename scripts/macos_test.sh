@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# macOS testing/debugging/benchmarking/UI-review lane driver for Vocello.
+# macOS deterministic testing, telemetry, and Computer Use evidence driver.
 #
 # macOS is the dev host (no device/Mirroring/burn-in). The engine runs OUT-OF-PROCESS in
 # an XPC service (com.qwenvoice.app.engine-service) — a separate process that can crash
@@ -8,18 +8,17 @@
 #
 # usage:
 #   scripts/macos_test.sh preflight [--strict-models]  # Xcode + app + dSYMs + XPC + model status
-#   scripts/macos_test.sh uitest-doctor [--open-accessibility]  # UI automation readiness (Gate 1–3)
-#   scripts/macos_test.sh bench-ui [--modes …] [--lengths …] [--warm 3] [--label …] [--profile] [--keep]
+#   scripts/macos_test.sh bench-ui [--report <run-dir>]  # validate Computer Use benchmark + telemetry
 #   scripts/macos_test.sh core-test                 # VocelloCoreTests (language semantics, no models)
 #   scripts/macos_test.sh lang-bench [--subset quick|full] [--label "note"]
 #                                                 # headless macOS language-hint matrix (vocello CLI)
-#   scripts/macos_test.sh test                      # models ensure → VocelloMacSmokeUITests (~12 tests)
-#   scripts/macos_test.sh journey                   # VocelloMacHumanJourneyUITests (phase-A flows)
+#   scripts/macos_test.sh test                      # Core + XPC transport + Qwen3 runtime tests (no UI)
+#   scripts/macos_test.sh ui-report --suite quick|full|benchmark [--report <run-dir>]
 #   scripts/macos_test.sh crashes [--test]          # collect + xcsym-symbolicate .ips (app + XPC service)
 #   scripts/macos_test.sh debug                     # LLDB attach guidance (app + XPC service PID)
 #   scripts/macos_test.sh logs                      # retained os_log → build/macos-logs/<run>.log
 #   scripts/macos_test.sh profile [spec]            # models ensure → xctrace vocello bench
-#   scripts/macos_test.sh review [--baseline] [--subset resting|full]  # catalog captures + baseline diff
+#   scripts/macos_test.sh review [--report <run-dir>]  # alias: validate full Computer Use report
 #   scripts/macos_test.sh xpc                       # XPC lifecycle: retirement/relaunch + crash isolation
 #   scripts/macos_test.sh gate                      # models → inputs → build_foundation → test → crashes
 #                                                    # optional: QWENVOICE_GATE_BENCH=1 adds bounded vocello bench
@@ -31,8 +30,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
 . "$SCRIPT_DIR/lib/test_models.sh"
-. "$SCRIPT_DIR/lib/uitest_signing.sh"
-. "$SCRIPT_DIR/lib/xcresult_shots.sh"
 test_models_init "$ROOT_DIR"
 APP_NAME="Vocello"
 BUNDLE_ID="com.qwenvoice.app"
@@ -46,11 +43,6 @@ warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[0;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 ensure_app() { [[ -d "$APP_BUNDLE" ]] || "$SCRIPT_DIR/build.sh" build; }
-
-# Stable Apple Development signing for macOS UI tests (runner + app under test).
-cmd_uitest_doctor() {
-  exec "$SCRIPT_DIR/macos_uitest_doctor.sh" "$@"
-}
 
 # crashes [--test]: collect macOS .ips crash reports (app + XPC service) from
 # ~/Library/Logs/DiagnosticReports and symbolicate against the preserved build dSYMs.
@@ -254,7 +246,7 @@ cmd_core_test() {
   xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
     -configuration Release -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGN_IDENTITY="-" ENABLE_TESTABILITY=YES \
     -only-testing:VocelloCoreTests \
     > "$ROOT_DIR/build/macos/core-test.log" 2>&1
   local st=$?
@@ -365,371 +357,151 @@ PY
   note "lang-bench PASS · $artifacts"
 }
 
-# test: run VocelloMacSmokeUITests (macOS, arm64) → a single verdict + artifacts under
-# build/macos/uitest-artifacts/<run>/ (xcresult path + best-effort xcresulttool summary +
-# any MAC_TEST_SCREENSHOT_DIR shots). Deep .xcresult analysis: user-axiom axiom_get_agent test-runner.
+# test: deterministic Core, XPC transport, and owned Qwen3 runtime tests. No UI
+# process is launched and no frontend action is synthesized.
 cmd_test() {
   local run_id="mac-test-$(date +%Y%m%d-%H%M%S)"
-  local artifacts="$ROOT_DIR/build/macos/uitest-artifacts/$run_id"
+  local artifacts="$ROOT_DIR/build/macos/test-artifacts/$run_id"
   mkdir -p "$artifacts"
-  export MAC_TEST_SCREENSHOT_DIR="$ROOT_DIR/build/macos/uitest-screenshots"
-  mkdir -p "$MAC_TEST_SCREENSHOT_DIR"
-  ensure_mac_test_models --require
-  export QVOICE_REQUIRE_TEST_MODELS=1
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-  pkill -x QwenVoiceEngineService >/dev/null 2>&1 || true
-  note "test: VocelloMacSmokeUITests (macOS, arm64) → $artifacts"
-  load_uitest_signing_args
-  local identity
-  identity="$(uitest_resolve_signing_identity)"
-  if [[ "$identity" != "-" ]]; then
-    note "uitest signing: $identity"
-  else
-    warn "uitest signing: ad-hoc (TCC grants may not survive rebuilds)"
-  fi
+  local core_st=0 transport_st=0 runtime_st=0 harness_st=0
+
+  note "test: VocelloCoreTests"
   set +e
   xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
     -configuration Release -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    "${UITEST_XCODEBUILD_SIGNING_ARGS[@]}" \
-    -only-testing:VocelloMacUITests/VocelloMacSmokeUITests \
-    > "$artifacts/test.log" 2>&1
-  local st=$?
+    CODE_SIGN_IDENTITY="-" ENABLE_TESTABILITY=YES \
+    -only-testing:VocelloCoreTests \
+    > "$artifacts/core.log" 2>&1 || core_st=$?
+
+  note "test: VocelloEngineIntegrationTests (injectable XPC transport)"
+  xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
+    -configuration Release -destination 'platform=macOS,arch=arm64' \
+    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
+    CODE_SIGN_IDENTITY="-" ENABLE_TESTABILITY=YES \
+    -only-testing:VocelloEngineIntegrationTests \
+    > "$artifacts/transport.log" 2>&1 || transport_st=$?
+
+  note "test: Qwen3RuntimeTests (owned vendored runtime)"
+  swift test --package-path "$ROOT_DIR/third_party_patches/mlx-audio-swift" \
+    --filter Qwen3RuntimeTests \
+    > "$artifacts/runtime.log" 2>&1 || runtime_st=$?
+
+  note "test: Computer Use harness contracts"
+  python3 -m unittest "$ROOT_DIR/scripts/test_macos_agent_ui.py" \
+    > "$artifacts/harness.log" 2>&1 || harness_st=$?
   set -e
-  local xcresult; xcresult="$(find "$ROOT_DIR/build/DerivedData/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1 || true)"
-  {
-    echo "xcresult: ${xcresult:-<none>}"
-    echo "exit: $st"
-    if [[ -n "$xcresult" && -d "$xcresult" ]]; then
-      xcrun xcresulttool get test-results summary --format json --path "$xcresult" 2>/dev/null \
-        || echo "(xcresulttool summary unavailable — open the .xcresult in Xcode)"
-    fi
-  } >"$artifacts/verdict.json"
-  cat "$artifacts/verdict.json" >&2
-  [[ -d "$MAC_TEST_SCREENSHOT_DIR" ]] && cp -R "$MAC_TEST_SCREENSHOT_DIR/." "$artifacts/screenshots" 2>/dev/null || true
-  if (( st == 0 )); then note "test verdict: PASS · artifacts → $artifacts";
-  else warn "test verdict: FAIL (exit $st) · artifacts → $artifacts"; exit "$st"; fi
+  printf 'core=%s\ntransport=%s\nruntime=%s\nharness=%s\n' \
+    "$core_st" "$transport_st" "$runtime_st" "$harness_st" \
+    > "$artifacts/verdict.txt"
+  cat "$artifacts/verdict.txt" >&2
+  if (( core_st == 0 && transport_st == 0 && runtime_st == 0 && harness_st == 0 )); then
+    note "test verdict: PASS · artifacts → $artifacts"
+  else
+    warn "test verdict: FAIL · artifacts → $artifacts"
+    return 1
+  fi
 }
 
-# bench-ui: full-matrix macOS XPC UI benchmark (VocelloMacBenchUITests) + merged summarizer + gate.
-cmd_bench_ui() {
-  local modes="custom,design,clone" lengths="short,medium,long" warm=3 label="" profile=0
-  local skip_doctor=0 keep=0
-  local profile_template="${QVOICE_MAC_PROFILE_TEMPLATE:-Time Profiler}"
-
+# Computer Use owns frontend driving. These lanes validate the resulting report;
+# they never launch an XCTest runner or synthesize input.
+cmd_ui_report() {
+  local suite="" report=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --modes) modes="${2:-}"; shift 2 ;;
-      --modes=*) modes="${1#*=}"; shift ;;
-      --lengths) lengths="${2:-}"; shift 2 ;;
-      --lengths=*) lengths="${1#*=}"; shift ;;
-      --warm) warm="${2:-3}"; shift 2 ;;
-      --warm=*) warm="${1#*=}"; shift ;;
-      --label) label="${2:-}"; shift 2 ;;
-      --label=*) label="${1#*=}"; shift ;;
-      --profile) profile=1; shift ;;
-      --profile-template) profile_template="${2:-Time Profiler}"; shift 2 ;;
-      --profile-template=*) profile_template="${1#*=}"; shift ;;
-      --skip-uitest-doctor) skip_doctor=1; shift ;;
-      --keep) keep=1; shift ;;
+      --suite) suite="${2:-}"; shift 2 ;;
+      --suite=*) suite="${1#*=}"; shift ;;
+      --report) report="${2:-}"; shift 2 ;;
+      --report=*) report="${1#*=}"; shift ;;
       -h|--help|help)
         cat <<'EOF'
-bench-ui — macOS XPC UI benchmark (supplementary integration lane)
+ui-report — validate Codex Computer Use frontend evidence
 
-  scripts/macos_test.sh bench-ui [--modes custom,design,clone] [--lengths short,medium,long]
-      [--warm 3] [--label NOTE] [--profile] [--profile-template "Time Profiler"]
-      [--skip-uitest-doctor] [--keep]
+  scripts/macos_test.sh ui-report --suite quick|full|benchmark [--report <run-id-or-directory>]
 
-Dev iteration (3 takes):
-  scripts/macos_test.sh bench-ui --warm 1 --lengths medium --modes custom --label smoke
-
-Full release matrix (29 takes, Speed):
-  scripts/macos_test.sh bench-ui --label xpc-bench-full
+Create evidence with:
+  $vocello-macos-ui-qa quick|full|benchmark
 EOF
         return 0
         ;;
-      *) die "unknown bench-ui flag '$1' (try --help)" ;;
+      *) die "unknown ui-report flag '$1'" ;;
     esac
   done
-
-  if (( skip_doctor == 0 )); then
-    note "bench-ui step 0: uitest doctor"
-    "$SCRIPT_DIR/macos_uitest_doctor.sh" || true
-    if command -v automationmodetool >/dev/null 2>&1 \
-        && automationmodetool 2>&1 | grep -q 'requires user authentication'; then
-      die "UI Automation still requires a password each run — fix Gate 1:
-  sudo /usr/bin/automationmodetool enable-automationmode-without-authentication
-(or pass --skip-uitest-doctor if you accept the prompt)"
-    fi
-  fi
-
-  local run_id="xpc-bench-$(date +%Y%m%d-%H%M%S)"
-  local artifacts="$ROOT_DIR/build/macos/bench-ui-$run_id"
-  local diag="$HOME/Library/Application Support/QwenVoice-Debug/diagnostics"
-  mkdir -p "$artifacts"
-  [[ -n "$label" ]] || label="$run_id"
-
-  ensure_mac_test_models --require
-  export QVOICE_REQUIRE_TEST_MODELS=1
-
-  if (( keep == 0 )) && [[ -d "$diag" ]]; then
-    note "bench-ui: clearing prior diagnostics in $diag"
-    rm -rf "$diag"
-    mkdir -p "$diag/engine" "$diag/engine-service" "$diag/app"
-  fi
-
-  printf '{"modes":"%s","lengths":"%s","warm":%s}\n' "$modes" "$lengths" "$warm" \
-    > /tmp/vocello-bench-matrix.json
-  note "bench-ui: matrix → /tmp/vocello-bench-matrix.json (modes=$modes lengths=$lengths warm=$warm)"
-  date -u +%Y-%m-%dT%H:%M:%SZ > "$artifacts/run-start-iso.txt"
-
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-  pkill -x QwenVoiceEngineService >/dev/null 2>&1 || true
-  sleep 1
-
-  local profile_app_pid="" profile_svc_pid=""
-  if (( profile )); then
-    note "bench-ui: dual-process profile ($profile_template) — poll for Vocello + QwenVoiceEngineService"
-    (
-      for _ in {1..120}; do
-        local apid; apid="$(pgrep -xn "$APP_NAME" || true)"
-        if [[ -n "$apid" ]]; then
-          xctrace record --template "$profile_template" --attach "$apid" \
-            --output "$artifacts/vocello.trace" \
-            > "$artifacts/profile-app.log" 2>&1 &
-          echo $! > "$artifacts/profile-app.pid"
-          break
-        fi
-        sleep 2
-      done
-    ) &
-    (
-      for _ in {1..120}; do
-        local spid; spid="$(pgrep -xn QwenVoiceEngineService || true)"
-        if [[ -n "$spid" ]]; then
-          xctrace record --template "$profile_template" --attach "$spid" \
-            --output "$artifacts/engine-service.trace" \
-            > "$artifacts/profile-service.log" 2>&1 &
-          echo $! > "$artifacts/profile-service.pid"
-          break
-        fi
-        sleep 5
-      done
-    ) &
-  fi
-
-  load_uitest_signing_args
-  note "bench-ui: VocelloMacBenchUITests (modes=$modes lengths=$lengths warm=$warm) → $artifacts"
-  set +e
-  QWENVOICE_DEBUG=1 \
-  QWENVOICE_SUPPRESS_WARMUP=1 \
-  QWENVOICE_UI_TEST_HOOKS=1 \
-  QVOICE_MAC_BENCH_RUN_ID="$run_id" \
-  QVOICE_MAC_BENCH_MODES="$modes" \
-  QVOICE_MAC_BENCH_LENGTHS="$lengths" \
-  QVOICE_MAC_BENCH_WARM="$warm" \
-  QVOICE_MAC_BENCH_LABEL="$label" \
-  xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
-    -configuration Release -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    "${UITEST_XCODEBUILD_SIGNING_ARGS[@]}" \
-    -only-testing:VocelloMacUITests/VocelloMacBenchUITests/testFullMatrix \
-    > "$artifacts/bench-ui.log" 2>&1
-  local st=$?
-  set -e
-
-  note "bench-ui: waiting for final telemetry merge…"
-  sleep 3
-
-  if [[ -f "$artifacts/profile-app.pid" ]]; then
-    profile_app_pid="$(cat "$artifacts/profile-app.pid" 2>/dev/null || true)"
-    kill "$profile_app_pid" 2>/dev/null || true
-    wait "$profile_app_pid" 2>/dev/null || true
-  fi
-  if [[ -f "$artifacts/profile-service.pid" ]]; then
-    profile_svc_pid="$(cat "$artifacts/profile-service.pid" 2>/dev/null || true)"
-    kill "$profile_svc_pid" 2>/dev/null || true
-    wait "$profile_svc_pid" 2>/dev/null || true
-  fi
-
-  local xcresult; xcresult="$(find "$ROOT_DIR/build/DerivedData/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1 || true)"
-  echo "xcresult: ${xcresult:-<none>}" | tee "$artifacts/verdict.txt"
-  echo "xcodebuild exit: $st" | tee -a "$artifacts/verdict.txt"
-
-  note "bench-ui: summarizer (--merged)"
-  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
-    --label "$label" --merged --show-variance \
-    | tee "$artifacts/summary.log" || warn "summarizer failed or found no rows"
-
-  note "bench-ui: XPC gate"
-  local gate_st=0
-  local since_iso=""
-  [[ -f "$artifacts/run-start-iso.txt" ]] && since_iso="$(tr -d '\n' < "$artifacts/run-start-iso.txt")"
-  python3 "$ROOT_DIR/scripts/check_macos_xpc_bench.py" "$diag" \
-    --modes "$modes" --lengths "$lengths" --warm "$warm" \
-    --run-id "$run_id" \
-    ${since_iso:+--since-recorded "$since_iso"} \
-    | tee -a "$artifacts/verdict.txt" || gate_st=$?
-
-  if (( st == 0 && gate_st == 0 )); then
-    note "bench-ui PASS · $artifacts"
-  else
-    warn "bench-ui FAIL (xcodebuild=$st gate=$gate_st) · $artifacts"
-    exit 1
-  fi
+  [[ "$suite" == "quick" || "$suite" == "full" || "$suite" == "benchmark" ]] \
+    || die "ui-report requires --suite quick|full|benchmark"
+  local -a args=(validate-report --suite "$suite")
+  [[ -n "$report" ]] && args+=(--run "$report")
+  "$SCRIPT_DIR/macos_agent_ui.sh" "${args[@]}"
 }
 
-# review [--baseline] [--subset resting|full]: catalog-driven captures (VocelloMacReviewUITests)
 cmd_review() {
-  local baseline_mode=0 subset="full"
+  cmd_ui_report --suite full "$@"
+}
+
+cmd_bench_ui() {
+  local report=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --baseline) baseline_mode=1; shift ;;
-      --subset) subset="${2:-full}"; shift 2 ;;
-      --subset=*) subset="${1#*=}"; shift ;;
-      *) die "unknown review flag '$1' (try --baseline or --subset resting|full)" ;;
+      --report) report="${2:-}"; shift 2 ;;
+      --report=*) report="${1#*=}"; shift ;;
+      -h|--help|help)
+        cat <<'EOF'
+bench-ui — validate a Computer Use benchmark report and its XPC/backend matrix
+
+  scripts/macos_test.sh bench-ui [--report <run-id-or-directory>]
+
+Drive the matrix first with:
+  $vocello-macos-ui-qa benchmark
+EOF
+        return 0
+        ;;
+      *) die "unknown bench-ui flag '$1'" ;;
     esac
   done
-  local run_id="mac-review-$(date +%Y%m%d-%H%M%S)"
-  local shots="$ROOT_DIR/build/macos/review-shots/$run_id"
-  local baselines="$ROOT_DIR/docs/macos-review-baselines"
-  mkdir -p "$shots" "$baselines"
-  note "review: macOS capture catalog (subset=$subset runID=$run_id)"
-  load_uitest_signing_args
-  set +e
-  # TEST_RUNNER_ prefix: xcodebuild strips it and passes the var into the test-runner
-  # process (plain env vars do NOT propagate). Keep the un-prefixed vars for older habits.
-  MAC_TEST_SCREENSHOT_DIR="$shots" \
-  QVOICE_MAC_REVIEW_SUBSET="$subset" \
-  TEST_RUNNER_MAC_TEST_SCREENSHOT_DIR="$shots" \
-  TEST_RUNNER_QVOICE_MAC_REVIEW_SUBSET="$subset" \
-  xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" \
-    -scheme QwenVoice -configuration Release -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    "${UITEST_XCODEBUILD_SIGNING_ARGS[@]}" \
-    -only-testing:VocelloMacUITests/VocelloMacReviewUITests \
-    > "$shots/tour.log" 2>&1
-  local st=$?
-  set -e
-  # Fallback: recover captures from the .xcresult attachments (always present even
-  # when the runner could not write PNGs to disk).
-  if ! ls "$shots"/*.png >/dev/null 2>&1; then
-    local xcresult
-    xcresult="$(find "$ROOT_DIR/build/DerivedData/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1 || true)"
-    if [[ -n "$xcresult" ]]; then
-      export_xcresult_shots "$xcresult" "$shots" "review-" >/dev/null 2>&1 \
-        && note "captures recovered from xcresult attachments" \
-        || true
-    fi
-  fi
-  note "captures → $shots"
-  if (( baseline_mode == 1 )); then
-    if ls "$shots"/*.png >/dev/null 2>&1; then
-      cp "$shots"/*.png "$baselines/"
-      note "baselines seeded/updated → $baselines (review + git add + commit)"
-    else
-      warn "no PNGs in $shots to seed"
-    fi
-    return "$st"
-  fi
-  note "── baseline pairs (perceptual diff via vision MCP) ──"
-  local any=0 png name
-  for png in "$shots"/*.png; do
-    [[ -f "$png" ]] || continue
-    any=1
-    name="$(basename "$png")"
-    if [[ -f "$baselines/$name" ]]; then
-      printf '  DIFF  %s\n' "$name" >&2
-      printf '        actual:   %s\n' "$png" >&2
-      printf '        baseline: %s\n' "$baselines/$name" >&2
-    else
-      printf '  NEW   %s  (no baseline — run: %s review --baseline)\n' "$name" "$0" >&2
-    fi
-  done
-  (( any == 0 )) && warn "no captures produced (did the tour run?)"
-  note "diff each pair with user-axiom axiom_get_agent screenshot-validator or a manual visual pass (expected=baseline, actual=capture)."
-  (( st == 0 )) && note "review OK" || warn "review had failures (exit $st)"
-  return "$st"
-}
 
-cmd_journey() {
-  local run_id="mac-journey-$(date +%Y%m%d-%H%M%S)"
-  local artifacts="$ROOT_DIR/build/macos/journey-artifacts/$run_id"
-  mkdir -p "$artifacts"
-  ensure_mac_test_models --require
-  export QVOICE_REQUIRE_TEST_MODELS=1
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-  pkill -x QwenVoiceEngineService >/dev/null 2>&1 || true
-  note "journey: VocelloMacHumanJourneyUITests → $artifacts"
-  load_uitest_signing_args
-  set +e
-  xcodebuild test -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
-    -configuration Release -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    "${UITEST_XCODEBUILD_SIGNING_ARGS[@]}" \
-    -only-testing:VocelloMacUITests/VocelloMacHumanJourneyUITests \
-    > "$artifacts/journey.log" 2>&1
-  local st=$?
-  set -e
-  local xcresult; xcresult="$(find "$ROOT_DIR/build/DerivedData/Logs/Test" -name '*.xcresult' -type d 2>/dev/null | sort | tail -1 || true)"
-  echo "xcresult: ${xcresult:-<none>}" > "$artifacts/verdict.txt"
-  echo "exit: $st" >> "$artifacts/verdict.txt"
-  cat "$artifacts/verdict.txt" >&2
-  (( st == 0 )) && note "journey PASS · $artifacts" || { warn "journey FAIL · $artifacts"; exit "$st"; }
-}
+  local -a report_args=(--suite benchmark)
+  [[ -n "$report" ]] && report_args+=(--report "$report")
+  cmd_ui_report "${report_args[@]}"
 
-# xpc [--crash-isolation] [--watch N]: exercise the XPC engine-service lifecycle — the
-# macOS-unique dimension. The service is lazy (spawns on first generation), can be retired
-# under memory pressure (idle exit), and the app must survive a service crash + reconnect
-# on the next generation. This verb launches the app with a short retirement dwell and
-# WATCHES the service process (spawn → retire → relaunch); with --crash-isolation it
-# kills a running service to prove the app survives. Triggering a generation is manual
-# (the app is UI-driven) — the verb monitors + asserts the scriptable parts. Full
-# procedure + the expected app-side UX (sidebar_backendStatus_crashed / transparent
-# relaunch) are documented in docs/reference/macos-testing.md.
+  local run_json
+  if [[ -n "$report" ]]; then
+    if [[ "$report" == */run.json ]]; then run_json="$report"
+    elif [[ -d "$report" ]]; then run_json="$report/run.json"
+    else run_json="$ROOT_DIR/build/macos/agent-ui/$report/run.json"; fi
+  else
+    run_json="$(python3 - "$ROOT_DIR/build/macos/agent-ui/current-run.json" <<'PY'
+import json, pathlib, sys
+current = json.loads(pathlib.Path(sys.argv[1]).read_text())
+print(pathlib.Path(current["runDirectory"]) / "run.json")
+PY
+)"
+  fi
+  [[ -f "$run_json" ]] || die "benchmark run.json not found: $run_json"
+  local run_id
+  run_id="$(python3 - "$run_json" <<'PY'
+import json, pathlib, sys
+print(json.loads(pathlib.Path(sys.argv[1]).read_text())["runID"])
+PY
+)"
+  local diag="$HOME/Library/Application Support/QwenVoice-Debug/diagnostics"
+  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
+    --label "$run_id" --merged --show-variance
+  python3 "$ROOT_DIR/scripts/check_macos_xpc_bench.py" "$diag" --run-id "$run_id"
+}
+# XPC lifecycle shell support for the Computer Use full suite. Frontend actions
+# remain in $vocello-macos-ui-qa; this verb only observes or mutates the service.
 cmd_xpc() {
-  local ci=0
-  [[ "${1:-}" == "--crash-isolation" ]] && ci=1
-  local watch="${QVOICE_MAC_XPC_WATCH:-60}"
-  ensure_app
-  note "xpc: launching app with a short retirement dwell (QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=8)…"
-  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
-  QWENVOICE_DEBUG=1 QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=8 /usr/bin/open -na "$APP_BUNDLE"
-  note "  ⇒ trigger a generation in the app to spawn the service; this verb watches the lifecycle."
-  note "  watching QwenVoiceEngineService for ${watch}s (spawn → retire → relaunch)…"
-  local seen=0 prev=0 end=$(( $(date +%s) + watch )) now pid
-  while (( $(date +%s) < end )); do
-    now=0; pgrep -x QwenVoiceEngineService >/dev/null 2>&1 && now=1
-    if (( now != prev )); then
-      if (( now == 1 )); then
-        pid="$(pgrep -xn QwenVoiceEngineService || echo '?')"
-        note "  service: SPAWNED (pid $pid)"
-        if (( ci == 1 )) && [[ "$pid" != "?" ]]; then
-          note "  crash-isolation: killing service pid $pid ..."
-          kill -KILL "$pid" 2>/dev/null || true
-          sleep 2
-          if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
-            note "  ✓ app ($APP_NAME) survived the service kill — crash isolation holds"
-          else
-            warn "  ✗ app died after the service kill — crash isolation FAILED"
-          fi
-          note "  (the next generation relaunches the service — keep watching)"
-        fi
-      else
-        note "  service: retired (idle exit)"
-      fi
-      prev=$now; seen=1
-    fi
-    sleep 1
-  done
-  (( seen )) || warn "service never spawned — trigger a generation in the app, then re-run"
-  note "done. Relaunch/reconnect is proven when the service reappears after a retire/kill on the next generation."
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    status) "$SCRIPT_DIR/macos_agent_ui.sh" xpc-status "$@" ;;
+    kill)   "$SCRIPT_DIR/macos_agent_ui.sh" xpc-kill "$@" ;;
+    wait)   "$SCRIPT_DIR/macos_agent_ui.sh" xpc-wait "$@" ;;
+    *) die "unknown xpc subcommand '$sub' (try status|kill|wait)" ;;
+  esac
 }
-
-# gate: one-command macOS pre-merge gate — check_project_inputs → build_foundation macos
-# → test (VocelloMacSmokeUITests) → crashes (post-run check) → single verdict +
-# build/macos/gate-<run>/. Optional bounded engine bench when QWENVOICE_GATE_BENCH=1.
-# Deeper dives (bench/profile/review/xpc) are separate verbs.
+# gate: one-command macOS pre-merge gate — inputs → build → deterministic Core,
+# transport, and runtime tests → crashes → impact-based Computer Use attestation.
+# Optional bounded engine bench remains available with QWENVOICE_GATE_BENCH=1.
 
 GATE_BENCH_BASELINE="$ROOT_DIR/benchmarks/baselines/mac-gate-bench.json"
 
@@ -817,8 +589,8 @@ cmd_gate() {
   local overall=0
   local gate_bench=0
   [[ "${QWENVOICE_GATE_BENCH:-0}" == "1" ]] && gate_bench=1
-  local total_steps=6
-  (( gate_bench )) && total_steps=7
+  local total_steps=7
+  (( gate_bench )) && total_steps=8
   { echo "Vocello macOS gate — $run_id"; echo; } | tee "$verdict"
 
   # Marker for the gate-fatal crash-delta check: only .ips files newer than this
@@ -848,7 +620,7 @@ cmd_gate() {
     echo "core-test: PASS" | tee -a "$verdict"
   else echo "core-test: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 4/$total_steps: test (VocelloMacSmokeUITests)"
+  note "gate step 4/$total_steps: deterministic Core + XPC transport + Qwen3 runtime tests"
   if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
     echo "test: PASS" | tee -a "$verdict"
   else echo "test: FAIL" | tee -a "$verdict"; overall=1; fi
@@ -870,8 +642,16 @@ cmd_gate() {
     overall=1
   fi
 
+  note "gate step 6/$total_steps: impact-based Computer Use attestation"
+  if "$SCRIPT_DIR/macos_agent_ui.sh" impact --check >>"$gate_dir/ui-attestation.log" 2>&1; then
+    echo "computer-use attestation: PASS or not required" | tee -a "$verdict"
+  else
+    echo "computer-use attestation: FAIL (see ui-attestation.log; run the required \$vocello-macos-ui-qa suite)" | tee -a "$verdict"
+    overall=1
+  fi
+
   if (( gate_bench )); then
-    note "gate step 6/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
+    note "gate step 7/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
     if run_gate_bench "$gate_dir"; then
       echo "bench: PASS (see bench.log)" | tee -a "$verdict"
     else
@@ -900,17 +680,16 @@ main() {
     core-test) cmd_core_test "$@" ;;
     lang-bench) cmd_lang_bench "$@" ;;
     test)      cmd_test "$@" ;;
-    journey)   cmd_journey "$@" ;;
+    ui-report) cmd_ui_report "$@" ;;
     bench-ui)  cmd_bench_ui "$@" ;;
     review)    cmd_review "$@" ;;
     xpc)       cmd_xpc "$@" ;;
     gate)      cmd_gate "$@" ;;
     models)    cmd_models "$@" ;;
-    uitest-doctor) cmd_uitest_doctor "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
-    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|journey|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|uitest-doctor|help)" ;;
+    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|ui-report|bench-ui|crashes|debug|logs|profile|review|xpc|gate|models|help)" ;;
   esac
 }
 

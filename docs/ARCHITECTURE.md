@@ -1,7 +1,7 @@
 # Vocello (QwenVoice) — Architecture Reference
 
-> **Living document.** This is the unified, code-verified map of how Vocello fits
-> together: modules, dependencies, runtime architecture, the request/generation
+> **Living document.** This is the code-verified architecture reference for how Vocello fits
+> together: modules, runtime architecture, the request/generation
 > lifecycle, persistence, model management, and telemetry. When this doc disagrees
 > with the code, **the code wins** — fix this doc.
 >
@@ -27,9 +27,9 @@ Platforms: macOS 26+, iOS 26+, Apple Silicon (`arm64`), Xcode 26, Swift 6.
 Stable macOS release: **Vocello 2.1.0**. iOS is on-device-capable on `main` but
 not yet distributed.
 
-> For repo conventions, build commands, engine invariants, and release process,
-> read [`AGENTS.md`](../AGENTS.md). This document is the *map*; `AGENTS.md` is
-> the *operating manual*.
+> Start with the canonical interactive [`project map`](project-map.html). For repo conventions,
+> build commands, engine invariants, and release process, read [`AGENTS.md`](../AGENTS.md).
+> This document provides the deeper architecture narrative.
 
 ---
 
@@ -104,7 +104,8 @@ graph.)
 | `QwenVoiceEngineSupport` | framework.static | macOS | `QwenVoiceEngineSupport` | `com.qwenvoice.engine-support` | macOS runtime helpers + the **XPC wire protocol** (`EngineCommand`, envelopes, codec). |
 | `QwenVoiceNative` | framework.static | macOS | `QwenVoiceNative` | `com.qwenvoice.native` | macOS app-facing XPC client/coordinator/store bridging XPC to SwiftUI. |
 | `QwenVoiceEngineService` | xpc-service | macOS | `QwenVoiceEngineService` | `com.qwenvoice.app.engine-service` | Out-of-process engine host for crash isolation + memory containment. |
-| `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | macOS XCUITest: smoke, journey, review catalog, XPC bench matrix (real engine). |
+| `VocelloCoreTests` | bundle.unit-test | macOS | `VocelloCoreTests` | `com.qwenvoice.core.tests` | Core semantics, typed telemetry compatibility, and atomic/readable output contracts. |
+| `VocelloEngineIntegrationTests` | bundle.unit-test | macOS | `VocelloEngineIntegrationTests` | `com.qwenvoice.engine-integration.tests` | Injectable XPC client/transport lifecycle and correlation contracts; never launches frontend UI. |
 | `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | iOS XCUITest on paired iPhone only (real in-process engine). |
 
 ### Testing lanes (see [`docs/reference/testing-runbook.md`](reference/testing-runbook.md))
@@ -112,11 +113,12 @@ graph.)
 | Layer | macOS | iOS | Pre-merge gate? |
 | --- | --- | --- | --- |
 | **Gate** | `macos_test.sh gate` | `ios_device.sh gate` | Yes |
-| **UI regression** | XCUITest smoke/journey/bench-ui/review | XCUITest test/bench-ui/review | Used by gate (smoke) |
+| **UI regression** | `$vocello-macos-ui-qa` Computer Use + typed attestation | XCUITest test/bench-ui/review | Impact-selected on macOS; used by iOS gate |
+| **Middle/backend deterministic** | Core + XPC integration + `Qwen3RuntimeTests` | Core/on-device engine lanes | Yes on macOS |
 | **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` autorun | Optional in gate |
-| **Agent exploratory** | Peekaboo + `uitest_measure.sh` | mirroir MCP + tour doc | Never |
+| **Agent exploratory** | Same Computer Use operator, but only structured quick/full/benchmark reports count | mirroir MCP + tour doc | macOS reports can gate; iOS exploration cannot |
 
-**Two schemes**: `QwenVoice` (macOS app + `VocelloMacUITests`) and `VocelloiOS`
+**Two schemes**: `QwenVoice` (macOS app + deterministic unit/integration tests) and `VocelloiOS`
 (iOS app + `VocelloiOSUITests`). A single shippable config, **`Release`**, is
 the only config — there is no `Debug` config and no `DEBUG` symbol.
 
@@ -669,11 +671,15 @@ Records are written by the `GenerationTelemetryJSONLSink` actor as JSONL under
 - `*/native-events.jsonl` (chunk gaps, warm-admission, XPC retirement — gated)
 - `<documents>/generation-failures.jsonl` (`GenerationFailureDiagnosticLogger` — gated)
 
-`GenerationTelemetryRecord` is a versioned Codable struct keyed by `generationID`
-with `layer { engine, engineService, app, merged }`, wall/audio timings, a
-`timings` map, `memorySnapshots[]`, `stageMarks[]` (e.g. prewarm, clone
-conditioning, generation, wav-write), optional `chunkTelemetry`, and an
-`audioQCReport`. Aggregate with `scripts/summarize_generation_telemetry.py`.
+`GenerationTelemetryRecord` schema v6 is a versioned Codable struct keyed by `generationID`
+with `layer { engine, engineService, app, merged }`. New validation consumes typed
+`FrontendGenerationMetrics`, `EngineTransportMetrics`, `BackendGenerationMetrics`, and
+`GenerationOutputMetrics`. The legacy timing/counter/note dictionaries remain serialization
+compatibility output and v1–v5 rows still decode. The transport layer records session/chunk/order/
+terminal evidence; the backend records typed stages/timings/counters, final barrier, atomic output,
+memory, and audio QC. No telemetry persists raw script, transcript, path, or voice description.
+Aggregate with `scripts/summarize_generation_telemetry.py` and validate UI-driven generations with
+`scripts/macos_agent_ui.sh verify-probes`.
 Logs are budget-capped (`QWENVOICE_DIAGNOSTICS_MAX_MB`, default ~8 MB, pruned
 oldest-first); raw `*.jsonl` is gitignored; committed summaries must be ≤256 KB.
 
@@ -758,6 +764,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
+- [`project-map.html`](project-map.html) — canonical interactive project map: product features, build graph, runtime flows, source ownership, dependencies, contracts, and Codex routes.
 - [`AGENTS.md`](../AGENTS.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.
 - [`PRODUCT.md`](../PRODUCT.md) — product/brand guidance.

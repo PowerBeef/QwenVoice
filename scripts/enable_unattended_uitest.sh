@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time Mac host setup: remove the login-password prompt when XCTest enables UI Automation
-# (Authorization Services Gate 1). Applies to macOS *and* on-device iOS XCUITest — both use
-# the same host-side automation mode on this Mac.
+# (Authorization Services Gate 1). This is now used only by on-device iOS XCUITest; macOS
+# frontend acceptance uses Codex Computer Use instead of XCTest UI Automation.
 #
 # Requires admin once (sudo). Persists across reboots. Does not grant Accessibility/TCC and
 # does not bypass the iPhone unlock / device-passcode handshake (see ios_uitest_doctor.sh).
@@ -47,7 +47,7 @@ out="$(automationmodetool 2>&1 || true)"
 if grep -q 'DOES NOT REQUIRE user authentication' <<<"$out"; then
   ok "Gate 1 closed — Mac password prompt removed for UI Automation"
   echo "$out" | sed 's/^/    /'
-  note "Next: scripts/ios_uitest_doctor.sh (iPhone unlock advisory) or scripts/macos_uitest_doctor.sh (Accessibility)"
+  note "Next: scripts/ios_uitest_doctor.sh (physical-device XCUITest only). macOS frontend QA uses Codex Computer Use."
   exit 0
 fi
 

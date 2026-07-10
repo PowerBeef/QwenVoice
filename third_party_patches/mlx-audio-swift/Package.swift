@@ -68,5 +68,17 @@ let package = Package(
             ],
             path: "Sources/MLXAudioTTS"
         ),
+
+        // Curated deterministic coverage for the owned Qwen3 runtime. Keep this
+        // target narrow; do not re-import upstream's broad multi-model test tree.
+        .testTarget(
+            name: "Qwen3RuntimeTests",
+            dependencies: [
+                "MLXAudioCore",
+                "MLXAudioCodecs",
+                "MLXAudioTTS",
+            ],
+            path: "Tests/Qwen3RuntimeTests"
+        ),
     ]
 )

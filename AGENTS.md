@@ -1,8 +1,8 @@
 # AGENTS.md — Vocello (QwenVoice)
 
-> Onboarding for AI agents in Cursor. **Code wins over docs.** When scope, platform, or gate expectations are unclear, **ask before editing**.
+> Durable onboarding for Codex. **Code wins over docs.** When scope, platform, or gate expectations are unclear, **ask before editing**.
 >
-> **Invariants:** [`.cursor/rules/`](.cursor/rules/) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Role playbooks:** [`.agents/`](.agents/)
+> **Project map:** [`docs/project-map.html`](docs/project-map.html) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Role playbooks:** [`.agents/`](.agents/)
 
 ## What this is
 
@@ -26,15 +26,17 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 
 | Rule | Detail / verify |
 | --- | --- |
-| **iOS = physical device only** | Never Simulator or sim MCP tools. Gate: `scripts/ios_device.sh gate`. → [`.cursor/rules/testing.mdc`](.cursor/rules/testing.mdc), [`.cursor/rules/ios.mdc`](.cursor/rules/ios.mdc) |
+| **iOS = physical device only** | Never use Simulator or simulator-oriented Codex skills/tools. Gate: `scripts/ios_device.sh gate`. → [`.agents/ios-engineer.md`](.agents/ios-engineer.md), [`docs/reference/ios-device-testing.md`](docs/reference/ios-device-testing.md) |
 | **`project.yml`, not pbxproj** | After edit: `./scripts/regenerate_project.sh` + `./scripts/check_project_inputs.sh`. iOS resources: `sources:` + `buildPhase: resources` (not `resources:`). |
 | **Release-only config** | Debug via `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); `#if DEBUG` for test/sim scaffolding only. |
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Privacy** | No PII in tracked user-facing files. |
-| **Agent UI ≠ gates** | Exploratory mirroir/peekaboo only → [`.cursor/rules/agent-ui-driving.mdc`](.cursor/rules/agent-ui-driving.mdc) |
+| **macOS UI = Computer Use** | The repository skill `$vocello-macos-ui-qa` is the sole macOS frontend driver. Its fresh typed attestation is gate-blocking when `scripts/macos_agent_ui.sh impact` selects quick/full/benchmark. XCUITest remains iOS-only. → [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md) |
 
-Full invariant list: [`.cursor/rules/project-structure.mdc`](.cursor/rules/project-structure.mdc).
+`.cursor/rules/` is retained as historical Cursor configuration, not as automatically active
+Codex guidance. Every active invariant must live here, in a role playbook, or in an authoritative
+reference document.
 
 ## Workflows
 
@@ -53,7 +55,9 @@ Full invariant list: [`.cursor/rules/project-structure.mdc`](.cursor/rules/proje
 
 ```sh
 scripts/macos_test.sh models ensure   # once per machine if needed
-scripts/macos_test.sh core-test       # VocelloCoreTests (language semantics; also gate step 3)
+scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime tests
+scripts/macos_agent_ui.sh impact      # none, quick, full, or benchmark
+# If UI evidence is required: invoke $vocello-macos-ui-qa <suite>
 scripts/macos_test.sh gate
 ```
 
@@ -106,11 +110,15 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | `Sources/SharedSupport/` | Shared player, persistence, transcriber |
 | `scripts/*.sh` | Build, test, release |
 | `config/language-bench-*.json` | Language hint bench corpus + matrix |
-| `Tests/Vocello*UITests/` | XCUITest smoke/bench |
-| `Tests/VocelloCoreTests/` | macOS unit tests (language semantics) |
+| `.agents/skills/vocello-macos-ui-qa/` | Sole macOS frontend-driving workflow (Codex Computer Use) |
+| `scripts/macos_agent_ui.sh`, `config/macos-*.json` | Session/evidence harness, scenario and impact contracts |
+| `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
+| `Tests/VocelloiOSUITests/` | Physical-device iOS XCUITest (unchanged) |
+| `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |
 | `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
 
-Module graph and lifecycles: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Interactive feature/module map: [`docs/project-map.html`](docs/project-map.html). Deeper lifecycle
+narrative: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Commands (common)
 
@@ -120,30 +128,32 @@ Module graph and lifecycles: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 scripts/macos_test.sh core-test
 scripts/macos_test.sh lang-bench --subset quick
 scripts/macos_test.sh test
+scripts/macos_test.sh ui-report --suite quick|full|benchmark
 scripts/ios_device.sh test
 scripts/ios_device.sh lang-bench --subset quick
-scripts/macos_test.sh review [--baseline]
+scripts/macos_test.sh review [--report <run>]
 scripts/ios_device.sh review [--baseline]
 ```
 
 Full lanes: [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md), [`docs/reference/ios-device-testing.md`](docs/reference/ios-device-testing.md).
 
-## Tool routing (Cursor)
+## Codex tool routing
 
-**Scripts first** for build/test — gates are never agent-driven screen control.
+**Scripts first** for build/test and deterministic proof. macOS frontend acceptance is the explicit
+exception: the repository Computer Use skill drives the real UI while the shell harness supplies
+typed, reproducible evidence. Before using a skill/plugin, read its instructions and keep actions
+inside the selected role's ownership boundary.
 
-MCP inventory: [`.cursor/rules/mcp-routing.mdc`](.cursor/rules/mcp-routing.mdc).
-
-| Work | Start here |
+| Work | Start here / use |
 | --- | --- |
-| MLX / engine | `.agents/backend-mlx.md`, `docs/reference/mlx-guide.md` |
-| iOS | `.agents/ios-engineer.md`, `docs/reference/ios-app-guide.md` |
-| macOS / XPC | `.agents/macos-engineer.md`, `docs/reference/macos-app-guide.md` |
-| Scripts / CI | `.agents/release-qa-engineer.md` |
-| Crashes / profiles | Axiom MCP via mcp-routing |
-| Library docs | Context7 MCP |
-
-Dispatch large work via Cursor `Task`; pass the role file path.
+| MLX / engine | `.agents/backend-mlx.md`, `docs/reference/mlx-guide.md`, shell scripts |
+| iOS | `.agents/ios-engineer.md`, `docs/reference/ios-app-guide.md`, `scripts/ios_device.sh` on a physical device only |
+| macOS / XPC | `.agents/macos-engineer.md`, `docs/reference/macos-app-guide.md`, macOS Codex skills where relevant |
+| Scripts / CI / GitHub | `.agents/release-qa-engineer.md`, shell scripts, installed GitHub integration |
+| Website | `.agents/website-engineer.md`, Browser for localhost verification |
+| macOS frontend QA | `$vocello-macos-ui-qa quick|full|benchmark|destructive` + `scripts/macos_agent_ui.sh`; exact `build/Vocello.app` only |
+| iOS frontend QA | `scripts/ios_device.sh` + physical-device XCUITest; Computer Use migration is deferred |
+| External systems and current APIs | Relevant installed Codex skill/plugin or connector; use authoritative documentation |
 
 ## Active / deep reading
 
@@ -151,7 +161,7 @@ Dispatch large work via Cursor `Task`; pass the role file path.
 | --- | --- |
 | [`docs/rescue-plan-progress.md`](docs/rescue-plan-progress.md) | **Active rescue/QA** — read first |
 | [`docs/reference/ios-agent-ui-tour.md`](docs/reference/ios-agent-ui-tour.md) | mirroir driving (Appendix B) |
-| [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) | exploratory smokes |
+| [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) | macOS Computer Use route + iOS exploratory smokes |
 | [`docs/reference/ui-test-surface.md`](docs/reference/ui-test-surface.md) | accessibilityIdentifier catalog |
 | [`docs/reference/language-bench.md`](docs/reference/language-bench.md) | language hint + output bench (Phases 1–3) |
 | [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) | bench protocol |

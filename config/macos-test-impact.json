@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "default": "none",
+  "rank": {"none": 0, "quick": 1, "full": 2, "benchmark": 3},
+  "rules": [
+    {"level": "benchmark", "patterns": ["third_party_patches/mlx-audio-swift/Package.swift", "third_party_patches/mlx-audio-swift/Sources/**", "third_party_patches/mlx-audio-swift/Tests/**", "Sources/QwenVoiceBackendCore/**", "benchmarks/**", "scripts/summarize_generation_telemetry.py"]},
+    {"level": "full", "patterns": ["project.yml", "Sources/ViewModels/**", "Sources/Services/**", "Sources/QwenVoiceNative/**", "Sources/QwenVoiceEngineService/**", "Sources/QwenVoiceEngineSupport/**", "Sources/SharedSupport/**", "Sources/QwenVoiceCore/**", "config/macos-ui-scenarios.json", "config/backend-risk-spine.json", ".agents/skills/vocello-macos-ui-qa/**", "scripts/macos_agent_ui.sh", "scripts/lib/macos_agent_ui.py"]},
+    {"level": "quick", "patterns": ["Sources/Views/**", "Sources/ContentView.swift", "Sources/QwenVoiceApp.swift", "Sources/Assets.xcassets/**", "Sources/Info.plist"]}
+  ]
+}

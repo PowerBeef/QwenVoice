@@ -71,7 +71,6 @@ UIstall column      —                       yes                    yes
 | **macOS profile** | `scripts/macos_test.sh profile` | In-process via CLI inside trace | Instruments / os_signpost validation |
 | **iOS device** | `scripts/ios_device.sh bench` | In-process | iPhone tier, Jetsam, on-device RTF (headless autorun, single take) |
 | **iOS UI bench** | `scripts/ios_device.sh bench-ui` | In-process | Full release matrix through the real Studio UI on the iPhone (XCUITest); gate `scripts/check_ios_ui_bench.py` |
-| **iOS agent UI bench** | `scripts/ios_device.sh bench-ui-mirroir --agent-drive` | In-process | Same matrix + gate via mirroir agent; see §4.7c |
 
 **Important:** CLI bench numbers are **not** identical to macOS XPC UI numbers. Compare like with
 like (CLI vs CLI, UI vs UI). Use CLI for backend optimization; use UI/XPC for integration regressions.
@@ -252,26 +251,18 @@ scripts/ios_device.sh bench-ui --profile --profile-template "Time Profiler" --la
 Artifacts: `build/ios/bench-ui-<timestamp>/` (log, gate.log, optional `vocello.trace`).
 Post-run gate: `python3 scripts/check_ios_ui_bench.py build/ios-diagnostics --run-id …`.
 
-### 4.7c iOS UI benchmark (mirroir agent — `bench-ui-mirroir`)
+### 4.7c iOS UI benchmark (deprecated agent lanes — historical)
 
-Agent-driven matrix through the **real Studio UI** via native mirroir; same matrix manifest and telemetry gate as §4.7b. Procedure: [`ios-agent-ui-tour.md`](ios-agent-ui-tour.md) Appendix **B.6d**.
-
-```sh
-scripts/ios_device.sh device-state
-scripts/ios_mirroir_preflight.sh --native-only
-scripts/ios_device.sh models check --strict
-scripts/ios_device.sh bench-ui-mirroir --agent-drive \
-  --warm 1 --lengths medium --modes custom --label mirroir-bench-pilot
-```
-
-Shell prints **`MIRROIR_BENCH_TAKE_BEGIN`** per take; agent completes mirroir O-A-V steps and `touch take-N.done`. Completion proof: `vision-bench-wait` (not OCR `"Just now"`).
+> **Retired 2026-07.** Full matrix = XCUITest `bench-ui` only (§4.7b). Agent smokes use
+> mirroir + `measure-*`. Historical `bench-ui-mirroir` procedure:
+> [`computer-use-mcp-pilot-log.md`](computer-use-mcp-pilot-log.md) §Archived agent bench.
 
 | iOS UI bench lane | Driver | When |
 | --- | --- | --- |
-| **`bench-ui`** | XCUITest | Unattended full matrix; pre-release when agent unavailable |
-| **`bench-ui-mirroir --agent-drive`** | mirroir native | Agent session; pilot/exploratory matrix |
+| **`bench-ui`** | XCUITest | **Only** supported full matrix lane |
+| **`bench-ui-mirroir --agent-drive`** | mirroir native | **Deprecated** — retired 2026-07 |
 | **`bench-ui-mcp --agent-drive`** | mobile-mcp WDA | Deferred (signing) |
-| **`bench-ui-vision --agent-drive`** | Peekaboo coords | Deprecated — use `bench-ui-mirroir` |
+| **`bench-ui-vision --agent-drive`** | Peekaboo coords | Deprecated |
 
 **iOS engine RTF without UI friction:** use headless §4.7 (`ios_device.sh bench`), not UI bench lanes.
 
@@ -299,73 +290,76 @@ For XPC: attach `xctrace` to `QwenVoiceEngineService` while generating via UI.
 
 ### 4.9 UI-driven generation (macOS XPC)
 
-Real generation through XPC is covered by `VocelloMacSmokeUITests` (~12 tests) and optional
-`VocelloMacHumanJourneyUITests` (phase-A player + history flows):
+Real generation through the macOS frontend is driven only by the repository Codex Computer Use
+skill. Deterministic completion comes from the session harness and typed XPC/backend probes:
 
 ```sh
 scripts/macos_test.sh models ensure
-scripts/macos_test.sh test      # smoke only (-only-testing scoped)
-scripts/macos_test.sh journey   # deeper human flows
+scripts/macos_agent_ui.sh impact
+# Invoke $vocello-macos-ui-qa quick or full.
+scripts/macos_test.sh ui-report --suite full
 ```
 
-This validates integration (player bar, backend status) but is **not** the primary RTF matrix driver.
+This validates semantic frontend behavior plus the matching History/WAV/XPC/backend state. It is
+not the primary RTF matrix driver.
 
 ### 4.10 macOS XPC UI benchmark (supplementary integration net)
 
-**Primary backend regression remains `vocello bench` (§4.1).** Use this lane when Native,
-Services, Views, or XPC transport changed — it drives the **same Speed matrix** (29 takes
-default) through `VocelloMacBenchUITests` + real app + XPC service.
+**Primary backend regression remains `vocello bench` (§4.1).** The supplementary UI matrix is
+driven by `$vocello-macos-ui-qa benchmark` through the real app + XPC service. The shell harness
+owns the take definitions, timestamps, typed telemetry validation, and aggregation.
 
-**Bench driver contract:** completion waits on `mainWindow_lastTelemetryFlushed` (ack-based flush, not fixed sleeps). Telemetry rows stamp `notes.benchRunID`, `benchTakeIndex`, `benchCell`, `benchWarmState` when `QVOICE_MAC_BENCH_RUN_ID` is set. Gate with `--run-id`:
+Telemetry rows stamp `notes.benchRunID`, `benchTakeIndex`, `benchCell`, and `benchWarmState` when
+`QVOICE_MAC_BENCH_RUN_ID` is set. Completion requires `verify-generation`, `verify-history`, and
+`verify-probes`; there are no hidden UI-test flush markers. Gate with the run ID:
 
 ```sh
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --run-id xpc-bench-YYYYMMDD-HHMMSS
+  --run-id mac-ui-benchmark-YYYYMMDD-HHMMSS
 ```
 
-**One-time machine setup** (three gates — password vs Accessibility vs keychain):
+**One-time machine setup:** grant Codex Computer Use Accessibility and Screen Recording, build
+`build/Vocello.app`, and install models. TCC enrollment stays attended.
 
 ```sh
-scripts/macos_uitest_doctor.sh              # diagnose
-sudo /usr/bin/automationmodetool enable-automationmode-without-authentication   # Gate 1
-scripts/macos_uitest_doctor.sh --open-accessibility   # Gate 2 (Xcode, Xcode Helper, Runner)
+scripts/macos_agent_ui.sh doctor --suite benchmark --json
 ```
 
-See [`macos-testing.md`](macos-testing.md) § UI test machine setup.
+See [`macos-testing.md`](macos-testing.md) § Prerequisites.
 
-**Dev iteration** (3 takes):
+**Full matrix:**
+
+```text
+$vocello-macos-ui-qa benchmark
+```
+
+The skill obtains the canonical matrix from `scripts/macos_agent_ui.sh benchmark-manifest` and
+wraps every UI-driven generation with ordered `benchmark-take --phase begin|complete` calls.
+Cold Custom and Design cells are exact-path relaunches; a cell cannot complete without its
+matching deterministic History/WAV assertion.
+
+Then validate the report and matrix:
 
 ```sh
-scripts/macos_test.sh models ensure
-scripts/macos_test.sh bench-ui --warm 1 --lengths medium --modes custom --label xpc-bench-smoke
+scripts/macos_test.sh bench-ui --report <run-id-or-directory>
 ```
 
-**Full release matrix** (29 takes, Speed):
-
-```sh
-scripts/macos_test.sh bench-ui --label xpc-bench-full
-```
-
-Optional dual-process profile (app + `QwenVoiceEngineService`):
-
-```sh
-scripts/macos_test.sh bench-ui --profile --profile-template "Time Profiler" --label xpc-profile
-```
-
-Artifacts: `build/macos/bench-ui-<timestamp>/` (log, summarizer `--merged`, verdict, optional `.trace`).
+Artifacts live under `build/macos/agent-ui/<run-id>/`; the tracked attestation contains only
+fingerprints, verdicts, issue counts, evidence digest, and cleanup result.
 
 Post-run gate:
 
 ```sh
-python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics
+python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
+  --run-id <run-id>
 ```
 
 | Phase | Tool |
 |-------|------|
-| Trace capture | `bench-ui --profile` / `xctrace record --attach` |
-| Trace analysis | `axiom_xcprof_analyze` / `axiom_get_agent` → `performance-profiler` |
-| Logs / warm-admission | `axiom_xclog_*` / `scripts/macos_test.sh logs` |
-| Crash post-mortem | `axiom_xcsym_crash` / `axiom_get_agent` → `crash-analyzer` |
+| Trace capture | `xctrace record --attach QwenVoiceEngineService` during a benchmark scenario |
+| Trace analysis | Instruments/xctrace plus the relevant installed macOS performance skill |
+| Logs / warm-admission | `scripts/macos_test.sh logs` and unified-log inspection |
+| Crash post-mortem | `scripts/macos_test.sh crashes`, dSYMs, and standard symbolication |
 
 Cold takes: app relaunch + `QWENVOICE_SUPPRESS_WARMUP=1` + `QWENVOICE_BENCH_FORCE_COLD=1`
 (debug-only unload before generate). Warm takes stay in-session.

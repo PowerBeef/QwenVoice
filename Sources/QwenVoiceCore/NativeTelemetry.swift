@@ -38,6 +38,24 @@ public struct NativeTelemetryStageMark: Hashable, Codable, Sendable {
         self.stage = try container.decode(String.self, forKey: .stage)
         self.metadata = try container.decodeIfPresent([String: String].self, forKey: .metadata) ?? [:]
     }
+
+    static func chronologicallyPrecedes(
+        _ lhs: NativeTelemetryStageMark,
+        _ rhs: NativeTelemetryStageMark
+    ) -> Bool {
+        if let lhsNS = lhs.tNS, let rhsNS = rhs.tNS, lhsNS != rhsNS {
+            return lhsNS < rhsNS
+        }
+        if lhs.tMS != rhs.tMS {
+            return lhs.tMS < rhs.tMS
+        }
+        if let lhsSequence = lhs.sequence,
+           let rhsSequence = rhs.sequence,
+           lhsSequence != rhsSequence {
+            return lhsSequence < rhsSequence
+        }
+        return lhs.stage < rhs.stage
+    }
 }
 
 public actor NativeTelemetryRecorder {
@@ -72,12 +90,7 @@ public actor NativeTelemetryRecorder {
     }
 
     public func snapshot() -> [NativeTelemetryStageMark] {
-        stageMarks.sorted { lhs, rhs in
-            if lhs.tMS == rhs.tMS {
-                return lhs.stage < rhs.stage
-            }
-            return lhs.tMS < rhs.tMS
-        }
+        stageMarks.sorted(by: NativeTelemetryStageMark.chronologicallyPrecedes)
     }
 
     public func reset() {

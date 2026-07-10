@@ -31,9 +31,6 @@ enum GenerationTelemetryMerger {
         let appSupportDirectory = AppPaths.appSupportDir
         Task.detached(priority: .utility) {
             await merge(generationID: key, appSupportDirectory: appSupportDirectory)
-            await MainActor.run {
-                MacUITestSurfaceMarkers.markTelemetryFlushed(id: key)
-            }
         }
     }
 

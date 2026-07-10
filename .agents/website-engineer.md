@@ -22,14 +22,15 @@ npm --prefix website run build    # production build → website/dist/
 npm --prefix website run preview  # serve the production build
 ```
 
-## Tools (Cursor)
+## Tools (Codex)
 
-- **`chrome-devtools`** MCP (`plugin-chrome-devtools-mcp-chrome-devtools`) — `navigate_page`,
-  `take_screenshot`, `take_snapshot`, `list_console_messages` for verifying the running site.
-- **`cursor-ide-browser`** MCP — in-IDE tab automation (`browser_navigate`, `browser_snapshot`, …).
-- **React / Vite / library API questions** → **`user-context7`** MCP (`resolve-library-id` →
-  `query-docs`); web search as fallback.
-- **Shell tool** for `npm`/`node` commands.
+- Use the Browser skill to inspect localhost, verify responsive behavior, take screenshots, and
+  check console output against the running dev or preview server.
+- Use shell commands for `npm`/`node` workflows.
+- For React, Vite, or library API questions, use authoritative current documentation and a
+  relevant installed Codex skill/plugin when available.
+- Computer Use is an exploratory fallback when browser inspection cannot reach a required UI;
+  the production build remains the verification baseline.
 
 ## Boundaries
 

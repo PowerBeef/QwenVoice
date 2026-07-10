@@ -757,10 +757,15 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
 /// write is dispatched off-loop via `Task.detached`, so the unbounded `events`
 /// stream is never blocked on file I/O (preserves the no-drop streaming invariant).
 private struct EngineServiceTransportAccumulator {
+    private let sessionIdentity = UUID().uuidString
     private var generationID: UUID?
     private var mode: String?
     private var firstChunkUptime: Double?
     private var chunksForwarded = 0
+    private var firstChunkSequence: UInt64?
+    private var lastChunkSequence: UInt64?
+    private var duplicateChunks = 0
+    private var outOfOrderChunks = 0
     /// Incremented by the drain's existing gap detector for the current generation.
     var gapCount = 0
 
@@ -780,7 +785,19 @@ private struct EngineServiceTransportAccumulator {
                 mode = chunk.mode
                 firstChunkUptime = ProcessInfo.processInfo.systemUptime
                 chunksForwarded = 0
+                firstChunkSequence = nil
+                lastChunkSequence = nil
+                duplicateChunks = 0
+                outOfOrderChunks = 0
                 gapCount = 0
+            }
+            if let sequence = chunk.chunkSequence {
+                if firstChunkSequence == nil { firstChunkSequence = sequence }
+                if let previous = lastChunkSequence {
+                    if sequence == previous { duplicateChunks += 1 }
+                    if sequence < previous { outOfOrderChunks += 1 }
+                }
+                lastChunkSequence = max(lastChunkSequence ?? sequence, sequence)
             }
             chunksForwarded += 1
         case .completed(let result):
@@ -795,7 +812,9 @@ private struct EngineServiceTransportAccumulator {
             flush(
                 finishReason: "failed",
                 usedStreaming: true,
-                notes: ["message": message],
+                notes: TelemetryGate.resolvedEnabled
+                    ? GenerationTelemetryPrivacy.failureNotes(message: message)
+                    : [:],
                 appSupportDirectory: appSupportDirectory
             )
             reset()
@@ -809,6 +828,10 @@ private struct EngineServiceTransportAccumulator {
         mode = nil
         firstChunkUptime = nil
         chunksForwarded = 0
+        firstChunkSequence = nil
+        lastChunkSequence = nil
+        duplicateChunks = 0
+        outOfOrderChunks = 0
         gapCount = 0
     }
 
@@ -842,8 +865,29 @@ private struct EngineServiceTransportAccumulator {
             finishReason: finishReason,
             stageMarks: stageMarks,
             timingsMS: timingsMS,
-            counters: ["chunksForwarded": chunksForwarded, "chunkGaps": gapCount],
-            notes: mergedNotes
+            counters: [
+                "chunksForwarded": chunksForwarded,
+                "chunkGaps": gapCount,
+                "duplicateChunks": duplicateChunks,
+                "outOfOrderChunks": outOfOrderChunks,
+            ],
+            notes: mergedNotes,
+            transportMetrics: EngineTransportMetrics(
+                finishReason: GenerationTerminalReason(compatibilityValue: finishReason),
+                firstChunkToTerminalMS: timingsMS["chunkForwardingSpanMS"],
+                counters: EngineTransportCounters(
+                    chunksForwarded: chunksForwarded,
+                    chunkGaps: gapCount,
+                    duplicateChunks: duplicateChunks,
+                    outOfOrderChunks: outOfOrderChunks
+                ),
+                cancellation: GenerationTerminalReason(compatibilityValue: finishReason) == .cancelled
+                    ? .completed : .notRequested,
+                requestAccepted: true,
+                sessionIdentity: sessionIdentity,
+                firstChunkSequence: firstChunkSequence,
+                lastChunkSequence: lastChunkSequence
+            )
         )
         Task.detached(priority: .background) {
             await GenerationTelemetryJSONLSink.shared.write(

@@ -1,8 +1,8 @@
 # Vocello for Mac — app guide + test-driving reference
 
 A consolidated map of the Vocello macOS app: what every screen/element/option does (user
-view) and how to drive it in tests like a human (identifier → action → expected). Use this
-to author accurate macOS XCUITest flows.
+view) and how Codex Computer Use drives it like a human (identifier → action → expected).
+Use this to maintain the repository macOS UI scenarios and stable accessibility surface.
 
 > **Where this fits:** the canonical "macOS app + driving" reference. Running the tests
 > lives in [`macos-testing.md`](macos-testing.md); the engine/XPC internals live in
@@ -33,18 +33,11 @@ has **both Speed (4-bit) and Quality (8-bit)** variants.
 
 ## 2. Screen-by-screen element + identifier map
 
-### Hidden window markers (test infrastructure)
+### Semantic state surfaces
 
-| Marker | Purpose |
-|--------|---------|
-| `mainWindow_ready` | "true" when the app is fully mounted |
-| `mainWindow_activeScreen` | The active screen id (e.g. `screen_customVoice`) |
-| `mainWindow_activeTitle` | The active sidebar title |
-| `mainWindow_disabledSidebarItems` | Comma-separated disabled items (model-aware) |
-| `mainWindow_composeReady_{custom,design,clone}` | `"true"` when generate would enable (debug / `QWENVOICE_UI_TEST_HOOKS=1`) |
-| `mainWindow_lastGenerationComplete` | UUID of the last completed generation |
-| `mainWindow_lastTelemetryFlushed` | UUID after merged telemetry write |
-| `{mode}_readiness` | `accessibilityValue` is `ready=true` or `ready=false` |
+Computer Use inspects the real accessibility state. Destination containers use `screen_*`, primary
+controls expose stable identifiers, and `{mode}_readiness` values report `ready=true/false`.
+Hidden `mainWindow_*` markers and `QWENVOICE_UI_TEST_HOOKS` are intentionally absent on macOS.
 
 ### Custom Voice (`sidebar_customVoice` → `screen_customVoice`)
 
@@ -151,56 +144,56 @@ higher-fidelity output.
 
 ## 5. Driving the macOS UI like a human
 
-### Test infrastructure (XCUITest)
+### Test infrastructure (Codex Computer Use)
 
-Human-like suites (`VocelloMacSmokeUITests`, `VocelloMacHumanJourneyUITests`,
-`VocelloMacReviewUITests`) use a **shared app session**
-([`VocelloMacUITestApp`](../../Tests/VocelloMacUITests/VocelloMacUITestApp.swift)) and
-predicate-based queries ([`VocelloMacUIQuery`](../../Tests/VocelloMacUITests/VocelloMacUIQuery.swift)).
-The **bench matrix** ([`VocelloMacBenchUITests`](../../Tests/VocelloMacUITests/VocelloMacBenchUITests.swift))
-uses a separate cold/warm relaunch policy via [`VocelloMacUIBase`](../../Tests/VocelloMacUITests/VocelloMacUIBase.swift).
+`$vocello-macos-ui-qa` is the sole macOS frontend driver. It consumes the semantic scenarios in
+[`config/macos-ui-scenarios.json`](../../config/macos-ui-scenarios.json), launches the exact
+`build/Vocello.app`, and re-observes the accessibility tree before and after each logical action.
+There is no macOS XCUITest target or hidden test-marker surface.
 
-Run via script lanes (each passes `-only-testing`):
+The shell harness owns deterministic proof and evidence:
 
-| Lane | Class |
-|------|-------|
-| `scripts/macos_test.sh test` | `VocelloMacSmokeUITests` |
-| `scripts/macos_test.sh journey` | `VocelloMacHumanJourneyUITests` |
-| `scripts/macos_test.sh review` | `VocelloMacReviewUITests` |
-| `scripts/macos_test.sh bench-ui` | `VocelloMacBenchUITests/testFullMatrix` |
+| Lane | Purpose |
+|------|---------|
+| `scripts/macos_test.sh test` | Core, XPC transport, runtime and harness tests; no UI driving |
+| `$vocello-macos-ui-qa quick\|full` | Semantic UI journeys and review |
+| `$vocello-macos-ui-qa benchmark` | UI-driven generation matrix |
+| `scripts/macos_test.sh ui-report --suite …` | Validate report, typed probes, fingerprints and cleanup |
+| `scripts/macos_test.sh review` | Require a valid full report |
+| `scripts/macos_test.sh bench-ui` | Require a valid benchmark report and merged telemetry matrix |
 
 ### macOS-specific patterns (vs iOS)
 
-- **NavigationSplitView sidebar** — not a tab bar. Click `sidebar_*` buttons or use
-  Cmd+1..6 shortcuts. Each click sets `mainWindow_activeScreen`.
+- **NavigationSplitView sidebar** — not a tab bar. Use `sidebar_*` identifiers or Cmd+1..6,
+  then re-observe the real destination identifier such as `screen_customVoice`.
 - **Menus + popovers** — sort pickers, model "Manage" menus, language/delivery pickers use
-  macOS menus (NSMenu), not iOS-style sheets. Drive via `app.menuItems["…"]`.
+  macOS menus (NSMenu), not iOS-style sheets. Re-observe after opening before selecting.
 - **Keyboard shortcuts** — Cmd+1..6 for sidebar (Cmd+6 is labeled "Models" in the Navigate menu but opens the unified Settings/Models surface); Cmd+, for the Settings window.
-- **Hidden markers** — `mainWindow_ready` / `mainWindow_activeScreen` /
-  `mainWindow_disabledSidebarItems` provide test-readable app state without visible UI.
-- **File pickers** — import/browse uses NSOpenPanel (a system sheet, not drivable by
-  XCUITest; use a known path or mock).
-- **Click, not tap** — `.click()` on macOS (not `.tap()`).
+- **File pickers** — reference import uses NSOpenPanel. The full suite chooses the tracked
+  non-PII fixture and follows Computer Use action-time confirmation policy.
+- **Coordinates/screenshots** — use only when accessibility cannot expose the control and record
+  the fallback as an automation warning.
 
 ### Canonical flow
 
-1. Launch → wait for `sidebar_customVoice` (app mounted).
-2. Navigate: `app.buttons["sidebar_<mode>"].click()` → assert `mainWindow_activeScreen`.
-3. Compose: `app.textViews["textInput_textEditor"].click()` + type.
-4. Generate: `app.buttons["textInput_generateButton"].click()` → wait for
-   `sidebarPlayer_bar` (the player appears on completion) or `sidebar_backendStatus_active`.
+1. Launch → observe `sidebar_customVoice` and `screen_customVoice`.
+2. Navigate by `sidebar_<mode>` → re-observe the destination screen identifier.
+3. Compose through `textInput_textEditor` → re-observe the changed semantic value/state.
+4. Generate through `textInput_generateButton` → observe `sidebarPlayer_bar`, then run
+   `verify-generation`, `verify-history`, and `verify-probes`.
 5. History: `sidebar_history` → `historyRow_play_<id>`.
 6. Settings: `sidebar_settings` → `settings_download_<id>`.
 
 ### Gotchas
 
-- **Menu items** — sort/manage menu items don't have stable identifiers; drive by label.
-- **NSOpenPanel** — file pickers are system sheets; XCUITest can't drive them. Pre-stage
-  files or use AppleScript.
+- **Menu items** — sort/manage menu items without identifiers are selected by semantic label and
+  recorded as catalog gaps when the accessibility tree is insufficient.
+- **NSOpenPanel** — re-observe the system sheet and select the known fixture; do not use hidden
+  mocks or AppleScript as frontend proof.
 - **XPC service retirement** — the engine may be idle/retired; a generation auto-relaunches
   it. The `sidebar_backendStatus_*` markers reflect the state.
-- **First responder** — after navigating, the text editor may need an explicit `.click()`
-  to become first responder before typing.
+- **First responder** — after navigating, the text editor may need one explicit action before
+  typing; re-observe instead of assuming focus.
 
 ---
 

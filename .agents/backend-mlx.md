@@ -29,22 +29,20 @@ Before changing anything in this layer, read:
 2. The relevant subsystem guide under `docs/reference/` (e.g. `mlx-guide.md` for `MLXArray`/`Memory`/`GPU`, `qwen3-tts-guide.md` for prompt construction, `mimi-codec-guide.md` for codec work).
 3. `Sources/Resources/qwenvoice_contract.json` if you are touching model IDs, speakers, variants, or HF revisions.
 
-## Tools and skills (Cursor)
+## Tools and skills (Codex)
 
-- **MLX / backend** → follow the **`mlx-swift`** and **`mlx-swift-lm`** skills (open their
-  `SKILL.md` with the Read tool and follow them) for MLX API patterns, wired memory, model
-  loading, and Qwen3-TTS specifics.
-- **Shell tool / scripts** for build/test:
+- **Shell scripts are authoritative** for build/test:
   - `scripts/build_foundation_targets.sh macos|ios` for compile-safety.
   - `scripts/build.sh cli` to build `vocello`.
   - `QWENVOICE_DEBUG=1 ./build/vocello bench …` for perf/quality gates.
-- **Apple framework docs** when an API boundary is unclear → **`user-axiom`** MCP
-  (`axiom_read_skill` for `axiom-apple-docs` and related skills).
-- **Non-Apple library docs** (e.g. GRDB, SwiftHuggingFace) → **`user-context7`** MCP via
-  `CallMcpTool` (`resolve-library-id` → `query-docs`).
-- **Hugging Face hub** (model cards, revisions) → **`plugin-huggingface-skills-huggingface-skills`**
-  MCP and/or the `hf` CLI.
-- **Read-only deep dives** into the vendored stack → Task tool with `subagent_type: "explore"`.
+- Use relevant installed Codex skills/plugins for Swift, MLX, profiling, or GitHub work only
+  after reading their instructions. Where none applies, inspect the vendored source and use
+  authoritative Apple, package, or Hugging Face documentation.
+- Browser and Computer Use may support exploratory inspection, but never replace benchmarks,
+  compile checks, or physical-device iOS gates.
+- Runtime-affecting macOS changes additionally require the impact-selected full/benchmark
+  `$vocello-macos-ui-qa` attestation. Frontend observations do not prove backend completion;
+  `verify-probes` must join typed app/XPC/backend rows by `generationID`.
 
 ## Build / test commands
 
@@ -52,6 +50,7 @@ Before changing anything in this layer, read:
 # Compile-safety for the core frameworks
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
+scripts/macos_test.sh test   # Core, XPC transport, Qwen3RuntimeTests, harness contracts
 
 # Build the CLI and run a quick generate
 ./scripts/build.sh cli

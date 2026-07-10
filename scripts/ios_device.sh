@@ -30,15 +30,19 @@
 #                                                 # headless language-hint matrix (autorun)
 #   scripts/ios_device.sh bench-ui [--modes m,..] [--lengths l,..] [--warm N] [--label "note"] [--profile]
 #                                                 # full-matrix UI-DRIVEN bench (XCUITest)
-#   scripts/ios_device.sh bench-ui-mirroir --agent-drive [--modes …] [--warm N] …
-#                                                 # agent bench via native mirroir (preferred agent path)
-#   scripts/ios_device.sh bench-ui-mcp --agent-drive [--modes …] [--warm N] …
-#                                                 # agent bench via mobile-mcp + WDA (deferred)
-#   scripts/ios_device.sh bench-ui-vision --agent-drive [--modes …] …
-#                                                 # DEPRECATED: Peekaboo mirror coords — use bench-ui-mirroir
-#   scripts/ios_device.sh vision-launch --run-id ID [--force-cold 0|1]
-#   scripts/ios_device.sh vision-now              # UTC timestamp for vision-bench-wait --since
-#   scripts/ios_device.sh vision-bench-wait --run-id ID --since TS [--timeout N]
+#   scripts/ios_device.sh measure-prep [--run-id ID] [--force-cold 0|1]
+#                                                 # launch Vocello for agent smokes (debug env + run id)
+#   scripts/ios_device.sh measure-now             # UTC timestamp — capture before tapping Generate
+#   scripts/ios_device.sh measure-wait --run-id ID --since TS [--timeout N]
+#                                                 # poll pulled telemetry for one generation
+#   scripts/ios_device.sh measure-verify --run-id ID --since TS [--artifacts-dir DIR] [--timeout N]
+#                                                 # wait + pull + write result.json (agent smokes)
+#   scripts/ios_device.sh vision-launch --run-id ID [--force-cold 0|1]  # alias of measure-prep internals
+#   scripts/ios_device.sh vision-now              # alias of measure-now
+#   scripts/ios_device.sh vision-bench-wait --run-id ID --since TS [--timeout N]  # alias of measure-wait
+#   scripts/ios_device.sh bench-ui-mirroir …      # DEPRECATED — use bench-ui (XCUITest matrix)
+#   scripts/ios_device.sh bench-ui-mcp --agent-drive …  # deferred (WDA signing)
+#   scripts/ios_device.sh bench-ui-vision --agent-drive …  # DEPRECATED Peekaboo mirror coords
 #   scripts/ios_device.sh ui-test [--all|--cold|--download] [only]
 #                                                 # device-safe UI tests (default: Smoke+Sheet+ColdGeneration; needs all Speed models)
 #   scripts/ios_device.sh crashes [--test]         # pull + symbolicate on-device crash/hang diagnostics (MetricKit)
@@ -1057,9 +1061,34 @@ EOF
   note "bench-ui PASS · $out_dir"
 }
 
-# vision-now: UTC timestamp for vision-bench-wait --since (capture immediately before Generate).
+# vision-now: UTC timestamp for measure-wait --since (capture immediately before Generate).
 cmd_vision_now() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# measure-*: drive-agnostic iOS smoke measurement (mirroir exploratory QA).
+cmd_measure_now() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+cmd_measure_prep() {
+  . "$ROOT_DIR/scripts/lib/ios_measure.sh"
+  ios_measure_prep "$@"
+}
+
+cmd_measure_wait() {
+  . "$ROOT_DIR/scripts/lib/ios_measure.sh"
+  ios_measure_wait "$@"
+}
+
+cmd_measure_verify() {
+  . "$ROOT_DIR/scripts/lib/ios_measure.sh"
+  ios_measure_verify "$@"
+}
+
+cmd_measure_artifacts_dir() {
+  . "$ROOT_DIR/scripts/lib/ios_measure.sh"
+  ios_measure_artifacts_dir "$@"
 }
 
 # vision-launch: relaunch Vocello with bench/vision env (no autorun).
@@ -1103,9 +1132,9 @@ cmd_vision_bench_wait() {
   "$ROOT_DIR/scripts/lib/ios_vision_bench_wait.sh" wait "$@"
 }
 
-# bench-ui-mirroir: agent-driven matrix via native mirroir OCR + tap/type_text.
+# bench-ui-mirroir: DEPRECATED — full matrix is XCUITest bench-ui only.
 cmd_bench_ui_mirroir() {
-  _ios_agent_bench_ui mirroir "$@"
+  die "bench-ui-mirroir is deprecated (2026-07) — use scripts/ios_device.sh bench-ui for the UI matrix. Exploratory smokes: mirroir 1-clip + measure-* (docs/reference/ui-smoke-runbooks.md). Historical: docs/reference/computer-use-mcp-pilot-log.md §Archived agent bench."
 }
 
 # bench-ui-mcp: agent-driven matrix via mobile-mcp + WDA (deferred).
@@ -1115,8 +1144,7 @@ cmd_bench_ui_mcp() {
 
 # bench-ui-vision: DEPRECATED Peekaboo mirror-coordinate agent bench.
 cmd_bench_ui_vision() {
-  warn "bench-ui-vision is deprecated — use bench-ui-mirroir (docs/reference/ios-agent-ui-tour.md Appendix B.6d)"
-  _ios_agent_bench_ui vision "$@"
+  die "bench-ui-vision is deprecated — use scripts/ios_device.sh bench-ui for the UI matrix. Exploratory smokes: mirroir + measure-* (docs/reference/ui-smoke-runbooks.md)."
 }
 
 UI_TEST_DEFAULT_CLASSES=(
@@ -1894,7 +1922,7 @@ main() {
   # Auto-start iPhone Mirroring before any device-touching command (observation + keeps a
   # locked device reachable). `mirror` calls ensure_mirror itself; help/none skip it.
   case "$sub" in
-    doctor|build|install|launch|console|pull|bench|lang-bench|vision-launch|shot|crashes|debug|logs|profile) ensure_mirror ;;
+    doctor|build|install|launch|console|pull|bench|lang-bench|vision-launch|measure-prep|measure-verify|shot|crashes|debug|logs|profile) ensure_mirror ;;
   esac
   case "$sub" in
     doctor)  cmd_doctor "$@" ;;
@@ -1915,6 +1943,11 @@ main() {
     vision-launch) cmd_vision_launch "$@" ;;
     vision-now) cmd_vision_now "$@" ;;
     vision-bench-wait) cmd_vision_bench_wait "$@" ;;
+    measure-prep) cmd_measure_prep "$@" ;;
+    measure-now) cmd_measure_now "$@" ;;
+    measure-wait) cmd_measure_wait "$@" ;;
+    measure-verify) cmd_measure_verify "$@" ;;
+    measure-artifacts-dir) cmd_measure_artifacts_dir "$@" ;;
     ui-test) cmd_ui_test "$@" ;;
     crashes) cmd_crashes "$@" ;;
     debug)   cmd_debug "$@" ;;
@@ -1928,7 +1961,7 @@ main() {
     uitest-doctor) cmd_uitest_doctor "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|device-state|shot|pull|bench|lang-bench|bench-ui|bench-ui-mirroir|bench-ui-mcp|bench-ui-vision|vision-launch|vision-now|vision-bench-wait|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|mirror|device-state|shot|pull|bench|lang-bench|bench-ui|measure-prep|measure-now|measure-wait|measure-verify|measure-artifacts-dir|vision-launch|vision-now|vision-bench-wait|ui-test|uitest-doctor|crashes|debug|logs|profile|preflight|test|review|gate|models|help)" ;;
   esac
 }
 

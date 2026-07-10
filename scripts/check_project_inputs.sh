@@ -36,29 +36,28 @@ done
 # screen-mirror UI-driving workflow (see .agents/ios-engineer.md "Testing" +
 # docs/reference/ios-device-testing.md). The device driver (scripts/ios_device.sh),
 # the VocelloiOSUITests smoke bundle, and the iOS test trees are all allowed again.
-# The only surface still banned is the vendored upstream test tree — don't pull in
-# mlx-audio-swift's own tests / churn.
-PROHIBITED_SURFACES=(
-    "third_party_patches/mlx-audio-swift/""Tests"
-)
+# The owned Qwen3 runtime now has one curated direct test target. Broad upstream
+# multi-model tests remain prohibited; only this exact directory is allowed.
+VENDOR_TEST_ROOT="$PROJECT_DIR/third_party_patches/mlx-audio-swift/Tests"
+if [ -d "$VENDOR_TEST_ROOT" ]; then
+    unexpected_vendor_test="$(find "$VENDOR_TEST_ROOT" -mindepth 1 -maxdepth 1 \
+        ! -name Qwen3RuntimeTests -print -quit)"
+    if [ -n "$unexpected_vendor_test" ]; then
+        echo "error: unapproved vendored test surface: ${unexpected_vendor_test#"$PROJECT_DIR/"}" >&2
+        exit 1
+    fi
+fi
 # NOTE: benchmarking, output-quality, AND iOS device/test surfaces are first-class
 # here (runtime telemetry, scripts/summarize_generation_telemetry.py, benchmarks/,
 # in-engine audioQC, scripts/ios_device.sh, the VocelloiOSUITests smoke). Committed
 # benchmark/QC scripts + baselines are allowed (bounded by the benchmarks/ cap below).
-
-for prohibited_surface in "${PROHIBITED_SURFACES[@]}"; do
-    if [ -e "$PROJECT_DIR/$prohibited_surface" ]; then
-        echo "error: prohibited surface is present: $prohibited_surface" >&2
-        exit 1
-    fi
-done
 
 # General hygiene bans only (kept): vendored upstream tests, stale macOS-15 product /
 # old build-path names, and the Python-script variants (the "no Python backend"
 # standing decision — the .sh versions are canonical). The retired iOS-test /
 # UI-driving / QA reference bans were removed when that workflow was re-enabled.
 PROHIBITED_REFERENCE_PATTERNS=(
-    "third_party_patches/mlx-audio-swift/""Tests"
+    "third_party_patches/mlx-audio-swift/Tests/(MLXAudioTTSTests|MLXAudioCodecsTests)"
     "QwenVoice-macos15.dmg"
     "build/QwenVoice.app"
     "scripts/check_qwen3_backend_only\.py"

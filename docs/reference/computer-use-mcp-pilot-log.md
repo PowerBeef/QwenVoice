@@ -475,8 +475,29 @@ Per take: B.6d loop → `vision-bench-wait` → `touch take-N.done`. Optional co
 **Gate:** `check_ios_ui_bench.py --run-id ios-bench-ui-mirroir-20260705-123609 --expected 5` → **PASS** (custom n=2, design n=2, clone n=1; QC=pass).
 
 **Friction:** Design take 2 — `vision-bench-wait` timed out when row count >1 and `createdAt` missing on telemetry rows; row-count poll workaround used for takes 2–4. Clone reference pick: first tap landed on Custom; re-open sheet + tap row body → **AD ^** chip staged correctly.
- after `.mirroir-mcp/settings.json` `mirroringProcessName` change; verify `describe_screen` shows **Clear script** on Studio with hooks enabled.
-2. Run pilot **interactively** (not backgrounded) — shell blocks on `take-N.done`; agent drives mirroir O-A-V in same session.
-3. Confirm **Clear script** OCR tap clears composer + dismisses inline player on warm take #2 before typing bench corpus.
-4. After 2/2 PASS, expand to `--modes custom,design,clone` (Phase B).
+
+---
+
+## Archived agent bench (deprecated 2026-07-07)
+
+> **Retired.** Full UI matrix = XCUITest `scripts/ios_device.sh bench-ui` only. Agent smokes use
+> mirroir 1-clip + `measure-*` (`docs/reference/ui-smoke-runbooks.md`). Content below is
+> historical reference for the removed `bench-ui-mirroir` lane.
+
+### B.6d procedure (historical)
+
+Entry (removed):
+
+```sh
+scripts/ios_device.sh bench-ui-mirroir --agent-drive \
+  --warm 1 --lengths medium --modes custom --label mirroir-bench-pilot
+```
+
+Per-take loop: shell printed `MIRROIR_BENCH_TAKE_BEGIN` → agent mode prep → Clear script →
+type corpus → `vision-now` before Generate → `vision-bench-wait` → `touch take-N.done`.
+
+Pilot PASS artifacts: `ios-bench-ui-mirroir-20260705-122747` (2/2), `ios-bench-ui-mirroir-20260705-123609` (5/5).
+
+**Why retired:** duplicated XCUITest `bench-ui` with OCR fragility (window size, Generate vs chip Y,
+permission restarts). See iOS UI testing simplification plan (2026-07-07).
 

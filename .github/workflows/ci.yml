@@ -6,10 +6,9 @@ name: CI
 # (no Simulator, no XCUITest). Real iOS UI tests run on a paired iPhone via
 # `scripts/ios_device.sh gate` locally before merge.
 #
-# macOS UI smoke is NOT here yet: GitHub runners cannot launch a macOS-26-targeted app
-# (same reason release.yml sets QWENVOICE_SKIP_LAUNCH_SMOKE=1). It runs locally via
-# `scripts/macos_test.sh test`. The manual `macos_ui_smoke` dispatch input is a placeholder
-# for when macOS-26 runner images support it reliably.
+# macOS CI runs deterministic Core/XPC/runtime/harness tests and validates any impact-required
+# Computer Use attestation. It never claims to drive frontend UI; that report is produced locally
+# by the repository Codex skill against the exact build/Vocello.app.
 #
 # Toolchain pinning mirrors release.yml: Xcode 26, XcodeGen + xcbeautify via Homebrew,
 # SPM versions inherited from the committed Package.resolved.
@@ -19,12 +18,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      macos_ui_smoke:
-        description: 'Also attempt macOS UI smoke (only useful on a macOS-26 runner)'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -82,16 +75,15 @@ jobs:
             -derivedDataPath build/ci/ios-compile-dd \
             CODE_SIGNING_ALLOWED=NO | xcbeautify
 
-  macos-ui-smoke:
-    name: macOS UI smoke (manual; needs macOS-26 runner)
-    # Manual only: macOS-26-targeted app launch may still fail on shared runners
-    # (see release.yml QWENVOICE_SKIP_LAUNCH_SMOKE). Fire via workflow_dispatch when testing.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_ui_smoke }}
+  macos-deterministic-tests:
+    name: macOS deterministic tests + UI attestation validation
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode 26
         run: |
@@ -107,21 +99,22 @@ jobs:
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
 
-      - name: Run macOS UI smoke
-        run: |
-          set -euo pipefail
-          xcodebuild test \
-            -project QwenVoice.xcodeproj \
-            -scheme QwenVoice \
-            -destination 'platform=macOS,arch=arm64' \
-            -derivedDataPath build/ci/macos-dd \
-            -resultBundlePath build/ci/macos-ui.xcresult | xcbeautify
+      - name: Run deterministic macOS tests
+        run: scripts/macos_test.sh test
+
+      - name: Build exact-path app for attestation fingerprinting
+        run: ./scripts/build.sh build
+
+      - name: Validate impact-selected Computer Use attestation
+        env:
+          QVOICE_BASE_REF: ${{ github.event.pull_request.base.sha || 'HEAD^' }}
+        run: scripts/macos_agent_ui.sh impact --check
 
       - name: Upload xcresult on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-ui-xcresult
-          path: build/ci/macos-ui.xcresult
+          name: macos-deterministic-test-artifacts
+          path: build/macos/test-artifacts/
           if-no-files-found: warn
           retention-days: 14

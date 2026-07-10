@@ -1,197 +1,173 @@
-# macOS testing — lanes + the XPC dimension
+# macOS testing — Computer Use frontend + typed runtime probes
 
-The macOS testing/debugging/benchmarking/UI-review lanes. macOS is the dev host (no
-device/Mirroring/burn-in) and the engine runs **out-of-process in an XPC service**
-(`com.qwenvoice.app.engine-service`) — a separate process that can crash independently
-and be **retired under memory pressure** then lazily relaunched. Several lanes target the
-app **and** the service.
+macOS testing has two deliberately separate proof layers:
 
-> Build/run/release stay in [`build.sh`](../../scripts/build.sh); this doc covers the lane
-> driver **`scripts/macos_test.sh`**. For the canonical testing strategy (on-device iOS,
-> compile-only CI) see [`testing-runbook.md`](testing-runbook.md). For the iOS device lanes
-> see [`ios-device-testing.md`](ios-device-testing.md). For the macOS app map + driving see
-> [`macos-app-guide.md`](macos-app-guide.md).
+1. `$vocello-macos-ui-qa` is the sole frontend driver. Codex Computer Use operates the
+   exact `build/Vocello.app`, observes fresh accessibility state before and after each action,
+   and records semantic visual/accessibility findings.
+2. Deterministic scripts and typed telemetry prove XPC, backend, persistence, and output
+   behavior. A visual observation alone never proves generation completion.
+
+iOS is not part of this migration. Its physical-device XCUITest gates remain authoritative.
 
 ## Prerequisites
 
-- **Xcode 26** (with the Metal Toolchain component — `xcodebuild -downloadComponent MetalToolchain` if missing).
-- A signing identity (Apple Development for dev; Developer ID for release — see
-  [`macos-permissions.md`](macos-permissions.md)).
-- The app built: `scripts/build.sh build` → `build/Vocello.app` (also preserves dSYMs to
-  `build/macos/dsyms/`).
-- The XPC service is embedded at `Vocello.app/Contents/XPCServices/QwenVoiceEngineService.xpc`.
-- **Speed models for real-engine lanes** (one-time ~6.9 GB for all three modes, ~2.3 GB each): `scripts/macos_test.sh models ensure`
-  installs `pro_custom_speed`, `pro_design_speed`, and `pro_clone_speed` headlessly via
-  `vocello models install` into the canonical store, symlinks `QwenVoice-Debug/models` for UI
-  smoke (`QWENVOICE_DEBUG=1`), and bootstraps the bench clone voice (`A_warm_elderly_woman`).
+- Xcode 26 and the Metal Toolchain component.
+- `./scripts/build.sh build` has produced `build/Vocello.app`.
+- Speed models are available for real-generation suites:
+  `scripts/macos_test.sh models ensure`.
+- Codex Computer Use has macOS Accessibility and Screen Recording permission.
+- System Settings/TCC enrollment and first-time microphone permission are attended setup.
 
-## Lane → tool map
+## Public lanes
 
-| Lane | Verb | Captures / proves | Deeper analysis |
-|------|------|-------------------|-----------------|
-| Preflight | `preflight [--strict-models]` | Xcode + app + XPC bundle + dSYMs + model status | — |
-| Models | `models check\|ensure\|install` | three Speed models + clone voice fixture | — |
-| Test | `test` | `VocelloMacSmokeUITests` only (~12 smoke tests, human driver) | `axiom_get_agent` → `test-runner` on the `.xcresult` |
-| Journey | `journey` | `VocelloMacHumanJourneyUITests` (compose → generate → player → history) | same |
-| XPC UI bench | `bench-ui` | `VocelloMacBenchUITests` matrix (29 takes default) + merged summarizer + `--run-id` gate | `check_macos_xpc_bench.py`; `axiom_xcprof_analyze` with `--profile` |
-| UITest doctor | `uitest-doctor` | automation mode + signing + TCC guidance (Gates 1–3) | — |
-| Bench | `build.sh cli bench` | deterministic perf/quality matrix | `summarize_generation_telemetry.py` |
-| Crash | `crashes [--test]` | `.ips` for app + XPC service | `axiom_xcsym_crash` / `axiom_get_agent` → `crash-analyzer` |
-| Debug | `debug` | LLDB attach (app + service PID) + `logs` | `./scripts/macos_test.sh debug`; `axiom_get_agent` → `build-fixer` |
-| Profile | `profile [spec]` | xctrace/Instruments on the engine (CLI in-process) | `axiom_xcprof_analyze` / `axiom_get_agent` → `performance-profiler` |
-| Review | `review [--baseline] [--subset resting\|full]` | catalog-driven captures (`VocelloMacReviewUITests`) | `axiom_get_agent` → `screenshot-validator` / manual diff vs `docs/macos-review-baselines/` |
-| XPC | `xpc [--crash-isolation]` | retirement/relaunch + crash isolation | — |
-| Gate | `gate` | models → inputs → build_foundation → test → crashes (**gate-fatal on new .ips**) → verdict; optional bounded `vocello bench` + audioQC + baseline compare (`benchmarks/baselines/mac-gate-bench.json`) when `QWENVOICE_GATE_BENCH=1` | — |
+| Lane | Command | Proof |
+| --- | --- | --- |
+| Deterministic tests | `scripts/macos_test.sh test` | Core/output/telemetry tests, injectable XPC transport tests, owned Qwen3 runtime tests, harness contracts; no UI driving |
+| Core only | `scripts/macos_test.sh core-test` | `VocelloCoreTests`, including schema-v6 and atomic-WAV contracts |
+| UI impact | `scripts/macos_agent_ui.sh impact` | Required evidence level: `none`, `quick`, `full`, or `benchmark` |
+| UI report | `scripts/macos_test.sh ui-report --suite quick\|full\|benchmark` | Validates a fresh Computer Use report, typed probes, fingerprints, findings, and cleanup |
+| Semantic review | `scripts/macos_test.sh review [--report <run>]` | Compatibility alias requiring a valid full report |
+| UI benchmark | `scripts/macos_test.sh bench-ui [--report <run>]` | Valid benchmark report plus merged XPC/backend take matrix |
+| XPC support | `scripts/macos_test.sh xpc status\|kill\|wait` | Process observation/mutation used inside the full Computer Use suite |
+| Gate | `scripts/macos_test.sh gate` | Inputs, build, deterministic tests, crashes, then impact-selected attestation |
 
-## UI test machine setup
+The removed `journey`, `uitest-doctor`, `VocelloMacUITests`, runner-signing, and hidden
+`QWENVOICE_UI_TEST_HOOKS` workflows must not be revived.
 
-macOS XCUITest hits **three unrelated security systems**. Run `scripts/macos_uitest_doctor.sh`
-(or `scripts/macos_test.sh uitest-doctor`) before `test`, `journey`, `review`, or `bench-ui`.
+## Computer Use suites
 
-| Gate | Symptom | Fix |
-|------|---------|-----|
-| **1 — Authorization Services** | Password to “Enable UI Automation” | `scripts/enable_unattended_uitest.sh` |
-| **2 — TCC Accessibility** | Allow Xcode / Xcode Helper / Runner | System Settings → Privacy & Security → Accessibility (one-time) |
-| **3 — Keychain** | `codesign wants to access key…` | “Always Allow” once, or `security set-key-partition-list …` |
+Invoke the repository skill directly in Codex:
 
-**Stable signing:** `scripts/macos_test.sh test` and `bench-ui` pass Apple Development signing
-overrides to `xcodebuild` ([`scripts/lib/uitest_signing.sh`](../../scripts/lib/uitest_signing.sh))
-so TCC grants survive rebuilds. Verify:
-
-```sh
-codesign -dr - build/DerivedData/Build/Products/Release/VocelloMacUITests-Runner.app
+```text
+$vocello-macos-ui-qa quick
+$vocello-macos-ui-qa full
+$vocello-macos-ui-qa benchmark
+$vocello-macos-ui-qa destructive
 ```
 
-Cross-link: mic/speech TCC is separate — [`macos-permissions.md`](macos-permissions.md).
+| Suite | Budget | Coverage |
+| --- | --- | --- |
+| Quick | at most 10 minutes | Exact launch, navigation, Custom generation/playback/history replay, semantic layout/copy/state/accessibility review |
+| Full | 30–40 minutes with warm models | Quick plus Design, Clone, batch, controls, History/Saved Voices, reversible Settings, reference import, XPC kill/recovery and post-recovery generation |
+| Benchmark | matrix-owned | Computer Use drives Custom/Design/Clone × length × cold/warm; shell timestamps, telemetry and aggregation remain deterministic |
+| Destructive | explicit only | History/voice deletion and model cancel/repair/delete/download; requires `--allow-destructive` plus action-time Computer Use confirmation |
 
-## XPC UI benchmark
+The scenario source of truth is
+[`config/macos-ui-scenarios.json`](../../config/macos-ui-scenarios.json). The skill must:
 
-```sh
-scripts/macos_test.sh bench-ui --label xpc-bench-full          # 29 takes (Speed)
-scripts/macos_test.sh bench-ui --warm 1 --lengths medium --modes custom   # dev smoke
-scripts/macos_test.sh bench-ui --profile --label xpc-profile   # optional dual-process trace
+- target the exact absolute `build/Vocello.app` path;
+- obtain a fresh accessibility tree before and after every logical action;
+- resolve fresh element indices and prefer stable `accessibilityIdentifier` values;
+- record screenshot/coordinate fallbacks as automation warnings;
+- continue independent scenarios after nonblocking findings;
+- always perform idempotent cleanup.
+
+## Session and evidence contract
+
+[`scripts/macos_agent_ui.sh`](../../scripts/macos_agent_ui.sh) owns repeatable lifecycle and
+verification:
+
+```text
+doctor
+start --suite quick|full|benchmark|destructive [--allow-destructive]
+now
+benchmark-manifest
+benchmark-take --index <n> --phase begin|complete|fail
+checkpoint
+issue
+verify-generation
+verify-history
+verify-probes
+xpc-status | xpc-kill | xpc-wait
+finish
+cleanup
+validate-report
+attest
+impact
 ```
 
-See [`benchmarking-procedure.md`](benchmarking-procedure.md) §4.10 for matrix semantics and Axiom routing.
+`start` terminates stale app/service processes, resets only isolated debug history/output,
+preserves models and saved voices, enables verbose telemetry, launches one exact-path app
+process, and records source/build/app fingerprints. Evidence stays ignored under
+`build/macos/agent-ui/<run-id>/`; the compact tracked attestation is
+[`qa/macos-ui-attestation.json`](../../qa/macos-ui-attestation.json).
 
-## Crashes
+For `benchmark`, the manifest command returns the canonical 29 take definitions. Each ordered
+`begin` stamps the run ID and current cell into telemetry (and exact-path relaunches the two cold cells),
+while `complete` refuses to advance until the matching database row and readable WAV have been
+recorded by `verify-generation`.
 
-macOS writes `.ips` crash reports to `~/Library/Logs/DiagnosticReports/`. The app crashes as
-`Vocello-<date>-<pid>.ips`; the XPC service as `QwenVoiceEngineService-<pid>.ips` (or
-matching `*engine-service*`). `scripts/build.sh build` preserves the build's dSYMs (app +
-service + any others) to `build/macos/dsyms/`.
+A report fails when it is blocked, contains a blocker/major issue, lacks a typed probe layer,
+has stale source/build/app fingerprints, uses an insufficient suite, or fails cleanup.
 
-```sh
-scripts/macos_test.sh crashes            # collect recent .ips → xcsym symbolicate
-scripts/macos_test.sh crashes --test     # SIGSEGV a launched app to verify the lane
-```
+## Typed middle/backend proof
 
-`xcsym crash <file> --dsym-dir build/macos/dsyms` symbolicates when `xcsym` is on PATH.
-If not, use the **`user-axiom`** MCP tool `axiom_xcsym_crash`, or `axiom_get_agent`
-agent=`crash-analyzer`.
+Schema-v6 `GenerationTelemetryRecord` rows retain v1–v5 decoding and legacy dictionaries for
+tool compatibility, while validators consume:
 
-## Debug + logs
+- `FrontendGenerationMetrics`
+- `EngineTransportMetrics`
+- `BackendGenerationMetrics`
+- `GenerationOutputMetrics`
 
-Dev builds have hardened runtime **OFF** (`build.sh` line 90), so LLDB attaches directly
-(no `get-task-allow` needed). The XPC service is a separate process — attach by PID.
+The engine-service row records an opaque session identity, accepted/forwarded chunk evidence,
+first/last sequence, gaps, duplicates, reordering, cancellation/terminal state, and duration.
+The backend row records warm state, lifecycle stages, typed timing/counters, terminal reason,
+final-chunk barrier, output publication, readability, memory and audio QC.
 
-```sh
-scripts/macos_test.sh debug              # launches app, prints LLDB attach for app + service PID
-scripts/macos_test.sh logs               # retained os_log → build/macos-logs/<run>.log
-```
+`verify-probes` joins rows by `generationID` and rejects missing or duplicate terminal rows,
+non-monotonic stages, terminal disagreement, gaps/duplicates/reordering, transport completion
+before backend terminal evidence, and a completed stream without its final barrier. Separate
+generation/history assertions require the matching database row and a readable, non-empty WAV.
+No telemetry row stores raw user script, transcript, voice description, or file path.
 
-The subsystem is `com.qwenvoice.app` (app + service + the `performance` signpost category).
-For interactive debugging, `scripts/macos_test.sh debug` (LLDB attach by PID), Xcode → Debug → Attach to
-Process, or XcodeBuildMCP debugging if you enable that workflow in `.xcodebuildmcp/config.yaml`.
+## Deterministic risk spine
 
-## Profile
+[`config/backend-risk-spine.json`](../../config/backend-risk-spine.json) links the corrected
+report IDs to current symbols and executable coverage. The first owned targets are:
 
-```sh
-scripts/macos_test.sh profile custom:speed    # xctrace the vocello CLI (engine in-process)
-```
+- `VocelloCoreTests`: telemetry schema/legacy decoding and atomic readable WAV publication.
+- `VocelloEngineIntegrationTests`: request/reply correlation, timeout cleanup, cancellation
+  ordering, expected retirement, interruption and reconnection using injectable transport.
+- vendored `Qwen3RuntimeTests`: FIFO/cancellation/stress generation-gate behavior, learned
+  component fail-closed behavior, and clone artifact integrity.
+- Python harness contracts: scenario/impact/report behavior and malformed cross-layer fixtures.
 
-Profiles the `vocello` CLI during a bench — the **deterministic engine profile** (same
-engine code as the XPC service). Default template: Time Profiler; override via
-`QVOICE_MAC_PROFILE_TEMPLATE` / `QVOICE_MAC_PROFILE_DURATION`. The lane **fails** if
-`vocello bench` exits non-zero unless you pass `--allow-bench-fail` or set
-`QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL=1` (useful when you only want the trace artifact).
-The engine emits
-`OSSignpost` intervals under `com.qwenvoice.app` / `performance`. To profile the XPC
-service specifically (the production path): launch the app, `xctrace record --attach
-QwenVoiceEngineService`, and generate via the UI.
+The source report directory is research evidence and remains unchanged; automation consumes the
+compact manifest rather than parsing prose.
 
-## Review
-
-```sh
-scripts/macos_test.sh review                        # full catalog (resting + post-gen states)
-scripts/macos_test.sh review --subset resting       # fast PR visual pass
-scripts/macos_test.sh review --baseline             # seed/update docs/macos-review-baselines/
-scripts/macos_test.sh journey                       # phase-A human flows (player + history)
-```
-
-**Drivers:** human-like tests (`VocelloMacSmokeUITests`, `VocelloMacHumanJourneyUITests`,
-`VocelloMacReviewUITests`) share `VocelloMacUIQuery` + `VocelloMacUITestApp` (one session,
-`XCTNSPredicateExpectation` waits — no RunLoop polling). The bench matrix uses
-`VocelloMacBenchUITests` separately (cold/warm relaunch, telemetry-flush markers).
-
-Runs `VocelloMacReviewUITests` (catalog keys like `review-custom-postgen`, `review-history-populated`).
-Diff each capture against its committed baseline via **`user-axiom`** `axiom_get_agent`
-agent=`screenshot-validator` or a manual visual pass. macOS is the host — direct capture, no
-Mirroring chrome, no burn-in concern.
-
-## XPC lifecycle (macOS-unique)
-
-The XPC engine service is the macOS-specific testing dimension. It is:
-- **Lazy** — spawned on the first generation; not present at app launch.
-- **Retireable** — under memory pressure (floor8GBMac) or after an idle dwell, the service
-  exits (`shutdownWhenIdle`); the app stays alive; the next generation lazily relaunches it.
-- **Crash-isolated** — if the service crashes, the app survives; the next generation
-  reconnects (the service auto-relaunches).
+## Gate and CI behavior
 
 ```sh
-scripts/macos_test.sh xpc                    # watch the lifecycle (retire → relaunch)
-scripts/macos_test.sh xpc --crash-isolation  # kill the service → assert the app survives
+scripts/macos_test.sh gate
 ```
 
-The verb launches the app with a short `QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS` and watches
-the service process for SPAWNED/retired/relaunch events. `--crash-isolation` kills a running
-service and asserts the app (`Vocello`) survives — the crash-isolation guarantee.
-Triggering a generation is manual (the app is UI-driven); the verb monitors + asserts the
-scriptable parts. Event-stream gaps are recorded by the service to
-`diagnostics/engine-service/native-events.jsonl`.
+The gate runs project-input checks, builds, deterministic tests and crash checks, then calls the
+impact classifier. `none` requires no UI report; the other levels require a matching fresh
+attestation. Headless CI can run deterministic tests and validate attestation schema/fingerprints,
+but it does not claim to execute Computer Use.
 
-## Gate
+## XPC and crash diagnostics
+
+The XPC service is lazy, retireable and crash-isolated. The full Computer Use suite kills it,
+waits for absence/relaunch, and requires a successful generation after recovery. Use:
 
 ```sh
-scripts/macos_test.sh gate    # models → check_project_inputs → build_foundation macos → test → crashes
-QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # …plus bounded custom/speed/medium bench + audioQC + regression compare vs benchmarks/baselines/mac-gate-bench.json
+scripts/macos_test.sh xpc status
+scripts/macos_test.sh xpc kill
+scripts/macos_test.sh xpc wait --present --timeout 60
+scripts/macos_test.sh crashes
+scripts/macos_test.sh logs
+scripts/macos_test.sh profile custom:speed
 ```
 
-Steps: (1) `ensure_mac_test_models`, (2) `check_project_inputs`, (3) `build_foundation_targets macos`,
-(4) `VocelloMacSmokeUITests` via `test` (re-ensures models + `QVOICE_REQUIRE_TEST_MODELS=1`),
-(5) post-run crash check. Does **not** call the `preflight` verb. A single PASS/FAIL verdict +
-per-step logs under `build/macos/gate-<run>/`. Deeper dives (bench/profile/review/xpc) are separate
-verbs, not part of the every-merge gate.
+Crash reports remain gate-fatal when new `.ips` files appear.
 
-| Level | Command | Proves |
-|-------|---------|--------|
-| Compile | `scripts/build_foundation_targets.sh macos` | the app + frameworks compile |
-| Core unit | `scripts/macos_test.sh core-test` | `VocelloCoreTests` — language hint/detection (no models) |
-| Lang bench | `scripts/macos_test.sh lang-bench [--subset quick\|full]` | headless CLI language-hint matrix + `check_language_hints.py` |
-| Compile (test) | `xcodebuild build-for-testing -scheme QwenVoice -destination 'platform=macOS,arch=arm64'` | the test bundle compiles |
-| UI smoke | `scripts/macos_test.sh test` | ~12 smoke tests (`-only-testing:VocelloMacSmokeUITests`) |
-| Journey | `scripts/macos_test.sh journey` | phase-A compose → player → history |
-| UI review | `scripts/macos_test.sh review` | sidebar-screen tour vs baselines |
-| Perf/quality | `scripts/build.sh cli bench --modes … --variants … --lengths …` | RTF/decode/audioQC + telemetry |
-| Crash | `scripts/macos_test.sh crashes` | .ips collection + symbolication |
-| XPC | `scripts/macos_test.sh xpc --crash-isolation` | service crash isolation |
-| Pre-merge gate | `scripts/macos_test.sh gate` | the standing gate |
+## Related documents
 
-## Related docs
-
-- [`macos-app-guide.md`](macos-app-guide.md) — the macOS app map + how to drive it in tests.
-- [`macos-release-qa.md`](macos-release-qa.md) — the release QA gate sequence.
-- [`macos-permissions.md`](macos-permissions.md) — TCC + signing.
-- [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md) — telemetry schema + bench recipes.
-- [`cli.md`](cli.md) — the `vocello` CLI reference.
-- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the XPC host + macOS request lifecycle.
+- [`macos-app-guide.md`](macos-app-guide.md) — app surfaces and stable identifiers.
+- [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) — current macOS Computer Use route and iOS exploratory material.
+- [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md) — telemetry fields and benchmark analysis.
+- [`macos-release-qa.md`](macos-release-qa.md) — release sequence.
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — runtime hosts and XPC lifecycle.

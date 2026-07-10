@@ -123,23 +123,17 @@ Full table: repo `docs/reference/ios-agent-ui-tour.md` Appendix **B.5–B.8**.
 - `Custom segment` / `Design hop` as reset
 - `tap` without prior `describe_screen`
 
-## Agent UI bench (`bench-ui-mirroir`)
+## Agent smokes (exploratory — not a matrix)
 
-Full 29-take matrix (same as XCUITest `bench-ui`) driven by mirroir with shell orchestration. **Not a pre-merge gate** until pilot-stable.
+Single-clip generate via mirroir + deterministic `measure-*` proof:
 
 ```sh
-scripts/ios_device.sh bench-ui-mirroir --agent-drive \
-  --warm 1 --lengths medium --modes custom --label mirroir-bench-pilot
+RUN_ID="ios-smoke-$(date +%Y%m%d-%H%M%S)"
+scripts/ios_device.sh measure-prep --run-id "$RUN_ID"
+# mirroir drive → Generate
+SINCE=$(scripts/ios_device.sh measure-now)
+ART=$(scripts/ios_device.sh measure-artifacts-dir --run-id "$RUN_ID")
+scripts/ios_device.sh measure-verify --run-id "$RUN_ID" --since "$SINCE" --artifacts-dir "$ART"
 ```
 
-Per take (shell prints **`MIRROIR_BENCH_TAKE_BEGIN`**):
-
-1. **Mode prep** when `needsModePrep=1`: Custom / Design / Clone segment + brief or reference sheet
-2. Tap OCR **`Clear script`** (top-leading; `iosStudio_benchClearScript`) — fallback: `vision-launch --force-cold 0`
-3. Type **corpus from take JSON** → verify `N / 150` with N > 0
-4. `SINCE=$(scripts/ios_device.sh vision-now)` → tap **Generate** → `vision-bench-wait --run-id … --since "$SINCE"`
-5. `touch build/ios/bench-ui-mirroir-<runID>/take-N.done`
-
-**Proof:** `vision-bench-wait` (telemetry by `benchRunID`) — not OCR `"Just now"`. **Illegal:** Design share `*`, **Save as voice**, Voices tab mid-matrix.
-
-Full procedure: repo `docs/reference/ios-agent-ui-tour.md` Appendix **B.6d**.
+Full UI matrix: XCUITest `scripts/ios_device.sh bench-ui` only. Procedure: `docs/reference/ui-smoke-runbooks.md`.

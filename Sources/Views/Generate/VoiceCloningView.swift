@@ -575,9 +575,6 @@ private struct VoiceCloningComposerFooter: View {
                 isBusy: isGenerating,
                 accessibilityIdentifier: "voiceCloning_readiness"
             )
-            .onChange(of: isReadyForFastGenerate) { _, ready in
-                MacUITestSurfaceMarkers.setComposeReady(mode: "clone", ready: ready && !isGenerating)
-            }
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
