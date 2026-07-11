@@ -49,11 +49,12 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Install XcodeGen + xcbeautify
+      - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify
+          brew install xcodegen xcbeautify ripgrep
           xcodegen --version
           xcbeautify --version
+          rg --version
 
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
@@ -97,8 +98,12 @@ jobs:
             sudo xcode-select -s /Applications/Xcode_26.0.app
           fi
 
-      - name: Install XcodeGen + xcbeautify
-        run: brew install xcodegen xcbeautify
+      - name: Install deterministic tooling
+        run: |
+          brew install xcodegen xcbeautify ripgrep
+          xcodegen --version
+          xcbeautify --version
+          rg --version
 
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
