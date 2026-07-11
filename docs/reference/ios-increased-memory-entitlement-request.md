@@ -24,7 +24,7 @@ Status context: [`../../AGENTS.md`](../../AGENTS.md) § "Release & iPhone status
 > (`scripts/ios_device.sh build`, BUILD SUCCEEDED). No remaining portal cleanup.
 
 > **Note (device tooling):** on-device build/test tooling is **re-established** — `scripts/ios_device.sh`
-> (device driver) + the `QVOICE_IOS_AUTORUN` headless harness capture entitled-vs-unentitled memory evidence
+> (device driver) + `IOSDeviceDiagnosticsRunner` capture entitled-vs-unentitled memory evidence
 > on a real device (see [`ios-device-testing.md`](ios-device-testing.md)). The device-free verification
 > (`codesign`/`security`/`verify_ios_release_archive.sh`) and the memory evidence you can already cite
 > (streaming ~3 GB, see `benchmarks/OPTIMIZATION.md` §F.1) do **not** need a device.
@@ -196,7 +196,7 @@ Memory-reduction behavior already implemented:
 not a hard blocker for Custom/Design. (The ~7–8 GB figures elsewhere are the *non-streaming* bench path that
 iOS never uses.) This is the necessity/sufficiency evidence to cite.
 
-**On device** (`scripts/ios_device.sh` + the `QVOICE_IOS_AUTORUN` harness), capture an unentitled baseline
+**On device** (`scripts/ios_device.sh` + `IOSDeviceDiagnosticsRunner`), capture an unentitled baseline
 showing safe blocking, then an entitled baseline showing raised headroom. The app-process rows to extract
 from the diagnostics JSONL:
 

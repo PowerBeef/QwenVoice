@@ -14,7 +14,8 @@ It links the engine frameworks directly (no XPC), **ships no model weights and n
 (Settings → Model downloads) or headlessly with `vocello models install <id>` — the same
 HuggingFace downloader the app uses. `generate`/`bench` fail fast if a requested model isn't
 installed (`vocello models list` / `models status` show what's present). For macOS UI tests and
-bench in debug context, see [`testing-runbook.md`](testing-runbook.md) §1b (`scripts/macos_test.sh models ensure`).
+bench in debug context, see [`testing-runbook.md`](testing-runbook.md) "Model readiness"
+(`scripts/macos_test.sh models ensure`).
 
 ## Build & run
 
@@ -153,7 +154,8 @@ immediately usable in the app, and vice versa. Variant-scoped ids (`pro_custom_s
 are what `generate --variant` selects.
 
 For test/bench lanes with `QWENVOICE_DEBUG=1`, weights live under `QwenVoice-Debug/`; the test
-driver symlinks `QwenVoice-Debug/models` → the canonical store (see [`testing-runbook.md`](testing-runbook.md) §1b).
+driver symlinks `QwenVoice-Debug/models` → the canonical store (see
+[`testing-runbook.md`](testing-runbook.md) "Model readiness").
 
 ### `bench` — drive the perf/quality matrix + aggregate
 

@@ -50,6 +50,15 @@ OCR taps, alternate UI drivers, and fixed sleeps are not supported.
 Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
 runs; invoking the command without filters is the canonical 29-take matrix.
 
+## Headless device diagnostics
+
+`bench`, `lang-bench`, `profile`, and the deliberate crash diagnostic launch
+`IOSDeviceDiagnosticsRunner` through a purpose-specific `QVOICE_IOS_DEVICE_DIAGNOSTICS_*`
+environment contract. The runner writes `device-diagnostics-done.json`; it never drives or inspects
+the app UI. Clone diagnostics require the exact prepared voice ID, and `--memory-profile` can apply a
+smaller-device memory budget while retaining the connected phone's real GPU and thermals. These
+operations are diagnostics, not a second frontend acceptance stack.
+
 ## Model readiness
 
 Before generation, XCUITest visibly requires Custom, Design, and Clone Speed to report ready,

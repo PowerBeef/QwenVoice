@@ -43,7 +43,7 @@ Tests assert these visible production surfaces directly.
 
 | Element | Identifier |
 |---|---|
-| Speaker picker | `customVoice_speakerPicker` (menu) / `customVoice_selectedSpeaker` (value) |
+| Speaker picker | `customVoice_speakerPicker` (visible menu; selected speaker is its accessibility value) |
 | Language picker | `customVoice_languageSetup` |
 | Delivery (tone) | `customVoice_toneSpeed` |
 | Script editor | `textInput_textEditor` / `textInput_charCount` |
@@ -55,7 +55,7 @@ Tests assert these visible production surfaces directly.
 
 | Element | Identifier |
 |---|---|
-| Voice brief field | `voiceDesign_voiceDescriptionField` / `voiceDesign_voiceDescriptionValue` |
+| Voice brief field | `voiceDesign_voiceDescriptionField` (visible field; current brief is its accessibility value) |
 | Brief starters | `voiceDesign_briefStarter_<n>` |
 | Brief char count | `voiceDesign_briefCharCount` |
 | Language + delivery | `voiceDesign_toneSpeed` / `voiceDesign_languageSetup` |

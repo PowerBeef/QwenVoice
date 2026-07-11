@@ -254,7 +254,7 @@ struct HistoryView: View {
     @ViewBuilder
     private var content: some View {
         if let loadError, items.isEmpty, !isLoading {
-            historyStateContainer(identifier: "history_errorState", markerLabel: "History error state") {
+            historyStateContainer(identifier: "history_errorState") {
                 ContentUnavailableView(
                     "Couldn't load history",
                     systemImage: "exclamationmark.triangle",
@@ -262,13 +262,13 @@ struct HistoryView: View {
                 )
             }
         } else if isLoading && items.isEmpty {
-            historyStateContainer(identifier: "history_loadingState", markerLabel: "History loading state") {
+            historyStateContainer(identifier: "history_loadingState") {
                 VStack(spacing: 12) {
                     ProgressView("Loading history...")
                 }
             }
         } else if filteredItems.isEmpty {
-            historyStateContainer(identifier: "history_emptyState", markerLabel: "History empty state") {
+            historyStateContainer(identifier: "history_emptyState") {
                 ContentUnavailableView(
                     items.isEmpty ? "No generations yet" : "No results found",
                     systemImage: "clock.arrow.circlepath",
@@ -373,7 +373,6 @@ private extension HistoryView {
     @ViewBuilder
     func historyStateContainer<Content: View>(
         identifier: String,
-        markerLabel: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack {
@@ -381,13 +380,8 @@ private extension HistoryView {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) {
-            Text(markerLabel)
-                .font(.system(size: 1))
-                .opacity(0.01)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier(identifier)
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
     }
 
     func reloadHistory() {
@@ -452,10 +446,10 @@ private extension HistoryView {
 
     func finishReload(wallStart: UInt64, interval: AppPerformanceSignposts.Interval) {
         AppPerformanceSignposts.end(interval)
-        #if DEBUG
-        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
-        print("[Performance][HistoryView] reload_wall_ms=\(elapsedMs)")
-        #endif
+        if DebugMode.isEnabled {
+            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+            print("[Performance][HistoryView] reload_wall_ms=\(elapsedMs)")
+        }
 
         loadTask = nil
 

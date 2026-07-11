@@ -41,11 +41,12 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 | --- | --- |
 | **iOS runtime/UI = physical device + XCUITest** | Never use Simulator. XCUITest drives the paired physical iPhone; scripts provide deterministic device/telemetry proof. The generic physical-device SDK compile needs no phone. `scripts/ios_device.sh gate` remains a physical-device runtime diagnostic, not a UI-result gate. |
 | **`project.yml`, not pbxproj** | After edit: `./scripts/regenerate_project.sh` + `./scripts/check_project_inputs.sh`. iOS resources: `sources:` + `buildPhase: resources` (not `resources:`). |
-| **Release-only config** | Debug via `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); `#if DEBUG` for test/sim scaffolding only. |
+| **Release-only config** | The project has no Debug configuration or generic `DEBUG` symbol. Runtime diagnostics use `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); compile-time test isolation belongs in test targets or a narrowly named compilation condition, never hidden app behavior. |
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Privacy** | No PII in tracked user-facing files. |
 | **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. No Simulator, alternate desktop-control MCP, or coordinate bridge is active. |
+| **No hidden test UI** | XCUITest observes genuine visible controls. Test-only code belongs in test targets; shippable app targets must not contain preview routes, invisible state markers, seeded UI state, or onboarding bypasses. |
 | **One shared XcodeBuildMCP** | OpenAI Build iOS Apps supplies the shared server; Build macOS Apps consumes it. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never configure a second server. Repository scripts remain the final gate. |
 | **Codex/ChatGPT Desktop only** | This repository has no compatibility layer for another agent IDE. Codex/ChatGPT Desktop, installed OpenAI plugins, repository skills, and repository scripts are the supported development environment. |
 | **Publishing is deterministic-only** | Commits, pushes, pull requests, ordinary merges, ordinary CI, and release packaging require deterministic verification only. Missing models, a physical device, or XCUITest evidence must never block preserving, sharing, signing, notarizing, or uploading work. UI lanes run only for explicit frontend QA. |
@@ -131,15 +132,18 @@ require on-device Speech assets — setup: [`language-bench.md`](docs/reference/
 ### Release QA
 
 Release packaging is gated by deterministic build, test, identity, signing, crash, and artifact
-checks. XCUITest smoke and benchmark runs remain useful explicit frontend QA, but their absence never
-blocks signing, notarization, artifact upload, a macOS package, or an iOS archive/TestFlight build.
+checks. XCUITest smoke, UI benchmarks, and model-dependent engine benchmarks remain explicit quality
+QA, but their absence never blocks signing, notarization, artifact upload, a macOS package, or an iOS
+archive/TestFlight build.
 
 ```sh
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
   --lengths short,medium,long --warm 3 --voice <voice> --label "release-QA" --ledger
 ```
 
-**Verify:** the applicable platform release check, listening pass, and telemetry compare succeed →
+**Verify:** packaging requires the applicable deterministic platform release check. When an engine
+promotion benchmark is explicitly requested, that separate quality decision also requires its
+audio-QC, telemetry comparison, and listening verdict →
 [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md).
 
 ## Key paths
@@ -148,8 +152,9 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | --- | --- |
 | `Sources/QwenVoiceCore/` | Engine, download, generation semantics |
 | `Sources/QwenVoiceBackendCore/` | MLX/audio primitives |
-| `Sources/QwenVoiceNative/`, `EngineService/`, `EngineSupport/` | macOS XPC stack |
-| `Sources/iOS/`, `iOSSupport/` | iOS app |
+| `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineService/`, `Sources/QwenVoiceEngineSupport/` | macOS XPC stack |
+| `Sources/iOS/`, `Sources/iOSSupport/` | iOS app |
+| `Sources/iOS/IOSDeviceDiagnosticsRunner.swift` | Headless, non-UI physical-device diagnostics used by `ios_device.sh` |
 | `Sources/SharedSupport/` | Shared player, persistence, transcriber |
 | `scripts/*.sh` | Build, test, release |
 | `config/language-bench-*.json` | Language hint bench corpus + matrix |
@@ -159,7 +164,7 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | `scripts/ui_test.sh` | Unified explicit XCUITest entry point |
 | `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
 | `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |
-| `docs/development-progress.md` | Active checkpoint, verified frontend evidence, and Codex reinstall/resume route |
+| `docs/development-progress.md` | Current implementation checkpoint and remaining release work |
 | `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
 
 Interactive feature/module map: [`docs/project-map.html`](docs/project-map.html). Deeper lifecycle
@@ -176,7 +181,6 @@ scripts/macos_test.sh test
 scripts/macos_test.sh telemetry-overhead
 scripts/ui_test.sh macos smoke
 scripts/ui_test.sh macos benchmark
-scripts/ios_device.sh test
 scripts/ui_test.sh ios smoke
 scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh lang-bench --subset quick
@@ -206,7 +210,7 @@ configuration and plugin state are never repository sources of truth.
 
 | Doc | When |
 | --- | --- |
-| [`docs/development-progress.md`](docs/development-progress.md) | **Active checkpoint** — completed transition, verified evidence, and resume route |
+| [`docs/development-progress.md`](docs/development-progress.md) | **Active checkpoint** — current topology, release work, and resume route |
 | [`docs/reference/ios-ui-reference.md`](docs/reference/ios-ui-reference.md) | iOS screen map, stable identifiers, states, and physical-device expectations |
 | [`docs/reference/language-bench.md`](docs/reference/language-bench.md) | language hint + output bench (Phases 1–3) |
 | [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) | bench protocol |

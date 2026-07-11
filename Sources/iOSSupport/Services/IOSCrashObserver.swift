@@ -14,7 +14,7 @@ import os
 ///
 /// No entitlement required. Started once from `QVoiceiOSApp.init()`. Writes only to
 /// the `devicectl`-pullable app-container dir (the App-Group container is NOT pullable
-/// — same constraint `IOSAutorunHarness` works around for the autorun sentinel).
+/// — the same constraint `IOSDeviceDiagnosticsRunner` works around for its sentinel).
 final class IOSCrashObserver: NSObject, @unchecked Sendable {
     static let shared = IOSCrashObserver()
     private let log = OSLog(subsystem: "com.patricedery.vocello", category: "crash")

@@ -37,7 +37,6 @@ final class IOSDeviceDiagnosticsRecorder {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         appSupportDirectory: URL = AppPaths.appSupportDir
     ) -> IOSDeviceDiagnosticsRecorder? {
-#if DEBUG
         guard NativeTelemetryMode.current(environment: environment) != .off else {
             return nil
         }
@@ -70,9 +69,6 @@ final class IOSDeviceDiagnosticsRecorder {
             directories.append((name: "app-container-cache", url: mirrorDirectory))
         }
         return IOSDeviceDiagnosticsRecorder(runID: safeRunID, diagnosticsDirectories: directories)
-#else
-        return nil
-#endif
     }
 
     func recordMemoryContext(
@@ -143,9 +139,9 @@ final class IOSDeviceDiagnosticsRecorder {
             }
             mirrorNativeEventsToAppContainerCacheIfNeeded()
         } catch {
-#if DEBUG
-            print("[IOSDeviceDiagnosticsRecorder] Could not write diagnostics: \(error.localizedDescription)")
-#endif
+            if TelemetryGate.resolvedEnabled {
+                print("[IOSDeviceDiagnosticsRecorder] Could not write diagnostics: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -203,9 +199,9 @@ final class IOSDeviceDiagnosticsRecorder {
                     to: target.nativeEventsURL
                 )
             } catch {
-#if DEBUG
-                print("[IOSDeviceDiagnosticsRecorder] Could not mirror native events: \(error.localizedDescription)")
-#endif
+                if TelemetryGate.resolvedEnabled {
+                    print("[IOSDeviceDiagnosticsRecorder] Could not mirror native events: \(error.localizedDescription)")
+                }
             }
         }
     }

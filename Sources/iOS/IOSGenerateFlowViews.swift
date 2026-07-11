@@ -60,13 +60,10 @@ enum IOSPrefetchRequestFactory {
 }
 
 private enum IOSProactivePrefetchPolicy {
-    static var isEnabled: Bool {
-#if DEBUG
-        ProcessInfo.processInfo.environment["QVOICE_IOS_ENABLE_PROACTIVE_PREFETCH"] == "1"
-#else
-        false
-#endif
-    }
+    // Proactive prefetch is intentionally disabled in the single shippable
+    // configuration. Keep this explicit rather than reviving the former dead
+    // DEBUG-only environment override.
+    static let isEnabled = false
 }
 
 struct IOSGenerateContainerView: View {

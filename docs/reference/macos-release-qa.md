@@ -64,7 +64,7 @@ upload depend on deterministic release-readiness and artifact checks.
    ```sh
    python3 scripts/summarize_generation_telemetry.py \
      ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-     --compare-baseline benchmarks/baseline-2026-06-16-45720dd-streaming-default.md \
+     --compare-baseline benchmarks/baselines/mac-gate-bench.json \
      --label "release-QA"
    ```
    Investigate any highlighted cell before shipping.

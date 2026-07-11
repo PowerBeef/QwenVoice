@@ -56,16 +56,16 @@ QVOICE_LANG_BENCH_SKIP_OUTPUT=1 scripts/ios_device.sh lang-bench --subset quick
 
 Per cell the driver sets:
 
-- `QVOICE_MAC_BENCH_RUN_ID` — shared run id (`ios-lang-bench-…`)
+- `QVOICE_IOS_DEVICE_RUN_ID` — shared run id (`ios-lang-bench-…`)
 - `QVOICE_MAC_BENCH_CELL` — matrix cell id
-- `QVOICE_IOS_AUTORUN_LANG` — UI hint (`english`, `french`, …; omitted for Auto)
-- `QVOICE_IOS_AUTORUN` — `mode:speed:<script>`
-- `QVOICE_IOS_VERIFY_OUTPUT=1` — Speech round-trip (default unless skipped)
+- `QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE` — language hint (`english`, `french`, …; omitted for Auto)
+- `QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC` — `mode:speed:<script>`
+- `QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT=1` — Speech round-trip (default unless skipped)
 
 Gates:
 
 - `scripts/check_language_hints.py` — `engine/generations.jsonl`
-- `scripts/check_language_output.py` — `autorun-done.json` → `outputVerification`
+- `scripts/check_language_output.py` — `device-diagnostics-done.json` → `outputVerification`
 
 ### Validated (2026-07-06)
 
@@ -90,7 +90,7 @@ scripts/macos_test.sh lang-bench --subset quick
 
 Uses `QWENVOICE_DEBUG=1`, `vocello generate --language …`, and the hint gate against
 `~/Library/Application Support/QwenVoice-Debug/diagnostics/`. CLI Speech is **not** used
-(TCC); output verification is iOS autorun only.
+(TCC); output verification is available through the iOS device-diagnostics lane only.
 
 ## Offline gate tests
 

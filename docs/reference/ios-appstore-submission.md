@@ -16,7 +16,7 @@ offline manual signing if no Apple ID is in Xcode). The development provisioning
 8 GB-class iPhone budget), 0 memory trims, and audio-QC pass. Physical-device XCUITest can be run
 independently when explicit frontend acceptance is requested; ordinary GitHub CI and archive
 packaging are deterministic-only — see
-[`testing-runbook.md`](testing-runbook.md)); and the UI
+[`testing-runbook.md`](testing-runbook.md); and the UI
 holds with no clipping at the largest accessibility Dynamic Type size. **Still maintainer-only below:** the
 **Distribution** cert + **App Store** provisioning profile (regenerated to carry `increased-memory-limit`) +
 the ASC record/metadata/upload.

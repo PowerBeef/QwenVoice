@@ -449,8 +449,6 @@ private extension CustomVoiceView {
         )
     }
 
-    // selectedSpeakerValueAnchor moved to SpeakerPickerRow struct
-
     var composerFooter: some View {
         VStack(alignment: .leading, spacing: LayoutConstants.compactGap) {
             generationReadiness
@@ -528,17 +526,6 @@ private struct SpeakerPickerRow: View {
             .frame(minWidth: LayoutConstants.configurationControlMinWidth, maxWidth: 220, alignment: .leading)
             .accessibilityValue(TTSModel.speakerPickerLabel(for: selectedSpeaker))
             .accessibilityIdentifier("customVoice_speakerPicker")
-        }
-        .overlay(alignment: .topLeading) {
-            Text(TTSModel.speakerPickerLabel(for: selectedSpeaker))
-                .font(.caption2)
-                .foregroundStyle(.clear)
-                .opacity(0.01)
-                .frame(width: 1, height: 1, alignment: .leading)
-                .allowsHitTesting(false)
-                .accessibilityLabel(TTSModel.speakerPickerLabel(for: selectedSpeaker))
-                .accessibilityValue(TTSModel.speakerPickerLabel(for: selectedSpeaker))
-                .accessibilityIdentifier("customVoice_selectedSpeaker")
         }
     }
 }

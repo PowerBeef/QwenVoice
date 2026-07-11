@@ -1,7 +1,7 @@
 
 [2026-06-16 · 45720dd · streaming-default (speed matrix + custom quality; design quality not installed)]
 
-Telemetry summary — /Users/patricedery/Library/Application Support/QwenVoice/diagnostics
+Telemetry summary — ~/Library/Application Support/QwenVoice/diagnostics
 (30 runs across 12 cells; warm shows median)
 tier: floor_8gb_mac
 

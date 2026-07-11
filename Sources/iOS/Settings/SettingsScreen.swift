@@ -30,10 +30,6 @@ struct SettingsScreen: View {
     @State private var isFolderPickerPresented = false
     @State private var modelPendingCancel: TTSModel? = nil
 
-    private var previewSettingsState: IOSPreviewSettingsState? {
-        IOSPreviewRuntime.current?.definition.settingsState
-    }
-
     private var installedModelBytes: Int64 {
         TTSModel.all.reduce(0) { total, model in
             guard case let .installed(bytes) = effectiveStatus(for: model) else {
@@ -222,16 +218,11 @@ struct SettingsScreen: View {
     }
 
     private func effectiveOperationState(for model: TTSModel) -> IOSModelInstallerViewModel.OperationState {
-        if let previewState = previewSettingsState?.sample(for: model)?.operationState {
-            return previewState
-        }
-
         return modelInstaller.state(for: model)
     }
 
     private func effectiveStatus(for model: TTSModel) -> ModelManagerViewModel.ModelStatus {
-        previewSettingsState?.sample(for: model)?.status
-            ?? modelManager.statuses[model.id]
+        modelManager.statuses[model.id]
             ?? .checking
     }
 

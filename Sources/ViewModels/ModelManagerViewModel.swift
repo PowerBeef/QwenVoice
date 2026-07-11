@@ -159,10 +159,10 @@ final class ModelManagerViewModel {
             let wallStart = DispatchTime.now().uptimeNanoseconds
             await performRefresh()
             AppPerformanceSignposts.end(interval)
-            #if DEBUG
-            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
-            print("[Performance][ModelManagerViewModel] refresh_wall_ms=\(elapsedMs)")
-            #endif
+            if DebugMode.isEnabled {
+                let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+                print("[Performance][ModelManagerViewModel] refresh_wall_ms=\(elapsedMs)")
+            }
         }
 
         refreshTask = task

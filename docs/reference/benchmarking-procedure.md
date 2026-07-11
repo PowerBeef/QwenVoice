@@ -1,7 +1,7 @@
 # Benchmarking procedure — operator runbook
 
 Step-by-step guide for running Vocello performance and quality benchmarks on **macOS**
-(CLI and app/XPC) and **iOS** (on-device autorun). This document covers **when** to bench,
+(CLI and app/XPC) and **iOS** (headless on-device diagnostics). This document covers **when** to bench,
 **how** to drive each platform path, **what** artifacts to expect, and **how** to read results.
 
 For telemetry schema, record fields, and MLX timing semantics, see
@@ -73,7 +73,7 @@ UIstall column      —                       yes                    yes
 | **macOS UI** | App + `QwenVoiceEngineService` XPC | Out-of-process engine | End-to-end TTFC, UI stall, XPC transport; UI smoke tests |
 | **macOS XPC UI benchmark** | `scripts/ui_test.sh macos benchmark` | Out-of-process engine | Full UI matrix through real app + XPC; merged 3-layer telemetry |
 | **macOS profile** | `scripts/macos_test.sh profile` | In-process via CLI inside trace | Instruments / os_signpost validation |
-| **iOS device** | `scripts/ios_device.sh bench` | In-process | iPhone tier, Jetsam, on-device RTF (headless autorun, single take) |
+| **iOS device** | `scripts/ios_device.sh bench` | In-process | iPhone tier, Jetsam, on-device RTF (headless diagnostics, single take) |
 | **iOS UI benchmark** | `scripts/ui_test.sh ios benchmark` | In-process | Full UI matrix through XCUITest on the paired physical iPhone; telemetry gated per take |
 
 **Important:** CLI bench numbers are **not** identical to macOS XPC UI numbers. Compare like with
@@ -112,7 +112,7 @@ Set `QVOICE_REQUIRE_TEST_MODELS=1` is automatic on script paths; bare `xcodebuil
 | Check | Action |
 |-------|--------|
 | Quiet machine | Quit heavy apps; watch thermals (see §6.4). |
-| Single Vocello session | `pkill -x Vocello; pkill -x QwenVoiceEngineService` before UI benches. |
+| Single Vocello session | Quit any separately installed Vocello first. The XCUITest runner verifies exact executable paths and signals only its own Release products. |
 | Debug data dir | `QWENVOICE_DEBUG=1` → `~/Library/Application Support/QwenVoice-Debug/` |
 | Floor-tier simulation | `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` (propagates to engine via handshake) |
 | Suppress proactive warm | `QWENVOICE_SUPPRESS_WARMUP=1` for accurate Custom/Design **cold** rows in UI runs |
@@ -226,13 +226,14 @@ scripts/ios_device.sh bench custom:speed: \
   --label "ios-device-bench"
 ```
 
-Optional restriction simulation:
+Optional physical-device memory-profile diagnostic:
 
 ```sh
-scripts/ios_device.sh bench --sim-device iphone15pro custom:speed:
+scripts/ios_device.sh bench --memory-profile iphone15pro custom:speed:
 ```
 
-Pulls diagnostics from device; runs summarizer; exits non-zero if autorun status ≠ ok.
+Pulls diagnostics from the device, runs the summarizer, and exits non-zero unless
+`device-diagnostics-done.json` reports success.
 
 ### 4.7b iOS UI benchmark (Studio matrix — XCUITest)
 
@@ -318,7 +319,7 @@ probe evidence; there are no hidden UI-test flush markers. Gate with the run ID:
 
 ```sh
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --run-id mac-ui-benchmark-YYYYMMDD-HHMMSS
+  --run-id macos-xcui-benchmark-YYYYMMDD-HHMMSS
 ```
 
 **One-time machine setup:** configure Xcode UI-test runner signing, build the native test host, and
@@ -429,7 +430,7 @@ Useful flags:
 | `--show-variance` | IQR / outlier hints per cell |
 | `--merged` | Cross-layer first-chunk table from `generations-merged.jsonl` |
 | `--save-baseline PATH` | Write the current per-cell summary as a **JSON** baseline |
-| `--compare-baseline PATH` | Regression compare vs a **JSON** baseline from `--save-baseline` (exit 2 on >5% regression; RTF **drop**, tok/s drop, TTFC/physFoot rise, QC worsening). Markdown snapshots cannot be fed to this flag — diff those with `git diff`. |
+| `--compare-baseline BASELINE.json` | Regression compare vs a **JSON** baseline from `--save-baseline` (exit 2 on >5% regression; RTF **drop**, tok/s drop, TTFC/physFoot rise, QC worsening). Markdown snapshots cannot be fed to this flag — diff those with `git diff`. |
 | `--ledger-row` | One HISTORY.md row (pipe to `>> benchmarks/HISTORY.md`) |
 | `--cell mode/model/state[/len]` | Headline cell for ledger (default `custom/quality/warm`) |
 
@@ -546,10 +547,10 @@ stamps `notes.languageHint` (resolved Qwen3 token, not raw UI picker). Gate with
 `scripts/check_language_hints.py` against `config/language-bench-matrix.json`.
 Offline fixture self-test: `python3 scripts/test_check_language_hints.py`.
 
-### Layer 2.6 — Output language + WER (Phase 3, iOS autorun)
+### Layer 2.6 — Output language + WER (Phase 3, iOS device diagnostics)
 
-When `QVOICE_IOS_VERIFY_OUTPUT=1`, the app transcribes each bench WAV in-process (Speech)
-and stamps `outputVerification` on `autorun-done.json`. Gate with
+When `QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT=1`, the app transcribes each bench WAV
+in-process (Speech) and stamps `outputVerification` on `device-diagnostics-done.json`. Gate with
 `scripts/check_language_output.py`. Requires Speech Recognition permission on the phone once.
 Skip with `QVOICE_LANG_BENCH_SKIP_OUTPUT=1`. See [`language-bench.md`](language-bench.md).
 
@@ -605,7 +606,7 @@ Engine regression net remains **manual local** until a self-hosted macOS bench j
 | Summarizer empty | Wrong diagnostics dir / gate off | Confirm `QWENVOICE_DEBUG=1`; check `engine/generations.jsonl` |
 | RTF vs decode ms disagree | Different time bases + lazy MLX | Read §6.3; use signpost trace |
 | All QC warn:dropout on long | Often natural pauses | Listening pass; check punctuation-aware budget |
-| iOS bench timeout | Model missing / autorun stuck | `scripts/ios_device.sh console`; install Speed model |
+| iOS bench timeout | Model missing / device diagnostics did not complete | `scripts/ios_device.sh console`; install Speed model |
 | Clone cold row appears | Summarizer labels first clone take | Clone is warm-by-design; ignore cold label if present |
 
 ---
@@ -619,7 +620,5 @@ Engine regression net remains **manual local** until a self-hosted macOS bench j
 | [`macos-release-qa.md`](macos-release-qa.md) | Release gate sequence |
 | [`macos-testing.md`](macos-testing.md) | UI test / profile / gate lanes |
 | [`ios-device-testing.md`](ios-device-testing.md) | iOS bench, gate, device lanes |
-| [`telemetry-harness-review.md`](telemetry-harness-review.md) | 2026-06-15 harness technical review |
 | [`benchmarks/OPTIMIZATION.md`](../../benchmarks/OPTIMIZATION.md) | Optimization program status |
 | [`benchmarks/HISTORY.md`](../../benchmarks/HISTORY.md) | Performance ledger |
-| [`benchmarks/benchmarking-procedure-audit-2026-06-29.md`](../../benchmarks/benchmarking-procedure-audit-2026-06-29.md) | 2026-06-29 procedure audit |

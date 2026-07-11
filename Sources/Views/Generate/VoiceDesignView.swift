@@ -372,21 +372,6 @@ private struct VoiceDesignBriefSettings: View {
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .overlay(alignment: .topLeading) {
-            voiceDescriptionValueAnchor
-        }
         .accessibilityValue(voiceDescription)
-    }
-
-    private var voiceDescriptionValueAnchor: some View {
-        Text(voiceDescription.isEmpty ? " " : voiceDescription)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(voiceDescription)
-            .accessibilityValue(voiceDescription)
-            .accessibilityIdentifier("voiceDesign_voiceDescriptionValue")
     }
 }

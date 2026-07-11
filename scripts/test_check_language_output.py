@@ -41,7 +41,7 @@ def write_fixture(diag: str, run_id: str, *, mismatch: bool = False) -> None:
                 "pass": True,
             },
         }
-        with open(os.path.join(directory, "autorun-done.json"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(directory, "device-diagnostics-done.json"), "w", encoding="utf-8") as fh:
             json.dump(record, fh)
 
 

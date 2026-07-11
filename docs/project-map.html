@@ -1914,7 +1914,7 @@ scripts/macos_test.sh test
         {"name":"IOSVoicesView.swift · Voices/","desc":"Saved/built-in voices, recording, Files import, visible enrollment, and Clone handoff"},
         {"name":"History/ · Settings/","desc":"History and Settings tab content surfaces"},
         {"name":"TTSEngineStore.swift","desc":"Bounded event stream and cooperative-cancel facade"},
-        {"name":"IOSAutorunHarness.swift","desc":"Headless on-device bench/language generation"}
+        {"name":"IOSDeviceDiagnosticsRunner.swift","desc":"Headless, non-UI on-device bench/language diagnostics"}
       ]
     },
     {
@@ -2035,7 +2035,7 @@ scripts/macos_test.sh test
     ],
     "macOS test":[
       {"cmd":"scripts/macos_test.sh models ensure","desc":"Explicit repair/bootstrap for real-engine Speed model fixtures"},
-      {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, owned Qwen3 runtime, and harness tests; no frontend driving"},
+      {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, and owned Qwen3 runtime tests; no frontend driving"},
       {"cmd":"scripts/ui_test.sh macos smoke","desc":"Native-app navigation, visible readiness, one Custom generation, player, History, and screenshots"},
       {"cmd":"scripts/ui_test.sh macos benchmark","desc":"Full UI-driven matrix with typed XPC/backend evidence"},
       {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Seeded PCM and RTF/TTFC deterministic runtime diagnostic"},
@@ -2055,7 +2055,7 @@ scripts/macos_test.sh test
       {"cmd":"python3 scripts/summarize_generation_telemetry.py …","desc":"Merge and compare generation telemetry"}
     ],
     "CI / release":[
-      {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build-for-testing"},
+      {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build"},
       {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests and app build; no UI driving"},
       {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized DMG and GitHub Release after strict macOS readiness"},
       {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual signed archive"}

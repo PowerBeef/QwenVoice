@@ -18,7 +18,7 @@
 - Build scripts, CI, signing, release packaging (`.agents/release-qa-engineer.md`)
 
 **Consults:**
-- `docs/ARCHITECTURE.md` §4 (engine core), §9 (model management), §11 (telemetry)
+- `docs/ARCHITECTURE.md` §4 (engine core), §11 (model management), §12 (telemetry)
 - `docs/reference/{mlx-guide,qwen3-tts-guide,mimi-codec-guide,metal-guide,swift-performance-guide,ios-engine-optimization,telemetry-and-benchmarking}.md`
 - Root `AGENTS.md` (Hard rules) + [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) (engine invariants)
 
@@ -54,7 +54,7 @@ Before changing anything in this layer, read:
 # Compile-safety for the core frameworks
 ./scripts/build_foundation_targets.sh macos
 ./scripts/build_foundation_targets.sh ios
-scripts/macos_test.sh test   # Core, XPC transport, Qwen3RuntimeTests, harness contracts
+scripts/macos_test.sh test   # Core, XPC transport, and owned Qwen3 runtime contracts
 
 # Build the CLI and run a quick generate
 ./scripts/build.sh cli
@@ -89,7 +89,8 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 
 - Editing `QwenVoice.xcodeproj/project.pbxproj` directly. Always edit `project.yml` and run
   `./scripts/regenerate_project.sh`.
-- Adding a `#if DEBUG` fork. There is no `DEBUG` symbol; use runtime `DebugMode.isEnabled`.
+- Adding a generic `#if DEBUG` behavior fork. There is no Debug configuration or `DEBUG` symbol;
+  use runtime `DebugMode.isEnabled` or a narrowly named condition owned by a test target.
 - Touching the iOS Simulator. Backend work is validated through macOS builds, foundation-target
   builds, and on-device iOS lanes — never the simulator.
 - Changing the contract JSON without updating the iOS catalog check

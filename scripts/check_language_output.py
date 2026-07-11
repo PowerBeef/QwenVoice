@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gate language-bench output verification (Phase 3 — in-app Speech round-trip).
 
-Reads autorun sentinels stamped with `outputVerification` and checks:
+Reads device-diagnostics sentinels stamped with `outputVerification` and checks:
   - verification present and pass=true;
   - expectedLanguage matches matrix expectedHint;
   - no skipReason (Speech permission must be granted on device once).
@@ -28,9 +28,9 @@ from check_language_hints import load_json, select_cells
 def find_sentinels(diag: str, run_id: str) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for root, _dirs, files in os.walk(diag):
-        if "autorun-done.json" not in files:
+        if "device-diagnostics-done.json" not in files:
             continue
-        path = os.path.join(root, "autorun-done.json")
+        path = os.path.join(root, "device-diagnostics-done.json")
         try:
             record = json.load(open(path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -71,14 +71,17 @@ def main() -> int:
             continue
         record = sentinels.get(cell_id)
         if record is None:
-            failures.append(f"{cell_id}: missing autorun sentinel")
+            failures.append(f"{cell_id}: missing device-diagnostics sentinel")
             continue
         if record.get("status") != "ok":
-            failures.append(f"{cell_id}: autorun status={record.get('status')!r}")
+            failures.append(f"{cell_id}: device-diagnostics status={record.get('status')!r}")
             continue
         verification = record.get("outputVerification")
         if not isinstance(verification, dict):
-            failures.append(f"{cell_id}: missing outputVerification (set QVOICE_IOS_VERIFY_OUTPUT=1)")
+            failures.append(
+                f"{cell_id}: missing outputVerification "
+                "(set QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT=1)"
+            )
             continue
         if verification.get("skipReason"):
             failures.append(f"{cell_id}: skipped ({verification.get('skipReason')})")

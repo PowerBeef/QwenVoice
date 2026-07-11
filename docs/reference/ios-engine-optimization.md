@@ -29,7 +29,7 @@ this doc.** All claims below are cited to a file or commit; re-verify before rel
   entitled per-app limit ≈ **~6 GB** on the 17 Pro, ~5–5.5 GB on 8 GB devices. No hard
   `Memory.memoryLimit` on any tier (§2).
 - **Remaining work (§9):** the design-mode `fail:dropout` / `warn:clicks` audioQC lead (listening
-  pass), an 8 GB-device proof (only the 17 Pro is measured), the signed-IPA/TestFlight lane, and the
+  pass), an 8 GB-device proof (only the 17 Pro is measured), App Store credential/metadata setup, and the
   gated mlx-swift 0.31 bump. (The 0.6B variant evaluation was **ruled out 2026-07-02** — see §9 P2.)
 
 ---
@@ -185,12 +185,12 @@ inert at the current token cap (§9, OPTIMIZATION.md §F.2).
 - **No dedicated custom prewarm.** `customPrewarmPolicy: .skipDedicatedCustomPrewarm` — the prewarm
   cost moves into the first generation rather than a startup memory spike (matches the floor-8GB Mac
   policy).
-- **Proactive warm is band-gated only.** `TTSEngineStore.allowsProactiveWarmOperations` warms when the
-  memory band is healthy on simulator/DEBUG/Release alike (the old blanket "disabled on Release"
+- **Proactive warm is band-gated only.** `TTSEngineStore.allowsProactiveWarmOperations` warms on the
+  physical-device Release build when the memory band is healthy (the old blanket "disabled on Release"
   caution was removed once the entitlement + band guard were in place). Escape hatch:
   `QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH=1` (A/B / battery testing).
-- **Clone is warm-by-design.** Clone primes its reference conditioning before generating (the autorun
-  harness calls `ensureCloneReferencePrimed`), so a "cold" clone cell in a bench is a bench artifact,
+- **Clone is warm-by-design.** Clone primes its reference conditioning before generating (the
+  device-diagnostics runner calls `ensureCloneReferencePrimed`), so a "cold" clone cell in a bench is a bench artifact,
   not the production path.
 
 ---
@@ -230,7 +230,7 @@ focuses on 1.7B variants only (mlx-swift bump when gated review passes, kernel-l
 ## 6. Measured on-device performance
 
 iPhone 17 Pro · Speed (4-bit) · in-process · streaming · `iphone_pro` tier · 0 trims everywhere.
-Captured headlessly via `scripts/ios_device.sh bench` (the `QVOICE_IOS_AUTORUN` harness →
+Captured headlessly via `scripts/ios_device.sh bench` (`IOSDeviceDiagnosticsRunner` →
 `summarize_generation_telemetry.py`). Numbers are warm medians over the accumulated device pool;
 fresh single-run RTFs from the latest validation were custom 1.68, clone 1.65.
 
@@ -310,25 +310,26 @@ change without a confirmed-real defect.
 custom + clone on a real 8 GB device and confirm RTF / 0-trims / clone-gate-on. Until then, 8 GB
 viability is inferred (streaming ~3 GB flat), not proven.
 
-*De-risking harness (2026-06-09, OPTIMIZATION.md §H P5):* the **iPhone 15 Pro restriction
-simulation** runs the full on-device matrix on the 17 Pro under the 8 GB tier's entitled budget —
-`scripts/ios_device.sh bench --sim-device iphone15pro …` clamps the effective per-process limit to
+*Memory-profile diagnostic (2026-06-09, OPTIMIZATION.md §H P5):* the **iPhone 15 Pro profile** runs
+the full on-device matrix on the 17 Pro under the 8 GB tier's entitled budget —
+`scripts/ios_device.sh bench --memory-profile iphone15pro …` clamps the effective per-process limit to
 **5,000 MB** (the conservative bottom of the entitled band) inside `IOSMemorySnapshot.capture()`, so
 bands, admission, and the clone gate (5,000 ≥ 4,500 ⇒ stays ON) all behave as on the smaller device;
-rows self-stamp `notes.simulatedDevice`. **Measured 2026-06-09 (iPhone 17 Pro, post-§H engine):
+rows self-stamp `notes.memoryProfile`. **Measured 2026-06-09 (iPhone 17 Pro, post-§H engine):
 custom/long RTF 1.89, physFoot 2,723 MB (margin 2,277 MB); clone RTF 1.62, physFoot 3,332 MB
-(margin 1,668 MB); 0 trims, QC pass, clone gate ON (proven by execution) — simulated PASS on the
-memory dimension.** **This simulates the MEMORY dimension only.** Compute cannot
-be hardware-simulated: A17 Pro sustained GPU ≈ **0.60×** A19 Pro (band 0.55–0.65; LPDDR5 ~60 vs
+(margin 1,668 MB); 0 trims, QC pass, clone gate ON (proven by execution) — profiled PASS on the
+memory dimension.** **The profile changes the memory budget only.** It cannot emulate compute:
+A17 Pro sustained GPU ≈ **0.60×** A19 Pro (band 0.55–0.65; LPDDR5 ~60 vs
 ~68 GB/s; A17 throttles harder) ⇒ from the 17 Pro's measured RTF 1.6–1.9, the **analytic 15 Pro
 projection is RTF ≈ 0.9–1.2** — brushing realtime, which is exactly why the real-device gate above
 stays open (streaming playback tolerance to sub-realtime decode is the question only hardware
-answers). A simulated row is labeled evidence, never proof.
+answers). A memory-profile row is labeled diagnostic evidence, never different-device proof.
 
-**P2 — signed-IPA / TestFlight lane.** The one deferred *distribution* piece. Needs (1) an iOS
-Distribution certificate in the team and (2) a sibling `archive-ios` CI job to the existing
-`compile-ios` job in `.github/workflows/release.yml`. Local on-device build/test is already
-established (`ios-device-testing.md`); on-device proof is **not** a public-release blocker (macOS-first).
+**P2 — App Store distribution setup.** The manual `archive-ios` CI job already archives, verifies,
+exports, and optionally uploads. It still needs maintainer-owned iOS Distribution credentials, an
+App Store provisioning profile carrying the increased-memory entitlement, the App Store Connect
+record and metadata, and an explicit dispatch. Local on-device build/test is already established
+(`ios-device-testing.md`); optional frontend proof is independent of archive packaging.
 
 **P2 — 0.6B variant: RULED OUT (maintainer decision, 2026-07-02).** The 0.6B checkpoints exist
 (`Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`; mlx-community publishes a 4-bit of the Base only), but

@@ -31,10 +31,12 @@ scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --lab
 | Smoke | Exact app launch, sidebar navigation, visible model and clone-reference readiness, one real Custom generation, completed player, and History |
 | Benchmark | Ordered, configurable Custom/Design/Clone matrix with cold/warm classification and per-take deterministic proof; the default is exactly 29 takes |
 
-The runner targets the configured native Vocello test host. It establishes single-process
-ownership, uses stable accessibility identifiers and condition waits, leaves preferences and saved
-voices unchanged, terminates its owned app/service processes, and records failures as XCTest
-activities and attachments. It never retries through a display name or alternate app path.
+The runner targets the configured native Vocello test host. Before launch it resolves every matching
+Vocello and engine-service PID to its executable, fails fast if any process belongs to another app
+path, and signals only the exact app/service products under the runner's Release build directory.
+It uses stable accessibility identifiers and condition waits, leaves preferences and saved voices
+unchanged, and records failures as XCTest activities and attachments. It never retries through a
+display name or alternate app path.
 
 Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
 runs; invoking the command without filters is the canonical 29-take matrix.

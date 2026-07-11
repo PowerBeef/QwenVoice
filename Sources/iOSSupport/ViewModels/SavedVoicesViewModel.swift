@@ -85,10 +85,10 @@ final class SavedVoicesViewModel: ObservableObject {
     }
 
     private func finishLoad(wallStart: UInt64) {
-        #if DEBUG
-        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
-        print("[Performance][SavedVoicesViewModel] load_wall_ms=\(elapsedMs)")
-        #endif
+        if TelemetryGate.resolvedEnabled {
+            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+            print("[Performance][SavedVoicesViewModel] load_wall_ms=\(elapsedMs)")
+        }
 
         isLoading = false
         loadTask = nil

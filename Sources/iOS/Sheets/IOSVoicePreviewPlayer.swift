@@ -1,4 +1,5 @@
 import AVFoundation
+import QwenVoiceCore
 import SwiftUI
 
 /// Lightweight AVAudioPlayer wrapper that plays per-voice sample WAVs
@@ -44,11 +45,11 @@ final class IOSVoicePreviewPlayer: NSObject, ObservableObject {
             withExtension: "wav"
         ) else {
             // No bundled sample for this voice. Fail-safe; the picker
-            // simply doesn't preview. Logs in Debug to flag missing
+            // simply doesn't preview. Runtime diagnostics flag missing
             // assets during sample generation.
-            #if DEBUG
-            print("[IOSVoicePreviewPlayer] No sample WAV for voice id '\(voiceID)' under voice-previews/")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[IOSVoicePreviewPlayer] No sample WAV for voice id '\(voiceID)' under voice-previews/")
+            }
             return
         }
 
@@ -64,9 +65,9 @@ final class IOSVoicePreviewPlayer: NSObject, ObservableObject {
             self.currentlyPlayingID = voiceID
             player.play()
         } catch {
-            #if DEBUG
-            print("[IOSVoicePreviewPlayer] Failed to play '\(voiceID)': \(error)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[IOSVoicePreviewPlayer] Failed to play '\(voiceID)': \(error)")
+            }
             stop()
         }
     }

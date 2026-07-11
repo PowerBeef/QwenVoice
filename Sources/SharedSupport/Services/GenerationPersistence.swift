@@ -26,7 +26,8 @@ enum GenerationPersistence {
     ///
     /// Behavior change from May 2026: persistence errors that occur
     /// AFTER playback handoff are no longer thrown — they're logged via
-    /// `print()` in DEBUG only. Rationale: the user already heard their
+    /// `print()` only when runtime diagnostics are enabled. Rationale: the user
+    /// already heard their
     /// audio play. A persistence failure means the generation won't
     /// appear in History, which is a quiet non-blocking failure that
     /// doesn't affect the immediate UX. Surfacing it via a thrown error
@@ -60,9 +61,9 @@ enum GenerationPersistence {
                 isAutoplay: AudioService.shouldAutoPlay,
                 presentationContext: .generatePreview
             )
-            #if DEBUG
-            print("[Performance][\(caller)] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[Performance][\(caller)] autoplay_start_wall_ms=\(elapsedMs(since: autoplayStart))")
+            }
         }
 
         schedulePersistence(generation, caller: caller)
@@ -138,15 +139,15 @@ enum GenerationPersistence {
             do {
                 savedGeneration = try await DatabaseService.shared.saveGenerationAsync(generation)
             } catch {
-                #if DEBUG
-                print("[Performance][\(caller)] db_save_failed: \(error.localizedDescription)")
-                #endif
+                if TelemetryGate.resolvedEnabled {
+                    print("[Performance][\(caller)] db_save_failed: \(error.localizedDescription)")
+                }
                 return
             }
             let saveMS = elapsedMs(since: saveStart)
-            #if DEBUG
-            print("[Performance][\(caller)] db_save_wall_ms=\(saveMS) (off-main)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[Performance][\(caller)] db_save_wall_ms=\(saveMS) (off-main)")
+            }
             await MainActor.run {
                 let notificationStart = DispatchTime.now().uptimeNanoseconds
                 #if canImport(QwenVoiceNative)
@@ -154,9 +155,9 @@ enum GenerationPersistence {
                 #else
                 NotificationCenter.default.post(name: .generationSaved, object: nil)
                 #endif
-                #if DEBUG
-                print("[Performance][\(caller)] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
-                #endif
+                if TelemetryGate.resolvedEnabled {
+                    print("[Performance][\(caller)] history_notification_wall_ms=\(elapsedMs(since: notificationStart))")
+                }
             }
         }
     }

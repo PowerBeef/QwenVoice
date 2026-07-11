@@ -197,15 +197,6 @@ final class AppModel {
         if let raw = IOSAppDefaults.lastTabRawValue, let restored = IOSAppTab(rawValue: raw) {
             self.tab = restored
         }
-
-        // Honor preview-runtime overrides for design-time previews.
-        if let preview = IOSPreviewRuntime.current?.definition.initialState {
-            self.tab = preview.selectedTab
-            self.studioMode = preview.selectedGenerationSection
-            self.customVoiceDraft = preview.customDraft
-            self.voiceDesignDraft = preview.designDraft
-            self.voiceCloningDraft = preview.cloneDraft
-        }
     }
 }
 

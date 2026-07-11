@@ -6,7 +6,7 @@ import QwenVoiceCore
 ///
 /// devicectl can pull appDataContainer but NOT the App Group, so on-device
 /// bench/gate lanes read telemetry from the Caches mirror (see
-/// `scripts/ios_device.sh pull` and `IOSAutorunHarness`).
+/// `scripts/ios_device.sh pull` and `IOSDeviceDiagnosticsRunner`).
 enum IOSPullableDiagnosticsMirror {
     /// App-Group diagnostics dir where the in-process engine writes JSONL rows.
     private static var appGroupDiagnosticsRoot: URL {
@@ -21,7 +21,7 @@ enum IOSPullableDiagnosticsMirror {
     }
 
     /// Mirror engine/app JSONL telemetry after each debug generation so the
-    /// XCUITest benchmark validator can pull and gate without an autorun sentinel.
+    /// XCUITest benchmark validator can pull and gate without a diagnostics sentinel.
     static func syncEngineTelemetryIfEnabled() {
         guard TelemetryGate.resolvedEnabled else { return }
         guard let pullableRoot else { return }

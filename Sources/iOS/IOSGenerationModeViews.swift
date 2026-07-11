@@ -1672,9 +1672,9 @@ struct IOSVoiceCloningView: View {
                 )
             )
         } catch {
-            #if DEBUG
-            print("[IOSVoiceCloningView] clone priming failed: \(error.localizedDescription)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[IOSVoiceCloningView] clone priming failed: \(error.localizedDescription)")
+            }
         }
     }
 

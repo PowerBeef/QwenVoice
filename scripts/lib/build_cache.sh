@@ -115,8 +115,8 @@ ensure_spm_resolved() {
 }
 
 # Gracefully terminate Vocello if it's running. SIGTERM, poll ~10s, then
-# SIGKILL fallback. Mirrors the kill pattern in build.sh and
-# build_and_run.sh so behavior is consistent across entrypoints.
+# SIGKILL fallback. This helper is used only by build-cache maintenance;
+# explicit UI acceptance owns its exact test-host process separately.
 quit_app_if_running() {
     if ! pgrep -x Vocello >/dev/null 2>&1; then
         return 0

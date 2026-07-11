@@ -129,10 +129,10 @@ final class ModelManagerViewModel: ObservableObject {
             statuses = await statusProvider.refreshStatuses(for: TTSModel.all)
 
             AppPerformanceSignposts.end(interval)
-            #if DEBUG
-            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
-            print("[Performance][ModelManagerViewModel] refresh_wall_ms=\(elapsedMs)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - wallStart) / 1_000_000)
+                print("[Performance][ModelManagerViewModel] refresh_wall_ms=\(elapsedMs)")
+            }
         }
 
         refreshTask = task

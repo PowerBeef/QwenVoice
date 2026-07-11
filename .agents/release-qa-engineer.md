@@ -72,7 +72,7 @@ scripts/ui_test.sh macos smoke
 scripts/ui_test.sh macos benchmark
 scripts/macos_test.sh telemetry-overhead
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --run-id mac-ui-benchmark-YYYYMMDD-HHMMSS
+  --run-id macos-xcui-benchmark-YYYYMMDD-HHMMSS
 
 # Language-path verification (optional pre-release; Phases 1–3)
 scripts/macos_test.sh core-test
@@ -82,7 +82,6 @@ scripts/macos_test.sh lang-bench --subset quick              # Phase 2 hint gate
 scripts/ios_device.sh lang-bench --subset quick --label "release-QA"   # Phases 2–3 on device
 # Full 19-cell iOS matrix: scripts/ios_device.sh lang-bench --subset full --label "…"
 # Phase 3 output (DE/ES/ZH/JA): language-bench.md § Phase 3 prerequisites — Speech Wi‑Fi assets
-# Historical 2026-07-06 language run: hint 19/19 PASS; output 7/18 pending Speech assets.
 # Current acceptance state and resume commands: docs/development-progress.md
 
 scripts/ui_test.sh ios smoke
@@ -104,7 +103,7 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 # Optional regression compare (see macos-release-qa.md step 3)
 python3 scripts/summarize_generation_telemetry.py \
   ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --compare-baseline benchmarks/baseline-2026-06-16-45720dd-streaming-default.md \
+  --compare-baseline benchmarks/baselines/mac-gate-bench.json \
   --label "release-QA"
 
 # Crash/profile (profile fails on bench error unless --allow-bench-fail / QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL=1)
@@ -116,7 +115,7 @@ scripts/ios_device.sh profile [spec]
 
 ## Invariants (do not regress)
 
-- **Single shippable config: `Release` only.** There is no `Debug` config or `DEBUG` symbol.
+- **Single shippable config: `Release` only.** There is no `Debug` config or generic `DEBUG` symbol.
   `build.sh` compiles `-Onone`; `release.sh` compiles optimized.
 - **XcodeGen project generation.** `project.yml` is the source of truth; never edit
   `QwenVoice.xcodeproj/project.pbxproj` directly.
@@ -128,17 +127,19 @@ scripts/ios_device.sh profile [spec]
 - **Committed benchmark summaries ≤256 KB.** Raw `*.jsonl` is gitignored.
 - **Deep checkout on CI.** `fetch-depth: 0` is required so `git rev-parse HEAD` in
   `scripts/release.sh` resolves for `release-metadata.txt`.
-- **Burn-in-safe iOS testing.** All on-device lanes go through `scripts/ios_device.sh`.
+- **Burn-in-safe iOS testing.** Headless generation, profiling, logs, and device diagnostics go
+  through `scripts/ios_device.sh`; physical-device UI acceptance goes through `scripts/ui_test.sh`.
 - **macOS real-generation acceptance needs model fixtures.** XCUITest verifies readiness in Settings;
   run `scripts/macos_test.sh models ensure` only to repair/bootstrap the debug link and clone voice. See [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh) and
-  [`docs/reference/testing-runbook.md`](../docs/reference/testing-runbook.md) §1b.
+  [`docs/reference/testing-runbook.md`](../docs/reference/testing-runbook.md) "Model readiness".
 - **Single XCUITest stack.** Keep shared waits, fixtures, evidence export, and benchmark contracts
   common across the macOS and physical-iPhone targets. Do not add coordinate hooks, hidden marker
   catalogs, or a second UI driver.
 
 ## Common mistakes
 
-- Adding a `Debug` configuration or `#if DEBUG` scaffolding in scripts.
+- Adding a Debug configuration or generic `#if DEBUG` behavior fork. Use runtime diagnostics or a
+  narrowly named test-target compilation condition instead.
 - Running iOS UI work in the Simulator or expecting ordinary CI to drive the UI. Use the physical-
   iPhone XCUITest lanes for explicit frontend acceptance, never as an archive/TestFlight or
   development-publishing prerequisite.

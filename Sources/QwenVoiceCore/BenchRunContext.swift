@@ -55,7 +55,6 @@ public enum BenchRunContext {
     private static let takeFileURL = URL(fileURLWithPath: "/tmp/vocello-bench-current-take.json")
 
     private static func notesFromEnvironment(intendedWarmState: String?) -> [String: String] {
-        let env = ProcessInfo.processInfo.environment
         var notes: [String: String] = [:]
         if let runID = trimmedEnv(runIDKey) { notes["benchRunID"] = runID }
         if let take = trimmedEnv(takeIndexKey) { notes["benchTakeIndex"] = take }

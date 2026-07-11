@@ -293,19 +293,19 @@ jobs:
     # job and is intentionally NOT a `needs:` dependency — if iOS source
     # regresses, the macOS DMG still ships.
     #
-    # This CI job does NOT produce a TestFlight-ready IPA — that signed
-    # archive/export lane is the one deferred piece. Note (2026-06-01): the
+    # This CI job does NOT produce a TestFlight-ready IPA. The separate, implemented
+    # `archive-ios` job owns signed archive/export on explicit manual dispatch. The
     # com.apple.developer.kernel.increased-memory-limit capability is
     # SELF-SERVE (no Apple approval) and is enabled on com.patricedery.vocello
     # (the engine runs in-process — there is no separate extension App ID);
-    # local on-device build/test tooling is re-established (scripts/ios_device.sh
-    # + the QVOICE_IOS_AUTORUN harness; optional physical-device XCUITest is documented in
-    # docs/reference/ios-device-testing.md). A CI signed lane still needs:
+    # local on-device build/test tooling is established (scripts/ios_device.sh plus
+    # IOSDeviceDiagnosticsRunner; optional physical-device XCUITest is documented in
+    # docs/reference/ios-device-testing.md). Dispatching the signed lane still needs:
     #   1. iOS Distribution certificate enrolled in the Apple Developer team.
     #   2. A Distribution provisioning profile for the com.patricedery.vocello
     #      app bundle that includes the increased-memory-limit entitlement.
-    # Then add a sibling `archive-ios` job that imports the dist cert +
-    # profiles, exports the IPA, and uploads it as a workflow artifact.
+    # The sibling `archive-ios` job below imports those credentials, exports the IPA, and
+    # uploads it as a workflow artifact.
     name: iOS compile-safety
     runs-on: macos-latest
     timeout-minutes: 30
@@ -336,9 +336,9 @@ jobs:
             spm-ios-${{ runner.os }}-xcode26-
 
       - name: Regenerate Xcode project
-        # build_foundation_targets.sh assumes the .xcodeproj exists; the
-        # repo doesn't check it in, only project.yml. Same setup the
-        # macOS job does inside release.sh.
+        # project.yml is authoritative; regeneration refreshes and verifies the
+        # checked-in generated .xcodeproj before the compile step. This mirrors
+        # the setup performed by the macOS job inside release.sh.
         run: ./scripts/regenerate_project.sh
 
       - name: Compile iOS targets (no code signing)
@@ -357,7 +357,8 @@ jobs:
           retention-days: 14
 
   archive-ios:
-    # Signed iOS archive + App Store export lane (the deferred distribution piece).
+    # Signed iOS archive + App Store export lane. The job is implemented; account credentials,
+    # App Store Connect metadata, and public submission remain maintainer-owned.
     #
     # GATING: only runs on a MANUAL workflow_dispatch with archive_ios=true. It is
     # never triggered by `release: published`, so a missing-secrets state can never

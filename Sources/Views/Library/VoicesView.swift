@@ -94,8 +94,7 @@ struct VoicesView: View {
     private var content: some View {
         if !ttsEngineStore.isReady {
             voicesStateContainer(
-                identifier: "voices_emptyState",
-                markerLabel: "Saved voices backend startup state"
+                identifier: "voices_emptyState"
             ) {
                 ContentUnavailableView(
                     "Starting speech engine...",
@@ -104,7 +103,7 @@ struct VoicesView: View {
                 )
             }
         } else if let loadError, voices.isEmpty, !isLoading {
-            voicesStateContainer(identifier: "voices_errorState", markerLabel: "Saved voices error state") {
+            voicesStateContainer(identifier: "voices_errorState") {
                 VStack(alignment: .leading, spacing: 12) {
                     ContentUnavailableView(
                         "Couldn't load saved voices",
@@ -120,7 +119,7 @@ struct VoicesView: View {
                 }
             }
         } else if isLoading && voices.isEmpty {
-            voicesStateContainer(identifier: "voices_loadingState", markerLabel: "Saved voices loading state") {
+            voicesStateContainer(identifier: "voices_loadingState") {
                 VStack(spacing: 12) {
                     ProgressView()
                     Text("Loading saved voices...")
@@ -129,7 +128,7 @@ struct VoicesView: View {
                 }
             }
         } else if voices.isEmpty {
-            voicesStateContainer(identifier: "voices_emptyState", markerLabel: "Saved voices empty state") {
+            voicesStateContainer(identifier: "voices_emptyState") {
                 ContentUnavailableView(
                     "No saved voices",
                     systemImage: "person.2.wave.2",
@@ -177,7 +176,6 @@ private extension VoicesView {
     @ViewBuilder
     func voicesStateContainer<Content: View>(
         identifier: String,
-        markerLabel: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack {
@@ -185,13 +183,8 @@ private extension VoicesView {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) {
-            Text(markerLabel)
-                .font(.system(size: 1))
-                .opacity(0.01)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier(identifier)
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
     }
 
     func presentAddSavedVoiceSheet() {

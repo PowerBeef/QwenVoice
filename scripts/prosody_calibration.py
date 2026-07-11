@@ -43,8 +43,9 @@ THRESHOLD_MAP = {
 
 
 def load_labels(path):
-    """Load label entries; returns list of dicts with validated label."""
+    """Load labels, resolving relative clip paths beside the JSONL file."""
     entries = []
+    labels_dir = os.path.dirname(os.path.abspath(path))
     with open(path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
             line = line.strip()
@@ -57,6 +58,12 @@ def load_labels(path):
             label = str(entry.get("label", "")).lower()
             if label not in {"good", "bad"}:
                 raise ValueError(f"labels:{i}: label must be 'good' or 'bad', got {entry.get('label')!r}")
+            clip_path = entry.get("path")
+            if not isinstance(clip_path, str) or not clip_path:
+                raise ValueError(f"labels:{i}: path must be a non-empty string")
+            if not os.path.isabs(clip_path):
+                clip_path = os.path.join(labels_dir, clip_path)
+            entry["path"] = os.path.normpath(clip_path)
             entry["label"] = label
             entries.append(entry)
     return entries

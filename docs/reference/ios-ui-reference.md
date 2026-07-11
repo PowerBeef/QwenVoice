@@ -15,10 +15,10 @@ Vocello opens on the Studio tab in Custom mode. The root tabs are:
 
 | Surface | Purpose | Stable identifier family |
 | --- | --- | --- |
-| Studio | Custom, Design, and Clone generation | `rootTab_studio`, `screen_studio`, `studio*`, `textInput_*` |
+| Studio | Custom, Design, and Clone generation | `rootTab_studio`, `generateSection_*`, `studio_*`, `textInput_*` |
 | Voices | Saved voices and built-in speakers | `rootTab_voices`, `screen_voices`, `voicesRow_*` |
-| History | Generated takes, playback, export, deletion | `rootTab_history`, `screen_history`, `historyRow_*` |
-| Settings | Models, preferences, storage, permissions, About | `rootTab_settings`, `screen_settings`, `iosSettings_*`, `iosModel*` |
+| History | Generated takes, playback, export, deletion | `rootTab_history`, `historyModeFilter*`, `historyRow_*` |
+| Settings | Models, preferences, storage, permissions, About | `rootTab_settings`, `iosSettings_*`, `iosModel*` |
 
 The Studio selector changes the composer in place. Cold launch selects Custom mode; explicit
 handoffs may change the in-session Studio mode.

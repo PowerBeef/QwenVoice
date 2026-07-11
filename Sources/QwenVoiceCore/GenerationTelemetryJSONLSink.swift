@@ -2,10 +2,10 @@ import Foundation
 
 /// Shared, runtime-gated, append-only writer for per-generation telemetry rows.
 ///
-/// Replaces the dead `#if DEBUG` `NativeDiagnosticEventJSONLWriter` path: this sink
-/// is gated on `TelemetryGate.resolvedEnabled` (resolved at runtime, never compiled
-/// out) so dev and shipped binaries run identical code. Each layer appends one JSON
-/// line to `<appSupport>/diagnostics/<layer>/generations.jsonl`.
+/// Complements the runtime-gated native event stream with one durable summary per
+/// generation. This sink is gated on `TelemetryGate.resolvedEnabled` (resolved at
+/// runtime, never compiled out) so dev and shipped binaries run identical code. Each
+/// layer appends one JSON line to `<appSupport>/diagnostics/<layer>/generations.jsonl`.
 ///
 /// Hardening notes (Phase 2b):
 /// - All file writes are wrapped in `NSFileCoordinator` so the app process and the

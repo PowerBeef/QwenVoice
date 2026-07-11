@@ -76,15 +76,6 @@ struct RootView: View {
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .tint(Theme.Brand.gold)
-        .overlay {
-            if IOSPreviewRuntime.isEnabled {
-                IOSPreviewCaptureBridge(
-                    selectedTab: appModel.tab,
-                    selectedGenerationSection: appModel.studioMode
-                )
-                .allowsHitTesting(false)
-            }
-        }
         .iosFocusModalBackdrop(
             isActive: isFocusBackdropActive,
             allowsBlur: !effectiveReduceTransparency

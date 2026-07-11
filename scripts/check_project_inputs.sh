@@ -20,6 +20,7 @@ REQUIRED_SURFACES=(
     "scripts/build_foundation_targets.sh"
     "scripts/ui_test.sh"
     "scripts/check_test_workflows.sh"
+    "scripts/validate_backend_risk_spine.py"
     "scripts/check_ios_ui_benchmark.py"
     "scripts/test_check_macos_xpc_bench.py"
     "scripts/test_check_ios_ui_benchmark.py"
@@ -172,8 +173,8 @@ if [ -f "$SIDEBAR_VIEW_PATH" ]; then
     rm -f /tmp/qwenvoice_sidebar_list_region /tmp/qwenvoice_sidebar_list_audio_grep
 fi
 
-if grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" | grep -n "Release" >/dev/null 2>&1; then
-    echo "error: QW_TEST_SUPPORT must not be configured for Release builds." >&2
+if grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" >/dev/null 2>&1; then
+    echo "error: QW_TEST_SUPPORT must not be configured in the single shippable project." >&2
     grep -n "QW_TEST_SUPPORT" "$PROJECT_DIR/project.yml" >&2 || true
     exit 1
 fi
@@ -212,6 +213,7 @@ fi
 
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --project
 "$SCRIPT_DIR/check_qwen3_backend_only.sh"
+python3 "$SCRIPT_DIR/validate_backend_risk_spine.py" --root "$PROJECT_DIR"
 "$SCRIPT_DIR/check_test_workflows.sh"
 
 echo "==> Project inputs are clean."

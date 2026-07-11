@@ -233,16 +233,12 @@ enum TTSContract {
     }
 
     private static func handleLoadFailure(_ error: ContractLoadError) -> TTSContractLoadState {
-        #if DEBUG
-        fatalError("\(error.summary): \(error.details)")
-        #else
         let manifestURL = error.manifestPath.map { URL(fileURLWithPath: $0) }
         return TTSContractLoadState(
             manifest: .empty,
             manifestURL: manifestURL,
             loadError: error
         )
-        #endif
     }
 
     private static func validate(_ manifest: TTSContractManifest) throws {

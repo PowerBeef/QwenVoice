@@ -275,7 +275,7 @@ detail: [`../docs/reference/ios-increased-memory-entitlement-request.md`](../doc
 
 iOS live-preview playback (audio during generation) was checked for engine impact via an on-device A/B on
 the same binary: live OFF (`QWENVOICE_STREAMING_PREVIEW_DATA=off` → `.skip` = pre-feature: no PCM, chunks
-dropped, no consumer) vs ON (`.emit` = feature; the autorun harness keeps `AudioPlayerViewModel` alive so
+dropped, no consumer) vs ON (`.emit` = feature; the device-diagnostics runner keeps `AudioPlayerViewModel` alive so
 the `AVAudioEngine` consumer is exercised too). iPhone 17 Pro, custom/speed, short+long × 3, interleaved.
 **Result: no measurable cost** — RTF +0.5% overall (short −1.9% / long +0.2%, within run-to-run noise),
 physFootprint peak identical (~2.7 GB, off-max 2731 vs on-max 2722 MB; inside the 2.4–3.3 GB band, far
@@ -326,7 +326,7 @@ actually made). Ledger rows: `pre-ui-kpi baseline` and `post smoothness ws sanit
 ## H — Qwen3-specialization program (2026-06-09; branch `engine-risk`)
 
 The exhaustive backend program: specialize the vendored tree for Qwen3-TTS, close the remaining
-speed/RAM levers under the standing quality gates, and build an iPhone-15-Pro restriction simulation
+speed/RAM levers under the standing quality gates, and build an iPhone-15-Pro memory-profile diagnostic
 for the maintainer's 17 Pro. Phases P0–P6; per-phase ledger rows labeled `P<n>-…`.
 
 ### P0 — Instruments compute attribution (the long-gated capture, finally run)
@@ -412,14 +412,14 @@ GPU-bound workload; the launch-bound reality made it 10×).
 - **GPU cacheLimit re-sweep**: not re-run this program; current per-tier values stand (set during
   the iOS program; no P0–P4 row shows cache-pressure misfit). Open as a low-priority follow-up.
 
-### P5 — iPhone 15 Pro simulation: validated (memory dimension PASS)
+### P5 — iPhone 15 Pro memory profile: validated (memory dimension PASS)
 
-On-device under `--sim-device iphone15pro` (5,000 MB clamp; rows stamped `simulatedDevice`):
+On-device under `--memory-profile iphone15pro` (5,000 MB clamp; rows stamped `memoryProfile`):
 custom/long **RTF 1.89** / physFoot 2,723 MB (margin 2,277 MB ≥ the 500 MB bar); clone **RTF 1.62**
 / 3,332 MB (margin 1,668 MB ≥ 300 MB); **0 trims, QC pass, clone gate ON** (proven by execution).
 On-device RTF sits at the top of the pre-program 1.6–1.9 band (P3's launch-bound win is smaller on
 the A19 than the M2 — its launch overhead is lower, consistent with the P0 theory). Ops note: the
-first launch of a freshly installed build can exceed the default 300 s autorun sentinel timeout
+first launch of a freshly installed build can exceed the default 300 s device-diagnostics timeout
 (cold Metal-shader compile) — use `QVOICE_IOS_BENCH_TIMEOUT=600` after installing a new binary.
 The analytic 15 Pro compute projection (0.60× ⇒ RTF ≈ 1.0–1.1 post-§H) and the real-device gate
 remain as documented in ios-engine-optimization.md §9.

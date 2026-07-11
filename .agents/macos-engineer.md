@@ -37,7 +37,8 @@ Before changing macOS app or XPC code, read:
 
 - **Shell tool / scripts** (the source of truth for the local loop):
   - `./scripts/build.sh build|run|cli`
-  - `scripts/macos_test.sh models check|ensure|test|gate|crashes|debug|logs|profile|xpc`
+  - `scripts/macos_test.sh test|gate|crashes|debug|logs|profile`
+  - `scripts/macos_test.sh models check|ensure|install`
   - `scripts/ui_test.sh macos smoke|benchmark`
   - `./scripts/regenerate_project.sh` after `project.yml` changes
 - Use OpenAI Build macOS Apps skills for SwiftUI/AppKit structure, build/run/debug, test triage,
@@ -68,8 +69,8 @@ scripts/ui_test.sh macos smoke
 scripts/ui_test.sh macos benchmark
 scripts/macos_test.sh gate            # deterministic macOS platform gate
 
-# XPC lifecycle / crash isolation
-scripts/macos_test.sh xpc status
+# XPC lifecycle / crash isolation is included in the deterministic test and gate lanes.
+scripts/macos_test.sh test
 
 ```
 
@@ -90,6 +91,9 @@ scripts/macos_test.sh xpc status
 - **No color-only signal.** Mode colors pair with icon, label, or position cue.
 - **`accessibilityIdentifier`s are stable.** Values like `voicesRow_*`, `textInput_*`,
   `studioChip_*` must survive refactors.
+- **No hidden test UI.** XCUITest observes genuine visible controls. Put test-only code in the UI
+  test target; do not add invisible state markers, seeded app state, or generic `#if DEBUG` app
+  behavior.
 - **App sandbox disabled.** `Sources/QwenVoice.entitlements` keeps sandbox off for MLX; do not
   re-enable it.
 
@@ -100,4 +104,5 @@ scripts/macos_test.sh xpc status
 - Performing XPC event draining on `MainActor`.
 - Showing error UI when the XPC service retires normally.
 - Blocking the main thread during model load or generation.
-- Adding `#if DEBUG` forks instead of using runtime `DebugMode.isEnabled`.
+- Adding a generic `#if DEBUG` behavior fork instead of runtime `DebugMode.isEnabled` or a narrowly
+  named test-target condition.

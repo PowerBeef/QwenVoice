@@ -10,8 +10,9 @@ import QwenVoiceCore
 /// `NativeRuntimeFactory` (see `IOSAppBootstrap.makeBackend`) — the app process gets
 /// the `com.apple.developer.kernel.increased-memory-limit` entitlement's raised limit,
 /// whereas the (since-removed) `VocelloEngineExtension` did not and was jetsam-killed
-/// loading the model. The headless `IOSAutorunHarness` (`QVOICE_IOS_AUTORUN`) drives a
-/// generation with no UI for `scripts/ios_device.sh bench`; it ships inert.
+/// loading the model. The headless `IOSDeviceDiagnosticsRunner`
+/// (`QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC`) drives a generation with no UI for
+/// `scripts/ios_device.sh bench`; it ships inert.
 @main
 struct QVoiceiOSApp: App {
     @StateObject private var deps: IOSAppDependenciesContainer
@@ -115,17 +116,17 @@ struct QVoiceiOSApp: App {
             do {
                 try await engine.initialize(appSupportDirectory: AppPaths.appSupportDir)
                 await engine.refreshMemoryContext(reason: "engine_initialized", source: "app")
-                #if DEBUG
-                print("[QVoiceiOSApp] Engine initialized.")
-                #endif
-                // Headless on-device bench/smoke driver. No-op unless QVOICE_IOS_AUTORUN
-                // is set in the launch environment (scripts/ios_device.sh bench).
-                IOSAutorunHarness.runIfRequested(engine: engine)
+                if TelemetryGate.resolvedEnabled {
+                    print("[QVoiceiOSApp] Engine initialized.")
+                }
+                // Headless, non-UI on-device diagnostics runner. No-op unless
+                // QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC is set by scripts/ios_device.sh.
+                IOSDeviceDiagnosticsRunner.runIfRequested(engine: engine)
             } catch {
                 didInitializeEngine = false
-#if DEBUG
-                print("[QVoiceiOSApp] Engine initialization failed: \(error.localizedDescription)")
-#endif
+                if TelemetryGate.resolvedEnabled {
+                    print("[QVoiceiOSApp] Engine initialization failed: \(error.localizedDescription)")
+                }
                 engine.setVisibleError("Engine initialization failed: \(error.localizedDescription)")
             }
         }
@@ -165,9 +166,9 @@ struct QVoiceiOSApp: App {
                 try session.setActive(false, options: .notifyOthersOnDeactivation)
             }
         } catch {
-            #if DEBUG
-            print("[QVoiceiOSApp] Audio session \(active ? "activate" : "deactivate") failed: \(error.localizedDescription)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[QVoiceiOSApp] Audio session \(active ? "activate" : "deactivate") failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -285,9 +286,9 @@ struct QVoiceiOSApp: App {
                 audioPlayer.abortLivePreviewIfNeeded()
                 engine.clearGenerationActivity()
             }
-            #if DEBUG
-            print("[QVoiceiOSApp] Applied \(trimLevel.rawValue) due to \(reason)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[QVoiceiOSApp] Applied \(trimLevel.rawValue) due to \(reason)")
+            }
         }
     }
 
@@ -332,9 +333,9 @@ struct QVoiceiOSApp: App {
             }
             audioPlayer.abortLivePreviewIfNeeded()
             engine.clearGenerationActivity()
-            #if DEBUG
-            print("[QVoiceiOSApp] Released runtime due to \(reason)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[QVoiceiOSApp] Released runtime due to \(reason)")
+            }
         }
     }
 
@@ -379,9 +380,9 @@ struct QVoiceiOSApp: App {
             try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
-            #if DEBUG
-            print("[QVoiceiOSApp] Failed to configure audio session: \(error.localizedDescription)")
-            #endif
+            if TelemetryGate.resolvedEnabled {
+                print("[QVoiceiOSApp] Failed to configure audio session: \(error.localizedDescription)")
+            }
         }
     }
 }

@@ -91,13 +91,13 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
 | Env | Effect |
 |---|---|
 | `QWENVOICE_SUPPRESS_WARMUP=1` | Skips proactive prewarm/clone‑priming so the first generation records its own **cold** load (`MacGenerationWarmupCoordinator`). App‑process only. |
-| `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` | Forces the device‑memory tier (`NativeDeviceClassGate`), propagated to the engine over `initialize`. Runs the constrained‑tier code paths so memory **pressure is measurable on any hardware**. See §11 "Memory & pressure pass". Accepts the `NativeDeviceMemoryClass` rawValues + aliases `8gb`/`16gb`. |
+| `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` | Forces the device-memory tier (`NativeDeviceClassGate`), propagated to the engine over `initialize`. Runs constrained-tier code paths for diagnostic comparison. See §11 "Memory and pressure interpretation". Accepts the `NativeDeviceMemoryClass` raw values + aliases `8gb`/`16gb`. |
 | `QWENVOICE_MAC_WARM_GATE=off\|records\|enforce` | macOS warm‑admission gate (`MacWarmupAdmissionPolicy`): defers **proactive** warms while the app‑process kernel pressure level is soft/hardTrim on floor/mid tiers. Default `enforce` (validated 2026‑06‑09); `records` logs verdicts without blocking; user generations are never gated. Events land in `diagnostics/app/native-events.jsonl`. |
 | `QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=<n>` | Dev override for the XPC service retirement idle dwell (default 300 s) so retirement‑to‑reclaim can be exercised without the full wait. App‑process only. |
 | `QVOICE_TALKER_KV_QUANT=8\|4` | **Dev-only** opt‑in talker KV‑cache quantization (QuantizedKVCache, group 64). Measured (P4, §H): clone/long −271 MB physFoot but **−8.6% RTF** — not shipped on any tier; insurance knob only. Never combined with `QVOICE_TALKER_KV_WINDOW`. |
 | `QVOICE_IOS_MLX_CACHE_LIMIT_MB=<n>` | **Dev-only** override of the MLX `Memory.cacheLimit` for the iPhone tier. Useful for sweeps; production uses the tier default. |
 | `QVOICE_IOS_MLX_MEMORY_LIMIT_MB=<n>` | **Dev-only / do not ship** override of MLX `Memory.memoryLimit`. Production avoids a hard `memoryLimit`; see `mlx-guide.md` §5.2. |
-| `QVOICE_IOS_SIM_DEVICE=iphone15pro` / `QVOICE_IOS_SIMULATED_PROCESS_LIMIT_MB=<n>` | **iPhone restriction simulation (memory dimension only)**: clamps the effective per‑process limit inside `IOSMemorySnapshot.capture()` so bands/admission/clone‑gate behave like the smaller device (`iphone15pro` → 5,000 MB, the conservative bottom of the 8 GB‑iPhone entitled band). Rows self‑stamp `notes.simulatedDevice`/`notes.simulatedProcessLimitMB`. GPU compute + thermals are NOT simulated — the real‑8GB‑device proof stays open (see ios‑engine-optimization.md §9). Convenience: `scripts/ios_device.sh bench --sim-device iphone15pro …`. |
+| `QVOICE_IOS_MEMORY_PROFILE=iphone15pro` | **Physical-device memory-profile diagnostic**: clamps the effective per-process limit inside `IOSMemorySnapshot.capture()` so bands/admission/clone-gate use the smaller-device budget (`iphone15pro` → 5,000 MB). Rows stamp `notes.memoryProfile` and `notes.simulatedProcessLimitMB`. GPU compute and thermals remain those of the connected device; this is not proof for a different device. See the canonical benchmark procedure for `--memory-profile`. |
 
 ---
 
@@ -150,7 +150,7 @@ folder when DebugMode is on, so real data is never polluted):
 | `*/native-events.jsonl` | engine/middle/app | Chunk‑sequence gaps + encode drops; the **app** file also carries `mac_warm_admission_observed` / `mac_warm_blocked` (warm‑admission gate) and `engine_service_retired` (XPC retirement) events. **Written only when telemetry is enabled** (`TelemetryGate.resolvedEnabled` / app-process intended mode). |
 | `<documents>/generation-failures.jsonl` | debug | Append-only failure log when telemetry is on (see `GenerationFailureDiagnosticLogger`). |
 
-One JSON object per line. Read with `jq` or Python (examples in [§10](#10-running--reading-a-benchmark)).
+One JSON object per line. The field-reading order is in [§10](#10-reading-telemetry).
 
 **Bounded by design.** These are append‑only but **size‑capped + auto‑pruned** (oldest‑first) by
 `GenerationTelemetryJSONLSink`, so logs can't blow out disk: each `generations.jsonl` (incl. the merged
@@ -359,127 +359,31 @@ sampler + a sidecar write; for the tightest latency numbers use `lightweight` an
 
 ---
 
-## 10. Running & reading a benchmark
+## 10. Reading telemetry
 
-1. Launch with telemetry on: `QWENVOICE_DEBUG=1 ./scripts/build.sh run` (add
-   `QWENVOICE_NATIVE_TELEMETRY_MODE=verbose` for the raw series).
-2. Drive a generation from the UI or via the `vocello` CLI — **cold** (first run after launch /
-   model switch) and **warm** (back‑to‑back) both matter.
-3. Read the merged row (engine-only for CLI; use `--merged` for macOS XPC UI bench):
-
-```sh
-python3 scripts/summarize_generation_telemetry.py "$DIR" --merged --show-variance
-```
-
-```sh
-DIR=~/Library/Application\ Support/QwenVoice-Debug/diagnostics
-python3 - <<'PY'
-import json, os
-d = os.path.expanduser("~/Library/Application Support/QwenVoice-Debug/diagnostics")
-row = json.loads(open(d+"/engine/generations.jsonl").read().splitlines()[-1])
-print("finish:", row["finishReason"], "| streaming:", row["usedStreaming"])
-print("KPIs:", row.get("derivedMetrics"))
-print("decode breakdown:", {k: v for k, v in sorted(row.get("timingsMS", {}).items())})
-print("chunks:", len(row.get("chunkTimeline") or []))
-PY
-```
-
-```sh
-# Stage timeline (cold runs show upstreamModelLoad / prewarm):
-jq -c 'select(.layer=="engine") | .stageMarks[] | {tMS, stage}' "$DIR/engine/generations.jsonl" | tail -20
-```
-
-Cold vs warm: force cold by switching the model variant (unloads) or letting idle‑unload
-fire; warm = immediate repeat. Compare `derivedMetrics.audioSecondsPerWallSecond` and the
-dominant `timingsMS` substage across your before/after.
+The canonical benchmark procedure owns launch configuration, matrix execution, and diagnostics-path
+selection. Once a run exists, `summarize_generation_telemetry.py` can merge the macOS app, XPC, and
+engine layers by `generationID`; CLI rows have only the engine boundary. Read `finishReason` and
+`audioQC` before interpreting performance, keep cold and warm populations separate, and compare
+`derivedMetrics.audioSecondsPerWallSecond` with the dominant `timingsMS` substage. A cold Custom or
+Design row should include `upstreamModelLoad` in `stageMarks`; an immediately repeated row should be
+warm. See [`benchmarking-procedure.md`](benchmarking-procedure.md) for supported invocations.
 
 ---
 
-## 11. Reusable benchmark procedure (full matrix)
+## 11. Benchmark result interpretation
 
-> **Operator runbook:** Step-by-step workflows, platform topology (CLI vs macOS XPC vs iOS device),
-> preflight, artifact map, and troubleshooting live in
-> [`benchmarking-procedure.md`](benchmarking-procedure.md). This section retains the matrix
-> semantics and manual UI procedure; the runbook is the preferred entry point for agents and release QA.
+This document is the telemetry schema and interpretation reference. The sole operational source for
+benchmark preflight, model and clone-fixture preparation, exact matrices, commands, UI lanes,
+artifact handling, and troubleshooting is
+[`benchmarking-procedure.md`](benchmarking-procedure.md). In particular, do not derive a Clone
+fixture from a Custom Voice output: the canonical fixture is generated through Voice Design and its
+provenance is verified by the repository model-preparation helper.
 
-> **Primary driver — the `vocello` CLI (headless, deterministic).**
-> `./scripts/build.sh cli bench --lengths short,medium,long --warm 3` drives this entire matrix
-> in‑process (cold/warm controlled exactly via load/unload — no UI waits, focus races, or engine‑busy
-> rejections) and runs the aggregator automatically. Engine telemetry rows (RTF / decode / memory /
-> `audioQC` / `promptChars`) are
-> identical to the app path; the CLI bypasses XPC, so the app/XPC frontend row is absent and the
-> summarizer's end‑to‑end **TTFC shows `-`** (engine‑only boundary — what backend optimization targets).
-> `vocello bench` and `vocello generate` now stream by default. To measure first‑chunk latency, just
-> use `vocello generate` or `vocello bench --ttfc` (an engine‑side warm probe per cell → a table +
-> `diagnostics/bench-ttfc.json`); both report engine TTFC,
-> not the app's through‑XPC buffered TTFA.
->
-> One‑command flags fold in the manual workflow below: `--label "<note>"` stamps the summary,
-> `--ledger` appends a row to `benchmarks/HISTORY.md`, `--force-class 8gb|16gb|high|iphone` forces a
-> constrained tier on any Mac (the `QWENVOICE_FORCE_MEMORY_CLASS` knob), and `--telemetry verbose`
-> writes the raw per‑sample sidecars. `--seed N` applies the same deterministic sampling seed to
-> every take. Full CLI reference: [`cli.md`](cli.md). The manual UI procedure below is retained for
-> visual/interactive runs only.
-
-A repeatable, accurate sweep over **mode × model variant × cold/warm**. The `vocello` CLI above is the
-default driver; the **manual UI procedure below** drives the app by hand and reads the JSONL the probes
-write, then aggregates with the read‑only helper (it's retained for visual/interactive runs — committed
-benchmark scripts + baselines are permitted if you want to automate it further). Each engine row
-self‑identifies its cell
-via `mode`, `modelID` (variant‑specific), and `warmState` (`cold`/`warm`).
-
-**Matrix:** 3 modes (Custom Voice / Voice Design / Voice Cloning) × 2 variants (Speed 1.7B 4‑bit /
-Quality 1.7B 8‑bit) = 6 cells. Per cell: **1 cold + 3 warm** — **except Voice Cloning, which is
-warm‑only by design** (see below): 4 warm samples per Clone cell.
-
-**Voice Cloning is intentionally always warm.** Clone generation requires reference conditioning,
-and the engine deliberately primes (loads + conditions) the clone model as part of servicing the
-request — a deliberate latency optimization. So a Clone generation never runs against a cold model;
-its rows correctly record `warmState=warm` and there is no separate Clone cold cell to measure. Do
-not treat the absence of Clone `cold` rows as a bug. (Custom Voice and Voice Design have a genuine
-cold path — the model loads inside the generation — so they get a real `cold` sample.)
-
-**Accurate cold (Custom / Design) requires suppressing proactive warmup.** Otherwise prewarm loads
-the model before you press Generate and the "cold" run records as `warm`. Launch with:
-
-```sh
-QWENVOICE_DEBUG=1 QWENVOICE_SUPPRESS_WARMUP=1 ./scripts/build.sh run
-```
-
-`QWENVOICE_SUPPRESS_WARMUP` (1/true/on/yes) skips all proactive warmup + clone priming
-(`MacGenerationWarmupCoordinator.isSuppressed`), so the **first generation of a freshly‑loaded
-package does — and records — its own cold load**. Leave it unset for normal use.
-
-**Fixed corpus (keep it identical across runs):**
-- One fixed script sentence for every mode (RTF + tokens/s are the text‑robust cross‑mode metrics;
-  TTFC is the latency metric).
-- Custom Voice: the default speaker. Voice Design: one fixed voice description. Voice Cloning: a
-  pre‑enrolled saved voice — enroll one once from a Custom Voice output clip (no external audio).
-
-**Driving each cell (frontend):**
-1. Select the mode (`sidebar_*`) and the variant — `{mode}_speedVariantButton` /
-   `{mode}_qualityVariantButton`. Switching variant or mode forces the next load to be cold.
-2. Type the fixed script; `cmd+Return`; wait for "Ready" / the inline Player.
-3. That first run is the **cold** sample (`warmState=cold`). Repeat ×3 for the **warm** samples.
-   macOS: `scripts/ui_test.sh macos benchmark` drives the configured native test host and validators
-   join typed app/XPC/backend rows before accepting the take. iOS uses
-   `scripts/ui_test.sh ios benchmark` on a paired physical iPhone (see
-   [`testing-runbook.md`](testing-runbook.md)).
-
-**Storage‑safe order (disk‑tight machines):** process one cell at a time — download that package
-→ run cold + 3 warm → delete the package (`QwenVoice-Debug/models/<pkg>`) → next cell. Peak disk ≈
-one package (~2.3–4 GB) instead of all six (~12–18 GB). If the **real** app already has the weights and
-you want to avoid the re‑download, **copy** the package into `QwenVoice-Debug/models/` once (don't
-symlink — the prepared‑cache overlay lives inside the model dir, so a symlink breaks the rebuild). To
-benchmark *without* the debug‑folder isolation, run the real app with telemetry on
-(`QWENVOICE_NATIVE_TELEMETRY_MODE=lightweight`, no `QWENVOICE_DEBUG`) — telemetry then lands in the real
-`QwenVoice/diagnostics`; prune those rows afterward if you don't want them.
-
-**Aggregate:**
-
-```sh
-python3 scripts/summarize_generation_telemetry.py
-```
+Each engine row identifies its cell through `mode`, variant-specific `modelID`, and `warmState`.
+Custom and Design can produce genuine cold rows; Clone is normally warm because reference
+conditioning primes the model. Interpret a missing Clone cold row as expected unless the canonical
+procedure explicitly changes that contract.
 
 The summarizer is streaming (it walks JSONL once with `iter_jsonl`, maintains a lightweight
 app index, and aggregates with `CellAccumulator`) so it handles large verbose logs without
@@ -498,45 +402,30 @@ GPU compute: `talker`/`codePred` measure graph‑*build* time, the single per‑
 `asyncEval`'d (Phase 2c) and overlaps the token loop (pipelined, not free). To attribute compute per
 stage, capture the os_signpost intervals under Instruments `xctrace`. Read‑only; joins `engine/` +
 `app/` rows by `generationID`.
-Pass a diagnostics dir as `$1` to summarize a different run. Compact **summaries (and baselines) may be
-committed** under `benchmarks/` (≤256 KB each, **no raw `*.jsonl`** — guard‑enforced); don't commit the
-raw diagnostics JSONL. Comparison stays manual/agent‑driven (`git diff`) — there's no auto‑compared
-baseline *gate*, but committing a baseline file for reference is fine.
+Compact **summaries and JSON baselines** may be committed under `benchmarks/` (≤256 KB each, no raw
+`*.jsonl`). Markdown snapshots are reviewed with `git diff`; JSON baselines support the explicit,
+model-dependent comparison described in the canonical procedure. Neither comparison is an ordinary
+CI or packaging gate.
 
-### Memory & pressure pass
+### Memory and pressure interpretation
 
 RAM usage (physFoot/RSS/peak‑GPU + the per‑stage GPU block) is captured on **every** run. But the
 **memory‑pressure** signals (`trims`/`pressure`) only fire on a pressure‑bound tier
 (`floor8GBMac`/`mid16GBMac`/`iPhonePro`), and `deviceClass()` is derived from real RAM — so on a
-high‑memory dev Mac they read `0`. To measure the constrained‑tier behavior (and pressure) **without
-8 GB hardware**, force the tier:
-
-```sh
-QWENVOICE_DEBUG=1 QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac QWENVOICE_SUPPRESS_WARMUP=1 ./scripts/build.sh run
-```
+high‑memory dev Mac they read `0`.
 
 `QWENVOICE_FORCE_MEMORY_CLASS` (accepts `floor_8gb_mac`/`mid_16gb_mac`/`high_memory_mac`/`iphone_pro`,
 or aliases `8gb`/`16gb`/`high`/`iphone`) is read in the app process and **propagated to the engine over the
 `initialize` IPC handshake** (env doesn't cross to the engine process — same path as `telemetryMode`).
-It makes the engine run the floor‑tier code paths: the pressure monitor **starts**, caches are tight,
+When selected by the canonical diagnostic procedure, it makes the engine run the floor-tier code
+paths: the pressure monitor **starts**, caches are tight,
 single‑gen clears + post‑batch hard trims fire, and idle‑unload is aggressive. Every engine row stamps
 `notes.deviceClass`, so the summarizer header shows `tier: floor_8gb_mac ⚠ forced` — never mistake a
 forced run for native‑tier data.
 
-To exercise kernel pressure (so `memory_pressure` + pressure‑driven `memory_trim` marks appear),
-fire a **simulated pressure notification** mid‑generation from a shell while a take is running:
-
-```sh
-sudo memory_pressure -S -l warn      # or: -S -l critical
-```
-
-`-S` sends a one‑shot notification to every subscribed process and auto‑resets ~1 s later (it needs
-sudo — without it the trigger sysctl fails with "Operation not permitted"). **Plain `-l warn` does
-NOT work for this**: it allocates real memory and raises the kernel level, but dispatch‑source
-monitors never receive a notification, so nothing lands in telemetry (verified 2026‑06‑09).
-The monitor observes the simulated event and the marks land on that generation's timeline. Then
-`python3 scripts/summarize_generation_telemetry.py` → confirm non‑zero `trims`/`pressure` and inspect
-`physFoot` + the GPU‑by‑stage block.
+Pressure-triggered trims appear as `memory_pressure` and `memory_trim` stage marks. Interpret them
+together with `physFoot`, the GPU-by-stage block, and the recorded device class; a forced class is
+diagnostic evidence, not proof for that physical device.
 
 > **Caveat:** on the forced floor tier, a Quality load that cannot fit will surface as an error rather
 > than silently falling back to Speed. The row's `modelID` reveals the actual variant served — check it
@@ -546,38 +435,25 @@ The monitor observes the simulated event and the marks land on that generation's
 **Watch for OOM regressions** when optimizing the backend: a rising `physFoot` peak, GPU‑stage peak,
 or any `hardTrim` in `trims` means a run is shedding model state under pressure — the early OOM signal.
 
-**Verify attribution:** for **Custom Voice and Voice Design**, each cold row must show
-`warmState":"cold"` (and carry `upstreamModelLoad` in `stageMarks`); warm rows show `"warm"`. If a
-Custom/Design "cold" row says `warm`, warmup suppression wasn't in effect — confirm
-`QWENVOICE_SUPPRESS_WARMUP=1` reached the app launch. **Voice Cloning rows are always `warm`** — that
-is correct (clone is warm‑by‑design, above), not a suppression failure.
+**Verify attribution:** for Custom Voice and Voice Design, each accepted cold row must show
+`warmState":"cold"` and carry `upstreamModelLoad`; warm rows show `"warm"`. Clone rows are normally
+warm by design.
 
 ### Tracking performance over time
 
-As optimization advances, track the trend with **committed snapshots + on‑demand comparison**. There's
-intentionally **no auto‑compared baseline *gate*** (no build fails on a regression — thresholds are a
-maintainer call), but committed baselines, comparison scripts, and snapshots are all permitted under
-`benchmarks/` if you want to automate the comparison.
+As optimization advances, track the trend with committed snapshots and explicit, on-demand
+comparison. Regression thresholds remain a maintainer decision and do not run in ordinary CI.
 
-Two committed artifacts under `benchmarks/` (compact, ≤256 KB, no raw `*.jsonl` — guard‑enforced):
+Three committed artifact types under `benchmarks/` (compact, ≤256 KB, no raw `*.jsonl`):
 
-1. **Per‑milestone snapshot** — save the full table before/after a change. `--label` stamps a note;
-   the run is auto‑stamped with the date + short git SHA so the numbers tie to a commit:
-   ```sh
-   python3 scripts/summarize_generation_telemetry.py --label "stepeval fix" > benchmarks/2026-06-02-stepeval.md
-   ```
-2. **`benchmarks/HISTORY.md` ledger** — one compact row per run for the trend at a glance. The row is
-   printed (read‑only); you redirect it to the end of the file:
-   ```sh
-   python3 scripts/summarize_generation_telemetry.py --ledger-row --label "stepeval fix" >> benchmarks/HISTORY.md
-   ```
-   Default headline cell is `custom/quality/warm`; pass `--cell mode/model/state` (model = substring)
-   to track a different one. Columns: date · sha · cell · RTF · tok/s · TTFC · physFoot · trims · QC ·
-   note · uiMaxStall ms (trailing, added 2026‑06 — max main‑thread stall during the generation; `—`
-   for CLI bench rows, which have no UI process).
+1. **Per-milestone Markdown snapshot** — the full table, labeled and tied to a date and Git SHA.
+2. **`benchmarks/HISTORY.md` ledger** — one compact headline row per accepted run.
+3. **JSON baseline** — machine-readable cells for the optional regression comparison.
 
-**Compare** by `git diff`‑ing two snapshots (or ask the agent to diff the deltas and flag
-regressions). For trustworthy deltas: **same machine, quiet (quit other apps), watch thermals**; keep
+The ledger columns are date, SHA, cell, RTF, tok/s, TTFC, physFoot, trims, QC, note, and
+`uiMaxStall` (absent for CLI rows, which have no UI process).
+
+For trustworthy deltas: use the same machine, keep it quiet, watch thermals, keep
 cold vs warm separate; compare **medians** of ≥3 warm; record the SHA. For MLX backend work the needle
 to watch is the dominant `timingsMS` substage (e.g. `qwen_stream_step_eval_total`) alongside RTF.
 
@@ -610,17 +486,16 @@ dropouts, garbled words, "sounds worse"). Two layers, increasing in what they ca
    and run on the bench WAVs directly. With `vocello bench --delivery`, the summarizer also surfaces
    `prosEff` / `dF0Std` / `dRateCV` / `dPauseR` / `dRough` in the delivery table.
    A JSON **prosody profile** (`scripts/prosody_profile.py`) supplies thresholds and delivery-effect
-   weights; calibrate one from a labeled corpus with `scripts/prosody_calibration.py`, then pass it to
-   `vocello bench --delivery --prosody-profile path/to/profile.json`. The built-in profile is used when
-   none is supplied.
+   weights. The canonical procedure owns calibration and benchmark invocation; the built-in profile
+   is used when none is supplied.
 3. **Listening pass — mandatory before promoting or releasing a backend change.** No automated check judges subtle
    perceptual quality (timbre, prosody, naturalness). Play each take and listen for hiccups/artifacts;
    record the verdict in the snapshot / `HISTORY.md` note. The objective `audioQC` + prosody gates are
    fast tripwires, not substitutes for ears.
 
-Workflow: run the corpus → any `QC=fail` is a hard stop for promotion/release → inspect prosody
-gate output → do the manual listening pass → record pass/fail. (The in-engine `audioQC` is the harness-free
-default; committed quality-check scripts/baselines under `benchmarks/` are also permitted.)
+Interpretation order is `audioQC` first, then prosody output, then the listening verdict. Any
+`QC=fail` is a hard stop for engine promotion. The in-engine `audioQC` is the default signal;
+committed bounded quality summaries and baselines remain permitted.
 
 ---
 

@@ -10,6 +10,11 @@ MAC_DERIVED="$ROOT_DIR/build/DerivedData"
 IOS_DERIVED="$ROOT_DIR/build/ios"
 BUNDLE_ID_IOS="com.patricedery.vocello"
 MAC_TAKE_MANIFEST="/tmp/vocello-bench-current-take.json"
+MAC_APP_EXECUTABLE="$MAC_DERIVED/Build/Products/Release/Vocello.app/Contents/MacOS/Vocello"
+MAC_ENGINE_EXECUTABLES=(
+  "$MAC_DERIVED/Build/Products/Release/Vocello.app/Contents/XPCServices/QwenVoiceEngineService.xpc/Contents/MacOS/QwenVoiceEngineService"
+  "$MAC_DERIVED/Build/Products/Release/QwenVoiceEngineService.xpc/Contents/MacOS/QwenVoiceEngineService"
+)
 . "$ROOT_DIR/scripts/lib/test_models.sh"
 test_models_init "$ROOT_DIR"
 
@@ -110,27 +115,91 @@ check_mac_crash_delta() {
   [[ -z "$new" ]] || { printf '%s\n' "$new" >"$out/new-crashes.txt"; die "new Vocello crash report detected (see $out/new-crashes.txt)"; }
 }
 
-terminate_macos_app() {
-  pkill -x Vocello >/dev/null 2>&1 || true
-  local attempt
-  for attempt in {1..40}; do
-    [[ "$(pgrep -x Vocello 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] && break
-    sleep 0.1
-  done
-  [[ "$(pgrep -x Vocello 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] \
-    || die "could not establish single-process ownership of Vocello"
+process_executable_path() {
+  local pid="$1" path=""
+  if command -v lsof >/dev/null 2>&1; then
+    path="$(lsof -a -p "$pid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+  fi
+  if [[ -z "$path" ]]; then
+    path="$(ps -p "$pid" -o comm= 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  fi
+  printf '%s' "$path"
+}
 
-  pkill -x QwenVoiceEngineService >/dev/null 2>&1 || true
+path_is_one_of() {
+  local candidate="$1"
+  shift
+  local expected
+  for expected in "$@"; do
+    [[ "$candidate" == "$expected" ]] && return 0
+  done
+  return 1
+}
+
+terminate_owned_processes() {
+  local name="$1"
+  shift
+  local -a expected=("$@") pids=()
+  local pid path attempt alive candidates
+  candidates="$(pgrep -x "$name" 2>/dev/null || true)"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    path="$(process_executable_path "$pid")"
+    path_is_one_of "$path" "${expected[@]}" \
+      || die "cannot establish exclusive $name ownership: PID $pid uses ${path:-an unknown executable}, not the exact XCUITest build product"
+    pids+=("$pid")
+  done <<<"$candidates"
+  ((${#pids[@]} > 0)) || return 0
+
+  kill "${pids[@]}" 2>/dev/null || true
   for attempt in {1..40}; do
-    [[ "$(pgrep -x QwenVoiceEngineService 2>/dev/null | wc -l | tr -d ' ')" == "0" ]] && return 0
+    alive=false
+    for pid in "${pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        path="$(process_executable_path "$pid")"
+        if [[ -z "$path" ]] && ! kill -0 "$pid" 2>/dev/null; then
+          continue
+        fi
+        path_is_one_of "$path" "${expected[@]}" \
+          || die "$name PID $pid changed identity while waiting for termination"
+        alive=true
+      fi
+    done
+    $alive || return 0
     sleep 0.1
   done
-  die "could not retire the previous Vocello engine service"
+
+  for pid in "${pids[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      path="$(process_executable_path "$pid")"
+      if [[ -z "$path" ]] && ! kill -0 "$pid" 2>/dev/null; then
+        continue
+      fi
+      path_is_one_of "$path" "${expected[@]}" \
+        || die "$name PID $pid changed identity before forced termination"
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
+  for attempt in {1..20}; do
+    alive=false
+    for pid in "${pids[@]}"; do
+      kill -0 "$pid" 2>/dev/null && alive=true
+    done
+    $alive || return 0
+    sleep 0.1
+  done
+  die "could not retire the owned $name process"
+}
+
+terminate_macos_app() {
+  terminate_owned_processes Vocello "$MAC_APP_EXECUTABLE"
+  terminate_owned_processes QwenVoiceEngineService "${MAC_ENGINE_EXECUTABLES[@]}"
 }
 
 cleanup_macos_run() {
-  pkill -x Vocello >/dev/null 2>&1 || true
-  pkill -x QwenVoiceEngineService >/dev/null 2>&1 || true
+  # Cleanup must never terminate a different installation of Vocello. A path
+  # mismatch remains visible as a suite failure instead of being name-killed.
+  terminate_macos_app
   rm -f "$MAC_TAKE_MANIFEST" "$MAC_TAKE_MANIFEST.next"
 }
 

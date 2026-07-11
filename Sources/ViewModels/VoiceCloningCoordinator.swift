@@ -159,9 +159,9 @@ final class VoiceCloningCoordinator {
                             )
                         )
                     } catch {
-                        #if DEBUG
-                        print("[Performance][VoiceCloningCoordinator] clone priming degraded: \(error.localizedDescription)")
-                        #endif
+                        if DebugMode.isEnabled {
+                            print("[Performance][VoiceCloningCoordinator] clone priming degraded: \(error.localizedDescription)")
+                        }
                     }
                 }
 
@@ -320,9 +320,9 @@ final class VoiceCloningCoordinator {
                 )
             )
         } catch {
-            #if DEBUG
-            print("[Performance][VoiceCloningCoordinator] clone priming failed key=\(clonePrimingRequestKey) error=\(error.localizedDescription)")
-            #endif
+            if DebugMode.isEnabled {
+                print("[Performance][VoiceCloningCoordinator] clone priming failed key=\(clonePrimingRequestKey) error=\(error.localizedDescription)")
+            }
         }
     }
 

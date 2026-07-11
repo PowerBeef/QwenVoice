@@ -70,7 +70,7 @@ enum VoiceClipTranscriber {
 
     /// Score at/above which we accept a candidate's language as the detected one.
     private static let confidentLanguageScore = 0.5
-    /// Exposed for generation-output verification (bench/autorun).
+    /// Exposed for generation-output verification (benchmark/device diagnostics).
     static let outputVerificationLanguagePassScore = 0.5
     /// Default WER ceiling for short bench scripts (~8 words).
     static let outputVerificationDefaultMaxWordErrorRate = 0.15

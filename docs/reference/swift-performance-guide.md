@@ -47,7 +47,9 @@ All Swift targets use `SWIFT_VERSION: "6"`. The project uses strict-concurrency-
 ### 2.3 Compilation-condition switches
 
 - `QW_UI_LIQUID` is set in the `Release` config for the macOS app target to enable Liquid Glass surfaces. It has no performance effect.
-- `#if DEBUG` blocks are reserved for test/sim scaffolding and compile out of the shipped package. Runtime debug capabilities are gated by `DebugMode.isEnabled`, not by a compile-time symbol.
+- The project has no Debug configuration or generic `DEBUG` symbol. Runtime diagnostic behavior is
+  gated by `DebugMode.isEnabled`. Compile-time test isolation belongs in test targets or behind a
+  narrowly named compilation condition; do not add hidden app behavior through `#if DEBUG`.
 
 ### 2.4 When to rebuild with `-O`
 

@@ -32,8 +32,8 @@ Three generation modes (Studio segmented control `generateSection_*`):
 - **Voice Design** (`generateSection_design`) — describe a voice in natural language.
 - **Voice Cloning** (`generateSection_clone`) — use a reference clip (record on-device or a saved voice).
 
-The UI is what this guide drives. For headless, no-UI generation see `IOSAutorunHarness`
-(`ios-device-testing.md` §1) — that path is for benchmarks, not this guide.
+The UI is what this guide drives. Headless, non-UI device diagnostics are documented in
+[`ios-device-testing.md`](ios-device-testing.md); that path is separate from XCUITest.
 
 ---
 
@@ -60,7 +60,7 @@ mode segments, composer, and primary action; there is no hidden screen-presence 
 | **Install CTA** | `textInput_installModelButton` | Shown instead of Generate when the model is **missing** (see §3) |
 | Cancel | `textInput_cancelButton` | Inside the generating progress bar |
 | Error retry | `textInput_generationError` | Retry bar on a failed generation |
-| Inline player | `studio_inlinePlayer` (completed take) / `studio_livePreviewPlayer` (live streaming preview) | Live streaming preview + completed-take card. `studioPlayerCard` is a SwiftUI view identity, not an accessibility identifier. |
+| Player controls | `studio_livePreview_playPause`, `studio_livePreview_cancel`; `studio_inlinePlayer_playPause`, `studio_inlinePlayer_save`, `studio_inlinePlayer_download`, `studio_inlinePlayer_dismiss` | Live streaming preview and completed-take controls. The enclosing SwiftUI card has no test identifier. |
 
 **Selector pills (chips)** — `studioChip_*` identifiers are directly queryable in Studio. Per mode:
 
@@ -104,7 +104,7 @@ present, prefills the transcript. The enrollment sheet exposes `saveVoice_nameFi
 alternate audio-file viewer, so opening supported audio from Files enters this same import and
 enrollment flow. Search is `voicesSearchField`.
 
-### History tab — `Sources/iOS/IOSLibraryViews.swift`
+### History tab — `Sources/iOS/History/HistoryScreen.swift`
 
 Search `historySearchField`; clear menu `historyClearMenu` → `historyClearKeepFiles` /
 `historyClearDeleteFiles`; retry `historyRetryButton`. Mode-filter chips

@@ -1628,8 +1628,8 @@ private struct StreamingExecutionContext: Sendable {
             // Restriction-simulation rows must self-identify — a simulated
             // iPhone-15-Pro run must never read as a real-device proof.
             tierNotes["simulatedProcessLimitMB"] = String(simLimit / 1_048_576)
-            if let profile = ProcessInfo.processInfo.environment["QVOICE_IOS_SIM_DEVICE"] {
-                tierNotes["simulatedDevice"] = profile
+            if let profile = ProcessInfo.processInfo.environment["QVOICE_IOS_MEMORY_PROFILE"] {
+                tierNotes["memoryProfile"] = profile
             }
         }
         // Bench delivery cells (vocello bench --delivery) stamp the preset id so

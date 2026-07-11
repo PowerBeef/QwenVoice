@@ -15,8 +15,9 @@ benchmark result logs are now permitted in the repo — but **bounded**, so they
   for a milestone — auto-stamped with the date + short SHA so numbers tie to a commit.
 - A small `.json` of headline numbers (RTF, tokens/s, TTFC, peak RAM/GPU) for a dated run.
 
-Name milestone files by date + context, e.g. `2026-05-30-floor8gb-quality.md`. Compare runs with
-`git diff` (or ask the agent) — there's no auto-compared baseline gate, by design.
+Name milestone files by date + context, e.g. `2026-05-30-floor8gb-quality.md`. Compare Markdown
+snapshots with `git diff`. JSON baselines under `benchmarks/baselines/` support the optional,
+model-dependent `--compare-baseline` regression check; it is never an ordinary CI or packaging gate.
 
 ## Rules (enforced by `scripts/check_project_inputs.sh`)
 
@@ -24,8 +25,8 @@ Name milestone files by date + context, e.g. `2026-05-30-floor8gb-quality.md`. C
   `~/Library/Application Support/QwenVoice[-Debug]/diagnostics/` (gitignored, and auto-pruned to a size
   budget by `GenerationTelemetryJSONLSink`). Commit a distilled summary, not the raw stream.
 - **Each committed file ≤ 256 KB.** Keep it a summary, not a dump.
-- Still **no** auto-compared baseline manifest and **no** benchmark script harness — those remain
-  retired (the guard's existing denylist is unchanged). These are reference logs, not a CI gate.
+- JSON baseline comparisons are explicit local QA. They do not run automatically in ordinary CI or
+  release packaging. See the canonical procedure for the supported save/compare commands.
 
 See [`docs/reference/benchmarking-procedure.md`](../docs/reference/benchmarking-procedure.md)
 for the operator runbook (workflows, preflight, reading results) and

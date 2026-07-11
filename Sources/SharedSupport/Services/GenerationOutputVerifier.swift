@@ -1,7 +1,7 @@
 import Foundation
 import QwenVoiceCore
 
-/// Post-generation output verification for bench/autorun lanes — transcribes a WAV
+/// Post-generation output verification for benchmark/device-diagnostics lanes — transcribes a WAV
 /// in-process (Speech, on-device) and scores language match + word error rate vs the
 /// source script. Avoids CLI Speech TCC issues documented in benchmarks/OPTIMIZATION.md.
 enum GenerationOutputVerifier {

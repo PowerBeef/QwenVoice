@@ -68,8 +68,8 @@
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testLegacyV1ThroughV5RowsRemainDecodable",
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testTelemetryOffPlansNoSamplerSinkChunkQCOrDerivedDiagnostics",
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testFailurePrivacyAdapterDoesNotPersistRawMessageOrPath",
-        "HarnessTests/ProbeValidationTests/test_accepts_correlated_monotonic_terminal_rows",
-        "HarnessTests/ProbeValidationTests/test_rejects_cross_layer_privacy_leaks"
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testTransportAdapterPreservesGapAndTerminalSemantics",
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testFrontendAdapterDoesNotRequireRawUserContent"
       ],
       "runtimeChecks": ["telemetry-overhead"],
       "status": "implemented",

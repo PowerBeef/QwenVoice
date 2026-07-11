@@ -6,12 +6,13 @@ import UIKit
 /// (`CXCallObserver` — no special entitlement) and app lifecycle transitions (the
 /// user unlocking/using the phone backgrounds the app under test).
 ///
-/// **Runtime-gated, ships inert**: started only by `IOSAutorunHarness` (which
-/// itself fires only when `QVOICE_IOS_AUTORUN` is set by `scripts/ios_device.sh`).
+/// **Runtime-gated, ships inert**: started only by `IOSDeviceDiagnosticsRunner` (which
+/// itself fires only when `QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC` is set by
+/// `scripts/ios_device.sh`).
 /// A normal user launch never creates it. Follows the repo's runtime-gate
 /// philosophy — no `#if DEBUG`.
 ///
-/// Consumers: the autorun sentinel (`autorun-done.json` gains `interruptions`)
+/// Consumers: the diagnostics sentinel (`device-diagnostics-done.json` gains `interruptions`)
 /// so `ios_device.sh bench`/`gate` can report "failed because a call arrived at
 /// t=42s" instead of a generic timeout.
 @MainActor
@@ -61,7 +62,7 @@ public final class IOSInterruptionRecorder: NSObject {
         print("[interruptions] recorder started")
     }
 
-    /// Events observed so far (for the autorun sentinel).
+    /// Events observed so far (for the diagnostics sentinel).
     public func snapshot() -> [Event] {
         events
     }

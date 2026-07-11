@@ -116,7 +116,7 @@ graph.)
 | **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
 | **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of XCUITest |
 | **UI regression** | `ui_test.sh macos smoke\|benchmark` XCUITest | `ui_test.sh ios smoke\|benchmark` XCUITest on a paired physical iPhone | Explicit frontend QA only; never required for publishing or packaging |
-| **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` autorun | Explicit performance/release QA |
+| **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` device diagnostics | Explicit performance/release QA |
 | **UI evidence** | Named XCTest attachments from the native app | Named XCTest attachments from the physical iPhone | Independent explicit-acceptance artifacts |
 
 Release packaging is deterministic and does not consume UI results. Frontend evidence remains
@@ -125,7 +125,7 @@ platform-specific and is created only when explicitly requested.
 **Four schemes**: `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
 (iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
 iOS XCUITest). The UI schemes are isolated from ordinary test actions. A single shippable config,
-**`Release`**, is the only config — there is no `Debug` config and no `DEBUG` symbol.
+**`Release`**, is the only config — there is no `Debug` config or generic `DEBUG` symbol.
 
 ### Key layering rule
 
@@ -168,7 +168,7 @@ Resolved versions (`QwenVoice.xcodeproj/.../Package.resolved`):
 
 Shipped models (`Sources/Resources/qwenvoice_contract.json`): Qwen3-TTS 1.7B in
 **Speed (4-bit)** and **Quality (8-bit)** variants across three modes —
-`pro_custom`, `pro_design`, `pro_clone` (see [§9 Model management](#9-model-management--contract)).
+`pro_custom`, `pro_design`, `pro_clone` (see [§11 Model management](#11-model-management--contract)).
 
 ---
 
@@ -493,8 +493,8 @@ concrete type. Key iOS behaviors:
   serious/critical; generation is never thermally blocked
   (`QVOICE_IOS_THERMAL_GATE=off` escape hatch).
 - **Interruption recorder** (2026-07-02): `IOSInterruptionRecorder` (CXCallObserver +
-  UIApplication lifecycle) runs during autorun only; events land in the bench
-  sentinel as `interruptions` so doomed runs self-report calls/backgrounding.
+  UIApplication lifecycle) runs during headless device diagnostics only; events land in
+  `device-diagnostics-done.json` as `interruptions` so doomed runs self-report calls/backgrounding.
 - **Memory posture**: `.iPhonePro` policy; `Qwen3TTSMemoryCaches.clearAll()` on
   hard-trim/unload/failure (macOS preserves cache warmth).
 - **Clone load profile**: `.fullCapabilities` vs `.iOSProductionDefault`
@@ -659,7 +659,8 @@ Headless install: `vocello models install <id>` (CLI) or the app Settings UI.
 
 **macOS test fixtures:** UI smoke and bench lanes with `QWENVOICE_DEBUG=1` read
 `QwenVoice-Debug/models`; the test driver symlinks that path to the canonical
-`QwenVoice/models` store. See [`reference/testing-runbook.md`](reference/testing-runbook.md) §1b
+`QwenVoice/models` store. See [`reference/testing-runbook.md`](reference/testing-runbook.md)
+"Model readiness"
 and [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh).
 
 ---

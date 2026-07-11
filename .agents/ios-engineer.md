@@ -34,7 +34,8 @@ Before changing iOS UI or behavior, read:
 
 - **Shell scripts** are the only way to build/test/run real-engine iOS work on device:
   - `scripts/ios_device.sh preflight`
-  - `scripts/ios_device.sh test`
+  - `scripts/ios_device.sh build|install|launch`
+  - `scripts/ios_device.sh bench|lang-bench`
   - `scripts/ios_device.sh profile [spec]`
   - `scripts/ios_device.sh crashes`
   - `scripts/ios_device.sh gate`
@@ -82,6 +83,9 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
   (`.withoutCloneEncoders`) depending on the entitled memory limit.
 - **`accessibilityIdentifier`s are stable.** Values like `voicesRow_*`, `textInput_*`,
   `studioChip_*` must survive refactors.
+- **No hidden test UI.** XCUITest observes genuine visible controls. Put test-only code in the UI
+  test target; do not add preview routes, invisible state markers, onboarding bypasses, seeded UI
+  text, or generic `#if DEBUG` app behavior.
 
 ## Common mistakes
 

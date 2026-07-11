@@ -59,7 +59,7 @@ class ProsodyCalibrationTests(unittest.TestCase):
             path = os.path.join(self.dir, name)
             write_sine(path, freq, dur, amp, fend, pauses)
             label = "bad" if name.startswith("bad") else "good"
-            labels.append({"path": path, "label": label})
+            labels.append({"path": name, "label": label})
         labels_path = os.path.join(self.dir, "labels.jsonl")
         with open(labels_path, "w", encoding="utf-8") as f:
             for entry in labels:

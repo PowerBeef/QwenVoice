@@ -39,11 +39,7 @@ enum AppLaunchPreflight {
 
     static func shouldShowDiagnostics(bundlePath: String) -> Bool {
         guard !bundlePath.contains("/DerivedData/") else { return false }
-        #if DEBUG
-        return false
-        #else
         return true
-        #endif
     }
 
     static func run() -> AppLaunchDiagnosticsSnapshot? {

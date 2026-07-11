@@ -74,9 +74,6 @@ struct EmotionPickerView: View {
 
             customToneField
         }
-        .overlay(alignment: .topLeading) {
-            emotionValueAnchor
-        }
         .onAppear {
             syncSelectionFromText()
         }
@@ -100,6 +97,7 @@ struct EmotionPickerView: View {
             maxWidth: 240,
             alignment: .leading
         )
+        .accessibilityValue(emotion)
         .accessibilityIdentifier("\(accessibilityPrefix)_tonePicker")
     }
 
@@ -293,17 +291,5 @@ struct EmotionPickerView: View {
 
         emotion = profile.finalInstruction
         deliveryProfile?.wrappedValue = profile
-    }
-
-    private var emotionValueAnchor: some View {
-        Text(emotion.isEmpty ? " " : emotion)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(emotion)
-            .accessibilityValue(emotion)
-            .accessibilityIdentifier("\(accessibilityPrefix)_emotionValue")
     }
 }

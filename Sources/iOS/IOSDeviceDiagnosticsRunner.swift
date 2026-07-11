@@ -2,9 +2,9 @@ import Foundation
 import QwenVoiceCore
 import UIKit
 
-/// Headless on-device generation harness — the iOS analog of `vocello bench`.
+/// Headless, non-UI on-device diagnostics runner — the iOS analog of `vocello bench`.
 ///
-/// Fires **only** when `QVOICE_IOS_AUTORUN` is present and non-empty in the launch
+/// Fires **only** when `QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC` is present and non-empty in the launch
 /// environment, so it ships completely inert (a normal user launch never sets it).
 /// `scripts/ios_device.sh bench` sets it — together with `QWENVOICE_DEBUG=1` (lights
 /// up `TelemetryGate`, so the engine appends its decode/RTF/audioQC row to
@@ -19,28 +19,33 @@ import UIKit
 /// a bare `1`/`on`/`true`/`yes`, a bare mode, or a partial spec all fall back to
 /// sensible defaults.
 ///
-/// Optional companion env `QVOICE_IOS_AUTORUN_LANG` sets the UI language picker
+/// Optional companion env `QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE` sets the UI language picker
 /// equivalent (`english`, `french`, `auto`, …) on the generation request. Omitted
 /// behaves like Auto. `scripts/ios_device.sh lang-bench` sets it per matrix cell.
 ///
-/// When `QVOICE_IOS_VERIFY_OUTPUT=1`, after a successful generation the harness
-/// transcribes the output WAV in-process (Speech) and stamps `outputVerification`
-/// on the autorun sentinel for `scripts/check_language_output.py`.
+/// Clone diagnostics additionally require `QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID`
+/// to identify the exact prepared voice. They never select an arbitrary saved voice or
+/// substitute a bundled speaker preview.
 ///
-/// The harness drives the same in-process `TTSEngineStore.generate(_:)` the UI uses —
-/// no UI interaction — then writes `diagnostics/<runID>/autorun-done.json`. It never
+/// When `QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT=1`, after a successful generation the runner
+/// transcribes the output WAV in-process (Speech) and stamps `outputVerification`
+/// on the diagnostics sentinel for `scripts/check_language_output.py`.
+///
+/// The runner drives the same in-process `TTSEngineStore.generate(_:)` the UI uses —
+/// no UI interaction — then writes `diagnostics/<runID>/device-diagnostics-done.json`. It never
 /// calls `exit()`; the app stays up so the script can pull the diagnostics container.
 @MainActor
-enum IOSAutorunHarness {
-    private static let environmentKey = "QVOICE_IOS_AUTORUN"
+enum IOSDeviceDiagnosticsRunner {
+    private static let environmentKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC"
     private static let runIDKey = "QVOICE_IOS_DEVICE_RUN_ID"
-    private static let languageEnvKey = "QVOICE_IOS_AUTORUN_LANG"
-    private static let verifyOutputEnvKey = "QVOICE_IOS_VERIFY_OUTPUT"
+    private static let languageEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE"
+    private static let verifyOutputEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT"
+    private static let cloneVoiceIDEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID"
 
     /// Default benchmark sentence — long enough to exercise streaming chunking,
     /// free of any personal/sensitive content.
     private static let defaultText =
-        "Vocello on-device autorun check. The quick brown fox jumps over the lazy dog, "
+        "Vocello on-device diagnostics check. The quick brown fox jumps over the lazy dog, "
         + "then pauses, takes a breath, and reads one more sentence aloud."
     /// Default Voice Design brief when a `design` run supplies only text.
     private static let defaultVoiceBrief =
@@ -52,29 +57,31 @@ enum IOSAutorunHarness {
         var text: String
     }
 
-    /// True when the launch environment requested an autorun.
+    /// True when the launch environment requested a diagnostic generation.
     static var isRequested: Bool {
         guard let raw = ProcessInfo.processInfo.environment[environmentKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
         return !raw.isEmpty
     }
 
-    /// Kick off the autorun if requested. Safe to call once after engine init;
-    /// no-op when `QVOICE_IOS_AUTORUN` is unset. Runs detached on the MainActor so it
+    /// Kick off the diagnostic generation if requested. Safe to call once after engine init;
+    /// no-op when `QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC` is unset. Runs detached on the MainActor so it
     /// doesn't block app startup.
     static func runIfRequested(engine: TTSEngineStore) {
         guard isRequested else { return }
+        #if QVOICE_DEVICE_DIAGNOSTICS
         // Crash-capture lane verification: deliberately fault so MetricKit captures the
         // crash and the `scripts/ios_device.sh crashes --test` flow can symbolicate it
-        // against the preserved build dSYM. Ships inert (only set by the test verb).
-        if ProcessInfo.processInfo.environment["QVOICE_IOS_CRASH_TEST"] == "1" {
-            print("[autorun] QVOICE_IOS_CRASH_TEST=1 → deliberate crash for the capture/symbolication lane")
-            fatalError("QVOICE_IOS_CRASH_TEST: deliberate crash for the on-device crash-capture lane")
+        // against the preserved build dSYM. This code is absent from ordinary builds.
+        if ProcessInfo.processInfo.environment["QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST"] == "1" {
+            print("[device-diagnostics] deliberate crash requested for the capture/symbolication lane")
+            fatalError("QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST: deliberate diagnostics crash")
         }
+        #endif
         let spec = parseSpec(ProcessInfo.processInfo.environment[environmentKey] ?? "")
         let uiLanguageHint = trimmedEnvironmentValue(languageEnvKey)
         // Record calls + lifecycle transitions for the sentinel so a doomed run
-        // self-reports its cause ("call arrived at t=42s"). Autorun-only → inert
+        // self-reports its cause ("call arrived at t=42s"). Diagnostics-only → inert
         // on user launches.
         IOSInterruptionRecorder.shared.start()
         Task { @MainActor in
@@ -112,11 +119,11 @@ enum IOSAutorunHarness {
     // MARK: - Run
 
     private static func run(spec: Spec, uiLanguageHint: String?, engine: TTSEngineStore) async {
-        let runID = safeRunID(from: ProcessInfo.processInfo.environment[runIDKey]) ?? "autorun"
+        let runID = safeRunID(from: ProcessInfo.processInfo.environment[runIDKey]) ?? "device-diagnostics"
         let generationID = UUID()
         let startedAt = Date()
         print(
-            "[autorun] start mode=\(spec.mode.rawValue) variant=\(spec.variant.rawValue) "
+            "[device-diagnostics] start mode=\(spec.mode.rawValue) variant=\(spec.variant.rawValue) "
             + "runID=\(runID) lang=\(uiLanguageHint ?? "auto") chars=\(spec.text.count)"
         )
 
@@ -140,25 +147,25 @@ enum IOSAutorunHarness {
 
         do {
             guard let model = ModelDescriptor.model(for: spec.mode) else {
-                throw HarnessError("no model in the contract for mode '\(spec.mode.rawValue)'")
+                throw DiagnosticsError("no model in the contract for mode '\(spec.mode.rawValue)'")
             }
             record.modelID = model.id
             record.modelName = model.name
 
-            let payload = try await buildPayload(spec: spec, model: model, engine: engine)
+            let payload = try await buildPayload(spec: spec, engine: engine)
 
-            print("[autorun] loading \(model.id)…")
+            print("[device-diagnostics] loading \(model.id)…")
             try await engine.loadModel(id: model.id)
 
             // Clone requires the reference primed (the optimized `voiceClonePrompt`) BEFORE
             // generate — mirrors `VoiceCloningCoordinator`. With proactive warm now gated on
             // the memory band (not blanket-disabled on hardware), this actually runs on device.
             if case .clone(let reference) = payload {
-                print("[autorun] priming clone reference…")
+                print("[device-diagnostics] priming clone reference…")
                 do {
                     try await engine.ensureCloneReferencePrimed(modelID: model.id, reference: reference)
                 } catch {
-                    print("[autorun] clone prime degraded: \(error.localizedDescription)")
+                    print("[device-diagnostics] clone prime degraded: \(error.localizedDescription)")
                 }
             }
 
@@ -176,7 +183,7 @@ enum IOSAutorunHarness {
             )
             record.resolvedLanguageHint = GenerationSemantics.qwenLanguageHint(for: request)
 
-            print("[autorun] generating… resolvedLanguage=\(record.resolvedLanguageHint ?? "?")")
+            print("[device-diagnostics] generating… resolvedLanguage=\(record.resolvedLanguageHint ?? "?")")
             let t0 = Date()
             let result = try await engine.generate(request)
             let wall = Date().timeIntervalSince(t0)
@@ -189,7 +196,7 @@ enum IOSAutorunHarness {
             record.realtimeFactor = rtf
             record.finishReason = result.finishReason?.rawValue
             print(String(
-                format: "[autorun] ✓ %.2fs audio · rtf=%.2f · finish=%@",
+                format: "[device-diagnostics] ✓ %.2fs audio · rtf=%.2f · finish=%@",
                 result.durationSeconds, rtf, result.finishReason?.rawValue ?? "?"
             ))
 
@@ -203,7 +210,7 @@ enum IOSAutorunHarness {
                 )
                 record.outputVerification = verification
                 print(
-                    "[autorun] output verify pass=\(verification.pass) "
+                    "[device-diagnostics] output verify pass=\(verification.pass) "
                     + "lang=\(verification.languagePass) wer=\(String(format: "%.2f", verification.wordErrorRate)) "
                     + "score=\(String(format: "%.2f", verification.languageMatchScore))"
                 )
@@ -211,11 +218,11 @@ enum IOSAutorunHarness {
         } catch is CancellationError {
             record.status = "error"
             record.error = "cancelled"
-            print("[autorun] ✗ cancelled")
+            print("[device-diagnostics] ✗ cancelled")
         } catch {
             record.status = "error"
             record.error = error.localizedDescription
-            print("[autorun] ✗ \(error.localizedDescription)")
+            print("[device-diagnostics] ✗ \(error.localizedDescription)")
         }
 
         record.finishedAt = ISO8601DateFormatter().string(from: Date())
@@ -229,7 +236,6 @@ enum IOSAutorunHarness {
     @MainActor
     private static func buildPayload(
         spec: Spec,
-        model: ModelDescriptor,
         engine: TTSEngineStore
     ) async throws -> GenerationRequest.Payload {
         switch spec.mode {
@@ -244,55 +250,27 @@ enum IOSAutorunHarness {
                 deliveryStyle: nil
             )
         case .clone:
+            guard let requestedVoiceID = trimmedEnvironmentValue(cloneVoiceIDEnvKey) else {
+                throw DiagnosticsError(
+                    "clone diagnostics require \(cloneVoiceIDEnvKey) to identify an exact saved voice"
+                )
+            }
             let voices = try await engine.listPreparedVoices()
-            if let voice = voices.first {
-                return .clone(
-                    reference: CloneReference(
-                        audioPath: voice.audioPath,
-                        transcript: nil,
-                        preparedVoiceID: voice.id
-                    )
+            guard let voice = voices.first(where: { $0.id == requestedVoiceID }) else {
+                let availableIDs = voices.map(\.id).sorted().joined(separator: ", ")
+                throw DiagnosticsError(
+                    "saved clone voice '\(requestedVoiceID)' was not found"
+                    + (availableIDs.isEmpty ? "; no saved voices are installed" : "; available IDs: \(availableIDs)")
                 )
             }
-            // Headless-bench fallback: no enrolled voice → use a bundled English
-            // voice-preview clip as the clone reference. Clone needs a TRANSCRIPT to build
-            // the optimized voiceClonePrompt (NativeCloneSupport: createVoiceClonePrompt),
-            // so this only uses aiden/ryan — generated from the exact known phrase below
-            // (voice-previews/README.md). Exercises the clone encoder + generation path +
-            // memory fit (the point of a clone bench); NOT a quality reference (real cloning
-            // uses a user-enrolled recording). Lets `ios_device.sh bench clone:…` run with
-            // nothing enrolled.
-            if let previewURL = bundledPreviewReferenceURL() {
-                print("[autorun] clone: no saved voice — using bundled preview reference \(previewURL.lastPathComponent)")
-                return .clone(
-                    reference: CloneReference(
-                        audioPath: previewURL.path,
-                        transcript: bundledPreviewReferenceTranscript,
-                        preparedVoiceID: nil
-                    )
+            return .clone(
+                reference: CloneReference(
+                    audioPath: voice.audioPath,
+                    transcript: nil,
+                    preparedVoiceID: voice.id
                 )
-            }
-            throw HarnessError("clone autorun needs a saved voice or a bundled English preview reference (none found)")
+            )
         }
-    }
-
-    /// The exact phrase the English voice-previews were generated from
-    /// (`voice-previews/README.md`) — the matching transcript clone needs to build the
-    /// optimized voiceClonePrompt.
-    private static let bundledPreviewReferenceTranscript = "Hello, this is a sample of my voice."
-
-    /// A bundled ENGLISH preview WAV usable as a fallback clone reference for benching
-    /// (`Sources/Resources/voice-previews/<id>.wav`). Restricted to aiden/ryan because only
-    /// those have a documented transcript (the non-English previews use unknown text, and a
-    /// mismatched transcript degrades/blocks clone conditioning). Returns the first present.
-    private static func bundledPreviewReferenceURL() -> URL? {
-        for id in ["aiden", "ryan"] {
-            if let url = Bundle.main.url(forResource: id, withExtension: "wav", subdirectory: "voice-previews")
-                ?? Bundle.main.url(forResource: id, withExtension: "wav") {
-                return url
-            }
-        }
-        return nil
     }
 
     private static func trimmedEnvironmentValue(_ key: String) -> String? {
@@ -318,7 +296,7 @@ enum IOSAutorunHarness {
     private static func makeOutputPath(runID: String, model: ModelDescriptor) -> String {
         let dir = AppPaths.outputsDir
             .appendingPathComponent(model.outputSubfolder, isDirectory: true)
-            .appendingPathComponent("autorun", isDirectory: true)
+            .appendingPathComponent("device-diagnostics", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("\(runID).wav", isDirectory: false).path
     }
@@ -333,7 +311,7 @@ enum IOSAutorunHarness {
         let groupRunDir = AppPaths.appSupportDir
             .appendingPathComponent("diagnostics", isDirectory: true)
             .appendingPathComponent(runID, isDirectory: true)
-        writeData(data, to: groupRunDir.appendingPathComponent("autorun-done.json", isDirectory: false),
+        writeData(data, to: groupRunDir.appendingPathComponent("device-diagnostics-done.json", isDirectory: false),
                   label: "sentinel (app-group)")
 
         // 2) Pullable mirror in the app's OWN container. devicectl `copy from
@@ -344,7 +322,7 @@ enum IOSAutorunHarness {
         //    needs the sentinel + the engine telemetry here too.
         guard let pullableRoot = IOSPullableDiagnosticsMirror.pullableRoot else { return }
         writeData(data, to: pullableRoot.appendingPathComponent(runID, isDirectory: true)
-                    .appendingPathComponent("autorun-done.json", isDirectory: false),
+                    .appendingPathComponent("device-diagnostics-done.json", isDirectory: false),
                   label: "sentinel (pullable)")
         IOSPullableDiagnosticsMirror.syncEngineTelemetry(
             from: AppPaths.appSupportDir.appendingPathComponent("diagnostics", isDirectory: true),
@@ -357,9 +335,9 @@ enum IOSAutorunHarness {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
-            print("[autorun] \(label) → \(url.path)")
+            print("[device-diagnostics] \(label) → \(url.path)")
         } catch {
-            print("[autorun] could not write \(label): \(error.localizedDescription)")
+            print("[device-diagnostics] could not write \(label): \(error.localizedDescription)")
         }
     }
 
@@ -377,7 +355,7 @@ enum IOSAutorunHarness {
         return String(safe)
     }
 
-    private struct HarnessError: LocalizedError {
+    private struct DiagnosticsError: LocalizedError {
         let message: String
         init(_ message: String) { self.message = message }
         var errorDescription: String? { message }

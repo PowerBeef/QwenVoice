@@ -1,7 +1,7 @@
 
 [2026-06-16 · 0e7d6dd · P4 native 8GB full matrix]
 
-Telemetry summary — /Users/patricedery/Library/Application Support/QwenVoice/diagnostics
+Telemetry summary — ~/Library/Application Support/QwenVoice/diagnostics
 (76 runs across 36 cells; warm shows median)
 tier: floor_8gb_mac
 

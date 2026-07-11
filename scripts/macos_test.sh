@@ -143,7 +143,7 @@ cmd_logs() {
   note "saved $out"
 }
 
-# profile [spec]: Instruments/xctrace trace of an autorun generation via the `vocello` CLI
+# profile [spec]: Instruments/xctrace trace of a headless generation via the `vocello` CLI
 # (engine IN-PROCESS — the deterministic engine profile; the same engine code runs in the
 # XPC service). The engine emits OSSignpost intervals under subsystem com.qwenvoice.app,
 # category 'performance'. Default template 'Time Profiler'; override with
@@ -160,7 +160,7 @@ cmd_profile() {
   if [[ "${QVOICE_MAC_PROFILE_ALLOW_BENCH_FAIL:-0}" == "1" ]]; then
     allow_bench_fail=1
   fi
-  local spec="${1:-custom:speed:Profile autorun.}"
+  local spec="${1:-custom:speed:Profile headless generation.}"
   [[ "$spec" == *:* ]] || spec="custom:speed:$spec"
   local mode="${spec%%:*}"
   local rest="${spec#*:}"

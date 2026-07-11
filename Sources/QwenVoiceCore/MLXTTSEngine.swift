@@ -1450,17 +1450,15 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         details: [String: String],
         appSupportDirectoryURL: URL?
     ) async {
-#if DEBUG
+        guard TelemetryGate.resolvedEnabled else { return }
         await NativeDiagnosticEventJSONLWriter.shared.record(
             name: name,
             details: details,
             appSupportDirectoryURL: appSupportDirectoryURL
         )
-#endif
     }
 }
 
-#if DEBUG
 private actor NativeDiagnosticEventJSONLWriter {
     static let shared = NativeDiagnosticEventJSONLWriter()
 
@@ -1555,7 +1553,6 @@ private struct NativeDiagnosticEventRecord: Codable {
     let processName: String
     let details: [String: String]
 }
-#endif
 
 final class DiagnosticAppSupportBox: @unchecked Sendable {
     private let lock = NSLock()
