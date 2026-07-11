@@ -18,17 +18,18 @@ REQUIRED_SURFACES=(
     "scripts/check_backend_resource_contract.sh"
     "scripts/regenerate_project.sh"
     "scripts/build_foundation_targets.sh"
-    "scripts/ios_agent_ui.sh"
-    "scripts/lib/computer_use_routing.py"
-    "scripts/lib/ios_agent_ui.py"
-    "scripts/test_computer_use_routing.py"
+    "scripts/ui_test.sh"
+    "scripts/check_test_workflows.sh"
+    "scripts/check_ios_ui_benchmark.py"
+    "scripts/test_check_macos_xpc_bench.py"
+    "scripts/test_check_ios_ui_benchmark.py"
     "scripts/test_check_language_output.py"
     "scripts/release.sh"
     "Sources/Resources/qwenvoice_contract.json"
     "config/apple-platform-capability-matrix.json"
-    "config/ios-ui-scenarios.json"
-    "config/ios-test-impact.json"
-    "qa/ios-ui-attestation.json"
+    "Tests/UIAutomationSupport"
+    "Tests/VocelloMacUITests"
+    "Tests/VocelloiOSUITests"
     ".xcodebuildmcp/config.yaml"
     "project.yml"
 )
@@ -40,8 +41,8 @@ for required_surface in "${REQUIRED_SURFACES[@]}"; do
     fi
 done
 
-# iOS device tooling and bundled Computer Use are first-class. `scripts/ios_device.sh` owns
-# physical-device operations; `scripts/ios_agent_ui.sh` owns UI evidence and attestations.
+# iOS device tooling and explicit XCUITest are first-class. `scripts/ios_device.sh` owns
+# physical-device operations; `scripts/ui_test.sh` is the sole app-UI entry point.
 # The owned Qwen3 runtime now has one curated direct test target. Broad upstream
 # multi-model tests remain prohibited; only this exact directory is allowed.
 VENDOR_TEST_ROOT="$PROJECT_DIR/third_party_patches/mlx-audio-swift/Tests"
@@ -53,15 +54,15 @@ if [ -d "$VENDOR_TEST_ROOT" ]; then
         exit 1
     fi
 fi
-# NOTE: benchmarking, output-quality, AND iOS device/Computer Use surfaces are first-class
+# NOTE: benchmarking, output-quality, AND physical-device XCUITest surfaces are first-class
 # here (runtime telemetry, scripts/summarize_generation_telemetry.py, benchmarks/,
-# in-engine audioQC, scripts/ios_device.sh, and the iOS Computer Use skill). Committed
-# benchmark/QC scripts + baselines are allowed (bounded by the benchmarks/ cap below).
+# in-engine audioQC, scripts/ios_device.sh, and the isolated UI-test targets). Committed
+# benchmark/QC summaries are allowed (bounded by the benchmarks/ cap below).
 
 # General hygiene bans only (kept): vendored upstream tests, stale macOS-15 product /
 # old build-path names, and the Python-script variants (the "no Python backend"
-# standing decision — the .sh versions are canonical). The retired iOS-test /
-# UI-driving / QA reference bans were removed when that workflow was re-enabled.
+# standing decision — the .sh versions are canonical). UI-stack consistency is
+# enforced separately by check_test_workflows.sh.
 PROHIBITED_REFERENCE_PATTERNS=(
     "third_party_patches/mlx-audio-swift/Tests/(MLXAudioTTSTests|MLXAudioCodecsTests)"
     "QwenVoice-macos15.dmg"
@@ -69,19 +70,6 @@ PROHIBITED_REFERENCE_PATTERNS=(
     "scripts/check_qwen3_backend_only\.py"
     "scripts/check_ios_catalog\.py"
     "scripts/refresh_readme_screenshots\.py"
-    "VocelloiOSUITests"
-    "ios_uitest_doctor"
-    "enable_unattended_uitest"
-    "xcresult_shots"
-    "IOSStudioBenchHooks"
-    "check_ios_ui_bench"
-    "ios_vision_bench_matrix"
-    "ios_test_models"
-    "IOSModelsInventoryWriter"
-    "generate_ui_test_surface"
-    "ui-test-surface"
-    "record-capability"
-    "computer-use-capability"
 )
 
 for removed_pattern in "${PROHIBITED_REFERENCE_PATTERNS[@]}"; do
@@ -92,7 +80,7 @@ for removed_pattern in "${PROHIBITED_REFERENCE_PATTERNS[@]}"; do
             --glob '!build/**' \
             --glob '!scratch/**' \
             --glob '!**/scripts/check_project_inputs.sh' \
-            --glob '!**/scripts/check_doc_harness_drift.sh' \
+            --glob '!**/scripts/check_test_workflows.sh' \
             >/tmp/qwenvoice_removed_reference_grep 2>/dev/null; then
             echo "error: removed test/benchmark reference is still present:" >&2
             cat /tmp/qwenvoice_removed_reference_grep >&2
@@ -101,7 +89,7 @@ for removed_pattern in "${PROHIBITED_REFERENCE_PATTERNS[@]}"; do
         fi
     elif git -C "$PROJECT_DIR" grep -nE "$removed_pattern" -- \
         ':!:scripts/check_project_inputs.sh' \
-        ':!:scripts/check_doc_harness_drift.sh' \
+        ':!:scripts/check_test_workflows.sh' \
         ':!:build/**' \
         >/tmp/qwenvoice_removed_reference_grep 2>/dev/null; then
         echo "error: removed test/benchmark reference is still present:" >&2
@@ -206,7 +194,7 @@ fi
 # Committed benchmark logs are permitted but must stay bounded: only compact
 # human-readable summaries under benchmarks/, each <= 256 KB, never raw *.jsonl
 # (raw diagnostics belong on disk / gitignored, not in git history). The retired
-# harness / baseline-manifest / banned-symbol checks above still apply everywhere.
+# harness and banned-symbol checks above still apply everywhere.
 BENCHMARKS_DIR="$PROJECT_DIR/benchmarks"
 if [ -d "$BENCHMARKS_DIR" ]; then
     BENCH_MAX_BYTES=$((256 * 1024))
@@ -224,6 +212,6 @@ fi
 
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --project
 "$SCRIPT_DIR/check_qwen3_backend_only.sh"
-"$SCRIPT_DIR/check_doc_harness_drift.sh"
+"$SCRIPT_DIR/check_test_workflows.sh"
 
 echo "==> Project inputs are clean."

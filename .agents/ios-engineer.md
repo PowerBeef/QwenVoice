@@ -34,10 +34,9 @@ Before changing iOS UI or behavior, read:
 
 - **Shell scripts** are the only way to build/test/run real-engine iOS work on device:
   - `scripts/ios_device.sh preflight`
-  - `scripts/ios_device.sh test` / `ui-test`
+  - `scripts/ios_device.sh test`
   - `scripts/ios_device.sh profile [spec]`
   - `scripts/ios_device.sh crashes`
-  - `scripts/ios_device.sh review [--baseline]`
   - `scripts/ios_device.sh gate`
 - Use OpenAI Build iOS Apps skills for code structure and physical-device build/run/debug support.
   The plugin supplies the one shared XcodeBuildMCP server: call `session_show_defaults`, select
@@ -45,35 +44,30 @@ Before changing iOS UI or behavior, read:
   Repository scripts remain authoritative for build, launch, telemetry, profiling, and crash proof.
 - Use authoritative Apple documentation for current framework APIs. GitHub integration may be
   used for repository context; scripts remain the test interface.
-- **Bundled Computer Use owns iOS UI.** During ordinary development,
-  `scripts/ios_agent_ui.sh impact` is advisory and missing device/UI/model evidence never blocks a
-  commit, push, pull request, or ordinary merge. Invoke `$vocello-ios-ui-qa` for explicitly
-  requested quick/full/benchmark/review work and for iOS archive/TestFlight acceptance. It targets
-  `com.apple.ScreenContinuity`, derives every click from the current screenshot, and records device
-  telemetry through `scripts/ios_agent_ui.sh`. Never restore an alternate iOS UI MCP, XCTest UI
-  runner, hardcoded coordinate table, or Simulator route.
+- **XCUITest owns iOS UI.** It runs only on the paired physical iPhone. Run smoke and
+  benchmark lanes only for explicitly requested frontend acceptance.
+  Missing device, UI, or model evidence never blocks a commit, push, pull request, ordinary merge,
+  or ordinary CI. Never add a Simulator route, alternate UI driver, or coordinate table.
 
 ## Build / test commands
 
 ```sh
 # Ordinary development (compile only, no simulator launch or device/UI prerequisite)
 ./scripts/build_foundation_targets.sh ios
-scripts/ios_agent_ui.sh impact        # advisory frontend scope
 
-# Explicit frontend acceptance / iOS archive-TestFlight only. Never use Simulator.
+# Explicit frontend acceptance only. Never use Simulator.
 scripts/ios_device.sh preflight
-# Computer Use verifies all Speed tiers in Settings before generation.
-# Invoke $vocello-ios-ui-qa quick|full|benchmark as required.
-scripts/ios_device.sh test            # validate quick Computer Use evidence
-scripts/ios_device.sh ui-test --suite full
-scripts/ios_device.sh gate            # strict acceptance, not a development-publishing check
+# XCUITest verifies all Speed tiers visibly in Settings before generation.
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
+scripts/ios_device.sh gate            # deterministic physical-device/runtime proof
 ```
 
 ## Invariants (do not regress)
 
-- **All iOS runtime work is on-device only.** The MLX engine runs in-process on Metal. Computer Use
-  drives the paired iPhone through iPhone Mirroring; scripts handle the device and telemetry. The
-  generic physical-device SDK compile is the sole no-phone iOS development lane.
+- **All iOS runtime work is on-device only.** The MLX engine runs in-process on Metal. XCUITest
+  drives the paired physical iPhone; scripts handle the device and telemetry. The generic
+  physical-device SDK compile is the sole no-phone iOS development lane.
 - **Cooperative cancel.** iOS does not conform to `ActiveGenerationCancellable`. The generate
   flow must discard the result on `Task.isCancelled` so cancelled takes never land in History.
 - **Use `IOSScrollView`.** iOS vertical scroll surfaces use `IOSScrollView`, not raw `ScrollView`.

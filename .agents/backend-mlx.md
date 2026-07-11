@@ -41,15 +41,12 @@ Before changing anything in this layer, read:
 - Skills guide implementation and diagnosis; shell builds, tests, benchmarks, and their artifacts
   remain authoritative. Where no skill applies, inspect vendored source and authoritative Apple,
   package, or Hugging Face documentation.
-- Browser and Computer Use may support exploratory inspection, but never replace benchmarks,
-  compile checks, or physical-device iOS gates.
-- `scripts/macos_agent_ui.sh impact` is advisory during development: use it to identify later
-  frontend scope, but never withhold a commit, push, pull request, or ordinary merge because UI,
-  model, or device evidence is absent. Explicit frontend acceptance and macOS release work require
-  every returned suite and runtime check. Full and benchmark are independent; telemetry-affecting
-  release work also runs `scripts/macos_test.sh telemetry-overhead` after the current full UI
-  attestation proves visible model readiness. Frontend observations do not prove backend completion;
-  `verify-probes` must join typed app/XPC/backend rows by `generationID`.
+- Browser inspection may support website work, but never replaces benchmarks, compile checks, or
+  physical-device iOS gates.
+- XCUITest is the sole autonomous app UI driver. Smoke and benchmark UI lanes are explicit
+  frontend acceptance only and never a prerequisite for a commit, push, pull request, ordinary
+  merge, ordinary CI, or release package. Frontend observations do not prove backend completion;
+  typed app/XPC/backend rows must still join by `generationID`.
 
 ## Build / test commands
 

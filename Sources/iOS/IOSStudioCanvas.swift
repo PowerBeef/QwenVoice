@@ -223,7 +223,22 @@ struct IOSStudioCanvas<SetupChips: View>: View {
                     .font(.system(size: 12, weight: .medium))
                     .tracking(0.24)               // letter-spacing 0.02em ≈ 0.24pt at 12pt
                     .foregroundStyle(IOSAppTheme.textSecondary)
+                    .accessibilityIdentifier("textInput_modeMetaLabel")
                 Spacer()
+                if !script.isEmpty {
+                    Button {
+                        script = ""
+                        isScriptFocused = false
+                    } label: {
+                        Text("Clear")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(IOSAppTheme.textSecondary)
+                    .accessibilityLabel("Clear script")
+                    .accessibilityIdentifier(IOSAccessibilityIdentifier.TextInput.clearButton)
+                }
                 Text("\(script.count) / \(charLimit)")
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
                     .foregroundStyle(script.count > charLimit ? Color.orange : IOSAppTheme.textSecondary)

@@ -103,12 +103,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         return modelManager.hasInstalledVariant(for: generationMode)
     }
 
-    @MainActor static func defaultInitialSelection(
-        launchOverride: SidebarItem? = AppLaunchConfiguration.current.initialSidebarItem
-    ) -> SidebarItem {
-        if let launchOverride {
-            return launchOverride
-        }
+    @MainActor static func defaultInitialSelection() -> SidebarItem {
         return .customVoice
     }
 }
@@ -120,8 +115,6 @@ struct ContentView: View {
     @Environment(SavedVoicesViewModel.self) private var savedVoicesViewModel
     @EnvironmentObject private var appCommandRouter: AppCommandRouter
 
-    private let launchSidebarOverride: SidebarItem?
-
     static let lastSidebarItemKey = "QwenVoice.LastSelectedSidebarItem"
     static let lastVoiceCloningSavedVoiceIDKey = "QwenVoice.LastVoiceCloningSavedVoiceID"
 
@@ -132,7 +125,6 @@ struct ContentView: View {
     private var persistedVoiceCloningSavedVoiceID: String = ""
 
     @State private var selectedItem: SidebarItem?
-    @State private var protectedLaunchOverride: SidebarItem?
     /// When the user clicks a disabled generation tab, the
     /// sidebar redirects to Settings and asks the Models page to
     /// flash that mode's row. Keyed by `GenerationMode` (not
@@ -161,11 +153,6 @@ struct ContentView: View {
         modelManager.hasInstalledVariant(for: .clone)
     }
 
-    private var isPreservingLaunchOverrideSelection: Bool {
-        guard let protectedLaunchOverride else { return false }
-        return selectedItem == protectedLaunchOverride
-    }
-
     private var sidebarSelectionBinding: Binding<SidebarItem?> {
         Binding(
             get: { selectedItem },
@@ -177,32 +164,19 @@ struct ContentView: View {
     }
 
     init() {
-        let launchSidebarOverride = AppLaunchConfiguration.current.initialSidebarItem
-        self.launchSidebarOverride = launchSidebarOverride
-
-        // When a runtime debug launch override is active (Computer Use screen pinning) we
-        // ignore the persisted sidebar + VC reference state so diagnostic runs stay
-        // hermetic. The override-less case reads through AppDefaults directly
-        // because @AppStorage isn't materialised inside `init` yet.
-        let initialSelection: SidebarItem
+        // Read through AppDefaults because @AppStorage is not materialized in init yet.
+        let storedSidebar = AppDefaults.store
+            .string(forKey: ContentView.lastSidebarItemKey)
+            .flatMap(SidebarItem.init(rawValue:))
+        let initialSelection = storedSidebar ?? SidebarItem.defaultInitialSelection()
         var initialDraft = VoiceCloningDraft()
-        if let launchSidebarOverride {
-            initialSelection = launchSidebarOverride
-        } else {
-            let storedSidebar = AppDefaults.store
-                .string(forKey: ContentView.lastSidebarItemKey)
-                .flatMap(SidebarItem.init(rawValue:))
-            initialSelection = storedSidebar ?? SidebarItem.defaultInitialSelection(launchOverride: nil)
-
-            let storedVoiceID = AppDefaults.store
-                .string(forKey: ContentView.lastVoiceCloningSavedVoiceIDKey)
-            if let storedVoiceID, !storedVoiceID.isEmpty {
-                initialDraft.selectedSavedVoiceID = storedVoiceID
-            }
+        let storedVoiceID = AppDefaults.store
+            .string(forKey: ContentView.lastVoiceCloningSavedVoiceIDKey)
+        if let storedVoiceID, !storedVoiceID.isEmpty {
+            initialDraft.selectedSavedVoiceID = storedVoiceID
         }
 
         _selectedItem = State(initialValue: initialSelection)
-        _protectedLaunchOverride = State(initialValue: launchSidebarOverride)
         _voiceCloningDraft = State(initialValue: initialDraft)
     }
 
@@ -377,20 +351,13 @@ struct ContentView: View {
     private func handleInitialLoad() async {
         await modelManager.refresh()
         didCompleteInitialAvailabilityRefresh = true
-        if !isPreservingLaunchOverrideSelection {
-            reconcileSelectionWithAvailability()
-        }
+        reconcileSelectionWithAvailability()
         scheduleGenerationWarmupIfNeeded(for: selectedItem, allowClonePrime: false)
     }
 
     private func handleSelectionChange(_ newValue: SidebarItem?) {
-        if let protectedLaunchOverride, newValue != protectedLaunchOverride {
-            self.protectedLaunchOverride = nil
-        }
-        // Persist the selection so the next cold launch restores the last
-        // sidebar item. Skipped under a runtime debug launch override to keep
-        // diagnostic runs hermetic.
-        if launchSidebarOverride == nil, let newValue {
+        // Persist the selection so the next cold launch restores the last sidebar item.
+        if let newValue {
             persistedSidebarItem = newValue
         }
         scheduleGenerationWarmupIfNeeded(for: newValue)
@@ -398,14 +365,12 @@ struct ContentView: View {
 
     private func handleStatusesChange() {
         guard didCompleteInitialAvailabilityRefresh else { return }
-        guard !isPreservingLaunchOverrideSelection else { return }
         reconcileSelectionWithAvailability()
         scheduleGenerationWarmupIfNeeded(for: selectedItem)
     }
 
     private func handleActiveVariantChange() {
         guard didCompleteInitialAvailabilityRefresh else { return }
-        guard !isPreservingLaunchOverrideSelection else { return }
         reconcileSelectionWithAvailability()
         scheduleGenerationWarmupIfNeeded(for: selectedItem)
     }
@@ -430,7 +395,6 @@ struct ContentView: View {
         // restores it on next launch. The existing `syncSavedVoiceSelectionState`
         // hydration path will reload `wavPath` + transcript from disk, or clear
         // the draft if the voice was deleted between launches.
-        guard launchSidebarOverride == nil else { return }
         persistedVoiceCloningSavedVoiceID = newValue ?? ""
     }
 

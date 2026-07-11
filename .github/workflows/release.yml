@@ -1,7 +1,7 @@
 name: Release
 
-# Vocello release packaging. Signing and notarization cannot start until the unconditional
-# deterministic and frontend release-readiness gate passes.
+# Vocello release packaging. Signing and notarization start only after deterministic
+# release-readiness checks pass. UI acceptance is an explicit XCUITest run outside hosted CI.
 #
 # Triggers:
 #   - release.published: user clicks "Publish release" in the GitHub UI;
@@ -13,12 +13,11 @@ name: Release
 #
 # Jobs:
 #   - package: macOS DMG production (signed + notarized + stapled), gated by current macOS
-#     deterministic, model-readiness, full, benchmark, and telemetry evidence.
+#     deterministic release checks.
 #   - compile-ios: iOS compile-safety only. Runs in parallel with
 #     `package` and does NOT block macOS publishing if it fails.
-#   - archive-ios: optional manual signed archive / TestFlight lane, gated by current iOS full and
-#     benchmark Computer Use evidence before signing material is imported. Neither platform's UI
-#     evidence blocks deterministic CI or the other platform's release job.
+#   - archive-ios: optional manual signed archive / TestFlight lane. Physical-device XCUITest is an
+#     independent explicit frontend-QA lane and is not required before dispatch.
 #
 # Toolchain pinning mirrors the local setup documented in .agents/release-qa-engineer.md:
 #   - Xcode 26.0 (project.yml `xcodeVersion: "26.0"`)
@@ -112,7 +111,6 @@ jobs:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      QVOICE_RELEASE_READINESS_MODE: ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -301,7 +299,7 @@ jobs:
     # SELF-SERVE (no Apple approval) and is enabled on com.patricedery.vocello
     # (the engine runs in-process — there is no separate extension App ID);
     # local on-device build/test tooling is re-established (scripts/ios_device.sh
-    # + the QVOICE_IOS_AUTORUN harness + bundled Computer Use acceptance; see
+    # + the QVOICE_IOS_AUTORUN harness; optional physical-device XCUITest is documented in
     # docs/reference/ios-device-testing.md). A CI signed lane still needs:
     #   1. iOS Distribution certificate enrolled in the Apple Developer team.
     #   2. A Distribution provisioning profile for the com.patricedery.vocello
@@ -403,11 +401,6 @@ jobs:
         env:
           QWENVOICE_DEVELOPMENT_TEAM: ${{ secrets.QWENVOICE_DEVELOPMENT_TEAM }}
         run: ./scripts/regenerate_project.sh
-
-      - name: Require current iOS frontend release evidence
-        # Fail before importing certificates or provisioning profiles. macOS frontend evidence is
-        # intentionally not consulted by this platform-specific archive/TestFlight lane.
-        run: scripts/ios_agent_ui.sh release-check
 
       - name: Import signing assets
         env:

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Vocello macOS UI QA"
-  short_description: "Run explicit macOS UI or release acceptance"
-  default_prompt: "Use $vocello-macos-ui-qa when macOS frontend acceptance is explicitly requested or a macOS release is being prepared; ordinary development and Git publishing use deterministic checks only."

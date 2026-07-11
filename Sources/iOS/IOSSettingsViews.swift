@@ -545,6 +545,9 @@ struct IOSModelRow: View {
                     .foregroundStyle(statusSummaryText == "Active"
                                      ? IOSBrandTheme.modeColor(for: model.mode)
                                      : IOSAppTheme.textSecondary)
+                    .accessibilityLabel("\(model.mode.displayName) model status")
+                    .accessibilityValue(statusSummaryText)
+                    .accessibilityIdentifier("iosModelStatus_\(model.id)")
             }
         }
         .iosScaledFont(size: 12, relativeTo: .caption)

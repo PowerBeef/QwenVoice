@@ -7,7 +7,6 @@ It serves two roles:
   Voice Cloning), one clip or many, scriptable with JSON output and stdin piping.
 - **Deterministic benchmark/test driver** — drive the perf/quality matrix in-process (cold/warm
   controlled exactly via load/unload, no UI waits), aggregate telemetry, and append a perf-ledger row.
-  This replaced computer-use UI-driving for anything scripted.
 
 It links the engine frameworks directly (no XPC), **ships no model weights and no Python**, and runs
 **in place** beside its MLX metallib bundle. It shares the same on-disk model store as the app

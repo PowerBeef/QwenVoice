@@ -1,19 +1,17 @@
 # Vocello for iPhone — app guide + test-driving reference
 
 A consolidated map of the Vocello iOS app: what every screen/element/option does (user
-view) and how to drive it in tests like a human (identifier/label → action → expected).
-Use this to author accurate, human-like Computer Use flows and to understand the app before
-touching `Sources/iOS/`. All iOS UI work runs on a paired physical device through iPhone
-Mirroring; MLX cannot initialize on the iOS Simulator.
+view) and how XCUITest drives it (stable identifier → action → expected). Use this to understand the
+app before touching `Sources/iOS/`. All iOS UI work runs on a paired physical device; MLX cannot
+initialize on the iOS Simulator.
 
 > **Where this fits:** this is the canonical "what the app is + how to drive it" reference.
 > The testing strategy lives in [`testing-runbook.md`](testing-runbook.md);
 > device lanes (`scripts/ios_device.sh`) in [`ios-device-testing.md`](ios-device-testing.md);
 > generation-engine internals in [`../ARCHITECTURE.md`](../ARCHITECTURE.md);
 > tone/delivery prompt-writing in [`../qwen_tone.md`](../qwen_tone.md).
-> The compact UI state map is [`ios-ui-reference.md`](ios-ui-reference.md), and the frontend
-> acceptance index is [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md). Bundled Computer Use through
-> iPhone Mirroring is the only iOS automation driver.
+> The compact UI state map is [`ios-ui-reference.md`](ios-ui-reference.md). XCUITest is the only
+> autonomous iOS app UI driver.
 
 ---
 
@@ -45,35 +43,32 @@ The UI is what this guide drives. For headless, no-UI generation see `IOSAutorun
 
 Three pages (Welcome → Install → Ready). Controls: `onboarding_skip` (top-right on pages
 1–2) and `onboarding_cta` (primary button; label changes per page: "Get started" →
-"Continue" → "Open Studio"). Fast path: `QVOICE_IOS_SKIP_ONBOARDING=1` (the test
-coordinator sets this) bypasses onboarding straight to Studio.
+"Continue" → "Open Studio"). Tests interact with these visible controls. There is no hidden
+onboarding bypass.
 
 ### Studio — `Sources/iOS/IOSStudioCanvas.swift`, `IOSGenerationModeViews.swift`
 
 The mode segmented control is `generateSectionPicker` (`.contain`) with
-`generateSection_custom|design|clone`. The Studio surface uses
-`screenPresenceMarker("screen_generateStudio")` — a 1pt leaf marker so the screen id is
-queryable without shadowing descendants (see §5).
+`generateSection_custom|design|clone`. Tests establish Studio state from the visible root tab,
+mode segments, composer, and primary action; there is no hidden screen-presence marker.
 
 | Element | Identifier | Notes |
 |---|---|---|
 | Mode segment | `generateSection_custom\|design\|clone` | Tap to switch mode (keeps its id — not shadowed) |
 | Script composer | `textInput_textEditor` | Multi-line; live char counter `textInput_lengthCount`; over-limit warning `textInput_limitMessage` |
-| Batch affordance | `textInput_batchButton` | Appears for multi-line scripts |
 | **Generate CTA** | `textInput_generateButton` | Shown when the mode's model is installed |
 | **Install CTA** | `textInput_installModelButton` | Shown instead of Generate when the model is **missing** (see §3) |
 | Cancel | `textInput_cancelButton` | Inside the generating progress bar |
 | Error retry | `textInput_generationError` | Retry bar on a failed generation |
 | Inline player | `studio_inlinePlayer` (completed take) / `studio_livePreviewPlayer` (live streaming preview) | Live streaming preview + completed-take card. `studioPlayerCard` is a SwiftUI view identity, not an accessibility identifier. |
 
-**Selector pills (chips)** — `studioChip_*` identifiers are directly queryable in Studio
-(via `screenPresenceMarker`). Per mode:
+**Selector pills (chips)** — `studioChip_*` identifiers are directly queryable in Studio. Per mode:
 
-| Mode | Pills (label prefix → opens) |
+| Mode | Identified pills |
 |---|---|
-| Custom | Voice (`"Voice: "` → voice picker) · Delivery (`"Delivery: "` → delivery picker) · Language (`"Language:"` → language picker) |
-| Design | Voice brief (`"Voice brief:"` → brief editor) · Delivery (`"Delivery: "`) · Language (`"Language:"`) |
-| Clone | Reference (`studioChip_reference` → record or saved voice) · Language (`"Language:"`) |
+| Custom | `studioChip_voice` → voice picker · `studioChip_delivery` · `studioChip_language` |
+| Design | `studioChip_voiceBrief` → brief editor · `studioChip_delivery` · `studioChip_language` |
+| Clone | `studioChip_reference` → record or saved voice · `studioChip_language` |
 
 ### Bottom sheets — `Sources/iOS/Sheets/IOSBottomSheets.swift`
 
@@ -100,8 +95,14 @@ tone editor: `deliveryPickerSheet_customTone` (toggle in), `deliveryPickerSheet_
 
 Container `screen_voices`. Filter chips `voicesFilter_all|builtIn|saved`. Built-in rows
 `voicesRow_<speakerId>` (e.g. `voicesRow_aiden`); saved-voice rows `voicesRow_saved_<id>`.
-"Save a new voice" card `voices_saveNewVoice` (opens the record flow). Search field
-`voicesSearchField`. Record/import flow uses the `iosRecord_*` controls (see below).
+The Save a New Voice card has two visible actions: `voices_saveNewVoice` starts the recorder and
+`voices_importAudioFile` opens the native Files picker for WAV, MP3, AIFF, or M4A audio. An imported
+clip is materialized into app-owned storage before enrollment. A neighboring `.txt` sidecar, when
+present, prefills the transcript. The enrollment sheet exposes `saveVoice_nameField`,
+`saveVoice_transcriptEditor`, and `saveVoice_saveButton`; a successful save creates
+`voicesRow_saved_<id>` and hands the reference to Studio Clone. The app also declares itself as an
+alternate audio-file viewer, so opening supported audio from Files enters this same import and
+enrollment flow. Search is `voicesSearchField`.
 
 ### History tab — `Sources/iOS/IOSLibraryViews.swift`
 
@@ -124,8 +125,8 @@ Voice Models rows `iosModelRow_<modelID>` (full lifecycle — see §3). Prefs:
 ### Player + overlays
 
 Full-screen player (`Sources/iOS/Sheets/IOSPlayerSheet.swift`): `iosPlayer_save`,
-`iosPlayer_playPause`, `iosPlayer_download` (the scrubber + transcript stay unlabeled —
-minor gap). Recording overlay (`Sources/iOS/Overlays/IOSRecordingOverlay.swift`):
+`iosPlayer_playPause`, `iosPlayer_download`, `iosPlayer_scrubber`, and
+`iosPlayer_transcript`. Recording overlay (`Sources/iOS/Overlays/IOSRecordingOverlay.swift`):
 `iosRecord_close`, `iosRecord_start` / `iosRecord_stop`, `iosRecord_retake`, `iosRecord_use`.
 Lifecycle toasts (`IOSEngineLifecycleToast.swift`) are transient ("Preparing runtime",
 "Model loading") and labeled with `engineLifecycleToast_<id>`.
@@ -163,11 +164,10 @@ The composer's primary CTA reflects model readiness:
 So "is this mode ready to generate?" is **test-readable from the Studio surface**: if
 `textInput_installModelButton` is present, the model isn't installed.
 
-### Human and Computer Use preconditions
+### Generation-test preconditions
 
-**Always confirm the mode's model is installed before composing/generating.** The current mirror
-screenshot must show Generate rather than Install. Destructive install/cancel/delete actions are
-outside normal suites and require action-time confirmation.
+**Always confirm the mode's model is installed before composing/generating.** XCUITest requires
+Generate rather than Install. Destructive install/cancel/delete actions are outside normal lanes.
 
 ### Model lifecycle sequence
 
@@ -189,11 +189,12 @@ outside normal suites and require action-time confirmation.
 - **Voice Design** — describe a voice in plain language (character, age, accent, gender,
   pitch); the model invents a new voice from that brief each call. Name gender + concrete
   pitch register to avoid underspecified results. The result can be saved and reused in Clone.
-- **Voice Cloning** — supply a reference clip (record in-app on this iPhone; ~10–20 s clean clip),
-  optionally with a transcript (auto-fillable via on-device speech
-  recognition). Saved voices from the Voices tab are reusable references. Clone cannot take a
-  separate delivery instruction on current checkpoints — pick a reference clip that already
-  carries the delivery you want.
+- **Voice Cloning** — supply a reference clip by recording in-app on this iPhone or importing a
+  WAV, MP3, AIFF, or M4A file. A neighboring `.txt` file can prefill an imported clip's transcript;
+  recordings can use on-device speech recognition. Enrollment saves an app-owned reference and
+  hands it directly to Clone. Saved voices from the Voices tab are reusable references. Clone
+  cannot take a separate delivery instruction on current checkpoints — pick a reference clip that
+  already carries the delivery you want.
 
 ### Speakers (Custom Voice) — `qwenvoice_contract.json`
 
@@ -220,25 +221,28 @@ Italian. The instruction/brief language is independent of the spoken-text langua
 ### Cross-cutting
 
 - **Speed vs Quality** — iOS is Speed-only (smaller, faster, lower memory). Quality (8-bit) is macOS-only.
-- **Reproducible takes** — Settings → `iosSettings_variationRow`: **Expressive** (most variety, default) / **Balanced** / **Consistent** (most stable). Each generation records its seed; a multi-line batch shares one seed so it reads as one performance.
+- **Reproducible takes** — Settings → `iosSettings_variationRow`: **Expressive** (most variety,
+  default) / **Balanced** / **Consistent** (most stable). Each generation records its seed. Batch
+  generation is intentionally absent from iOS.
 - **Text limits** — enforced live (`textInput_lengthCount` + `textInput_limitMessage`); custom-tone cap `/500`.
 
 ---
 
-## 5. Driving through Computer Use
+## 5. Driving through XCUITest
 
-The mirror accessibility tree exposes only window chrome. `$vocello-ios-ui-qa` therefore observes
-the current device screenshot, locates the target visually, clicks its current center in app-local
-coordinates, and immediately re-observes. Coordinates are never reused across states or committed
-as a table.
+`VocelloiOSUITests` uses stable accessibility identifiers, condition-based waits, and shared test
+support. Coordinates, OCR taps, and label-only fallback tables are not accepted test selectors.
 
 Canonical flows remain:
 
 - Onboarding → Studio: advance or skip until the Studio tabs and composer are visible.
 - Custom: select Custom, confirm model readiness, configure voice/delivery/language, compose,
-  Generate, verify the completed player, then run `ios_agent_ui.sh verify-generation`.
+  Generate, then verify the completed player and matching deterministic evidence.
 - Design: select Design, enter a voice brief, compose, Generate, and verify telemetry.
 - Clone: select Clone, choose a saved reference, compose, Generate, and verify telemetry.
+- Import: Voices → `voices_importAudioFile` → choose a supported file in the native picker → confirm
+  name/transcript through `saveVoice_*` → verify the saved row and Clone handoff. System-picker
+  interaction is explicit product acceptance, not part of the minimal smoke or benchmark lane.
 - History: open the History tab, find the generated take, and replay it.
 - Settings: review model and preference state; restore any reversible preference change.
 
@@ -247,19 +251,21 @@ Gotchas:
 1. Picker selection is provisional until its visible Confirm action is activated.
 2. Dismiss the keyboard before Generate when it obscures the button.
 3. Wait for cold model loading rather than repeating a click.
-4. Save a new screenshot after every semantic state transition.
-5. Recording and destructive model lifecycle actions require attended confirmation and are outside
-   ordinary quick/full/benchmark suites.
+4. Attach named screenshots at important semantic states and failures.
+5. Recording and destructive model lifecycle actions require attended setup and are outside the
+   smoke and benchmark lanes.
 
 ---
 
 ## 6. Remaining test-coverage gaps (driveability backlog)
 
-Most interactive controls now carry an `accessibilityIdentifier`. Still missing (driving
-them needs label/coordinate hacks or new ids):
+Most interactive controls now carry an `accessibilityIdentifier`. If a future scenario needs a
+control without one, add a stable identifier before automating it; label-only and coordinate
+fallbacks are not supported.
 
 - ~~Player sheet scrubber + transcript~~ — **closed 2026-07-02**: the scrubber is an adjustable VoiceOver element (`iosPlayer_scrubber`, "Playback position" + value) and the karaoke transcript reads as one prose element (`iosPlayer_transcript`).
-- **Mode meta labels** ("Built-in voice" / "Designed voice"), section headings, empty-state cards, sheet titles — low-value to drive; label by text if needed.
+- **Mode meta labels** ("Built-in voice" / "Designed voice"), section headings, empty-state cards,
+  and sheet titles are currently descriptive rather than test-driving targets.
 - **Lifecycle toasts** — transient, but labeled with `engineLifecycleToast_<id>`.
 
 A separate, optional follow-up is consolidating **all** ids (most are inline string

@@ -1217,7 +1217,7 @@ table.matrix .note {
       <li>macOS: SwiftUI → QwenVoiceNative → XPC EngineServiceHost → MLXTTSEngine.</li>
       <li>iOS: SwiftUI → in-process TTSEngineStore → MLXTTSEngine; physical-device testing only.</li>
       <li>CLI: vocello → CLIRuntime → MLXTTSEngine; built from source and not bundled in the DMG.</li>
-      <li>Sources/ and project.yml outrank documentation. Deterministic scripts govern development; strict Computer Use gates are explicit acceptance and release-only.</li>
+      <li>Sources/ and project.yml outrank documentation. Deterministic scripts govern development and release packaging; XCUITest smoke and benchmark lanes are explicit frontend acceptance only.</li>
     </ul>
   </section>
 </noscript>
@@ -1319,7 +1319,7 @@ table.matrix .note {
           <li>Module <code>QVoiceiOS</code></li>
           <li>Bundle <code>com.patricedery.vocello</code></li>
           <li>Tabs: Studio · Voices · History · Settings</li>
-          <li>Speed only · App Group storage</li>
+          <li>Speed only · App Group storage · Files reference import</li>
         </ul>
       </article>
       <article class="host-card">
@@ -1361,7 +1361,7 @@ table.matrix .note {
         <div class="mark"></div>
         <div>
           <h4>iOS = physical device only</h4>
-          <p>Gates never use Simulator. Bundled Computer Use drives the paired iPhone through iPhone Mirroring.</p>
+          <p>Gates never use Simulator. XCUITest drives the paired physical iPhone.</p>
         </div>
       </div>
     </div>
@@ -1507,7 +1507,7 @@ table.matrix .note {
     <h2 class="section-title">Scripts, tests &amp; CI</h2>
     <p class="section-lede">
       Development is Codex-first and scripts remain the executable source of truth.
-      Native builds are the typecheck. Commits, pushes, pull requests, ordinary merges, and CI use deterministic checks only; impact reports are advisory. Bundled Computer Use remains the sole frontend driver for explicit acceptance and platform-specific releases.
+      Native builds are the typecheck. Commits, pushes, pull requests, ordinary merges, CI, and release packaging use deterministic checks only. XCUITest smoke and benchmark lanes are explicit frontend acceptance work.
     </p>
 
     <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Build, test, release, and Codex workflow categories"></div>
@@ -1518,20 +1518,17 @@ table.matrix .note {
         <h4>macOS development</h4>
         <pre>./scripts/check_project_inputs.sh
 scripts/macos_test.sh test
-./scripts/build.sh build
-scripts/macos_agent_ui.sh impact  # advisory</pre>
+./scripts/build.sh build</pre>
       </article>
       <article class="gate-card">
         <h4>iOS development</h4>
         <pre>./scripts/check_project_inputs.sh
-./scripts/build_foundation_targets.sh ios
-scripts/ios_agent_ui.sh impact  # advisory</pre>
+./scripts/build_foundation_targets.sh ios</pre>
       </article>
     </div>
     <p class="section-lede" style="margin-top:16px">
-      Strict gates remain available for explicit frontend acceptance. macOS packaging requires
-      <code>scripts/macos_test.sh release-readiness</code>; iOS archive/TestFlight requires
-      <code>scripts/ios_agent_ui.sh release-check</code>. Each artifact requires only its own platform evidence.
+      XCUITest smoke and benchmark lanes remain available for explicit frontend acceptance. They
+      never block signing, notarization, archive creation, or artifact upload.
     </p>
   </section>
 
@@ -1566,12 +1563,12 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
     <div class="dist-grid">
       <article class="dist-card">
         <h4>macOS release</h4>
-        <p>Signed Developer ID + notarized + stapled DMG (<code>Vocello-macos26.dmg</code>) via <code>scripts/release.sh</code> and <code>.github/workflows/release.yml</code>, gated by fresh macOS-only frontend evidence.</p>
+        <p>Signed Developer ID + notarized + stapled DMG (<code>Vocello-macos26.dmg</code>) via <code>scripts/release.sh</code> and <code>.github/workflows/release.yml</code>, gated by deterministic release-readiness and artifact checks.</p>
         <span class="status">Shipped · 2.1.0</span>
       </article>
       <article class="dist-card">
         <h4>iOS distribution</h4>
-        <p>App Store / TestFlight path exists as a manual CI job (<code>archive_ios</code>) gated by fresh iOS-only frontend evidence. Not on GitHub Releases yet.</p>
+        <p>App Store / TestFlight path exists as a manual CI job (<code>archive_ios</code>) gated by signing, entitlement, archive, catalog, and artifact checks. Not on GitHub Releases yet.</p>
         <span class="status soon">Arriving soon</span>
       </article>
       <article class="dist-card">
@@ -1617,7 +1614,7 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
   </section>
 
   <footer class="map-footer">
-    <div>Canonical Vocello engineering atlas · code and manifests win over this map · reviewed 2026-07-09</div>
+    <div>Canonical Vocello engineering atlas · code and manifests win over this map · reviewed 2026-07-11</div>
     <div>MIT · QwenVoice monorepo</div>
   </footer>
 </div>
@@ -1627,7 +1624,7 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
 {
   "meta": {
     "title": "Vocello project map",
-    "reviewed": "2026-07-09",
+    "reviewed": "2026-07-11",
     "canonicalPath": "docs/project-map.html",
     "sourcesOfTruth": [
       "Sources/",
@@ -1642,7 +1639,7 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
   "features": [
     {"name":"Custom Voice","macos":"yes","ios":"yes","cli":"yes","note":"9 built-in speakers; delivery and language control"},
     {"name":"Voice Design","macos":"yes","ios":"yes","cli":"yes","note":"Natural-language brief; result can become a Saved Voice"},
-    {"name":"Voice Cloning","macos":"yes","ios":"yes","cli":"yes","note":"Reference import/enrollment; microphone recording in apps"},
+    {"name":"Voice Cloning","macos":"yes","ios":"yes","cli":"yes","note":"Reference import/enrollment; iOS Files picker and document-open route; microphone recording in apps"},
     {"name":"Delivery presets / custom tone","macos":"yes","ios":"yes","cli":"yes","note":"10 presets × intensity; Clone follows its reference"},
     {"name":"Language pin / Auto","macos":"yes","ios":"yes","cli":"yes","note":"10 spoken languages plus Auto"},
     {"name":"Speed (4-bit) models","macos":"yes","ios":"yes","cli":"yes","note":"iOS production tier; about 2.31–2.34 GB per mode"},
@@ -1699,6 +1696,7 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
       "body":"Record or import references, optionally transcribe locally, cache prepared clone prompts, replay/export generations, and manage per-mode model packages. iOS background-session reattachment is not the same as the macOS repair affordance.",
       "chips":[
         {"t":"PreparedVoice","c":""},
+        {"t":"LocalDocumentIO","c":""},
         {"t":"GenerationPersistence","c":""},
         {"t":"IOSModelDownloadCoordinator","c":""},
         {"t":"ModelManagerViewModel","c":""}
@@ -1715,10 +1713,10 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
     },
     {
       "id":"VocelloiOS","label":"VocelloiOS","sub":"iOS app","kind":"app","type":"application","platform":"iOS","bundle":"com.patricedery.vocello",
-      "desc":"Four-tab iPhone app with onboarding, in-process engine, App Group storage, model delivery, diagnostics, and physical-device gates.",
+      "desc":"Four-tab iPhone app with onboarding, in-process engine, App Group storage, native Files reference import/enrollment, model delivery, diagnostics, and physical-device gates.",
       "depends":["GRDB","QwenVoiceCore","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
       "sourceRoots":["Sources/iOS","Sources/iOSSupport","Sources/SharedSupport","Sources/Resources/qwenvoice_contract.json","Sources/Resources/qwenvoice_ios_model_catalog.json","Sources/Resources/voice-previews","Sources/Assets.xcassets","Sources/PrivacyInfo.xcprivacy"],
-      "files":["Sources/iOS/QVoiceiOSApp.swift","Sources/iOS/App/RootView.swift","Sources/iOS/Studio/","Sources/iOSSupport/","Sources/SharedSupport/"]
+      "files":["Sources/iOS/QVoiceiOSApp.swift","Sources/iOS/App/RootView.swift","Sources/iOS/IOSVoicesView.swift","Sources/iOS/Voices/IOSRecordVoiceSheet.swift","Sources/iOS/Info.plist","Sources/iOS/Studio/","Sources/iOSSupport/","Sources/SharedSupport/"]
     },
     {
       "id":"VocelloCLI","label":"VocelloCLI","sub":"source-built tool","kind":"app","type":"tool","platform":"macOS","bundle":"com.qwenvoice.cli",
@@ -1911,9 +1909,10 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
       "name":"Sources/iOS/","plat":"iOS","desc":"App shell, Studio, Voices, History, Settings, overlays, sheets, design system, and in-process engine store.",
       "children":[
         {"name":"App/","desc":"RootView, AppModel, TabDock"},
-        {"name":"Studio/","desc":"StudioScreen, coordinator, inline player and bench hooks"},
+        {"name":"Studio/","desc":"StudioScreen, generation coordinator, flexible editor, and inline player"},
         {"name":"Sheets/IOSBottomSheets.swift","desc":"Delivery, language, voice, reference and delete-model sheet types"},
-        {"name":"Voices/ · History/ · Settings/","desc":"Four-tab content surfaces"},
+        {"name":"IOSVoicesView.swift · Voices/","desc":"Saved/built-in voices, recording, Files import, visible enrollment, and Clone handoff"},
+        {"name":"History/ · Settings/","desc":"History and Settings tab content surfaces"},
         {"name":"TTSEngineStore.swift","desc":"Bounded event stream and cooperative-cancel facade"},
         {"name":"IOSAutorunHarness.swift","desc":"Headless on-device bench/language generation"}
       ]
@@ -1955,19 +1954,20 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
       "children":[{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
     },
     {
-      "name":"Tests/","plat":"macOS + offline device probes","desc":"Core/output/telemetry tests, macOS XPC integration, and device-probe fixtures.",
+      "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",
       "children":[
         {"name":"VocelloCoreTests/","desc":"Language, schema-v6 compatibility, and atomic WAV tests"},
-        {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"}
+        {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"},
+        {"name":"UIAutomationSupport/","desc":"Shared waits, fixtures, queries, and evidence helpers"},
+        {"name":"VocelloMacUITests/ · VocelloiOSUITests/","desc":"Explicit smoke and benchmark XCUITest lanes"}
       ]
     },
     {
       "name":"scripts/ · config/ · benchmarks/","plat":"operations","desc":"Build, gates, device tooling, benchmark matrices, analyzers, baselines, and release verification.",
       "children":[
-        {"name":"macos_test.sh","desc":"macOS test/gate/review/profile router"},
-        {"name":"macos_agent_ui.sh","desc":"Exact-path Computer Use session, probes, report, attestation, and impact harness"},
-        {"name":"ios_agent_ui.sh","desc":"iPhone Mirroring Computer Use session, telemetry, report, attestation, and impact harness"},
-        {"name":"macos-ui-scenarios.json · macos-test-impact.json · backend-risk-spine.json","desc":"Tracked scenario, evidence-selection, and report-risk contracts"},
+        {"name":"macos_test.sh","desc":"macOS deterministic test/gate/profile router"},
+        {"name":"ui_test.sh","desc":"Unified explicit XCUITest smoke and benchmark entry point"},
+        {"name":"backend-risk-spine.json","desc":"Tracked backend report-risk contract"},
         {"name":"ios_device.sh","desc":"Physical-device build/test/bench/gate router"},
         {"name":"release.sh","desc":"Optimized signing/notarization packaging"}
       ]
@@ -2019,9 +2019,9 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
   ],
   "externalSystems": [
     {"name":"Hugging Face","role":"Pinned model repository downloads over HTTPS","boundary":"No inference or user-script upload"},
-    {"name":"GitHub Actions / Releases","role":"Compile safety, DMG packaging, artifacts, and release attachment","boundary":"Real iOS UI gates stay local"},
+    {"name":"GitHub Actions / Releases","role":"Compile safety, DMG packaging, artifacts, and release attachment","boundary":"UI acceptance remains explicit and local"},
     {"name":"Apple Developer services","role":"Developer ID signing, notarytool, App Store Connect, optional TestFlight","boundary":"Secrets stay in CI or local keychains"},
-    {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, Computer Use UI, and profiling","boundary":"Simulator is prohibited"},
+    {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, XCUITest, and profiling","boundary":"Simulator is prohibited"},
     {"name":"Vercel","role":"Marketing-site deployment from website/","boundary":"Separate from native app runtime"},
     {"name":"On-device Speech assets","role":"Locale-locked language-output verification","boundary":"Some locales require Wi-Fi asset download"}
   ],
@@ -2036,19 +2036,17 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
     "macOS test":[
       {"cmd":"scripts/macos_test.sh models ensure","desc":"Explicit repair/bootstrap for real-engine Speed model fixtures"},
       {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, owned Qwen3 runtime, and harness tests; no frontend driving"},
-      {"cmd":"scripts/macos_agent_ui.sh impact","desc":"Advisory union of requiredSuites and requiredRuntimeChecks for later frontend acceptance"},
-      {"cmd":"$vocello-macos-ui-qa quick|full|benchmark","desc":"Sole macOS frontend driver; full and benchmark never substitute for one another"},
-      {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Seeded PCM and RTF/TTFC gate after current full UI model-readiness evidence"},
-      {"cmd":"scripts/macos_test.sh ui-report|review|bench-ui","desc":"Validate semantic reports, probes, fingerprints, cleanup, and benchmark matrix"},
-      {"cmd":"scripts/macos_test.sh gate","desc":"Strict explicit frontend and macOS release acceptance"}
+      {"cmd":"scripts/ui_test.sh macos smoke","desc":"Native-app navigation, visible readiness, one Custom generation, player, History, and screenshots"},
+      {"cmd":"scripts/ui_test.sh macos benchmark","desc":"Full UI-driven matrix with typed XPC/backend evidence"},
+      {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Seeded PCM and RTF/TTFC deterministic runtime diagnostic"},
+      {"cmd":"scripts/macos_test.sh gate","desc":"Deterministic macOS platform and crash gate"}
     ],
     "iOS device":[
-      {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, and model readiness"},
-      {"cmd":"$vocello-ios-ui-qa quick|full|benchmark","desc":"Sole iOS frontend driver through bundled Computer Use and iPhone Mirroring"},
-      {"cmd":"scripts/ios_device.sh test|ui-test|bench-ui|review","desc":"Validate Computer Use reports and attestations"},
+      {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, app, and dSYM readiness"},
+      {"cmd":"scripts/ui_test.sh ios smoke","desc":"Physical-iPhone semantic, accessibility, generation, and screenshot assertions"},
+      {"cmd":"scripts/ui_test.sh ios benchmark","desc":"Physical-iPhone full UI generation matrix"},
       {"cmd":"scripts/ios_device.sh lang-bench|profile|crashes","desc":"Headless language, profiling, and crash evidence"},
-      {"cmd":"scripts/ios_agent_ui.sh impact","desc":"Advisory frontend scope for later iOS acceptance"},
-      {"cmd":"scripts/ios_device.sh gate","desc":"Strict attended frontend and iOS release acceptance"}
+      {"cmd":"scripts/ios_device.sh gate","desc":"Physical-device deterministic/runtime gate"}
     ],
     "Bench":[
       {"cmd":"QWENVOICE_DEBUG=1 ./build/vocello bench … --seed N --ledger","desc":"Seedable headless perf/quality matrix and bounded committed summary"},
@@ -2058,18 +2056,17 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
     ],
     "CI / release":[
       {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build-for-testing"},
-      {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests, app build, and advisory frontend-impact reports; no UI attestation validation"},
+      {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests and app build; no UI driving"},
       {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized DMG and GitHub Release after strict macOS readiness"},
-      {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual archive after strict iOS release evidence"}
+      {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual signed archive"}
     ],
     "Codex workflow":[
       {"cmd":"AGENTS.md → .agents/<role>.md","desc":"Durable repo rules first, then the subsystem playbook"},
       {"cmd":"Use matching installed skills/plugins","desc":"Read the selected SKILL.md completely before acting"},
       {"cmd":"Build iOS Apps → shared XcodeBuildMCP","desc":"One server for macOS and physical-device iOS; repository scripts remain authoritative"},
-      {"cmd":"$vocello-macos-ui-qa","desc":"Computer Use is the sole macOS UI driver; scripts provide deterministic XPC/backend proof"},
-      {"cmd":"scripts/macos_test.sh release-readiness","desc":"Unconditional deterministic, crash, telemetry, full-review, and benchmark gate before packaging"},
-      {"cmd":"scripts/ios_agent_ui.sh release-check","desc":"Fresh iOS frontend evidence before archive or TestFlight"},
-      {"cmd":"Git publishing","desc":"Commit, push, pull request, and ordinary merge never require Computer Use, models, devices, or UI attestations"},
+      {"cmd":"scripts/ui_test.sh macos|ios smoke|benchmark","desc":"Sole autonomous app UI stack; iOS requires the paired physical phone"},
+      {"cmd":"scripts/macos_test.sh release-readiness","desc":"Project-input check, exact app build, deterministic tests, and crash delta before packaging"},
+      {"cmd":"Git publishing","desc":"Commit, push, pull request, and ordinary merge never require models, devices, or XCUITest results"},
       {"cmd":"GitHub plugin / gh fallback","desc":"Use connector-backed repository context; use gh for Actions logs or local branch gaps"},
       {"cmd":"Physical-device invariant","desc":"Do not use simulator-oriented Codex skills or simulator MCP tools for Vocello iOS"}
     ]
@@ -2124,7 +2121,6 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
   "storage": [
     {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and prepared artifacts","history.sqlite","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
     {"title":"macOS debug","root":"~/Library/Application Support/QwenVoice-Debug/","items":["Same logical layout as release","Model fixtures may symlink to the canonical store","Raw diagnostics remain gitignored"]},
-    {"title":"macOS destructive QA","root":"build/macos/agent-ui/&lt;run&gt;/disposable-app-support/","items":["Never production or canonical shared storage","Model and voice roots may not be symlinks","Entire root is discarded after the explicitly authorized suite"]},
     {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages and staging","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
     {"title":"Privacy boundary","root":"local-first runtime","items":["No cloud TTS or bundled model weights","Recording, transcription, generation, playback, and History stay local","Network use is model download, release/CI, and website delivery","Production telemetry is disabled by default"]}
   ],
@@ -2139,8 +2135,8 @@ scripts/ios_agent_ui.sh impact  # advisory</pre>
     "Stable accessibilityIdentifier values survive refactors",
     "Production telemetry stays runtime-gated through TelemetryGate.resolvedEnabled",
     "Telemetry-off constructs no sampler, sink, chunk QC, or expensive derived diagnostics",
-    "macOS frontend acceptance uses Computer Use only; no macOS XCUITest or hidden UI-test markers",
-    "Quick accepts quick or full; full requires full; benchmark requires benchmark",
+    "XCUITest is the sole autonomous app UI driver; no hidden UI-test markers or coordinate bridge",
+    "Smoke and benchmark are independent explicit acceptance lanes",
     "Batch generation stays absent from iOS unless a device-proven sequential streaming design replaces it"
   ]
 }

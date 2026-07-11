@@ -2,12 +2,10 @@ name: CI
 
 # Pre-merge CI for Vocello (QwenVoice).
 #
-# iOS: compile-only on GitHub-hosted runners against the device SDK. Real iOS UI acceptance runs
-# through bundled Computer Use and iPhone Mirroring on a paired physical device.
+# iOS: compile the app against the physical-device SDK. XCUITest is explicit local work and does
+# not consume ordinary CI time.
 #
-# Ordinary CI is deterministic-only: project inputs, macOS Core/XPC/runtime/harness tests and
-# builds, plus the iOS device-SDK compile check. Frontend impact is classified and reported for
-# planning, but Computer Use evidence is required only by platform release workflows.
+# Ordinary CI remains UI-free: project inputs, macOS Core/XPC/runtime tests, and compile checks.
 #
 # Toolchain pinning mirrors release.yml: Xcode 26, XcodeGen + xcbeautify via Homebrew,
 # SPM versions inherited from the committed Package.resolved.
@@ -17,11 +15,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      base_ref:
-        description: 'Commit or checkpoint tag used for impact comparison'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -69,7 +62,7 @@ jobs:
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
 
-      - name: Build VocelloiOS for physical-device SDK
+      - name: Compile VocelloiOS for the device SDK
         run: |
           set -euo pipefail
           xcodebuild build \
@@ -81,7 +74,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO | xcbeautify
 
   macos-deterministic-tests:
-    name: macOS deterministic tests + advisory UI impact
+    name: macOS deterministic tests
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -113,43 +106,6 @@ jobs:
 
       - name: Run deterministic macOS tests
         run: scripts/macos_test.sh test
-
-      - name: Build macOS app
-        run: ./scripts/build.sh build
-
-      - name: Report advisory frontend impact
-        env:
-          QVOICE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || inputs.base_ref }}
-        run: |
-          set -euo pipefail
-          impact_dir="build/ci/frontend-impact"
-          mkdir -p "$impact_dir"
-          scripts/macos_agent_ui.sh impact > "$impact_dir/macos.json"
-          scripts/ios_agent_ui.sh impact > "$impact_dir/ios.json"
-
-          {
-            echo "## Advisory frontend impact"
-            echo
-            echo "These reports help plan explicit frontend QA. They do not require Computer Use attestations for commits, pushes, pull requests, or ordinary merges."
-            echo
-            echo "### macOS"
-            echo '```json'
-            cat "$impact_dir/macos.json"
-            echo '```'
-            echo
-            echo "### iOS"
-            echo '```json'
-            cat "$impact_dir/ios.json"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload advisory frontend impact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-impact-advisory
-          path: build/ci/frontend-impact/
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Upload xcresult on failure
         if: failure()

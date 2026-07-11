@@ -264,8 +264,8 @@ around lazy ops, not per-stage GPU attribution (OPTIMIZATION.md §A).
 The reference-free `audioQC` verdict (per engine row; `pass` / `warn` / `fail:flags` —
 nonfinite/clipping/clicks/dropout/near_silent) is the **objective tripwire**, not the perceptual gate.
 The **mandatory promotion/release listening pass** over the fixed corpus is the real perceptual
-gate (`vocello review` / by ear; audio never ships). It does not block preserving or sharing an
-ordinary development checkpoint.
+gate: inspect the generated WAV artifacts by ear. This listening pass does not block preserving or
+sharing an ordinary development checkpoint.
 
 - **`dropout` is punctuation-aware** (OPTIMIZATION.md §B/§C, `ac86b8a`). The original ~586 ms
   "dropout" was root-caused as the model's **natural prosodic pauses** at sentence/comma boundaries on
@@ -300,8 +300,8 @@ The blow-by-blow is in git history; per-run perf is in `benchmarks/HISTORY.md`.
 ## 9. Roadmap (prioritized)
 
 **P1 — design-mode output-quality lead (§7).** Investigate the `design` `fail:dropout` / `warn:clicks`
-on device via the listening pass (`vocello review` over the design corpus). Determine whether `clicks`
-is a real artifact (chunk-boundary / decoder) or another QC false-positive, and whether it is
+on device by listening to the generated design-corpus WAV artifacts. Determine whether `clicks` is a
+real artifact (chunk-boundary / decoder) or another QC false-positive, and whether it is
 device-specific. Maps to `NativeStreamingSynthesisSession` (audioQC) + the decoder path; no engine
 change without a confirmed-real defect.
 

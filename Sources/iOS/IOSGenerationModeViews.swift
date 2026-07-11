@@ -170,7 +170,6 @@ struct IOSCustomVoiceView: View {
 
     var body: some View {
         pageContent
-            .screenPresenceMarker("screen_customVoice")
             .task(id: promptText) {
                 try? await Task.sleep(for: .milliseconds(350))
                 guard !Task.isCancelled else { return }
@@ -602,7 +601,6 @@ struct IOSVoiceDesignView: View {
 
     var body: some View {
         pageContent
-            .screenPresenceMarker("screen_voiceDesign")
             .task(id: promptText) {
                 try? await Task.sleep(for: .milliseconds(350))
                 guard !Task.isCancelled else { return }
@@ -1232,6 +1230,25 @@ struct IOSVoiceCloningView: View {
         return nil
     }
 
+    /// A compact, visible readiness state in the composer's existing metadata
+    /// row. It gives users and XCUITest the same production signal without a
+    /// hidden marker or making successful generation depend on proactive work.
+    private var cloneModeMetaLabel: String {
+        guard draft.referenceAudioPath != nil else { return "Voice cloning" }
+        switch cloneContextStatus {
+        case .waitingForHydration:
+            return "Voice cloning · Loading voice"
+        case .preparing:
+            return "Voice cloning · Preparing reference"
+        case .primed:
+            return "Voice cloning · Reference ready"
+        case .fallback:
+            return "Voice cloning · Prepares on generate"
+        case nil:
+            return "Voice cloning · Reference selected"
+        }
+    }
+
     private var promptHelper: String? {
         if !isScriptFocused && promptText.isEmpty {
             return nil
@@ -1252,7 +1269,6 @@ struct IOSVoiceCloningView: View {
 
     var body: some View {
         pageContent
-            .screenPresenceMarker("screen_voiceCloning")
             .task(id: promptText) {
                 try? await Task.sleep(for: .milliseconds(350))
                 guard !Task.isCancelled else { return }
@@ -1297,7 +1313,7 @@ struct IOSVoiceCloningView: View {
                 mode: .clone,
                 script: promptTextBinding,
                 placeholder: "Type the new text. The reference voice will speak it.",
-                modeMetaLabel: "Voice cloning",
+                modeMetaLabel: cloneModeMetaLabel,
                 charLimit: scriptLimitState.limit,
                 tint: IOSBrandTheme.clone,
                 genState: studioGenState,

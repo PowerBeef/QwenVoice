@@ -27,4 +27,5 @@ sessionDefaultsProfiles:
     bundleId: com.patricedery.vocello
     arch: arm64
     # Physical-device ID is set at runtime via session_set_defaults and never committed.
-    # Prefer scripts/ios_device.sh for all iOS UI tests and real-engine work.
+    # Use scripts/ui_test.sh for explicit XCUITest and scripts/ios_device.sh for
+    # deterministic physical-device runtime diagnostics.

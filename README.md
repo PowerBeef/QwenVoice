@@ -130,30 +130,28 @@ Useful checks:
 ./scripts/build_foundation_targets.sh ios
 scripts/macos_test.sh models ensure   # explicit repair/bootstrap only when visible Settings readiness fails
 scripts/macos_test.sh test            # deterministic Core + XPC + Qwen3 runtime tests (no UI)
-scripts/macos_agent_ui.sh impact      # advisory frontend scope; never blocks development publishing
-# In Codex: invoke $vocello-macos-ui-qa <selected-suite>
-scripts/macos_test.sh ui-report --suite full  # validate Computer Use + typed probes
-scripts/macos_test.sh gate            # strict explicit macOS frontend/release acceptance
-scripts/ios_agent_ui.sh impact        # advisory iOS frontend scope
-# In Codex: invoke $vocello-ios-ui-qa <selected-suite>
-scripts/ios_device.sh test            # validate quick iOS Computer Use evidence
-scripts/ios_device.sh bench-ui        # validate 29-take Computer Use benchmark
+scripts/ui_test.sh macos smoke        # explicit XCUITest acceptance only
+scripts/ui_test.sh macos benchmark
+scripts/macos_test.sh gate            # deterministic macOS platform gate
+scripts/ui_test.sh ios smoke          # paired physical iPhone only
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh lang-bench --subset quick --label "…"  # language hint + output bench
 scripts/ios_device.sh device-state      # physical-device reachability/unlock/interference probe
-scripts/ios_device.sh gate              # strict explicit iOS frontend/release acceptance
+scripts/ios_device.sh gate              # physical-device deterministic/runtime gate
 ```
 
-Testing runbook: [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md). Bundled Computer Use drives both macOS and iOS frontend acceptance; the iOS skill operates the paired physical phone through iPhone Mirroring while scripts validate device telemetry and attestations. See [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md).
+Testing runbook: [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md). XCUITest
+is the sole autonomous app UI driver: native macOS and a paired physical iPhone only. Smoke and
+benchmark lanes are explicit frontend acceptance work.
 
 Commits, pushes, pull requests, and ordinary merges use deterministic verification only. Missing
-Computer Use, model, physical-device, or UI-attestation evidence never blocks preserving or sharing
-development work. Frontend impact reports are advisory until explicit acceptance or release;
-macOS releases require only macOS UI evidence, while iOS archive/TestFlight requires only iOS UI
-evidence.
+models, physical-device, or XCUITest evidence never blocks preserving or sharing development work.
+Frontend lanes run only for explicit acceptance. Their absence never blocks release packaging,
+signing, notarization, artifact upload, a macOS package, or an iOS archive/TestFlight build.
 
 More technical detail:
 
-- [`docs/development-progress.md`](docs/development-progress.md) — active maintainer checkpoint: verified work, pending acceptance gates, and the Codex reinstall/resume sequence
+- [`docs/development-progress.md`](docs/development-progress.md) — active maintainer checkpoint: completed transition, verified acceptance evidence, and the Codex reinstall/resume sequence
 - [`docs/project-map.html`](docs/project-map.html) — canonical interactive project map: features, targets, dependencies, flows, source ownership, contracts, and development routes
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture reference: runtime design, engine invariants, and request lifecycles
 - [`AGENTS.md`](AGENTS.md) — repo guide: build, architecture, engine invariants, dependency pinning, release policy, conventions
@@ -162,16 +160,15 @@ More technical detail:
 
 ## Development checkpoint
 
-Active development on `main` is completing the macOS Computer Use frontend and typed runtime-probe
-overhaul. Deterministic tests are the ordinary development and CI requirement; fresh full and
-29-take benchmark Computer Use attestations remain required only before the corresponding release
-is ready. Maintainers
-and new Codex sessions should start with [`AGENTS.md`](AGENTS.md), then follow the exact checkpoint
-and reinstall/resume sequence in [`docs/development-progress.md`](docs/development-progress.md).
+The repository uses one XCUITest stack for native macOS and the paired physical iPhone.
+Deterministic tests are the development, CI, and packaging requirement; smoke and benchmark UI
+results are produced only for explicitly requested frontend acceptance. Maintainers and new Codex
+sessions should start with [`AGENTS.md`](AGENTS.md), then follow the exact checkpoint and
+resume sequence in [`docs/development-progress.md`](docs/development-progress.md).
 
 ## Command-line tool (`vocello`)
 
-Vocello ships a headless command-line tool, `vocello`, built from source alongside the app (it is not part of the app download). It drives the same local Swift + MLX engine in-process — no Python, no bundled weights — and serves two roles: scriptable local generation from the terminal, and the deterministic driver for the perf/quality benchmarks. Models install via the app (Settings → Model downloads) or `vocello models install <id>` into the shared `~/Library/Application Support/QwenVoice/models` store. For macOS test fixtures, use `scripts/macos_test.sh models ensure` only as explicit repair/bootstrap; normal generation gates require visible Settings readiness and never invoke it automatically.
+Vocello ships a headless command-line tool, `vocello`, built from source alongside the app (it is not part of the app download). It drives the same local Swift + MLX engine in-process — no Python, no bundled weights — and serves two roles: scriptable local generation from the terminal, and the deterministic driver for the perf/quality benchmarks. Models install via the app (Settings → Model downloads) or `vocello models install <id>` into the shared `~/Library/Application Support/QwenVoice/models` store. For macOS test fixtures, use `scripts/macos_test.sh models ensure` only as explicit repair/bootstrap; UI generation lanes require visible Settings readiness and never invoke it automatically.
 
 ```sh
 ./scripts/build.sh cli                 # build build/vocello
@@ -207,7 +204,7 @@ stdout is machine-readable (an output path, or JSON with `--json`); progress not
 
 | | |
 | --- | --- |
-| ![Vocello running on iPhone — the Studio screen with Custom / Design / Clone modes](https://vocello.vercel.app/assets/screens/ios-studio.png) | Vocello is coming to iPhone — the **same local, private engine**, running **fully on-device** on Apple Silicon. Write a script, pick or describe a voice, and generate speech without a cloud round-trip, exactly like the Mac app.<br><br>**On-device generation already works.** The remaining piece is the **App Store / TestFlight** distribution lane (not GitHub Releases), which is still in progress. No public release date yet.<br><br>This is what the native Swift + MLX rebuild was for: replacing the old bundled Python runtime with an engine that runs entirely on-device — the only way to bring Vocello to iPhone.<br><br>**Want to follow along?** Star ⭐ and watch 👀 the repo for updates. |
+| ![Vocello running on iPhone — the Studio screen with Custom / Design / Clone modes](https://vocello.vercel.app/assets/screens/ios-studio.png) | Vocello is coming to iPhone — the **same local, private engine**, running **fully on-device** on Apple Silicon. Write a script, pick or describe a voice, and generate speech without a cloud round-trip, exactly like the Mac app. Record a Clone reference on-device or import WAV, MP3, AIFF, or M4A audio from Files; an adjacent transcript sidecar can prefill enrollment, and the saved voice opens directly in Clone.<br><br>**On-device generation already works.** The remaining piece is the **App Store / TestFlight** distribution lane (not GitHub Releases), which is still in progress. No public release date yet.<br><br>This is what the native Swift + MLX rebuild was for: replacing the old bundled Python runtime with an engine that runs entirely on-device — the only way to bring Vocello to iPhone.<br><br>**Want to follow along?** Star ⭐ and watch 👀 the repo for updates. |
 
 ## Contributing
 

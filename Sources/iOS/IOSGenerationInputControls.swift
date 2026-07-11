@@ -369,6 +369,7 @@ struct IOSSaveVoiceSheet: View {
                             .foregroundStyle(IOSAppTheme.textPrimary)
                             .submitLabel(.done)
                             .onSubmit { dismissKeyboard() }
+                            .accessibilityIdentifier("saveVoice_nameField")
                             .iosSelectionFieldChrome(tint: tint, isFocused: isNameFocused)
                     }
 
@@ -380,7 +381,8 @@ struct IOSSaveVoiceSheet: View {
                             text: $transcript,
                             placeholder: "What you said in the recording",
                             tint: tint,
-                            isFocused: $isTranscriptFocused
+                            isFocused: $isTranscriptFocused,
+                            accessibilityIdentifier: "saveVoice_transcriptEditor"
                         )
                         .frame(height: transcriptHeight)
                     }
@@ -403,6 +405,7 @@ struct IOSSaveVoiceSheet: View {
                         }
                     )
                     .padding(.top, 4)
+                    .accessibilityIdentifier("saveVoice_saveButton")
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)

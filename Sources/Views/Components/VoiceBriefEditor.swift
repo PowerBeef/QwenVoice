@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Multi-line Voice Design brief editor — the macOS counterpart of the iOS
 /// `IOSVoiceDesignBriefSheet`, inline instead of a sheet: a ~3–4 line
@@ -13,6 +14,7 @@ struct VoiceBriefEditor: View {
     @Binding var text: String
     var accentColor: Color = AppTheme.voiceDesign
     var accessibilityIdentifier: String = "voiceDesign_voiceDescriptionField"
+    @State private var isEditorFocused = false
 
     private var trimmedIsEmpty: Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -25,10 +27,13 @@ struct VoiceBriefEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topLeading) {
-                TextEditor(text: $text)
-                    .font(.body)
-                    .focusEffectDisabled()
-                    .scrollContentBackground(.hidden)
+                ScriptTextEditor(
+                    text: $text,
+                    placeholder: "",
+                    font: .systemFont(ofSize: NSFont.systemFontSize),
+                    isFocused: $isEditorFocused,
+                    accessibilityIdentifier: accessibilityIdentifier
+                )
                     // min 52 (~2 body lines + insets; the editor scrolls
                     // internally beyond maxHeight) keeps the whole Voice
                     // Design panel scroll-free at the default 720×560
@@ -37,7 +42,6 @@ struct VoiceBriefEditor: View {
                     .frame(minHeight: 52, maxHeight: 80)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
-                    .accessibilityIdentifier(accessibilityIdentifier)
 
                 if trimmedIsEmpty {
                     Text(VoiceDesignBriefCatalog.placeholder)

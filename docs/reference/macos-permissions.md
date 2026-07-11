@@ -92,18 +92,6 @@ never trigger prompts.
   folder is missing/unwritable; generation transparently falls back to the
   default outputs folder (`AudioService.makeOutputPath`) so audio is never lost.
 
-## Virtual microphone (mic-less dev machines)
-
-`QWENVOICE_FAKE_MIC_WAV=<clip.wav>` makes `ReferenceClipRecorder` simulate
-capture from that clip: real elapsed time, meter levels from the clip's
-amplitude envelope, auto-stop at clip end / 20 s, and `stopAndSave` delivers a
-copy — the whole record→review→enroll flow works with no hardware and no mic
-prompt. Pick a 10–20 s generated clip (e.g. a prior Custom Voice output).
-
-```sh
-QWENVOICE_DEBUG=1 QWENVOICE_FAKE_MIC_WAV="$HOME/.../some_10-20s_clip.wav" ./scripts/build.sh run
-```
-
 ## Troubleshooting
 
 1. Run `scripts/permissions_doctor.sh` — it reports the build's signing
@@ -121,22 +109,16 @@ QWENVOICE_DEBUG=1 QWENVOICE_FAKE_MIC_WAV="$HOME/.../some_10-20s_clip.wav" ./scri
 5. Reading the TCC database from a terminal needs Full Disk Access for that
    terminal; the doctor degrades gracefully without it.
 
-## Computer Use permissions (separate from mic/speech TCC)
+## XCUITest setup (separate from mic/speech TCC)
 
-macOS frontend acceptance is driven by Codex Computer Use and needs Accessibility plus Screen
-Recording for the Codex host. There is no `VocelloMacUITests-Runner`, Authorization Services UI
-Automation mode, or runner-signing helper. These grants are distinct from microphone/speech above.
-
-```sh
-scripts/macos_agent_ui.sh doctor --suite full --json
-```
-
-Full setup: [`macos-testing.md`](macos-testing.md) § Prerequisites.
+macOS frontend acceptance runs from the `VocelloMacUITests` target under Xcode's test runner.
+Configure its signing and test destination through the project and repository test script. XCTest
+screenshots need no separate screen-capture plugin route. These concerns are distinct from the
+application's microphone and speech permissions above.
 
 ## Manual testing / TCC caveat
 
-TCC permission dialogs require a **human** to answer — autonomous Computer Use cannot reliably
-handle them, and synthetic keystrokes can land on a hidden prompt and dismiss it as
-"Don't Allow". After a permission reset: pause, let a human answer the prompt, and verify
-the outcome with the doctor (or the TCC query) instead of assuming. With stable dev signing
+TCC permission dialogs require a **human** to answer; UI tests must stop before a permission-
+sensitive scenario when the grant is absent. After a permission reset, answer the prompt and
+verify the outcome with `scripts/permissions_doctor.sh` (or the TCC query). With stable dev signing
 this is now a once-per-machine event rather than an every-rebuild hazard.

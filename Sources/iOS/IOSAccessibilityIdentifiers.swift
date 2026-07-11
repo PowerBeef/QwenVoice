@@ -9,6 +9,7 @@ import Foundation
 /// catches renames and typos.
 enum IOSAccessibilityIdentifier {
     enum TextInput {
+        static let clearButton = "textInput_clearButton"
         static let limitMessage = "textInput_limitMessage"
         static let lengthCount = "textInput_lengthCount"
         static let lengthStatus = "textInput_lengthStatus"

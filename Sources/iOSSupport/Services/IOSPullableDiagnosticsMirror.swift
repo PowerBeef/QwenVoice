@@ -20,8 +20,8 @@ enum IOSPullableDiagnosticsMirror {
             .appendingPathComponent("diagnostics", isDirectory: true)
     }
 
-    /// Mirror engine/app JSONL telemetry after each debug generation so UI-driven
-    /// bench-ui can pull and gate without an autorun sentinel.
+    /// Mirror engine/app JSONL telemetry after each debug generation so the
+    /// XCUITest benchmark validator can pull and gate without an autorun sentinel.
     static func syncEngineTelemetryIfEnabled() {
         guard TelemetryGate.resolvedEnabled else { return }
         guard let pullableRoot else { return }

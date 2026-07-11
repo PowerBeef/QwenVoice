@@ -1,124 +1,79 @@
-# Testing runbook (Vocello / QwenVoice)
+# Testing runbook
 
-Authority is `Sources/` → `project.yml` → repository scripts → this document. Bundled Computer Use
-is the sole frontend driver on macOS and iOS; scripts and typed artifacts remain the strict
-frontend/release gate interface.
+Authority is `Sources/` → `project.yml` → repository scripts → this document. Deterministic checks
+are the routine development, CI, and packaging contract. XCUITest is the sole autonomous app UI
+driver and is reserved for explicit frontend acceptance.
 
-## Development publishing policy
+## Routine development matrix
 
-Commits, pushes, pull requests, ordinary merges, and ordinary CI require deterministic verification
-only. Missing Computer Use, model, paired-device, or UI-attestation evidence must never block
-preserving or sharing development work. The two `impact` commands report advisory future frontend
-scope; strict validation is opt-in for explicit acceptance and unconditional only for the platform
-artifact being released.
-
-## Platform model
-
-| Platform | Deterministic development proof | Strict frontend/release gate |
+| Platform | Required for development/CI/release packaging | Explicit UI lanes |
 | --- | --- | --- |
-| macOS | `scripts/macos_test.sh test` + `./scripts/build.sh build` | `$vocello-macos-ui-qa` + `scripts/macos_test.sh gate` |
-| iOS | `./scripts/check_project_inputs.sh` + `./scripts/build_foundation_targets.sh ios` | `$vocello-ios-ui-qa` through iPhone Mirroring + `scripts/ios_device.sh gate` |
-| Website | Site build/tests | OpenAI Browser review when explicitly requested/releasing |
+| macOS | `scripts/macos_test.sh test` + `./scripts/build.sh build` | `scripts/ui_test.sh macos smoke|benchmark` |
+| iOS | `./scripts/check_project_inputs.sh` + `./scripts/build_foundation_targets.sh ios` | `scripts/ui_test.sh ios smoke|benchmark` on a paired physical iPhone |
 
-Neither platform uses an XCTest UI runner. The iOS Simulator is unsupported.
+No UI lane, model download, paired phone, or UI result is mandatory for ordinary development
+publishing.
 
-## macOS deterministic development
+## macOS
 
 ```sh
+./scripts/check_project_inputs.sh
 scripts/macos_test.sh test
 ./scripts/build.sh build
-scripts/macos_agent_ui.sh impact  # advisory only
-```
 
-## macOS explicit frontend/release acceptance
-
-```sh
-# Invoke $vocello-macos-ui-qa full when required; it verifies Settings visibly.
-# Then run telemetry-overhead when listed; it refuses without current full evidence.
-# Run benchmark independently when required.
+# Deterministic/runtime diagnostic; independent of XCUITest
 scripts/macos_test.sh gate
+
+# Explicit frontend acceptance only
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
+# Filtered benchmark example
+scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --label "focused"
 ```
 
-Use `scripts/macos_test.sh models ensure` only as explicit repair/bootstrap when the visible
-Settings check fails, then start a fresh UI run. Normal gates never download, link, or enroll model
-fixtures automatically.
-
-macOS reports join History, WAV, XPC/backend probes, executable, source, build-input, toolchain,
-cleanup, and semantic UI evidence.
-
-## iOS deterministic development
+## iOS
 
 ```sh
 ./scripts/check_project_inputs.sh
 ./scripts/build_foundation_targets.sh ios
-scripts/ios_agent_ui.sh impact  # advisory only
-```
 
-## iOS explicit frontend/release acceptance
-
-```sh
+# Physical-device diagnostics; independent of XCUITest
 scripts/ios_device.sh preflight
-# Computer Use verifies the three Speed models in iOS Settings before generation.
-scripts/ios_agent_ui.sh impact
-# Invoke every required $vocello-ios-ui-qa suite.
-scripts/ios_device.sh test
-scripts/ios_device.sh bench-ui
-scripts/ios_device.sh review
 scripts/ios_device.sh gate
+
+# Explicit frontend acceptance only; never Simulator
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
+# Filtered benchmark example
+scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
 ```
 
-iOS Computer Use acts through `com.apple.ScreenContinuity` and derives every click from the current
-screenshot. The harness pulls on-device engine telemetry after UI generation and stores raw evidence
-under `build/ios/agent-ui/`.
+Both benchmark commands accept `--modes`, `--lengths`, `--warm`, and `--label`. Without filters,
+each runs the canonical 29-take matrix. Filtered runs are targeted diagnostics, not substitutes for
+the full matrix when full frontend benchmark acceptance is explicitly requested.
 
-## Compile safety
+## Model readiness
 
-```sh
-./scripts/check_project_inputs.sh
-./scripts/build_foundation_targets.sh macos
-./scripts/build_foundation_targets.sh ios
-./scripts/build.sh build
-```
+Generation UI tests inspect Settings and require Custom, Design, and Clone Speed to be ready,
+Generate to be enabled, and the benchmark clone voice to exist before a take begins. Use model
+ensure/install operations only for explicit repair/bootstrap and restart the UI lane afterward.
 
-CI builds the iOS app against `generic/platform=iOS` but cannot claim attended Computer Use UI
-acceptance. Ordinary CI records both impact reports for information without validating the current
-attestations.
+## Evidence
 
-## Platform-specific release enforcement
+XCTest assertions, activities, attachments, and `.xcresult` bundles own UI truth. Benchmark
+validators own exact take counts/order plus matching telemetry, History/database, readable-WAV, and
+audio-QC proof. The runner owns app/device identity and crash deltas. Smoke intentionally stops at
+its visible journey, History assertion, and crash check rather than claiming benchmark evidence.
 
-- macOS signing/notarization requires `scripts/macos_test.sh release-readiness`, including fresh
-  macOS `full` and `benchmark` evidence and required runtime checks.
-- iOS signing/archive/TestFlight requires `scripts/ios_agent_ui.sh release-check`, including fresh
-  iOS evidence.
-- macOS evidence does not gate iOS artifacts, and iOS evidence does not gate macOS artifacts.
+## CI and release
 
-## Shared XcodeBuildMCP
+Ordinary CI builds app targets and runs deterministic checks; it neither compiles nor executes the
+isolated UI-test bundles.
+Release packaging uses deterministic build, test, signing, identity, crash, entitlement, and artifact
+checks. XCUITest results may accompany an explicit frontend review, but missing or stale UI results
+never block signing, notarization, a macOS package, or an iOS archive/TestFlight build.
 
-OpenAI Build iOS Apps supplies the one shared server and Build macOS Apps consumes it. Call
-`session_show_defaults`, select `macos` or `ios-device`, set physical-device identity only at
-runtime, and return to scripts for final proof. No Simulator profile or second server is allowed.
+## Artifacts
 
-## Artifacts and triage
-
-| Evidence | Location / tool |
-| --- | --- |
-| macOS UI | `build/macos/agent-ui/`, `qa/macos-ui-attestation.json` |
-| iOS UI | `build/ios/agent-ui/`, `qa/ios-ui-attestation.json` |
-| iOS telemetry/crashes | `build/ios-diagnostics/` |
-| Crash review | Xcode Organizer; optional `xcsym` |
-| Performance | Instruments / `xcrun xctrace`; optional `xcprof` |
-| Workflow selection | `$axiom-tools` guidance |
-
-## CI impact comparison
-
-These base rules make the advisory reports describe the complete change range. Ordinary CI does
-not pass `--check` and does not validate UI attestations.
-
-- Pull request: `github.event.pull_request.base.sha`.
-- Push: `github.event.before`.
-- Manual dispatch: explicit resolvable base input.
-
-Deep references: [`macos-testing.md`](macos-testing.md),
-[`ios-device-testing.md`](ios-device-testing.md),
-[`ui-smoke-runbooks.md`](ui-smoke-runbooks.md), and
-[`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md).
+Raw result bundles, exported screenshots, telemetry, databases, WAVs, and traces remain ignored
+build artifacts. Compact benchmark summaries must contain no user data.

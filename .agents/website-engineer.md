@@ -29,8 +29,8 @@ npm --prefix website run preview  # serve the production build
 - Use shell commands for `npm`/`node` workflows.
 - For React, Vite, or library API questions, use authoritative current documentation and a
   relevant installed Codex skill/plugin when available.
-- Computer Use is an exploratory fallback when browser inspection cannot reach a required UI;
-  the production build remains the verification baseline.
+- When browser inspection cannot reach a required state, record the limitation and use an attended
+  manual check; the production build remains the verification baseline.
 
 ## Boundaries
 

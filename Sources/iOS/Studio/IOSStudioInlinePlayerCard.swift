@@ -115,7 +115,6 @@ struct IOSStudioPlayerCard: View {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
         .onDisappear { controller.stop() }
-        .accessibilityIdentifier(phase.isLive ? "studio_livePreviewPlayer" : "studio_inlinePlayer")
         .confirmationDialog(
             "Dismiss this clip?",
             isPresented: $showDismissConfirm,
@@ -272,22 +271,40 @@ struct IOSStudioPlayerCard: View {
             .transition(.opacity)
         } else {
             HStack(spacing: 8) {
-                iconButton(symbol: "bookmark", label: "Save") {
+                iconButton(
+                    symbol: "bookmark",
+                    label: "Save",
+                    accessibilityIdentifier: "studio_inlinePlayer_save"
+                ) {
                     if let onSave { onSave() } else { shareWAV() }
                 }
-                iconButton(symbol: "arrow.down.to.line", label: "Download") { shareWAV() }
-                iconButton(symbol: "xmark", label: "Dismiss") { showDismissConfirm = true }
+                iconButton(
+                    symbol: "arrow.down.to.line",
+                    label: "Download",
+                    accessibilityIdentifier: "studio_inlinePlayer_download"
+                ) { shareWAV() }
+                iconButton(
+                    symbol: "xmark",
+                    label: "Dismiss",
+                    accessibilityIdentifier: "studio_inlinePlayer_dismiss"
+                ) { showDismissConfirm = true }
             }
             .transition(.opacity)
         }
     }
 
-    private func iconButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func iconButton(
+        symbol: String,
+        label: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             IOSPlayerIconButtonChrome(symbol: symbol, size: 40, symbolSize: 18)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private func shareWAV() {

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # On-device iPhone build/test driver for Vocello — CoreDevice via `devicectl`.
-# iOS frontend automation is driven by bundled Computer Use through iPhone Mirroring.
-# Repository scripts own build, launch, telemetry, crash, report, and attestation proof.
+# Repository scripts own build, launch, telemetry, crash, and physical-device proof.
 #
 # Pairs with IOSAutorunHarness (Sources/iOS/IOSAutorunHarness.swift): `bench`
 # launches the app with QVOICE_IOS_AUTORUN set, the in-app harness runs one
@@ -25,19 +24,14 @@
 #   scripts/ios_device.sh bench [spec] [--label "note"]
 #   scripts/ios_device.sh lang-bench [--subset quick|full] [--label "note"]
 #                                                 # headless language-hint matrix (autorun)
-#   scripts/ios_device.sh bench-ui [--report <run>] # validate Computer Use benchmark evidence
-#   scripts/ios_device.sh ui-test [--suite quick|full] [--report <run>]
-#                                                 # validate Computer Use UI evidence
 #   scripts/ios_device.sh crashes [--test]         # pull + symbolicate on-device crash/hang diagnostics (MetricKit)
 #   scripts/ios_device.sh debug [spec]             # attached launch + LLDB attach guidance (get-task-allow build)
 #   scripts/ios_device.sh logs [spec]              # attached launch teeing stdout → build/ios-logs/<run>.log
 #   scripts/ios_device.sh profile [spec]           # Instruments/xctrace trace of an autorun generation (burn-in-safe)
-#   scripts/ios_device.sh preflight [--cold]       # device/build readiness; models are reviewed in Settings
-#   scripts/ios_device.sh test [--report <run>]      # validate quick Computer Use evidence
-#   scripts/ios_device.sh review [--report <run>]    # validate full Computer Use semantic review
+#   scripts/ios_device.sh preflight                # paired-device, signing, build, and dSYM readiness
 #   scripts/ios_device.sh device-state [--json|--json-v2] [watch [--interval N] [--count N]]
-#                                                 # reachability and Computer Use mirror readiness
-#   scripts/ios_device.sh gate                 # pre-merge gate: preflight → test → generation → crashes → verdict
+#                                                 # paired-device reachability and lock state
+#   scripts/ios_device.sh gate                 # explicit device gate: preflight → generation → crashes → verdict
 #                                              # (generation needs Speed on device; QVOICE_GATE_SKIP_GENERATION=1 to skip)
 #
 # Autorun spec: <mode>:<variant>:<text> (default custom:speed:<built-in sentence>).
@@ -76,9 +70,9 @@ warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[0;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # device-state [--json|--json-v2] [watch [--interval N] [--count N]]
-# Exit codes: 0 READY · 10 MIRROR_UNAVAILABLE · 14 DEVICE_UNREACHABLE.
+# Exit codes: 0 READY · 14 DEVICE_UNREACHABLE.
 cmd_device_state() {
-  local as_json=0 json_v2=0 watch=0 interval=2 count=3 lane=computer-use
+  local as_json=0 json_v2=0 watch=0 interval=2 count=3
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --json) as_json=1; shift ;;
@@ -86,8 +80,7 @@ cmd_device_state() {
       watch) watch=1; shift ;;
       --interval) interval="${2:?}"; shift 2 ;;
       --count) count="${2:?}"; shift 2 ;;
-      --lane) lane="${2:?}"; shift 2 ;;
-      *) shift ;;
+      *) die "unknown device-state flag: $1" ;;
     esac
   done
 
@@ -95,11 +88,11 @@ cmd_device_state() {
 
   if (( watch )); then
     local line verdict detail
-    line="$(probe_device_state_watch "$dev" "$interval" "$count" "$lane")"
+    line="$(probe_device_state_watch "$dev" "$interval" "$count")"
     verdict="${line%%|*}"
     detail="${line#*|}"
     if (( as_json && json_v2 )); then
-      probe_device_state_json "$dev" "$lane"
+      probe_device_state_json "$dev"
     elif (( as_json )); then
       VERDICT="$verdict" DETAIL="$detail" ADVICE="$(device_state_advice "$verdict")" python3 -c '
 import json, os
@@ -112,7 +105,7 @@ print(json.dumps({"verdict": os.environ["VERDICT"], "detail": os.environ["DETAIL
   fi
 
   if (( as_json && json_v2 )); then
-    probe_device_state_json "$dev" "$lane"
+    probe_device_state_json "$dev"
     local line verdict
     line="$(probe_device_state "$dev")"
     verdict="${line%%|*}"
@@ -440,7 +433,7 @@ wait_autorun_sentinel() {
     state="$(probe_device_state 2>/dev/null || true)"
     verdict="${state%%|*}"
     case "$verdict" in
-      MIRROR_UNAVAILABLE|DEVICE_UNREACHABLE)
+      DEVICE_UNREACHABLE)
         die "run doomed at ${waited}s — $verdict: $(device_state_advice "$verdict") (${state#*|})"
         ;;
       *)
@@ -634,7 +627,7 @@ cmd_bench() {
     state="$(probe_device_state 2>/dev/null || true)"
     verdict="${state%%|*}"
     case "$verdict" in
-      MIRROR_UNAVAILABLE|DEVICE_UNREACHABLE)
+      DEVICE_UNREACHABLE)
         die "run doomed at ${waited}s — $verdict: $(device_state_advice "$verdict") (${state#*|})"
         ;;
       *)
@@ -680,8 +673,6 @@ PY
   python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status")=="ok" else 1)' "$sentinel"
 }
 
-# UI benchmark reports are created by `$vocello-ios-ui-qa benchmark` and validated by the
-# public `bench-ui` override near the dispatcher.
 cmd_crashes() {
   local test_mode=0
   [[ "${1:-}" == "--test" ]] && test_mode=1
@@ -824,17 +815,11 @@ cmd_profile() {
   printf '%s\n' "$trace"
 }
 
-# preflight: physical-device reachability, Computer Use mirror surface, signing, app, and dSYM.
+# preflight: physical-device reachability, signing, app, and dSYM.
 # It fails fast with concrete remediation.
 cmd_preflight() {
   local rc=0
-  local cold=0
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --cold) cold=1; shift ;;
-      *) die "unknown preflight flag: $1 (try --cold)" ;;
-    esac
-  done
+  [[ $# -eq 0 ]] || die "preflight accepts no arguments"
   note "on-device preflight"
 
   local dev; dev="$(resolve_device 2>/dev/null)" || dev=""
@@ -860,7 +845,7 @@ PY
       warn "  reachability: ✗ devicectl list failed"; rc=1
     fi
     rm -f "$tmp"
-    if ! guard_device_state "$dev" computer-use; then rc=1; fi
+    if ! guard_device_state "$dev"; then rc=1; fi
   fi
 
   local team; team="$(derive_team 2>/dev/null)"
@@ -881,11 +866,6 @@ PY
     warn "  app: ✗ not built (run: $0 build)"; rc=1
   fi
 
-  note "UI surface: keep iPhone Mirroring connected while bundled Computer Use drives acceptance."
-  note "models: Computer Use must confirm Custom, Design, and Clone Speed in Settings before generation."
-  if (( cold == 1 )); then
-    note "(--cold is an alias for ColdGeneration-only; default scope already includes it.)"
-  fi
   (( rc == 0 )) && note "preflight OK" || die "preflight not ready (see above)"
 }
 
@@ -910,7 +890,7 @@ _gate_generation_check() {
     state="$(probe_device_state 2>/dev/null || true)"
     verdict="${state%%|*}"
     case "$verdict" in
-      MIRROR_UNAVAILABLE|DEVICE_UNREACHABLE)
+      DEVICE_UNREACHABLE)
         echo "aborted at ${waited}s — $verdict: $(device_state_advice "$verdict")"
         return 1
         ;;
@@ -929,71 +909,20 @@ sys.exit(0 if r.get("status") == "ok" else 1)
 PY
 }
 
-# Public iOS UI lanes are Computer Use report validators. The older XCTest implementation remains
-# compiled for migration safety but is not dispatched by supported commands.
-_cmd_ios_computer_use_report() {
-  local suite="$1"; shift
-  local report=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --report) report="${2:-}"; shift 2 ;;
-      --report=*) report="${1#*=}"; shift ;;
-      -h|--help|help)
-        echo "Validate bundled Computer Use evidence: scripts/ios_device.sh ${suite/quick/ui-test} [--report <run>]" >&2
-        return 0
-        ;;
-      *) die "unknown Computer Use report flag: $1" ;;
-    esac
-  done
-  local -a args=(validate-report --suite "$suite")
-  [[ -n "$report" ]] && args+=(--run "$report")
-  "$ROOT_DIR/scripts/ios_agent_ui.sh" "${args[@]}"
-}
-
-cmd_ui_test() {
-  local suite="quick" report=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --suite) suite="${2:-quick}"; shift 2 ;;
-      --suite=*) suite="${1#*=}"; shift ;;
-      --all) suite="full"; shift ;;
-      --report) report="${2:-}"; shift 2 ;;
-      --report=*) report="${1#*=}"; shift ;;
-      -h|--help|help)
-        echo "ui-test — validate iOS Computer Use quick/full report" >&2
-        return 0
-        ;;
-      *) die "unknown ui-test flag: $1" ;;
-    esac
-  done
-  [[ "$suite" == "quick" || "$suite" == "full" ]] || die "ui-test suite must be quick or full"
-  local -a args=()
-  [[ -n "$report" ]] && args+=(--report "$report")
-  _cmd_ios_computer_use_report "$suite" "${args[@]}"
-}
-
-cmd_test() { _cmd_ios_computer_use_report quick "$@"; }
-cmd_review() { _cmd_ios_computer_use_report full "$@"; }
-cmd_bench_ui() { _cmd_ios_computer_use_report benchmark "$@"; }
-
 cmd_gate() {
   local run_id="ios-gate-$(date +%Y%m%d-%H%M%S)"
   local gate_dir="$ROOT_DIR/build/ios/$run_id"
   local verdict="$gate_dir/verdict.txt"
   mkdir -p "$gate_dir"
-  note "iOS Computer Use gate: project inputs"
+  note "iOS device gate: project inputs"
   "$ROOT_DIR/scripts/check_project_inputs.sh" >"$gate_dir/inputs.log" 2>&1 \
     || { echo "project-inputs: FAIL" | tee "$verdict"; return 1; }
   echo "project-inputs: PASS" | tee "$verdict"
-  note "iOS Computer Use gate: physical-device preflight"
+  note "iOS device gate: physical-device preflight"
   cmd_preflight >"$gate_dir/preflight.log" 2>&1 \
     || { echo "preflight: FAIL" | tee -a "$verdict"; return 1; }
   echo "preflight: PASS" | tee -a "$verdict"
-  note "iOS Computer Use gate: impact-selected attestation"
-  "$ROOT_DIR/scripts/ios_agent_ui.sh" impact --check >"$gate_dir/ui-attestation.log" 2>&1 \
-    || { echo "computer-use: FAIL" | tee -a "$verdict"; return 1; }
-  echo "computer-use: PASS" | tee -a "$verdict"
-  note "iOS Computer Use gate: headless generation"
+  note "iOS device gate: headless generation"
   if [[ "${QVOICE_GATE_SKIP_GENERATION:-0}" == "1" ]]; then
     echo "generation: SKIPPED" | tee -a "$verdict"
   elif _gate_generation_check "$gate_dir" >"$gate_dir/generation.log" 2>&1; then
@@ -1001,7 +930,7 @@ cmd_gate() {
   else
     echo "generation: FAIL" | tee -a "$verdict"; return 1
   fi
-  note "iOS Computer Use gate: crashes"
+  note "iOS device gate: crashes"
   cmd_crashes >"$gate_dir/crashes.log" 2>&1 \
     || { echo "crashes: FAIL" | tee -a "$verdict"; return 1; }
   echo "crashes: PASS" | tee -a "$verdict"
@@ -1021,19 +950,15 @@ main() {
     pull)    cmd_pull "$@" ;;
     bench)   cmd_bench "$@" ;;
     lang-bench) cmd_lang_bench "$@" ;;
-    bench-ui) cmd_bench_ui "$@" ;;
-    ui-test) cmd_ui_test "$@" ;;
     crashes) cmd_crashes "$@" ;;
     debug)   cmd_debug "$@" ;;
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
     preflight) cmd_preflight "$@" ;;
-    test)      cmd_test "$@" ;;
-    review)    cmd_review "$@" ;;
     gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|bench-ui|ui-test|crashes|debug|logs|profile|preflight|test|review|gate|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|crashes|debug|logs|profile|preflight|gate|help)" ;;
   esac
 }
 

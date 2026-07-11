@@ -60,14 +60,20 @@ Maintained iPhone subtrees:
 - `downloads/` stores in-progress model delivery state; `downloads/staging/` holds staged partials.
 - `outputs/` stores generated audio. The user can optionally also copy each new clip to an external Files/iCloud folder via Settings → "Saved outputs" (a user-granted security-scoped bookmark; no new entitlement). The internal copy here is always kept and is what History plays from.
 - `voices/` stores saved voice reference assets.
-- `cache/` stores required runtime cache data.
+- `cache/imported_references/` stores app-owned materializations of WAV, MP3, AIFF, or M4A files
+  selected or opened through Files, plus an adjacent `.txt` sidecar when supplied. Enrollment copies
+  the kept reference into `voices/`.
+- Other `cache/` subtrees store required runtime cache data.
 - `history.sqlite` stores local generation history.
 
 The iPhone app intentionally keeps shared state constrained to the App Group app-support subtree. It does not use a parallel shared-user-defaults channel for model or voice state.
 
 ## Voice Cloning Consent
 
-Voice cloning accepts user-provided reference audio — recorded in the app or imported. Only clone voices you own or have permission to use. Reference clips, transcripts, and saved voices are local files, but the user remains responsible for rights and consent before recording, importing, or reusing them.
+Voice cloning accepts user-provided reference audio — recorded in the app or imported through the
+native Files picker/document-open route. Only clone voices you own or have permission to use.
+Reference clips, transcripts, and saved voices are local files, but the user remains responsible for
+rights and consent before recording, importing, or reusing them.
 
 ## Microphone And On-Device Transcription
 

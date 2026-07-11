@@ -1406,7 +1406,10 @@ private struct StreamingExecutionContext: Sendable {
                             cumulativeDurationSeconds: cumulativeDurationSeconds,
                             streamSessionDirectory: sessionDirectory.path,
                             previewAudio: previewAudio,
-                            chunkSequence: UInt64(chunkIndex)
+                            // Transport sequencing is zero-based: the first
+                            // emitted chunk is index 0, matching the XPC gap
+                            // detector and accumulator contract.
+                            chunkSequence: UInt64(chunkIndex - 1)
                         )
                     )
 

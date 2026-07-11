@@ -290,12 +290,6 @@ private extension CustomVoiceView {
                 }
             }
         }
-        .overlay(alignment: .topLeading) {
-            HiddenAccessibilityMarker(
-                value: "Configuration",
-                identifier: "customVoice_configuration"
-            )
-        }
         .animation(.none, value: draft.selectedSpeaker)
         .fixedSize(horizontal: false, vertical: true)
     }

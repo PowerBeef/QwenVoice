@@ -153,12 +153,9 @@ if [ -n "$CODESIGN_KEYCHAIN" ] && [ ! -f "$CODESIGN_KEYCHAIN" ]; then
 fi
 
 # This gate is unconditional: signing, notarization, and artifact creation never begin without
-# deterministic tests plus current independent full/benchmark frontend and telemetry evidence.
-if [ "${QVOICE_RELEASE_READINESS_MODE:-local}" = "ci" ]; then
-    "$SCRIPT_DIR/macos_test.sh" release-readiness --ci
-else
-    "$SCRIPT_DIR/macos_test.sh" release-readiness
-fi
+# deterministic build/test/crash checks. Model-dependent telemetry and XCUITest remain explicit
+# QA lanes and are never packaging prerequisites.
+"$SCRIPT_DIR/macos_test.sh" release-readiness
 
 run_codesign() {
     local target="$1"

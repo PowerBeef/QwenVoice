@@ -10,7 +10,6 @@
 - `.github/workflows/release.yml`
 - `benchmarks/` committed summaries
 - `docs/releases/`
-- `docs/ios-review-baselines/`, `docs/macos-review-baselines/`
 - Release verification scripts (`scripts/verify_*.sh`, `scripts/create_dmg.sh`, etc.)
 
 **Does NOT own:**
@@ -38,47 +37,40 @@ Before changing scripts or CI, read:
   integration does not expose the required operation or log detail.
 - Use relevant installed Codex skills for test triage, performance, signing, packaging, or
   telemetry after reading their instructions. Start from script output and generated artifacts.
-- macOS frontend acceptance is driven by `$vocello-macos-ui-qa`; iOS frontend acceptance is driven
-  by `$vocello-ios-ui-qa` through iPhone Mirroring. Both use bundled Computer Use and script-owned
-  reports/attestations; iOS adds pulled on-device telemetry proof.
+- XCUITest is the sole autonomous app UI driver. It runs against the native macOS app or a paired
+  physical iPhone and provides smoke and benchmark lanes; iOS adds pulled on-device
+  telemetry proof.
 - Development CI is deterministic-only. Commits, pushes, pull requests, and ordinary merges must
-  not wait for Computer Use, models, a paired phone, or UI attestations; impact reports are advisory.
-- Release packaging is strict and platform-specific. macOS packaging is subordinate to
-  `scripts/macos_test.sh release-readiness`, which requires deterministic tests, project-input and
-  crash-delta checks, independent fresh macOS full and benchmark attestations,
-  telemetry-overhead, frontend review, and matching identities. iOS archive/TestFlight is
-  subordinate to `scripts/ios_agent_ui.sh release-check` and requires only fresh iOS frontend
-  evidence. Neither platform's UI proof blocks the other platform's artifact.
+  not wait for models, a paired phone, or XCUITest results.
+- Release packaging is deterministic. macOS packaging is subordinate to
+  `scripts/macos_test.sh release-readiness`, which requires project-input, build,
+  deterministic-test, and crash-delta checks. Model-dependent telemetry remains optional explicit
+  QA. iOS archive/TestFlight uses
+  its signing, archive, entitlement, catalog, and artifact verification. XCUITest is optional
+  explicit frontend QA and never a signing, notarization, packaging, or upload prerequisite.
 - **iOS artifact paths** (see [`ios-device-testing.md`](../docs/reference/ios-device-testing.md)):
-  `build/ios/agent-ui/<run>/` (Computer Use report, screenshots, pulled telemetry),
+  `.xcresult` bundles and exported screenshots from physical-device XCUITest,
   `build/ios-diagnostics/` (headless generation telemetry + crashes),
-  `build/ios/gate-<runID>/verdict.txt`, `build/ios/profile-*.trace` / `bench-ui-*/vocello.trace`.
+  `build/ios/gate-<runID>/verdict.txt`, `build/ios/profile-*.trace`.
 
 ## Build / test commands
 
 ```sh
-# Ordinary development / CI (no Computer Use, model, or device prerequisite)
+# Ordinary development / CI (no model, device, or UI prerequisite)
 ./scripts/check_project_inputs.sh
 scripts/macos_test.sh test
 ./scripts/build.sh build
 ./scripts/build_foundation_targets.sh ios
-scripts/macos_agent_ui.sh impact      # advisory only
-scripts/ios_agent_ui.sh impact        # advisory only
 
-# Explicit macOS frontend/release acceptance (step 0 is read-only model verification)
+# Deterministic/runtime macOS gate (models are needed only for the optional bounded bench)
 scripts/macos_test.sh models ensure   # explicit repair/bootstrap only; normal readiness is visible in Settings
 scripts/macos_test.sh gate
 QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # optional: bounded custom/speed/medium bench + audioQC
 
-# macOS Computer Use evidence (suite selected by impact)
-scripts/macos_agent_ui.sh doctor --suite full --json
-scripts/macos_agent_ui.sh impact
-# Run every required suite; full and benchmark are orthogonal.
-# Invoke $vocello-macos-ui-qa full first, then validate its visible model-readiness proof:
-scripts/macos_test.sh ui-report --suite full
-scripts/macos_test.sh telemetry-overhead   # when listed; refuses without current full evidence
-# Invoke benchmark independently when required, then validate:
-scripts/macos_test.sh bench-ui --report <benchmark-run>
+# Explicit XCUITest evidence; never a packaging prerequisite.
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
+scripts/macos_test.sh telemetry-overhead
 python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
   --run-id mac-ui-benchmark-YYYYMMDD-HHMMSS
 
@@ -93,13 +85,13 @@ scripts/ios_device.sh lang-bench --subset quick --label "release-QA"   # Phases 
 # Historical 2026-07-06 language run: hint 19/19 PASS; output 7/18 pending Speech assets.
 # Current acceptance state and resume commands: docs/development-progress.md
 
-# Semantic frontend/release review (Computer Use report required)
-scripts/macos_test.sh review --report <full-run>
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh gate
 
 # Model fixture helpers
 scripts/macos_test.sh models check|ensure|install
-# iOS model readiness is reviewed live in Settings through Computer Use.
+# XCUITest reviews iOS model readiness visibly in Settings.
 
 # Release packaging
 ./scripts/build.sh release
@@ -131,25 +123,25 @@ scripts/ios_device.sh profile [spec]
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
 - **Ordinary CI is deterministic-only.** GitHub CI builds `VocelloiOS` with
-  `generic/platform=iOS` and runs macOS deterministic verification. Real Computer Use evidence is
-  required only by explicit frontend acceptance and the matching platform's release lane.
+  `generic/platform=iOS` and runs macOS deterministic verification. XCUITest execution is used only
+  for explicitly requested frontend acceptance.
 - **Committed benchmark summaries ≤256 KB.** Raw `*.jsonl` is gitignored.
 - **Deep checkout on CI.** `fetch-depth: 0` is required so `git rev-parse HEAD` in
   `scripts/release.sh` resolves for `release-metadata.txt`.
 - **Burn-in-safe iOS testing.** All on-device lanes go through `scripts/ios_device.sh`.
-- **macOS real-generation acceptance needs model fixtures.** Computer Use verifies readiness in Settings;
+- **macOS real-generation acceptance needs model fixtures.** XCUITest verifies readiness in Settings;
   run `scripts/macos_test.sh models ensure` only to repair/bootstrap the debug link and clone voice. See [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh) and
   [`docs/reference/testing-runbook.md`](../docs/reference/testing-runbook.md) §1b.
-- **No macOS XCUITest frontend.** `VocelloMacUITests`, runner signing, coordinate hooks, hidden
-  UI-test markers, and a generated accessibility catalog must not return. Stable controls are
-  validated when explicit Computer Use scenarios encounter them.
+- **Single XCUITest stack.** Keep shared waits, fixtures, evidence export, and benchmark contracts
+  common across the macOS and physical-iPhone targets. Do not add coordinate hooks, hidden marker
+  catalogs, or a second UI driver.
 
 ## Common mistakes
 
 - Adding a `Debug` configuration or `#if DEBUG` scaffolding in scripts.
-- Running iOS UI work in the Simulator or expecting ordinary CI to drive the UI. Use
-  `$vocello-ios-ui-qa` and `scripts/ios_device.sh gate` on a paired iPhone for explicit frontend
-  acceptance and before iOS archive/TestFlight, not as a prerequisite to preserve development work.
+- Running iOS UI work in the Simulator or expecting ordinary CI to drive the UI. Use the physical-
+  iPhone XCUITest lanes for explicit frontend acceptance, never as an archive/TestFlight or
+  development-publishing prerequisite.
 - Committing raw `.jsonl` telemetry to `benchmarks/`.
 - Forgetting to preserve dSYMs (`scripts/build.sh` copies them to `build/macos/dsyms`).
 - Changing signing/notarization env vars without updating the workflow secret docs.

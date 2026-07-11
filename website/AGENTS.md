@@ -27,7 +27,7 @@ this directory.
 - For React, Vite, or library API questions, use authoritative current documentation and a
   relevant installed Codex skill/plugin when available.
 - For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first, then use the Browser skill
-  against the running dev/preview server. Computer Use is an exploratory fallback.
+  against the running dev/preview server. Record unreachable states for attended manual checking.
 - Run `npm`/`node` commands through the shell.
 
 ## Architecture

@@ -53,11 +53,45 @@ schemes:
         VocelloiOS: all
     run:
       config: Release
-    # Keep an explicit empty Test action: XcodeGen 2.45.4 traps while writing a
-    # shared scheme that omits the action after its former UI-test target is removed.
     test:
       config: Release
       targets: []
+    profile:
+      config: Release
+    analyze:
+      config: Release
+    archive:
+      config: Release
+
+  VocelloMacUI:
+    build:
+      targets:
+        QwenVoice: all
+        VocelloMacUITests: [test]
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - VocelloMacUITests
+    profile:
+      config: Release
+    analyze:
+      config: Release
+    archive:
+      config: Release
+
+  VocelloiOSUI:
+    build:
+      targets:
+        VocelloiOS: all
+        VocelloiOSUITests: [test]
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - VocelloiOSUITests
     profile:
       config: Release
     analyze:
@@ -150,7 +184,7 @@ targets:
 
   # Headless Swift CLI over the in-process engine (QwenVoiceCore). User-facing
   # generation without the UI + the deterministic driver for benchmarks/perf
-  # tests (replaces computer-use UI-driving). No Python backend, no bundled
+  # tests. No Python backend, no bundled
   # weights — links the same engine frameworks as the app/XPC service.
   VocelloCLI:
     type: tool
@@ -401,7 +435,6 @@ targets:
       - path: Tests/VocelloCoreTests
       - path: Sources/SharedSupport/Services/LanguageSelectionPresentation.swift
       - path: Sources/SharedSupport/Services/VoiceClipTranscriber.swift
-      - path: Sources/Services/InitialSidebarItemOverride.swift
     dependencies:
       - target: QwenVoiceCore
     settings:
@@ -414,8 +447,8 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
 
-  # Deterministic macOS XPC transport tests. Frontend journeys are driven only by
-  # the repository Codex Computer Use skill; this target never launches app UI.
+  # Deterministic macOS XPC transport tests. Frontend journeys live in the
+  # separate VocelloMacUITests target and never run as part of this bundle.
   VocelloEngineIntegrationTests:
     type: bundle.unit-test
     platform: macOS
@@ -434,3 +467,50 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
+
+  # Explicit macOS UI automation. This target is deliberately isolated from the
+  # ordinary QwenVoice test action so commits and CI do not drive the UI.
+  VocelloMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/UIAutomationSupport
+      - path: Tests/VocelloMacUITests
+    dependencies:
+      - target: QwenVoice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.app.uitests
+        PRODUCT_NAME: VocelloMacUITests
+        PRODUCT_MODULE_NAME: VocelloMacUITests
+        TEST_TARGET_NAME: QwenVoice
+        SWIFT_VERSION: "6"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_STRICT_CONCURRENCY: minimal
+
+  # Explicit physical-device iPhone UI automation. Simulator destinations are
+  # unsupported; scripts/ui_test.sh resolves and signs for the paired phone.
+  VocelloiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/UIAutomationSupport
+      - path: Tests/VocelloiOSUITests
+    dependencies:
+      - target: VocelloiOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.patricedery.vocello.uitests
+        PRODUCT_NAME: VocelloiOSUITests
+        PRODUCT_MODULE_NAME: VocelloiOSUITests
+        TEST_TARGET_NAME: VocelloiOS
+        SWIFT_VERSION: "6"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(QWENVOICE_DEVELOPMENT_TEAM)
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        SWIFT_STRICT_CONCURRENCY: minimal

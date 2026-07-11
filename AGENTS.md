@@ -28,41 +28,27 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 ### After a Codex reinstall
 
 1. Restore a clean `main` from `origin/main`; never discard a dirty tree without reviewing it.
-2. Install **and enable** the bundled Computer Use plugin, start a new Codex task, and grant
-   attended macOS Accessibility plus Screen & System Audio Recording permissions. Plugin
-   installation, plugin enablement, server/skill availability in the new task, and a live helper
-   process are separate readiness checks. The same bundled service drives the macOS app and the
-   physical iPhone through iPhone Mirroring.
-3. Do not manually add a second Computer Use transport. When the installed plugin declares
-   `bundledContentVariant=node-repl`, the enabled Node REPL entry is the active server and a
-   disabled manifest-matched Computer Use record is an expected inert mirror. Enabling that mirror,
-   or retaining stale commands, older helper paths, or conflicting definitions, is invalid.
-   Repository scripts and `.agents/skills/` define the project workflow; `~/.codex` remains
-   user-scoped state.
-4. Run `scripts/macos_agent_ui.sh routing-audit`, `impact`, and the required
-   `doctor --suite … --json` checks before frontend acceptance. Full resume sequence:
-   [`docs/development-progress.md`](docs/development-progress.md).
-
-> **Active Computer Use block:** helper `26.708.1000366 (1000366)`, UUID `61C0…9236`, is
-> known-bad for normal Vocello frontend suites. Do not start macOS or iOS quick/full/benchmark work
-> with that helper. Only the single-observation diagnostic in
-> [`computer-use-failure-analysis.md`](docs/reference/computer-use-failure-analysis.md) is allowed
-> until its resumption criteria pass.
+2. Confirm Xcode, the paired physical iPhone, signing identities, and the repository scripts before
+   explicit frontend acceptance. Ordinary deterministic development does not require a phone.
+3. Inspect the installed OpenAI plugin and skill inventory for optional build/debug assistance.
+   Repository scripts and XCUITest remain authoritative; `~/.codex` remains user-scoped state.
+4. Run the deterministic development checks below. Run XCUITest only when frontend acceptance is
+   explicitly requested or when preparing the corresponding platform release.
 
 ## Hard rules
 
 | Rule | Detail / verify |
 | --- | --- |
-| **iOS runtime/UI = physical device + Computer Use** | Never use Simulator. `$vocello-ios-ui-qa` drives the paired iPhone only through bundled Computer Use and iPhone Mirroring; scripts provide deterministic device/telemetry proof. The generic physical-device SDK compile needs no phone. `scripts/ios_device.sh gate` is strict explicit acceptance/release proof. |
+| **iOS runtime/UI = physical device + XCUITest** | Never use Simulator. XCUITest drives the paired physical iPhone; scripts provide deterministic device/telemetry proof. The generic physical-device SDK compile needs no phone. `scripts/ios_device.sh gate` remains a physical-device runtime diagnostic, not a UI-result gate. |
 | **`project.yml`, not pbxproj** | After edit: `./scripts/regenerate_project.sh` + `./scripts/check_project_inputs.sh`. iOS resources: `sources:` + `buildPhase: resources` (not `resources:`). |
 | **Release-only config** | Debug via `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); `#if DEBUG` for test/sim scaffolding only. |
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Privacy** | No PII in tracked user-facing files. |
-| **All UI = bundled Computer Use** | `$vocello-macos-ui-qa` drives `build/Vocello.app`; `$vocello-ios-ui-qa` drives the paired iPhone through `com.apple.ScreenContinuity`. No XCTest UI runner, alternate desktop-control MCP, or coordinate bridge is active. Scripts validate typed evidence and attestations. |
+| **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. No Simulator, alternate desktop-control MCP, or coordinate bridge is active. |
 | **One shared XcodeBuildMCP** | OpenAI Build iOS Apps supplies the shared server; Build macOS Apps consumes it. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never configure a second server. Repository scripts remain the final gate. |
 | **Codex/ChatGPT Desktop only** | This repository has no compatibility layer for another agent IDE. Codex/ChatGPT Desktop, installed OpenAI plugins, repository skills, and repository scripts are the supported development environment. |
-| **Development publishing is deterministic-only** | Commits, pushes, pull requests, and ordinary merges require deterministic verification only. Missing Computer Use, model, physical-device, or UI-attestation evidence must never block preserving or sharing development work. UI impact is advisory until explicit frontend QA or a platform-specific release. |
+| **Publishing is deterministic-only** | Commits, pushes, pull requests, ordinary merges, ordinary CI, and release packaging require deterministic verification only. Missing models, a physical device, or XCUITest evidence must never block preserving, sharing, signing, notarizing, or uploading work. UI lanes run only for explicit frontend QA. |
 
 Every active invariant must live here, in a role playbook, or in an authoritative reference document.
 
@@ -84,49 +70,45 @@ Every active invariant must live here, in a role playbook, or in an authoritativ
 ```sh
 scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime tests
 ./scripts/build.sh build
-scripts/macos_agent_ui.sh impact      # advisory frontend scope; does not validate attestations
 ```
 
 **Verify:** deterministic commands exit 0. This is enough to commit, push, open a pull request,
-and merge ordinary development work. Do not invoke or wait for Computer Use solely to publish a
-development checkpoint.
+and merge ordinary development work. Do not invoke XCUITest solely to publish a development
+checkpoint.
 
 ### Development verification — iOS
 
 ```sh
 ./scripts/check_project_inputs.sh
 ./scripts/build_foundation_targets.sh ios   # physical-device SDK compile safety; no device/UI
-scripts/ios_agent_ui.sh impact              # advisory frontend scope
 ```
 
-**Verify:** deterministic commands exit 0. A paired phone, installed models, Computer Use, and an
-iOS UI attestation are not development-publishing prerequisites.
+**Verify:** deterministic commands exit 0. A paired phone, installed models, and XCUITest results
+are not development-publishing prerequisites.
 
 ### Explicit frontend acceptance
 
-Run these strict lanes only when the user explicitly requests frontend/device acceptance or when
-preparing the corresponding platform release:
+Run these strict lanes only when the user explicitly requests frontend/device acceptance:
 
 ```sh
-# macOS: run every suite reported by impact, then validate the strict acceptance gate.
-scripts/macos_agent_ui.sh impact
+# macOS: native app UI on the current Mac.
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
 scripts/macos_test.sh gate
 
-# iOS: paired physical iPhone + Computer Use through iPhone Mirroring.
-scripts/ios_agent_ui.sh impact
+# iOS: paired physical iPhone only; never Simulator.
 scripts/ios_device.sh preflight
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh gate
 ```
 
-These `gate` commands intentionally remain strict. They are acceptance/release proof, not commit,
-push, pull-request, or ordinary-merge checks.
+The platform `gate` commands remain deterministic/device diagnostics. They do not consume or
+validate XCUITest results.
 
-Computer Use generation is additionally gated by visible Settings state: Custom, Design, and
-Clone Speed must show installed/ready, Generate must be enabled, and the required clone voice must
-be visible before any take. `models ensure` is explicit repair/bootstrap, never a substitute for
-that observation. Because `telemetry-overhead` performs real seeded generation, it now refuses to
-start unless a current `full` Computer Use attestation proves the visible `model-readiness`
-scenario passed; it uses only the read-only model integrity check and never runs `models ensure`.
+Generation UI tests first assert the visible Settings state: Custom, Design, and Clone Speed must
+show installed/ready, Generate must be enabled, and the required clone voice must be visible before
+any take. `models ensure` is explicit repair/bootstrap, never a substitute for that observation.
 
 ### Language-path verification (Phases 1–3)
 
@@ -148,13 +130,9 @@ require on-device Speech assets — setup: [`language-bench.md`](docs/reference/
 
 ### Release QA
 
-Release acceptance is platform-specific and unconditional for the artifact being shipped:
-
-- macOS packaging requires fresh macOS `full` and `benchmark` Computer Use evidence plus
-  deterministic/runtime proof through `scripts/macos_test.sh release-readiness`.
-- iOS archive/TestFlight requires fresh iOS frontend evidence through
-  `scripts/ios_agent_ui.sh release-check` before signing or archiving.
-- macOS UI evidence never blocks an iOS archive, and iOS UI evidence never blocks a macOS package.
+Release packaging is gated by deterministic build, test, identity, signing, crash, and artifact
+checks. XCUITest smoke and benchmark runs remain useful explicit frontend QA, but their absence never
+blocks signing, notarization, artifact upload, a macOS package, or an iOS archive/TestFlight build.
 
 ```sh
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
@@ -175,13 +153,13 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 | `Sources/SharedSupport/` | Shared player, persistence, transcriber |
 | `scripts/*.sh` | Build, test, release |
 | `config/language-bench-*.json` | Language hint bench corpus + matrix |
-| `.agents/skills/vocello-macos-ui-qa/` | Sole macOS frontend-driving workflow (Codex Computer Use) |
-| `.agents/skills/vocello-ios-ui-qa/` | Sole iOS frontend-driving workflow (Computer Use + iPhone Mirroring) |
-| `scripts/macos_agent_ui.sh`, `config/macos-*.json` | Session/evidence harness, scenario and impact contracts |
-| `scripts/ios_agent_ui.sh`, `config/ios-*.json` | iOS Computer Use session/evidence harness and contracts |
+| `Tests/UIAutomationSupport/` | Shared XCUITest waits, fixtures, queries, and evidence helpers |
+| `Tests/VocelloMacUITests/` | macOS smoke and benchmark UI tests |
+| `Tests/VocelloiOSUITests/` | Physical-iPhone smoke and benchmark UI tests |
+| `scripts/ui_test.sh` | Unified explicit XCUITest entry point |
 | `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
 | `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |
-| `docs/development-progress.md` | Active checkpoint, verified work, pending gates, and Codex reinstall/resume route |
+| `docs/development-progress.md` | Active checkpoint, verified frontend evidence, and Codex reinstall/resume route |
 | `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
 
 Interactive feature/module map: [`docs/project-map.html`](docs/project-map.html). Deeper lifecycle
@@ -196,22 +174,22 @@ scripts/macos_test.sh core-test
 scripts/macos_test.sh lang-bench --subset quick
 scripts/macos_test.sh test
 scripts/macos_test.sh telemetry-overhead
-scripts/macos_test.sh ui-report --suite quick|full|benchmark
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
 scripts/ios_device.sh test
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh lang-bench --subset quick
-scripts/macos_test.sh review [--report <run>]
-scripts/ios_device.sh review [--baseline]
 ```
 
 Full lanes: [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md), [`docs/reference/ios-device-testing.md`](docs/reference/ios-device-testing.md).
 
 ## Codex tool routing
 
-**Scripts first** for build/test and deterministic proof. macOS frontend acceptance is the explicit
-exception: the repository Computer Use skill drives the real UI while the shell harness supplies
-typed, reproducible evidence. Before using a skill/plugin, read its instructions and keep actions
-inside the selected role's ownership boundary. User-scoped Codex configuration and plugin state
-are never repository sources of truth.
+**Scripts first** for build/test and deterministic proof. XCUITest is the sole autonomous app UI
+driver on macOS and the paired physical iPhone. Before using an optional skill/plugin, read its
+instructions and keep actions inside the selected role's ownership boundary. User-scoped Codex
+configuration and plugin state are never repository sources of truth.
 
 | Work | Start here / use |
 | --- | --- |
@@ -220,21 +198,18 @@ are never repository sources of truth.
 | macOS / XPC | `.agents/macos-engineer.md`, `docs/reference/macos-app-guide.md`, macOS Codex skills where relevant |
 | Scripts / CI / GitHub | `.agents/release-qa-engineer.md`, shell scripts, installed GitHub integration |
 | Website | `.agents/website-engineer.md`, Browser for localhost verification |
-| macOS frontend QA | `$vocello-macos-ui-qa quick|full|benchmark|destructive` + `scripts/macos_agent_ui.sh`; exact `build/Vocello.app` only |
-| iOS frontend QA | `$vocello-ios-ui-qa quick|full|benchmark` + `scripts/ios_agent_ui.sh`; physical iPhone through iPhone Mirroring |
+| macOS frontend QA | `scripts/ui_test.sh macos smoke|benchmark`; native macOS target only |
+| iOS frontend QA | `scripts/ui_test.sh ios smoke|benchmark`; paired physical iPhone only |
 | External systems and current APIs | Relevant installed Codex skill/plugin or connector; use authoritative documentation |
 
 ## Active / deep reading
 
 | Doc | When |
 | --- | --- |
-| [`docs/development-progress.md`](docs/development-progress.md) | **Active checkpoint** — resume state, verified work, and remaining gates |
-| [`docs/reference/ios-ui-reference.md`](docs/reference/ios-ui-reference.md) | iOS screen map, stable identifiers, states, and physical-device review expectations |
-| [`docs/reference/ui-smoke-runbooks.md`](docs/reference/ui-smoke-runbooks.md) | Codex-native macOS, iOS, and website frontend acceptance index |
-| [`docs/reference/computer-use-failure-analysis.md`](docs/reference/computer-use-failure-analysis.md) | **Active Computer Use block** — helper fingerprint, evidence, diagnostic-only route, and suite-resumption criteria |
+| [`docs/development-progress.md`](docs/development-progress.md) | **Active checkpoint** — completed transition, verified evidence, and resume route |
+| [`docs/reference/ios-ui-reference.md`](docs/reference/ios-ui-reference.md) | iOS screen map, stable identifiers, states, and physical-device expectations |
 | [`docs/reference/language-bench.md`](docs/reference/language-bench.md) | language hint + output bench (Phases 1–3) |
 | [`docs/reference/benchmarking-procedure.md`](docs/reference/benchmarking-procedure.md) | bench protocol |
-| [`docs/reference/ios-device-probe.md`](docs/reference/ios-device-probe.md) | layered device-state / mirror probe |
 | [`docs/reference/`](docs/reference/) | subsystem guides |
 
 ## Release & security (summary)

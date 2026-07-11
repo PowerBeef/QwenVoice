@@ -13,11 +13,10 @@ If anything here disagrees with the code, the code wins — fix this file.
 > drive a generation, then read the JSONL this system writes + aggregate with
 > `summarize_generation_telemetry.py`. Benchmarking + output‑quality checks are **first‑class**:
 > committed benchmark/QC scripts, baselines, and summaries are permitted (bounded by the
-> `benchmarks/` cap). macOS frontend acceptance is driven only by the repository
-> `$vocello-macos-ui-qa` Computer Use skill; deterministic history/WAV/XPC/backend probes make its
-> structured attestation gate-bearing. iOS UI tests and real-engine generation remain
-> **on-device only**; `$vocello-ios-ui-qa` drives the phone through bundled Computer Use and
-> iPhone Mirroring. GitHub CI is compile-only for iOS.
+> `benchmarks/` cap). XCUITest is the sole autonomous app UI driver; deterministic
+> history/WAV/XPC/backend probes validate its smoke and benchmark results. iOS UI tests
+> and real-engine generation remain **on-device only** on a paired physical iPhone. GitHub CI is
+> compile-only for iOS.
 > See [`testing-runbook.md`](testing-runbook.md) and [`ios-device-testing.md`](ios-device-testing.md).
 
 ---
@@ -72,16 +71,14 @@ overhead lane verifies that optimization and waveform parity:
 scripts/macos_test.sh telemetry-overhead
 ```
 
-This is a real generation lane. It requires a current full Computer Use attestation whose visible
-Settings `model-readiness` scenario passed, then performs a read-only model integrity check. It
-never invokes `models ensure`, downloads weights, or bootstraps a clone fixture.
+This is a real generation lane with its own read-only model integrity check. It never invokes
+`models ensure`, downloads weights, bootstraps a clone fixture, or depends on an XCUITest result.
 
 It applies one fixed `vocello bench --seed`, one warm-up and five measured
 Custom/Speed/medium warm takes per mode. PCM SHA-256 must match across off,
 lightweight, and verbose. Median RTF and TTFC regression limits are 5% for
 lightweight and 10% for verbose. Raw evidence stays under `build/macos/`; the
-compact verdict enters `qa/macos-ui-attestation.json` as runtime check
-`telemetry-overhead`.
+compact verdict is retained as runtime check `telemetry-overhead`.
 
 Typical backend‑optimization invocation:
 
@@ -97,7 +94,6 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
 | `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` | Forces the device‑memory tier (`NativeDeviceClassGate`), propagated to the engine over `initialize`. Runs the constrained‑tier code paths so memory **pressure is measurable on any hardware**. See §11 "Memory & pressure pass". Accepts the `NativeDeviceMemoryClass` rawValues + aliases `8gb`/`16gb`. |
 | `QWENVOICE_MAC_WARM_GATE=off\|records\|enforce` | macOS warm‑admission gate (`MacWarmupAdmissionPolicy`): defers **proactive** warms while the app‑process kernel pressure level is soft/hardTrim on floor/mid tiers. Default `enforce` (validated 2026‑06‑09); `records` logs verdicts without blocking; user generations are never gated. Events land in `diagnostics/app/native-events.jsonl`. |
 | `QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=<n>` | Dev override for the XPC service retirement idle dwell (default 300 s) so retirement‑to‑reclaim can be exercised without the full wait. App‑process only. |
-| `QWENVOICE_FAKE_MIC_WAV=<clip.wav>` | Virtual microphone for mic‑less machines — the record flow simulates capture from this clip (see [`macos-permissions.md`](macos-permissions.md)). |
 | `QVOICE_TALKER_KV_QUANT=8\|4` | **Dev-only** opt‑in talker KV‑cache quantization (QuantizedKVCache, group 64). Measured (P4, §H): clone/long −271 MB physFoot but **−8.6% RTF** — not shipped on any tier; insurance knob only. Never combined with `QVOICE_TALKER_KV_WINDOW`. |
 | `QVOICE_IOS_MLX_CACHE_LIMIT_MB=<n>` | **Dev-only** override of the MLX `Memory.cacheLimit` for the iPhone tier. Useful for sweeps; production uses the tier default. |
 | `QVOICE_IOS_MLX_MEMORY_LIMIT_MB=<n>` | **Dev-only / do not ship** override of MLX `Memory.memoryLimit`. Production avoids a hard `memoryLimit`; see `mlx-guide.md` §5.2. |
@@ -409,8 +405,8 @@ dominant `timingsMS` substage across your before/after.
 > **Primary driver — the `vocello` CLI (headless, deterministic).**
 > `./scripts/build.sh cli bench --lengths short,medium,long --warm 3` drives this entire matrix
 > in‑process (cold/warm controlled exactly via load/unload — no UI waits, focus races, or engine‑busy
-> rejections) and runs the aggregator automatically. It **replaced computer‑use UI‑driving** as the
-> benchmark/test driver. Engine telemetry rows (RTF / decode / memory / `audioQC` / `promptChars`) are
+> rejections) and runs the aggregator automatically. Engine telemetry rows (RTF / decode / memory /
+> `audioQC` / `promptChars`) are
 > identical to the app path; the CLI bypasses XPC, so the app/XPC frontend row is absent and the
 > summarizer's end‑to‑end **TTFC shows `-`** (engine‑only boundary — what backend optimization targets).
 > `vocello bench` and `vocello generate` now stream by default. To measure first‑chunk latency, just
@@ -422,8 +418,8 @@ dominant `timingsMS` substage across your before/after.
 > `--ledger` appends a row to `benchmarks/HISTORY.md`, `--force-class 8gb|16gb|high|iphone` forces a
 > constrained tier on any Mac (the `QWENVOICE_FORCE_MEMORY_CLASS` knob), and `--telemetry verbose`
 > writes the raw per‑sample sidecars. `--seed N` applies the same deterministic sampling seed to
-> every take. Full CLI reference: [`cli.md`](cli.md). The computer‑use UI
-> procedure below is retained for manual/visual runs only.
+> every take. Full CLI reference: [`cli.md`](cli.md). The manual UI procedure below is retained for
+> visual/interactive runs only.
 
 A repeatable, accurate sweep over **mode × model variant × cold/warm**. The `vocello` CLI above is the
 default driver; the **manual UI procedure below** drives the app by hand and reads the JSONL the probes
@@ -465,9 +461,10 @@ package does — and records — its own cold load**. Leave it unset for normal 
    `{mode}_qualityVariantButton`. Switching variant or mode forces the next load to be cold.
 2. Type the fixed script; `cmd+Return`; wait for "Ready" / the inline Player.
 3. That first run is the **cold** sample (`warmState=cold`). Repeat ×3 for the **warm** samples.
-   macOS: `$vocello-macos-ui-qa benchmark` drives the exact app and the shell harness joins typed
-   app/XPC/backend rows before accepting the take. iOS: bundled Computer Use drives real generation on a paired iPhone via
-   `scripts/ios_device.sh` (see [`testing-runbook.md`](testing-runbook.md)).
+   macOS: `scripts/ui_test.sh macos benchmark` drives the configured native test host and validators
+   join typed app/XPC/backend rows before accepting the take. iOS uses
+   `scripts/ui_test.sh ios benchmark` on a paired physical iPhone (see
+   [`testing-runbook.md`](testing-runbook.md)).
 
 **Storage‑safe order (disk‑tight machines):** process one cell at a time — download that package
 → run cold + 3 warm → delete the package (`QwenVoice-Debug/models/<pkg>`) → next cell. Peak disk ≈

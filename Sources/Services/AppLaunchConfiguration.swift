@@ -1,5 +1,4 @@
 import AppKit
-import Foundation
 import SwiftUI
 
 struct AppLaunchConfiguration {
@@ -12,32 +11,11 @@ struct AppLaunchConfiguration {
     }
 
     private let overriddenAnimationsEnabled: Bool?
-    private let initialSidebarItemOverride: InitialSidebarItemOverride?
 
     static let current = AppLaunchConfiguration()
 
-    init(
-        animationsEnabled: Bool? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        debugModeEnabled: Bool = DebugMode.isEnabled
-    ) {
+    init(animationsEnabled: Bool? = nil) {
         self.overriddenAnimationsEnabled = animationsEnabled
-        self.initialSidebarItemOverride = InitialSidebarItemOverride.resolve(
-            environment: environment,
-            debugModeEnabled: debugModeEnabled
-        )
-    }
-
-    var initialSidebarItem: SidebarItem? {
-        guard let initialSidebarItemOverride else { return nil }
-        switch initialSidebarItemOverride {
-        case .settings:
-            return .settings
-        case .history:
-            return .history
-        case .custom:
-            return .customVoice
-        }
     }
 
     var shouldOpenSettingsOnLaunch: Bool {

@@ -1,15 +1,16 @@
 import QwenVoiceCore
 import SwiftUI
 
-/// Record → auto-transcribe → name → enroll a **permanent, reusable** saved voice, launched from
-/// the Voices tab's "Save a new voice" card. Reuses `IOSRecordingOverlay` for capture and
-/// `IOSSaveVoiceSheet` for naming; enrolls via `enrollPreparedVoice` (which copies the clip into
-/// the voices dir + optionally writes the transcript sidecar). On success it hands the new voice
-/// back to the caller (`onEnrolled`) which navigates to Clone mode pre-loaded with it.
+/// Record or import → name → enroll a **permanent, reusable** saved voice from the Voices tab.
+/// Recordings are auto-transcribed; imported clips preserve a neighboring `.txt` sidecar when
+/// `LocalDocumentIO` materializes one. Both sources reuse `IOSSaveVoiceSheet` and
+/// `enrollPreparedVoice`, then hand the saved voice back to Clone mode through `onEnrolled`.
 ///
 /// Presented as a `.fullScreenCover`. Phase 1 renders the recorder inline; phase 2 shows a warm
 /// backdrop with the naming `.sheet` on top (so we never nest two full-screen covers).
 struct IOSRecordVoiceSheet: View {
+    /// A Files import already materialized inside the app sandbox. Nil starts the recorder.
+    let importedReference: ImportedReferenceAudio?
     /// Called once the voice is enrolled with the confirmed (possibly empty) `transcript` and the
     /// detected reference `language` (`.auto` if undetected) to pre-set the Clone language.
     var onEnrolled: (Voice, String, Qwen3SupportedLanguage) -> Void
@@ -18,16 +19,40 @@ struct IOSRecordVoiceSheet: View {
     @EnvironmentObject private var ttsEngine: TTSEngineStore
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
 
-    @State private var phase: Phase = .recording
+    @State private var phase: Phase
     @State private var capturedURL: URL?
-    @State private var suggestedName: String = ""
-    @State private var transcript: String = ""
-    @State private var detectedLanguage: Qwen3SupportedLanguage = .auto
-    @State private var isNamingPresented = false
+    @State private var suggestedName: String
+    @State private var transcript: String
+    @State private var detectedLanguage: Qwen3SupportedLanguage
+    @State private var isNamingPresented: Bool
     @State private var enrollError: String?
     @State private var pendingVoiceForReview: PreparedVoice?
 
     private enum Phase { case recording, naming }
+
+    init(
+        importedReference: ImportedReferenceAudio? = nil,
+        onEnrolled: @escaping (Voice, String, Qwen3SupportedLanguage) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.importedReference = importedReference
+        self.onEnrolled = onEnrolled
+        self.onDismiss = onDismiss
+
+        let importedTranscript = Self.transcript(from: importedReference)
+        _phase = State(initialValue: importedReference == nil ? .recording : .naming)
+        _capturedURL = State(initialValue: importedReference?.materializedURL)
+        _suggestedName = State(initialValue: Self.suggestedName(from: importedReference))
+        _transcript = State(initialValue: importedTranscript)
+        _detectedLanguage = State(
+            initialValue: importedTranscript.isEmpty
+                ? .auto
+                : PromptLanguageDetector.detect(importedTranscript)
+        )
+        _isNamingPresented = State(initialValue: importedReference != nil)
+        _enrollError = State(initialValue: nil)
+        _pendingVoiceForReview = State(initialValue: nil)
+    }
 
     var body: some View {
         ZStack {
@@ -60,13 +85,14 @@ struct IOSRecordVoiceSheet: View {
         }
         .sheet(isPresented: $isNamingPresented) {
             IOSSaveVoiceSheet(
-                title: "Save this voice",
+                title: importedReference == nil ? "Save this voice" : "Import voice",
                 suggestedName: $suggestedName,
                 transcript: $transcript,
                 errorMessage: enrollError,
                 clipAudioURL: capturedURL,
                 onCancel: {
                     isNamingPresented = false
+                    cleanupCapturedFile()
                     onDismiss()
                 },
                 onSave: { Task { await performEnroll() } }
@@ -95,14 +121,18 @@ struct IOSRecordVoiceSheet: View {
                 }
                 .accessibilityIdentifier("recordVoice_keepDespiteWarning")
             }
-            Button("Discard and re-record", role: .destructive) {
+            Button(importedReference == nil ? "Discard and re-record" : "Discard imported voice", role: .destructive) {
                 let voiceID = voice.id
                 pendingVoiceForReview = nil
                 Task { try? await ttsEngine.deletePreparedVoice(id: voiceID) }
-                // Back to the recorder for another take.
                 cleanupCapturedFile()
                 isNamingPresented = false
-                phase = .recording
+                if importedReference == nil {
+                    // Back to the recorder for another take.
+                    phase = .recording
+                } else {
+                    onDismiss()
+                }
             }
             .accessibilityIdentifier("recordVoice_discardOnWarning")
             Button("Cancel", role: .cancel) { pendingVoiceForReview = nil }
@@ -156,9 +186,28 @@ struct IOSRecordVoiceSheet: View {
     }
 
     private func cleanupCapturedFile() {
+        // Imported references live in the shared cache and may also back an in-progress Clone
+        // draft. Enrollment copies them into Saved Voices, but this flow must not invalidate
+        // another consumer of the same fingerprinted cache entry.
+        guard importedReference == nil else {
+            capturedURL = nil
+            return
+        }
         if let url = capturedURL {
             try? FileManager.default.removeItem(at: url)
         }
         capturedURL = nil
+    }
+
+    private static func suggestedName(from importedReference: ImportedReferenceAudio?) -> String {
+        guard let importedReference else { return "" }
+        return importedReference.originalURL.deletingPathExtension().lastPathComponent
+    }
+
+    private static func transcript(from importedReference: ImportedReferenceAudio?) -> String {
+        guard let sidecarURL = importedReference?.transcriptSidecarURL,
+              let contents = try? String(contentsOf: sidecarURL, encoding: .utf8)
+        else { return "" }
+        return contents.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -5,7 +5,7 @@
 > lifecycle, persistence, model management, and telemetry. When this doc disagrees
 > with the code, **the code wins** — fix this doc.
 >
-> Last reviewed: 2026-06-28.
+> Last reviewed: 2026-07-11.
 
 ## TL;DR
 
@@ -106,25 +106,26 @@ graph.)
 | `QwenVoiceEngineService` | xpc-service | macOS | `QwenVoiceEngineService` | `com.qwenvoice.app.engine-service` | Out-of-process engine host for crash isolation + memory containment. |
 | `VocelloCoreTests` | bundle.unit-test | macOS | `VocelloCoreTests` | `com.qwenvoice.core.tests` | Core semantics, typed telemetry compatibility, and atomic/readable output contracts. |
 | `VocelloEngineIntegrationTests` | bundle.unit-test | macOS | `VocelloEngineIntegrationTests` | `com.qwenvoice.engine-integration.tests` | Injectable XPC client/transport lifecycle and correlation contracts; never launches frontend UI. |
+| `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | Explicit native-app smoke and benchmark XCUITest lanes. |
+| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | Explicit paired-physical-iPhone smoke and benchmark XCUITest lanes; never Simulator. |
 
 ### Testing lanes (see [`docs/reference/testing-runbook.md`](reference/testing-runbook.md))
 
 | Layer | macOS | iOS | Development publishing policy |
 | --- | --- | --- | --- |
 | **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
-| **UI impact** | `macos_agent_ui.sh impact` | `ios_agent_ui.sh impact` | Advisory only |
-| **Strict frontend gate** | `macos_test.sh gate` | `ios_device.sh gate` | Explicit acceptance and matching-platform release only |
-| **UI regression** | `$vocello-macos-ui-qa` Computer Use + independent schema-v2 attestations | `$vocello-ios-ui-qa` Computer Use through iPhone Mirroring | Never required to preserve or share development work |
+| **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of XCUITest |
+| **UI regression** | `ui_test.sh macos smoke\|benchmark` XCUITest | `ui_test.sh ios smoke\|benchmark` XCUITest on a paired physical iPhone | Explicit frontend QA only; never required for publishing or packaging |
 | **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` autorun | Explicit performance/release QA |
-| **Exploratory review** | Same Computer Use operator, but only structured quick/full/benchmark reports count | Same Computer Use operator with live mirror screenshots | Structured reports feed platform release gates |
+| **UI evidence** | Named XCTest attachments from the native app | Named XCTest attachments from the physical iPhone | Independent explicit-acceptance artifacts |
 
-Release evidence is platform-specific: a macOS package requires macOS frontend evidence, while an
-iOS archive/TestFlight build requires iOS frontend evidence. Neither platform blocks the other's
-artifact.
+Release packaging is deterministic and does not consume UI results. Frontend evidence remains
+platform-specific and is created only when explicitly requested.
 
-**Two schemes**: `QwenVoice` (macOS app + deterministic unit/integration tests) and `VocelloiOS`
-(iOS app). A single shippable config, **`Release`**, is
-the only config — there is no `Debug` config and no `DEBUG` symbol.
+**Four schemes**: `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
+(iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
+iOS XCUITest). The UI schemes are isolated from ordinary test actions. A single shippable config,
+**`Release`**, is the only config — there is no `Debug` config and no `DEBUG` symbol.
 
 ### Key layering rule
 
@@ -551,6 +552,12 @@ goes to stderr. Full reference: [`reference/cli.md`](reference/cli.md).
 - Studio: `IOSStudioCanvas.swift` with a mode segmented control
   (custom/design/clone), input area, generate button, and live-preview rail.
   Sheets under `Sources/iOS/Sheets/` (e.g. `IOSVoicePreviewPlayer`).
+- Reference import: `IOSVoicesView` presents a native `fileImporter` for WAV, MP3, AIFF, and M4A;
+  `RootView.onOpenURL` routes supported documents opened from Files through the same production
+  flow. `TTSEngineStore.importReferenceAudio` / `LocalDocumentIO` materializes the security-scoped
+  audio and adjacent `.txt` transcript sidecar into app-owned storage. `IOSRecordVoiceSheet` then
+  collects the visible name/transcript, enrolls the saved voice, and hands it to Studio Clone.
+  `Info.plist` declares `public.audio`, in-place document opening, and Files sharing for this route.
 - iOS UI conventions: `IOSScrollView` (not raw `ScrollView`) for vertical
   surfaces, `TabDock`, voice previews from `Resources/voice-previews/`.
 
@@ -682,8 +689,8 @@ with `layer { engine, engineService, app, merged }`. New validation consumes typ
 compatibility output and v1–v5 rows still decode. The transport layer records session/chunk/order/
 terminal evidence; the backend records typed stages/timings/counters, final barrier, atomic output,
 memory, and audio QC. No telemetry persists raw script, transcript, path, or voice description.
-Aggregate with `scripts/summarize_generation_telemetry.py` and validate UI-driven generations with
-`scripts/macos_agent_ui.sh verify-probes`.
+Aggregate with `scripts/summarize_generation_telemetry.py`; UI-driven tests join matching typed
+records by `generationID` before accepting a take.
 Logs are budget-capped (`QWENVOICE_DIAGNOSTICS_MAX_MB`, default ~8 MB, pruned
 oldest-first); raw `*.jsonl` is gitignored; committed summaries must be ≤256 KB.
 
@@ -769,7 +776,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
-- [`development-progress.md`](development-progress.md) — active checkpoint: implemented work, deterministic development status, pending release-only Computer Use evidence, and Codex resume route.
+- [`development-progress.md`](development-progress.md) — active checkpoint: deterministic development status, the completed XCUITest stack, and the Codex resume route.
 - [`project-map.html`](project-map.html) — canonical interactive project map: product features, build graph, runtime flows, source ownership, dependencies, contracts, and Codex routes.
 - [`AGENTS.md`](../AGENTS.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.

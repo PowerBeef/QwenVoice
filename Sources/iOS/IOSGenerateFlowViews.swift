@@ -147,9 +147,6 @@ struct IOSGenerateContainerView: View {
                 voiceDesignDraft: voiceDesignDraft
             )
         }
-        // Leaf presence marker (see `screenPresenceMarker`): keeps `screen_generateStudio`
-        // queryable without shadowing the composer/pill ids beneath it.
-        .screenPresenceMarker("screen_generateStudio")
     }
 }
 
@@ -448,4 +445,3 @@ extension IOSGenerationSection {
         IOSBrandTheme.modeColor(for: mode)
     }
 }
-

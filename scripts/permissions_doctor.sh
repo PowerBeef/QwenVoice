@@ -98,7 +98,7 @@ section_mic() {
         echo "$inputs" | sed 's/^/    input: /'
     else
         echo "    ⚠ no audio-input device detected — the record UI shows its no-microphone"
-        echo "      state; use QWENVOICE_FAKE_MIC_WAV=<clip.wav> for virtual-mic testing."
+        echo "      state; attach a real input device before testing microphone capture."
     fi
 }
 

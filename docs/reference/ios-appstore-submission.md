@@ -4,18 +4,18 @@ The end-to-end steps to ship **Vocello for iPhone** (`com.patricedery.vocello`) 
 
 Source-of-truth rule: if this disagrees with the code, the code wins.
 
-This runbook is release-only. Ordinary commits, pushes, pull requests, merges, and CI use
-deterministic verification and do not require a phone, models, Computer Use, or UI evidence. iOS
-archive/TestFlight alone requires fresh iOS evidence; it never requires macOS frontend evidence.
+This runbook is release-only. Commits, pushes, pull requests, merges, CI, archive, and TestFlight
+packaging use deterministic verification and do not require a phone, models, or XCUITest evidence.
+Physical-device UI results are optional explicit frontend QA artifacts.
 
 **Verified on device (2026-06-13, iPhone 17 Pro):** the development build signs, installs, and runs
 end-to-end. `scripts/ios_device.sh` now **auto-derives the signing team** from the keychain's Apple
 Development certificate (no `QWENVOICE_DEVELOPMENT_TEAM` needed for local dev builds; it also falls back to
 offline manual signing if no Apple ID is in Xcode). The development provisioning profile already carries
 `increased-memory-limit`, and on-device generation is healthy — RTF ~1.8 warm, ~2.7 GB peak (well within the
-8 GB-class iPhone budget), 0 memory trims, audio-QC pass; full iOS Computer Use acceptance passed
-historically via `scripts/ios_device.sh test` / `gate` (fresh evidence is required for the next
-archive; ordinary GitHub CI is deterministic-only — see
+8 GB-class iPhone budget), 0 memory trims, and audio-QC pass. Physical-device XCUITest can be run
+independently when explicit frontend acceptance is requested; ordinary GitHub CI and archive
+packaging are deterministic-only — see
 [`testing-runbook.md`](testing-runbook.md)); and the UI
 holds with no clipping at the largest accessibility Dynamic Type size. **Still maintainer-only below:** the
 **Distribution** cert + **App Store** provisioning profile (regenerated to carry `increased-memory-limit`) +
@@ -53,7 +53,8 @@ the ASC record/metadata/upload.
 > "Custom Voice"; it downloads a ~2.3 GB 4-bit Speed model from Hugging Face over Wi-Fi, ~1–2 min). After the model
 > shows **Active**, open Studio, type a short line, pick a built-in speaker, and tap Generate to hear on-device
 > synthesis. Voice Design and Voice Cloning each install their own model the same way. No account or login is
-> required. Microphone + Speech permissions are only requested if you use Voice Cloning's in-app recording.
+> required. Voice Cloning can record a reference on-device or import WAV, MP3, AIFF, or M4A from Files;
+> Microphone + Speech permissions are only requested for the in-app recording/transcription route.
 
 No demo account is needed (no login). Note the model download requirement so the app is not judged
 non-functional under Guideline 2.1.
@@ -62,7 +63,8 @@ non-functional under Guideline 2.1.
 
 - [ ] iPhone screenshots (6.9" and 6.5" required). Capture from the **device** for all
       surfaces (generation, model install, sheets). Studio (with a script + voice), Voice Design, Voice
-      Cloning, History, and model-install Settings. Use `$vocello-ios-ui-qa full` captures.
+      Cloning, Voices import/enrollment, History, and model-install Settings. Export named screenshots from a current
+      `scripts/ui_test.sh ios smoke` result bundle.
 - [ ] App name, subtitle (≤30 chars each), description, keywords (≤100), support URL (the GitHub repo or the
       website), marketing URL (`https://vocello.vercel.app`), copyright.
 
@@ -84,8 +86,7 @@ Add these repo **Secrets** (Settings → Secrets and variables → Actions):
 
 Then run the **Release** workflow from the Actions tab with `archive_ios = true` (and `upload_to_testflight = true`
 to push straight to TestFlight). This job is gated to manual dispatch only, so it never affects the macOS DMG
-release. Before importing signing assets or archiving, it requires
-`scripts/ios_agent_ui.sh release-check`. It then archives `VocelloiOS`, asserts the
+release. The workflow archives `VocelloiOS`, asserts the
 `increased-memory-limit` entitlement + the bundled catalog, exports via
 `ExportOptions-appstore.plist`, uploads the IPA artifact, and (optionally) uploads to TestFlight.
 
@@ -94,7 +95,7 @@ release. Before importing signing assets or archiving, it requires
 ```sh
 export QWENVOICE_DEVELOPMENT_TEAM=<your-team-id>
 ./scripts/regenerate_project.sh
-scripts/ios_agent_ui.sh release-check
+scripts/ios_device.sh preflight
 xcodebuild archive -scheme VocelloiOS -destination 'generic/platform=iOS' \
   -archivePath build/ios/Vocello.xcarchive -allowProvisioningUpdates
 /usr/libexec/PlistBuddy -c "Add :teamID string $QWENVOICE_DEVELOPMENT_TEAM" ExportOptions-appstore.plist
@@ -110,6 +111,9 @@ validation per `scripts/verify_ios_release_archive.sh`'s usage):
 ./scripts/verify_ios_release_archive.sh build/ios/Vocello.xcarchive build/ios/export release_metadata.txt
 ```
 
+When frontend acceptance is explicitly requested, run `scripts/ui_test.sh ios smoke` and
+`scripts/ui_test.sh ios benchmark` separately; their result bundles do not gate the archive.
+
 Upload the IPA via Transporter or `xcrun altool --upload-app -f build/ios/export/Vocello.ipa -t ios \
   --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>` (with `AuthKey_<KEY_ID>.p8` in `~/.appstoreconnect/private_keys/`).
 
@@ -117,7 +121,7 @@ Upload the IPA via Transporter or `xcrun altool --upload-app -f build/ios/export
 
 The repo's standing iOS quality work covers the code side (audio-session lifecycle, accessibility, dismissible
 onboarding, error/empty states, portrait lock, privacy link). Before submitting, additionally confirm on a real
-device: launch + all 4 tabs; install a model; generate in each mode; record→clone with mic/speech permission
+device: launch + all 4 tabs; install a model; generate in each mode; import→enroll→clone; record→clone with mic/speech permission
 **denial + recovery** via Settings → About → Open iOS Settings; cancel mid-generation; an incoming call mid-record
 keeps the take; VoiceOver reads the primary controls; the largest Dynamic Type doesn't clip the composer.
 

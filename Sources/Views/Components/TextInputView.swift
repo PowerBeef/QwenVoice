@@ -48,7 +48,6 @@ struct TextInputView: View {
             radius: 10,
             strokeColor: isEditorFocused ? buttonColor.opacity(0.24) : AppTheme.fieldStroke
         )
-        .accessibilityIdentifier("textInput_textEditor")
         .frame(maxHeight: usesFlexibleEmbeddedHeight ? .infinity : nil, alignment: .topLeading)
     }
 
@@ -134,6 +133,7 @@ struct ScriptTextEditor: NSViewRepresentable {
     let placeholder: String
     let font: NSFont
     @Binding var isFocused: Bool
+    var accessibilityIdentifier: String = "textInput_textEditor"
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -157,17 +157,12 @@ struct ScriptTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.string = text
         textView.placeholderString = placeholder
+        textView.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
+        textView.setAccessibilityIdentifier(accessibilityIdentifier)
+        textView.setAccessibilityEnabled(true)
         textView.onFocusChange = { focused in
             DispatchQueue.main.async { isFocused = focused }
         }
-        #if DEBUG
-        // The nested NSTextView's AXTextArea subtree can destabilize AppKit
-        // accessibility-tree traversal during automated UI inspection. Keep the
-        // outer scroll view discoverable via textInput_textEditor (so manual,
-        // agent-driven UI review can click it by coordinates) but drop the inner
-        // text area from the accessibility tree in Debug builds.
-        textView.setAccessibilityElement(false)
-        #endif
 
         scrollView.hasVerticalScroller = true
         scrollView.scrollerStyle = .overlay
@@ -188,6 +183,10 @@ struct ScriptTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? PlaceholderTextView else { return }
+        if textView.identifier?.rawValue != accessibilityIdentifier {
+            textView.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
+            textView.setAccessibilityIdentifier(accessibilityIdentifier)
+        }
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
             textView.string = text

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import QwenVoiceCore
 
 /// Unified Voices tab from design_references/Vocello iOS/screens.jsx
@@ -17,6 +18,8 @@ struct IOSVoicesView: View {
     let onSelectSavedVoice: (Voice) -> Void
     /// Surface the record → name → enroll flow (the call-site presents it + handles the handoff).
     let onRecordNewVoice: () -> Void
+    /// Continue an imported reference through the same name → enroll flow as a recording.
+    let onImportNewVoice: (ImportedReferenceAudio) -> Void
 
     @EnvironmentObject private var ttsEngine: TTSEngineStore
     @EnvironmentObject private var savedVoicesViewModel: SavedVoicesViewModel
@@ -24,6 +27,8 @@ struct IOSVoicesView: View {
 
     @State private var search: String = ""
     @State private var filter: VoiceFilter = .all
+    @State private var isAudioImporterPresented = false
+    @State private var importErrorMessage: String?
 
     // The built-in speaker list is a static constant — sort it once, not on
     // every body evaluation (iOS readiness audit, fix #25).
@@ -108,11 +113,35 @@ struct IOSVoicesView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.bottom, 12)
             }
-            .task {
+            // Engine initialization finishes asynchronously after the screen can
+            // first appear. Key the task to readiness so an early no-op is retried
+            // instead of leaving Saved Voices empty for the rest of the session.
+            .task(id: ttsEngine.isReady) {
                 await savedVoicesViewModel.ensureLoaded(using: ttsEngine)
             }
         }
         .accessibilityIdentifier("screen_voices")
+        .fileImporter(
+            isPresented: $isAudioImporterPresented,
+            allowedContentTypes: [.wav, .mp3, .aiff, .mpeg4Audio],
+            allowsMultipleSelection: false
+        ) { result in
+            handleAudioImport(result)
+        }
+        .fileDialogDefaultDirectory(
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        )
+        .alert(
+            "Couldn't import audio",
+            isPresented: Binding(
+                get: { importErrorMessage != nil },
+                set: { if !$0 { importErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { importErrorMessage = nil }
+        } message: {
+            Text(importErrorMessage ?? "Choose another audio file and try again.")
+        }
     }
 
     private func voicesSectionHeading(_ title: String) -> some View {
@@ -128,29 +157,77 @@ struct IOSVoicesView: View {
     // MARK: - Save-a-voice CTA
 
     private var saveACallCard: some View {
-        Button {
-            IOSHaptics.selection()
-            // Launch record → name → enroll. The call-site (VoicesScreen) presents the flow and,
-            // on enrollment, stages the Clone handoff + navigates to Studio.
-            onRecordNewVoice()
-        } label: {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Save a new voice")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(IOSAppTheme.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            newVoiceActionRow(
+                title: "Record voice",
+                detail: "Capture a 10-20 second reference clip on this iPhone.",
+                symbol: "mic.fill",
+                accessibilityIdentifier: "voices_saveNewVoice"
+            ) {
+                IOSHaptics.selection()
+                onRecordNewVoice()
+            }
+
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+                .padding(.leading, 66)
+
+            newVoiceActionRow(
+                title: "Import audio file",
+                detail: "Choose a WAV, MP3, AIFF, or M4A file from Files.",
+                symbol: "folder.fill",
+                accessibilityIdentifier: "voices_importAudioFile"
+            ) {
+                IOSHaptics.selection()
+                isAudioImporterPresented = true
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.white.opacity(0.02))
+                }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func newVoiceActionRow(
+        title: String,
+        detail: String,
+        symbol: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.06))
-                    Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .bold))
+                        .fill(IOSBrandTheme.clone.opacity(0.16))
+                    Image(systemName: symbol)
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(IOSBrandTheme.clone)
                 }
-                .frame(width: 44, height: 44)
+                .frame(width: 40, height: 40)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Save a new voice")
+                    Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(IOSAppTheme.textPrimary)
-                    Text("Record a 10-20 s reference clip you own.")
+                    Text(detail)
                         .font(.caption)
                         .foregroundStyle(IOSAppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 6)
@@ -161,19 +238,31 @@ struct IOSVoicesView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .background {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.white.opacity(0.02))
-                    }
-            }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .accessibilityIdentifier("voices_saveNewVoice")
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
+    }
+
+    private func handleAudioImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let sourceURL = urls.first else { return }
+            do {
+                // Keep the picker-provided URL intact so LocalDocumentIO can consume its
+                // security-scoped grant before materializing both audio and any .txt sidecar.
+                let imported = try ttsEngine.importReferenceAudio(from: sourceURL)
+                importErrorMessage = nil
+                onImportNewVoice(imported)
+            } catch {
+                importErrorMessage = error.localizedDescription
+            }
+        case .failure(let error):
+            if (error as? CocoaError)?.code != .userCancelled {
+                importErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: - Rows
@@ -271,6 +360,7 @@ struct IOSVoicesView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("voicesRow_saved_\(voice.id)")
 
             Spacer(minLength: 8)
 
@@ -297,7 +387,6 @@ struct IOSVoicesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
-        .accessibilityIdentifier("voicesRow_saved_\(voice.id)")
     }
 
     private func voicePreviewButton(isPlaying: Bool, action: @escaping () -> Void) -> some View {

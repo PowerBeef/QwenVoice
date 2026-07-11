@@ -1,8 +1,8 @@
 # Vocello for Mac — app guide + test-driving reference
 
-A consolidated map of the Vocello macOS app: what every screen/element/option does (user
-view) and how Codex Computer Use drives it like a human (identifier → action → expected).
-Use this to maintain the repository macOS UI scenarios and stable accessibility surface.
+A consolidated map of the Vocello macOS app: what every screen/element/option does and how
+XCUITest addresses it (identifier → action → expected). Use this to maintain the smoke and
+benchmark tests and stable accessibility surface.
 
 > **Where this fits:** the canonical "macOS app + driving" reference. Running the tests
 > lives in [`macos-testing.md`](macos-testing.md); the engine/XPC internals live in
@@ -35,9 +35,9 @@ has **both Speed (4-bit) and Quality (8-bit)** variants.
 
 ### Semantic state surfaces
 
-Computer Use inspects the real accessibility state. Destination containers use `screen_*`, primary
+XCUITest inspects the real accessibility state. Destination containers use `screen_*`, primary
 controls expose stable identifiers, and `{mode}_readiness` values report `ready=true/false`.
-Hidden `mainWindow_*` markers and `QWENVOICE_UI_TEST_HOOKS` are intentionally absent on macOS.
+Tests assert these visible production surfaces directly.
 
 ### Custom Voice (`sidebar_customVoice` → `screen_customVoice`)
 
@@ -144,23 +144,19 @@ higher-fidelity output.
 
 ## 5. Driving the macOS UI like a human
 
-### Test infrastructure (Codex Computer Use)
+### Test infrastructure (XCUITest)
 
-`$vocello-macos-ui-qa` is the sole macOS frontend driver. It consumes the semantic scenarios in
-[`config/macos-ui-scenarios.json`](../../config/macos-ui-scenarios.json), launches the exact
-`build/Vocello.app`, and re-observes the accessibility tree before and after each logical action.
-There is no macOS XCUITest target or hidden test-marker surface.
+`VocelloMacUITests` is the sole autonomous macOS frontend driver. It launches its configured
+Vocello test host, uses the shared UI automation support, and re-queries stable accessibility state
+before and after each logical action. There is no hidden test-marker surface.
 
 The shell harness owns deterministic proof and evidence:
 
 | Lane | Purpose |
 |------|---------|
-| `scripts/macos_test.sh test` | Core, XPC transport, runtime and harness tests; no UI driving |
-| `$vocello-macos-ui-qa quick\|full` | Semantic UI journeys and review |
-| `$vocello-macos-ui-qa benchmark` | UI-driven generation matrix |
-| `scripts/macos_test.sh ui-report --suite …` | Validate report, typed probes, fingerprints and cleanup |
-| `scripts/macos_test.sh review` | Require a valid full report |
-| `scripts/macos_test.sh bench-ui` | Require a valid benchmark report and merged telemetry matrix |
+| `scripts/macos_test.sh test` | Core, XPC transport, and runtime tests; no UI driving |
+| `scripts/ui_test.sh macos smoke` | Semantic UI journeys, accessibility assertions, and named screenshots |
+| `scripts/ui_test.sh macos benchmark` | UI-driven generation matrix plus merged telemetry proof |
 
 ### macOS-specific patterns (vs iOS)
 
@@ -169,27 +165,27 @@ The shell harness owns deterministic proof and evidence:
 - **Menus + popovers** — sort pickers, model "Manage" menus, language/delivery pickers use
   macOS menus (NSMenu), not iOS-style sheets. Re-observe after opening before selecting.
 - **Keyboard shortcuts** — Cmd+1..6 for sidebar (Cmd+6 is labeled "Models" in the Navigate menu but opens the unified Settings/Models surface); Cmd+, for the Settings window.
-- **File pickers** — reference import uses NSOpenPanel. The full suite chooses the tracked
-  non-PII fixture and follows Computer Use action-time confirmation policy.
-- **Coordinates/screenshots** — use only when accessibility cannot expose the control and record
-  the fallback as an automation warning.
+- **File pickers** — reference import uses NSOpenPanel. Import is product functionality but is not
+  part of the minimal smoke or benchmark lane.
+- **Screenshots** — attach named screenshots at important states and on failures; do not use
+  coordinates as a control-selection fallback.
 
 ### Canonical flow
 
 1. Launch → observe `sidebar_customVoice` and `screen_customVoice`.
 2. Navigate by `sidebar_<mode>` → re-observe the destination screen identifier.
 3. Compose through `textInput_textEditor` → re-observe the changed semantic value/state.
-4. Generate through `textInput_generateButton` → observe `sidebarPlayer_bar`, then run
-   `verify-generation`, `verify-history`, and `verify-probes`.
+4. Generate through `textInput_generateButton` → observe `sidebarPlayer_bar`, then assert the
+   matching History/WAV/typed-probe evidence.
 5. History: `sidebar_history` → `historyRow_play_<id>`.
 6. Settings: `sidebar_settings` → `settings_download_<id>`.
 
 ### Gotchas
 
-- **Menu items** — sort/manage menu items without identifiers are selected by semantic label and
-  recorded as catalog gaps when the accessibility tree is insufficient.
-- **NSOpenPanel** — re-observe the system sheet and select the known fixture; do not use hidden
-  mocks or AppleScript as frontend proof.
+- **Menu items** — if a future scenario needs an item that lacks a stable identifier, add one before
+  automating it. Label-only selection is not a fallback.
+- **NSOpenPanel** — system-picker interaction belongs to an explicit import scenario. Do not use
+  coordinates, hidden mocks, or AppleScript as frontend proof.
 - **XPC service retirement** — the engine may be idle/retired; a generation auto-relaunches
   it. The `sidebar_backendStatus_*` markers reflect the state.
 - **First responder** — after navigating, the text editor may need one explicit action before
@@ -199,9 +195,11 @@ The shell harness owns deterministic proof and evidence:
 
 ## 6. Identifier gaps
 
-macOS controls without stable identifiers (label/coordinate-driven):
-- Individual delivery/language menu items (drive by label).
+macOS controls not currently targeted by the minimal smoke/benchmark lanes:
+- Individual delivery/language menu items.
 - Model "Manage" popover menu items.
 - Batch item rows (derived from `BatchGenerationItemState`, no per-item id).
 - History context menu items ("Reveal in Finder").
-- History context menu items ("Reveal in Finder").
+
+Add stable identifiers before extending autonomous coverage to these controls; do not introduce
+label-only or coordinate-based selectors.

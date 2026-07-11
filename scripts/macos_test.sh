@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
-# macOS deterministic testing, telemetry, and Computer Use evidence driver.
+# macOS deterministic testing and telemetry driver.
 #
-# macOS is the dev host (no device/Mirroring/burn-in). The engine runs OUT-OF-PROCESS in
+# macOS is the native development host. The engine runs OUT-OF-PROCESS in
 # an XPC service (com.qwenvoice.app.engine-service) — a separate process that can crash
 # independently and be retired under memory pressure. Several lanes target the app AND the
 # service. Build/run/release stay in scripts/build.sh; this script adds the lanes.
 #
 # usage:
 #   scripts/macos_test.sh preflight [--strict-models]  # Xcode + app + dSYMs + XPC + model status
-#   scripts/macos_test.sh bench-ui [--report <run-dir>]  # validate Computer Use benchmark + telemetry
 #   scripts/macos_test.sh core-test                 # VocelloCoreTests (language semantics, no models)
 #   scripts/macos_test.sh lang-bench [--subset quick|full] [--label "note"]
 #                                                 # headless macOS language-hint matrix (vocello CLI)
 #   scripts/macos_test.sh test                      # Core + XPC transport + Qwen3 runtime tests (no UI)
-#   scripts/macos_test.sh telemetry-overhead        # seeded PCM + RTF/TTFC; requires current full UI model-readiness evidence
-#   scripts/macos_test.sh ui-report --suite quick|full|benchmark [--report <run-dir>]
+#   scripts/macos_test.sh telemetry-overhead        # seeded PCM + RTF/TTFC (explicit, model-dependent)
 #   scripts/macos_test.sh crashes [--test]          # collect + xcsym-symbolicate .ips (app + XPC service)
 #   scripts/macos_test.sh debug                     # LLDB attach guidance (app + XPC service PID)
 #   scripts/macos_test.sh logs                      # retained os_log → build/macos-logs/<run>.log
 #   scripts/macos_test.sh profile [spec]            # models ensure → xctrace vocello bench
-#   scripts/macos_test.sh review [--report <run-dir>]  # alias: validate full Computer Use report
-#   scripts/macos_test.sh xpc                       # XPC lifecycle: retirement/relaunch + crash isolation
-#   scripts/macos_test.sh gate                      # models → inputs → build_foundation → test → crashes
+#   scripts/macos_test.sh gate                      # inputs → build_foundation → test → crashes
 #                                                    # optional: QWENVOICE_GATE_BENCH=1 adds bounded vocello bench
-#   scripts/macos_test.sh release-readiness         # unconditional deterministic + full + benchmark + telemetry gate
+#   scripts/macos_test.sh release-readiness         # deterministic packaging gate (no UI)
 #   scripts/macos_test.sh models check|ensure|install  # test model fixture (Speed variant)
 #   scripts/macos_test.sh help
 
@@ -385,7 +381,7 @@ cmd_test() {
   local run_id="mac-test-$(date +%Y%m%d-%H%M%S)"
   local artifacts="$ROOT_DIR/build/macos/test-artifacts/$run_id"
   mkdir -p "$artifacts"
-  local test_build_st=0 core_st=0 transport_st=0 runtime_st=0 harness_st=0
+  local test_build_st=0 core_st=0 transport_st=0 runtime_st=0
 
   note "test: compile deterministic macOS test bundles"
   set +e
@@ -430,17 +426,12 @@ cmd_test() {
     runtime_st=1
   fi
 
-  note "test: Computer Use harness contracts"
-  python3 -m unittest \
-    "$ROOT_DIR/scripts/test_computer_use_routing.py" \
-    "$ROOT_DIR/scripts/test_macos_agent_ui.py" \
-    > "$artifacts/harness.log" 2>&1 || harness_st=$?
   set -e
-  printf 'test_build=%s\ncore=%s\ntransport=%s\nruntime=%s\nharness=%s\n' \
-    "$test_build_st" "$core_st" "$transport_st" "$runtime_st" "$harness_st" \
+  printf 'test_build=%s\ncore=%s\ntransport=%s\nruntime=%s\n' \
+    "$test_build_st" "$core_st" "$transport_st" "$runtime_st" \
     > "$artifacts/verdict.txt"
   cat "$artifacts/verdict.txt" >&2
-  if (( core_st == 0 && transport_st == 0 && runtime_st == 0 && harness_st == 0 )); then
+  if (( core_st == 0 && transport_st == 0 && runtime_st == 0 )); then
     note "test verdict: PASS · artifacts → $artifacts"
   else
     warn "test verdict: FAIL · artifacts → $artifacts"
@@ -449,10 +440,8 @@ cmd_test() {
 }
 
 cmd_telemetry_overhead() {
-  # This lane performs real generation. A current full Computer Use report is
-  # the durable proof that Settings visibly showed every required model ready,
-  # Generate enabled, and the clone fixture present before generation began.
-  "$SCRIPT_DIR/macos_agent_ui.sh" model-readiness-check >/dev/null
+  # Explicit model-dependent diagnostic. UI readiness is checked separately by
+  # scripts/ui_test.sh before every UI-driven generation.
   check_mac_test_models --strict
   "$SCRIPT_DIR/build.sh" cli >/dev/null
   local verdict_path
@@ -460,109 +449,11 @@ cmd_telemetry_overhead() {
   verdict_path="$(python3 "$SCRIPT_DIR/telemetry_overhead.py" "$@")" \
     || die "telemetry-overhead FAIL (raw evidence under build/macos/telemetry-overhead)"
   [[ -f "$verdict_path" ]] || die "telemetry-overhead verdict missing: $verdict_path"
-  "$SCRIPT_DIR/macos_agent_ui.sh" attest-runtime \
-    --name telemetry-overhead --file "$verdict_path"
   note "telemetry-overhead PASS · $verdict_path"
 }
 
-# Computer Use owns frontend driving. These lanes validate the resulting report;
-# they never launch an XCTest runner or synthesize input.
-cmd_ui_report() {
-  local suite="" report=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --suite) suite="${2:-}"; shift 2 ;;
-      --suite=*) suite="${1#*=}"; shift ;;
-      --report) report="${2:-}"; shift 2 ;;
-      --report=*) report="${1#*=}"; shift ;;
-      -h|--help|help)
-        cat <<'EOF'
-ui-report — validate Codex Computer Use frontend evidence
-
-  scripts/macos_test.sh ui-report --suite quick|full|benchmark [--report <run-id-or-directory>]
-
-Create evidence with:
-  $vocello-macos-ui-qa quick|full|benchmark
-EOF
-        return 0
-        ;;
-      *) die "unknown ui-report flag '$1'" ;;
-    esac
-  done
-  [[ "$suite" == "quick" || "$suite" == "full" || "$suite" == "benchmark" ]] \
-    || die "ui-report requires --suite quick|full|benchmark"
-  local -a args=(validate-report --suite "$suite")
-  [[ -n "$report" ]] && args+=(--run "$report")
-  "$SCRIPT_DIR/macos_agent_ui.sh" "${args[@]}"
-}
-
-cmd_review() {
-  cmd_ui_report --suite full "$@"
-}
-
-cmd_bench_ui() {
-  local report=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --report) report="${2:-}"; shift 2 ;;
-      --report=*) report="${1#*=}"; shift ;;
-      -h|--help|help)
-        cat <<'EOF'
-bench-ui — validate a Computer Use benchmark report and its XPC/backend matrix
-
-  scripts/macos_test.sh bench-ui [--report <run-id-or-directory>]
-
-Drive the matrix first with:
-  $vocello-macos-ui-qa benchmark
-EOF
-        return 0
-        ;;
-      *) die "unknown bench-ui flag '$1'" ;;
-    esac
-  done
-
-  local -a report_args=(--suite benchmark)
-  [[ -n "$report" ]] && report_args+=(--report "$report")
-  cmd_ui_report "${report_args[@]}"
-
-  local run_json
-  if [[ -n "$report" ]]; then
-    if [[ "$report" == */run.json ]]; then run_json="$report"
-    elif [[ -d "$report" ]]; then run_json="$report/run.json"
-    else run_json="$ROOT_DIR/build/macos/agent-ui/$report/run.json"; fi
-  else
-    run_json="$(python3 - "$ROOT_DIR/build/macos/agent-ui/current-run.json" <<'PY'
-import json, pathlib, sys
-current = json.loads(pathlib.Path(sys.argv[1]).read_text())
-print(pathlib.Path(current["runDirectory"]) / "run.json")
-PY
-)"
-  fi
-  [[ -f "$run_json" ]] || die "benchmark run.json not found: $run_json"
-  local run_id
-  run_id="$(python3 - "$run_json" <<'PY'
-import json, pathlib, sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text())["runID"])
-PY
-)"
-  local diag="$HOME/Library/Application Support/QwenVoice-Debug/diagnostics"
-  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
-    --label "$run_id" --merged --show-variance
-  python3 "$ROOT_DIR/scripts/check_macos_xpc_bench.py" "$diag" --run-id "$run_id"
-}
-# XPC lifecycle shell support for the Computer Use full suite. Frontend actions
-# remain in $vocello-macos-ui-qa; this verb only observes or mutates the service.
-cmd_xpc() {
-  local sub="${1:-status}"; shift || true
-  case "$sub" in
-    status) "$SCRIPT_DIR/macos_agent_ui.sh" xpc-status "$@" ;;
-    kill)   "$SCRIPT_DIR/macos_agent_ui.sh" xpc-kill "$@" ;;
-    wait)   "$SCRIPT_DIR/macos_agent_ui.sh" xpc-wait "$@" ;;
-    *) die "unknown xpc subcommand '$sub' (try status|kill|wait)" ;;
-  esac
-}
-# gate: one-command macOS pre-merge gate — inputs → build → deterministic Core,
-# transport, and runtime tests → crashes → impact-based Computer Use attestation.
+# gate: one-command macOS deterministic gate — inputs → build → Core,
+# transport, and runtime tests → crashes.
 # Optional bounded engine bench remains available with QWENVOICE_GATE_BENCH=1.
 
 GATE_BENCH_BASELINE="$ROOT_DIR/benchmarks/baselines/mac-gate-bench.json"
@@ -651,8 +542,8 @@ cmd_gate() {
   local overall=0
   local gate_bench=0
   [[ "${QWENVOICE_GATE_BENCH:-0}" == "1" ]] && gate_bench=1
-  local total_steps=7
-  (( gate_bench )) && total_steps=8
+  local total_steps=4
+  (( gate_bench )) && total_steps=5
   { echo "Vocello macOS gate — $run_id"; echo; } | tee "$verdict"
 
   # Marker for the gate-fatal crash-delta check: only .ips files newer than this
@@ -660,34 +551,27 @@ cmd_gate() {
   local crash_marker="$gate_dir/.crash-marker"
   touch "$crash_marker"
 
-  note "gate step 0/$total_steps: verify test models without repair or download"
-  if ( check_mac_test_models --strict ) >>"$gate_dir/models.log" 2>&1; then
-    echo "models: PASS" | tee -a "$verdict"
-  else
-    echo "models: FAIL (see models.log)" | tee -a "$verdict"; overall=1
-  fi
-
-  note "gate step 1/$total_steps: check_project_inputs"
+  note "gate step 0/$total_steps: check_project_inputs"
   if "$SCRIPT_DIR/check_project_inputs.sh" >>"$gate_dir/inputs.log" 2>&1; then
     echo "check_project_inputs: PASS" | tee -a "$verdict"
   else echo "check_project_inputs: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 2/$total_steps: build_foundation_targets macos"
+  note "gate step 1/$total_steps: build_foundation_targets macos"
   if "$SCRIPT_DIR/build_foundation_targets.sh" macos >>"$gate_dir/build.log" 2>&1; then
     echo "build_foundation macos: PASS" | tee -a "$verdict"
   else echo "build_foundation macos: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 3/$total_steps: core-test (VocelloCoreTests)"
+  note "gate step 2/$total_steps: core-test (VocelloCoreTests)"
   if ( cmd_core_test ) >>"$gate_dir/core-test.log" 2>&1; then
     echo "core-test: PASS" | tee -a "$verdict"
   else echo "core-test: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 4/$total_steps: deterministic Core + XPC transport + Qwen3 runtime tests"
+  note "gate step 3/$total_steps: deterministic Core + XPC transport + Qwen3 runtime tests"
   if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
     echo "test: PASS" | tee -a "$verdict"
   else echo "test: FAIL" | tee -a "$verdict"; overall=1; fi
 
-  note "gate step 5/$total_steps: crashes (GATE-FATAL on new .ips during this run)"
+  note "gate step 4/$total_steps: crashes (GATE-FATAL on new .ips during this run)"
   if ( cmd_crashes ) >>"$gate_dir/crashes.log" 2>&1; then
     local dr="$HOME/Library/Logs/DiagnosticReports"
     local new_ips
@@ -704,16 +588,8 @@ cmd_gate() {
     overall=1
   fi
 
-  note "gate step 6/$total_steps: impact-based Computer Use attestation"
-  if "$SCRIPT_DIR/macos_agent_ui.sh" impact --check >>"$gate_dir/ui-attestation.log" 2>&1; then
-    echo "computer-use attestation: PASS or not required" | tee -a "$verdict"
-  else
-    echo "computer-use attestation: FAIL (see ui-attestation.log; run the required \$vocello-macos-ui-qa suite)" | tee -a "$verdict"
-    overall=1
-  fi
-
   if (( gate_bench )); then
-    note "gate step 7/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
+    note "gate step 5/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
     if run_gate_bench "$gate_dir"; then
       echo "bench: PASS (see bench.log)" | tee -a "$verdict"
     else
@@ -732,9 +608,7 @@ cmd_gate() {
 }
 
 cmd_release_readiness() {
-  local ci=0
-  if [[ "${1:-}" == "--ci" ]]; then ci=1; shift; fi
-  [[ $# -eq 0 ]] || die "release-readiness accepts only --ci"
+  [[ $# -eq 0 ]] || die "release-readiness accepts no arguments"
   local run_id="release-readiness-$(date +%Y%m%d-%H%M%S)"
   local out="$ROOT_DIR/build/macos/$run_id"
   local crash_marker="$out/.crash-marker"
@@ -747,14 +621,6 @@ cmd_release_readiness() {
   note "release readiness: exact-path app build"
   "$SCRIPT_DIR/build.sh" build 2>&1 | tee "$out/build.log"
 
-  note "release readiness: visible Settings model-readiness prerequisite"
-  local -a model_readiness_args=(model-readiness-check)
-  (( ci )) && model_readiness_args+=(--ci)
-  "$SCRIPT_DIR/macos_agent_ui.sh" "${model_readiness_args[@]}" 2>&1 | tee "$out/model-readiness.json"
-
-  note "release readiness: read-only model integrity"
-  ( check_mac_test_models --strict ) 2>&1 | tee "$out/models.log"
-
   note "release readiness: deterministic macOS tests"
   cmd_test 2>&1 | tee "$out/tests.log"
 
@@ -763,18 +629,6 @@ cmd_release_readiness() {
   local diagnostic_root="$HOME/Library/Logs/DiagnosticReports" new_ips
   new_ips="$(find "$diagnostic_root" \( -name 'Vocello-*.ips' -o -name 'QwenVoiceEngineService-*.ips' -o -name '*engine-service*.ips' \) -newer "$crash_marker" 2>/dev/null || true)"
   [[ -z "$new_ips" ]] || die "release readiness found new crash reports: $new_ips"
-
-  if (( ci == 0 )); then
-    note "release readiness: telemetry overhead"
-    cmd_telemetry_overhead 2>&1 | tee "$out/telemetry-overhead.log"
-  else
-    note "release readiness: validate committed telemetry-overhead attestation"
-  fi
-
-  note "release readiness: independent full review and benchmark UI attestations"
-  local -a release_args=(release-check)
-  (( ci )) && release_args+=(--ci)
-  "$SCRIPT_DIR/macos_agent_ui.sh" "${release_args[@]}" | tee "$out/frontend-readiness.json"
 
   printf 'RELEASE READINESS: PASS\n' | tee "$out/verdict.txt"
   note "release readiness PASS · $out"
@@ -792,17 +646,13 @@ main() {
     lang-bench) cmd_lang_bench "$@" ;;
     test)      cmd_test "$@" ;;
     telemetry-overhead) cmd_telemetry_overhead "$@" ;;
-    ui-report) cmd_ui_report "$@" ;;
-    bench-ui)  cmd_bench_ui "$@" ;;
-    review)    cmd_review "$@" ;;
-    xpc)       cmd_xpc "$@" ;;
     gate)      cmd_gate "$@" ;;
     release-readiness) cmd_release_readiness "$@" ;;
     models)    cmd_models "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
-    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|telemetry-overhead|ui-report|bench-ui|crashes|debug|logs|profile|review|xpc|gate|release-readiness|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|telemetry-overhead|crashes|debug|logs|profile|gate|release-readiness|models|help)" ;;
   esac
 }
 

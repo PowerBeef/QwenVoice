@@ -37,8 +37,8 @@ Before changing macOS app or XPC code, read:
 
 - **Shell tool / scripts** (the source of truth for the local loop):
   - `./scripts/build.sh build|run|cli`
-  - `scripts/macos_test.sh models check|ensure|test|gate|crashes|debug|logs|profile|ui-report|review|xpc`
-  - `scripts/macos_agent_ui.sh doctor|impact|verify-probes|validate-report|attest`
+  - `scripts/macos_test.sh models check|ensure|test|gate|crashes|debug|logs|profile|xpc`
+  - `scripts/ui_test.sh macos smoke|benchmark`
   - `./scripts/regenerate_project.sh` after `project.yml` changes
 - Use OpenAI Build macOS Apps skills for SwiftUI/AppKit structure, build/run/debug, test triage,
   telemetry, signing, and packaging after reading the selected skill. Shell scripts remain the
@@ -49,12 +49,9 @@ Before changing macOS app or XPC code, read:
   verification. Never configure a second XcodeBuildMCP server.
 - Use authoritative Apple documentation where current framework behavior matters and the GitHub
   integration for repository/CI context.
-- During ordinary development, `scripts/macos_agent_ui.sh impact` is an advisory description of
-  later frontend scope; missing evidence never blocks committing, pushing, opening a pull request,
-  or merging. For explicitly requested macOS frontend acceptance and macOS release work, invoke
-  `$vocello-macos-ui-qa` for every listed suite. Requirements are independent sets, not a rank.
-  Computer Use is the sole UI driver; the skill's
-  structured report and typed probes are the gate evidence. Never add a macOS XCUITest target.
+- XCUITest is the sole autonomous macOS app UI driver. Run the smoke and benchmark lanes
+  only for explicitly requested frontend acceptance. Missing UI evidence never blocks committing,
+  pushing, opening a pull request, merging, ordinary CI, or release packaging.
 
 ## Build / test commands
 
@@ -66,16 +63,14 @@ Before changing macOS app or XPC code, read:
 # macOS smoke tests (models ensure symlinks QwenVoice-Debug/models → canonical store)
 scripts/macos_test.sh models ensure   # one-time per machine
 scripts/macos_test.sh test
-scripts/macos_agent_ui.sh impact      # advisory during development
-# Explicit frontend acceptance / macOS release only:
-# invoke $vocello-macos-ui-qa quick|full|benchmark as selected.
-scripts/macos_test.sh gate            # strict acceptance, not a development-publishing check
+# Explicit frontend acceptance only:
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
+scripts/macos_test.sh gate            # deterministic macOS platform gate
 
 # XPC lifecycle / crash isolation
 scripts/macos_test.sh xpc status
 
-# UI capture + baseline diff
-scripts/macos_test.sh review [--report <run>]
 ```
 
 ## Invariants (do not regress)

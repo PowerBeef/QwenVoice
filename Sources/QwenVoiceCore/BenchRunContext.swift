@@ -22,14 +22,18 @@ public enum BenchRunContext {
         guard TelemetryGate.resolvedEnabled else { return [:] }
         var notes = notesFromEnvironment(intendedWarmState: intendedWarmState)
         if let fileNotes = notesFromTakeFile() {
-            for (key, value) in fileNotes where notes[key] == nil {
+            // The engine service keeps the environment from its first launch,
+            // while the benchmark advances multiple warm takes in that same
+            // process. The current-take file is therefore authoritative for
+            // the fields it carries.
+            for (key, value) in fileNotes {
                 notes[key] = value
             }
         }
         return notes
     }
 
-    /// Bench driver writes `/tmp/vocello-bench-current-take.json` before each take so
+    /// Bench driver writes a current-take manifest in shared temporary storage so
     /// warm-session takes still stamp take index + cell without relaunching.
     public static func writeCurrentTakeFile(
         takeIndex: Int,
@@ -45,10 +49,10 @@ public enum BenchRunContext {
               let text = String(data: data, encoding: .utf8) else {
             return
         }
-        try? text.write(toFile: takeFilePath, atomically: true, encoding: .utf8)
+        try? text.write(to: takeFileURL, atomically: false, encoding: .utf8)
     }
 
-    private static let takeFilePath = "/tmp/vocello-bench-current-take.json"
+    private static let takeFileURL = URL(fileURLWithPath: "/tmp/vocello-bench-current-take.json")
 
     private static func notesFromEnvironment(intendedWarmState: String?) -> [String: String] {
         let env = ProcessInfo.processInfo.environment
@@ -63,7 +67,7 @@ public enum BenchRunContext {
     }
 
     private static func notesFromTakeFile() -> [String: String]? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: takeFilePath)),
+        guard let data = try? Data(contentsOf: takeFileURL),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
             return nil
         }

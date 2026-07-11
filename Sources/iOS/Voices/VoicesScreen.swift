@@ -19,7 +19,7 @@ import QwenVoiceCore
 struct VoicesScreen: View {
     @Environment(AppModel.self) private var appModel
 
-    @State private var isRecordVoicePresented = false
+    @State private var newVoiceFlow: NewVoiceFlow?
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -42,12 +42,14 @@ struct VoicesScreen: View {
                 appModel.studioMode = .clone
                 appModel.tab = .studio
             },
-            onRecordNewVoice: { isRecordVoicePresented = true }
+            onRecordNewVoice: { newVoiceFlow = .recording },
+            onImportNewVoice: { imported in newVoiceFlow = .imported(imported) }
         )
-        .fullScreenCover(isPresented: $isRecordVoicePresented) {
+        .fullScreenCover(item: $newVoiceFlow) { flow in
             IOSRecordVoiceSheet(
+                importedReference: flow.importedReference,
                 onEnrolled: { voice, transcript, language in
-                    isRecordVoicePresented = false
+                    newVoiceFlow = nil
                     // Same staging as tapping a saved voice → Clone mode, pre-loaded; carry the
                     // detected reference language so the Clone Language picker is pre-set.
                     appModel.pendingVoiceCloningHandoff = PendingVoiceCloningHandoff(
@@ -60,8 +62,27 @@ struct VoicesScreen: View {
                     appModel.studioMode = .clone
                     appModel.tab = .studio
                 },
-                onDismiss: { isRecordVoicePresented = false }
+                onDismiss: { newVoiceFlow = nil }
             )
         }
+    }
+}
+
+private enum NewVoiceFlow: Identifiable {
+    case recording
+    case imported(ImportedReferenceAudio)
+
+    var id: String {
+        switch self {
+        case .recording:
+            return "recording"
+        case .imported(let reference):
+            return "imported-\(reference.fingerprint)"
+        }
+    }
+
+    var importedReference: ImportedReferenceAudio? {
+        guard case .imported(let reference) = self else { return nil }
+        return reference
     }
 }

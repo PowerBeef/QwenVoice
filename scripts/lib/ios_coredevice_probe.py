@@ -144,18 +144,10 @@ def probe_coredevice(device_id: str | None = None) -> dict[str, Any]:
     return out
 
 
-def automation_blockers(
-    *,
-    verdict: str,
-    coredevice: dict[str, Any],
-    lane: str = "computer-use",
-) -> tuple[bool, list[str]]:
+def automation_blockers(*, verdict: str, coredevice: dict[str, Any]) -> tuple[bool, list[str]]:
     blockers: list[str] = []
     if verdict == "DEVICE_UNREACHABLE":
         blockers.append("device_unreachable")
-    if verdict == "MIRROR_UNAVAILABLE":
-        blockers.append("mirror_unavailable")
-
     return len(blockers) == 0, blockers
 
 
@@ -204,15 +196,11 @@ def main() -> int:
         return 0
 
     if cmd == "automation":
-        lane = "computer-use"
         verdict = "READY"
         core: dict[str, Any] = {}
         i = 2
         while i < len(sys.argv):
-            if sys.argv[i] == "--lane" and i + 1 < len(sys.argv):
-                lane = sys.argv[i + 1]
-                i += 2
-            elif sys.argv[i] == "--verdict" and i + 1 < len(sys.argv):
+            if sys.argv[i] == "--verdict" and i + 1 < len(sys.argv):
                 verdict = sys.argv[i + 1]
                 i += 2
             elif sys.argv[i] == "--core-json" and i + 1 < len(sys.argv):
@@ -225,7 +213,7 @@ def main() -> int:
                 i += 1
         if not core:
             core = probe_coredevice(device_id)
-        ready, blockers = automation_blockers(verdict=verdict, coredevice=core, lane=lane)
+        ready, blockers = automation_blockers(verdict=verdict, coredevice=core)
         print(json.dumps({"readyForAutomation": ready, "blockers": blockers}, indent=2))
         return 0
 

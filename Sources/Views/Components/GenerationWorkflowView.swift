@@ -12,23 +12,6 @@ private extension View {
     }
 }
 
-struct HiddenAccessibilityMarker: View {
-    let value: String
-    let identifier: String
-
-    var body: some View {
-        Text(value)
-            .font(.caption2)
-            .foregroundStyle(.clear)
-            .opacity(0.01)
-            .frame(width: 1, height: 1, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityLabel(value)
-            .accessibilityValue(value)
-            .accessibilityIdentifier(identifier)
-    }
-}
-
 struct PageScaffold<Header: View, Content: View>: View {
     let accessibilityIdentifier: String?
     let fillsViewportHeight: Bool
@@ -629,12 +612,6 @@ struct GenerationVariantSelector: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
-        .overlay(alignment: .topLeading) {
-            HiddenAccessibilityMarker(
-                value: "\(mode.displayName) model variant: \(accessibilityValue)",
-                identifier: "\(accessibilityPrefix)_modelVariantSelector"
-            )
-        }
         .help("Choose the Qwen3-TTS package for \(mode.displayName). Current status: \(statusCaption).")
     }
 
@@ -666,12 +643,6 @@ struct GenerationVariantSelector: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(AppTheme.inlineStroke.opacity(0.24), lineWidth: 0.75)
         )
-        .overlay(alignment: .topLeading) {
-            HiddenAccessibilityMarker(
-                value: "\(mode.displayName) model variant picker",
-                identifier: "\(accessibilityPrefix)_modelVariantPicker"
-            )
-        }
     }
 
     private func variantSegment(for kind: TTSModelVariantKind) -> some View {
@@ -783,10 +754,6 @@ struct GenerationVariantSelector: View {
         return details
     }
 
-    private var accessibilityValue: String {
-        guard let selectedModel else { return "No model variant available" }
-        return "\(modelManager.activeVariantLabel(for: selectedModel)), \(statusCaption)"
-    }
 }
 
 struct ConfigurationFieldRow<Content: View, Supporting: View>: View {

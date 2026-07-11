@@ -234,6 +234,4 @@ Priority order from the audit; implementation status:
 
 - New runbook: [`docs/reference/benchmarking-procedure.md`](../docs/reference/benchmarking-procedure.md)
 - Prior review: [`docs/reference/telemetry-harness-review.md`](../docs/reference/telemetry-harness-review.md)
-- Live bench log: [`build/macos/benchmarking-procedure-audit-bench.log`](../build/macos/benchmarking-procedure-audit-bench.log)
 - Ledger: [`benchmarks/HISTORY.md`](HISTORY.md)
-- Multi-mode UI audit: [`macos-multi-mode-ui-xpc-audit-2026-06-29.md`](macos-multi-mode-ui-xpc-audit-2026-06-29.md)

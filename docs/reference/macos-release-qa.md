@@ -4,15 +4,15 @@
 > [`docs/development-progress.md`](../development-progress.md).
 
 The standing pre-release procedure for a macOS (Vocello.app / DMG) release. First executed in full
-for v2.1.0 (2026-06-09); rerun the automated gates for every release and the interactive matrix for
-releases that touched UI/engine surfaces. If this doc disagrees with the code, the code wins.
+for v2.1.0 (2026-06-09); rerun the deterministic gates for every release and use the interactive
+UI lanes only when frontend acceptance is explicitly requested. If this doc disagrees with the code,
+the code wins.
 
 This is a release-only gate, not a commit, push, pull-request, ordinary-merge, or ordinary-CI
-check. Missing Computer Use/model evidence may block a macOS package but must never block
-preserving or sharing development work. iOS frontend evidence is not required for a macOS package;
-the iOS archive/TestFlight lane enforces its own iOS evidence independently.
+check. Missing model or XCUITest evidence never blocks a macOS package. Signing, notarization, and
+upload depend on deterministic release-readiness and artifact checks.
 
-> For the macOS testing/debugging/profile/review lanes + the one-command `gate`, see
+> For the macOS testing/debugging/profile lanes + the one-command `gate`, see
 > [`macos-testing.md`](macos-testing.md). For the macOS app map + test-driving, see
 > [`macos-app-guide.md`](macos-app-guide.md).
 
@@ -24,33 +24,43 @@ the iOS archive/TestFlight lane enforces its own iOS evidence independently.
    ./scripts/build.sh build
    ./scripts/build_foundation_targets.sh macos && ./scripts/build_foundation_targets.sh ios
    ```
-2. **Deterministic tests + Computer Use frontend acceptance** (always):
+2. **Deterministic release readiness** (always):
    ```sh
-   scripts/macos_test.sh test            # Core + XPC transport + owned Qwen3 runtime + harness
-   scripts/macos_agent_ui.sh impact      # read requiredSuites + requiredRuntimeChecks
-   # Invoke $vocello-macos-ui-qa full first; its visible model-readiness scenario is mandatory.
-   scripts/macos_test.sh ui-report --suite full
-   scripts/macos_test.sh telemetry-overhead  # when listed; refuses without current full evidence
-   # Invoke benchmark independently when listed.
-   scripts/macos_test.sh gate
+   scripts/macos_test.sh test
+   scripts/macos_test.sh release-readiness
    ```
-   If the visible Settings state is incomplete, stop and run `scripts/macos_test.sh models ensure`
-   only as an explicit repair/bootstrap action, then start a fresh full UI run.
-   Computer Use is the sole macOS frontend driver and targets the exact `build/Vocello.app`.
-   The full report covers Custom/Design/Clone, playback, History/Voices/Settings, batch,
-   reference import, XPC recovery, and semantic visual/accessibility review. It only passes when
-   typed XPC/backend probes, the matching History row, readable WAV, fingerprints, and cleanup pass.
+   The packaging entry point invokes `release-readiness` before signing. It must remain independent
+   of installed models and XCUITest evidence.
+2a. **Optional model-dependent telemetry diagnostic** (never packaging-blocking):
+   ```sh
+   scripts/macos_test.sh telemetry-overhead
+   ```
+   This is deeper engine evidence when the model fixture is available; absence of the fixture does
+   not block signing, notarization, or upload.
+2b. **Optional explicit frontend acceptance** (never packaging-blocking):
+   ```sh
+   scripts/ui_test.sh macos smoke       # includes visible model readiness
+   scripts/ui_test.sh macos benchmark
+   ```
+   If the visible Settings state is incomplete, run `scripts/macos_test.sh models ensure` only as
+   an explicit repair/bootstrap action, then start a fresh smoke run.
+   XCUITest is the sole autonomous macOS app UI driver and targets its configured native test host.
+   Smoke covers sidebar navigation, visible model and clone-reference readiness, one real Custom
+   generation, the completed player, and History. Benchmark owns the configurable
+   Custom/Design/Clone matrix and defaults to exactly 29 takes. Both lanes fail on a new crash;
+   benchmark additionally validates exact telemetry count/order, History, readable WAVs, and
+   audio-QC evidence for every take.
 3. **Engine regression net** (when any engine/Sources change since the last green bench):
    ```sh
-   # Requires the current full UI model-readiness proof; repair with models ensure only if needed.
+   # Explicit model-dependent engine QA; repair fixtures only when this optional run is requested.
    QWENVOICE_DEBUG=1 ./build/vocello bench --modes custom,design,clone \
      --variants speed --lengths short,medium,long \
      --warm 3 --voice A_warm_elderly_woman --label "release-QA" --ledger
    ```
    Full procedure: [`benchmarking-procedure.md`](benchmarking-procedure.md) §4.1.
    Gate: audioQC pass on all cells; RTF within noise of the latest `benchmarks/HISTORY.md` rows;
-   a **manual listening pass by ear** for any engine-adjacent change (there is no
-   `vocello bench --review` subcommand). Optional regression compare against a committed baseline:
+   a **manual listening pass by ear** over the generated WAVs for any engine-adjacent change.
+   Optional regression compare against a committed baseline:
    ```sh
    python3 scripts/summarize_generation_telemetry.py \
      ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
@@ -61,37 +71,17 @@ the iOS archive/TestFlight lane enforces its own iOS evidence independently.
 4. **Static audits** (release-sized changesets): use the relevant installed Codex macOS skills
    plus direct code review for SwiftUI architecture/performance, memory, concurrency, signing,
    and security/privacy. Scope findings to changed surfaces; fix or explicitly defer them.
-5. **Interactive matrix** (releases touching UI; `$vocello-macos-ui-qa full` is required;
-   `scripts/macos_test.sh review` validates that structured report):
-   | Flow | Key checks |
-   |---|---|
-   | Record→enroll | record sheet (virtual mic ok: `QWENVOICE_FAKE_MIC_WAV`), <10 s gate ("Need 10 s"), ≥10 s "Use This Clip", review player, **auto-transcription fills**, enrolled row |
-   | Clone handoff | voices row "Open in Cloning" hydrates source/reference/transcript |
-   | 3 modes e2e | generate per mode; streaming preview; player; no error states (full Computer Use report + probes) |
-   | Cancel | cancellation and recovery are deterministic runtime contracts; frontend state is reviewed in the full report |
-   | History replay | row appears + replay from History in quick/full Computer Use scenarios |
-   | Error paths | model-missing rows (Download CTA), output-dir fallback (delete chosen dir → orange badge + "no longer exists" caption + Reset), engine-busy readiness |
-   | History CRUD | persistence across relaunch, search filter, delete + confirmation dialog |
-   | Saved Voices | quality warnings, preview, use, delete |
-   | Batch | line-by-line → Generate All → per-line Saved results → Done/Reveal/History |
-   | Brief editor | starter chips fill + counter; post-generation "Save to Saved Voices" CTA |
-   | Recommended pickers | foreign-language script → "Recommended for your script" section |
-   | Retirement transparency | `QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS=20` → service exits, NO error UI, transparent relaunch |
-   | Shortcuts | Cmd+1…6, Cmd+Return, Space, Cmd+., Cmd+Shift+O/R, Cmd+, |
-   | First-run | fresh `QWENVOICE_APP_SUPPORT_DIR` → disabled tabs, Settings redirect, "0 of N recommended", empty History/Voices |
-   | Reduce Motion/Transparency | spot-check solid fills (or code-verify the `appAnimation` paths) |
-   Caveat: TCC permission dialogs require a human to answer — verify with
-   `scripts/permissions_doctor.sh` (see `macos-permissions.md`).
-6. **Version bump**: `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` in `project.yml` (shared by
+5. **Version bump**: `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` in `project.yml` (shared by
    the two user-facing targets) → `./scripts/regenerate_project.sh`.
-7. **Local package + smoke**:
+6. **Local package verification**:
    ```sh
    ./scripts/release.sh --preflight full --signing-mode developer-id --signing-identity "<Developer ID Application: …>"
    scripts/verify_release_bundle.sh   # invoked by release.sh; rerun standalone if needed
-   open build/Vocello.app             # NON-debug: real data dir — launch + one generation per available mode
    ```
+   An attended launch or generation pass can be performed when models are available, but it is not
+   part of the packaging gate.
    (No `--notarize` locally unless the API key env vars are present.)
-8. **Notarized DMG**: publish the GitHub release → CI (`release.yml` `package` job) builds, signs,
+7. **Notarized DMG**: publish the GitHub release → CI (`release.yml` `package` job) builds, signs,
    notarizes, staples, verifies (`verify_packaged_dmg.sh`), and attaches `Vocello-macos26.dmg`.
 
 ## Known-cosmetic non-bugs (do not file)
@@ -100,18 +90,3 @@ the iOS archive/TestFlight lane enforces its own iOS evidence independently.
   is made and generation is unaffected).
 - Enroll sheet: the first click on "Record…" immediately after typing in the Name field can be
   consumed by the field's focus-commit — a second click opens the sheet (observed v2.1.0 QA).
-
-## v2.1.0 QA record (2026-06-09)
-
-- Static audits: 5 auditors → 9 real fixes (`64b291d`): cancel-race in all three coordinators,
-  drop-handler retain, zombie transcription task, batch-dismiss engine lock, pressure-monitor
-  stop-on-deinit ×2, AVAudioPlayer delegate UAF hardening, DateFormatter caching, level-meter
-  Canvas. Security scan: READY (usage strings present, no identifier leaks, HTTPS-only).
-  Deferred (tracked, post-release): TTSEngineStore observation slicing/`@EnvironmentObject`
-  unification, HistoryViewModel + SavedVoiceSheet coordinator extractions, remaining
-  ObservableObject→`@Observable` migrations (AV wrappers), `Binding(get:set:)` computed
-  properties, strict-concurrency enablement, XPC entitlements split (maintainer-declined).
-- Automated smoke: 10/10 passed (107 s), including a real generation + real cancel.
-- Interactive matrix: all flows passed (evidence in session; record/transcribe/handoff/batch/
-  fallback/first-run all green). Reduce Motion code-verified only.
-- Engine net: see the `release-QA net (post audit fixes)` HISTORY.md row.

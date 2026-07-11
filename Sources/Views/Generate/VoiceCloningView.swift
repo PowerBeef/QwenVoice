@@ -357,12 +357,6 @@ private extension VoiceCloningView {
                 languageSettings
             }
         }
-        .overlay(alignment: .topLeading) {
-            HiddenAccessibilityMarker(
-                value: "Reference",
-                identifier: "voiceCloning_configuration"
-            )
-        }
         .fixedSize(horizontal: false, vertical: true)
     }
 

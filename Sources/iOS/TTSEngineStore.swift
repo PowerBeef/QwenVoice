@@ -326,6 +326,14 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
             syncFromBackend()
         }
 
+        // The physical-device XCUITest benchmark uses the shared debug policy
+        // to guarantee the first Custom and Design cells are genuinely cold.
+        // Consume it immediately before generation so any earlier production
+        // warm work cannot silently change the recorded matrix classification.
+        if BenchForceColdPolicy.shouldUnloadBeforeGeneration {
+            try await unloadModel()
+        }
+
         let result = try await backend.generate(request)
         let postGenerationContext = await refreshMemoryContext(reason: "post_generation", source: "store")
         let postGenerationBand = postGenerationContext.pressureBand

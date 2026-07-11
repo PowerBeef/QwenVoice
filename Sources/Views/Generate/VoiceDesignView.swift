@@ -156,12 +156,6 @@ private extension VoiceDesignView {
                 languageAndDeliverySettings
             }
         }
-        .overlay(alignment: .topLeading) {
-            HiddenAccessibilityMarker(
-                value: "Configuration",
-                identifier: "voiceDesign_configuration"
-            )
-        }
         .fixedSize(horizontal: false, vertical: true)
     }
 

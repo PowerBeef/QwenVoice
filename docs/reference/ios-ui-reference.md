@@ -1,14 +1,13 @@
 # iOS UI reference
 
-> Codex/ChatGPT Desktop reference for the physical-device Vocello UI. `$vocello-ios-ui-qa`
-> drives the paired iPhone through bundled Computer Use and iPhone Mirroring;
-> `scripts/ios_agent_ui.sh` records evidence. The iOS Simulator is unsupported.
+This is the compact screen and accessibility map for physical-device Vocello UI tests. XCUITest is
+the sole autonomous driver and runs on a paired physical iPhone; the iOS Simulator is unsupported.
 
 Related sources:
 
 - [`ios-app-guide.md`](ios-app-guide.md) — architecture and implementation map.
 - [`ios-device-testing.md`](ios-device-testing.md) — physical-device lanes and gates.
-- [`ui-smoke-runbooks.md`](ui-smoke-runbooks.md) — Codex frontend acceptance index.
+- [`testing-runbook.md`](testing-runbook.md) — shared smoke/benchmark policy.
 
 ## Navigation hierarchy
 
@@ -21,145 +20,77 @@ Vocello opens on the Studio tab in Custom mode. The root tabs are:
 | History | Generated takes, playback, export, deletion | `rootTab_history`, `screen_history`, `historyRow_*` |
 | Settings | Models, preferences, storage, permissions, About | `rootTab_settings`, `screen_settings`, `iosSettings_*`, `iosModel*` |
 
-The Studio mode selector changes the composer in place; it does not change the selected root tab.
-Cold launch selects Custom mode. Explicit handoffs, such as using a saved voice for cloning, may
-switch the in-session Studio mode.
+The Studio selector changes the composer in place. Cold launch selects Custom mode; explicit
+handoffs may change the in-session Studio mode.
 
-## Studio — Custom Voice
+## Studio states
 
-Custom mode contains:
+### Custom Voice
 
-- script editor and character count (`textInput_textEditor`, `textInput_lengthCount`);
-- selected built-in speaker / saved voice control;
-- delivery, language, and variation controls;
-- Generate button (`textInput_generateButton`);
-- inline generation progress and player state.
+- Script editor and count: `textInput_textEditor`, `textInput_lengthCount`.
+- Voice, delivery, language, and variation controls.
+- Generate: `textInput_generateButton`.
+- Inline progress and completed player.
 
-Generate remains unavailable until the script and required model are ready. Successful generation
-must create a History row and readable output; UI visibility alone is not backend proof.
+Generate remains unavailable until the script and Custom model are ready. Smoke requires the
+completed player and matching History row; the benchmark validator adds readable-audio and exact
+telemetry evidence per take.
 
-## Studio — Voice Design
+### Voice Design
 
-Design mode replaces the voice picker with a required voice brief. The brief can be entered
-directly or started from a suggestion, then confirmed before generation. After a successful take,
-the generated voice may be saved into the Saved Voices collection.
+Design requires a voice brief, entered directly or from a starter, before generation. The benchmark
+lane exercises Design when that mode is selected; the minimal smoke only verifies the mode is
+navigable before performing its single Custom generation. A missing Design model must present the
+install state instead of Generate.
 
-The full Computer Use suite should verify:
+### Voice Cloning
 
-- brief setup and restoration;
-- script entry and readiness;
-- successful generation;
-- optional Save as Voice handoff;
-- correct behavior when the Design model is missing.
+Clone requires a reference clip from a saved voice, the physical-device recording flow, or an
+imported WAV, MP3, AIFF, or M4A file. Automated smoke and benchmark tests use a prepared non-PII
+saved reference. Recording, Files-picker import, and permission enrollment are separate explicit
+product-acceptance scenarios.
 
-## Studio — Voice Cloning
+## Voices and History
 
-Clone mode requires a reference clip before generation. References may come from saved voices or
-the physical-device recording flow. Automated tests should prefer a pre-enrolled saved reference;
-microphone authorization and recording remain attended device operations unless the test explicitly
-owns that state.
+Voices exposes saved rows (`voicesRow_saved_*`), built-in speakers, separate row and preview
+actions, search, filters, and two visible Save a New Voice actions. `voices_saveNewVoice` records a
+reference; `voices_importAudioFile` opens the native Files picker. Imported audio is materialized
+into app-owned storage, an adjacent `.txt` sidecar can prefill `saveVoice_transcriptEditor`, and
+`saveVoice_nameField` plus `saveVoice_saveButton` complete enrollment. Opening a supported audio
+document from Files routes through the same sheet. A saved/imported voice hands off to Studio Clone;
+a built-in speaker hands off to Studio Custom.
 
-The iOS production load profile may omit clone encoders when memory entitlement or device budget
-requires it. Preserve the `.fullCapabilities` versus `.iOSProductionDefault` policy.
-
-## Voices
-
-The Voices tab presents:
-
-- saved voice rows (`voicesRow_saved_*`);
-- built-in speaker rows;
-- separate row-body and preview-play actions;
-- search and filter controls;
-- the physical-device Save a New Voice flow.
-
-Using a saved voice hands it to Studio Clone mode. Using a built-in speaker hands it to Studio
-Custom mode. Keep row and action identifiers stable across layout refactors.
-
-## History
-
-History groups completed generations by date and supports:
-
-- transcript or voice search;
-- mode filtering and sorting;
-- playback;
-- saving/exporting audio;
-- saving a take as a voice;
-- individual deletion and bulk Clear History.
-
-Deletion is destructive and must be isolated in tests. Test output must use the app's test/debug
-storage and must not touch the owner's production library.
+History supports search, mode filtering, sorting, playback, export, saving a take as a voice, and
+deletion. Destructive History actions are outside the minimal smoke and benchmark lanes.
 
 ## Settings
 
-### Voice models
+iOS has one Speed model for each generation mode. Rows expose stable install, progress, cancel,
+ready, repair, and delete states. Normal smoke and benchmark lanes do not install or delete models;
+they visibly assert that Custom, Design, and Clone Speed are ready before generation.
 
-There is one Speed model for each generation mode on iOS. Model rows expose stable states and
-identifiers for:
+The minimal smoke and benchmark lanes inspect model readiness without changing preferences. System
+permission enrollment is attended setup.
 
-- not installed / Install;
-- downloading / progress / Cancel;
-- installed / Active;
-- repair when verification fails;
-- delete with storage impact.
+## Sheets and accessibility
 
-iOS ships the 1.7B Speed variants only. Model lifecycle tests are opt-in and must not run as part of
-ordinary UI smoke coverage.
+Important transient surfaces include voice and clone-reference pickers, the Design brief editor,
+delivery/language controls, the player, History actions, model confirmations, and system pickers.
 
-### Preferences and storage
-
-Settings includes autoplay, variation, output-copy destination, storage summary, permissions, and
-About/version information. Tests must restore reversible preferences after validation. System
-permission enrollment remains attended setup.
-
-## Sheets and overlays
-
-Important transient surfaces include:
-
-- Custom voice picker;
-- Design voice-brief editor;
-- Clone reference picker;
-- delivery and language controls;
-- batch-independent generation/player UI;
-- reference recording and Save This Voice naming flow;
-- History action and delete confirmations;
-- model lifecycle confirmations;
-- system folder picker.
-
-Tests should wait for semantic conditions and stable identifiers rather than fixed delays or
-coordinate assumptions.
-
-## Accessibility and visual acceptance
-
-All interactive controls must retain stable `accessibilityIdentifier` values. Visual review checks:
-
-- no clipping or truncation;
-- readable hierarchy and copy;
-- correct enabled/disabled states;
-- VoiceOver labels and focus order;
-- Dynamic Type behavior;
-- non-color cues for mode and status;
-- Reduce Motion and Reduce Transparency behavior;
-- error and recovery presentation.
-
-The authoritative review lane is:
-
-```sh
-scripts/ios_device.sh review
-```
-
-It runs on a paired physical iPhone and produces screenshots for manual/Codex inspection. It does
-not authorize a second UI automation driver.
+All controls used by autonomous tests retain stable `accessibilityIdentifier` values. Tests use
+condition-based waits and assert the visible enabled/readiness/completion state needed by the active
+scenario. Named screenshots are attached at important states and failures; labels and coordinates
+are not selector fallbacks. VoiceOver, Dynamic Type, Reduce Motion, and Reduce Transparency remain
+product accessibility requirements, but are not claimed as coverage of the minimal lanes.
 
 ## Test routing
 
 | Goal | Command |
 | --- | --- |
 | Device/environment readiness | `scripts/ios_device.sh preflight` |
-| Default physical-device UI regression | `$vocello-ios-ui-qa quick` → `scripts/ios_device.sh test` |
-| Full UI acceptance | `$vocello-ios-ui-qa full` → `scripts/ios_device.sh ui-test --suite full` |
-| Full UI generation matrix | `$vocello-ios-ui-qa benchmark` → `scripts/ios_device.sh bench-ui` |
-| Visual review | Full Computer Use report → `scripts/ios_device.sh review` |
-| Explicit frontend / iOS release acceptance | `scripts/ios_device.sh gate` |
+| Physical-device UI regression | `scripts/ui_test.sh ios smoke` |
+| Full UI generation matrix | `scripts/ui_test.sh ios benchmark` |
+| Physical-device deterministic/runtime diagnostic | `scripts/ios_device.sh gate` |
 
-Never use an iOS Simulator, Simulator Browser, another desktop-control/mobile MCP, or a committed
-coordinate table. Bundled Computer Use on iPhone Mirroring is the supported UI driver.
+Never use an iOS Simulator, Simulator Browser, alternate desktop/mobile UI driver, or committed
+coordinate table.

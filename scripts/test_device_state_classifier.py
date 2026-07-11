@@ -52,14 +52,12 @@ class CoreDeviceProbeTests(unittest.TestCase):
         self.assertFalse(lock["unlockedSinceBoot"])
         self.assertTrue(lock["passcodeRequired"])
 
-    def test_computer_use_readiness_does_not_use_lock_state(self) -> None:
+    def test_automation_readiness_does_not_use_lock_state(self) -> None:
         core = {
             "reachable": True,
             "lock": {"state": "known", "deviceLocked": True, "unlockedSinceBoot": False},
         }
-        ready, blockers = probe.automation_blockers(
-            verdict="READY", coredevice=core, lane="computer-use"
-        )
+        ready, blockers = probe.automation_blockers(verdict="READY", coredevice=core)
         self.assertTrue(ready)
         self.assertEqual(blockers, [])
 
@@ -68,18 +66,16 @@ class CoreDeviceProbeTests(unittest.TestCase):
             "reachable": True,
             "lock": {"state": "known", "deviceLocked": True},
         }
-        ready, blockers = probe.automation_blockers(
-            verdict="READY", coredevice=core, lane="bench"
-        )
+        ready, blockers = probe.automation_blockers(verdict="READY", coredevice=core)
         self.assertTrue(ready)
         self.assertEqual(blockers, [])
 
-    def test_automation_mirror_unavailable(self) -> None:
+    def test_automation_device_unreachable(self) -> None:
         ready, blockers = probe.automation_blockers(
-            verdict="MIRROR_UNAVAILABLE", coredevice={"reachable": True}, lane="computer-use"
+            verdict="DEVICE_UNREACHABLE", coredevice={"reachable": False}
         )
         self.assertFalse(ready)
-        self.assertIn("mirror_unavailable", blockers)
+        self.assertIn("device_unreachable", blockers)
 
 
 if __name__ == "__main__":

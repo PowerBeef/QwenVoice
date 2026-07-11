@@ -1,4 +1,0 @@
-interface:
-  display_name: "Vocello iOS UI QA"
-  short_description: "Run explicit iOS UI or release acceptance"
-  default_prompt: "Use $vocello-ios-ui-qa when iOS frontend acceptance is explicitly requested or an iOS archive/TestFlight build is being prepared; ordinary development and Git publishing use deterministic checks only."

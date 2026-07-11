@@ -43,23 +43,6 @@ extension View {
         }
     }
 
-    /// Attach a screen-presence accessibility marker as a hidden 1pt LEAF element.
-    ///
-    /// UI tests wait on screen ids (e.g. `screen_generateStudio`, `screen_customVoice`)
-    /// to know a surface is up. The previous approach —
-    /// `.accessibilityElement(children: .contain).accessibilityIdentifier("screen_…")` on
-    /// the whole screen container — propagated that identifier onto descendant elements,
-    /// shadowing their own stable ids (`textInput_*`, `studioChip_*`) and forcing tests into
-    /// brittle label/hierarchy fallbacks. A dedicated leaf marker is queryable by
-    /// `waitForExistence` without touching the descendants, so child ids stay addressable.
-    func screenPresenceMarker(_ identifier: String) -> some View {
-        background(alignment: .topLeading) {
-            Color.clear
-                .frame(width: 1, height: 1)
-                .accessibilityElement()
-                .accessibilityIdentifier(identifier)
-        }
-    }
 }
 
 private struct IOSAccessibleAnimationModifier<Value: Equatable>: ViewModifier {

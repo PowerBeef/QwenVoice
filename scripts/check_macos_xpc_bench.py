@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate script for macOS XPC UI benchmark telemetry (post bench-ui).
+"""Gate script for macOS XPC UI benchmark telemetry (post native XCUITest benchmark).
 
 Usage:
     python3 scripts/check_macos_xpc_bench.py DIAGNOSTICS_DIR \\
@@ -40,6 +40,18 @@ def expected_take_count(modes: list[str], lengths: list[str], warm: int) -> int:
     return total
 
 
+def expected_cells(modes: list[str], lengths: list[str], warm: int) -> list[str]:
+    cells: list[str] = []
+    cold_len = "medium" if "medium" in lengths else lengths[0]
+    for mode in modes:
+        if mode != "clone":
+            cells.append(f"{mode}/{cold_len}/cold#0")
+        for length in lengths:
+            for repetition in range(warm):
+                cells.append(f"{mode}/{length}/warm#{repetition}")
+    return cells
+
+
 def read_jsonl(path: str) -> list[dict]:
     if not os.path.isfile(path):
         return []
@@ -62,24 +74,15 @@ def filter_since(rows: list[dict], since_iso: str) -> list[dict]:
     return [r for r in rows if (r.get("recordedAt") or "") >= since_iso]
 
 
-def benchmark_engine_rows(rows: list[dict]) -> list[dict]:
-    out = []
-    for row in rows:
-        finish = row.get("finishReason")
-        if finish is not None and finish not in _BENCHMARK_SUCCESS_FINISH:
-            continue
-        out.append(row)
-    return out
-
-
-def audio_qc_failed(row: dict) -> bool:
-    qc = row.get("audioQC") or {}
-    if qc.get("passed") is False:
-        return True
-    if qc.get("ok") is False:
-        return True
-    status = (qc.get("status") or "").lower()
-    return status in {"fail", "failed", "error"}
+def audio_qc_failure(row: dict) -> str | None:
+    output = row.get("outputMetrics") or {}
+    qc = row.get("audioQC") or output.get("audioQC") or {}
+    verdict = qc.get("verdict")
+    if verdict in {"pass", "warn"}:
+        return None
+    if verdict == "fail":
+        return f"failed: {qc.get('flags') or []}"
+    return f"verdict is missing or invalid: {verdict!r}"
 
 
 def filter_run_id(rows: list[dict], run_id: str) -> list[dict]:
@@ -112,13 +115,14 @@ def main() -> int:
     modes = parse_list(args.modes, DEFAULT_MODES)
     lengths = parse_list(args.lengths, DEFAULT_LENGTHS)
     expected = expected_take_count(modes, lengths, args.warm)
+    expected_cell_order = expected_cells(modes, lengths, args.warm)
 
     engine_path = os.path.join(diag, "engine", "generations.jsonl")
     service_path = os.path.join(diag, "engine-service", "generations.jsonl")
     app_path = os.path.join(diag, "app", "generations.jsonl")
     merged_path = os.path.join(diag, "generations-merged.jsonl")
 
-    engine_rows = benchmark_engine_rows(filter_since(read_jsonl(engine_path), args.since_recorded))
+    engine_rows = filter_since(read_jsonl(engine_path), args.since_recorded)
     service_rows = filter_since(read_jsonl(service_path), args.since_recorded)
     app_rows = filter_since(read_jsonl(app_path), args.since_recorded)
     merged_rows = filter_since(read_jsonl(merged_path), args.since_recorded)
@@ -142,9 +146,19 @@ def main() -> int:
     if len(merged_rows) != expected:
         failures.append(f"merged rows {len(merged_rows)} != expected {expected}")
 
-    engine_ids = {r.get("generationID") for r in engine_rows if r.get("generationID")}
+    engine_id_list = [r.get("generationID") for r in engine_rows]
+    if any(not value for value in engine_id_list):
+        failures.append("one or more engine rows has no generationID")
+    if len(set(engine_id_list)) != len(engine_id_list):
+        failures.append("engine generationIDs are not unique")
+    engine_ids = {value for value in engine_id_list if value}
     for layer, rows in (("engine-service", service_rows), ("app", app_rows)):
-        layer_ids = {r.get("generationID") for r in rows if r.get("generationID")}
+        layer_id_list = [r.get("generationID") for r in rows]
+        if any(not value for value in layer_id_list):
+            failures.append(f"one or more {layer} rows has no generationID")
+        if len(set(layer_id_list)) != len(layer_id_list):
+            failures.append(f"{layer} generationIDs are not unique")
+        layer_ids = {value for value in layer_id_list if value}
         missing = engine_ids - layer_ids
         if missing:
             failures.append(f"{layer} missing {len(missing)} generationID(s) present in engine")
@@ -153,10 +167,43 @@ def main() -> int:
     if engine_ids and not merged_ids >= engine_ids:
         failures.append("generations-merged.jsonl missing engine generationIDs")
 
+    actual_cells: list[str] = []
+    actual_indices: list[int] = []
     for row in engine_rows:
-        if audio_qc_failed(row):
+        notes = row.get("notes") or {}
+        cell = notes.get("benchCell")
+        if isinstance(cell, str):
+            actual_cells.append(cell)
+        try:
+            actual_indices.append(int(notes.get("benchTakeIndex")))
+        except (TypeError, ValueError):
+            failures.append(f"generation {row.get('generationID', '?')} has no valid benchTakeIndex")
+        finish = row.get("finishReason")
+        if finish not in _BENCHMARK_SUCCESS_FINISH:
+            failures.append(f"generation {row.get('generationID', '?')} has unsuccessful finishReason={finish!r}")
+        if qc_failure := audio_qc_failure(row):
             gid = row.get("generationID", "?")
-            failures.append(f"audioQC failed for engine generation {gid}")
+            failures.append(f"audioQC {qc_failure} for engine generation {gid}")
+        output = row.get("outputMetrics") or {}
+        if output.get("readableWAV") is not True:
+            failures.append(f"generation {row.get('generationID', '?')} did not prove a readable WAV")
+        if output.get("atomicallyPublished") is not True:
+            failures.append(f"generation {row.get('generationID', '?')} was not atomically published")
+        if not isinstance(output.get("durationSeconds"), (int, float)) or output["durationSeconds"] <= 0:
+            failures.append(f"generation {row.get('generationID', '?')} has no positive output duration")
+
+    if actual_cells != expected_cell_order:
+        failures.append(f"benchmark cell order differs: actual={actual_cells} expected={expected_cell_order}")
+    if actual_indices != list(range(1, expected + 1)):
+        failures.append(f"benchmark take order differs: actual={actual_indices} expected=1..{expected}")
+    for row in engine_rows:
+        cell = (row.get("notes") or {}).get("benchCell", "")
+        intended = "cold" if "/cold#" in cell else "warm"
+        if row.get("warmState") != intended:
+            failures.append(
+                f"generation {row.get('generationID', '?')} warmState={row.get('warmState')!r} "
+                f"does not match cell {cell!r}"
+            )
 
     for row in service_rows:
         gaps = (row.get("counters") or {}).get("chunkGaps")
