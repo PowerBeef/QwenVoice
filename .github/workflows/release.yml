@@ -312,6 +312,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Project-input validation verifies historical evidence commits.
+          fetch-depth: 0
 
       - name: Select Xcode 26.0
         run: |
@@ -381,6 +384,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Project-input validation verifies historical evidence commits.
+          fetch-depth: 0
 
       - name: Select Xcode 26.0
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
