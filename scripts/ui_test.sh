@@ -276,12 +276,16 @@ validate_macos_benchmark() {
 validate_ios_benchmark() {
   local diagnostics="$out/diagnostics"
   rm -rf "$diagnostics"
-  "$ROOT_DIR/scripts/ios_device.sh" pull "$diagnostics" >/dev/null
-  python3 "$ROOT_DIR/scripts/check_ios_ui_benchmark.py" "$diagnostics" \
-    --run-id "$run_id" --modes "$modes" --lengths "$lengths" --warm "$warm" \
-    | tee "$out/benchmark-gate.txt"
+  "$ROOT_DIR/scripts/ios_device.sh" pull "$diagnostics" >/dev/null \
+    || return 1
+  if ! python3 "$ROOT_DIR/scripts/check_ios_ui_benchmark.py" "$diagnostics" \
+      --run-id "$run_id" --modes "$modes" --lengths "$lengths" --warm "$warm" \
+      | tee "$out/benchmark-gate.txt"; then
+    return 1
+  fi
   python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diagnostics" \
     --label "${label:-$run_id}" >"$out/telemetry-summary.txt" 2>&1 || true
+  return 0
 }
 
 if [[ "$platform" == "macos" ]]; then
@@ -338,7 +342,8 @@ else
   run_xcodebuild xcodebuild test \
     -project "$PROJECT" -scheme VocelloiOSUI -configuration Release \
     -destination "id=$device" -derivedDataPath "$IOS_DERIVED" \
-    -resultBundlePath "$result" -only-testing:"$only_test" \
+    -resultBundlePath "$result" -collect-test-diagnostics never \
+    -only-testing:"$only_test" \
     -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic \
     || die "physical-iPhone XCUITest failed (see $out/xcodebuild.log)"
 
