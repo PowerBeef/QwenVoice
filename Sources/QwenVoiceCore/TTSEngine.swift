@@ -141,6 +141,12 @@ public protocol TTSEngineRuntimeControlling: TTSEngine {
     ) async -> InteractivePrefetchDiagnostics?
     func setVisibleError(_ message: String?)
     func setAllowsProactiveWarmOperations(_ allow: Bool)
+    func recordApplicationMemoryWarning(reason: String) async
+    func recordMemoryBudgetTransition(
+        from previousBand: IOSMemoryPressureBand,
+        to currentBand: IOSMemoryPressureBand,
+        reason: String
+    ) async
     func trimMemory(level: NativeMemoryTrimLevel, reason: String) async
 }
 

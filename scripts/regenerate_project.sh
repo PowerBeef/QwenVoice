@@ -33,6 +33,11 @@ cp "$ENTITLEMENTS" "$BACKUP"
 echo "==> Running xcodegen..."
 xcodegen generate
 
+# XcodeGen 2.45.4 traps when it directly generates a scheme for the CLI's
+# `tool` product. Render that one shared scheme from the generated target ID so
+# every Xcode invocation can still use an explicit managed DerivedData path.
+python3 "$SCRIPT_DIR/generate_cli_scheme.py"
+
 bash "$SCRIPT_DIR/check_project_inputs.sh"
 
 echo "==> Done. Project regenerated at QwenVoice.xcodeproj"

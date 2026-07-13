@@ -12,6 +12,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_HELPERS = ROOT / "scripts" / "tests"
+if str(TEST_HELPERS) not in sys.path:
+    sys.path.insert(0, str(TEST_HELPERS))
+from test_benchmark_memory import ENGINE_BOUNDARIES, row as memory_row, samples as memory_samples
 CHECK = ROOT / "scripts" / "check_macos_xpc_bench.py"
 RUN_ID = "mac-ui-order-fixture"
 
@@ -26,9 +30,7 @@ def make_engine_row(index: int, cell: str) -> dict:
         "warmState": warm_state,
         "finishReason": "completed",
         "derivedMetrics": {"generatedTokenCount": 100 + index},
-        "stageMarks": [
-            {"stage": "memory_trim", "metadata": {"level": "hardTrim"}},
-        ] if index == 1 else [],
+        "stageMarks": [],
         "notes": {
             "benchRunID": RUN_ID,
             "benchTakeIndex": str(index),
@@ -69,20 +71,35 @@ def v7_frontend() -> dict:
     return {
         "submitToFirstChunkMS": 10, "submitToPlaybackScheduledMS": 30,
         "submitToCompletedMS": 100, "firstChunkToPlaybackScheduledMS": 20,
-        "delayedHeartbeatCount50": 0, "scheduledHeartbeatCount": 10,
+        "delayedHeartbeatCount50": 0, "delayedHeartbeatCount250": 0,
+        "maximumDelayedHeartbeatMS": 0, "scheduledHeartbeatCount": 10,
         "completedHeartbeatCount": 10, "heartbeatCoveragePPM": 1_000_000,
         "playbackChunksReceived": 4, "playbackContinuityFailures": 0,
-        "playbackUnderruns": 0, "playbackStartBufferedChunks": 2,
+        "playbackUnderruns": 0, "playbackStartSource": "finalFile",
+        "playbackStartBufferedChunks": 1,
         "playbackStartBufferedAudioMS": 120, "playbackMinimumQueuedAudioMS": 80,
     }
 
 
-def upgrade_layers_to_v7(layers: dict[str, list[dict]]) -> None:
+def upgrade_layers_to_v8(layers: dict[str, list[dict]], diagnostics: Path) -> None:
     for row in layers["engine"]:
         mode = row["mode"]
         model_id = f"pro_{mode}_speed"
-        row["schemaVersion"] = 7
-        row["summary"] = v7_summary()
+        sidecar = memory_samples(
+            role="engine", boundaries=ENGINE_BOUNDARIES, ios=False,
+            footprint=2500 + int(str(row["generationID"]).rsplit("-", 1)[-1]),
+        )
+        memory = memory_row(row["generationID"], sidecar, layer="engine", ios=False)
+        row["schemaVersion"] = 8
+        row["summary"] = {**memory["summary"], **v7_summary()}
+        row["summary"].update({
+            "sampleCount": len(sidecar), "periodicSampleCount": 1,
+            "boundarySampleCount": len(ENGINE_BOUNDARIES), "captureFailureCount": 0,
+            "missedPeriodicDeadlineCount": 0,
+            "captureCoverage": memory["summary"]["captureCoverage"],
+            "boundaryCoverage": memory["summary"]["boundaryCoverage"],
+        })
+        row["memoryMetrics"] = memory["memoryMetrics"]
         row["backendMetrics"] = {"timings": [], "stages": []}
         row["modelID"] = model_id
         row["modelRuntimeIdentity"] = {
@@ -95,15 +112,37 @@ def upgrade_layers_to_v7(layers: dict[str, list[dict]]) -> None:
         if mode in {"design", "clone"}:
             row["modelRuntimeIdentity"]["fixtureDigest"] = "d" * 64
         row["notes"]["promptDigest"] = "c" * 64
+        (diagnostics / "engine").mkdir(exist_ok=True)
+        (diagnostics / "engine" / f"samples-{row['generationID']}.jsonl").write_text(
+            "".join(json.dumps(item) + "\n" for item in sidecar), encoding="utf-8"
+        )
     for row in layers["engine-service"]:
-        row["schemaVersion"] = 7
+        row["schemaVersion"] = 8
         row["transportMetrics"] = {
             "requestAccepted": True, "requestToFirstChunkMS": 9,
             "counters": {"chunkGaps": 0},
         }
     for row in layers["app"]:
-        row["schemaVersion"] = 7
+        sidecar = memory_samples(
+            role="app", boundaries=["app_submit", "app_terminal"], ios=False,
+            footprint=200, uptime_offset=10_000_000,
+        )
+        memory = memory_row(row["generationID"], sidecar, layer="app", ios=False)
+        row["schemaVersion"] = 8
         row["frontendMetrics"] = v7_frontend()
+        row["summary"] = memory["summary"]
+        row["summary"].update({
+            "targetIntervalNS": 500_000_000, "effectiveIntervalNS": 500_000_000,
+            "maximumDriftNS": 0, "maximumLatenessNS": 0,
+            "missedPeriodicDeadlineCount": 0,
+            "processResourceUsage": v7_summary()["processResourceUsage"],
+            "runEnvironment": v7_summary()["runEnvironment"],
+        })
+        row["memoryMetrics"] = memory["memoryMetrics"]
+        (diagnostics / "app").mkdir(exist_ok=True)
+        (diagnostics / "app" / f"samples-{row['generationID']}.jsonl").write_text(
+            "".join(json.dumps(item) + "\n" for item in sidecar), encoding="utf-8"
+        )
 
 
 class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
@@ -158,6 +197,17 @@ class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
                     for row in engine_rows
                 ],
             }
+            for row in layers["engine"]:
+                row["processIdentifier"] = 42
+            for row in layers["engine-service"]:
+                row["processIdentifier"] = 42
+            for row in layers["app"]:
+                row["processIdentifier"] = 43
+            for row in layers["merged"]:
+                row["engine"]["processIdentifier"] = 42
+                row["engineService"]["processIdentifier"] = 42
+                row["app"]["processIdentifier"] = 43
+            upgrade_layers_to_v8(layers, diagnostics)
             if mutate_layers is not None:
                 mutate_layers(layers)
             for layer, rows in (
@@ -166,7 +216,7 @@ class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
                 ("app", layers["app"]),
             ):
                 directory = diagnostics / layer
-                directory.mkdir()
+                directory.mkdir(exist_ok=True)
                 path = directory / "generations.jsonl"
                 path.write_text(
                     "".join(json.dumps(row) + "\n" for row in rows)
@@ -259,8 +309,14 @@ class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
         self.assertTrue(manifest["historyRecord"]["evidence"]["crashDeltaPassed"])
         first_metrics = manifest["historyRecord"]["takes"][0]["metrics"]
         self.assertEqual(first_metrics["generatedTokens"], 101)
-        self.assertEqual(first_metrics["memoryTrimCount"], 1)
-        self.assertEqual(first_metrics["maximumTrimLevel"], 2)
+        self.assertEqual(first_metrics["memoryTrimCount"], 0)
+        self.assertEqual(first_metrics["maximumTrimLevel"], 0)
+        self.assertEqual(
+            manifest["historyRecord"]["takes"][0]["playbackStartSource"],
+            "finalFile",
+        )
+        self.assertEqual(manifest["schemaVersion"], 2)
+        self.assertEqual(manifest["historyRecord"]["evidence"]["sampleSidecarCount"], 10)
 
     def test_missing_correlated_layer_row_fails_without_evidence(self) -> None:
         def remove_app_row(layers: dict[str, list[dict]]) -> None:
@@ -283,6 +339,41 @@ class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing complete layer payloads: app", result.stdout + result.stderr)
 
+    def test_process_ownership_rejects_same_app_and_engine_pid(self) -> None:
+        def share_pid(layers: dict[str, list[dict]]) -> None:
+            layers["app"][0]["processIdentifier"] = 42
+            layers["merged"][0]["app"]["processIdentifier"] = 42
+
+        result = self.run_checker(self.expected_order, mutate_layers=share_pid)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("app and engine unexpectedly share PID", result.stdout + result.stderr)
+
+    def test_process_ownership_rejects_engine_service_pid_mismatch(self) -> None:
+        def mismatch(layers: dict[str, list[dict]]) -> None:
+            layers["engine-service"][0]["processIdentifier"] = 44
+            layers["merged"][0]["engineService"]["processIdentifier"] = 44
+
+        result = self.run_checker(self.expected_order, mutate_layers=mismatch)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("engine PID 42 != engine-service PID 44", result.stdout + result.stderr)
+
+    def test_process_ownership_rejects_invalid_and_nested_mismatched_pid(self) -> None:
+        for value in (None, True, 0, -1):
+            def invalid(layers: dict[str, list[dict]], value=value) -> None:
+                layers["engine"][0]["processIdentifier"] = value
+
+            with self.subTest(value=value):
+                result = self.run_checker(self.expected_order, mutate_layers=invalid)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("invalid processIdentifier", result.stdout + result.stderr)
+
+        def nested_mismatch(layers: dict[str, list[dict]]) -> None:
+            layers["merged"][0]["app"]["processIdentifier"] = 99
+
+        result = self.run_checker(self.expected_order, mutate_layers=nested_mismatch)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("app PID 99 != layer PID 43", result.stdout + result.stderr)
+
     def test_duplicate_layer_generation_id_fails(self) -> None:
         def duplicate_service_id(layers: dict[str, list[dict]]) -> None:
             layers["engine-service"][1]["generationID"] = "fixture-1"
@@ -296,44 +387,54 @@ class CheckMacOSXPCBenchmarkTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("malformed JSON", result.stdout + result.stderr)
 
-    def test_schema_v7_complete_accuracy_evidence_passes(self) -> None:
-        result = self.run_checker(self.expected_order, mutate_layers=upgrade_layers_to_v7)
+    def test_schema_v8_complete_accuracy_evidence_passes(self) -> None:
+        result = self.run_checker(self.expected_order)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_schema_v7_missing_sampler_resource_or_environment_fails(self) -> None:
+    def test_schema_v8_missing_sampler_resource_or_environment_fails(self) -> None:
         for field, message in (
             ("maximumDriftNS", "invalid sampler maximumDriftNS"),
             ("processResourceUsage", "incomplete process resource deltas"),
             ("runEnvironment", "has no run environment"),
         ):
             def mutate(layers, field=field):
-                upgrade_layers_to_v7(layers)
                 layers["engine"][0]["summary"].pop(field)
             with self.subTest(field=field):
                 result = self.run_checker(self.expected_order, mutate_layers=mutate)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stdout + result.stderr)
 
-    def test_schema_v7_transport_acceptance_and_latency_are_required(self) -> None:
+    def test_schema_v8_transport_acceptance_and_latency_are_required(self) -> None:
         for field, value, message in (
             ("requestAccepted", False, "was not accepted by XPC transport"),
             ("requestToFirstChunkMS", None, "has no request-to-first-chunk"),
         ):
             def mutate(layers, field=field, value=value):
-                upgrade_layers_to_v7(layers)
                 layers["engine-service"][0]["transportMetrics"][field] = value
             with self.subTest(field=field):
                 result = self.run_checker(self.expected_order, mutate_layers=mutate)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stdout + result.stderr)
 
-    def test_schema_v7_frontend_lifecycle_and_playback_health_are_required(self) -> None:
+    def test_schema_v8_frontend_lifecycle_and_playback_health_are_required(self) -> None:
         def mutate(layers):
-            upgrade_layers_to_v7(layers)
             layers["app"][0]["frontendMetrics"].pop("playbackMinimumQueuedAudioMS")
         result = self.run_checker(self.expected_order, mutate_layers=mutate)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("incomplete typed frontend lifecycle/playback", result.stdout + result.stderr)
+
+    def test_schema_v8_frontend_source_and_lifecycle_order_are_required(self) -> None:
+        def missing_source(layers):
+            layers["app"][0]["frontendMetrics"].pop("playbackStartSource")
+        result = self.run_checker(self.expected_order, mutate_layers=missing_source)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid playback start source", result.stdout + result.stderr)
+
+        def inconsistent_order(layers):
+            layers["app"][0]["frontendMetrics"]["submitToPlaybackScheduledMS"] = 9
+        result = self.run_checker(self.expected_order, mutate_layers=inconsistent_order)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inconsistent frontend lifecycle ordering", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

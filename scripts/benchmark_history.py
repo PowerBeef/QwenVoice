@@ -30,15 +30,37 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
+# Some deterministic tests load this module through importlib without adding the
+# scripts directory to sys.path. Make the repository-local policy helper
+# importable in that supported context as well as during normal CLI execution.
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+from build_output_policy import load_policy
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BUILD_OUTPUT_POLICY = load_policy(REPO_ROOT)
+MACOS_DERIVED_DATA = (
+    REPO_ROOT / BUILD_OUTPUT_POLICY.entries_by_id["xcode-macos-derived-data"]["path"]
+)
+IOS_DERIVED_DATA = (
+    REPO_ROOT / BUILD_OUTPUT_POLICY.entries_by_id["xcode-ios-device-derived-data"]["path"]
+)
 BENCHMARK_ROOT = REPO_ROOT / "benchmarks"
 RUNS_ROOT = BENCHMARK_ROOT / "runs"
 HARDWARE_PROFILES_PATH = BENCHMARK_ROOT / "hardware-profiles.json"
-SCHEMA_PATH = BENCHMARK_ROOT / "schema-v1.json"
+SCHEMA_PATHS = {
+    1: BENCHMARK_ROOT / "schema-v1.json",
+    2: BENCHMARK_ROOT / "schema-v2.json",
+}
+# Compatibility alias retained for schema-v1 fixture callers. New publication
+# uses SCHEMA_PATHS[2]; historical v1 tests may safely patch this read-only path.
+SCHEMA_PATH = SCHEMA_PATHS[1]
 HISTORY_PATH = BENCHMARK_ROOT / "HISTORY.md"
 MAX_RECORD_BYTES = 256 * 1024
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = frozenset(SCHEMA_PATHS)
 
 KINDS = {
     "ui-generation",
@@ -47,6 +69,13 @@ KINDS = {
     "telemetry-overhead",
     "instrument-profile",
     "prosody-calibration",
+}
+V1_KINDS = set(KINDS)
+V2_KINDS = (KINDS - {"telemetry-overhead"}) | {"memory-qualification"}
+ALL_KINDS = V1_KINDS | V2_KINDS
+MEMORY_QUALIFIED_KINDS = {
+    "ui-generation", "engine-generation", "language", "instrument-profile",
+    "memory-qualification",
 }
 PLATFORMS = {"macos", "ios"}
 SUCCESS_STATUSES = {"passed", "passedWithWarnings"}
@@ -88,6 +117,10 @@ SECTION_KEYS = {
         "expectedTakeCount", "actualTakeCount", "resultBundleDigest",
         "rawTelemetryDigest", "selectedEvidenceDigest", "screenshotDigests", "trace",
         "languageVerification",
+        "memoryContractVersion", "memoryQualified", "sampleSidecarCount",
+        "sampleSidecarsDigest", "memoryPolicyID", "retentionMetric",
+        "retentionThresholdFraction", "maximumRetainedGrowthMB",
+        "maximumRetainedGrowthFraction", "retentionPassed",
     },
     "comparison": {"key", "comparable", "baselineRunID", "deltas"},
     "listening": {"status", "note", "annotatedAt"},
@@ -102,7 +135,8 @@ TAKE_KEYS = {
     "durationSeconds", "metrics", "output", "audioQC", "thermalState", "warnings",
     "runtimeProfileSignature", "fixtureDigest", "modelIntegrityDigest", "modelRepository",
     "modelRevision", "modelArtifactVersion", "modelQuantization", "seed",
-    "accuracyMetric", "accuracyThreshold",
+    "accuracyMetric", "accuracyThreshold", "playbackStartSource",
+    "memoryStatus", "sampleSidecarDigest",
 }
 OUTPUT_KEYS = {
     "readableWAV", "atomicPublish", "durationSeconds", "sampleRate", "channels",
@@ -116,14 +150,35 @@ CELL_KEYS = {
     "key", "mode", "modelID", "variant", "warmState", "length", "count", "status",
     "statistics", "worstQCVerdict", "worstThermalState", "maximumTrimLevel", "warningCount",
 }
-TRACE_KEYS = {"digest", "template", "durationSeconds", "validated", "summary"}
+TRACE_RETENTION_KEYS = {
+    "originalEphemeralPath", "summaryArtifact", "rawTraceRetained",
+    "retentionPolicy", "captureSettings", "captureSettingsDigest",
+}
+TRACE_KEYS = {
+    "digest", "template", "durationSeconds", "validated", "summary",
+} | TRACE_RETENTION_KEYS
+TRACE_CAPTURE_SETTINGS_KEYS = {
+    "profileKind", "template", "requestedDurationSeconds", "targetProcess", "exactPID",
+}
+TRACE_SUMMARY_ARTIFACT_KEYS = {"path", "digest"}
+LEGACY_MEMORY_TRACE_SUMMARY_KEYS = {
+    "allocationTargetDataBytes", "allocationTrackVerified",
+    "vmTrackerRegionMapVerified", "vmTrackerTrackVerified",
+}
+MEMORY_TRACE_V2_SUMMARY_KEYS = {
+    "memoryTraceEvidenceVersion",
+    "allocationTargetDataBytes", "allocationTrackPresent", "allocationListPresent",
+    "allocationDataExportStatus", "allocationTargetRowCount",
+    "vmTrackerTrackPresent", "vmTrackerRegionMapPresent",
+    "vmTrackerDataExportStatus", "vmTrackerTargetRowCount",
+}
 TRACE_SUMMARY_KEYS = {
     "artifact", "capturedDataRowCount", "capturedRowsBySchema",
     "correlatedSignpostEventCount", "correlationFieldsVerified",
     "cpuCycleWeight", "cpuSampleCount", "cpuSampleSpanMS", "cpuSampleWeightMS",
     "processCount", "schemaCount", "signpostEventCount", "signpostSchemaCount",
     "tableCount", "targetPIDVerified", "targetProcess", "tocDigest",
-}
+} | LEGACY_MEMORY_TRACE_SUMMARY_KEYS | MEMORY_TRACE_V2_SUMMARY_KEYS
 LANGUAGE_VERIFICATION_KEYS = {
     "outputSchemaVersion", "outputAlgorithm", "recognitionSchemaVersion",
     "recognitionAlgorithm", "accuracyMetricVersion", "requiredPassCount",
@@ -154,7 +209,12 @@ SCHEMA_REQUIRED_KEYS = {
     "source": SECTION_KEYS["source"],
     "toolchain": SECTION_KEYS["toolchain"],
     "inputs": SECTION_KEYS["inputs"],
-    "evidence": SECTION_KEYS["evidence"] - {"trace", "languageVerification"},
+    "evidence": SECTION_KEYS["evidence"] - {
+        "trace", "languageVerification", "memoryContractVersion", "memoryQualified",
+        "sampleSidecarCount", "sampleSidecarsDigest",
+        "memoryPolicyID", "retentionMetric", "retentionThresholdFraction",
+        "maximumRetainedGrowthMB", "maximumRetainedGrowthFraction", "retentionPassed",
+    },
     "comparison": SECTION_KEYS["comparison"],
     "listening": SECTION_KEYS["listening"],
     "model": MODEL_KEYS,
@@ -165,14 +225,44 @@ SCHEMA_REQUIRED_KEYS = {
         "algorithmVersion", "verdict", "instabilityVerdict", "writtenOutputVerdict",
         "warningCodes", "metrics",
     },
-    "trace": TRACE_KEYS,
+    # Trace-retention metadata is optional only to preserve read-only
+    # compatibility with records published before the summary-only policy.
+    # When any retention field is present, the executable validator requires
+    # the complete set and enforces its internal consistency.
+    "trace": TRACE_KEYS - TRACE_RETENTION_KEYS,
     "traceSummary": {
         "artifact", "capturedDataRowCount", "capturedRowsBySchema",
         "correlatedSignpostEventCount", "correlationFieldsVerified", "cpuSampleCount",
         "cpuSampleSpanMS", "processCount", "schemaCount", "signpostEventCount",
         "signpostSchemaCount", "tableCount", "targetPIDVerified", "targetProcess", "tocDigest",
     },
+    "traceCaptureSettings": TRACE_CAPTURE_SETTINGS_KEYS,
+    "traceSummaryArtifact": TRACE_SUMMARY_ARTIFACT_KEYS,
 }
+V2_ONLY_EVIDENCE_KEYS = {
+    "memoryContractVersion", "memoryQualified", "sampleSidecarCount", "sampleSidecarsDigest",
+    "memoryPolicyID", "retentionMetric", "retentionThresholdFraction",
+    "maximumRetainedGrowthMB", "maximumRetainedGrowthFraction", "retentionPassed",
+}
+V2_ONLY_TAKE_KEYS = {"memoryStatus", "sampleSidecarDigest"}
+V2_ONLY_TRACE_SUMMARY_KEYS = {
+    *LEGACY_MEMORY_TRACE_SUMMARY_KEYS,
+    *MEMORY_TRACE_V2_SUMMARY_KEYS,
+}
+V2_ONLY_TRACE_KEYS = set(TRACE_RETENTION_KEYS)
+
+
+def schema_property_keys(version: int) -> dict[str, set[str]]:
+    properties = {name: set(keys) for name, keys in SCHEMA_PROPERTY_KEYS.items()}
+    if version == 1:
+        properties["evidence"] -= V2_ONLY_EVIDENCE_KEYS
+        properties["take"] -= V2_ONLY_TAKE_KEYS
+        properties["trace"] -= V2_ONLY_TRACE_KEYS
+        properties["traceSummary"] -= V2_ONLY_TRACE_SUMMARY_KEYS
+    else:
+        properties["traceCaptureSettings"] = set(TRACE_CAPTURE_SETTINGS_KEYS)
+        properties["traceSummaryArtifact"] = set(TRACE_SUMMARY_ARTIFACT_KEYS)
+    return properties
 
 SAFE_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 SAFE_WARNING_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,79}(?:\([0-9]+/[0-9]+\))?$")
@@ -203,6 +293,16 @@ METRIC_KEYS = {
     "blockIOOperations", "samplerTargetIntervalMS", "samplerEffectiveMedianIntervalMS",
     "samplerMaximumLatenessMS", "samplerBoundarySampleCount", "samplerCaptureFailureCount",
     "samplerMaximumDriftMS",
+    "residentStartMB", "residentEndMB", "residentDeltaMB",
+    "physicalFootprintStartMB", "physicalFootprintEndMB", "physicalFootprintDeltaMB",
+    "gpuRecommendedWorkingSetMB", "gpuWorkingSetUsageRatioPeak", "memoryTimeToPeakMS",
+    "samplerSampleCount", "samplerPeriodicSampleCount", "samplerMissedDeadlineCount",
+    "samplerCoverage", "memoryPressureEventCount", "maximumPressureLevel",
+    "memoryWarningCount", "memoryExitCount", "headroomStartMB", "headroomEndMB",
+    "peakProcessBudgetUtilization", "alignedProcessSampleCount",
+    "alignedProcessSampleCoverage", "alignedEngineSampleCoverage",
+    "alignedAppSampleCoverage", "mlxActivePeakMB", "mlxCachePeakMB", "mlxPeakMB",
+    "impliedProcessLimitMB", "totalDeviceRAMMB",
     "loadAverage1M", "freeStorageBytes", "uptimeSeconds", "lowPowerMode",
     "chunksReceived", "continuityFailures", "underruns", "startBufferDepth",
     "chunksForwarded", "transportChunkGaps", "transportDuplicateChunks", "transportOutOfOrderChunks",
@@ -225,6 +325,27 @@ METRIC_KEYS = {
     "rushedSyllableRateThresholdHz", "rushedMaximumPauseRatio",
     "flatEnvelopeRoughnessThreshold", "flatRateCVThreshold",
     "maximumPauseThresholdSeconds", "maximumPauseRatioThreshold",
+}
+MEMORY_REQUIRED_METRICS = {
+    "residentStartMB", "residentEndMB", "residentDeltaMB", "peakResidentMB",
+    "physicalFootprintStartMB", "physicalFootprintEndMB", "physicalFootprintDeltaMB",
+    "peakPhysicalFootprintMB", "peakCompressedMB", "peakGPUAllocatedMB",
+    "gpuRecommendedWorkingSetMB", "gpuWorkingSetUsageRatioPeak",
+    "memoryTimeToPeakMS", "samplerSampleCount", "samplerPeriodicSampleCount",
+    "samplerBoundarySampleCount", "samplerCaptureFailureCount",
+    "samplerMissedDeadlineCount", "samplerCoverage", "memoryPressureEventCount",
+    "maximumPressureLevel", "memoryTrimCount", "maximumTrimLevel",
+    "memoryWarningCount", "memoryExitCount",
+    "mlxActivePeakMB", "mlxCachePeakMB", "mlxPeakMB",
+}
+IOS_MEMORY_REQUIRED_METRICS = {
+    "headroomStartMB", "headroomEndMB", "minimumHeadroomMB",
+    "peakProcessBudgetUtilization",
+    "impliedProcessLimitMB", "totalDeviceRAMMB",
+}
+MACOS_UI_MEMORY_REQUIRED_METRICS = {
+    "alignedProcessSampleCount", "alignedProcessSampleCoverage",
+    "alignedEngineSampleCoverage", "alignedAppSampleCoverage",
 }
 
 SENSITIVE_KEY_PARTS = {
@@ -252,6 +373,18 @@ def canonical_bytes(value: Any) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
     ).encode("utf-8")
+
+
+def stored_json_bytes(value: Any) -> bytes:
+    """Return the deterministic, size-bounded representation used on disk.
+
+    Benchmark records intentionally retain both exact per-take evidence and
+    per-cell aggregates.  Pretty-print whitespace made the canonical 29-take
+    UI matrix exceed the 256 KiB registry contract even though its allowlisted
+    content fit.  Reuse the canonical JSON representation used for record
+    digests so the cap measures evidence rather than presentation overhead.
+    """
+    return canonical_bytes(value) + b"\n"
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -302,7 +435,7 @@ def load_json(path: Path) -> Any:
 
 def atomic_json_write(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n").encode("utf-8")
+    encoded = stored_json_bytes(value)
     if len(encoded) > MAX_RECORD_BYTES:
         raise HistoryError(f"record exceeds {MAX_RECORD_BYTES} bytes ({len(encoded)} bytes)")
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -350,15 +483,20 @@ def require_schema_object(value: Any, location: str) -> dict[str, Any]:
     return value
 
 
-def load_schema_contract() -> dict[str, Any]:
-    """Parse schema-v1 and prove that it matches the executable allowlist.
+def load_schema_contract(version: int | None = None) -> dict[str, Any]:
+    """Parse one history schema and prove it matches the executable allowlist.
 
     The repository intentionally has no runtime dependency on ``jsonschema``.
     This contract check covers the closed record shape and the enums that must
     stay in lockstep with the executable validator; ``validate_schema_value``
     then evaluates the schema subset used by schema-v1 for every record.
     """
-    schema = require_schema_object(load_json(SCHEMA_PATH), "root")
+    if version is None:
+        version = 1 if SCHEMA_PATH != SCHEMA_PATHS[1] else SCHEMA_VERSION
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise HistoryError(f"unsupported benchmark history schema: {version!r}")
+    schema_path = SCHEMA_PATH if version == 1 else SCHEMA_PATHS[version]
+    schema = require_schema_object(load_json(schema_path), "root")
     if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
         raise HistoryError("benchmark schema must declare JSON Schema draft 2020-12")
     if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
@@ -368,11 +506,11 @@ def load_schema_contract() -> dict[str, Any]:
         raise HistoryError("benchmark schema top-level properties drifted from the executable allowlist")
     if set(schema.get("required", [])) != TOP_LEVEL_KEYS:
         raise HistoryError("benchmark schema top-level required fields drifted from the executable validator")
-    if properties.get("schemaVersion", {}).get("const") != SCHEMA_VERSION:
+    if properties.get("schemaVersion", {}).get("const") != version:
         raise HistoryError("benchmark schema version drifted from the executable validator")
 
     definitions = require_schema_object(schema.get("$defs"), "$defs")
-    for name, expected_properties in SCHEMA_PROPERTY_KEYS.items():
+    for name, expected_properties in schema_property_keys(version).items():
         definition = require_schema_object(definitions.get(name), f"$defs.{name}")
         if definition.get("type") != "object" or definition.get("additionalProperties") is not False:
             raise HistoryError(f"benchmark schema $defs.{name} must be a closed object")
@@ -390,7 +528,7 @@ def load_schema_contract() -> dict[str, Any]:
 
     run_properties = definitions["run"]["properties"]
     enum_contracts = {
-        "kind": KINDS,
+        "kind": V2_KINDS if version == 2 else V1_KINDS,
         "platform": PLATFORMS,
         "status": SUCCESS_STATUSES,
         "matrixScope": MATRIX_SCOPES,
@@ -448,7 +586,7 @@ def validate_schema_value(value: Any, node: dict[str, Any], root: dict[str, Any]
         if not isinstance(choices, list) or not all(isinstance(item, str) for item in choices):
             raise HistoryError(f"benchmark schema {location} has an invalid type declaration")
         if not any(schema_type_matches(value, item) for item in choices):
-            raise HistoryError(f"{location} has the wrong type for benchmark schema-v1")
+            raise HistoryError(f"{location} has the wrong type for benchmark history schema")
 
     if isinstance(value, dict):
         properties = node.get("properties", {})
@@ -514,7 +652,7 @@ def validate_registry_tree() -> list[Path]:
         raise HistoryError("benchmarks/runs must be a real directory")
     records: list[Path] = []
     for kind_path in sorted(RUNS_ROOT.iterdir()):
-        if kind_path.is_symlink() or not kind_path.is_dir() or kind_path.name not in KINDS:
+        if kind_path.is_symlink() or not kind_path.is_dir() or kind_path.name not in ALL_KINDS:
             raise HistoryError(f"unexpected benchmark run-kind entry: {kind_path.name}")
         for path in sorted(kind_path.iterdir()):
             if path.is_symlink() or not path.is_file():
@@ -660,11 +798,14 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
     ]
     harness_paths = [
         REPO_ROOT / "scripts" / "ui_test.sh",
+        REPO_ROOT / "scripts" / "check_test_workflows.sh",
         REPO_ROOT / "scripts" / "check_macos_xpc_bench.py",
         REPO_ROOT / "scripts" / "check_ios_ui_benchmark.py",
         REPO_ROOT / "scripts" / "summarize_generation_telemetry.py",
+        REPO_ROOT / "scripts" / "benchmark_memory.py",
         REPO_ROOT / "scripts" / "benchmark_history.py",
         REPO_ROOT / "scripts" / "publish_benchmark_history.py",
+        REPO_ROOT / "scripts" / "ios_memory_field_report.py",
         REPO_ROOT / "scripts" / "macos_test.sh",
         REPO_ROOT / "scripts" / "ios_device.sh",
         REPO_ROOT / "scripts" / "telemetry_overhead.py",
@@ -687,6 +828,8 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
         REPO_ROOT / "Sources" / "SharedSupport" / "Telemetry" / "AppGenerationTimeline.swift",
         REPO_ROOT / "Sources" / "SharedSupport" / "Telemetry" / "MainThreadStallWatchdog.swift",
         REPO_ROOT / "Sources" / "QwenVoiceEngineSupport" / "EngineServiceTransportAccumulator.swift",
+        REPO_ROOT / "benchmarks" / "schema-v2.json",
+        REPO_ROOT / "config" / "memory-qualification-policy.json",
     ]
     corpus_paths = [
         REPO_ROOT / "Tests" / "UIAutomationSupport" / "VocelloUIAutomationSupport.swift",
@@ -696,7 +839,11 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "contractHash": hash_existing_files([REPO_ROOT / "Sources/Resources/qwenvoice_contract.json"]),
         "dependencyLockHash": hash_existing_files(package_locks),
-        "projectInputHash": hash_existing_files([REPO_ROOT / "project.yml"]),
+        "projectInputHash": hash_existing_files([
+            REPO_ROOT / "project.yml",
+            REPO_ROOT / "benchmarks" / "schema-v2.json",
+            REPO_ROOT / "config" / "memory-qualification-policy.json",
+        ]),
         "harnessHash": hash_existing_files(harness_paths),
         "matrixHash": sha256_bytes(canonical_bytes(matrix_payload)),
         "corpusHash": hash_existing_files(corpus_paths),
@@ -780,8 +927,8 @@ def app_identity(platform: str, outer: dict[str, Any], artifact_dir: Path) -> di
             raise HistoryError("appBundleRelativePath must remain inside the repository")
     elif not has_explicit_executables:
         bundle = (
-            REPO_ROOT / "build/DerivedData/Build/Products/Release/Vocello.app" if platform == "macos"
-            else REPO_ROOT / "build/ios/Build/Products/Release-iphoneos/Vocello.app"
+            MACOS_DERIVED_DATA / "Build/Products/Release/Vocello.app" if platform == "macos"
+            else IOS_DERIVED_DATA / "Build/Products/Release-iphoneos/Vocello.app"
         )
     else:
         bundle = Path("/__vocello_no_default_bundle__")
@@ -1054,6 +1201,14 @@ def selected_evidence_digest(record: dict[str, Any]) -> str:
     }
     if evidence.get("languageVerification") is not None:
         payload["languageVerification"] = evidence["languageVerification"]
+    if record.get("schemaVersion") == 2:
+        for key in (
+            "sampleSidecarsDigest", "memoryPolicyID", "retentionMetric",
+            "retentionThresholdFraction", "maximumRetainedGrowthMB",
+            "maximumRetainedGrowthFraction", "retentionPassed",
+        ):
+            if key in evidence:
+                payload[key] = evidence[key]
     return sha256_bytes(canonical_bytes(payload))
 
 
@@ -1264,6 +1419,13 @@ def build_record(manifest_path: Path) -> dict[str, Any]:
     if "resultBundleDigest" not in evidence:
         evidence["resultBundleDigest"] = outer.get("resultBundleDigest") or digest_xcresult_summary(artifact_dir)
     evidence.setdefault("rawTelemetryDigest", outer.get("rawTelemetryDigest", "not-applicable"))
+    for key in (
+        "memoryContractVersion", "memoryQualified", "sampleSidecarCount", "sampleSidecarsDigest",
+        "memoryPolicyID", "retentionMetric", "retentionThresholdFraction",
+        "maximumRetainedGrowthMB", "maximumRetainedGrowthFraction", "retentionPassed",
+    ):
+        if key not in evidence and key in outer:
+            evidence[key] = outer[key]
     if "screenshotDigests" not in evidence:
         evidence["screenshotDigests"] = outer.get("screenshotDigests") or screenshot_digests(artifact_dir)
     evidence["selectedEvidenceDigest"] = selected_evidence_digest(record)
@@ -1383,8 +1545,11 @@ def validate_telemetry_overhead_semantics(
     evidence = record["evidence"]
     if run["platform"] != "macos" or run["matrixScope"] != "focused":
         raise HistoryError("telemetry-overhead must be a focused macOS benchmark")
-    if evidence.get("telemetrySchemaVersion") != 7 or evidence.get("qcAlgorithmVersion") != "not-applicable":
-        raise HistoryError("telemetry-overhead requires schema-v7 telemetry and no audio-QC version")
+    expected_schema = 7 if record.get("schemaVersion") == 1 else 8
+    if evidence.get("telemetrySchemaVersion") != expected_schema or evidence.get("qcAlgorithmVersion") != "not-applicable":
+        raise HistoryError(
+            f"telemetry-overhead requires schema-v{expected_schema} telemetry and no audio-QC version"
+        )
     if len(record["models"]) != 1:
         raise HistoryError("telemetry-overhead requires one exact Custom Speed model")
     model = record["models"][0]
@@ -1503,10 +1668,109 @@ def validate_prosody_semantics(record: dict[str, Any]) -> None:
     require_digest(record["inputs"].get("analysisProfileHash"), "inputs.analysisProfileHash", allow_na=False)
 
 
+def _safe_build_artifact_path(value: Any, *, suffix: str, location: str) -> PurePosixPath:
+    path = PurePosixPath(value) if isinstance(value, str) else None
+    if (
+        path is None or path.is_absolute() or ".." in path.parts
+        or not path.parts or path.parts[0] != "build" or path.suffix != suffix
+    ):
+        raise HistoryError(f"{location} must be a safe build-relative {suffix} path")
+    return path
+
+
+def validate_trace_retention(record: dict[str, Any], trace: dict[str, Any]) -> None:
+    """Validate the summary-only retention contract for newly published traces.
+
+    Older v1/v2 records predate this metadata and remain read-only compatible.
+    Once a record carries any retention field, however, all fields are required
+    so a raw trace path can never be mistaken for proof that the trace remains.
+    """
+
+    present = TRACE_RETENTION_KEYS.intersection(trace)
+    if not present:
+        return
+    if record.get("schemaVersion") != 2:
+        raise HistoryError("trace-retention metadata requires benchmark history schema v2")
+    if missing := sorted(TRACE_RETENTION_KEYS - set(trace)):
+        raise HistoryError("trace-retention metadata is incomplete: " + ", ".join(missing))
+
+    original = _safe_build_artifact_path(
+        trace["originalEphemeralPath"], suffix=".trace",
+        location="evidence.trace.originalEphemeralPath",
+    )
+    summary = trace.get("summary")
+    if not isinstance(summary, dict) or summary.get("artifact") != original.as_posix():
+        raise HistoryError("trace summary artifact must match the original ephemeral trace path")
+
+    retention_policy = trace["retentionPolicy"]
+    expected_raw_retained = {
+        "summaryOnly": False,
+        "keptExplicitly": True,
+    }.get(retention_policy)
+    if expected_raw_retained is None:
+        raise HistoryError("trace retentionPolicy is unsupported")
+    if trace["rawTraceRetained"] is not expected_raw_retained:
+        raise HistoryError("trace rawTraceRetained conflicts with its retentionPolicy")
+
+    summary_artifact = trace["summaryArtifact"]
+    if not isinstance(summary_artifact, dict):
+        raise HistoryError("trace summaryArtifact must be an object")
+    reject_unknown_keys(
+        summary_artifact, TRACE_SUMMARY_ARTIFACT_KEYS, "evidence.trace.summaryArtifact"
+    )
+    if missing := sorted(TRACE_SUMMARY_ARTIFACT_KEYS - set(summary_artifact)):
+        raise HistoryError("trace summaryArtifact is missing: " + ", ".join(missing))
+    summary_path = _safe_build_artifact_path(
+        summary_artifact["path"], suffix=".json",
+        location="evidence.trace.summaryArtifact.path",
+    )
+    if original == summary_path or original in summary_path.parents:
+        raise HistoryError("trace summaryArtifact must live outside the ephemeral trace bundle")
+    require_digest(
+        summary_artifact["digest"], "evidence.trace.summaryArtifact.digest", allow_na=False
+    )
+
+    capture_settings = trace["captureSettings"]
+    if not isinstance(capture_settings, dict):
+        raise HistoryError("trace captureSettings must be an object")
+    reject_unknown_keys(
+        capture_settings, TRACE_CAPTURE_SETTINGS_KEYS, "evidence.trace.captureSettings"
+    )
+    if missing := sorted(TRACE_CAPTURE_SETTINGS_KEYS - set(capture_settings)):
+        raise HistoryError("trace captureSettings is missing: " + ", ".join(missing))
+    if capture_settings["profileKind"] not in {"cpu", "memory"}:
+        raise HistoryError("trace captureSettings.profileKind is unsupported")
+    if capture_settings["template"] != trace.get("template"):
+        raise HistoryError("trace captureSettings.template does not match trace.template")
+    if capture_settings["targetProcess"] != summary.get("targetProcess"):
+        raise HistoryError("trace captureSettings.targetProcess does not match trace summary")
+    if capture_settings["exactPID"] is not True:
+        raise HistoryError("trace captureSettings must identify exact-PID attachment")
+    requested_duration = capture_settings["requestedDurationSeconds"]
+    if (
+        isinstance(requested_duration, bool)
+        or not isinstance(requested_duration, (int, float))
+        or not math.isfinite(float(requested_duration))
+        or requested_duration <= 0
+        or float(requested_duration) != float(trace.get("durationSeconds", -1))
+    ):
+        raise HistoryError("trace capture duration does not match validated trace evidence")
+    memory_profile = "allocations" in str(trace.get("template", "")).lower()
+    expected_kind = "memory" if memory_profile else "cpu"
+    if capture_settings["profileKind"] != expected_kind:
+        raise HistoryError("trace captureSettings.profileKind conflicts with its template")
+    require_digest(
+        trace["captureSettingsDigest"], "evidence.trace.captureSettingsDigest", allow_na=False
+    )
+    if trace["captureSettingsDigest"] != sha256_bytes(canonical_bytes(capture_settings)):
+        raise HistoryError("trace captureSettingsDigest does not match captureSettings")
+
+
 def validate_trace_summary(record: dict[str, Any]) -> None:
     trace = record["evidence"].get("trace")
     if not isinstance(trace, dict):
         raise HistoryError("instrument-profile evidence requires a validated trace")
+    validate_trace_retention(record, trace)
     summary = trace.get("summary")
     if not isinstance(summary, dict):
         raise HistoryError("instrument-profile requires a structured trace summary")
@@ -1534,18 +1798,107 @@ def validate_trace_summary(record: dict[str, Any]) -> None:
         raise HistoryError("trace summary lacks one correlated signpost per take")
     if summary["correlationFieldsVerified"] is not True or summary["targetPIDVerified"] is not True:
         raise HistoryError("trace summary did not verify correlation fields and target PID")
-    if not isinstance(summary["targetProcess"], str) or not SAFE_LABEL_RE.fullmatch(summary["targetProcess"]):
-        raise HistoryError("trace summary target process is not a safe identifier")
-    require_digest(summary["tocDigest"], "evidence.trace.summary.tocDigest", allow_na=False)
     rows = summary["capturedRowsBySchema"]
     if not isinstance(rows, dict) or not rows:
         raise HistoryError("trace summary lacks captured schema rows")
     if any(
         not isinstance(name, str) or not SAFE_LABEL_RE.fullmatch(name)
-        or not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        or not isinstance(value, int) or isinstance(value, bool) or value < 0
         for name, value in rows.items()
     ):
         raise HistoryError("trace summary schema-row counts are invalid")
+    if not any(rows.values()):
+        raise HistoryError("trace summary contains no target-process schema rows")
+    memory_profile = (
+        record.get("schemaVersion") == 2
+        and "allocations" in str(trace.get("template", "")).lower()
+    )
+    if memory_profile:
+        evidence_version = summary.get("memoryTraceEvidenceVersion")
+        if evidence_version == 2:
+            if missing := sorted(MEMORY_TRACE_V2_SUMMARY_KEYS - set(summary)):
+                raise HistoryError(
+                    "memory trace summary is missing v2 track evidence: " + ", ".join(missing)
+                )
+            legacy_only = LEGACY_MEMORY_TRACE_SUMMARY_KEYS - {"allocationTargetDataBytes"}
+            if legacy_only.intersection(summary):
+                raise HistoryError("memory trace summary mixes legacy verified flags with v2 evidence")
+            presence_fields = {
+                "allocationTrackPresent", "allocationListPresent",
+                "vmTrackerTrackPresent", "vmTrackerRegionMapPresent",
+            }
+            if any(summary[name] is not True for name in presence_fields):
+                raise HistoryError("memory trace summary is missing configured memory tracks")
+            allocation_schemas = {
+                name: count for name, count in rows.items()
+                if "allocation" in name.lower()
+            }
+            vm_schemas = {
+                name: count for name, count in rows.items()
+                if (
+                    name.lower().startswith("vm")
+                    or "vm-tracker" in name.lower()
+                    or "vm_tracker" in name.lower()
+                    or "virtual-memory" in name.lower()
+                    or "virtual_memory" in name.lower()
+                )
+            }
+
+            def validate_export(
+                *, label: str, status_key: str, count_key: str,
+                schema_rows: dict[str, int],
+            ) -> None:
+                status = summary[status_key]
+                count = summary[count_key]
+                if (
+                    status not in {"targetRows", "notExportable"}
+                    or not isinstance(count, int) or isinstance(count, bool) or count < 0
+                ):
+                    raise HistoryError(f"memory trace summary has invalid {label} export evidence")
+                exported_count = sum(schema_rows.values())
+                if status == "targetRows":
+                    if not schema_rows or count <= 0 or count != exported_count:
+                        raise HistoryError(
+                            f"memory trace summary lacks exact-PID {label} exported rows"
+                        )
+                elif schema_rows or count != 0:
+                    raise HistoryError(
+                        f"memory trace summary misclassifies exportable {label} data"
+                    )
+
+            validate_export(
+                label="Allocations", status_key="allocationDataExportStatus",
+                count_key="allocationTargetRowCount", schema_rows=allocation_schemas,
+            )
+            validate_export(
+                label="VM Tracker", status_key="vmTrackerDataExportStatus",
+                count_key="vmTrackerTargetRowCount", schema_rows=vm_schemas,
+            )
+        else:
+            # Read-only compatibility for v2 records published before explicit
+            # export-status evidence replaced the ambiguous `Verified` flags.
+            v2_only_fields = MEMORY_TRACE_V2_SUMMARY_KEYS - {"allocationTargetDataBytes"}
+            if v2_only_fields.intersection(summary):
+                raise HistoryError("memory trace summary has v2 fields without evidence version 2")
+            if missing := sorted(LEGACY_MEMORY_TRACE_SUMMARY_KEYS - set(summary)):
+                raise HistoryError(
+                    "memory trace summary is missing legacy track evidence: " + ", ".join(missing)
+                )
+            legacy_flags = LEGACY_MEMORY_TRACE_SUMMARY_KEYS - {"allocationTargetDataBytes"}
+            if any(summary[name] is not True for name in legacy_flags):
+                raise HistoryError("legacy memory trace summary did not verify both memory tracks")
+        allocation_bytes = summary["allocationTargetDataBytes"]
+        if (
+            isinstance(allocation_bytes, bool)
+            or not isinstance(allocation_bytes, int)
+            or allocation_bytes <= 0
+        ):
+            raise HistoryError("memory trace summary contains no exact-PID allocation data")
+    elif (LEGACY_MEMORY_TRACE_SUMMARY_KEYS | MEMORY_TRACE_V2_SUMMARY_KEYS).intersection(summary):
+        raise HistoryError("CPU-only trace summary contains memory-profile evidence")
+    if not isinstance(summary["targetProcess"], str) or not SAFE_LABEL_RE.fullmatch(summary["targetProcess"]):
+        raise HistoryError("trace summary target process is not a safe identifier")
+    require_digest(summary["tocDigest"], "evidence.trace.summary.tocDigest", allow_na=False)
     cpu_rows = sum(rows.get(name, 0) for name in ("cpu-profile", "time-profile"))
     signpost_rows = sum(value for name, value in rows.items() if "signpost" in name)
     if cpu_rows != summary["cpuSampleCount"] or signpost_rows != summary["signpostEventCount"]:
@@ -1565,17 +1918,27 @@ def validate_record(
 ) -> None:
     if not isinstance(record, dict):
         raise HistoryError("record must be a JSON object")
-    validate_record_against_schema(record, schema if schema is not None else load_schema_contract())
+    version = record.get("schemaVersion")
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise HistoryError(f"unsupported benchmark history schema: {version!r}")
+    selected_schema = schema
+    if (
+        selected_schema is None
+        or selected_schema.get("properties", {}).get("schemaVersion", {}).get("const") != version
+    ):
+        selected_schema = load_schema_contract(version)
+    validate_record_against_schema(record, selected_schema)
     reject_unknown_keys(record, TOP_LEVEL_KEYS, "record")
-    if record.get("schemaVersion") != SCHEMA_VERSION:
-        raise HistoryError(f"unsupported benchmark history schema: {record.get('schemaVersion')!r}")
     privacy_scan(record)
 
     for section in ("run", "hardware", "source", "toolchain", "inputs", "evidence", "comparison", "listening"):
         payload = record.get(section)
         if not isinstance(payload, dict):
             raise HistoryError(f"{section} must be an object")
-        reject_unknown_keys(payload, SECTION_KEYS[section], section)
+        allowed = SECTION_KEYS[section]
+        if version == 1 and section == "evidence":
+            allowed = allowed - V2_ONLY_EVIDENCE_KEYS
+        reject_unknown_keys(payload, allowed, section)
 
     run = record["run"]
     required_run = {"id", "kind", "platform", "label", "startedAt", "finishedAt", "durationSeconds", "status", "matrixScope", "classification", "warnings"}
@@ -1585,7 +1948,8 @@ def validate_record(
         raise HistoryError("run.id is not filesystem-safe")
     if not isinstance(run["label"], str) or not SAFE_LABEL_RE.fullmatch(run["label"]):
         raise HistoryError("run.label must be a privacy-safe opaque identifier")
-    if run["kind"] not in KINDS or run["platform"] not in PLATFORMS:
+    allowed_kinds = V2_KINDS if version == 2 else V1_KINDS
+    if run["kind"] not in allowed_kinds or run["platform"] not in PLATFORMS:
         raise HistoryError("run kind or platform is unsupported")
     if run["status"] not in SUCCESS_STATUSES:
         raise HistoryError("only successful benchmark runs may be tracked")
@@ -1663,6 +2027,7 @@ def validate_record(
         raise HistoryError("takes must be a list")
     generation_kind = run["kind"] in {
         "ui-generation", "engine-generation", "instrument-profile", "language",
+        "memory-qualification",
     }
     if generation_kind and not takes:
         raise HistoryError("generation benchmarks require at least one take")
@@ -1670,7 +2035,8 @@ def validate_record(
     for position, take in enumerate(takes, start=1):
         if not isinstance(take, dict):
             raise HistoryError(f"takes[{position - 1}] must be an object")
-        reject_unknown_keys(take, TAKE_KEYS, f"takes[{position - 1}]")
+        allowed_take_keys = TAKE_KEYS if version == 2 else TAKE_KEYS - V2_ONLY_TAKE_KEYS
+        reject_unknown_keys(take, allowed_take_keys, f"takes[{position - 1}]")
         required = {"takeIndex", "generationID", "cell", "status", "metrics", "warnings"}
         if missing := sorted(required - set(take)):
             raise HistoryError(f"takes[{position - 1}] is missing: {', '.join(missing)}")
@@ -1702,12 +2068,57 @@ def validate_record(
             raise HistoryError("take cell must be a privacy-safe machine identifier")
         if take["status"] not in SUCCESS_STATUSES:
             raise HistoryError("tracked takes must be successful")
+        playback_source = take.get("playbackStartSource")
+        if playback_source is not None and playback_source not in {"liveStream", "finalFile"}:
+            raise HistoryError("take playbackStartSource is invalid")
+        if version == 2 and run["kind"] == "ui-generation" and playback_source is None:
+            raise HistoryError("schema-v2 UI take has no typed playback start source")
+        if version == 2 and run["kind"] in MEMORY_QUALIFIED_KINDS:
+            if take.get("memoryStatus") not in {"qualified", "qualifiedWithWarnings"}:
+                raise HistoryError("memory-qualified take has no qualification status")
+            require_digest(
+                take.get("sampleSidecarDigest"), "take.sampleSidecarDigest", allow_na=False
+            )
         if not isinstance(take["metrics"], dict):
             raise HistoryError("take.metrics must be an object")
         reject_unknown_keys(take["metrics"], METRIC_KEYS, "take.metrics")
         for metric, value in take["metrics"].items():
             if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
                 raise HistoryError(f"take metric {metric} must be finite numeric data")
+        if version == 2 and run["kind"] in MEMORY_QUALIFIED_KINDS:
+            required_memory = set(MEMORY_REQUIRED_METRICS)
+            if run["platform"] == "ios":
+                required_memory |= IOS_MEMORY_REQUIRED_METRICS
+            if run["kind"] == "ui-generation" and run["platform"] == "macos":
+                required_memory |= MACOS_UI_MEMORY_REQUIRED_METRICS
+            if missing := sorted(required_memory - set(take["metrics"])):
+                raise HistoryError(
+                    "memory-qualified take metrics are incomplete: " + ", ".join(missing)
+                )
+            metrics = take["metrics"]
+            if not 0.95 <= float(metrics["samplerCoverage"]) <= 1:
+                raise HistoryError("memory sampler coverage is outside [0.95, 1]")
+            for coverage_key in (
+                "alignedProcessSampleCoverage",
+                "alignedEngineSampleCoverage",
+                "alignedAppSampleCoverage",
+            ):
+                if coverage_key in metrics and not 0.95 <= float(metrics[coverage_key]) <= 1:
+                    raise HistoryError(
+                        f"{coverage_key} is outside the qualified range [0.95, 1]"
+                    )
+            if any(metrics[key] != 0 for key in (
+                "samplerCaptureFailureCount", "memoryWarningCount", "memoryExitCount",
+            )):
+                raise HistoryError("memory-qualified take contains a capture failure or memory exit")
+            if metrics["maximumPressureLevel"] > 1 or metrics["maximumTrimLevel"] > 1:
+                raise HistoryError("memory-qualified take reached a hard memory-pressure action")
+            has_memory_warning = any(
+                warning.startswith("memory.") for warning in take.get("warnings", [])
+            )
+            expected_memory_status = "qualifiedWithWarnings" if has_memory_warning else "qualified"
+            if take["memoryStatus"] != expected_memory_status:
+                raise HistoryError("take memory status does not match its memory warnings")
         if "accuracyMetric" in take:
             metrics = take["metrics"]
             if missing := sorted(LANGUAGE_ACCURACY_METRIC_KEYS - set(metrics)):
@@ -1853,6 +2264,45 @@ def validate_record(
         require_digest(screenshot["digest"], "screenshot digest")
 
     kind = run["kind"]
+    memory_contract_applies = version == 2 and kind in MEMORY_QUALIFIED_KINDS
+    if memory_contract_applies:
+        if evidence.get("memoryContractVersion") != 1 or evidence.get("memoryQualified") is not True:
+            raise HistoryError("record lacks the benchmark memory qualification contract")
+        require_digest(
+            evidence.get("sampleSidecarsDigest"), "evidence.sampleSidecarsDigest", allow_na=False
+        )
+        expected_sidecars = len(takes)
+        if kind == "ui-generation" and run["platform"] == "macos":
+            expected_sidecars *= 2
+        if evidence.get("sampleSidecarCount") != expected_sidecars:
+            raise HistoryError("selected memory-sidecar count does not match the benchmark takes")
+        qualified_with_warnings = any(
+            take.get("memoryStatus") == "qualifiedWithWarnings" for take in takes
+        )
+        if qualified_with_warnings and run["status"] != "passedWithWarnings":
+            raise HistoryError("memory warnings must promote the run status to passedWithWarnings")
+    if kind == "memory-qualification":
+        if evidence.get("memoryPolicyID") != "retained-memory-v1":
+            raise HistoryError("memory qualification has an unknown policy ID")
+        if evidence.get("retentionMetric") != "withinModeRetainedPhysicalFootprintGrowth":
+            raise HistoryError("memory qualification has an unknown retention metric")
+        threshold = evidence.get("retentionThresholdFraction")
+        observed = evidence.get("maximumRetainedGrowthFraction")
+        growth_mb = evidence.get("maximumRetainedGrowthMB")
+        if (
+            not isinstance(threshold, (int, float)) or isinstance(threshold, bool)
+            or not math.isclose(float(threshold), 0.05, rel_tol=0, abs_tol=1e-12)
+            or not isinstance(observed, (int, float)) or isinstance(observed, bool)
+            or not math.isfinite(float(observed)) or float(observed) < 0
+            or not isinstance(growth_mb, (int, float)) or isinstance(growth_mb, bool)
+            or not math.isfinite(float(growth_mb)) or float(growth_mb) < 0
+            or float(observed) > float(threshold)
+            or evidence.get("retentionPassed") is not True
+        ):
+            raise HistoryError("memory qualification retention gate did not pass")
+        expected_fraction = float(growth_mb) / (float(record["hardware"]["memoryBytes"]) / 1_048_576)
+        if not math.isclose(float(observed), expected_fraction, rel_tol=1e-6, abs_tol=1e-9):
+            raise HistoryError("memory qualification growth fraction does not match hardware RAM")
     if evidence.get("rawTelemetryDigest") == "not-applicable":
         raise HistoryError(f"{kind} requires a selected-evidence digest")
     require_digest(evidence.get("selectedEvidenceDigest"), "evidence.selectedEvidenceDigest", allow_na=False)
@@ -1865,6 +2315,7 @@ def validate_record(
             raise HistoryError("UI generation evidence requires at least one named screenshot")
     generation_evidence_kind = kind in {
         "ui-generation", "engine-generation", "language", "instrument-profile",
+        "memory-qualification",
     }
     executable_evidence_kind = generation_evidence_kind or kind == "telemetry-overhead"
     if executable_evidence_kind:
@@ -1877,8 +2328,11 @@ def validate_record(
     if generation_evidence_kind:
         telemetry_version = evidence.get("telemetrySchemaVersion")
         qc_version = evidence.get("qcAlgorithmVersion")
-        if not isinstance(telemetry_version, int) or telemetry_version < 7:
-            raise HistoryError(f"{kind} requires generation telemetry schema v7 or newer")
+        minimum_telemetry_schema = 8 if memory_contract_applies else 7
+        if not isinstance(telemetry_version, int) or telemetry_version < minimum_telemetry_schema:
+            raise HistoryError(
+                f"{kind} requires generation telemetry schema v{minimum_telemetry_schema} or newer"
+            )
         if not isinstance(qc_version, int) or qc_version < 2:
             raise HistoryError(f"{kind} requires audio-QC algorithm v2 or newer")
         if not models:
@@ -1924,7 +2378,7 @@ def validate_record(
     expected_digest = record_digest(record)
     if record.get("digest") != expected_digest:
         raise HistoryError("record digest does not match its canonical content")
-    encoded = (json.dumps(record, indent=2, sort_keys=True, ensure_ascii=True) + "\n").encode("utf-8")
+    encoded = stored_json_bytes(record)
     if len(encoded) > MAX_RECORD_BYTES:
         raise HistoryError("record exceeds the per-file size limit")
     if expected_path is not None:
@@ -1992,11 +2446,26 @@ def markdown_escape(value: Any) -> str:
     return str(value).replace("|", "\\|")
 
 
-def trend_summary(comparison: dict[str, Any]) -> str:
+def memory_contract_status(record: dict[str, Any]) -> str:
+    if record.get("schemaVersion") == 1:
+        return "memory-contract-incomplete"
+    if record.get("run", {}).get("kind") not in MEMORY_QUALIFIED_KINDS:
+        return "not-applicable"
+    return (
+        "qualified-with-warnings"
+        if any(take.get("memoryStatus") == "qualifiedWithWarnings" for take in record.get("takes", []))
+        else "qualified"
+    )
+
+
+def trend_summary(record: dict[str, Any]) -> str:
+    comparison = record["comparison"]
     baseline = comparison.get("baselineRunID")
     if not baseline:
         return "baseline"
-    collected: dict[str, list[float]] = {"rtf": [], "ttfcMS": [], "peakPhysicalFootprintMB": []}
+    collected: dict[str, list[float]] = {"rtf": [], "ttfcMS": []}
+    if record.get("schemaVersion") == 2 and memory_contract_status(record).startswith("qualified"):
+        collected["peakPhysicalFootprintMB"] = []
     for metrics in comparison.get("deltas", {}).values():
         if not isinstance(metrics, dict):
             continue
@@ -2027,17 +2496,19 @@ def render_history(records: list[tuple[Path, dict[str, Any]]]) -> str:
         "",
         "Only validated, successful benchmark records are indexed here. Raw telemetry, audio, screenshots,",
         "result bundles, and traces remain untracked. Earlier manual results are preserved in",
-        "[`LEGACY_HISTORY.md`](LEGACY_HISTORY.md) and are not treated as schema-v1 evidence.",
+        "[`LEGACY_HISTORY.md`](LEGACY_HISTORY.md) and are not treated as structured evidence.",
+        "Schema-v1 records remain readable but are marked memory-contract-incomplete and are excluded",
+        "from schema-v2 memory trends.",
         "",
     ]
     if not grouped:
-        lines.extend(["_No schema-v1 benchmark runs have been recorded yet._", ""])
+        lines.extend(["_No structured benchmark runs have been recorded yet._", ""])
         return "\n".join(lines)
     for kind, platform, profile, configuration in sorted(grouped):
         lines.extend([
             f"## {kind} / {platform} / {profile} / config `{configuration[:12]}`", "",
-            "| completed (UTC) | run | scope | classification | status | takes | source | comparison | trend | label |",
-            "|---|---|---|---|---|---:|---|---|---|---|",
+            "| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |",
+            "|---|---|---|---|---|---|---:|---|---|---|---|",
         ])
         ordered = sorted(
             grouped[(kind, platform, profile, configuration)],
@@ -2050,12 +2521,13 @@ def render_history(records: list[tuple[Path, dict[str, Any]]]) -> str:
             relative = f"runs/{kind}/{run['id']}.json"
             comparable = comparison["key"][:12] if comparison.get("comparable") else "excluded"
             lines.append(
-                "| {date} | [`{run_id}`]({relative}) | {scope} | {classification} | {status} | {takes} | `{sha}`{dirty} | `{comparison}` | {trend} | {label} |".format(
+                "| {date} | [`{run_id}`]({relative}) | {scope} | {classification} | {status} | {memory} | {takes} | `{sha}`{dirty} | `{comparison}` | {trend} | {label} |".format(
                     date=run["finishedAt"].split("T", 1)[0], run_id=markdown_escape(run["id"]),
                     relative=relative, scope=run["matrixScope"], classification=run["classification"],
                     status=run["status"], takes=len(record["takes"]), sha=source["commit"][:12],
+                    memory=memory_contract_status(record),
                     dirty=" dirty" if source["dirty"] else "", comparison=comparable,
-                    trend=markdown_escape(trend_summary(comparison)),
+                    trend=markdown_escape(trend_summary(record)),
                     label=markdown_escape(run["label"]),
                 )
             )

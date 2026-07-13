@@ -1,9 +1,11 @@
 # XcodeBuildMCP configuration for the Vocello (QwenVoice) monorepo.
 # Docs: https://xcodebuildmcp.com/docs/configuration
 #
-# OpenAI Build iOS Apps supplies this repository's one shared XcodeBuildMCP server;
-# Build macOS Apps consumes the same server. After editing, start a fresh Codex/ChatGPT
-# Desktop task or reload the owning plugin. Never configure a second instance.
+# When the OpenAI Apple build plugins and their XcodeBuildMCP server are installed
+# and callable, Build iOS Apps owns this repository's one shared route and Build
+# macOS Apps may consume it. After editing, start a fresh Codex/ChatGPT Desktop
+# task or reload the owning plugin. Never configure a second instance merely
+# because a user-scoped plugin is unavailable in the current task.
 schemaVersion: 1
 enabledWorkflows:
   - macos              # Vocello.app: build_macos, build_run_macos, test_macos, …
@@ -19,6 +21,9 @@ sessionDefaultsProfiles:
     platform: macOS
     bundleId: com.qwenvoice.app
     arch: arm64
+    # MCP builds are optional scratch work. Repository scripts own the persistent
+    # macOS cache under build/cache/xcode/macos and remain the final gate.
+    derivedDataPath: ./build/scratch/derived-data/xcodebuildmcp/macos
   ios-device:
     projectPath: ./QwenVoice.xcodeproj
     scheme: VocelloiOS
@@ -26,6 +31,7 @@ sessionDefaultsProfiles:
     platform: iOS
     bundleId: com.patricedery.vocello
     arch: arm64
+    derivedDataPath: ./build/scratch/derived-data/xcodebuildmcp/ios-device
     # Physical-device ID is set at runtime via session_set_defaults and never committed.
     # Use scripts/ui_test.sh for explicit XCUITest and scripts/ios_device.sh for
     # deterministic physical-device runtime diagnostics.

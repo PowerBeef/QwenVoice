@@ -22,17 +22,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
 
+# shellcheck source=lib/build_paths.sh
+. "$SCRIPT_DIR/lib/build_paths.sh"
+
 APP_NAME="Vocello"
 SCHEME_NAME="QwenVoice"
 BUNDLE_ID="com.qwenvoice.app"
 DESTINATION="platform=macOS,arch=arm64"
 
-BUILD_DIR="$ROOT_DIR/build"
-DERIVED_DATA="$BUILD_DIR/DerivedData"
+BUILD_DIR="$QVOICE_BUILD_ROOT"
+DERIVED_DATA="$QVOICE_XCODE_MACOS_DERIVED"
+SOURCE_PACKAGES_DIR="$QVOICE_XCODE_SOURCE_PACKAGES"
 XCODEBUILD_APP="$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-BUILD_CACHE_DIR="$BUILD_DIR/.cache"
+export BUILD_CACHE_DIR="$SOURCE_PACKAGES_DIR/.qwenvoice-cache"
 
 # shellcheck source=lib/build_cache.sh
 . "$SCRIPT_DIR/lib/build_cache.sh"
@@ -49,18 +53,20 @@ commands:
                         Build, then launch $APP_NAME.app.
   release [args...]     Run scripts/release.sh (optimized DMG) with the shared regen/SPM cache.
   cli [args...]         Build the headless vocello CLI (build/vocello); runs it if args are given.
-  clean                 Remove build/.
+  clean                 Bounded cache cleanup (equivalent to --aggressive).
+  clobber --yes         Remove all ignored repository-local generated state.
   help                  Show this message.
 
 One shippable config; this builds it -Onone for speed, release.sh builds it -O.
-Cache lives under build/.cache/ and self-heals — delete build/ to force a full rebuild.
+Build ownership is defined by config/build-output-policy.json.
 Set QWENVOICE_DEBUG=1 to launch with the runtime debug toggle on.
 EOF
 }
 
 build_app() {
     ensure_project_regenerated
-    ensure_spm_resolved "$DERIVED_DATA" "" dev
+    ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
+        dev QwenVoice Release "$DESTINATION"
 
     # Stable dev signing: a real Apple Development identity keeps the app's
     # designated requirement constant across rebuilds, so TCC grants
@@ -84,7 +90,11 @@ build_app() {
         -configuration Release \
         -destination "$DESTINATION" \
         -derivedDataPath "$DERIVED_DATA" \
+        -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+        -disableAutomaticPackageResolution \
         -onlyUsePackageVersionsFromResolvedFile \
+        ARCHS=arm64 \
+        ONLY_ACTIVE_ARCH=YES \
         CODE_SIGN_STYLE=Manual \
         CODE_SIGN_IDENTITY="$signing_identity" \
         ENABLE_HARDENED_RUNTIME=NO \
@@ -98,11 +108,14 @@ build_app() {
         echo "error: built app bundle not found at $XCODEBUILD_APP" >&2
         exit 1
     fi
-    if [ -d "$APP_BUNDLE" ]; then
+    assert_macos_bundle_arm64_only "$XCODEBUILD_APP"
+    assert_signing_identity "$XCODEBUILD_APP" "$signing_identity"
+    assert_signing_identity "$XCODEBUILD_APP/Contents/XPCServices/QwenVoiceEngineService.xpc" "$signing_identity"
+    if [ -e "$APP_BUNDLE" ] || [ -L "$APP_BUNDLE" ]; then
         quit_app_if_running
         rm -rf "$APP_BUNDLE"
     fi
-    cp -a "$XCODEBUILD_APP" "$APP_BUNDLE"
+    ln -s "${XCODEBUILD_APP#"$BUILD_DIR"/}" "$APP_BUNDLE"
     if [ ! -x "$APP_BINARY" ]; then
         echo "error: built app binary not found at $APP_BINARY" >&2
         exit 1
@@ -111,6 +124,14 @@ build_app() {
     assert_signing_identity "$APP_BUNDLE/Contents/XPCServices/QwenVoiceEngineService.xpc" "$signing_identity"
     record_dev_signing_identity "$signing_identity"
     preserve_dsyms
+    local signing_class="apple-development"
+    [[ "$signing_identity" != "-" ]] || signing_class="ad-hoc"
+    write_build_provenance "$DERIVED_DATA/last-build.json" \
+        "scripts/build.sh build" "$SCHEME_NAME" Release "$DESTINATION" arm64 \
+        Onone "$signing_class" "$DERIVED_DATA" "$SOURCE_PACKAGES_DIR"
+    write_build_provenance "$QVOICE_SYMBOLS_MACOS/last-build.json" \
+        "scripts/build.sh build" "$SCHEME_NAME" Release "$DESTINATION" arm64 \
+        Onone "$signing_class" "$DERIVED_DATA" "$SOURCE_PACKAGES_DIR"
     echo "==> Build ready: $APP_BUNDLE"
     prune_stale_builds
 }
@@ -118,23 +139,9 @@ build_app() {
 # Preserve this build's dSYMs (app + XPC service + any others) so
 # scripts/macos_test.sh crashes can symbolicate .ips reports. Keyed by build version.
 preserve_dsyms() {
-    local dsym_dst="$BUILD_DIR/macos/dsyms"
+    local dsym_dst="$QVOICE_SYMBOLS_MACOS"
     local products="$DERIVED_DATA/Build/Products/Release"
-    rm -rf "$dsym_dst"
-    mkdir -p "$dsym_dst"
-    local any=0 dsym
-    for dsym in "$products"/*.dSYM; do
-        [[ -d "$dsym" ]] || continue
-        cp -R "$dsym" "$dsym_dst/"
-        any=1
-    done
-    /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_BUNDLE/Contents/Info.plist" \
-        > "$dsym_dst/build-version.txt" 2>/dev/null || true
-    if (( any )); then
-        echo "==> Preserved dSYMs → $dsym_dst (for crash symbolication)"
-    else
-        echo "==> warning: no dSYMs produced (crash symbolication unavailable)" >&2
-    fi
+    preserve_macos_dsyms "$products" "$APP_BUNDLE" "$dsym_dst"
 }
 
 kill_running_app() {
@@ -201,25 +208,26 @@ CLI_BUILT="$DERIVED_DATA/Build/Products/Release/vocello"
 
 build_cli() {
     ensure_project_regenerated
-    ensure_spm_resolved "$DERIVED_DATA" "" dev
+    ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
+        dev QwenVoice Release "$DESTINATION"
 
-    # Build by -target (no scheme): XcodeGen 2.45.4 SIGTRAPs generating a scheme
-    # for a `tool` product. `-derivedDataPath` requires a scheme, so instead point
-    # SYMROOT/OBJROOT + the cloned-packages dir at the SHARED DerivedData — this
-    # reuses the app's already-built engine frameworks + resolved SPM packages
-    # (no re-download, no duplicate build tree).
+    # XcodeGen 2.45.4 SIGTRAPs when it directly emits a scheme for a `tool`
+    # product. regenerate_project.sh renders the checked-in CLI scheme template
+    # after generation, letting this lane share the canonical macOS DerivedData
+    # without leaking module/index state into Xcode's global cache.
     echo "==> Building $CLI_TARGET (vocello, single config, -Onone)..."
     xcb_run \
         -project "$ROOT_DIR/QwenVoice.xcodeproj" \
-        -target "$CLI_TARGET" \
+        -scheme "$CLI_TARGET" \
         -configuration Release \
         -destination "$DESTINATION" \
+        -derivedDataPath "$DERIVED_DATA" \
         -onlyUsePackageVersionsFromResolvedFile \
-        -clonedSourcePackagesDirPath "$DERIVED_DATA/SourcePackages" \
-        SYMROOT="$DERIVED_DATA/Build/Products" \
-        OBJROOT="$DERIVED_DATA/Build/Intermediates.noindex" \
+        -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+        -disableAutomaticPackageResolution \
         ARCHS=arm64 \
         ONLY_ACTIVE_ARCH=YES \
+        CODE_SIGN_STYLE=Manual \
         CODE_SIGN_IDENTITY="-" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         SWIFT_OPTIMIZATION_LEVEL="-Onone" \
@@ -236,7 +244,12 @@ build_cli() {
     # binary — copying it elsewhere breaks metallib lookup. Expose a convenience
     # symlink at build/vocello; macOS resolves it to the real path, so the
     # bundles stay adjacent.
-    ln -sf "$CLI_BUILT" "$CLI_BINARY"
+    rm -f "$CLI_BINARY"
+    ln -s "${CLI_BUILT#"$BUILD_DIR"/}" "$CLI_BINARY"
+    assert_macho_arm64_only "$CLI_BUILT" "vocello CLI"
+    write_build_provenance "$DERIVED_DATA/last-build.json" \
+        "scripts/build.sh cli" "$CLI_TARGET" Release "$DESTINATION" arm64 \
+        Onone ad-hoc "$DERIVED_DATA" "$SOURCE_PACKAGES_DIR"
     echo "==> CLI ready: $CLI_BINARY → $CLI_BUILT"
 }
 
@@ -254,12 +267,15 @@ cmd_release() {
 }
 
 cmd_clean() {
-    if [ -d "$ROOT_DIR/build" ]; then
-        echo "==> Removing $ROOT_DIR/build"
-        rm -rf "$ROOT_DIR/build"
-    else
-        echo "==> Nothing to clean ($ROOT_DIR/build does not exist)"
-    fi
+    exec "$SCRIPT_DIR/clean_build_caches.sh" --aggressive
+}
+
+cmd_clobber() {
+    [[ "${1:-}" == "--yes" && $# -eq 1 ]] || {
+        echo "error: clobber requires the explicit confirmation: scripts/build.sh clobber --yes" >&2
+        exit 2
+    }
+    exec "$SCRIPT_DIR/clean_build_caches.sh" --clobber --yes
 }
 
 main() {
@@ -283,6 +299,9 @@ main() {
             ;;
         clean)
             cmd_clean
+            ;;
+        clobber)
+            cmd_clobber "$@"
             ;;
         help|-h|--help)
             usage

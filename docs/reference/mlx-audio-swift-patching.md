@@ -69,6 +69,9 @@ Keep local patches isolated from upstream refresh work:
 - Do not mass-format the vendor tree.
 - Do not rename package products such as `MLXAudioCore` or `MLXAudioTTS`.
 - Keep a full upstream rebase/snapshot in its own branch and commit series.
+- Route any direct `swift build` or `swift test` through
+  `--scratch-path build/cache/swiftpm/mlx-audio-runtime`; generated `.build` state must never live
+  inside the vendored source tree.
 
 Before landing a local vendor patch:
 
@@ -94,8 +97,8 @@ When you want to advance the vendored copy to a newer upstream revision:
 5. **Eyeball the release bundle.** An unsigned packaging run is cheap and catches bundle-shape regressions:
    ```bash
    ./scripts/release.sh --output-name Vocello-macos26-rebase
-   ./scripts/verify_release_bundle.sh build/Release/Vocello.app
-   ./scripts/verify_packaged_dmg.sh build/Release/Vocello-macos26-rebase.dmg build/Release/release-metadata.txt
+   ./scripts/verify_release_bundle.sh build/dist/macos/Vocello.app
+   ./scripts/verify_packaged_dmg.sh build/dist/macos/Vocello-macos26-rebase.dmg build/dist/macos/release-metadata.txt
    ```
 
 ## Build Checklist After A Rebase

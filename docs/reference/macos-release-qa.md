@@ -36,8 +36,9 @@ upload depend on deterministic release-readiness and artifact checks.
    scripts/macos_test.sh telemetry-overhead
    ```
    This is deeper engine evidence when the model fixture is available; absence of the fixture does
-   not block signing, notarization, or upload. A PASS publishes a compact `telemetry-overhead`
-   record; its three mode-order rotations, raw PCM/timing evidence, and machine context stay local.
+   not block signing, notarization, or upload. Its three mode-order rotations, raw PCM/timing
+   evidence, verdict, and machine context stay local. It does not publish schema-v2 history because
+   instrumenting the `off` lane would invalidate the observer-effect comparison.
 2b. **Optional explicit frontend acceptance** (never packaging-blocking):
    ```sh
    scripts/ui_test.sh macos smoke       # includes visible model readiness
@@ -85,11 +86,15 @@ upload depend on deterministic release-readiness and artifact checks.
    ./scripts/release.sh --preflight full --signing-mode developer-id --signing-identity "<Developer ID Application: …>"
    scripts/verify_release_bundle.sh   # invoked by release.sh; rerun standalone if needed
    ```
+   Release builds use isolated `build/scratch/derived-data/release-macos/` state and place the
+   signed app, metadata, and DMG under `build/dist/macos/`; they never invalidate the persistent
+   development cache. Routine cleanup does not remove these distribution outputs.
    An attended launch or generation pass can be performed when models are available, but it is not
    part of the packaging gate.
    (No `--notarize` locally unless the API key env vars are present.)
 7. **Notarized DMG**: publish the GitHub release → CI (`release.yml` `package` job) builds, signs,
-   notarizes, staples, verifies (`verify_packaged_dmg.sh`), and attaches `Vocello-macos26.dmg`.
+   notarizes, staples, verifies (`verify_packaged_dmg.sh`), and attaches
+   `build/dist/macos/Vocello-macos26.dmg`.
 
 ## Known-cosmetic non-bugs (do not file)
 

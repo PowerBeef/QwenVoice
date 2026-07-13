@@ -1,20 +1,24 @@
 # benchmarks/
 
 Validated, privacy-safe benchmark **summaries** live here. Raw telemetry, audio, screenshots, traces,
-and result bundles stay in the untracked run-artifact directory.
+and result bundles are never tracked. Successful profile traces are ephemeral by default: their
+digest, capture settings, extracted evidence, original path, and retention status are published
+before the raw trace is discarded. `--keep-trace` is an explicit local diagnostic exception.
 
 ## What may live here
 
-- **`runs/<kind>/<run-id>.json`** — one canonical, allowlisted record for each successful benchmark.
+- **`runs/<kind>/<run-id>.json`** — one allowlisted record for each successful benchmark; clean,
+  comparable runs are canonical while dirty-source successes remain exploratory.
 - **`HISTORY.md`** — a generated index. Never append to it manually.
 - **`LEGACY_HISTORY.md`** — the former hand-maintained ledger, preserved verbatim as incomplete historical
   context. It is not schema-v1 benchmark evidence.
 - **`hardware-profiles.json`** — the canonical Mac mini M2 8 GB and iPhone 17 Pro profiles.
-- **`schema-v1.json`** — the portable record shape. `scripts/benchmark_history.py` is the executable validator.
+- **`schema-v2.json`** — the current memory-complete record shape. **`schema-v1.json`** remains the
+  read-only compatibility schema; `scripts/benchmark_history.py` is the executable validator.
 - **`OPTIMIZATION.md`** — the standing optimization-progress log: what was investigated, decided, shipped,
   and deferred (workstreams + findings + invariants + next steps), anchored to the reference baseline.
 - Existing dated Markdown/JSON snapshots and `benchmarks/baselines/` remain preserved reference
-  artifacts. They are not silently converted into complete schema-v1 evidence. New successful runs
+  artifacts. They are not silently converted into complete schema-v2 evidence. New successful runs
   use `runs/<kind>/`; optional baseline comparisons remain local model-dependent QA and never an
   ordinary CI or packaging gate.
 
@@ -23,7 +27,9 @@ and result bundles stay in the untracked run-artifact directory.
 Successful benchmark validators write an untracked `benchmark-evidence.json`; the runner then publishes it:
 
 ```sh
-python3 scripts/benchmark_history.py record --artifact-dir build/path/to/run
+# Publication-repair example; use the exact policy-owned artifact directory printed by the runner.
+python3 scripts/benchmark_history.py record \
+  --artifact-dir build/artifacts/macos/<runner-owned-path>/<run-id>
 python3 scripts/benchmark_history.py validate --all
 python3 scripts/benchmark_history.py rebuild-index --check
 # Optional subjective annotation; never a PASS prerequisite.
@@ -32,6 +38,8 @@ python3 scripts/benchmark_history.py annotate --run-id <id> --listening pass --n
 
 Publication only writes the JSON record and generated index. It never stages, commits, or pushes. Repeating
 `record` with byte-identical evidence is idempotent; conflicting run IDs or duplicate evidence fail.
+If a validated benchmark cannot publish, do not move or rewrite its evidence: rerun the exact
+`record --artifact-dir …` repair command printed by the owning macOS, iOS, or XCUITest runner.
 
 ## Rules (enforced by `scripts/check_project_inputs.sh`)
 
@@ -56,8 +64,10 @@ New native comparisons use the profiles in `hardware-profiles.json`:
 - macOS: Mac mini `Mac14,3`, Apple M2, 8 GB (`mac-mini-m2-8gb`)
 - iOS: iPhone 17 Pro `iPhone18,1` (`iphone-17-pro`)
 
-The registry accepts `ui-generation`, `engine-generation`, `language`, `telemetry-overhead`,
-`instrument-profile`, and `prosody-calibration`. An unfiltered 29-take UI matrix on the matching
+Schema v2 accepts `ui-generation`, `engine-generation`, `language`, `instrument-profile`,
+`memory-qualification`, and `prosody-calibration`. Schema-v1 `telemetry-overhead` records remain
+readable but memory-contract-incomplete; new overhead verdicts stay local because sampling the
+`off` lane would change the observer-effect experiment. An unfiltered 29-take UI matrix on the matching
 hardware is canonical; a filtered matrix is focused; a dirty checkout is exploratory; an
 Instruments run is instrumented; and a hint-only language run is partial. Only compatible clean
 runs share a comparison key. Instrumented, exploratory, and partial records are never silently
@@ -70,7 +80,6 @@ and an optional independent listening-annotation block. Its canonical SHA-256 is
 omitted.
 
 The executable validator independently rechecks kind-specific success semantics after publication:
-the exact 18 measured telemetry-overhead takes and rotations, PCM parity and overhead thresholds,
 structured target-PID/CPU/signpost
 profile proof, complete prosody-calibration aggregates, full hardware context, and cell summaries
 recomputed from the ordered takes. A publisher PASS alone cannot make an incomplete tracked record

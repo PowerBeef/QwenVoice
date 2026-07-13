@@ -45,6 +45,8 @@ import UIKit
 @MainActor
 enum IOSDeviceDiagnosticsRunner {
     private static let environmentKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC"
+    private static let memoryQualificationEnvironmentKey =
+        "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC"
     private static let runIDKey = "QVOICE_IOS_DEVICE_RUN_ID"
     private static let languageEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE"
     private static let verifyOutputEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT"
@@ -69,9 +71,11 @@ enum IOSDeviceDiagnosticsRunner {
 
     /// True when the launch environment requested a diagnostic generation.
     static var isRequested: Bool {
-        guard let raw = ProcessInfo.processInfo.environment[environmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
-        return !raw.isEmpty
+        [environmentKey, memoryQualificationEnvironmentKey].contains { key in
+            guard let raw = ProcessInfo.processInfo.environment[key]?
+                .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+            return !raw.isEmpty
+        }
     }
 
     /// Kick off the diagnostic generation if requested. Safe to call once after engine init;
@@ -88,6 +92,13 @@ enum IOSDeviceDiagnosticsRunner {
             fatalError("QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST: deliberate diagnostics crash")
         }
         #endif
+        if let rawMemorySpec = trimmedEnvironmentValue(memoryQualificationEnvironmentKey) {
+            IOSInterruptionRecorder.shared.start()
+            Task { @MainActor in
+                await runMemoryQualification(rawSpec: rawMemorySpec, engine: engine)
+            }
+            return
+        }
         let spec = parseSpec(ProcessInfo.processInfo.environment[environmentKey] ?? "")
         let uiLanguageHint = trimmedEnvironmentValue(languageEnvKey)
         // Record calls + lifecycle transitions for the sentinel so a doomed run
@@ -211,7 +222,7 @@ enum IOSDeviceDiagnosticsRunner {
             // Headless diagnostics still execute in the production app process. Record the real
             // submit/completion lifecycle so iOS benchmark evidence proves both app and engine
             // ownership. Do not synthesize player milestones: this lane never schedules playback.
-            AppGenerationTimeline.shared.recordSubmitted(
+            await AppGenerationTimeline.shared.recordSubmitted(
                 id: generationID,
                 mode: spec.mode.rawValue
             )
@@ -288,6 +299,233 @@ enum IOSDeviceDiagnosticsRunner {
             }
         }
         writeSentinel(record, runID: runID)
+    }
+
+    /// Executes the canonical retained-memory plan in one app/engine process.
+    /// `memory-qualification-result.json` remains the only PASS barrier. A failed
+    /// run writes a separate bounded status marker so the host can stop polling;
+    /// that marker is never accepted by history publication.
+    private static func runMemoryQualification(rawSpec: String, engine: TTSEngineStore) async {
+        let environmentRunID = safeRunID(from: trimmedEnvironmentValue(runIDKey))
+        var failureCode = IOSMemoryQualificationFailureCode.invalidPlan
+        var completedTakeCount = 0
+        var activeTake: IOSMemoryQualificationTake?
+        do {
+            let plan = try IOSMemoryQualificationSpec.decodeAndValidate(rawSpec)
+            failureCode = .runIdentityMismatch
+            guard safeRunID(from: trimmedEnvironmentValue(runIDKey)) == plan.runID else {
+                throw DiagnosticsError("memory qualification runID does not match the launch environment")
+            }
+            failureCode = .telemetryUnavailable
+            guard NativeTelemetryMode.current() == .verbose, TelemetryGate.resolvedEnabled else {
+                throw DiagnosticsError("memory qualification requires verbose native telemetry")
+            }
+            failureCode = .cloneVoiceUnavailable
+            guard trimmedEnvironmentValue(cloneVoiceIDEnvKey) != nil else {
+                throw DiagnosticsError(
+                    "memory qualification requires \(cloneVoiceIDEnvKey) with an exact saved voice ID"
+                )
+            }
+            failureCode = .corpusUnavailable
+            guard let text = BenchMatrixSpec.text(for: plan.length) else {
+                throw DiagnosticsError("memory qualification corpus is missing \(plan.length)")
+            }
+
+            let startedAt = ISO8601DateFormatter().string(from: Date())
+            var takeResults: [MemoryQualificationTakeResult] = []
+            var fixtureDigests: [String: String] = [:]
+            let takeFileURL = URL(fileURLWithPath: "/tmp/vocello-bench-current-take.json")
+            defer { try? FileManager.default.removeItem(at: takeFileURL) }
+
+            print("[device-memory] start runID=\(plan.runID) takes=\(plan.takes.count)")
+            for plannedTake in plan.takes {
+                activeTake = plannedTake
+                failureCode = .modeUnavailable
+                guard let mode = GenerationMode(rawValue: plannedTake.mode),
+                      let model = ModelDescriptor.model(for: mode) else {
+                    throw DiagnosticsError("memory qualification mode/model is unavailable")
+                }
+                failureCode = .fixtureUnavailable
+                let payload = try await buildPayload(
+                    spec: Spec(mode: mode, variant: .speed, text: text),
+                    engine: engine
+                )
+                if let digest = try fixtureDigest(for: payload) {
+                    fixtureDigests[mode.rawValue] = digest
+                }
+
+                let actualWarmState = engine.loadState.currentModelID == model.id ? "warm" : "cold"
+                BenchRunContext.writeCurrentTakeFile(
+                    takeIndex: plannedTake.takeIndex,
+                    cell: plannedTake.cell,
+                    intendedWarmState: actualWarmState
+                )
+
+                let generationID = UUID()
+                let outputFileName = String(
+                    format: "take-%02d-%@-speed-medium-retained-%d.wav",
+                    plannedTake.takeIndex,
+                    plannedTake.mode,
+                    plannedTake.repetition
+                )
+                let outputPath = makeQualificationOutputPath(
+                    runID: plan.runID,
+                    model: model,
+                    outputFileName: outputFileName
+                )
+                let request = GenerationRequest(
+                    mode: mode,
+                    modelID: model.id,
+                    text: text,
+                    outputPath: outputPath,
+                    shouldStream: true,
+                    streamingInterval: GenerationSemantics.appStreamingInterval,
+                    languageHint: nil,
+                    payload: payload,
+                    generationID: generationID,
+                    seed: plan.seed,
+                    variation: nil
+                )
+
+                var appTimelineSubmitted = false
+                do {
+                    failureCode = .generationFailed
+                    await AppGenerationTimeline.shared.recordSubmitted(
+                        id: generationID,
+                        mode: mode.rawValue
+                    )
+                    appTimelineSubmitted = true
+                    let started = Date()
+                    let result = try await engine.generate(request)
+                    await AppGenerationTimeline.shared.recordCompleted(
+                        id: generationID,
+                        mode: mode.rawValue,
+                        usedStreaming: result.usedStreaming,
+                        finishReason: result.finishReason?.rawValue,
+                        summary: result.telemetrySummary
+                    )
+                    appTimelineSubmitted = false
+
+                    let audioURL = URL(fileURLWithPath: result.audioPath)
+                    failureCode = .outputValidationFailed
+                    _ = try makeOutputEvidence(for: audioURL)
+                    failureCode = .telemetryValidationFailed
+                    let engineRecord = try requireQualificationTelemetry(
+                        generationID: generationID,
+                        expectedMode: mode,
+                        expectedModelID: model.id,
+                        expectedCell: plannedTake.cell,
+                        expectedTakeIndex: plannedTake.takeIndex
+                    )
+                    failureCode = .outputMirrorFailed
+                    let pullableOutput = try mirrorQualificationOutput(
+                        audioURL,
+                        runID: plan.runID,
+                        outputFileName: outputFileName
+                    )
+                    guard pullableOutput.lastPathComponent == outputFileName else {
+                        throw DiagnosticsError("memory qualification output mirror identity changed")
+                    }
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
+
+                    let wallSeconds = Date().timeIntervalSince(started)
+                    takeResults.append(
+                        MemoryQualificationTakeResult(
+                            takeIndex: plannedTake.takeIndex,
+                            generationID: generationID.uuidString,
+                            cell: plannedTake.cell,
+                            mode: mode.rawValue,
+                            modelID: model.id,
+                            variant: plan.variant,
+                            length: plan.length,
+                            warmState: engineRecord.warmState?.rawValue ?? actualWarmState,
+                            repetition: plannedTake.repetition,
+                            audioSeconds: result.durationSeconds,
+                            wallSeconds: wallSeconds,
+                            firstChunkMS: engineRecord.stageMarks.first(where: {
+                                $0.stage == "firstChunk"
+                            }).map { Double($0.tMS) },
+                            outputFileName: outputFileName,
+                            environment: qualificationEnvironment(from: engineRecord.summary)
+                        )
+                    )
+                    completedTakeCount = takeResults.count
+                    activeTake = nil
+                    print(
+                        "[device-memory] take \(plannedTake.takeIndex)/9 "
+                        + "\(plannedTake.cell) \(actualWarmState) PASS"
+                    )
+                } catch {
+                    if appTimelineSubmitted {
+                        await AppGenerationTimeline.shared.recordFailed(id: generationID)
+                    }
+                    throw error
+                }
+            }
+
+            failureCode = .interrupted
+            let interruptions = IOSInterruptionRecorder.shared.snapshot()
+            guard interruptions.isEmpty else {
+                throw DiagnosticsError(
+                    "memory qualification was interrupted (\(interruptions.count) event(s))"
+                )
+            }
+            failureCode = .incompletePlan
+            guard takeResults.count == plan.takes.count else {
+                throw DiagnosticsError("memory qualification did not complete all planned takes")
+            }
+
+            let terminal = MemoryQualificationResult(
+                runID: plan.runID,
+                label: plan.runID,
+                startedAt: startedAt,
+                finishedAt: ISO8601DateFormatter().string(from: Date()),
+                telemetryMode: "verbose",
+                seed: plan.seed,
+                streaming: true,
+                fixtureDigests: fixtureDigests,
+                memoryQualification: MemoryQualificationDeclaration(
+                    policyID: plan.policyID,
+                    modeOrder: plan.modes,
+                    variant: plan.variant,
+                    length: plan.length,
+                    repetitionsPerMode: plan.repetitionsPerMode,
+                    expectedTakeCount: plan.takes.count
+                ),
+                takes: takeResults
+            )
+            failureCode = .resultWriteFailed
+            try writeMemoryQualificationSentinel(terminal, runID: plan.runID)
+            print("[device-memory] PASS runID=\(plan.runID)")
+        } catch {
+            // Preserve already-written per-generation telemetry and outputs. The
+            // allowlisted marker lets the host terminate promptly, while absence of
+            // the PASS sentinel keeps history publication fail-closed.
+            if let environmentRunID {
+                let failure = IOSMemoryQualificationFailureStatus(
+                    runID: environmentRunID,
+                    failedAt: ISO8601DateFormatter().string(from: Date()),
+                    failureCode: failureCode,
+                    completedTakeCount: completedTakeCount,
+                    failedTakeIndex: activeTake?.takeIndex,
+                    failedCell: activeTake?.cell
+                )
+                do {
+                    try writeMemoryQualificationFailureMarker(failure, runID: environmentRunID)
+                } catch {
+                    print(
+                        "[device-memory] failure marker unavailable "
+                        + "code=\(failureCode.rawValue)"
+                    )
+                }
+            }
+            print(
+                "[device-memory] FAIL code=\(failureCode.rawValue) "
+                + "completed=\(completedTakeCount)/9"
+            )
+        }
     }
 
     @MainActor
@@ -418,6 +656,235 @@ enum IOSDeviceDiagnosticsRunner {
 
     // MARK: - Paths & sentinel
 
+    private static func requireQualificationTelemetry(
+        generationID: UUID,
+        expectedMode: GenerationMode,
+        expectedModelID: String,
+        expectedCell: String,
+        expectedTakeIndex: Int
+    ) throws -> GenerationTelemetryRecord {
+        let engineDirectory = AppPaths.appSupportDir
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent("engine", isDirectory: true)
+        let rowsURL = engineDirectory.appendingPathComponent("generations.jsonl", isDirectory: false)
+        guard let text = try? String(contentsOf: rowsURL, encoding: .utf8) else {
+            throw DiagnosticsError("memory qualification engine telemetry is unavailable")
+        }
+        let decoder = JSONDecoder()
+        let matches = text.split(separator: "\n").compactMap { line -> GenerationTelemetryRecord? in
+            guard line.contains(generationID.uuidString),
+                  let data = line.data(using: .utf8),
+                  let row = try? decoder.decode(GenerationTelemetryRecord.self, from: data),
+                  row.generationID == generationID.uuidString else {
+                return nil
+            }
+            return row
+        }
+        guard matches.count == 1, let row = matches.first else {
+            throw DiagnosticsError(
+                "memory qualification expected one engine row for generation \(generationID.uuidString)"
+            )
+        }
+        guard row.schemaVersion >= 8,
+              row.mode == expectedMode.rawValue,
+              row.modelID == expectedModelID,
+              row.usedStreaming == true else {
+            throw DiagnosticsError("memory qualification engine telemetry identity is incomplete")
+        }
+        let acceptedFinishReasons = Set(["eos", "max_tokens", "maxTokens", "completed"])
+        guard row.finishReason.map(acceptedFinishReasons.contains) == true else {
+            throw DiagnosticsError("memory qualification generation did not finish successfully")
+        }
+        guard row.notes["benchRunID"] == trimmedEnvironmentValue(runIDKey),
+              row.notes["benchCell"] == expectedCell,
+              row.notes["benchTakeIndex"] == String(expectedTakeIndex) else {
+            throw DiagnosticsError("memory qualification telemetry lost ordered run/take identity")
+        }
+        guard row.outputMetrics?.readableWAV == true,
+              row.outputMetrics?.atomicallyPublished == true,
+              let audioQC = row.audioQC,
+              audioQC.verdict != .fail,
+              audioQC.instabilityVerdict != .fail,
+              audioQC.writtenOutputVerdict != .fail else {
+            throw DiagnosticsError("memory qualification output or audio QC proof failed")
+        }
+        guard let summary = row.summary,
+              let coverage = summary.captureCoverage,
+              coverage.totalSampleCount == summary.sampleCount,
+              coverage.memoryCoverageRatio >= 0.95,
+              coverage.processResourceCaptureSucceeded,
+              let boundaries = summary.boundaryCoverage,
+              boundaries.missingBoundaryNames.isEmpty,
+              summary.memoryAtStart != nil,
+              summary.memoryAtEnd != nil,
+              summary.memoryAtPeakPhysFootprint != nil,
+              let memoryMetrics = row.memoryMetrics,
+              memoryMetrics.captureCoverage == coverage,
+              memoryMetrics.boundaryCoverage == boundaries,
+              memoryMetrics.mlxStageCount > 0 else {
+            throw DiagnosticsError("memory qualification summary lacks complete v8 memory evidence")
+        }
+
+        let samplesURL = engineDirectory.appendingPathComponent(
+            "samples-\(generationID.uuidString).jsonl",
+            isDirectory: false
+        )
+        guard let samplesText = try? String(contentsOf: samplesURL, encoding: .utf8) else {
+            throw DiagnosticsError("memory qualification verbose sample sidecar is unavailable")
+        }
+        let sampleLines = samplesText.split(separator: "\n")
+        let samples = try sampleLines.map { line in
+            guard let data = line.data(using: .utf8) else {
+                throw DiagnosticsError("memory qualification sample sidecar is not UTF-8")
+            }
+            return try decoder.decode(TelemetrySample.self, from: data)
+        }
+        guard samples.count == summary.sampleCount,
+              samples.first?.kind == .start,
+              samples.last?.kind == .stop else {
+            throw DiagnosticsError("memory qualification sample sidecar count/lifetime is incomplete")
+        }
+        let observedBoundaries = Set(samples.compactMap(\.boundary))
+        guard observedBoundaries.contains("first_chunk"),
+              observedBoundaries.contains("final_audio_materialized") else {
+            throw DiagnosticsError("memory qualification streaming/output boundaries are incomplete")
+        }
+        return row
+    }
+
+    private static func qualificationEnvironment(
+        from summary: TelemetrySummary?
+    ) -> MemoryQualificationTakeEnvironment {
+        if let environment = summary?.runEnvironment {
+            return MemoryQualificationTakeEnvironment(
+                loadAverage1Minute: environment.loadAverage1Minute,
+                freeStorageBytes: environment.freeStorageBytes,
+                uptimeSeconds: environment.uptimeSeconds,
+                lowPowerModeEnabled: environment.lowPowerModeEnabled,
+                thermalState: environment.thermalState
+            )
+        }
+        let processInfo = ProcessInfo.processInfo
+        return MemoryQualificationTakeEnvironment(
+            loadAverage1Minute: nil,
+            freeStorageBytes: nil,
+            uptimeSeconds: processInfo.systemUptime,
+            lowPowerModeEnabled: processInfo.isLowPowerModeEnabled,
+            thermalState: thermalStateLabel(processInfo.thermalState)
+        )
+    }
+
+    private static func thermalStateLabel(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: "nominal"
+        case .fair: "fair"
+        case .serious: "serious"
+        case .critical: "critical"
+        @unknown default: "unknown"
+        }
+    }
+
+    private static func makeQualificationOutputPath(
+        runID: String,
+        model: ModelDescriptor,
+        outputFileName: String
+    ) -> String {
+        let directory = AppPaths.outputsDir
+            .appendingPathComponent(model.outputSubfolder, isDirectory: true)
+            .appendingPathComponent("memory-qualification", isDirectory: true)
+            .appendingPathComponent(runID, isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent(outputFileName, isDirectory: false).path
+    }
+
+    @discardableResult
+    private static func mirrorQualificationOutput(
+        _ source: URL,
+        runID: String,
+        outputFileName: String
+    ) throws -> URL {
+        guard let pullableRoot = IOSPullableDiagnosticsMirror.pullableRoot else {
+            throw DiagnosticsError("pullable diagnostics directory is unavailable")
+        }
+        let destination = pullableRoot
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent("outputs", isDirectory: true)
+            .appendingPathComponent(outputFileName, isDirectory: false)
+        try copyAtomically(source, to: destination)
+        return destination
+    }
+
+    private static func writeMemoryQualificationSentinel(
+        _ record: MemoryQualificationResult,
+        runID: String
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(record)
+        let relativeName = "memory-qualification-result.json"
+
+        let appGroupURL = AppPaths.appSupportDir
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(relativeName, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: appGroupURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: appGroupURL, options: .atomic)
+
+        guard let pullableRoot = IOSPullableDiagnosticsMirror.pullableRoot else {
+            throw DiagnosticsError("pullable diagnostics directory is unavailable")
+        }
+        let pullableURL = pullableRoot
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(relativeName, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: pullableURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // This is deliberately the final write observed by the shell poller.
+        try data.write(to: pullableURL, options: .atomic)
+    }
+
+    private static func writeMemoryQualificationFailureMarker(
+        _ record: IOSMemoryQualificationFailureStatus,
+        runID: String
+    ) throws {
+        try record.validate()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(record)
+        guard data.count <= IOSMemoryQualificationFailureStatus.maximumEncodedBytes else {
+            throw DiagnosticsError("memory qualification failure marker exceeded its bound")
+        }
+        let relativeName = "memory-qualification-failure.json"
+
+        let appGroupURL = AppPaths.appSupportDir
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(relativeName, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: appGroupURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: appGroupURL, options: .atomic)
+
+        guard let pullableRoot = IOSPullableDiagnosticsMirror.pullableRoot else {
+            throw DiagnosticsError("pullable diagnostics directory is unavailable")
+        }
+        let pullableURL = pullableRoot
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(relativeName, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: pullableURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        // This terminal marker is written only on failure and can never be
+        // mistaken for the successful result file by the host.
+        try data.write(to: pullableURL, options: .atomic)
+    }
+
     private static func makeOutputEvidence(for url: URL) throws -> OutputEvidence {
         let file = try AVAudioFile(forReading: url)
         let frameCount = Int64(file.length)
@@ -546,6 +1013,55 @@ enum IOSDeviceDiagnosticsRunner {
         let message: String
         init(_ message: String) { self.message = message }
         var errorDescription: String? { message }
+    }
+
+    private struct MemoryQualificationTakeEnvironment: Codable {
+        let loadAverage1Minute: Double?
+        let freeStorageBytes: UInt64?
+        let uptimeSeconds: Double
+        let lowPowerModeEnabled: Bool
+        let thermalState: String
+    }
+
+    private struct MemoryQualificationTakeResult: Codable {
+        let takeIndex: Int
+        let generationID: String
+        let cell: String
+        let mode: String
+        let modelID: String
+        let variant: String
+        let length: String
+        let warmState: String
+        let repetition: Int
+        let audioSeconds: Double
+        let wallSeconds: Double
+        let firstChunkMS: Double?
+        let outputFileName: String
+        let environment: MemoryQualificationTakeEnvironment
+    }
+
+    private struct MemoryQualificationDeclaration: Codable {
+        let policyID: String
+        let modeOrder: [String]
+        let variant: String
+        let length: String
+        let repetitionsPerMode: Int
+        let expectedTakeCount: Int
+    }
+
+    private struct MemoryQualificationResult: Codable {
+        var schemaVersion = 1
+        var status = "pass"
+        let runID: String
+        let label: String
+        let startedAt: String
+        let finishedAt: String
+        let telemetryMode: String
+        let seed: UInt64
+        let streaming: Bool
+        let fixtureDigests: [String: String]
+        let memoryQualification: MemoryQualificationDeclaration
+        let takes: [MemoryQualificationTakeResult]
     }
 
     private struct SentinelRecord: Codable {

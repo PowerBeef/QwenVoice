@@ -3,7 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-RELEASE_DIR="$PROJECT_DIR/build"
+# shellcheck source=lib/build_paths.sh
+. "$SCRIPT_DIR/lib/build_paths.sh"
+RELEASE_DIR="$QVOICE_DIST_MACOS"
 
 APP_PATH="${1:-$RELEASE_DIR/Vocello.app}"
 DMG_BASENAME="${2:-Vocello-macos26}"
@@ -11,6 +13,8 @@ DISPLAY_NAME="${QWENVOICE_DMG_DISPLAY_NAME:-Vocello}"
 DMG_OUTPUT="$RELEASE_DIR/${DMG_BASENAME}.dmg"
 
 echo "=== Vocello: Create DMG ==="
+echo ""
+echo "  Distribution root: $RELEASE_DIR"
 echo ""
 
 if [ ! -d "$APP_PATH" ]; then

@@ -29,6 +29,7 @@ struct QVoiceiOSApp: App {
         configureAudioSession()
         configureNativeRuntimeMemoryCacheIfNeeded()
         IOSCrashObserver.shared.start()
+        IOSMetricKitMemoryReporter.shared.start()
     }
 
     var body: some Scene {
@@ -66,7 +67,10 @@ struct QVoiceiOSApp: App {
                                 startEngineIfNeeded()
                             }
                             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
-                                handleMemoryPressure(reason: "memory_warning", severity: .critical)
+                                Task { @MainActor in
+                                    await engine.recordApplicationMemoryWarning(reason: "memory_warning")
+                                    handleMemoryPressure(reason: "memory_warning", severity: .critical)
+                                }
                             }
                             .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
                                 let thermalState = ProcessInfo.processInfo.thermalState

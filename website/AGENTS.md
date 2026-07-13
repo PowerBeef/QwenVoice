@@ -26,8 +26,9 @@ this directory.
 - This is a **non-app, non-native zone** — do not run Swift/iOS/macOS skills or audits here.
 - For React, Vite, or library API questions, use authoritative current documentation and a
   relevant installed Codex skill/plugin when available.
-- For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first, then use the Browser skill
-  against the running dev/preview server. Record unreachable states for attended manual checking.
+- For UI/UX/visual passes, read `PRODUCT.md` and `DESIGN.md` first, then use the Browser skill when
+  it is currently available against the running dev/preview server. Otherwise use the same local
+  server for attended browser verification and record unreachable states.
 - Run `npm`/`node` commands through the shell.
 
 ## Architecture
@@ -59,7 +60,7 @@ When changing grid layouts at narrow breakpoints, **use `grid-template-columns: 
 
 Two design-context files in this directory encode the website's rules:
 
-- **`PRODUCT.md`** (i.e. `website/PRODUCT.md`, the brand doc — distinct from the repo-root `PRODUCT.md` app-product doc) — brand voice, register (`brand`, not product), copy rules. Required by the `impeccable:impeccable` skill. Key constraints:
+- **`PRODUCT.md`** (i.e. `website/PRODUCT.md`, the brand doc — distinct from the repo-root `PRODUCT.md` app-product doc) — brand voice, register (`brand`, not product), copy rules. Required by the `impeccable` skill when that skill is available. Key constraints:
   - Say *local*, not *offline* or *on-device*, unless the technical distinction matters.
   - Sentence case. Reserve all caps for tiny labels only.
   - **No em dashes in visible copy.** Use commas, colons, semicolons, periods, or parentheses.

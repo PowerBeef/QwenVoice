@@ -16,18 +16,24 @@ enum VocelloiOSTab: String, CaseIterable {
 @MainActor
 class VocelloiOSUITestCase: XCTestCase {
     private(set) var session: VocelloUIApplicationSession!
+    private var pendingAutoplayPreferenceRestore: Bool?
 
     var app: XCUIApplication { session.app }
 
     func beginSession() {
         continueAfterFailure = false
+        pendingAutoplayPreferenceRestore = nil
         session = VocelloUIApplicationSession()
         launchApp()
     }
 
     func endSession() {
-        session?.terminate()
-        session = nil
+        defer {
+            session?.terminate()
+            session = nil
+            pendingAutoplayPreferenceRestore = nil
+        }
+        restorePendingAutoplayPreference()
     }
 
     /// Launches the production UI. First-run onboarding is completed through
@@ -124,6 +130,50 @@ class VocelloiOSUITestCase: XCTestCase {
                     "Installed model \(modelID) must not expose its \(unavailableState) control"
                 )
             }
+        }
+    }
+
+    /// Benchmarks require a real `play()` scheduling event so the typed
+    /// frontend row can report playback latency and buffer health. Exercise
+    /// the genuine visible Settings control and return the user's original
+    /// preference so the caller can restore it after the matrix.
+    @discardableResult
+    func ensureAutoplayEnabled() -> Bool {
+        select(tab: .settings)
+        let toggle = element("iosSettings_autoPlayToggle")
+        XCTAssertTrue(VocelloUIWait.exists(toggle, timeout: 20))
+        let wasEnabled = (toggle.value as? String) == "On"
+        if !wasEnabled {
+            // Register the rollback before touching the production control.
+            // If the tap or its assertion aborts, endSession still owns the
+            // original preference and restores it through this same UI.
+            pendingAutoplayPreferenceRestore = wasEnabled
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
+            XCTAssertTrue(VocelloUIWait.value(toggle, contains: "On", timeout: 15))
+        }
+        return wasEnabled
+    }
+
+    func restoreAutoplayPreference(originallyEnabled: Bool) {
+        guard !originallyEnabled else { return }
+        pendingAutoplayPreferenceRestore = originallyEnabled
+        restorePendingAutoplayPreference()
+    }
+
+    /// Idempotent visible-UI cleanup. The benchmark's explicit defer normally
+    /// calls this first; endSession repeats it only when an earlier assertion
+    /// prevented that defer from being registered or completed.
+    private func restorePendingAutoplayPreference() {
+        guard pendingAutoplayPreferenceRestore == false, session != nil else { return }
+        select(tab: .settings)
+        let toggle = element("iosSettings_autoPlayToggle")
+        XCTAssertTrue(VocelloUIWait.exists(toggle, timeout: 20))
+        if (toggle.value as? String) != "Off" {
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
+            XCTAssertTrue(VocelloUIWait.value(toggle, contains: "Off", timeout: 15))
+        }
+        if (toggle.value as? String) == "Off" {
+            pendingAutoplayPreferenceRestore = nil
         }
     }
 

@@ -5,7 +5,7 @@
 > lifecycle, persistence, model management, and telemetry. When this doc disagrees
 > with the code, **the code wins** — fix this doc.
 >
-> Last reviewed: 2026-07-11.
+> Last reviewed: 2026-07-13.
 
 ## TL;DR
 
@@ -621,6 +621,29 @@ Layout under the root: `models/` (downloaded HF weights, staged in
 (`QwenVoice.{CustomVoice,VoiceDesign,VoiceCloning}.VariantID`), and UI state
 (`QwenVoice.LastSelectedSidebarItem`, `QwenVoice.LastVoiceCloningSavedVoiceID`).
 
+### Repository-local generated output
+
+`config/build-output-policy.json` is the machine-readable owner and lifetime contract for ignored
+repository output. Local development has two persistent Xcode platform caches,
+`build/cache/xcode/macos/` and `build/cache/xcode/ios-device/`, plus one serialized shared package
+checkout at `build/cache/xcode/source-packages/`. The vendored MLX Audio runtime uses its separate
+policy-owned SwiftPM scratch cache and must not leave `.build` state in the source tree.
+
+Release, XcodeBuildMCP, package-resolution, CI, and compile-safety DerivedData are isolated below
+`build/scratch/`; no third persistent platform cache is permitted. Validator-owned telemetry,
+profiles, UI results, crash data, and UUID-matched current dSYMs live below `build/artifacts/`.
+Signing, archives, exports, and packages live below `build/dist/` and are never removed by routine
+or aggressive cache cleanup. The compatibility paths `build/Vocello.app` and `build/vocello` are
+symlinks to the canonical macOS cache products, not copied binaries.
+
+Every supported build records an atomic `last-build.json` provenance stamp with its producer,
+scheme, configuration, destination, architecture, optimization, signing class, DerivedData, and
+package store. Local macOS app, XPC, CLI, and relevant framework products are arm64-only. Preserved
+dSYMs are accepted only when their Mach-O UUIDs match the current app/XPC or iOS product. Run
+`python3 scripts/build_output_policy.py status|validate`; use
+`scripts/clean_build_caches.sh --routine --dry-run` before bounded cleanup. The generated owner and
+lifetime table is maintained in [`reference/privacy-storage.md`](reference/privacy-storage.md).
+
 ---
 
 ## 11. Model management & contract
@@ -679,11 +702,11 @@ Records are written by the `GenerationTelemetryJSONLSink` actor as JSONL under
 - `app/generations.jsonl`
 - `engine/generations.jsonl`
 - `engine-service/generations.jsonl` (macOS)
-- `generations-merged.jsonl` (merged by `Sources/Services/GenerationTelemetryMerger`)
+- `generations-merged.jsonl` (merged by `Sources/Services/GenerationTelemetryMerger.swift`)
 - `*/native-events.jsonl` (chunk gaps, warm-admission, XPC retirement — gated)
 - `<documents>/generation-failures.jsonl` (`GenerationFailureDiagnosticLogger` — gated)
 
-`GenerationTelemetryRecord` schema v7 is a versioned Codable struct keyed by `generationID`
+`GenerationTelemetryRecord` schema v8 is a versioned Codable struct keyed by `generationID`
 with `layer { engine, engineService, app, merged }`. New validation consumes typed
 `FrontendGenerationMetrics`, `EngineTransportMetrics`, `BackendGenerationMetrics`, and
 `GenerationOutputMetrics`, plus typed model/runtime identity. The generation sampler starts before
@@ -691,15 +714,28 @@ model preparation, adds lifecycle boundary samples to its 500 ms cadence, and re
 lateness, effective interval, drift, resource deltas, and safe run context. Frontend timing calls
 playback what it can prove—**scheduled**, not acoustically audible—and reports sampled delayed-heartbeat
 counts with coverage plus typed playback queue, continuity, and underrun health. The legacy timing/counter/note dictionaries remain serialization compatibility
-output and v1–v6 rows still decode. The transport layer records request acceptance, first-chunk,
+output and v1–v7 rows still decode. The transport layer records request acceptance, first-chunk,
 session/chunk/order/terminal evidence; the backend records typed stages/timings/counters, final barrier,
 atomic output, process-owned memory, and audio QC v3's separate pre-limiter-instability and
-persisted-WAV written-output verdicts.
+persisted-WAV written-output verdicts. Schema v8 adds absolute-uptime sample alignment, independent
+memory/thread/headroom/Metal capture success and coverage, total-RAM/implied-process-limit context,
+start/end/delta/peak memory fields, aligned extrema snapshots, and explicit app/engine lifecycle
+boundaries. Publishable benchmark-evidence v2 binds exact verbose sidecars and rejects <95%
+coverage, capture failures, critical pressure, memory warnings/exits, `hardTrim`, and `fullUnload`.
+macOS UI/XPC aggregates pair app and engine samples by uptime; independent process peaks are never
+summed. Older telemetry remains decodable but cannot enter memory-qualified trends.
 No telemetry persists raw script, transcript, path, or voice description.
 Aggregate with `scripts/summarize_generation_telemetry.py`; UI-driven tests join matching typed
 records by `generationID` before accepting a take.
 Logs are budget-capped (`QWENVOICE_DIAGNOSTICS_MAX_MB`, default ~8 MB, pruned
 oldest-first); raw `*.jsonl` is gitignored; committed summaries must be ≤256 KB.
+
+Retained-memory qualification is separate from Instruments profiling. The versioned
+`retained-memory-v1` policy runs fixed Custom→Design→Clone Speed/medium sequences and limits
+within-mode first-to-last retained-take physical-footprint growth to 5% of physical RAM. Successful lanes
+publish `memory-qualification`; `profile --kind memory` records exact-PID CPU Profiler,
+Allocations, VM Tracker, and signposts. iOS MetricKit daily aggregates are bounded, local-only field
+diagnostics and are never attributed to a benchmark take.
 
 ---
 

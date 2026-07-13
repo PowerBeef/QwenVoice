@@ -31,8 +31,13 @@
 #   scripts/ios_device.sh crashes [--test]         # pull + symbolicate on-device crash/hang diagnostics (MetricKit)
 #   scripts/ios_device.sh debug [spec]             # attached launch + LLDB attach guidance (get-task-allow build)
 #   scripts/ios_device.sh logs [spec] [--voice-id SAVED_VOICE_ID]
-#                                                 # attached launch teeing stdout → build/ios-logs/<run>.log
-#   scripts/ios_device.sh profile [spec]           # Instruments/xctrace trace of a diagnostic generation
+#                                                 # attached launch teeing stdout → build/artifacts/diagnostics/ios/logs/<run>.log
+#   scripts/ios_device.sh profile [--kind cpu|memory] [--keep-trace] [spec]
+#                                                 # exact-PID Instruments diagnostic generation
+#   scripts/ios_device.sh memory --voice-id SAVED_VOICE_ID [--label ID]
+#                                                 # one-process retained-memory qualification
+#   scripts/ios_device.sh memory-field-report [pulled-diagnostics]
+#                                                 # local-only delayed MetricKit summary; never contacts phone
 #   scripts/ios_device.sh preflight                # paired-device, signing, build, and dSYM readiness
 #   scripts/ios_device.sh device-state [--json|--json-v2] [watch [--interval N] [--count N]]
 #                                                 # paired-device reachability and lock state
@@ -58,14 +63,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/scripts/lib/build_paths.sh"
 
 SCHEME="VocelloiOS"
 CONFIG="Release"
 BUNDLE_ID="com.patricedery.vocello"
 APP_GROUP="group.com.patricedery.vocello.shared"
-# Single shared physical-device iOS DerivedData tree.
-# Swept/reclaimed by scripts/clean_build_caches.sh (--aggressive) + build.sh's prune.
-DERIVED="$ROOT_DIR/build/ios"
+# Single shared physical-device iOS compilation cache. Retained evidence is
+# always written below build/artifacts instead of being mixed into this tree.
+DERIVED="$QVOICE_XCODE_IOS_DERIVED"
 APP_PATH="$DERIVED/Build/Products/Release-iphoneos/Vocello.app"
 PROJECT="$ROOT_DIR/QwenVoice.xcodeproj"
 PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
@@ -77,6 +83,23 @@ PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 note() { printf '\033[0;36m==>\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[0;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
+
+uuid_set() {
+  /usr/bin/dwarfdump --uuid "$1" 2>/dev/null \
+    | awk '{ print toupper($2) }' \
+    | LC_ALL=C sort -u
+}
+
+validate_dsym_identity() {
+  local binary="$1" dsym="$2" dwarf="$dsym/Contents/Resources/DWARF/Vocello"
+  [[ -f "$binary" ]] || die "cannot validate dSYM: missing Mach-O $binary"
+  [[ -f "$dwarf" ]] || die "cannot validate dSYM: missing DWARF binary $dwarf"
+  local binary_uuids dsym_uuids
+  binary_uuids="$(uuid_set "$binary")"
+  dsym_uuids="$(uuid_set "$dwarf")"
+  [[ -n "$binary_uuids" && "$binary_uuids" == "$dsym_uuids" ]] \
+    || die "dSYM UUID mismatch for $binary (binary=${binary_uuids:-none}, dsym=${dsym_uuids:-none})"
+}
 
 validate_benchmark_label() {
   local value="$1"
@@ -122,6 +145,35 @@ record_benchmark_history() {
     warn "repair: python3 scripts/benchmark_history.py record --artifact-dir '$artifacts'"
     return 1
   }
+}
+
+# Bash 3.2 unwinds function-local variables before an EXIT trap executes. Keep
+# the one active physical-device profile's owned process/retention state in
+# explicit globals so failure cleanup can still terminate the exact PID.
+PROFILE_TRACE_ACTIVE=0
+PROFILE_TRACE_PUBLISHED=0
+PROFILE_TRACE_KIND=""
+PROFILE_TRACE_PHASE=""
+PROFILE_TRACE_ARTIFACTS=""
+PROFILE_TRACE_PATH=""
+PROFILE_TRACE_XCTRACE_PID=""
+PROFILE_TRACE_DEVICE_CLEANUP=""
+
+profile_failure_cleanup() {
+  local status=$?
+  trap - EXIT
+  set +e
+  [[ -z "$PROFILE_TRACE_XCTRACE_PID" ]] \
+    || kill "$PROFILE_TRACE_XCTRACE_PID" >/dev/null 2>&1 || true
+  [[ -z "$PROFILE_TRACE_DEVICE_CLEANUP" ]] || eval "$PROFILE_TRACE_DEVICE_CLEANUP"
+  if (( status != 0 && PROFILE_TRACE_ACTIVE == 1 && PROFILE_TRACE_PUBLISHED == 0 )); then
+    python3 "$ROOT_DIR/scripts/lib/profile_trace_retention.py" mark-failure \
+      --root "$ROOT_DIR" --platform ios --kind "$PROFILE_TRACE_KIND" \
+      --artifact-dir "$PROFILE_TRACE_ARTIFACTS" --trace "$PROFILE_TRACE_PATH" \
+      --phase "$PROFILE_TRACE_PHASE" --exit-code "$status" >/dev/null \
+      || warn "could not compact older failed $PROFILE_TRACE_KIND profile traces"
+  fi
+  exit "$status"
 }
 
 # device-state [--json|--json-v2] [watch [--interval N] [--count N]]
@@ -406,6 +458,10 @@ cmd_build() {
   fi
   [[ $# -eq 0 ]] || die "unknown build argument: $1"
   require_team
+  ensure_project_regenerated
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" \
+    "$QVOICE_XCODE_SOURCE_PACKAGES" ios-device VocelloiOS Release \
+    'generic/platform=iOS'
   local team; team="$(derive_team)"
   local dev; dev="$(resolve_device)"
   note "building $SCHEME ($CONFIG, -Onone) for $dev (team $team)"
@@ -418,15 +474,22 @@ cmd_build() {
   _run_device_build() {
     build_sign_args "$1" "$team"
     local -a command=(
-      xcodebuild
+      xcb_run
       -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIG"
       -destination "id=$dev" -derivedDataPath "$DERIVED"
+      -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES"
+      -disableAutomaticPackageResolution
+      -onlyUsePackageVersionsFromResolvedFile
       "${SIGN_ARGS[@]}"
     )
     if (( diagnostics_crash_build )); then
       command+=('OTHER_SWIFT_FLAGS=$(inherited) -DQVOICE_DEVICE_DIAGNOSTICS')
     fi
-    command+=(SWIFT_OPTIMIZATION_LEVEL=-Onone build)
+    command+=(
+      ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+      SWIFT_OPTIMIZATION_LEVEL=-Onone SWIFT_COMPILATION_MODE=incremental
+      build
+    )
     set +e
     "${command[@]}" 2>&1 | tee "$log"
     local st=${PIPESTATUS[0]}; set -e; return $st
@@ -443,16 +506,20 @@ cmd_build() {
   fi
 
   [[ -d "$APP_PATH" ]] || die "build finished but $APP_PATH is missing"
+  write_build_provenance "$DERIVED/last-build.json" \
+    "scripts/ios_device.sh build" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
+    Onone "$mode" "$DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
 
   # Preserve this build's dSYM so `crashes` can symbolicate MetricKit/.ips payloads.
   local dsym_src="$DERIVED/Build/Products/Release-iphoneos/Vocello.app.dSYM"
   if [[ -d "$dsym_src" ]]; then
-    local dsym_dst="$ROOT_DIR/build/ios/dsyms/Vocello.app.dSYM"
-    rm -rf "$dsym_dst"
-    mkdir -p "$(dirname "$dsym_dst")"
-    cp -R "$dsym_src" "$dsym_dst"
+    local dsym_dst="$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM"
+    preserve_ios_dsym "$dsym_src" "$dsym_dst" "$APP_PATH/Vocello"
     /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Info.plist" \
       > "$(dirname "$dsym_dst")/build-version.txt" 2>/dev/null || true
+    write_build_provenance "$QVOICE_SYMBOLS_IOS/last-build.json" \
+      "scripts/ios_device.sh build" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
+      Onone "$mode" "$DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
     note "preserved dSYM → $dsym_dst (for crash symbolication)"
   else
     warn "no dSYM produced — crash symbolication won't be available for this build"
@@ -558,14 +625,14 @@ cmd_console() {
     -e "$env_json" "$BUNDLE_ID"
 }
 
-# pull [dest]: copy the diagnostics mirror to dest (default build/ios-diagnostics).
+# pull [dest]: copy the diagnostics mirror to the governed diagnostics artifact root.
 # IMPORTANT: devicectl `copy from` can read the app's OWN data container
 # (appDataContainer) but NOT the App-Group container — any App-Group source fails with
 # a bogus "File paths cannot contain '..'". IOSDeviceDiagnosticsRunner mirrors the sentinel +
 # engine telemetry to Library/Caches/Vocello/diagnostics in the app container, and we
 # pull from there. devicectl copies the SOURCE DIR'S CONTENTS into dest.
 cmd_pull() {
-  local dest="${1:-$ROOT_DIR/build/ios-diagnostics}"
+  local dest="${1:-$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/device-diagnostics}"
   local dev; dev="$(resolve_device)"
   mkdir -p "$dest"
   note "pulling diagnostics from app container → $dest"
@@ -613,6 +680,91 @@ wait_device_diagnostics_sentinel() {
   die "no sentinel after ${timeout}s for runID=$run_id — Device state: $(probe_device_state 2>/dev/null || echo unknown)"
 }
 
+# wait_memory_qualification_sentinel RUN_ID TIMEOUT DEST
+# Same bounded physical-device polling contract as the single-take helper. The PASS result
+# remains the only publishable barrier; a separate failure marker stops the wait promptly.
+wait_memory_qualification_sentinel() {
+  local run_id="$1" timeout="${2:-900}" dest="$3"
+  local waited=0 sentinel="" failure=""
+  while (( waited < timeout )); do
+    sleep 10
+    waited=$((waited + 10))
+    cmd_pull "$dest" >/dev/null 2>&1 || true
+    failure="$(find "$dest" -type f -path "*/${run_id}/memory-qualification-failure.json" 2>/dev/null | head -1)"
+    if [[ -n "$failure" && -f "$failure" ]]; then
+      if python3 - "$failure" "$run_id" <<'PY' >&2
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+expected_run_id = sys.argv[2]
+if path.stat().st_size > 4096:
+    raise SystemExit(1)
+record = json.loads(path.read_text(encoding="utf-8"))
+allowed = set((
+    "schemaVersion", "status", "runID", "policyID", "failedAt", "failureCode",
+    "completedTakeCount", "expectedTakeCount", "failedTakeIndex", "failedCell",
+))
+if set(record) - allowed:
+    raise SystemExit(2)
+if record.get("schemaVersion") != 1 or record.get("status") != "failed":
+    raise SystemExit(3)
+if record.get("runID") != expected_run_id:
+    raise SystemExit(4)
+print(
+    "memory qualification failed "
+    f"code={record.get('failureCode', 'unknown')} "
+    f"completed={record.get('completedTakeCount', '?')}/{record.get('expectedTakeCount', '?')}"
+)
+PY
+      then
+        :
+      else
+        warn "memory qualification produced an invalid bounded failure marker: $failure"
+      fi
+      return 22
+    fi
+    sentinel="$(find "$dest" -type f -path "*/${run_id}/memory-qualification-result.json" 2>/dev/null | head -1)"
+    if [[ -n "$sentinel" && -f "$sentinel" ]]; then
+      note "memory qualification sentinel found after ${waited}s (runID=$run_id)"
+      printf '%s\n' "$sentinel"
+      return 0
+    fi
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    [[ "$verdict" != "DEVICE_UNREACHABLE" ]] \
+      || die "memory qualification doomed at ${waited}s: $(device_state_advice "$verdict")"
+    note "…memory qualification still running (${waited}s / runID=$run_id)"
+  done
+  die "no memory-qualification-result.json after ${timeout}s for runID=$run_id"
+}
+
+read_devicectl_launch_pid() {
+  local launch_json="$1"
+  python3 - "$launch_json" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1]))
+def find(value):
+    if isinstance(value, dict):
+        direct = value.get("processIdentifier")
+        if isinstance(direct, int):
+            return direct
+        for child in value.values():
+            found = find(child)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = find(child)
+            if found is not None:
+                return found
+    return None
+pid = find(payload)
+if pid is None:
+    raise SystemExit(1)
+print(pid)
+PY
+}
+
 # lang-bench [--subset quick|full] [--label RUN_ID] [--diagnostic-cohort[=PATH]]:
 # Headless on-device language matrix — one diagnostic generation per cell, gated by
 # scripts/check_language_hints.py on exact run/cell/generation/seed correlation.
@@ -650,11 +802,11 @@ cmd_lang_bench() {
   else
     run_id="ios-lang-bench-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
   fi
-  local artifacts="$ROOT_DIR/build/ios/lang-bench-$run_id"
+  local artifacts="$QVOICE_ARTIFACTS_IOS/language-bench/$run_id"
   local plan="$artifacts/language-run-plan.json"
   local started_at
   started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local dest="$ROOT_DIR/build/ios-diagnostics"
+  local dest="$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/device-diagnostics"
   # Three bounded 45-second Speech passes occur after generation. The outer bound leaves
   # enough room for a genuine cold model load without changing the fast success path.
   local cell_timeout="${QVOICE_IOS_LANG_BENCH_CELL_TIMEOUT:-360}"
@@ -720,7 +872,10 @@ print(scripts[cell["scriptLang"]], end="")')"
       export QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE="$ui_hint"
     fi
 
-    cmd_launch "$spec" >/dev/null
+    # Scope verbose telemetry to this launch. device_diagnostics_env_json sees
+    # the temporary value, and Bash restores the caller's prior value (including
+    # the unset state) as soon as cmd_launch returns.
+    QWENVOICE_NATIVE_TELEMETRY_MODE=verbose cmd_launch "$spec" >/dev/null
     set +e
     sentinel="$({ wait_device_diagnostics_sentinel "$child_run_id" "$cell_timeout" "$dest"; })"
     wait_st=$?
@@ -840,7 +995,7 @@ cmd_bench() {
   require_diagnostic_clone_voice "$spec"
   local run_id
   run_id="ios-engine-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
-  local artifacts="$ROOT_DIR/build/ios/engine-bench/$run_id"
+  local artifacts="$QVOICE_ARTIFACTS_IOS/engine-bench/$run_id"
   mkdir -p "$artifacts"
 
   cmd_build
@@ -850,12 +1005,14 @@ cmd_bench() {
   export QVOICE_MAC_BENCH_RUN_ID="$run_id"
   export QVOICE_MAC_BENCH_TAKE_INDEX=1
   export QVOICE_MAC_BENCH_CELL="$(device_benchmark_cell "$spec")"
+  export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose
   local launched_run_id; launched_run_id="$(cmd_launch "$spec" | tail -1)"
-  unset QVOICE_LAUNCH_RUN_ID QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_TAKE_INDEX QVOICE_MAC_BENCH_CELL
+  unset QVOICE_LAUNCH_RUN_ID QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_TAKE_INDEX \
+    QVOICE_MAC_BENCH_CELL QWENVOICE_NATIVE_TELEMETRY_MODE
   [[ "$launched_run_id" == "$run_id" ]] || die "device launch returned the wrong run ID"
 
   local timeout="${QVOICE_IOS_BENCH_TIMEOUT:-300}"
-  local dest="$ROOT_DIR/build/ios-diagnostics"
+  local dest="$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/device-diagnostics"
   rm -rf "$dest"
   note "waiting for device-diagnostics sentinel (runID=$run_id, timeout=${timeout}s)…"
   local waited=0 sentinel=""
@@ -952,7 +1109,7 @@ cmd_crashes() {
     sleep 6
   fi
 
-  local dest="$ROOT_DIR/build/ios-diagnostics"
+  local dest="$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/device-diagnostics"
   rm -rf "$dest"
   cmd_pull "$dest" >/dev/null || die "could not pull diagnostics (run device diagnostics first, or use --test)"
   local crash_dir; crash_dir="$(find "$dest" -type d -name crashes 2>/dev/null | head -1)"
@@ -964,7 +1121,7 @@ cmd_crashes() {
   note "── crash payloads ($crash_dir) ──"
   find "$crash_dir" -maxdepth 1 -type f | sort
 
-  local dsym="$ROOT_DIR/build/ios/dsyms/Vocello.app.dSYM"
+  local dsym="$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM"
   if [[ ! -d "$dsym" ]]; then
     warn "no preserved dSYM at $dsym — run '$0 build' to enable symbolication."
     return 0
@@ -1008,7 +1165,7 @@ cmd_debug() {
 }
 
 # logs [spec]: attached launch teeing the app's stdout/stderr to a retained, greppable
-# file under build/ios-logs/ (device-diagnostics/QVoiceiOSApp prints + engine signposts).
+# file under the governed diagnostics root (device-diagnostics/QVoiceiOSApp prints + engine signposts).
 # Replaces the ephemeral `console` stream with a saved log. Burns-in safe (headless).
 cmd_logs() {
   local spec="custom:speed:Log capture device diagnostics."
@@ -1023,7 +1180,7 @@ cmd_logs() {
   require_diagnostic_clone_voice "$spec"
   local dev; dev="$(resolve_device)"
   local run_id="ios-logs-$(date +%Y%m%d-%H%M%S)"
-  local out="$ROOT_DIR/build/ios-logs/${run_id}.log"
+  local out="$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/logs/${run_id}.log"
   mkdir -p "$(dirname "$out")"
   note "capturing attached launch logs → $out (Ctrl-C to stop)"
   local env_json
@@ -1033,20 +1190,47 @@ cmd_logs() {
   note "saved $out"
 }
 
-# profile [spec]: record an Instruments/xctrace trace while device diagnostics runs one
+# profile [--kind cpu|memory] [spec]: record an Instruments/xctrace trace while device diagnostics runs one
 # generation on-device (burns-in safe — headless, screen dark). The lane always records
-# CPU Profiler and os_signpost in one trace; QVOICE_IOS_PROFILE_DURATION controls the
-# capture window (seconds, default 90). The engine emits OSSignpost intervals under
+# CPU Profiler and os_signpost in one trace; memory profiles also record Allocations and
+# VM Tracker. QVOICE_IOS_PROFILE_DURATION controls the capture window (seconds, default 90),
+# and QVOICE_IOS_MEMORY_PROFILE_DURATION may override it for memory captures. The engine
+# emits OSSignpost intervals under
 # com.qwenvoice.engine / com.patricedery.vocello. Produces
-# build/ios/profiles/<run-id>/<run-id>.trace + the in-app telemetry summary for the same run.
+# build/artifacts/ios/profiles/<run-id>/<run-id>.trace + the in-app telemetry summary for the same run.
 cmd_profile() {
-  local spec="${1:-custom:speed:Profile device diagnostics.}"
+  local kind="cpu"
+  local spec=""
+  local keep_trace=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --kind) kind="${2:-}"; shift 2 ;;
+      --kind=*) kind="${1#*=}"; shift ;;
+      --keep-trace) keep_trace=1; shift ;;
+      -*) die "unknown profile flag: $1 (try --kind cpu|memory [--keep-trace])" ;;
+      *) [[ -z "$spec" ]] || die "profile accepts one generation spec"; spec="$1"; shift ;;
+    esac
+  done
+  case "$kind" in cpu|memory) ;; *) die "profile kind must be cpu or memory" ;; esac
+  spec="${spec:-custom:speed:Profile device diagnostics.}"
   [[ "$spec" == *:* ]] || spec="custom:speed:$spec"
+  python3 "$ROOT_DIR/scripts/lib/profile_trace_retention.py" preflight \
+    --root "$ROOT_DIR" --kind "$kind" >/dev/null \
+    || die "profile disk-space preflight failed before launching the target"
   require_diagnostic_clone_voice "$spec"
   require_team
   local cpu_instrument="CPU Profiler"
+  local allocations_instrument="Allocations"
+  local vm_tracker_instrument="VM Tracker"
+  local -a instrument_args=(--instrument "$cpu_instrument")
   local capture_instruments="$cpu_instrument + os_signpost"
+  if [[ "$kind" == "memory" ]]; then
+    instrument_args+=(--instrument "$allocations_instrument" --instrument "$vm_tracker_instrument")
+    capture_instruments="$cpu_instrument + $allocations_instrument + $vm_tracker_instrument + os_signpost"
+  fi
+  instrument_args+=(--instrument os_signpost)
   local duration="${QVOICE_IOS_PROFILE_DURATION:-90}"
+  [[ "$kind" != "memory" ]] || duration="${QVOICE_IOS_MEMORY_PROFILE_DURATION:-$duration}"
   local tracer_start_timeout="${QVOICE_IOS_PROFILE_START_TIMEOUT:-30}"
   [[ "$duration" =~ ^[1-9][0-9]*$ ]] || die "QVOICE_IOS_PROFILE_DURATION must be a positive whole number of seconds"
   [[ "$tracer_start_timeout" =~ ^[1-9][0-9]*$ ]] \
@@ -1060,27 +1244,54 @@ cmd_profile() {
   [[ -d "$APP_PATH" ]] || cmd_build
   cmd_install >/dev/null
   local run_id
-  run_id="ios-profile-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
-  local artifacts="$ROOT_DIR/build/ios/profiles/$run_id"
+  run_id="ios-${kind}-profile-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_IOS/profiles/$run_id"
   local trace="$artifacts/$run_id.trace"
   local toc="$artifacts/trace-toc.xml"
+  local profile_summary="$artifacts/profile-summary.json"
+  local history_record="$ROOT_DIR/benchmarks/runs/instrument-profile/$run_id.json"
+  local retention_policy="summaryOnly"
+  (( keep_trace == 0 )) || retention_policy="keptExplicitly"
   local launch_json="$artifacts/launch.json"
   local dest="$artifacts/device-diagnostics"
   mkdir -p "$artifacts"
   capture_benchmark_source "$artifacts"
 
-  note "profile: instruments='$capture_instruments', ${duration}s, device=$dev (exact suspended PID)"
+  local target_pid="" xctrace_pid="" cleanup_command=""
+  PROFILE_TRACE_ACTIVE=1
+  PROFILE_TRACE_PUBLISHED=0
+  PROFILE_TRACE_KIND="$kind"
+  PROFILE_TRACE_PHASE="target-launch"
+  PROFILE_TRACE_ARTIFACTS="$artifacts"
+  PROFILE_TRACE_PATH="$trace"
+  PROFILE_TRACE_XCTRACE_PID=""
+  PROFILE_TRACE_DEVICE_CLEANUP=""
+  trap profile_failure_cleanup EXIT
+
+  local profile_label="instrument-${kind}-profile"
+  note "profile: kind=$kind, instruments='$capture_instruments', ${duration}s, device=$dev (exact suspended PID)"
   local env_json
   export QVOICE_MAC_BENCH_RUN_ID="$run_id"
   export QVOICE_MAC_BENCH_TAKE_INDEX=1
   export QVOICE_MAC_BENCH_CELL="$(device_benchmark_cell "$spec")"
+  local previous_telemetry_mode="${QWENVOICE_NATIVE_TELEMETRY_MODE:-}"
+  export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose
   env_json="$(device_diagnostics_env_json "$spec" "$run_id")"
+  if [[ -n "$previous_telemetry_mode" ]]; then
+    export QWENVOICE_NATIVE_TELEMETRY_MODE="$previous_telemetry_mode"
+  else
+    unset QWENVOICE_NATIVE_TELEMETRY_MODE
+  fi
   unset QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_TAKE_INDEX QVOICE_MAC_BENCH_CELL
+  PROFILE_TRACE_PHASE="final-disk-preflight"
+  python3 "$ROOT_DIR/scripts/lib/profile_trace_retention.py" preflight \
+    --root "$ROOT_DIR" --kind "$kind" >/dev/null \
+    || die "profile disk-space preflight failed after build/install and before target launch"
+  PROFILE_TRACE_PHASE="target-launch"
   xcrun devicectl device process launch --device "$dev" --terminate-existing --start-stopped \
     -e "$env_json" --json-output "$launch_json" "$BUNDLE_ID" \
     >"$artifacts/launch.log" 2>&1 \
     || die "could not launch the profiling target suspended (see $artifacts/launch.log)"
-  local target_pid
   target_pid="$(python3 - "$launch_json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
@@ -1104,16 +1315,17 @@ print(pid)
 PY
 )" || die "devicectl launch result did not contain the exact target PID"
   [[ "$target_pid" =~ ^[0-9]+$ ]] || die "invalid profiling target PID"
-  local cleanup_command
   printf -v cleanup_command \
     'xcrun devicectl device process terminate --device %q --pid %q --quiet >/dev/null 2>&1 || true' \
     "$dev" "$target_pid"
-  trap "$cleanup_command" EXIT
+  PROFILE_TRACE_DEVICE_CLEANUP="$cleanup_command"
   note "device diagnostics suspended (runID=$run_id pid=$target_pid); attaching Instruments"
-  xcrun xctrace record --device "$xctrace_dev" --instrument "$cpu_instrument" --instrument os_signpost \
+  PROFILE_TRACE_PHASE="trace-recording"
+  xcrun xctrace record --device "$xctrace_dev" "${instrument_args[@]}" \
     --attach "$target_pid" --time-limit "${duration}s" --no-prompt --output "$trace" \
     >"$artifacts/xctrace.log" 2>&1 &
-  local xctrace_pid=$!
+  xctrace_pid=$!
+  PROFILE_TRACE_XCTRACE_PID="$xctrace_pid"
   local tracer_start_deadline=$((SECONDS + tracer_start_timeout))
   local tracer_started=0
   while kill -0 "$xctrace_pid" >/dev/null 2>&1; do
@@ -1136,16 +1348,17 @@ PY
     >"$artifacts/resume.log" 2>&1 \
     || { kill "$xctrace_pid" >/dev/null 2>&1 || true; die "could not resume the profiled target"; }
   wait "$xctrace_pid" || die "xctrace failed (see $artifacts/xctrace.log)"
+  xctrace_pid=""
+  PROFILE_TRACE_XCTRACE_PID=""
   [[ -d "$trace" ]] || die "no trace produced at $trace"
+  PROFILE_TRACE_PHASE="trace-export"
   xcrun xctrace export --input "$trace" --toc --output "$toc" \
     >"$artifacts/xctrace-export.log" 2>&1 \
     || die "trace table-of-contents validation failed (see $artifacts/xctrace-export.log)"
   [[ -s "$toc" ]] || die "trace table-of-contents export is empty"
 
-  note "trace → $trace"
-  note "analyze: open in Instruments, or use optional: xcprof analyze \"$trace\""
-
   local sentinel
+  PROFILE_TRACE_PHASE="generation-validation"
   sentinel="$({ wait_device_diagnostics_sentinel "$run_id" "$duration" "$dest"; })" \
     || die "profiled generation did not produce a success sentinel"
   require_uninterrupted_success_sentinel "$sentinel" \
@@ -1153,23 +1366,173 @@ PY
   local diag="$dest"
   local engine_jsonl; engine_jsonl="$(find "$dest" -path '*/engine/generations.jsonl' 2>/dev/null | head -1)"
   [[ -n "$engine_jsonl" ]] && diag="$(dirname "$(dirname "$engine_jsonl")")"
+  PROFILE_TRACE_PHASE="evidence-validation"
   python3 "$ROOT_DIR/scripts/publish_benchmark_history.py" ios-profile \
     --artifact-dir "$artifacts" --snapshot "$artifacts/benchmark-source.json" \
     --run-id "$run_id" --sentinel "$sentinel" --diagnostics "$diag" --crash-diagnostics "$dest" \
     --trace "$trace" --toc "$toc" --template "$capture_instruments" --duration "$duration" \
-    --target-process Vocello --target-pid "$target_pid" --defer-record \
-    --label "instrument-profile" \
+    --target-process Vocello --target-pid "$target_pid" --profile-kind "$kind" --defer-record \
+    --retention-policy "$retention_policy" --summary-artifact "$profile_summary" \
+    --label "$profile_label" \
     || die "profile passed but evidence validation failed; artifacts are preserved in $artifacts"
   note "── telemetry for the profiled run ──"
   python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
     --run-id "$run_id" --evidence-manifest "$artifacts/benchmark-evidence.json" \
-    --engine-only --label "instrument-profile" >&2 \
+    --engine-only --label "$profile_label" >&2 \
     || die "profile evidence was valid but its frozen telemetry summary failed"
+  PROFILE_TRACE_PHASE="history-publication"
   record_benchmark_history "$artifacts" >/dev/null \
     || die "profile history publication failed"
+  PROFILE_TRACE_PUBLISHED=1
+  PROFILE_TRACE_PHASE="retention-finalization"
+  python3 "$ROOT_DIR/scripts/lib/profile_trace_retention.py" finalize-success \
+    --root "$ROOT_DIR" --platform ios --kind "$kind" \
+    --artifact-dir "$artifacts" --trace "$trace" --policy "$retention_policy" \
+    --summary-artifact "$profile_summary" --history-record "$history_record" \
+    || die "profile was published but raw-trace retention finalization failed; run routine cleanup"
   eval "$cleanup_command"
   trap - EXIT
-  printf '%s\n' "$trace"
+  PROFILE_TRACE_ACTIVE=0
+  PROFILE_TRACE_DEVICE_CLEANUP=""
+  if (( keep_trace )); then
+    note "trace retained explicitly → $trace"
+    note "analyze: open in Instruments, or use optional: xcprof analyze \"$trace\""
+    printf '%s\n' "$trace"
+  else
+    note "validated summary → $profile_summary"
+    note "raw trace removed after successful history publication (use --keep-trace to retain one)"
+    printf '%s\n' "$profile_summary"
+  fi
+}
+
+# memory --voice-id ID [--label ID]: one persistent physical-device process executes the
+# fixed Custom→Design→Clone Speed/medium plan, three retained takes per mode. This is a
+# retention/pressure qualification record, not an Instruments trace; use `profile --kind memory`
+# for Allocations + VM Tracker. The runner writes one terminal sentinel only after all nine takes.
+cmd_memory() {
+  require_team
+  local label="memory-qualification" voice_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --label) label="${2:-}"; shift 2 ;;
+      --label=*) label="${1#*=}"; shift ;;
+      --voice-id) voice_id="${2:-}"; shift 2 ;;
+      --voice-id=*) voice_id="${1#*=}"; shift ;;
+      *) die "memory accepts only --voice-id SAVED_VOICE_ID and --label ID" ;;
+    esac
+  done
+  validate_benchmark_label "$label"
+  [[ -n "$voice_id" ]] || die "memory qualification requires --voice-id <exact-prepared-saved-voice-id>"
+  local policy="$ROOT_DIR/config/memory-qualification-policy.json"
+  [[ -f "$policy" ]] || die "memory qualification policy is missing: $policy"
+  local run_id="ios-memory-qualification-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_IOS/memory/$run_id"
+  local dest="$artifacts/device-diagnostics"
+  local launch_json="$artifacts/launch.json"
+  local timeout="${QVOICE_IOS_MEMORY_TIMEOUT:-900}"
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die "QVOICE_IOS_MEMORY_TIMEOUT must be a positive whole number of seconds"
+  mkdir -p "$artifacts"
+  local plan_json
+  plan_json="$(python3 -c '
+import json, sys
+p = json.load(open(sys.argv[1]))
+keys = ("schemaVersion", "policyID", "modes", "variant", "length", "repetitionsPerMode", "seed")
+plan = {key: p[key] for key in keys}
+plan["runID"] = sys.argv[2]
+print(json.dumps(plan, sort_keys=True, separators=(",", ":")))' "$policy" "$run_id")" \
+    || die "could not construct the bounded memory qualification plan"
+
+  cmd_build
+  cmd_install >/dev/null
+  capture_benchmark_source "$artifacts"
+  rm -rf "$dest"
+  local dev env_json
+  dev="$(resolve_device)"
+  export QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC="$plan_json"
+  export QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID="$voice_id"
+  export QVOICE_IOS_DEVICE_RUN_ID="$run_id"
+  export QVOICE_MAC_BENCH_RUN_ID="$run_id"
+  export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose
+  env_json="$(QV_RUNID="$run_id" python3 -c '
+import json, os
+keys = (
+    "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC",
+    "QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID",
+    "QVOICE_IOS_DEVICE_RUN_ID",
+    "QVOICE_MAC_BENCH_RUN_ID",
+    "QWENVOICE_NATIVE_TELEMETRY_MODE",
+)
+env = {"QWENVOICE_DEBUG": "1", **{key: os.environ[key] for key in keys}}
+print(json.dumps(env, sort_keys=True))')"
+  note "memory qualification: one process, Custom→Design→Clone, 3 retained takes per mode"
+  xcrun devicectl device process launch --device "$dev" --terminate-existing \
+    -e "$env_json" --json-output "$launch_json" "$BUNDLE_ID" >"$artifacts/launch.log" 2>&1 \
+    || die "could not launch the memory qualification plan (see $artifacts/launch.log)"
+  local target_pid
+  target_pid="$(read_devicectl_launch_pid "$launch_json")" \
+    || die "memory qualification launch did not return its exact process PID"
+  [[ "$target_pid" =~ ^[0-9]+$ ]] || die "memory qualification returned an invalid process PID"
+  local cleanup_command
+  printf -v cleanup_command \
+    'xcrun devicectl device process terminate --device %q --pid %q --quiet >/dev/null 2>&1 || true' \
+    "$dev" "$target_pid"
+  trap "$cleanup_command" EXIT
+  unset QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC \
+    QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID QVOICE_IOS_DEVICE_RUN_ID \
+    QVOICE_MAC_BENCH_RUN_ID QWENVOICE_NATIVE_TELEMETRY_MODE
+
+  local sentinel
+  sentinel="$({ wait_memory_qualification_sentinel "$run_id" "$timeout" "$dest"; })" \
+    || die "memory qualification failed or did not produce its PASS sentinel; no history was published (see $artifacts)"
+  python3 - "$sentinel" <<'PY' \
+    || die "memory qualification terminal sentinel is not a successful nine-take result"
+import json, sys
+record = json.load(open(sys.argv[1]))
+takes = record.get("takes") or []
+expected_modes = ["custom"] * 3 + ["design"] * 3 + ["clone"] * 3
+expected_cells = [
+    f"{mode}/speed/medium/retained#{repetition}"
+    for mode in ("custom", "design", "clone")
+    for repetition in range(3)
+]
+if record.get("status") != "pass" or len(takes) != 9:
+    raise SystemExit(1)
+if [take.get("mode") for take in takes] != expected_modes:
+    raise SystemExit(2)
+if [take.get("takeIndex") for take in takes] != list(range(1, 10)):
+    raise SystemExit(3)
+if [take.get("cell") for take in takes] != expected_cells:
+    raise SystemExit(4)
+PY
+  local diag="$dest"
+  local engine_jsonl
+  engine_jsonl="$(find "$dest" -path '*/engine/generations.jsonl' 2>/dev/null | head -1)"
+  [[ -n "$engine_jsonl" ]] && diag="$(dirname "$(dirname "$engine_jsonl")")"
+  local output_dir="$(dirname "$sentinel")/outputs"
+  python3 "$ROOT_DIR/scripts/publish_benchmark_history.py" memory-qualification \
+    --artifact-dir "$artifacts" --snapshot "$artifacts/benchmark-source.json" \
+    --platform ios --run-id "$run_id" --results "$sentinel" --diagnostics "$diag" \
+    --output-dir "$output_dir" --label "$label" --defer-record \
+    || die "memory sequence passed but qualification failed; artifacts are preserved in $artifacts"
+  python3 "$ROOT_DIR/scripts/summarize_generation_telemetry.py" "$diag" \
+    --run-id "$run_id" --evidence-manifest "$artifacts/benchmark-evidence.json" \
+    --engine-only --label "$label" >"$artifacts/summary.txt" 2>&1 \
+    || die "memory qualification evidence was valid but its frozen summary failed"
+  record_benchmark_history "$artifacts" >/dev/null \
+    || die "memory qualification history publication failed"
+  eval "$cleanup_command"
+  trap - EXIT
+  note "memory qualification PASS · $artifacts"
+}
+
+# memory-field-report [pulled-diagnostics]: summarize privacy-reduced MetricKit memory
+# aggregates already present on disk. MetricKit delivery is delayed and not run-correlated,
+# so absence reports notYetDelivered and remains nonfatal. This command intentionally does
+# not resolve, wake, pull from, or otherwise contact a physical iPhone.
+cmd_memory_field_report() {
+  [[ $# -le 1 ]] || die "memory-field-report accepts at most one local diagnostics path"
+  local source="${1:-$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/device-diagnostics}"
+  python3 "$ROOT_DIR/scripts/ios_memory_field_report.py" "$source"
 }
 
 # preflight: physical-device reachability, signing, app, and dSYM.
@@ -1214,8 +1577,9 @@ PY
 
   if [[ -d "$APP_PATH" ]]; then
     printf '  app: OK %s\n' "$APP_PATH" >&2
-    if [[ -d "$ROOT_DIR/build/ios/dsyms/Vocello.app.dSYM" ]]; then
-      printf '  dsym: OK build/ios/dsyms/Vocello.app.dSYM\n' >&2
+    if [[ -d "$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM" ]]; then
+      validate_dsym_identity "$APP_PATH/Vocello" "$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM"
+      printf '  dsym: OK %s (UUID matches app)\n' "$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM" >&2
     else
       warn "  dsym: ✗ none (run '$0 build' to enable crash symbolication)"
     fi
@@ -1242,9 +1606,11 @@ _gate_generation_check() {
   export QVOICE_MAC_BENCH_RUN_ID="$run_id"
   export QVOICE_MAC_BENCH_TAKE_INDEX=1
   export QVOICE_MAC_BENCH_CELL="$(device_benchmark_cell "custom:speed:Gate generation smoke.")"
+  export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose
   local launched_run_id
   launched_run_id="$(cmd_launch "custom:speed:Gate generation smoke." | tail -1)"
-  unset QVOICE_LAUNCH_RUN_ID QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_TAKE_INDEX QVOICE_MAC_BENCH_CELL
+  unset QVOICE_LAUNCH_RUN_ID QVOICE_MAC_BENCH_RUN_ID QVOICE_MAC_BENCH_TAKE_INDEX \
+    QVOICE_MAC_BENCH_CELL QWENVOICE_NATIVE_TELEMETRY_MODE
   [[ "$launched_run_id" == "$run_id" ]] || { echo "gate generation launched the wrong run ID"; return 1; }
   local timeout="${QVOICE_IOS_BENCH_TIMEOUT:-300}"
   local dest="$artifacts/device-diagnostics"
@@ -1294,7 +1660,7 @@ PY
 
 cmd_gate() {
   local run_id="ios-gate-$(date +%Y%m%d-%H%M%S)"
-  local gate_dir="$ROOT_DIR/build/ios/$run_id"
+  local gate_dir="$QVOICE_ARTIFACTS_IOS/gates/$run_id"
   local verdict="$gate_dir/verdict.txt"
   mkdir -p "$gate_dir"
   note "iOS device gate: project inputs"
@@ -1342,11 +1708,13 @@ main() {
     debug)   cmd_debug "$@" ;;
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
+    memory)  cmd_memory "$@" ;;
+    memory-field-report) cmd_memory_field_report "$@" ;;
     preflight) cmd_preflight "$@" ;;
     gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|crashes|debug|logs|profile|preflight|gate|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
   esac
 }
 

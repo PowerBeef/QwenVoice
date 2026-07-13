@@ -149,7 +149,7 @@ final class VoiceDesignCoordinator {
                     model: model,
                     outputPath: outputPath
                 )
-                AppGenerationTimeline.shared.recordSubmitted(
+                await AppGenerationTimeline.shared.recordSubmitted(
                     id: generationRequest.generationID,
                     mode: generationRequest.modeIdentifier
                 )
@@ -158,15 +158,6 @@ final class VoiceDesignCoordinator {
                     LivePreviewEstimate(text: text)
                 )
                 let result = try await ttsEngineStore.generate(generationRequest)
-                await AppGenerationTimeline.shared.recordCompleted(
-                    id: generationRequest.generationID,
-                    mode: generationRequest.modeIdentifier,
-                    usedStreaming: result.usedStreaming,
-                    finishReason: result.finishReason?.rawValue,
-                    summary: result.telemetrySummary
-                )
-                GenerationTelemetryMerger.scheduleMerge(generationID: generationRequest.generationID)
-
                 var generation = Generation(
                     text: text,
                     mode: model.mode.rawValue,
@@ -186,6 +177,16 @@ final class VoiceDesignCoordinator {
                     audioPlayer: audioPlayer,
                     caller: "VoiceDesignCoordinator"
                 )
+                // Finalize app telemetry only after the synchronous playback
+                // handoff has recorded the real scheduled-playback milestone.
+                await AppGenerationTimeline.shared.recordCompleted(
+                    id: generationRequest.generationID,
+                    mode: generationRequest.modeIdentifier,
+                    usedStreaming: result.usedStreaming,
+                    finishReason: result.finishReason?.rawValue,
+                    summary: result.telemetrySummary
+                )
+                GenerationTelemetryMerger.scheduleMerge(generationID: generationRequest.generationID)
                 self.latestSavedVoiceCandidate = VoiceDesignSavedVoiceCandidate(
                     audioPath: generation.audioPath,
                     transcript: text,

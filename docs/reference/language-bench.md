@@ -106,7 +106,14 @@ Failed cells, missing typed telemetry/model identity, or a publication error lea
 registry unchanged; the untracked artifact directory retains the idempotent repair command.
 Passing the diagnostic cohort prints its verdict locally and intentionally creates no record.
 
-### Validated (2026-07-06)
+### Historical validation snapshot (2026-07-06)
+
+The table below is preserved as dated operational evidence; it is not the current acceptance
+state. Current PASS evidence must exist in `benchmarks/runs/language/` and appear in generated
+`benchmarks/HISTORY.md`, while the active resume status lives in
+[`../development-progress.md`](../development-progress.md). The current tracked registry contains
+macOS hint-only records but no physical-iPhone language PASS record, so a fresh output-gated iOS
+run remains required before claiming current Phase 3 acceptance.
 
 | Run | Subset | Hint gate | Output gate | Notes |
 | --- | --- | --- | --- | --- |
@@ -117,7 +124,9 @@ Passing the diagnostic cohort prints its verdict locally and intentionally creat
 Negative control `custom-fr-text-en-pinned` is **hint-only** (`skipOutputVerification`) — pinned
 English hint is sent, but synthesis still speaks French for a French script today.
 
-Re-run full output gate after Phase 3 prerequisites above are satisfied on the phone.
+Re-run the full output gate after the Phase 3 prerequisites above are satisfied on the phone. A
+failed or incomplete run correctly creates no tracked history and cannot be replaced by this dated
+table or a listening judgment.
 
 ## macOS (in-process CLI)
 

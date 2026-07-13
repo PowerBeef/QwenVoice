@@ -17,26 +17,46 @@ REQUIRED_SURFACES=(
     "scripts/check_qwen3_backend_only.sh"
     "scripts/check_backend_resource_contract.sh"
     "scripts/regenerate_project.sh"
+    "scripts/generate_cli_scheme.py"
     "scripts/build_foundation_targets.sh"
+    "scripts/build_output_policy.py"
+    "scripts/documentation_contract.py"
+    "scripts/build_cleanup.py"
+    "scripts/clean_build_caches.sh"
+    "scripts/lib/build_paths.sh"
+    "scripts/lib/build_cache.sh"
+    "scripts/lib/profile_trace_retention.py"
     "scripts/ui_test.sh"
     "scripts/check_test_workflows.sh"
     "scripts/validate_backend_risk_spine.py"
     "scripts/check_ios_ui_benchmark.py"
+    "scripts/benchmark_memory.py"
     "scripts/benchmark_history.py"
     "scripts/publish_benchmark_history.py"
+    "scripts/ios_memory_field_report.py"
     "scripts/language_bench_evidence.py"
     "scripts/test_language_bench_evidence.py"
     "scripts/test_check_language_hints.py"
     "scripts/test_check_macos_xpc_bench.py"
     "scripts/test_check_ios_ui_benchmark.py"
     "scripts/test_check_language_output.py"
+    "scripts/tests/test_build_output_policy.py"
+    "scripts/tests/test_documentation_contract.py"
+    "scripts/tests/test_build_routing_contract.py"
+    "scripts/tests/test_generate_cli_scheme.py"
+    "scripts/tests/test_clean_build_caches.py"
+    "scripts/tests/test_profile_trace_retention.py"
     "scripts/release.sh"
     "Sources/Resources/qwenvoice_contract.json"
     "benchmarks/hardware-profiles.json"
     "benchmarks/schema-v1.json"
+    "benchmarks/schema-v2.json"
     "benchmarks/HISTORY.md"
     "benchmarks/LEGACY_HISTORY.md"
     "config/language-bench-diagnostic-cohort.json"
+    "config/memory-qualification-policy.json"
+    "config/build-output-policy.json"
+    "config/xcode-schemes/VocelloCLI.xcscheme.template"
     "config/apple-platform-capability-matrix.json"
     "Tests/UIAutomationSupport"
     "Tests/VocelloMacUITests"
@@ -51,6 +71,11 @@ for required_surface in "${REQUIRED_SURFACES[@]}"; do
         exit 1
     fi
 done
+
+# Validate the machine-readable generated-output contract before any producer,
+# cleanup, or higher-level workflow check can rely on its paths.
+python3 "$SCRIPT_DIR/build_output_policy.py" validate
+python3 "$SCRIPT_DIR/generate_cli_scheme.py" --check
 
 # iOS device tooling and explicit XCUITest are first-class. `scripts/ios_device.sh` owns
 # physical-device operations; `scripts/ui_test.sh` is the sole app-UI entry point.

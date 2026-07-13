@@ -5,9 +5,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT_DIR/scripts/lib/build_paths.sh"
+. "$ROOT_DIR/scripts/lib/build_cache.sh"
 PROJECT="$ROOT_DIR/QwenVoice.xcodeproj"
-MAC_DERIVED="$ROOT_DIR/build/DerivedData"
-IOS_DERIVED="$ROOT_DIR/build/ios"
+MAC_DERIVED="$QVOICE_XCODE_MACOS_DERIVED"
+IOS_DERIVED="$QVOICE_XCODE_IOS_DERIVED"
 BUNDLE_ID_IOS="com.patricedery.vocello"
 MAC_TAKE_MANIFEST="/tmp/vocello-bench-current-take.json"
 MAC_APP_EXECUTABLE="$MAC_DERIVED/Build/Products/Release/Vocello.app/Contents/MacOS/Vocello"
@@ -97,16 +99,69 @@ fi
 
 command -v xcodebuild >/dev/null 2>&1 || die "xcodebuild not found"
 [[ -d "$PROJECT" ]] || die "missing $PROJECT (run ./scripts/regenerate_project.sh)"
+ensure_project_regenerated
+if [[ "$platform" == "macos" ]]; then
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" \
+    "$QVOICE_XCODE_SOURCE_PACKAGES" ui-macos VocelloMacUI Release \
+    'platform=macOS,arch=arm64'
+else
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" \
+    "$QVOICE_XCODE_SOURCE_PACKAGES" ui-ios VocelloiOSUI Release \
+    'generic/platform=iOS'
+fi
 
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
 nonce="$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)"
 run_id="${platform}-xcui-${lane}-${timestamp}-${nonce}"
-out="$ROOT_DIR/build/ui-tests/$platform/$run_id"
+out="$QVOICE_ARTIFACTS_UI_TESTS/$platform/$run_id"
 result="$out/result.xcresult"
 mkdir -p "$out"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" >"$out/started-at.txt"
 printf '%s\n' "${label:-$run_id}" >"$out/label.txt"
+
+write_run_metadata() {
+  local status="$1" finished_at="${2:-}" exit_code="${3:-}"
+  python3 - "$out/run.json" "$platform" "$lane" "$run_id" "$modes" "$lengths" \
+    "$warm" "${label:-$run_id}" "$started_at" "$finished_at" "$status" "$exit_code" <<'PY'
+import json, os, pathlib, sys, tempfile
+
+path = pathlib.Path(sys.argv[1])
+payload = {
+    "platform": sys.argv[2], "lane": sys.argv[3], "runID": sys.argv[4],
+    "modes": sys.argv[5].split(','), "lengths": sys.argv[6].split(','),
+    "warm": int(sys.argv[7]), "label": sys.argv[8], "status": sys.argv[11],
+    "startedAt": sys.argv[9], "finishedAt": sys.argv[10] or None,
+    "exitCode": int(sys.argv[12]) if sys.argv[12] else None,
+    "schemaVersion": 2,
+}
+path.parent.mkdir(parents=True, exist_ok=True)
+descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+finally:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+PY
+}
+
+run_finalized=0
+write_run_metadata running
+record_early_failure() {
+  local status=$?
+  trap - EXIT
+  set +e
+  write_run_metadata failed "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"
+  exit "$status"
+}
+trap record_early_failure EXIT
 python3 "$ROOT_DIR/scripts/publish_benchmark_history.py" snapshot \
   --output "$out/benchmark-source.json" --crash-scope none >/dev/null \
   || die "could not capture pre-run source provenance"
@@ -216,6 +271,19 @@ cleanup_macos_run() {
   terminate_macos_app
   rm -f "$MAC_TAKE_MANIFEST" "$MAC_TAKE_MANIFEST.next"
 }
+
+cleanup_ui_run() {
+  local status=$?
+  trap - EXIT
+  set +e
+  [[ "$platform" != "macos" ]] || cleanup_macos_run
+  if (( run_finalized == 0 )); then
+    write_run_metadata failed "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"
+  fi
+  exit "$status"
+}
+
+trap cleanup_ui_run EXIT
 
 derive_team() {
   if [[ -n "${QWENVOICE_DEVELOPMENT_TEAM:-}" ]]; then
@@ -332,7 +400,6 @@ PY
 
 if [[ "$platform" == "macos" ]]; then
   terminate_macos_app
-  trap cleanup_macos_run EXIT
   if [[ "$lane" == "smoke" ]]; then
     only_test="VocelloMacUITests/VocelloMacSmokeUITests/testSmokeJourney"
   else
@@ -346,14 +413,25 @@ if [[ "$platform" == "macos" ]]; then
   fi
 
   note "macOS XCUITest $lane → $out"
-  run_xcodebuild xcodebuild test \
+  run_xcodebuild xcb_run test \
     -project "$PROJECT" -scheme VocelloMacUI -configuration Release \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
+    -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
     -resultBundlePath "$result" -only-testing:"$only_test" \
-    CODE_SIGN_IDENTITY="-" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
     SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "macOS XCUITest failed (see $out/xcodebuild.log)"
   check_mac_crash_delta
+  write_build_provenance "$MAC_DERIVED/last-build.json" \
+    "scripts/ui_test.sh macos $lane" VocelloMacUI Release \
+    "platform=macOS,arch=arm64" arm64 O ad-hoc \
+    "$MAC_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
+  write_build_provenance "$out/last-build.json" \
+    "scripts/ui_test.sh macos $lane" VocelloMacUI Release \
+    "platform=macOS,arch=arm64" arm64 O ad-hoc \
+    "$MAC_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
   [[ "$lane" != "benchmark" ]] || validate_macos_benchmark \
     || die "macOS benchmark telemetry gate failed"
   terminate_macos_app
@@ -382,12 +460,16 @@ else
   fi
 
   note "physical-iPhone XCUITest $lane on $device → $out"
-  run_xcodebuild xcodebuild test \
+  run_xcodebuild xcb_run test \
     -project "$PROJECT" -scheme VocelloiOSUI -configuration Release \
     -destination "id=$device" -derivedDataPath "$IOS_DERIVED" \
+    -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
     -resultBundlePath "$result" -collect-test-diagnostics never \
     -only-testing:"$only_test" \
     -allowProvisioningUpdates DEVELOPMENT_TEAM="$team" CODE_SIGN_STYLE=Automatic \
+    ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
     SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "physical-iPhone XCUITest failed (see $out/xcodebuild.log)"
 
@@ -395,27 +477,35 @@ else
     || die "could not establish the post-run iPhone crash snapshot"
   new_crashes="$(comm -13 "$out/crashes-before/hashes.txt" "$out/crashes-after/hashes.txt" || true)"
   [[ -z "$new_crashes" ]] || { printf '%s\n' "$new_crashes" >"$out/new-crashes.txt"; die "new iPhone crash payload detected"; }
+  write_build_provenance "$IOS_DERIVED/last-build.json" \
+    "scripts/ui_test.sh ios $lane" VocelloiOSUI Release "id=$device" arm64 \
+    O automatic "$IOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
+  write_build_provenance "$out/last-build.json" \
+    "scripts/ui_test.sh ios $lane" VocelloiOSUI Release "id=$device" arm64 \
+    O automatic "$IOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
   [[ "$lane" != "benchmark" ]] || validate_ios_benchmark \
     || die "iOS benchmark telemetry gate failed"
 fi
 
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-python3 - "$out/run.json" "$platform" "$lane" "$run_id" "$modes" "$lengths" "$warm" "${label:-$run_id}" "$started_at" "$finished_at" <<'PY'
-import json, pathlib, sys
-path = pathlib.Path(sys.argv[1])
-path.write_text(json.dumps({
-    "platform": sys.argv[2], "lane": sys.argv[3], "runID": sys.argv[4],
-    "modes": sys.argv[5].split(','), "lengths": sys.argv[6].split(','),
-    "warm": int(sys.argv[7]), "label": sys.argv[8], "status": "passed",
-    "startedAt": sys.argv[9], "finishedAt": sys.argv[10],
-}, indent=2) + "\n", encoding="utf-8")
-PY
+write_run_metadata passed "$finished_at" 0
+run_finalized=1
 
 if [[ "$lane" == "benchmark" ]]; then
   if ! history_record="$(python3 "$ROOT_DIR/scripts/benchmark_history.py" record --artifact-dir "$out")"; then
     die "benchmark passed, but history publication failed; evidence is preserved in $out (repair: python3 scripts/benchmark_history.py record --artifact-dir '$out')"
   fi
   note "tracked benchmark record → $history_record"
+fi
+
+# Keep the most recent passing result for each platform/lane only after this
+# run is durably marked as passed (and, for benchmarks, after history
+# publication). Cleanup failure must not rewrite an otherwise valid UI verdict.
+if "$ROOT_DIR/scripts/clean_build_caches.sh" --prune-ui-results --ui-keep 1 \
+    >"$out/result-retention.log" 2>&1; then
+  note "pruned superseded XCUITest results (latest passing result retained per platform/lane)"
+else
+  warn "could not prune superseded XCUITest results (see $out/result-retention.log)"
 fi
 
 note "$platform $lane PASS · $out"

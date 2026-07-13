@@ -61,6 +61,34 @@ actor NativeTelemetryTerminalGate {
     }
 }
 
+enum NativeTelemetryTerminalBoundary {
+    static func name(for finishReason: GenerationFinishReason) -> String {
+        switch finishReason {
+        case .eos:
+            "terminal_success"
+        case .cancelled:
+            "terminal_cancelled"
+        case .maxTokens, .failed:
+            "terminal_failure"
+        }
+    }
+
+    static func name(for terminalReason: GenerationTerminalReason) -> String {
+        switch terminalReason {
+        case .eos, .completed:
+            "terminal_success"
+        case .cancelled:
+            "terminal_cancelled"
+        case .maxTokens, .failed, .superseded, .unknown:
+            "terminal_failure"
+        }
+    }
+
+    static func name(for error: Error) -> String {
+        name(for: NativeGenerationTerminalClassifier.reason(for: error))
+    }
+}
+
 final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unchecked Sendable {
     private let generationID: UUID
     private let requestID: Int
@@ -131,8 +159,8 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
     }
 
     func run(chunkSink: @escaping @Sendable (GenerationEvent) -> Void) async throws -> GenerationResult {
-        do {
         let telemetryTerminalGate = NativeTelemetryTerminalGate()
+        do {
         if !request.shouldStream {
             let sessionDirectory = try makeSessionDirectory()
             let execution = StreamingExecutionContext(
@@ -212,8 +240,66 @@ final class NativeStreamingSynthesisSession: NativeStreamingSessionRunning, @unc
         chunkSink(.completed(result))
         return result
         } catch {
+            await writeUnhandledSessionFailureTelemetryIfNeeded(
+                error,
+                terminalGate: telemetryTerminalGate
+            )
             await stopSamplerIfNeeded()
             throw error
+        }
+    }
+
+    /// Covers failures that occur before an execution context exists (most
+    /// notably session-directory setup). Execution-owned failures normally
+    /// claim the same terminal gate first, making this outer fallback a no-op.
+    private func writeUnhandledSessionFailureTelemetryIfNeeded(
+        _ error: Error,
+        terminalGate: NativeTelemetryTerminalGate
+    ) async {
+        guard NativeGenerationTerminalClassifier.shouldPublish(
+            error: error,
+            policy: telemetryTerminalPolicy
+        ), TelemetryGate.resolvedEnabled,
+           let appSupportDirectory = diagnosticAppSupportBox?.url,
+           await terminalGate.claim() else { return }
+
+        let reason = NativeGenerationTerminalClassifier.reason(for: error)
+        await telemetrySampler?.captureBoundary(
+            NativeTelemetryTerminalBoundary.name(for: reason)
+        )
+        await telemetryRecorder?.mark(
+            metadata: StreamFailureMessageMetadata(message: error.localizedDescription)
+        )
+        let stageMarks = await telemetryRecorder?.snapshot() ?? []
+        let stopped = await telemetrySampler?.stop(stageMarks: stageMarks)
+        let summary = stopped?.summary ?? TelemetrySummary.empty(stageMarks: stageMarks)
+        let record = GenerationTelemetryRecord(
+            generationID: generationID.uuidString,
+            layer: .engine,
+            recordedAt: ISO8601DateFormatter().string(from: Date()),
+            mode: request.modeIdentifier,
+            modelID: request.modelID,
+            finishReason: reason.rawValue,
+            stageMarks: stageMarks,
+            summary: summary,
+            thermalState: summary.thermalState,
+            notes: GenerationTelemetryPrivacy.failureNotes(message: error.localizedDescription)
+                .merging(BenchRunContext.telemetryNotes()) { current, _ in current }
+        )
+        await GenerationTelemetryJSONLSink.shared.write(
+            record: record,
+            appSupportDirectory: appSupportDirectory,
+            subdirectory: "engine"
+        )
+        if NativeTelemetryMode.current().persistsRawSamples,
+           let samples = stopped?.samples,
+           !samples.isEmpty {
+            await GenerationTelemetryJSONLSink.shared.writeRawSamples(
+                samples,
+                generationID: generationID.uuidString,
+                appSupportDirectory: appSupportDirectory,
+                subdirectory: "engine"
+            )
         }
     }
 
@@ -1055,6 +1141,9 @@ struct StreamingExecutionContext: Sendable {
 
         let finishReason = Self.mapFinishReason(completion.finishReason)
         if finishReason != .eos {
+            await telemetrySampler?.captureBoundary(
+                NativeTelemetryTerminalBoundary.name(for: finishReason)
+            )
             await telemetryRecorder?.mark(
                 metadata: StreamFailureFinishReasonMetadata(finishReason: finishReason)
             )
@@ -1131,11 +1220,13 @@ struct StreamingExecutionContext: Sendable {
             guard Self.isReadableWAV(at: outputURL) else {
                 throw MLXTTSEngineError.generationFailed("The finalized WAV could not be reopened for reading.")
             }
+            await telemetrySampler?.captureBoundary("before_audio_qc")
             finalAudioQC = telemetryActive ? try Self.makePersistedWAVAudioQCReport(
                 at: outputURL,
                 preWriteMetrics: scratchBuffer.limiterMetrics,
                 expectedPauseCount: Self.expectedPauseCount(in: request.text)
             ) : nil
+            await telemetrySampler?.captureBoundary("after_audio_qc")
         } catch {
             await writeFailureTelemetry(error: error, usedStreaming: false, counters: [:])
             Memory.clearCache()
@@ -1145,12 +1236,21 @@ struct StreamingExecutionContext: Sendable {
         mlxMemorySnapshots["after_final_write"] = NativeMemoryPolicyResolver.snapshot()
         let postRequestCacheClearApplied = memoryPolicy.clearCacheAfterGeneration
         if postRequestCacheClearApplied {
+            await telemetrySampler?.captureBoundary("before_post_generation_trim")
+            await telemetryRecorder?.mark(
+                metadata: MemoryTrimMetadata(
+                    level: .softTrim,
+                    reason: "post_generation_cache_clear",
+                    source: .postGeneration
+                )
+            )
             Memory.clearCache()
             mlxMemorySnapshots["after_generation_trim"] = NativeMemoryPolicyResolver.snapshot()
             await telemetrySampler?.captureBoundary("post_generation_trim")
         } else {
             await telemetrySampler?.captureBoundary("post_generation")
         }
+        await telemetrySampler?.captureBoundary("terminal_success")
 
         let durationSeconds = Double(pcmSamples.count) / Double(sampleRate)
         await telemetryRecorder?.mark(stage: .streamCompleted)
@@ -1587,6 +1687,7 @@ struct StreamingExecutionContext: Sendable {
         // Token loop + pipelined decoder drain finished; post-stream work (WAV
         // finalize, telemetry marks) is tracked separately from decodeWallSeconds.
         await telemetryRecorder?.mark(stage: .streamGenerationEnded)
+        await telemetrySampler?.captureBoundary("final_audio_materialized")
 
         await telemetrySampler?.captureBoundary("before_final_wav")
         let finalWriteSignpost = NativeStreamingSignposts.signposter.beginInterval(
@@ -1616,12 +1717,14 @@ struct StreamingExecutionContext: Sendable {
         signpostTimingsMS["native_final_wav_finish_ms"] = finalWAVFinishStartedAt.elapsedMilliseconds
         let finalAudioQC: AudioQCReport?
         do {
+            await telemetrySampler?.captureBoundary("before_audio_qc")
             finalAudioQC = telemetryActive ? try Self.makePersistedWAVAudioQCReport(
                 at: outputURL,
                 preWriteMetrics: scratchBuffer.limiterMetrics,
                 expectedPauseCount: Self.expectedPauseCount(in: request.text),
                 chunkQC: chunkQCActive && !chunkQCReports.isEmpty ? chunkQCReports : nil
             ) : nil
+            await telemetrySampler?.captureBoundary("after_audio_qc")
         } catch {
             await writeFailureTelemetry(
                 error: error,
@@ -1638,12 +1741,21 @@ struct StreamingExecutionContext: Sendable {
         mlxMemorySnapshots["after_stream"] = NativeMemoryPolicyResolver.snapshot()
         let postRequestCacheClearApplied = memoryPolicy.clearCacheAfterGeneration
         if postRequestCacheClearApplied {
+            await telemetrySampler?.captureBoundary("before_post_generation_trim")
+            await telemetryRecorder?.mark(
+                metadata: MemoryTrimMetadata(
+                    level: .softTrim,
+                    reason: "post_generation_cache_clear",
+                    source: .postGeneration
+                )
+            )
             Memory.clearCache()
             mlxMemorySnapshots["after_generation_trim"] = NativeMemoryPolicyResolver.snapshot()
             await telemetrySampler?.captureBoundary("post_generation_trim")
         } else {
             await telemetrySampler?.captureBoundary("post_generation")
         }
+        await telemetrySampler?.captureBoundary("terminal_success")
         let stageMarks = await telemetryRecorder?.snapshot() ?? []
         let (summary, rawSamples) = await Self.stopTelemetrySampler(
             telemetrySampler,
@@ -1749,7 +1861,7 @@ struct StreamingExecutionContext: Sendable {
     ) async {
         let reason = NativeGenerationTerminalClassifier.reason(for: error)
         await telemetrySampler?.captureBoundary(
-            reason == .cancelled ? "terminal_cancelled" : "terminal_failure"
+            NativeTelemetryTerminalBoundary.name(for: reason)
         )
         await telemetryRecorder?.mark(
             metadata: StreamFailureMessageMetadata(message: error.localizedDescription)
@@ -1843,14 +1955,10 @@ struct StreamingExecutionContext: Sendable {
         let policyNotes = NativeMemoryPolicyResolver.currentPolicyNotes(for: memoryPolicy)
         tierNotes.merge(policyNotes) { _, policy in policy }
 
-        // Worst memory pressure band over the generation (audit P1-6): derived from
-        // the sampler summary extremes with the shipping policy thresholds, so
-        // Jetsam-adjacent runs are visible directly on the row.
-        if let worstBand = IOSMemoryBudgetPolicy.iPhoneShippingDefault.worstBand(
-            headroomMinMB: summary.headroomMinMB,
-            physFootprintPeakMB: summary.physFootprintPeakMB,
-            gpuWorkingSetUsageRatioPeak: summary.gpuWorkingSetUsageRatioPeak
-        ) {
+        // On iOS, derive the worst pressure band from the sampler summary using the
+        // shipping process-budget thresholds so Jetsam-adjacent runs are visible on
+        // the row. macOS retains the raw metrics without inheriting iPhone limits.
+        if let worstBand = GenerationMemoryMetrics.worstPressureBand(for: summary) {
             tierNotes["memoryPressureBandWorst"] = worstBand.rawValue
         }
 

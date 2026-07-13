@@ -23,6 +23,8 @@ final class AppGenerationTimeline {
         var playbackScheduledAt: ContinuousClock.Instant?
         var mode: String?
         var playbackHealth = PlaybackHealthAccumulator()
+        let memorySampler: NativeTelemetrySampler?
+        let telemetryMode: NativeTelemetryMode
     }
 
     private var marksByID: [String: Marks] = [:]
@@ -36,17 +38,33 @@ final class AppGenerationTimeline {
 
     private init() {}
 
-    func recordSubmitted(id: UUID?, mode: String?) {
+    func recordSubmitted(id: UUID?, mode: String?) async {
         guard TelemetryGate.appProcessIntendedEnabled else { return }
         guard let key = id?.uuidString else { return }
         if marksByID.count >= Self.maxTrackedGenerations {
+            let evictedSamplers = marksByID.values.compactMap(\.memorySampler)
             marksByID.removeAll(keepingCapacity: true)
             for _ in watchdogSessions { MainThreadStallWatchdog.shared.end() }
             watchdogSessions.removeAll(keepingCapacity: true)
+            for sampler in evictedSamplers {
+                await sampler.captureBoundary("app_terminal")
+                _ = await sampler.stop(stageMarks: [])
+            }
         }
-        marksByID[key] = Marks(submittedAt: clock.now, mode: mode)
+        let telemetryMode = TelemetryGate.appProcessIntendedMode
+        let memorySampler = Self.makeAppMemorySampler(mode: telemetryMode)
+        marksByID[key] = Marks(
+            submittedAt: clock.now,
+            mode: mode,
+            memorySampler: memorySampler,
+            telemetryMode: telemetryMode
+        )
         if watchdogSessions.insert(key).inserted {
             MainThreadStallWatchdog.shared.begin()
+        }
+        if let memorySampler {
+            await memorySampler.start()
+            await memorySampler.captureBoundary("app_submit")
         }
     }
 
@@ -88,16 +106,26 @@ final class AppGenerationTimeline {
                 )
             }
         }
+        let appMemorySummary = await finishAppMemoryCapture(
+            marks: marks,
+            generationID: key
+        )
         let record = GenerationTelemetryRecord(
             generationID: key,
             layer: .app,
             recordedAt: ISO8601DateFormatter().string(from: Date()),
             mode: marks?.mode,
             finishReason: finishReason.rawValue,
+            summary: appMemorySummary,
             timingsMS: timingsMS,
             counters: counters,
             notes: currentTaskQOSNotes()
-                .merging(BenchRunContext.telemetryNotes()) { current, _ in current }
+                .merging(BenchRunContext.telemetryNotes()) { current, _ in current },
+            frontendMetrics: GenerationTelemetryCompatibilityAdapter.frontend(
+                timingsMS: timingsMS,
+                counters: counters,
+                playbackStartSource: marks?.playbackHealth.startSource
+            )
         )
         await GenerationTelemetryJSONLSink.shared.write(
             record: record,
@@ -114,17 +142,20 @@ final class AppGenerationTimeline {
         marksByID[id] = marks
     }
 
-    /// Records the instant the player node receives `play()`. This is intentionally
-    /// named "scheduled": without an acoustic loopback we cannot prove when a
-    /// listener first heard a rendered sample.
+    /// Records the instant a frontend player accepts a successful `play()` call.
+    /// This is intentionally named "scheduled": without an acoustic loopback we
+    /// cannot prove when a listener first heard a rendered sample. `source` keeps
+    /// live PCM queue depth distinct from finalized-file buffer semantics.
     func recordPlaybackScheduled(
         id: String?,
+        source: FrontendPlaybackStartSource,
         queuedChunks: Int,
         queuedAudioSeconds: TimeInterval
     ) {
         guard let id, var marks = marksByID[id], marks.playbackScheduledAt == nil else { return }
         marks.playbackScheduledAt = clock.now
         marks.playbackHealth.playbackScheduled(
+            source: source,
             queuedChunks: queuedChunks,
             queuedAudioMS: Self.audioMilliseconds(queuedAudioSeconds)
         )
@@ -227,6 +258,10 @@ final class AppGenerationTimeline {
 
         let notes = currentTaskQOSNotes()
             .merging(BenchRunContext.telemetryNotes()) { current, _ in current }
+        let appMemorySummary = await finishAppMemoryCapture(
+            marks: marks,
+            generationID: key
+        )
         let record = GenerationTelemetryRecord(
             generationID: key,
             layer: .app,
@@ -234,13 +269,18 @@ final class AppGenerationTimeline {
             mode: mode ?? marks?.mode,
             usedStreaming: usedStreaming,
             finishReason: finishReason,
-            // Memory belongs to the process that sampled it. The app timeline is
-            // passed the engine summary for presentation convenience, but copying
-            // it into an app-owned row would misattribute engine memory to the UI.
-            summary: nil,
+            // Memory belongs to the process that sampled it. On macOS this is the
+            // app-process sampler; iOS deliberately leaves this nil because its
+            // app and engine share the single engine-owned process sampler.
+            summary: appMemorySummary,
             timingsMS: timingsMS,
             counters: counters,
-            notes: notes
+            notes: notes,
+            frontendMetrics: GenerationTelemetryCompatibilityAdapter.frontend(
+                timingsMS: timingsMS,
+                counters: counters,
+                playbackStartSource: marks?.playbackHealth.startSource
+            )
         )
         let appSupportDirectory = AppPaths.appSupportDir
         // A completed result is a durability boundary. Await the append before
@@ -251,6 +291,40 @@ final class AppGenerationTimeline {
             appSupportDirectory: appSupportDirectory,
             subdirectory: "app"
         )
+    }
+
+    private static func makeAppMemorySampler(mode: NativeTelemetryMode) -> NativeTelemetrySampler? {
+        #if os(macOS)
+        guard let sampleIntervalMS = mode.sampleIntervalMS(
+            for: NativeMemoryPolicyResolver.deviceClass()
+        ) else { return nil }
+        return NativeTelemetrySampler(
+            clock: NativeTelemetryClock(),
+            sampleIntervalMS: sampleIntervalMS,
+            processRole: .app,
+            boundaryRequirements: TelemetryBoundaryRequirement.appGeneration
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    private func finishAppMemoryCapture(
+        marks: Marks?,
+        generationID: String
+    ) async -> TelemetrySummary? {
+        guard let marks, let sampler = marks.memorySampler else { return nil }
+        await sampler.captureBoundary("app_terminal")
+        let result = await sampler.stop(stageMarks: [])
+        if marks.telemetryMode.persistsRawSamples {
+            await GenerationTelemetryJSONLSink.shared.writeRawSamples(
+                result.samples,
+                generationID: generationID,
+                appSupportDirectory: AppPaths.appSupportDir,
+                subdirectory: "app"
+            )
+        }
+        return result.summary
     }
 
     private static func milliseconds(

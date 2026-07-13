@@ -41,6 +41,10 @@ Before changing anything in this layer, read:
 - Skills guide implementation and diagnosis; shell builds, tests, benchmarks, and their artifacts
   remain authoritative. Where no skill applies, inspect vendored source and authoritative Apple,
   package, or Hugging Face documentation.
+- Generated output must use `config/build-output-policy.json`. Backend work may consume the
+  canonical macOS/iOS caches and the dedicated vendored SwiftPM scratch path, but must not create
+  another DerivedData root or a `.build` directory below `third_party_patches/`. Route policy
+  changes through `.agents/release-qa-engineer.md`.
 - Browser inspection may support website work, but never replaces benchmarks, compile checks, or
   physical-device iOS gates.
 - XCUITest is the sole autonomous app UI driver. Smoke and benchmark UI lanes are explicit
@@ -91,7 +95,7 @@ warning.
 - **SPM pins move in lockstep.** `mlx-swift` and `mlx-swift-lm` are bumped together, never
   alone, and only after a benchmark-gated review on a throwaway branch.
 - **MLX is the only backend.** Do not pivot to Core ML or another runtime.
-- **Telemetry semantics are typed.** Schema-v7 frontend latency stops at playback scheduling, not
+- **Telemetry semantics are typed.** Schema-v8 frontend latency stops at playback scheduling, not
   acoustic audibility; process memory belongs only to the process that measured it, and a macOS UI
   benchmark is authoritative only when app, XPC service, and engine layers are complete.
 

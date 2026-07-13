@@ -95,6 +95,48 @@ def _evidence_manifest(run_id, generation_ids, cells):
     }
 
 
+def _engine_evidence_manifest(
+    run_id,
+    generation_ids,
+    cells,
+    *,
+    kind="engine-generation",
+    status="passed",
+):
+    takes = []
+    for index, (generation_id, cell) in enumerate(zip(generation_ids, cells), start=1):
+        takes.append({
+            "takeIndex": index,
+            "generationID": generation_id,
+            "cell": cell,
+            "status": status,
+            "finishReason": "completed",
+            "output": {"readableWAV": True, "atomicPublish": True},
+            "audioQC": {"verdict": "pass"},
+            "layerCompleteness": "complete",
+            "layers": ["engine"],
+        })
+    return {
+        "schemaVersion": 1,
+        "benchmarkKind": kind,
+        "platform": "ios",
+        "runID": run_id,
+        "status": status,
+        "expectedTakeCount": len(takes),
+        "actualTakeCount": len(takes),
+        "historyRecord": {
+            "schemaVersion": 1,
+            "run": {
+                "id": run_id,
+                "kind": kind,
+                "platform": "ios",
+                "status": status,
+            },
+            "takes": takes,
+        },
+    }
+
+
 def test_len_bucket_treats_ios_150_character_prompt_as_long():
     assert sgt.len_bucket(150) == "long"
 
@@ -224,6 +266,127 @@ def test_evidence_manifest_rejects_duplicate_generation_ids():
             assert "duplicate evidence generationID" in str(error)
         else:
             raise AssertionError("duplicate evidence generationID was accepted")
+
+
+def test_non_ui_evidence_manifests_control_exact_order_and_cells():
+    with tempfile.TemporaryDirectory() as tmp:
+        for kind in ("engine-generation", "language", "instrument-profile"):
+            run_id = f"{kind}-evidence-run"
+            path = os.path.join(tmp, f"{kind}-benchmark-evidence.json")
+            manifest = _engine_evidence_manifest(
+                run_id,
+                [f"{kind}-gen-2", f"{kind}-gen-1"],
+                ["custom/speed/device", "design/speed/device"],
+                kind=kind,
+            )
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+
+            _, selected_run, generation_ids, cell_by_id = sgt.load_evidence_selection(path)
+
+            assert selected_run == run_id
+            assert generation_ids == [f"{kind}-gen-2", f"{kind}-gen-1"]
+            assert cell_by_id == {
+                f"{kind}-gen-2": "custom/speed/device",
+                f"{kind}-gen-1": "design/speed/device",
+            }
+
+
+def test_non_ui_evidence_manifest_accepts_consistent_warning_status():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "benchmark-evidence.json")
+        manifest = _engine_evidence_manifest(
+            "warning-run",
+            ["warning-gen"],
+            ["custom/speed/device"],
+            status="passedWithWarnings",
+        )
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+
+        _, selected_run, generation_ids, _ = sgt.load_evidence_selection(path)
+
+        assert selected_run == "warning-run"
+        assert generation_ids == ["warning-gen"]
+
+
+def test_non_ui_evidence_manifest_rejects_nested_schema_mismatch():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "benchmark-evidence.json")
+        manifest = _engine_evidence_manifest(
+            "nested-schema-mismatch",
+            ["engine-gen"],
+            ["custom/speed/device"],
+        )
+        manifest["historyRecord"]["schemaVersion"] = 3
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+
+        with unittest.TestCase().assertRaisesRegex(
+            sgt.TelemetrySelectionError,
+            "historyRecord has an unsupported schemaVersion",
+        ):
+            sgt.load_evidence_selection(path)
+
+
+def test_non_ui_evidence_manifest_rejects_platform_mismatch():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "benchmark-evidence.json")
+        manifest = _engine_evidence_manifest(
+            "platform-mismatch",
+            ["language-gen"],
+            ["custom-en-pinned"],
+            kind="language",
+        )
+        manifest["historyRecord"]["run"]["platform"] = "macos"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+
+        with unittest.TestCase().assertRaisesRegex(
+            sgt.TelemetrySelectionError,
+            "run identity is inconsistent",
+        ):
+            sgt.load_evidence_selection(path)
+
+
+def test_non_ui_evidence_manifest_rejects_status_mismatch():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "benchmark-evidence.json")
+        manifest = _engine_evidence_manifest(
+            "status-mismatch",
+            ["profile-gen"],
+            ["custom/speed/device"],
+            kind="instrument-profile",
+        )
+        manifest["status"] = "passedWithWarnings"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+
+        with unittest.TestCase().assertRaisesRegex(
+            sgt.TelemetrySelectionError,
+            "run identity is inconsistent",
+        ):
+            sgt.load_evidence_selection(path)
+
+
+def test_non_ui_evidence_manifest_rejects_incomplete_engine_layer():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "benchmark-evidence.json")
+        manifest = _engine_evidence_manifest(
+            "incomplete-engine",
+            ["engine-gen"],
+            ["custom/speed/device"],
+            kind="instrument-profile",
+        )
+        manifest["historyRecord"]["takes"][0]["layerCompleteness"] = "incomplete"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+
+        with unittest.TestCase().assertRaisesRegex(
+            sgt.TelemetrySelectionError,
+            "incomplete engine telemetry",
+        ):
+            sgt.load_evidence_selection(path)
 
 
 def test_scoped_aggregate_rejects_malformed_jsonl():

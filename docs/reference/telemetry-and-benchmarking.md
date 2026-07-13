@@ -85,8 +85,10 @@ It applies one fixed `vocello bench --seed` through three deterministic mode-ord
 Each rotation runs one warm-up and two measured Custom/Speed/medium takes per mode, yielding six
 machine-readable takes per mode. PCM SHA-256 must match across off, lightweight, and verbose.
 Median RTF and TTFC regression limits are 5% for lightweight and 10% for verbose. Raw evidence and
-load/thermal context stay under `build/macos/`; a PASS publishes one compact
-`telemetry-overhead` record.
+load/thermal context stay under `build/artifacts/macos/`. The verdict is deliberately local-only: the
+`off` lane cannot supply mandatory v8 memory evidence without changing the observer-effect
+experiment, so new schema-v2 history publication fails closed. Existing schema-v1 overhead
+records remain readable and memory-contract-incomplete.
 
 Typical backend‑optimization invocation:
 
@@ -169,12 +171,13 @@ file) is front‑trimmed past ~8 MB (`QWENVOICE_DIAGNOSTICS_MAX_MB` scales it), 
 
 ## 5. The per‑generation record schema
 
-`GenerationTelemetryRecord` (schema v7). Optional fields are omitted from JSON when nil and
-v1–v6 rows remain decodable.
+`GenerationTelemetryRecord` (schema v8). Optional fields are omitted from JSON when nil and
+v1–v7 rows remain decodable. New history publication that claims qualified memory requires v8;
+older rows stay readable but are marked memory-contract-incomplete and excluded from memory trends.
 
 | Field | Type | Notes |
 |---|---|---|
-| `schemaVersion` | Int | 7 (v2 derived/memory/chunk; v3 model/warm state; v4 audioQC; v5 high-resolution clocks; v6 typed payloads; v7 sampler accuracy/resource deltas, merge completeness, and playback-scheduled naming). |
+| `schemaVersion` | Int | 8 (v2 derived/memory/chunk; v3 model/warm state; v4 audioQC; v5 high-resolution clocks; v6 typed payloads; v7 sampler accuracy/resource deltas and playback-scheduled naming; v8 independently qualified memory captures, absolute uptime, aligned snapshots, and coverage). |
 | `clockSource` | String? | `mach_absolute_time` when nanosecond timestamps are present. |
 | `generationID` | String | Correlation key (UUID). |
 | `layer` | String | `engine` / `engine-service` / `app` / `merged`. (The retired iOS `engine-extension` layer no longer emits — iOS runs in-process.) |
@@ -193,7 +196,7 @@ v1–v6 rows remain decodable.
 | `mlxMemoryByStage` | `[String: {activeMB, cacheMB, peakMB}]?` | MLX GPU memory at each stage (see §8). |
 | `chunkTimeline` | `[GenerationChunkTelemetry]?` | Per‑chunk decode substages, with `arrivalNS` (v5) and optional `mimiDecoderBreakdownMS` (v5) (see §6.3). |
 | `audioQC` | `AudioQCReport?` | Versioned reference‑free overall, model-instability, and written-output verdicts plus flags, defect offsets, and optional per‑chunk QC. Algorithm v3 preserves chunk-spanning silence state and derives written-output evidence from the atomically published WAV frames. |
-| `summary` | `TelemetrySummary?` | Owning-process memory curve, sampler target/effective/max interval, anchored phase drift/lateness, skipped-deadline and boundary/failure counts, and process CPU/page-fault/context-switch/block-I/O deltas. `timeToPeakMS` tracks the physical-footprint peak. |
+| `summary` | `TelemetrySummary?` | Owning-process resident/physical-footprint/compressed/headroom/Metal start, end, delta, peak/min and aligned extrema snapshots; total RAM and implied process limit; independent memory/thread/headroom/Metal coverage; sampler cadence/boundaries; and process CPU/page-fault/context-switch/block-I/O deltas. `timeToPeakMS` tracks the physical-footprint peak. |
 | `notes` | `[String: String]` | Bounded compatibility metadata such as `deviceClass`, `promptChars`, privacy-safe `promptDigest`, and memory pressure. Raw script, transcript, voice description, file path, and failure message are forbidden; prompts/failures use SHA-256 identity rather than content. |
 | `recordedAt` / `processName` / `processIdentifier` | | Provenance. |
 
@@ -329,16 +332,21 @@ where time goes; use **Instruments signposts** (see [`benchmarking-procedure.md`
   across the pipeline — key for restricted‑hardware tuning. Captured at boundaries only
   (a GPU snapshot is too costly per chunk).
 - **`summary`** (`TelemetrySummary`) — owning-process memory **curve** summary from the background
-  sampler: resident start/end/peak, physical footprint peak, compressed peak, headroom
-  start/end/min, GPU allocated peak + recommended working set, `timeToPeakMS`, `sampleCount`;
-  target/effective/maximum cadence, maximum lateness, periodic/boundary/failure counts; and
-  generation-scoped user/system CPU, page-fault, context-switch, and block-I/O deltas.
+  sampler: resident, physical footprint, compressed, headroom, and GPU allocated start/end/delta
+  plus peak/min; recommended Metal working set and usage ratio; total device RAM and the implied
+  process limit; `timeToPeakMS`; and aligned `memoryAtStart`, `memoryAtEnd`,
+  `memoryAtPeakPhysFootprint`, and `memoryAtMinimumHeadroom` snapshots. Memory, thread, headroom,
+  Metal, and process-resource capture success/coverage are independent, so one failed API cannot
+  masquerade as a zero value. Generation-scoped CPU, page-fault, context-switch, and block-I/O
+  deltas remain process-owned.
 - **Boundary samples** — capture immediately around model load, first chunk, final WAV, and trim,
   so short cold-load or finalize peaks are not dependent on the 500 ms constrained-device tick.
 - **Verbose raw series** — `verbose` mode writes every sample (`tMS`, `scheduledElapsedNS`,
-  `capturedElapsedNS`, `latenessNS`, `kind`, `boundary`, residentMB,
-  physFootprintMB, compressedMB, headroomMB, gpuAllocatedMB, threads, decorated `stage`/
-  `chunkIndex`) to `engine/samples-<generationID>.jsonl` for full memory‑curve analysis.
+  `capturedElapsedNS`, absolute `capturedUptimeNS`, `latenessNS`, `kind`, `boundary`,
+  `processRole`, resident/physical-footprint/compressed/headroom/Metal values, total RAM, implied
+  process limit, and separate `memoryCaptureSucceeded`, `threadCaptureSucceeded`,
+  `headroomCaptureSucceeded`, and `metalCaptureSucceeded` flags) to the exact
+  `<layer>/samples-<generationID>.jsonl` sidecar. Raw rows remain untracked.
   Off by default (higher volume).
 - **Kernel memory‑pressure marks** (in `stageMarks`) — on the pressure‑bound tiers
   (`floor8GBMac` / `mid16GBMac` / `iPhonePro`, where `NativeMemoryPressureMonitor` runs):
@@ -355,6 +363,38 @@ where time goes; use **Instruments signposts** (see [`benchmarking-procedure.md`
   these marks are absent (correct, not missing data). `headroom*` summary fields populate on
   iOS only (`os_proc_available_memory`); on macOS they're nil and `phys_footprint` is the
   OOM‑relevant figure to watch.
+
+### Publication-grade memory qualification
+
+Benchmark-evidence manifest v2 binds `memoryContractVersion: 1`, `memoryQualified: true`, the exact
+selected sidecar count/digest, and each take's `memoryStatus` plus sidecar digest. A sidecar must
+start/stop exactly once, have monotonic elapsed/uptime clocks, match all summary counts, report zero
+memory-capture failures, and retain at least 95% periodic coverage. Engine evidence includes
+preparation/model-load/session/final-WAV and first-output/terminal boundaries; app evidence includes
+`app_submit` and `app_terminal`. A 95–<100% coverage result is warning evidence.
+
+Critical pressure, `application_memory_warning`, a memory exit, `hardTrim`, or `fullUnload` fails
+publication. Guarded pressure or `softTrim` is `passedWithWarnings`. iOS additionally fails at
+physical footprint ≥5.2 GB, minimum headroom <384 MB, or Metal working-set ratio ≥0.8; footprint
+≥4.5 GB or headroom <768 MB is a warning. The iOS record retains start/end/min headroom and peak
+process-budget utilization. macOS UI/XPC totals pair app and engine samples by absolute uptime within
+one 500 ms cadence; they never add independent process maxima. Headless CLI/profile evidence reports
+only its owning engine process.
+
+The separate `memory` commands run policy `retained-memory-v1`: fixed Custom→Design→Clone
+Speed/medium sequences with three retained takes per mode. Within each mode, first-to-last retained
+physical-footprint growth must remain ≤5% of physical RAM. Intentional cross-mode model residency is
+diagnostic unless a future runner proves an explicit full unload. These PASS-only runs publish the
+`memory-qualification` kind; `profile --kind memory` remains the distinct Allocations + VM Tracker
+Instruments lane.
+
+On iOS, MetricKit's delayed daily aggregate is a complementary field signal. The app persists only
+a bounded privacy-reduced memory/exit summary; raw payload JSON, call stacks, identifiers, and paths
+are not retained for this purpose. After an explicit device pull,
+`scripts/ios_device.sh memory-field-report [pulled-diagnostics]` reads local files only. It does not
+contact the phone, does not publish benchmark history, and reports `notYetDelivered` nonfatally when
+MetricKit has not delivered a payload. Daily values are not run-correlated and cannot qualify or
+retroactively fail an individual take.
 
 ### Frontend responsiveness and playback health
 
@@ -445,8 +485,11 @@ stage, capture the os_signpost intervals under Instruments `xctrace`. Read‑onl
 `app/` rows by `generationID`.
 New benchmark history is one allowlisted JSON record per successful run under
 `benchmarks/runs/<kind>/` (≤256 KB), with a generated `HISTORY.md` index. Existing Markdown/JSON
-baselines remain reference artifacts; they are not silently upgraded into complete schema-v1
-records. Raw telemetry, audio, screenshots, result bundles, and traces remain untracked. Registry
+baselines remain reference artifacts; they are not silently upgraded into complete records.
+Schema-v1 history remains readable; new memory-qualified records use schema v2 and cannot be mixed
+into memory trends with v1. Raw telemetry, audio, screenshots, result bundles, and traces remain untracked. A successful
+profile record captures the original trace digest/path, capture settings, extracted summary, and
+retention policy; the raw trace is discarded after publication unless `--keep-trace` was explicit. Registry
 validation is deterministic CI work, but model/device/UI execution is not an ordinary CI or
 packaging gate.
 
@@ -484,9 +527,9 @@ warm by design.
 
 ### Tracking performance over time
 
-Each successful runner publishes one canonical, privacy-safe schema-v1 record under one of six
-kinds: UI generation, engine generation, language, telemetry overhead, instrument profile, or
-prosody calibration. `scripts/benchmark_history.py` validates these records and regenerates
+Each successful publishable runner creates one canonical, privacy-safe schema-v2 record under one
+of six kinds: UI generation, engine generation, language, instrument profile, retained-memory
+qualification, or prosody calibration. `scripts/benchmark_history.py` validates these records and regenerates
 `benchmarks/HISTORY.md`; direct Markdown append is unsupported. A strict allowlist rejects
 identifiers and content that could expose serials, UDIDs/ECIDs, host/device/user names, absolute
 paths, prompts/transcripts/voice descriptions, raw errors, email addresses, URLs, or secrets. Run
@@ -500,9 +543,8 @@ review. Dirty runs are exploratory and excluded from canonical comparisons. Inst
 partial runs are also isolated from normal timing trends.
 
 Tracked validation re-derives cell aggregates and enforces each kind's immutable success shape,
-including the exact 18 measured telemetry-overhead takes, PCM parity and overhead thresholds,
-structured PID/CPU/signpost profile
-evidence, and complete prosody-calibration aggregates. `rebuild-index` also reconciles comparison
+including structured PID/CPU/signpost profile evidence, schema-v2 sidecar memory qualification and retention
+policy evidence, and complete prosody-calibration aggregates. `rebuild-index` also reconciles comparison
 deltas from the nearest earlier compatible clean record, so merge order cannot leave stale trends;
 the `--check` form rejects any unreconciled record.
 

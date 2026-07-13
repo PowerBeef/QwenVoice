@@ -55,15 +55,27 @@ jobs:
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-            build/ci/ios-compile-dd/SourcePackages
+          path: build/cache/xcode/source-packages
           key: spm-ios-compile-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-ios-compile-${{ runner.os }}-xcode26-
 
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
+
+      - name: Resolve SwiftPM dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p build/cache/xcode/source-packages build/scratch/derived-data/ci/ios-compile
+          xcodebuild -resolvePackageDependencies \
+            -project QwenVoice.xcodeproj \
+            -scheme VocelloiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+            -derivedDataPath build/scratch/derived-data/ci/ios-compile \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile
 
       - name: Compile VocelloiOS for the device SDK
         run: |
@@ -73,7 +85,12 @@ jobs:
             -scheme VocelloiOS \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/ci/ios-compile-dd \
+            -derivedDataPath build/scratch/derived-data/ci/ios-compile \
+            -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO | xcbeautify
 
   macos-deterministic-tests:
@@ -115,6 +132,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-deterministic-test-artifacts
-          path: build/macos/test-artifacts/
+          path: build/artifacts/macos/tests/
           if-no-files-found: warn
           retention-days: 14

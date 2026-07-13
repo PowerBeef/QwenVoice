@@ -55,6 +55,15 @@ class IOSDeviceBenchmarkContractTests(unittest.TestCase):
         )
         self.assertNotIn("device-headless", bench)
         self.assertNotIn("device-gate", gate)
+        self.assertIn("export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose", bench)
+        self.assertIn("export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose", gate)
+
+    def test_language_generations_use_a_scoped_verbose_telemetry_override(self) -> None:
+        language = shell_function(self.text, "cmd_lang_bench")
+        launch = 'QWENVOICE_NATIVE_TELEMETRY_MODE=verbose cmd_launch "$spec"'
+        self.assertIn(launch, language)
+        self.assertNotIn("export QWENVOICE_NATIVE_TELEMETRY_MODE", language)
+        self.assertLess(language.index(launch), language.index("wait_device_diagnostics_sentinel"))
 
     def test_profile_propagates_correlation_before_building_launch_environment(self) -> None:
         profile = shell_function(self.text, "cmd_profile")
@@ -168,7 +177,9 @@ class IOSDeviceBenchmarkContractTests(unittest.TestCase):
         self.assertIn(summary, profile)
         self.assertIn('--run-id "$run_id"', profile[profile.index(summary):])
         self.assertIn('local cpu_instrument="CPU Profiler"', profile)
-        self.assertIn('--instrument "$cpu_instrument" --instrument os_signpost', profile)
+        self.assertIn('local -a instrument_args=(--instrument "$cpu_instrument")', profile)
+        self.assertIn('instrument_args+=(--instrument os_signpost)', profile)
+        self.assertIn('xcrun xctrace record --device "$xctrace_dev" "${instrument_args[@]}"', profile)
         self.assertNotIn('--template "$template"', profile)
 
     def test_xctrace_inventory_distinguishes_online_offline_and_missing_device(self) -> None:
@@ -203,15 +214,20 @@ class IOSDeviceBenchmarkContractTests(unittest.TestCase):
 
     def test_profile_always_cleans_up_the_exact_target_process(self) -> None:
         profile = shell_function(self.text, "cmd_profile")
+        cleanup = shell_function(self.text, "profile_failure_cleanup")
         self.assertIn("device process terminate --device %q --pid %q", profile)
-        self.assertIn('trap "$cleanup_command" EXIT', profile)
+        self.assertIn('PROFILE_TRACE_DEVICE_CLEANUP="$cleanup_command"', profile)
+        self.assertIn("trap profile_failure_cleanup EXIT", profile)
+        self.assertIn('eval "$PROFILE_TRACE_DEVICE_CLEANUP"', cleanup)
         self.assertIn('eval "$cleanup_command"', profile)
         self.assertIn("trap - EXIT", profile)
 
     def test_device_build_is_safe_when_optional_diagnostic_flags_are_empty(self) -> None:
         build = shell_function(self.text, "cmd_build")
         self.assertIn("local -a command=(", build)
-        self.assertIn('command+=(SWIFT_OPTIMIZATION_LEVEL=-Onone build)', build)
+        self.assertIn("SWIFT_OPTIMIZATION_LEVEL=-Onone", build)
+        self.assertIn("SWIFT_COMPILATION_MODE=incremental", build)
+        self.assertRegex(build, r"command\+=\([\s\S]*?\n\s+build\n\s+\)")
         self.assertIn('"${command[@]}" 2>&1 | tee "$log"', build)
         self.assertNotIn('"${diagnostic_flags[@]}"', build)
 

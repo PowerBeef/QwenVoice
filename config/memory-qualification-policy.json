@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "policyID": "retained-memory-v1",
+  "metric": "withinModeRetainedPhysicalFootprintGrowth",
+  "retentionThresholdFractionOfPhysicalMemory": 0.05,
+  "variant": "speed",
+  "length": "medium",
+  "seed": 19790615,
+  "modes": [
+    "custom",
+    "design",
+    "clone"
+  ],
+  "repetitionsPerMode": 3,
+  "expectedTakeCounts": {
+    "macos": 11,
+    "ios": 9
+  }
+}

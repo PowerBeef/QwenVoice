@@ -75,7 +75,7 @@ UI heartbeat        —                       yes                    yes
 | **CLI** | `./build/vocello bench` | In-process `MLXTTSEngine` | Deterministic RTF/decode/memory matrix; release QA step 3 |
 | **macOS UI** | App + `QwenVoiceEngineService` XPC | Out-of-process engine | Submit-to-first-chunk, playback scheduling, delayed-heartbeat, and XPC transport evidence; UI smoke tests |
 | **macOS XPC UI benchmark** | `scripts/ui_test.sh macos benchmark` | Out-of-process engine | Full UI matrix through real app + XPC; merged 3-layer telemetry |
-| **macOS profile** | `scripts/macos_test.sh profile` | In-process via CLI inside trace | Instruments / os_signpost validation |
+| **macOS profile** | `scripts/macos_test.sh profile --kind cpu|memory` | In-process via CLI inside exact-PID trace | CPU/signpost or allocation/VM validation |
 | **iOS device** | `scripts/ios_device.sh bench` | In-process | iPhone tier, Jetsam, on-device RTF (headless diagnostics, single take) |
 | **iOS UI benchmark** | `scripts/ui_test.sh ios benchmark` | In-process | Full UI matrix through XCUITest on the paired physical iPhone; telemetry gated per take |
 
@@ -288,13 +288,26 @@ The Instruments profile is a separate headless lane, not an attachment to the XC
 
 ```sh
 scripts/ios_device.sh profile
+scripts/ios_device.sh profile --kind memory
 ```
 
 It builds and installs the diagnostic app, launches one headless generation suspended, attaches
 CPU Profiler plus `os_signpost` to that exact PID, resumes it, waits for the success sentinel, pulls
-its run-scoped diagnostics, and publishes an independent `instrument-profile` record. Run it before
+its run-scoped diagnostics, and publishes an independent `instrument-profile` record. The memory
+kind additionally records Allocations and VM Tracker in the same trace. Run it before
 or after a UI benchmark when profiling evidence is useful; do not treat its trace, generation, or
 history record as part of the UI benchmark's `.xcresult` or evidence manifest.
+
+Retained-memory qualification is a separate one-process nine-take lane:
+
+```sh
+scripts/ios_device.sh memory --voice-id <exact-prepared-saved-voice-id> --label retained-check
+```
+
+It runs three medium Speed takes each in fixed Custom→Design→Clone order without relaunching the
+app. `retained-memory-v1` compares first-to-last retained-take footprint growth within each mode against a 5%
+of physical-RAM limit; cross-mode model residency is diagnostic. The terminal sentinel is atomic and
+a PASS publishes `memory-qualification`, not `instrument-profile`.
 
 ### 4.7c iOS benchmark ownership
 
@@ -303,7 +316,7 @@ friction, use the headless §4.7 `ios_device.sh bench` lane.
 
 | Phase | Tool |
 |-------|------|
-| Independent trace capture | `scripts/ios_device.sh profile` (separate headless generation/profile lane) |
+| Independent trace capture | `scripts/ios_device.sh profile --kind cpu|memory` (separate headless generation/profile lane) |
 | Trace analysis | Instruments / `xcrun xctrace`; optional `xcprof` on `PATH` |
 | UI failure | `.xcresult` activities, failure diagnostics, and screenshot attachments |
 | Crash post-mortem | Xcode Organizer; optional `xcsym` on `PATH` |
@@ -321,16 +334,45 @@ is not sufficient evidence that Instruments can attach.
 ```sh
 QVOICE_MAC_PROFILE_DURATION=120 \
 scripts/macos_test.sh profile custom:speed:
+
+scripts/macos_test.sh profile --kind memory custom:speed:
+
+# Only when the raw document must be reopened in Instruments:
+scripts/macos_test.sh profile --kind memory --keep-trace custom:speed:
 ```
 
-Produces `build/macos/profiles/<run-id>/<run-id>.trace` containing CPU Profiler samples and
-`os_signpost` rows in one capture. **In-process only** — not the production XPC
+The macOS memory profile records one cold long take. This captures model-load plus sustained
+allocation/VM peaks. The lane uses Apple's Allocations template for its Allocations and VM Tracker
+tracks because that template disables automatic VM snapshots; adding standalone VM Tracker to a
+Blank trace enables stop-the-world snapshots that create real holes in the target's 500 ms sampler.
+Publication verifies the captured template setting and retains the strict 95% floor. The memory
+profile's default 180-second safety cap is only a maximum; exact-target exit ends the recording
+early. The separate `scripts/macos_test.sh memory` lane owns repeated retained growth.
+
+Produces `build/artifacts/macos/profiles/<run-id>/<run-id>.trace` containing CPU Profiler samples and
+`os_signpost` rows in one capture; the memory kind adds Allocations and VM Tracker. **In-process
+only** — not the production XPC
 path. The lane is PASS-only: a tracer failure, benchmark failure, invalid trace, or failed publication
-returns nonzero and leaves the local artifacts available for diagnosis without creating history.
+returns nonzero without creating history. It retains only the newest raw failure per platform and
+profile kind; older failures are compacted to small diagnostic summaries.
 The profiler launches or attaches to the exact target PID, requires a successful tracer exit, and
 validates the trace through `xctrace export --toc`; there is no blind startup sleep. For XPC, attach
-to the exact `QwenVoiceEngineService` PID while generating via UI. Traces remain untracked; the
-registry retains only their digest, settings, extracted summary, and local artifact reference.
+to the exact `QwenVoiceEngineService` PID while generating via UI. Traces remain untracked. On
+success the registry retains the digest, settings, extracted summary, original ephemeral path, and
+retention policy, then the runner removes the raw trace. Pass `--keep-trace` to retain it
+explicitly. CPU profiles require at least 5 GiB free before target launch; memory profiles require
+15 GiB because Allocations can emit tens of megabytes per second.
+
+The separate retained-memory lane is:
+
+```sh
+scripts/macos_test.sh memory --label retained-check
+```
+
+It runs Custom and Design as one cold plus three `retained#0...2` takes and Clone as three
+`retained#0...2` takes, all Speed/medium in one CLI process. Each retained take keeps its actual
+engine warm-state attribution. The same `retained-memory-v1` within-mode 5%-of-RAM policy applies;
+an accepted run publishes `memory-qualification` and carries no trace.
 
 ### 4.9 UI-driven generation (macOS XPC)
 
@@ -400,7 +442,11 @@ This counterbalances `off`, `lightweight`, and `verbose` through three determini
 rotations. Every rotation performs one warm-up and two measured takes per mode, yielding six
 machine-readable measured takes per mode. It requires identical PCM, records thermal/load context,
 and gates median RTF/TTFC at 5% (lightweight) and 10% (verbose) versus off. It never repairs or
-downloads models; missing fixtures stop the run.
+downloads models; missing fixtures stop the run. Its verdict stays under `build/artifacts/macos/`
+and is not
+published to schema-v2 history: adding the in-process memory sampler to the `off` lane would change
+the observer whose overhead is being measured. This fail-closed exception preserves the experiment
+without admitting memory-incomplete records.
 
 The UI runner performs the strict post-run gate and freezes its ordered evidence before summary and
 publication. For post-mortem inspection only, the run-ID-only diagnostic command shown above can
@@ -499,6 +545,25 @@ Useful flags:
 | UIdelay | App row delayed-heartbeat count/max plus coverage | Sampling signal; `-` for CLI, not an exhaustive stall count |
 | QC | `audioQC.verdict` + flags | `fail` = hard stop |
 
+### 6.2a Memory qualification contract
+
+New publishable generation benchmarks require telemetry schema v8 and benchmark-evidence manifest
+v2. For every selected generation, the exact `engine/samples-<generationID>.jsonl` sidecar must
+begin with one `start`, end with one `stop`, retain monotonic elapsed and absolute-uptime clocks,
+and contain the required preparation/model-load/session/first-output/final-WAV/terminal boundaries.
+iOS additionally requires finite headroom samples. macOS UI/XPC runs require a matching app sidecar;
+their total resident/footprint/compressed/GPU values use samples paired by absolute uptime within one
+500 ms cadence. Headless macOS CLI/profile runs remain owning-engine-process evidence. Never add
+independent process maxima.
+
+Sidecar and summary counts must agree, capture failures must be zero, and periodic sampler coverage
+must be at least 95%. Coverage from 95% to below 100%, guarded pressure, or `softTrim` produces
+`passedWithWarnings`. Coverage below 95%, critical pressure, an app memory warning/exit,
+`hardTrim`, or `fullUnload` fails publication and leaves tracked history unchanged. Manifest v2
+binds `memoryContractVersion`, the selected sidecar count/digest, each take's memory status/digest,
+and bounded start/end/delta/peak, headroom/utilization, sampler, pressure, trim, warning, and exit
+metrics. Raw samples remain untracked.
+
 ### 6.3 Decode breakdown (lazy MLX)
 
 **RTF vs decode ms:** Both now prefer `qwen_token_loop_total` for wall time when present. See
@@ -549,18 +614,20 @@ command after repairing the exporter.
 An accepted QC warning produces `passedWithWarnings` and remains visible in run/cell warning
 counts and worst-QC fields. A QC failure is never downgraded or published.
 
-Tracked benchmark kinds are `ui-generation`, `engine-generation`, `language`,
-`telemetry-overhead`, `instrument-profile`, and `prosody-calibration`. Delivery/prosody cells from
+Schema-v2 tracked benchmark kinds are `ui-generation`, `engine-generation`, `language`,
+`instrument-profile`, `memory-qualification`, and `prosody-calibration`. Schema-v1
+`telemetry-overhead` records remain readable historical evidence, but new overhead runs are local
+observer-effect diagnostics and do not publish. Delivery/prosody cells from
 `vocello bench --delivery` remain inside their parent engine-generation record. Smoke, unit tests,
 crash inspection, preflight, and standalone analysis tools do not publish benchmark records.
 
 | Kind | Publisher | Minimum publishable success |
 |---|---|---|
-| `ui-generation` | `ui_test.sh macos|ios benchmark` | XCTest, exact selected matrix/order, complete required telemetry layers, readable atomic WAVs, QC, and crash delta |
-| `engine-generation` | `vocello bench`, iOS headless bench, optional gate bench | Exact selected rows, successful finishes, readable/QC-accepted output, and command PASS |
+| `ui-generation` | `ui_test.sh macos|ios benchmark` | XCTest, exact selected matrix/order, complete required telemetry layers, memory qualification, readable atomic WAVs, QC, and crash delta |
+| `engine-generation` | `vocello bench`, iOS headless bench, optional gate bench | Exact selected rows, memory qualification, successful finishes, readable/QC-accepted output, and command PASS |
 | `language` | macOS/iOS `lang-bench` | Requested hint/output gates; hint-only is explicitly `partial` |
-| `telemetry-overhead` | `macos_test.sh telemetry-overhead` | PCM parity and overhead thresholds across all rotations |
-| `instrument-profile` | macOS/iOS profile commands | Target generation PASS, tracer success, valid trace TOC, non-empty exported performance rows, and run/generation/take/cell-correlated signposts |
+| `instrument-profile` | macOS/iOS profile commands | Memory-qualified target generation PASS, exact PID, tracer success, valid trace TOC, non-empty exported performance rows, and run/generation/take/cell-correlated signposts |
+| `memory-qualification` | macOS/iOS `memory` commands | Fixed policy topology, v8 sidecar qualification, output/QC success, and within-mode retained-footprint growth ≤5% of physical RAM |
 | `prosody-calibration` | `prosody_calibration.py` | Required corpus coverage with no analysis failure |
 
 `HISTORY.md` is a generated index grouped by kind, platform, hardware, and comparable
@@ -671,7 +738,8 @@ an automated gate and does not authorize overriding a deterministic failure or w
 | `.../engine/samples-<UUID>.jsonl` | Verbose per-sample series |
 | `QwenVoice-Debug/outputs/bench/*.wav` | Bench WAV outputs |
 | `<run-artifact-dir>/benchmark-evidence.json` | Atomic run-scoped validator selection and verdict used for publication |
-| `build/**/*.xcresult`, screenshots, `*.trace` | UI/profile evidence retained locally |
+| `build/**/*.xcresult`, screenshots | UI evidence retained locally under bounded lane retention |
+| `build/**/profiles/` | Compact local profile summaries; raw `*.trace` is success-ephemeral unless `--keep-trace` was explicit |
 
 Auto-pruned: `generations.jsonl` ~8 MB cap; verbose sidecars newest-48 / 64 MB.
 
@@ -681,8 +749,8 @@ Auto-pruned: `generations.jsonl` ~8 MB cap; verbose sidecars newest-48 / 64 MB.
 |------|------|
 | `benchmarks/runs/<kind>/<run-id>.json` | One canonical allowlisted record per successful run, ≤ 256 KB; only `annotate` may update listening review |
 | `benchmarks/HISTORY.md` | Generated registry index; never edit by hand |
-| `benchmarks/LEGACY_HISTORY.md` | Preserved incomplete manual history; never promoted to schema-v1 evidence |
-| `benchmarks/hardware-profiles.json`, `schema-v1.json` | Canonical hardware identities and portable record contract |
+| `benchmarks/LEGACY_HISTORY.md` | Preserved incomplete manual history; never promoted to complete registry evidence |
+| `benchmarks/hardware-profiles.json`, `schema-v1.json`, `schema-v2.json` | Canonical hardware identities plus compatibility/current record contracts |
 | `benchmarks/baseline-*`, `OPTIMIZATION.md` | Existing reference snapshots and historical optimization narrative |
 
 The exporter uses a strict allowlist and rejects serials/UDIDs/ECIDs, host/device/user names,

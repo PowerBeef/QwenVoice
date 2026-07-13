@@ -205,9 +205,7 @@ jobs:
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-            build/source-packages
+          path: build/cache/xcode/source-packages
           key: spm-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-xcode26-
@@ -231,14 +229,12 @@ jobs:
       - name: Resolve produced artifact paths
         id: artifacts
         run: |
-          # release.sh always names the DMG <output-name>.dmg directly
-          # under build/ (single build-dir layout). Default basename is
-          # Vocello-macos26.
+          # release.sh owns distribution outputs under build/dist/macos.
           output_name="${{ inputs.output_name }}"
           [ -z "$output_name" ] && output_name="Vocello-macos26"
-          dmg="build/${output_name}.dmg"
-          metadata="build/release-metadata.txt"
-          [ -f "$dmg" ] || { echo "missing: $dmg" >&2; ls -la build/ >&2; exit 1; }
+          dmg="build/dist/macos/${output_name}.dmg"
+          metadata="build/dist/macos/release-metadata.txt"
+          [ -f "$dmg" ] || { echo "missing: $dmg" >&2; ls -la build/dist/macos/ >&2; exit 1; }
           [ -f "$metadata" ] || { echo "missing: $metadata" >&2; exit 1; }
           echo "dmg=$dmg" >> "$GITHUB_OUTPUT"
           echo "metadata=$metadata" >> "$GITHUB_OUTPUT"
@@ -331,9 +327,7 @@ jobs:
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-            build/foundation/local-builds/ios-derived-data/SourcePackages
+          path: build/cache/xcode/source-packages
           key: spm-ios-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-ios-${{ runner.os }}-xcode26-
@@ -345,8 +339,8 @@ jobs:
         run: ./scripts/regenerate_project.sh
 
       - name: Compile iOS targets (no code signing)
-        # CODE_SIGNING_ALLOWED=NO inside the script — produces an unsigned
-        # .app under build/foundation/local-builds/.
+        # CODE_SIGNING_ALLOWED=NO inside the script. Compile products are
+        # scratch state; the failure result bundle is a bounded artifact.
         # Purely a "does this still compile" gate.
         run: ./scripts/build_foundation_targets.sh ios
 
@@ -355,7 +349,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-compile-xcresult
-          path: build/foundation/local-builds/vocello-ios-generic-build.xcresult
+          path: build/artifacts/foundation/vocello-ios-generic-build.xcresult
           if-no-files-found: warn
           retention-days: 14
 
@@ -397,9 +391,7 @@ jobs:
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-            build/ios/SourcePackages
+          path: build/cache/xcode/source-packages
           key: spm-ios-archive-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-ios-archive-${{ runner.os }}-xcode26-
@@ -408,6 +400,20 @@ jobs:
         env:
           QWENVOICE_DEVELOPMENT_TEAM: ${{ secrets.QWENVOICE_DEVELOPMENT_TEAM }}
         run: ./scripts/regenerate_project.sh
+
+      - name: Resolve SwiftPM dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p build/cache/xcode/source-packages build/scratch/derived-data/ci/ios-archive build/dist/ios
+          xcodebuild -resolvePackageDependencies \
+            -project QwenVoice.xcodeproj \
+            -scheme VocelloiOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+            -derivedDataPath build/scratch/derived-data/ci/ios-archive \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile
 
       - name: Import signing assets
         env:
@@ -462,13 +468,21 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild archive \
+            -project QwenVoice.xcodeproj \
             -scheme VocelloiOS \
+            -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath build/ios/Vocello.xcarchive \
+            -derivedDataPath build/scratch/derived-data/ci/ios-archive \
+            -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -archivePath build/dist/ios/Vocello.xcarchive \
             -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_API_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_API_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
             -allowProvisioningUpdates \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             DEVELOPMENT_TEAM="$QWENVOICE_DEVELOPMENT_TEAM" \
             QVOICE_IOS_APP_ENTITLEMENTS="$QVOICE_IOS_APP_ENTITLEMENTS" | xcbeautify
 
@@ -481,7 +495,7 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/check_ios_catalog.sh
-          APP=$(find build/ios/Vocello.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d | head -1)
+          APP=$(find build/dist/ios/Vocello.xcarchive/Products/Applications -maxdepth 1 -name '*.app' -type d | head -1)
           codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.developer.kernel.increased-memory-limit" \
             && echo "increased-memory-limit entitlement present" \
             || { echo "::error::archived app missing increased-memory-limit entitlement"; exit 1; }
@@ -499,9 +513,9 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -exportArchive \
-            -archivePath build/ios/Vocello.xcarchive \
+            -archivePath build/dist/ios/Vocello.xcarchive \
             -exportOptionsPlist ExportOptions-appstore.plist \
-            -exportPath build/ios/export \
+            -exportPath build/dist/ios/export \
             -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_API_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_API_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_API_ISSUER_ID" \
@@ -511,7 +525,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vocello-ios-ipa
-          path: build/ios/export/*.ipa
+          path: build/dist/ios/export/*.ipa
           if-no-files-found: error
           retention-days: 14
 
@@ -522,6 +536,6 @@ jobs:
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
-          IPA=$(ls build/ios/export/*.ipa | head -1)
+          IPA=$(ls build/dist/ios/export/*.ipa | head -1)
           xcrun altool --upload-app -f "$IPA" -t ios \
             --apiKey "$ASC_API_KEY_ID" --apiIssuer "$ASC_API_ISSUER_ID"

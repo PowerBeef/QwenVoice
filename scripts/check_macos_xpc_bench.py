@@ -12,6 +12,16 @@ from pathlib import Path
 import sys
 import tempfile
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from benchmark_memory import (  # noqa: E402
+    MemoryEvidenceError,
+    REQUIRED_TELEMETRY_SCHEMA,
+    qualify_memory_rows,
+)
+
 DEFAULT_MODES = ["custom", "design", "clone"]
 DEFAULT_LENGTHS = ["short", "medium", "long"]
 DEFAULT_WARM = 3
@@ -203,6 +213,23 @@ def validate_v7_frontend(row: dict) -> list[str]:
         return [f"generation {generation} has incomplete typed frontend lifecycle/playback metrics"]
     if frontend["playbackChunksReceived"] <= 0 or frontend["playbackStartBufferedChunks"] <= 0:
         return [f"generation {generation} has invalid frontend playback health"]
+    if row.get("schemaVersion", 0) >= 8:
+        for key in ("delayedHeartbeatCount250", "maximumDelayedHeartbeatMS"):
+            if not _number(frontend.get(key)) or frontend[key] < 0:
+                return [f"generation {generation} has incomplete schema-v8 frontend metrics"]
+        source = frontend.get("playbackStartSource")
+        if source not in {"liveStream", "finalFile"}:
+            return [f"generation {generation} has invalid playback start source"]
+        if frontend["playbackStartBufferedAudioMS"] <= 0:
+            return [f"generation {generation} has invalid playback start buffer duration"]
+        if source == "finalFile" and frontend["playbackStartBufferedChunks"] != 1:
+            return [f"generation {generation} has invalid final-file playback buffer semantics"]
+        first = frontend["submitToFirstChunkMS"]
+        scheduled = frontend["submitToPlaybackScheduledMS"]
+        completed = frontend["submitToCompletedMS"]
+        delta = frontend["firstChunkToPlaybackScheduledMS"]
+        if not first <= scheduled <= completed or abs((scheduled - first) - delta) > 2:
+            return [f"generation {generation} has inconsistent frontend lifecycle ordering"]
     return []
 
 
@@ -282,6 +309,65 @@ def validate_merged(
             if nested_id != gid:
                 failures.append(
                     f"merged generation {gid!r} {key}.generationID={nested_id!r} does not match"
+                )
+    return failures
+
+
+def validate_process_ownership(
+    engine_rows: list[dict],
+    service_rows: list[dict],
+    app_rows: list[dict],
+    merged_rows: list[dict],
+    expected_ids: list[str],
+) -> list[str]:
+    """Prove that app and XPC memory evidence came from the expected processes."""
+    failures: list[str] = []
+
+    def indexed(rows: list[dict]) -> dict[str, dict]:
+        return {
+            row["generationID"]: row
+            for row in rows
+            if isinstance(row.get("generationID"), str)
+        }
+
+    def pid(row: dict | None, location: str) -> int | None:
+        value = row.get("processIdentifier") if isinstance(row, dict) else None
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            failures.append(f"{location} has invalid processIdentifier={value!r}")
+            return None
+        return value
+
+    engine_by_id = indexed(engine_rows)
+    service_by_id = indexed(service_rows)
+    app_by_id = indexed(app_rows)
+    merged_by_id = indexed(merged_rows)
+    for generation_id in expected_ids:
+        engine_pid = pid(engine_by_id.get(generation_id), f"engine generation {generation_id}")
+        service_pid = pid(
+            service_by_id.get(generation_id), f"engine-service generation {generation_id}"
+        )
+        app_pid = pid(app_by_id.get(generation_id), f"app generation {generation_id}")
+        if engine_pid is not None and service_pid is not None and engine_pid != service_pid:
+            failures.append(
+                f"generation {generation_id} engine PID {engine_pid} != engine-service PID {service_pid}"
+            )
+        if engine_pid is not None and app_pid is not None and engine_pid == app_pid:
+            failures.append(
+                f"generation {generation_id} app and engine unexpectedly share PID {engine_pid}"
+            )
+
+        merged = merged_by_id.get(generation_id)
+        for key, expected_pid in (
+            ("engine", engine_pid), ("engineService", service_pid), ("app", app_pid)
+        ):
+            nested_pid = pid(
+                merged.get(key) if isinstance(merged, dict) else None,
+                f"merged generation {generation_id} {key}",
+            )
+            if expected_pid is not None and nested_pid is not None and nested_pid != expected_pid:
+                failures.append(
+                    f"merged generation {generation_id} {key} PID {nested_pid} "
+                    f"!= layer PID {expected_pid}"
                 )
     return failures
 
@@ -402,6 +488,7 @@ def tracked_metrics(engine: dict, service: dict, app: dict) -> dict[str, float |
 
 
 def build_manifest(
+    diagnostics: Path,
     run_id: str,
     label: str,
     modes: list[str],
@@ -413,6 +500,15 @@ def build_manifest(
     app_rows: list[dict],
     merged_rows: list[dict],
 ) -> dict:
+    memory_evidence, memory_run = qualify_memory_rows(
+        rows=engine_rows,
+        diagnostics=diagnostics,
+        platform="macos",
+        app_rows=app_rows,
+        require_app_layer=True,
+    )
+    memory_by_id = {item.generation_id: item for item in memory_evidence}
+    app_by_id = {row.get("generationID"): row for row in app_rows}
     takes = []
     warning_count = 0
     for index, (row, cell) in enumerate(zip(engine_rows, cells, strict=True), start=1):
@@ -420,7 +516,9 @@ def build_manifest(
         state, repetition = state_repetition.split("#")
         output = row.get("outputMetrics") or {}
         qc = row.get("audioQC") or output.get("audioQC") or {}
-        if qc.get("verdict") == "warn":
+        memory = memory_by_id[row["generationID"]]
+        frontend = (app_by_id.get(row["generationID"]) or {}).get("frontendMetrics") or {}
+        if qc.get("verdict") == "warn" or memory.warnings:
             warning_count += 1
         completeness = {"engine": True, "engineService": True, "app": True, "merged": True}
         takes.append({
@@ -431,8 +529,9 @@ def build_manifest(
             "length": length,
             "warmState": state,
             "repetition": int(repetition),
-            "status": "passedWithWarnings" if qc.get("verdict") == "warn" else "pass",
+            "status": "passedWithWarnings" if qc.get("verdict") == "warn" or memory.warnings else "pass",
             "finishReason": row.get("finishReason"),
+            "playbackStartSource": frontend.get("playbackStartSource"),
             "readableWAV": True,
             "atomicPublish": True,
             "outputDurationSeconds": output.get("durationSeconds"),
@@ -455,6 +554,7 @@ def build_manifest(
         "engineService": service_rows,
         "app": app_rows,
         "merged": merged_rows,
+        "sampleSidecars": memory_run["digestPayload"],
     }
     raw_telemetry_digest = hashlib.sha256(
         json.dumps(
@@ -478,15 +578,16 @@ def build_manifest(
     )
     history_takes = []
     service_by_id = {row.get("generationID"): row for row in service_rows}
-    app_by_id = {row.get("generationID"): row for row in app_rows}
     for take, row in zip(takes, engine_rows, strict=True):
         generation_id = take["generationID"]
         model_identity = row.get("modelRuntimeIdentity") or {}
+        memory = memory_by_id[generation_id]
         metrics = tracked_metrics(
             row,
             service_by_id.get(generation_id) or {},
             app_by_id.get(generation_id) or {},
         )
+        metrics.update(memory.metrics)
         qc = take["audioQC"]
         raw_qc = row.get("audioQC") or (row.get("outputMetrics") or {}).get("audioQC") or {}
         qc_metrics = {}
@@ -500,6 +601,9 @@ def build_manifest(
             value = raw_qc.get(source)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 qc_metrics[destination] = value
+        take_warnings = sorted(set(
+            (qc["flags"] if qc["verdict"] == "warn" else []) + list(memory.warnings)
+        ))
         history_takes.append({
             "takeIndex": take["takeIndex"],
             "generationID": take["generationID"],
@@ -517,7 +621,10 @@ def build_manifest(
             "warmState": take["warmState"],
             "length": take["length"],
             "finishReason": "completed",
-            "status": "passedWithWarnings" if qc["verdict"] == "warn" else "passed",
+            "playbackStartSource": (
+                (app_by_id.get(generation_id) or {}).get("frontendMetrics") or {}
+            ).get("playbackStartSource"),
+            "status": "passedWithWarnings" if take_warnings else "passed",
             "layerCompleteness": "complete",
             "layers": ["engine", "engine-service", "app", "merged"],
             "metrics": metrics,
@@ -535,7 +642,9 @@ def build_manifest(
                 "metrics": qc_metrics,
             },
             "thermalState": ((row.get("summary") or {}).get("thermalState") or {}).get("worst", "unknown"),
-            "warnings": qc["flags"] if qc["verdict"] == "warn" else [],
+            "warnings": take_warnings,
+            "memoryStatus": memory.status,
+            "sampleSidecarDigest": memory.sidecar_digest,
         })
     history_record = {
         "run": {
@@ -547,7 +656,7 @@ def build_manifest(
             "matrixScope": scope,
             "startedAt": started_at,
             "finishedAt": finished_at,
-            "warnings": [],
+            "warnings": memory_run["warnings"],
         },
         "hardware": hardware,
         "toolchain": {"optimization": "-O"},
@@ -561,11 +670,15 @@ def build_manifest(
             "rawTelemetryDigest": raw_telemetry_digest,
             "telemetrySchemaVersion": telemetry_schema,
             "qcAlgorithmVersion": qc_algorithm,
+            "memoryContractVersion": memory_run["memoryContractVersion"],
+            "memoryQualified": memory_run["memoryQualified"],
+            "sampleSidecarCount": memory_run["sampleSidecarCount"],
+            "sampleSidecarsDigest": memory_run["sampleSidecarsDigest"],
         },
         "takes": history_takes,
     }
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "benchmarkKind": "ui-generation",
         "platform": "macos",
         "runID": run_id,
@@ -678,6 +791,11 @@ def main() -> int:
     failures.extend(validate_layer("engine-service", service_rows, valid_engine_ids, expected))
     failures.extend(validate_layer("app", app_rows, valid_engine_ids, expected))
     failures.extend(validate_merged(merged_rows, valid_engine_ids, expected))
+    failures.extend(
+        validate_process_ownership(
+            engine_rows, service_rows, app_rows, merged_rows, valid_engine_ids
+        )
+    )
 
     actual_cells: list[str] = []
     actual_indices: list[int] = []
@@ -732,6 +850,11 @@ def main() -> int:
                 failures.append(f"generation {row.get('generationID', '?')} has no privacy-safe prompt digest")
             if row.get("mode") in {"design", "clone"} and not is_digest(identity.get("fixtureDigest")):
                 failures.append(f"generation {row.get('generationID', '?')} has no exact fixture digest")
+        if row.get("schemaVersion", 0) < REQUIRED_TELEMETRY_SCHEMA:
+            failures.append(
+                f"generation {row.get('generationID', '?')} requires telemetry schema "
+                f"v{REQUIRED_TELEMETRY_SCHEMA} or newer for memory qualification"
+            )
 
     if actual_cells != expected_cell_order:
         failures.append(f"benchmark cell order differs: actual={actual_cells} expected={expected_cell_order}")
@@ -772,6 +895,11 @@ def main() -> int:
         if row.get("schemaVersion", 0) < 7:
             continue
         failures.extend(validate_v7_frontend(row))
+        if row.get("schemaVersion", 0) < REQUIRED_TELEMETRY_SCHEMA:
+            failures.append(
+                f"app generation {row.get('generationID', '?')} requires telemetry schema "
+                f"v{REQUIRED_TELEMETRY_SCHEMA} or newer for memory qualification"
+            )
     for engine_row in engine_rows:
         gid = engine_row.get("generationID")
         device = (engine_row.get("notes") or {}).get("deviceClass") or ""
@@ -790,6 +918,18 @@ def main() -> int:
                 f"delayedHeartbeatCount50 {stalls} > {args.max_delayed_heartbeats_50} (generation {gid})"
             )
 
+    if not failures:
+        try:
+            qualify_memory_rows(
+                rows=engine_rows,
+                diagnostics=args.diag_dir,
+                platform="macos",
+                app_rows=app_rows,
+                require_app_layer=True,
+            )
+        except MemoryEvidenceError as error:
+            failures.append(str(error))
+
     print(
         f"XPC bench gate: expected={expected} engine={len(engine_rows)} "
         f"service={len(service_rows)} app={len(app_rows)} merged={len(merged_rows)}"
@@ -802,6 +942,7 @@ def main() -> int:
 
     if args.evidence_manifest:
         manifest = build_manifest(
+            args.diag_dir,
             args.run_id,
             args.label,
             modes,

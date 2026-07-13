@@ -27,6 +27,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from build_output_policy import load_policy
 from prosody_profile import builtin_profile, save_profile, SCHEMA_VERSION
 
 
@@ -210,7 +211,13 @@ def main():
     )
     root = Path(__file__).resolve().parents[1]
     test_history_disabled = os.environ.get("QVOICE_BENCHMARK_HISTORY_TEST_DISABLE") == "1"
-    artifact_dir = root / "build" / "prosody-calibration" / run_id
+    output_policy = load_policy(root)
+    artifact_dir = (
+        root
+        / output_policy.entries_by_id["artifacts-macos"]["path"]
+        / "prosody-calibration"
+        / run_id
+    )
     snapshot = artifact_dir / "benchmark-source.json"
     if not test_history_disabled:
         artifact_dir.mkdir(parents=True, exist_ok=False)

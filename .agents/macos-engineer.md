@@ -37,17 +37,22 @@ Before changing macOS app or XPC code, read:
 
 - **Shell tool / scripts** (the source of truth for the local loop):
   - `./scripts/build.sh build|run|cli`
-  - `scripts/macos_test.sh test|gate|crashes|debug|logs|profile`
+  - `scripts/macos_test.sh test|gate|crashes|debug|logs`
+  - `scripts/macos_test.sh profile [--kind cpu|memory] [--keep-trace] [spec]`
+  - `scripts/macos_test.sh memory [--label ID]` (fixed retained-memory qualification)
   - `scripts/macos_test.sh models check|ensure|install`
   - `scripts/ui_test.sh macos smoke|benchmark`
   - `./scripts/regenerate_project.sh` after `project.yml` changes
-- Use OpenAI Build macOS Apps skills for SwiftUI/AppKit structure, build/run/debug, test triage,
-  telemetry, signing, and packaging after reading the selected skill. Shell scripts remain the
-  source of truth for gates.
-- Build iOS Apps supplies the one shared XcodeBuildMCP server. Build macOS Apps may consume it for
-  optional macOS project discovery, build, run, and debug operations: call
+- When currently installed and callable, use OpenAI Build macOS Apps skills for SwiftUI/AppKit
+  structure, build/run/debug, test triage, telemetry, signing, and packaging after reading the
+  selected skill. Shell scripts remain the source of truth for gates.
+- When the shared XcodeBuildMCP route is available, Build iOS Apps owns it and Build macOS Apps may
+  consume it for optional macOS project discovery, build, run, and debug operations: call
   `session_show_defaults`, select the `macos` profile, and return to repository scripts for final
-  verification. Never configure a second XcodeBuildMCP server.
+  verification. Unavailability is not permission to configure a second XcodeBuildMCP server.
+- Generated output must use `config/build-output-policy.json`. Do not add a macOS DerivedData,
+  package, evidence, symbol, or distribution root outside the manifest; route policy changes
+  through `.agents/release-qa-engineer.md`.
 - Use authoritative Apple documentation where current framework behavior matters and the GitHub
   integration for repository/CI context.
 - XCUITest is the sole autonomous macOS app UI driver. Run the smoke and benchmark lanes
@@ -98,6 +103,9 @@ scripts/macos_test.sh gate            # deterministic macOS platform gate
   behavior.
 - **App sandbox disabled.** `Sources/QwenVoice.entitlements` keeps sandbox off for MLX; do not
   re-enable it.
+- **Do not sum unrelated memory peaks.** New memory-qualified macOS benchmark evidence pairs app
+  and engine samples by absolute uptime within one 500 ms cadence. Independent per-process maxima
+  are useful layer diagnostics but are not a valid total system peak.
 
 ## Common mistakes
 

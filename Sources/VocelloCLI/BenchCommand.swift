@@ -47,7 +47,21 @@ enum BenchCommand {
         let seed: UInt64?
         let streaming: Bool
         let fixtureDigests: [String: String]
+        let memoryQualification: BenchMemoryQualification?
         let takes: [BenchTakeResult]
+    }
+
+    /// Declares the exact retained-memory protocol selected by the caller. The
+    /// Python validator still computes and gates the evidence from raw v8
+    /// sidecars; this declaration prevents an ordinary benchmark matrix from
+    /// being mislabeled as a memory qualification after generation.
+    private struct BenchMemoryQualification: Codable {
+        let policyID: String
+        let modeOrder: [String]
+        let variant: String
+        let length: String
+        let warmRepetitions: Int
+        let expectedTakeCount: Int
     }
 
     /// Fixed corpus — shared with macOS XPC UI bench via `BenchMatrixSpec`.
@@ -141,11 +155,21 @@ enum BenchCommand {
         let noSummary = args.flag("no-summary")
         let label = try validatedBenchmarkLabel(args.string("label"))
 
-        // Telemetry: default lightweight; verbose adds sidecars; off skips JSONL/sampler
-        // while still writing WAV outputs (engine-only baseline runs).
-        let telemetryRaw = (args.string("telemetry") ?? "lightweight").lowercased()
+        // Published schema-v2 benchmarks require the exact raw sampler sidecars.
+        // `--no-summary` diagnostic parents may still choose lightweight; a normal
+        // history-producing run defaults to verbose and rejects incomplete capture
+        // before model work begins.
+        let telemetryRaw = (args.string("telemetry") ?? "verbose").lowercased()
+        guard ["off", "lightweight", "verbose"].contains(telemetryRaw) else {
+            throw CLIError("--telemetry must be off, lightweight, or verbose")
+        }
         let telemetryOff = telemetryRaw == "off"
         let telemetryVerbose = telemetryRaw == "verbose"
+        guard telemetryOff || telemetryVerbose || noSummary else {
+            throw CLIError(
+                "history-producing benchmarks require --telemetry verbose for schema-v2 memory evidence"
+            )
+        }
         if telemetryOff {
             setenv("QWENVOICE_NATIVE_TELEMETRY_MODE", "off", 1)
         } else {
@@ -173,7 +197,15 @@ enum BenchCommand {
             note("forcing memory class: \(canonical)")
         }
 
-        let warm = max(1, Int(args.string("warm") ?? "3") ?? 3)
+        let warm: Int
+        if let rawWarm = args.string("warm") {
+            guard let parsedWarm = Int(rawWarm), parsedWarm >= 0 else {
+                throw CLIError("--warm must be a non-negative whole number")
+            }
+            warm = parsedWarm
+        } else {
+            warm = 3
+        }
         let designBrief = args.string("voice-brief") ?? defaultDesignBrief
         let cloneVoiceName = args.string("voice") ?? defaultCloneVoice
         let ttfc = args.flag("ttfc")
@@ -189,7 +221,25 @@ enum BenchCommand {
         } else {
             deliveryItems = []
         }
+        if warm == 0, modes.contains("clone") {
+            throw CLIError("--warm 0 cannot be used with Clone because Clone has no separate cold cell")
+        }
+        if warm == 0, !deliveryItems.isEmpty {
+            throw CLIError("--warm 0 cannot be used with --delivery because delivery analysis requires a neutral warm cell")
+        }
         let prosodyProfilePath = args.string("prosody-profile")
+        let memoryQualification = try memoryQualificationDeclaration(
+            rawPolicy: args.string("memory-qualification"),
+            wasBareFlag: args.flag("memory-qualification"),
+            modes: modes,
+            variants: variants,
+            lengths: lengths,
+            warm: warm,
+            seed: seed,
+            telemetryVerbose: telemetryVerbose,
+            noStream: noStream,
+            hasDeliveryCells: !deliveryItems.isEmpty
+        )
 
         let dataDir = CLIPaths.dataDirectory(override: args.string("data-dir"))
         if telemetryOff, args.string("data-dir") == nil,
@@ -292,13 +342,21 @@ enum BenchCommand {
                     let t = try requiredText(for: len)
                     for n in 0..<warm {
                         total += 1
-                        let cell = "\(mode.rawValue)/\(variantStr.lowercased())/\(len)/warm#\(n)"
+                        let repetition = memoryQualification == nil ? "warm#\(n)" : "retained#\(n)"
+                        let cell = "\(mode.rawValue)/\(variantStr.lowercased())/\(len)/\(repetition)"
+                        // Clone has no separate cold sample. The first retained take follows the
+                        // forced unload above, so stamp the observed lifecycle truth instead of
+                        // calling that model-loading take warm. The retained cell name remains
+                        // stable because it identifies the qualification sequence, not cache state.
+                        let retainedWarmState = memoryQualification != nil && mode == .clone && n == 0
+                            ? "cold"
+                            : "warm"
                         BenchRunContext.writeCurrentTakeFile(
-                            takeIndex: total, cell: cell, intendedWarmState: "warm"
+                            takeIndex: total, cell: cell, intendedWarmState: retainedWarmState
                         )
                         takeResults.append(try await take(
                             runtime, mode: mode, modelID: modelID, payload: payload,
-                            len: len, text: t, state: "warm", n: n, outDir: outDir,
+                            len: len, text: t, state: retainedWarmState, n: n, outDir: outDir,
                             takeIndex: total, cell: cell, shouldStream: !noStream, seed: seed
                         ))
                     }
@@ -346,6 +404,7 @@ enum BenchCommand {
                 seed: seed,
                 streaming: !noStream,
                 fixtureDigests: fixtureDigests,
+                memoryQualification: memoryQualification,
                 takes: takeResults
             ),
             artifactDirectory: historyArtifactDir
@@ -420,7 +479,10 @@ enum BenchCommand {
                 diagnostics: diagDir,
                 outputs: outDir,
                 runID: runID,
-                label: label
+                label: label,
+                publisherSubcommand: memoryQualification == nil
+                    ? "engine"
+                    : "memory-qualification"
             )
             try runSummarizer(
                 script: summarizerScript,
@@ -651,12 +713,13 @@ enum BenchCommand {
         diagnostics: URL,
         outputs: URL,
         runID: String,
-        label: String
+        label: String,
+        publisherSubcommand: String
     ) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         var arguments = [
-            "python3", publisher.path, "engine",
+            "python3", publisher.path, publisherSubcommand,
             "--artifact-dir", artifactDirectory.path,
             "--snapshot", artifactDirectory.appendingPathComponent("benchmark-source.json").path,
             "--platform", "macos",
@@ -783,6 +846,51 @@ enum BenchCommand {
         return raw
     }
 
+    private static func memoryQualificationDeclaration(
+        rawPolicy: String?,
+        wasBareFlag: Bool,
+        modes: [String],
+        variants: [String],
+        lengths: [String],
+        warm: Int,
+        seed: UInt64?,
+        telemetryVerbose: Bool,
+        noStream: Bool,
+        hasDeliveryCells: Bool
+    ) throws -> BenchMemoryQualification? {
+        if wasBareFlag {
+            throw CLIError("--memory-qualification requires retained-memory-v1")
+        }
+        guard let rawPolicy else { return nil }
+        guard rawPolicy == "retained-memory-v1" else {
+            throw CLIError("unsupported --memory-qualification policy '\(rawPolicy)' (use retained-memory-v1)")
+        }
+        guard modes == ["custom", "design", "clone"],
+              variants == ["speed"],
+              lengths == ["medium"],
+              warm == 3,
+              seed == 19_790_615,
+              telemetryVerbose,
+              !noStream,
+              !hasDeliveryCells else {
+            throw CLIError(
+                "retained-memory-v1 requires --modes custom,design,clone "
+                + "--variants speed --lengths medium --warm 3 --telemetry verbose "
+                + "--seed 19790615 with streaming enabled and no delivery cells"
+            )
+        }
+        return BenchMemoryQualification(
+            policyID: rawPolicy,
+            modeOrder: modes,
+            variant: "speed",
+            length: "medium",
+            warmRepetitions: warm,
+            // Custom and Design each contribute one cold take plus three warm
+            // takes; Clone is warm-only by product contract.
+            expectedTakeCount: 11
+        )
+    }
+
     /// Debug-isolated Application Support folder (models + diagnostics) without
     /// lighting TelemetryGate via `QWENVOICE_DEBUG`.
     private static func defaultDebugDataDir() -> URL {
@@ -904,8 +1012,9 @@ enum BenchCommand {
                         [--lengths short,medium,long] [--warm 3] [options]
 
         Per cell: 1 cold (medium) for Custom/Design + N warm per length; Voice
-        Cloning is warm-only. Telemetry defaults to lightweight (JSONL + sampler);
-        use --telemetry off for engine-only WAV runs without instrumentation.
+        Cloning is warm-only. Telemetry defaults to verbose so schema-v2 history
+        can bind exact raw memory sidecars; use --telemetry off for engine-only
+        WAV runs without instrumentation.
         Raw telemetry lands in <data>/diagnostics; each run's immutable manifest
         and publication evidence land in diagnostics/benchmark-runs/<runID>.
         Repository summary/history tools run unless telemetry is off or the CLI is
@@ -923,7 +1032,9 @@ enum BenchCommand {
           --variants     strict comma list: speed,quality (default both)
           --lengths      strict comma list: short,medium,long (default all)
                          Empty, unknown, and duplicate axis values fail.
-          --warm         warm reps per (cell × length); default 3
+          --warm         warm reps per (cell × length); default 3. Zero is
+                         allowed for a Custom/Design cold-only diagnostic;
+                         Clone and --delivery require at least one warm take.
           --voice        (clone) saved voice name; default \(defaultCloneVoice)
           --voice-brief  (design) brief; default the standard narrator brief
           --delivery [list]  add instruct-bearing cells (Custom/Design, warm, medium
@@ -943,7 +1054,10 @@ enum BenchCommand {
                          (default: built-in profile)
           --label <id>   opaque 1-96 character run label using letters, digits, ._- only
           --force-class  run a constrained tier on any Mac: 8gb|16gb|high|iphone
-          --telemetry    off | lightweight (default) | verbose (raw per-sample sidecars)
+          --telemetry    off | lightweight | verbose (default; raw memory sidecars)
+          --memory-qualification retained-memory-v1
+                         require the fixed 11-take Custom → Design → Clone Speed
+                         retained-memory protocol and strict verbose evidence
           --seed         deterministic sampling seed applied to every take
           --no-stream    accumulate the full result before decoding (old bench behavior)
           --ttfc         add an engine first-chunk-latency probe per cell (warm

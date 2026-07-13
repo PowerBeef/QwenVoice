@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import plistlib
 from types import SimpleNamespace
 import sys
 import tempfile
@@ -19,6 +20,15 @@ assert SPEC and SPEC.loader
 publisher = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = publisher
 SPEC.loader.exec_module(publisher)
+
+TEST_HELPERS = SCRIPT.parent / "tests"
+if str(TEST_HELPERS) not in sys.path:
+    sys.path.insert(0, str(TEST_HELPERS))
+from test_benchmark_memory import (  # noqa: E402
+    ENGINE_BOUNDARIES,
+    row as memory_row,
+    samples as memory_samples,
+)
 
 
 def source_fixture() -> dict:
@@ -110,6 +120,21 @@ def app_row(generation_id: str, *, run_id: str = "lang-ios", cell: str = "fr") -
         "timingsMS": {"submitToCompletedMS": 100},
         "frontendMetrics": {"submitToCompletedMS": 100},
     }
+
+
+def ios_benchmark_app_row(
+    generation_id: str,
+    *,
+    run_id: str,
+    cell: str,
+    take_index: int = 1,
+    mode: str = "custom",
+) -> dict:
+    row = app_row(generation_id, run_id=run_id, cell=cell)
+    row["schemaVersion"] = 8
+    row["mode"] = mode
+    row["notes"]["benchTakeIndex"] = str(take_index)
+    return row
 
 
 def successful_asr_verification(
@@ -252,6 +277,56 @@ def language_sentinel(
     }
 
 
+def qualified_memory_fixture(generation_ids: list[str]) -> tuple[list[SimpleNamespace], dict]:
+    qualified = [
+        SimpleNamespace(
+            generation_id=generation_id,
+            metrics={"peakPhysicalFootprintMB": 100.0},
+            sidecar_digest=(f"{index:x}" * 64)[:64],
+            status="qualified",
+            warnings=(),
+        )
+        for index, generation_id in enumerate(generation_ids, start=1)
+    ]
+    payload = [
+        {
+            "generationID": item.generation_id,
+            "digest": item.sidecar_digest,
+            "layers": {"engine": item.sidecar_digest},
+        }
+        for item in qualified
+    ]
+    return qualified, {
+        "memoryContractVersion": 1,
+        "memoryQualified": True,
+        "sampleSidecarCount": len(qualified),
+        "sampleSidecarsDigest": "e" * 64,
+        "status": "qualified",
+        "warnings": [],
+        "digestPayload": payload,
+    }
+
+
+def upgrade_language_memory_row(row: dict, diagnostics: Path, *, ios: bool) -> None:
+    sidecar = memory_samples(
+        role="engine", boundaries=ENGINE_BOUNDARIES, ios=ios, footprint=3000 if ios else 2500
+    )
+    memory = memory_row(row["generationID"], sidecar, layer="engine", ios=ios)
+    row["schemaVersion"] = 8
+    row["summary"] = memory["summary"]
+    row["memoryMetrics"] = memory["memoryMetrics"]
+    row["backendMetrics"] = {
+        **row.get("backendMetrics", {}),
+        "stages": [],
+    }
+    directory = diagnostics / "engine"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"samples-{row['generationID']}.jsonl").write_text(
+        "".join(json.dumps(sample, sort_keys=True) + "\n" for sample in sidecar),
+        encoding="utf-8",
+    )
+
+
 class PublisherTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -299,7 +374,7 @@ class PublisherTests(unittest.TestCase):
             "label": "fixture",
             "startedAt": "2026-07-12T12:00:00Z",
             "finishedAt": "2026-07-12T12:01:00Z",
-            "telemetryMode": "lightweight",
+            "telemetryMode": "verbose",
             "seed": 42,
             "streaming": True,
             "fixtureDigests": {},
@@ -328,6 +403,18 @@ class PublisherTests(unittest.TestCase):
         captured, write_patch = self.capture_manifest()
         with (
             mock.patch.object(publisher, "load_engine_rows", return_value=unrelated + [selected]),
+            mock.patch.object(
+                publisher,
+                "qualify_memory_rows",
+                return_value=([SimpleNamespace(
+                    generation_id="selected", metrics={}, sidecar_digest="f" * 64,
+                    status="qualified", warnings=(),
+                )], {
+                    "memoryContractVersion": 1, "memoryQualified": True,
+                    "sampleSidecarCount": 1, "sampleSidecarsDigest": "e" * 64,
+                    "digestPayload": [{"generationID": "selected", "digest": "f" * 64}],
+                }),
+            ),
             mock.patch.object(publisher, "source_from_snapshot", return_value=source_fixture()),
             mock.patch.object(publisher, "crash_delta_from_snapshot", return_value={"passed": True, "count": 0}),
             self.hardware_patch(),
@@ -343,6 +430,124 @@ class PublisherTests(unittest.TestCase):
         )
         self.assertEqual(record["toolchain"]["optimization"], "-Onone")
         self.assertEqual(record["evidence"]["actualTakeCount"], 1)
+
+    def test_ios_app_correlation_is_exact_completed_and_engine_memory_owned(self) -> None:
+        generation_id = "ios-correlation-generation"
+        run_id = "ios-correlation-run"
+        cell = "custom/speed/device"
+        engine = engine_row(generation_id, run_id=run_id, cell=cell)
+        engine["schemaVersion"] = 8
+        take = {
+            "generationID": generation_id,
+            "cell": cell,
+            "mode": "custom",
+        }
+        app = ios_benchmark_app_row(
+            generation_id, run_id=run_id, cell=cell
+        )
+        with mock.patch.object(publisher, "load_app_rows", return_value=[app]):
+            selected = publisher.correlated_ios_app_rows(
+                diagnostics=self.root,
+                engine_rows=[engine],
+                takes=[take],
+                run_id=run_id,
+            )
+        self.assertEqual(selected, [app])
+
+        cases = {
+            "missing": [],
+            "duplicate": [app, copy.deepcopy(app)],
+            "wrong-take": [{
+                **app,
+                "notes": {**app["notes"], "benchTakeIndex": "2"},
+            }],
+            "failed": [{**app, "finishReason": "failed"}],
+            "frontend-incomplete": [{**app, "frontendMetrics": {}}],
+            "app-memory-owner": [{
+                **app,
+                "summary": {"physFootprintPeakMB": 1.0},
+            }],
+        }
+        for name, rows in cases.items():
+            with (
+                self.subTest(name=name),
+                mock.patch.object(publisher, "load_app_rows", return_value=rows),
+                self.assertRaises(publisher.PublicationError),
+            ):
+                publisher.correlated_ios_app_rows(
+                    diagnostics=self.root,
+                    engine_rows=[engine],
+                    takes=[take],
+                    run_id=run_id,
+                )
+
+    def test_ios_headless_binds_app_row_into_layers_and_evidence_digest(self) -> None:
+        run_id = "ios-headless-run"
+        generation_id = "ios-headless-generation"
+        cell = "custom/speed/device"
+        sentinel_path = self.root / "device-diagnostics-done.json"
+        sentinel_path.write_text(json.dumps({
+            "schemaVersion": 2,
+            "runID": run_id,
+            "generationID": generation_id,
+            "status": "ok",
+            "mode": "custom",
+            "variant": "speed",
+            "startedAt": "2026-07-13T07:00:00Z",
+            "finishedAt": "2026-07-13T07:00:05Z",
+            "wallSeconds": 5.0,
+            "durationSeconds": 2.0,
+            "deviceModel": "iPhone",
+            "systemName": "iOS",
+            "systemVersion": "26.5",
+        }), encoding="utf-8")
+        engine = engine_row(generation_id, run_id=run_id, cell=cell)
+        engine["schemaVersion"] = 8
+        app = ios_benchmark_app_row(
+            generation_id, run_id=run_id, cell=cell
+        )
+        qualified_memory, memory_run = qualified_memory_fixture([generation_id])
+        args = SimpleNamespace(
+            sentinel=sentinel_path,
+            run_id=run_id,
+            diagnostics=self.root / "diagnostics",
+            artifact_dir=self.root,
+            snapshot=self.root / "snapshot.json",
+            crash_diagnostics=self.root / "crashes",
+            label="ios-headless",
+            defer_record=True,
+        )
+        captured, write_patch = self.capture_manifest()
+        with (
+            mock.patch.object(publisher, "load_engine_rows", return_value=[engine]),
+            mock.patch.object(publisher, "load_app_rows", return_value=[app]),
+            mock.patch.object(
+                publisher,
+                "qualify_memory_rows",
+                return_value=(qualified_memory, memory_run),
+            ),
+            mock.patch.object(publisher, "source_from_snapshot", return_value=source_fixture()),
+            mock.patch.object(
+                publisher,
+                "crash_delta_from_snapshot",
+                return_value={"passed": True, "count": 0},
+            ),
+            self.hardware_patch(),
+            write_patch,
+        ):
+            publisher.ios_engine_command(args)
+
+        record = captured["manifest"]["historyRecord"]
+        self.assertEqual(record["takes"][0]["layers"], ["engine", "app"])
+        self.assertEqual(record["evidence"]["sampleSidecarCount"], 1)
+        self.assertEqual(
+            record["evidence"]["rawTelemetryDigest"],
+            publisher.digest_bytes(publisher.canonical_bytes({
+                "telemetry": [engine],
+                "appTelemetry": [app],
+                "sampleSidecars": memory_run["digestPayload"],
+            })),
+        )
 
     def test_engine_take_requires_exact_run_take_and_cell_provenance(self) -> None:
         take = {
@@ -593,6 +798,10 @@ class PublisherTests(unittest.TestCase):
         captured, write_patch = self.capture_manifest()
         with (
             mock.patch.object(publisher, "load_engine_rows", return_value=[en, fr]),
+            mock.patch.object(
+                publisher, "qualify_memory_rows",
+                return_value=qualified_memory_fixture(["fr-id", "en-id"]),
+            ),
             mock.patch.object(publisher, "source_from_snapshot", return_value=source_fixture()),
             mock.patch.object(publisher, "crash_delta_from_snapshot", return_value={"passed": True, "count": 0}),
             self.hardware_patch(),
@@ -605,6 +814,67 @@ class PublisherTests(unittest.TestCase):
         self.assertTrue(all(take["layerCompleteness"] == "complete" for take in record["takes"]))
         self.assertTrue(all(take["output"]["readableWAV"] for take in record["takes"]))
         self.assertTrue(all(take["audioQC"]["verdict"] == "pass" for take in record["takes"]))
+
+    def test_language_v2_requires_v8_and_binds_the_exact_memory_sidecar(self) -> None:
+        diagnostics = self.root / "language-memory-diagnostics"
+        matrix = self.root / "memory-matrix.json"
+        corpus = self.root / "memory-corpus.json"
+        matrix.write_text(json.dumps({"cells": [
+            {"id": "fr", "quick": True, "expectedHint": "french"},
+        ]}))
+        corpus.write_text(json.dumps({"languages": [
+            {"id": "french", "script": "un deux trois"},
+        ]}))
+        row = engine_row("fr-memory", run_id="lang-memory", cell="fr")
+        row["notes"]["languageHint"] = "french"
+        upgrade_language_memory_row(row, diagnostics, ios=False)
+        # A historical sidecar in the same tree must not enter this run's exact
+        # selection or aggregate digest.
+        unrelated = diagnostics / "engine" / "samples-unrelated.jsonl"
+        unrelated.write_text("{}\n", encoding="utf-8")
+        args = SimpleNamespace(
+            matrix=matrix, corpus=corpus, subset="quick", diagnostics=diagnostics,
+            run_id="lang-memory", output_gate="not-performed", platform="macos",
+            started_at="2026-07-12T12:00:00Z", finished_at="2026-07-12T12:01:00Z",
+            label="fixture", artifact_dir=diagnostics,
+            snapshot=self.root / "snapshot.json",
+        )
+        captured, write_patch = self.capture_manifest()
+        common = (
+            mock.patch.object(publisher, "load_engine_rows", return_value=[row]),
+            mock.patch.object(publisher, "source_from_snapshot", return_value=source_fixture()),
+            mock.patch.object(
+                publisher, "crash_delta_from_snapshot", return_value={"passed": True, "count": 0}
+            ),
+            self.hardware_patch(),
+            write_patch,
+        )
+        with common[0], common[1], common[2], common[3], common[4]:
+            publisher.language_command(args)
+        record = captured["manifest"]["historyRecord"]
+        self.assertEqual(record["schemaVersion"], 2)
+        self.assertEqual(record["evidence"]["telemetrySchemaVersion"], 8)
+        self.assertTrue(record["evidence"]["memoryQualified"])
+        self.assertEqual(record["evidence"]["sampleSidecarCount"], 1)
+        self.assertRegex(record["evidence"]["sampleSidecarsDigest"], r"^[0-9a-f]{64}$")
+        self.assertEqual(record["takes"][0]["memoryStatus"], "qualified")
+        self.assertRegex(record["takes"][0]["sampleSidecarDigest"], r"^[0-9a-f]{64}$")
+        self.assertIn("peakPhysicalFootprintMB", record["takes"][0]["metrics"])
+
+        row["schemaVersion"] = 7
+        with (
+            mock.patch.object(publisher, "load_engine_rows", return_value=[row]),
+            self.assertRaisesRegex(publisher.PublicationError, "schema v8"),
+        ):
+            publisher.language_command(args)
+
+        row["schemaVersion"] = 8
+        (diagnostics / "engine" / "samples-fr-memory.jsonl").unlink()
+        with (
+            mock.patch.object(publisher, "load_engine_rows", return_value=[row]),
+            self.assertRaisesRegex(publisher.PublicationError, "sample sidecar"),
+        ):
+            publisher.language_command(args)
 
     def test_ios_language_binds_sanitized_asr_evidence_and_per_take_scores(self) -> None:
         matrix = self.root / "matrix.json"
@@ -642,6 +912,10 @@ class PublisherTests(unittest.TestCase):
         with (
             mock.patch.object(publisher, "load_engine_rows", return_value=[row]),
             mock.patch.object(publisher, "load_app_rows", return_value=[app_row("fr-generation")]),
+            mock.patch.object(
+                publisher, "qualify_memory_rows",
+                return_value=qualified_memory_fixture(["fr-generation"]),
+            ),
             mock.patch.object(publisher, "source_from_snapshot", return_value=source_fixture()),
             mock.patch.object(publisher, "crash_delta_from_snapshot", return_value={"passed": True, "count": 0}),
             self.hardware_patch(),
@@ -926,7 +1200,7 @@ class PublisherTests(unittest.TestCase):
                 planned_takes=planned, sentinels=sentinels, rows_by_cell=rows
             )
 
-    def test_telemetry_overhead_requires_and_records_eighteen_samples(self) -> None:
+    def test_legacy_telemetry_overhead_parser_requires_eighteen_samples(self) -> None:
         rotations = [
             ("off", "lightweight", "verbose"),
             ("lightweight", "verbose", "off"),
@@ -981,7 +1255,7 @@ class PublisherTests(unittest.TestCase):
             "completedAt": "2026-07-12T12:01:00Z",
             "status": "pass",
             "summary": {
-                "telemetrySchemaVersion": 7,
+                "telemetrySchemaVersion": 8,
                 "modelID": "pro_custom_speed",
                 "modelRuntimeIdentity": engine_row("identity")["modelRuntimeIdentity"],
                 "pcmParity": True,
@@ -1000,7 +1274,7 @@ class PublisherTests(unittest.TestCase):
             self.hardware_patch(),
             write_patch,
         ):
-            publisher.telemetry_overhead_command(args)
+            publisher._legacy_telemetry_overhead_record(args)
         takes = captured["manifest"]["historyRecord"]["takes"]
         self.assertEqual(len(takes), 18)
         self.assertEqual(
@@ -1048,9 +1322,9 @@ class PublisherTests(unittest.TestCase):
         )
         verdict.write_text(json.dumps(invalid))
         with self.assertRaisesRegex(publisher.PublicationError, "empty or invalid PCM"):
-            publisher.telemetry_overhead_command(args)
+            publisher._legacy_telemetry_overhead_record(args)
 
-    def test_telemetry_overhead_rejects_missing_typed_identity(self) -> None:
+    def test_telemetry_overhead_rejects_schema_v2_publication(self) -> None:
         verdict = self.root / "verdict.json"
         verdict.write_text(json.dumps({
             "schemaVersion": 2,
@@ -1065,9 +1339,78 @@ class PublisherTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             publisher.PublicationError,
-            "lacks exact schema-v7 Custom Speed identity",
+            "cannot publish schema-v2 history",
         ):
             publisher.telemetry_overhead_command(args)
+
+    def test_memory_retention_policy_passes_and_rejects_growth_or_matrix_drift(self) -> None:
+        policy_path = self.root / "memory-policy.json"
+        policy_path.write_text(json.dumps({
+            "schemaVersion": 1,
+            "policyID": "retained-memory-v1",
+            "metric": "withinModeRetainedPhysicalFootprintGrowth",
+            "modes": ["custom", "design", "clone"],
+            "variant": "speed",
+            "length": "medium",
+            "repetitionsPerMode": 3,
+            "seed": 19790615,
+            "retentionThresholdFractionOfPhysicalMemory": 0.05,
+            "expectedTakeCounts": {"macos": 11, "ios": 9},
+        }), encoding="utf-8")
+        takes = []
+        index = 1
+        for mode in ("custom", "design", "clone"):
+            if mode != "clone":
+                takes.append({
+                    "takeIndex": index, "mode": mode,
+                    "cell": f"{mode}/speed/medium/cold#0", "variant": "speed",
+                    "length": "medium", "warmState": "cold",
+                    "metrics": {"physicalFootprintEndMB": 3000.0},
+                })
+                index += 1
+            for repetition in range(3):
+                takes.append({
+                    "takeIndex": index, "mode": mode,
+                    "cell": f"{mode}/speed/medium/retained#{repetition}", "variant": "speed",
+                    "length": "medium", "warmState": "warm",
+                    "metrics": {"physicalFootprintEndMB": 3000.0 + repetition * 10},
+                })
+                index += 1
+        results = {
+            "seed": 19790615,
+            "memoryQualification": {"policyID": "retained-memory-v1"},
+        }
+        with mock.patch.object(publisher, "MEMORY_POLICY_PATH", policy_path):
+            evidence, digest = publisher.memory_retention_evidence(results, takes, "macos")
+            self.assertTrue(evidence["retentionPassed"])
+            self.assertEqual(evidence["maximumRetainedGrowthMB"], 20.0)
+            self.assertEqual(len(digest), 64)
+
+            excessive = copy.deepcopy(takes)
+            excessive[3]["metrics"]["physicalFootprintEndMB"] = 3500.0
+            with self.assertRaisesRegex(publisher.PublicationError, "exceeds policy threshold"):
+                publisher.memory_retention_evidence(results, excessive, "macos")
+
+            recovered_spike = copy.deepcopy(takes)
+            recovered_spike[2]["metrics"]["physicalFootprintEndMB"] = 3600.0
+            recovered_spike[3]["metrics"]["physicalFootprintEndMB"] = 3010.0
+            with self.assertRaisesRegex(publisher.PublicationError, "exceeds policy threshold"):
+                publisher.memory_retention_evidence(results, recovered_spike, "macos")
+
+            recovered_below_baseline = copy.deepcopy(takes)
+            for take in recovered_below_baseline:
+                if take["mode"] == "custom" and "/retained#" in take["cell"]:
+                    repetition = int(take["cell"].rsplit("#", 1)[-1])
+                    take["metrics"]["physicalFootprintEndMB"] = 3000.0 - repetition * 10
+            recovered, _ = publisher.memory_retention_evidence(
+                results, recovered_below_baseline, "macos"
+            )
+            self.assertGreaterEqual(recovered["maximumRetainedGrowthMB"], 0.0)
+
+            reordered = copy.deepcopy(takes)
+            reordered[0], reordered[1] = reordered[1], reordered[0]
+            with self.assertRaisesRegex(publisher.PublicationError, "ordered matrix"):
+                publisher.memory_retention_evidence(results, reordered, "macos")
 
     def test_prosody_calibration_retains_aggregate_accuracy_and_thresholds(self) -> None:
         profile = self.root / "profile.json"
@@ -1169,6 +1512,27 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(evidence["summary"]["cpuSampleCount"], 12)
             self.assertEqual(evidence["summary"]["correlatedSignpostEventCount"], 4)
             self.assertEqual(extract.call_args.kwargs["target_pid"], 4242)
+            self.assertEqual(evidence["retentionPolicy"], "summaryOnly")
+            self.assertFalse(evidence["rawTraceRetained"])
+            self.assertEqual(
+                evidence["originalEphemeralPath"], "build/profile.trace"
+            )
+            self.assertEqual(
+                evidence["summaryArtifact"]["path"], "build/profile-summary.json"
+            )
+            summary_artifact = self.root / evidence["summaryArtifact"]["path"]
+            self.assertTrue(summary_artifact.is_file())
+            self.assertEqual(
+                evidence["summaryArtifact"]["digest"],
+                publisher.digest_file(summary_artifact),
+            )
+            frozen = json.loads(summary_artifact.read_text(encoding="utf-8"))
+            self.assertEqual(frozen["traceDigest"], evidence["digest"])
+            self.assertEqual(frozen["captureSettings"], evidence["captureSettings"])
+            self.assertEqual(
+                frozen["captureSettingsDigest"], evidence["captureSettingsDigest"]
+            )
+            self.assertTrue(trace.is_dir(), "the publisher must not delete raw traces")
             extract.reset_mock()
             args.target_pid = None
             derived = publisher.trace_evidence(
@@ -1179,6 +1543,30 @@ class PublisherTests(unittest.TestCase):
             )
             self.assertTrue(derived["summary"]["targetPIDVerified"])
             self.assertEqual(extract.call_args.kwargs["target_pid"], 4242)
+            args.retention_policy = "keptExplicitly"
+            args.summary_artifact = self.root / "build" / "kept-profile-summary.json"
+            kept = publisher.trace_evidence(
+                args,
+                expected_correlations={
+                    ("profile-generation", 1, "custom/speed/medium/warm#0")
+                },
+            )
+            self.assertEqual(kept["retentionPolicy"], "keptExplicitly")
+            self.assertTrue(kept["rawTraceRetained"])
+            self.assertEqual(
+                kept["summaryArtifact"]["path"], "build/kept-profile-summary.json"
+            )
+            args.summary_artifact = trace / "invalid-summary.json"
+            with self.assertRaisesRegex(
+                publisher.PublicationError, "outside the raw trace bundle"
+            ):
+                publisher.trace_evidence(
+                    args,
+                    expected_correlations={
+                        ("profile-generation", 1, "custom/speed/medium/warm#0")
+                    },
+                )
+            args.summary_artifact = None
             args.target_pid = 4242
             args.target_pid = 9999
             with self.assertRaises(publisher.PublicationError):
@@ -1197,6 +1585,190 @@ class PublisherTests(unittest.TestCase):
                         ("profile-generation", 1, "custom/speed/medium/warm#0")
                     },
                 )
+
+    def test_memory_profile_reports_unexportable_tracks_without_claiming_rows(self) -> None:
+        trace = self.root / "build" / "memory-profile.trace"
+        trace.mkdir(parents=True)
+        (trace / "data.bin").write_bytes(b"trace")
+        allocation_dir = trace / "Trace1.run"
+        allocation_dir.mkdir()
+        (allocation_dir / "event_data_4242.oa").write_bytes(b"allocation-events")
+        toc = self.root / "memory-trace-toc.xml"
+        toc.write_text(
+            "<trace-toc><run><processes><process name='Vocello' pid='4242'/></processes>"
+            "<data><table schema='time-profile'/><table schema='os-signpost'/></data>"
+            "<tracks><track name='Allocations'><details><detail name='Allocations List'/></details></track>"
+            "<track name='VM Tracker'><details><detail name='Regions Map'/></details></track></tracks>"
+            "</run></trace-toc>"
+        )
+        args = SimpleNamespace(
+            trace=trace,
+            toc=toc,
+            template="CPU Profiler + Allocations + VM Tracker + os_signpost",
+            duration=10.0,
+            target_process="Vocello",
+            target_pid=4242,
+            run_id="memory-profile-fixture",
+            profile_kind="memory",
+        )
+        extracted = {
+            "capturedRowsBySchema": {
+                "time-profile": 12,
+                "os-signpost": 4,
+            },
+            "capturedDataRowCount": 16,
+            "cpuSampleCount": 12,
+            "cpuSampleSpanMS": 9.0,
+            "signpostEventCount": 4,
+            "correlatedSignpostEventCount": 1,
+            "correlationFieldsVerified": True,
+        }
+        correlations = {("generation", 1, "custom/speed/medium/warm#0")}
+        with (
+            mock.patch.object(publisher, "ROOT", self.root),
+            mock.patch.object(
+                publisher, "extract_trace_data_summary", return_value=extracted
+            ),
+        ):
+            evidence = publisher.trace_evidence(
+                args, expected_correlations=correlations
+            )
+        self.assertEqual(
+            evidence["summary"]["allocationTargetDataBytes"], len(b"allocation-events")
+        )
+        self.assertEqual(evidence["summary"]["memoryTraceEvidenceVersion"], 2)
+        self.assertTrue(evidence["summary"]["allocationTrackPresent"])
+        self.assertTrue(evidence["summary"]["allocationListPresent"])
+        self.assertTrue(evidence["summary"]["vmTrackerTrackPresent"])
+        self.assertTrue(evidence["summary"]["vmTrackerRegionMapPresent"])
+        self.assertEqual(evidence["summary"]["allocationDataExportStatus"], "notExportable")
+        self.assertEqual(evidence["summary"]["allocationTargetRowCount"], 0)
+        self.assertEqual(evidence["summary"]["vmTrackerDataExportStatus"], "notExportable")
+        self.assertEqual(evidence["summary"]["vmTrackerTargetRowCount"], 0)
+        self.assertNotIn("allocationTrackVerified", evidence["summary"])
+        self.assertNotIn("vmTrackerTrackVerified", evidence["summary"])
+        self.assertNotIn("vmTrackerRegionMapVerified", evidence["summary"])
+
+        (allocation_dir / "event_data_4242.oa").unlink()
+        with (
+            mock.patch.object(publisher, "ROOT", self.root),
+            mock.patch.object(publisher, "extract_trace_data_summary", return_value=extracted),
+            self.assertRaisesRegex(publisher.PublicationError, "allocation event data"),
+        ):
+            publisher.trace_evidence(args, expected_correlations=correlations)
+
+    def test_macos_memory_profile_rejects_vm_tracker_automatic_snapshots(self) -> None:
+        trace = self.root / "build" / "memory-template.trace"
+        trace.mkdir(parents=True)
+
+        def write_template(enabled: bool) -> None:
+            with (trace / "form.template").open("wb") as stream:
+                plistlib.dump(
+                    {
+                        "$objects": [
+                            "$null",
+                            "XRVMInstrumentKey_autoSnapshot",
+                            enabled,
+                            {
+                                "NS.keys": [plistlib.UID(1)],
+                                "NS.objects": [plistlib.UID(2)],
+                            },
+                        ]
+                    },
+                    stream,
+                    fmt=plistlib.FMT_BINARY,
+                )
+
+        write_template(False)
+        publisher.require_vm_tracker_auto_snapshot_disabled(trace)
+
+        write_template(True)
+        with self.assertRaisesRegex(
+            publisher.PublicationError,
+            "automatic snapshots are enabled",
+        ):
+            publisher.require_vm_tracker_auto_snapshot_disabled(trace)
+
+        with (trace / "form.template").open("wb") as stream:
+            plistlib.dump({"$objects": ["$null"]}, stream, fmt=plistlib.FMT_BINARY)
+        with self.assertRaisesRegex(
+            publisher.PublicationError,
+            "does not expose",
+        ):
+            publisher.require_vm_tracker_auto_snapshot_disabled(trace)
+
+    def test_memory_profile_requires_target_rows_for_exportable_memory_tables(self) -> None:
+        trace = self.root / "build" / "memory-exportable.trace"
+        trace.mkdir(parents=True)
+        (trace / "data.bin").write_bytes(b"trace")
+        allocation_dir = trace / "Trace1.run"
+        allocation_dir.mkdir()
+        (allocation_dir / "event_data_4242.oa").write_bytes(b"allocation-events")
+        toc = self.root / "memory-exportable-toc.xml"
+        toc.write_text(
+            "<trace-toc><run><processes><process name='Vocello' pid='4242'/></processes>"
+            "<data><table schema='time-profile'/><table schema='os-signpost'/>"
+            "<table schema='allocations'/><table schema='vm-tracker'/></data>"
+            "<tracks><track name='Allocations'><details><detail name='Allocations List'/></details></track>"
+            "<track name='VM Tracker'><details><detail name='Regions Map'/></details></track></tracks>"
+            "</run></trace-toc>"
+        )
+        args = SimpleNamespace(
+            trace=trace,
+            toc=toc,
+            template="CPU Profiler + Allocations + VM Tracker + os_signpost",
+            duration=10.0,
+            target_process="Vocello",
+            target_pid=4242,
+            run_id="memory-profile-exportable",
+            profile_kind="memory",
+        )
+        extracted = {
+            "capturedRowsBySchema": {
+                "time-profile": 12,
+                "os-signpost": 4,
+                "allocations": 3,
+                "vm-tracker": 2,
+            },
+            "capturedDataRowCount": 21,
+            "cpuSampleCount": 12,
+            "cpuSampleSpanMS": 9.0,
+            "signpostEventCount": 4,
+            "correlatedSignpostEventCount": 1,
+            "correlationFieldsVerified": True,
+        }
+        correlations = {("generation", 1, "custom/speed/medium/warm#0")}
+        with (
+            mock.patch.object(publisher, "ROOT", self.root),
+            mock.patch.object(
+                publisher, "extract_trace_data_summary", return_value=extracted
+            ),
+        ):
+            evidence = publisher.trace_evidence(
+                args, expected_correlations=correlations
+            )
+        self.assertEqual(evidence["summary"]["allocationDataExportStatus"], "targetRows")
+        self.assertEqual(evidence["summary"]["allocationTargetRowCount"], 3)
+        self.assertEqual(evidence["summary"]["vmTrackerDataExportStatus"], "targetRows")
+        self.assertEqual(evidence["summary"]["vmTrackerTargetRowCount"], 2)
+
+        for schema, message in (
+            ("allocations", "Allocations tables"),
+            ("vm-tracker", "VM Tracker tables"),
+        ):
+            wrong_pid_only = copy.deepcopy(extracted)
+            wrong_pid_only["capturedRowsBySchema"][schema] = 0
+            with (
+                self.subTest(schema=schema),
+                mock.patch.object(publisher, "ROOT", self.root),
+                mock.patch.object(
+                    publisher,
+                    "extract_trace_data_summary",
+                    return_value=wrong_pid_only,
+                ),
+                self.assertRaisesRegex(publisher.PublicationError, message),
+            ):
+                publisher.trace_evidence(args, expected_correlations=correlations)
 
     def test_trace_summary_extracts_cpu_samples_and_correlated_signposts(self) -> None:
         trace = self.root / "profile.trace"
@@ -1234,6 +1806,49 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(summary["correlatedSignpostEventCount"], 1)
         self.assertEqual(summary["capturedRowsBySchema"]["time-profile"], 2)
         self.assertEqual(summary["capturedRowsBySchema"]["os-signpost"], 1)
+
+    def test_trace_summary_filters_memory_tables_to_the_exact_target_pid(self) -> None:
+        trace = self.root / "profile-memory-rows.trace"
+        trace.mkdir()
+
+        def fake_export(command, **_kwargs):
+            output = Path(command[command.index("--output") + 1])
+            xpath = command[command.index("--xpath") + 1]
+            if "time-profile" in xpath:
+                xml = """<trace-query-result>
+                <row><process pid='4242'/><sample-time>1000000</sample-time><weight>1000000</weight></row>
+                <row><process pid='4242'/><sample-time>4000000</sample-time><weight>1000000</weight></row>
+                </trace-query-result>"""
+            elif "os-signpost" in xpath:
+                xml = """<trace-query-result>
+                <row><process pid='4242'/><string>runID=profile-run generationID=gen-1 takeIndex=1 cell=custom/speed/medium/warm#0</string></row>
+                </trace-query-result>"""
+            elif "allocations" in xpath:
+                xml = """<trace-query-result>
+                <row><process pid='9999'/><size>900</size></row>
+                <row><process pid='4242'/><size>100</size></row>
+                </trace-query-result>"""
+            else:
+                xml = """<trace-query-result>
+                <row><process pid='9999'/><region-size>4096</region-size></row>
+                </trace-query-result>"""
+            output.write_text(xml, encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with mock.patch.object(publisher.subprocess, "run", side_effect=fake_export):
+            summary = publisher.extract_trace_data_summary(
+                trace,
+                {"time-profile", "os-signpost", "allocations", "vm-tracker"},
+                run_id="profile-run",
+                target_pid=4242,
+                expected_correlations={
+                    ("gen-1", 1, "custom/speed/medium/warm#0")
+                },
+            )
+        self.assertEqual(summary["capturedRowsBySchema"]["allocations"], 1)
+        self.assertEqual(summary["capturedRowsBySchema"]["vm-tracker"], 0)
+        with self.assertRaisesRegex(publisher.PublicationError, "VM Tracker tables"):
+            publisher._memory_trace_export_evidence(summary["capturedRowsBySchema"])
 
     def test_trace_summary_resolves_cpu_profiler_and_reused_signpost_values(self) -> None:
         trace = self.root / "profile.trace"

@@ -23,7 +23,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.sequence), [2, 3])
     }
 
-    func testSchemaV7RoundTripCarriesTypedBackendMetrics() throws {
+    func testSchemaV8RoundTripCarriesTypedBackendMetrics() throws {
         let record = GenerationTelemetryRecord(
             generationID: UUID().uuidString,
             layer: .engine,
@@ -51,7 +51,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         let data = try JSONEncoder().encode(record)
         let decoded = try JSONDecoder().decode(GenerationTelemetryRecord.self, from: data)
 
-        XCTAssertEqual(decoded.schemaVersion, 7)
+        XCTAssertEqual(decoded.schemaVersion, 8)
         XCTAssertEqual(decoded.backendMetrics?.finishReason, .eos)
         XCTAssertEqual(decoded.backendMetrics?.warmState, .warm)
         XCTAssertEqual(decoded.backendMetrics?.stages.count, 1)
@@ -206,7 +206,8 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
                 "playbackContinuityFailures": 1,
                 "playbackUnderruns": 2,
                 "playbackStartBufferedChunks": 3,
-            ]
+            ],
+            playbackStartSource: .liveStream
         )
 
         XCTAssertEqual(metrics.submitToCompletedMS, 500)
@@ -214,6 +215,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(metrics.playbackChunksReceived, 4)
         XCTAssertEqual(metrics.playbackContinuityFailures, 1)
         XCTAssertEqual(metrics.playbackUnderruns, 2)
+        XCTAssertEqual(metrics.playbackStartSource, .liveStream)
         XCTAssertEqual(metrics.playbackStartBufferedChunks, 3)
         XCTAssertEqual(metrics.playbackStartBufferedAudioMS, 600)
         XCTAssertEqual(metrics.playbackMinimumQueuedAudioMS, 120)
@@ -221,7 +223,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
 
     func testPlaybackHealthTracksNormalDrainContinuityAndUnderrun() {
         var health = PlaybackHealthAccumulator()
-        health.playbackScheduled(queuedChunks: 3, queuedAudioMS: 900)
+        health.playbackScheduled(source: .liveStream, queuedChunks: 3, queuedAudioMS: 900)
         health.chunkReceived(queuedAudioMS: 1_200)
         health.queueDrained(queuedAudioMS: 600)
         health.queueDrained(queuedAudioMS: 250)
@@ -229,6 +231,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
 
         XCTAssertEqual(health.startBufferedChunks, 3)
         XCTAssertEqual(health.startBufferedAudioMS, 900)
+        XCTAssertEqual(health.startSource, .liveStream)
         XCTAssertEqual(health.chunksReceived, 1)
         XCTAssertEqual(health.continuityFailures, 1)
         XCTAssertEqual(health.minimumQueuedAudioMS, 250)
@@ -236,6 +239,16 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         health.underrun()
         XCTAssertEqual(health.underruns, 1)
         XCTAssertEqual(health.minimumQueuedAudioMS, 0)
+    }
+
+    func testPlaybackHealthKeepsFinalFileBufferSemanticsDistinct() {
+        var health = PlaybackHealthAccumulator()
+        health.playbackScheduled(source: .finalFile, queuedChunks: 1, queuedAudioMS: 1_800)
+
+        XCTAssertEqual(health.startSource, .finalFile)
+        XCTAssertEqual(health.startBufferedChunks, 1)
+        XCTAssertEqual(health.startBufferedAudioMS, 1_800)
+        XCTAssertEqual(health.minimumQueuedAudioMS, 1_800)
     }
 
     func testFailurePrivacyAdapterDoesNotPersistRawMessageOrPath() {
@@ -259,6 +272,7 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         let decoded = try JSONDecoder().decode(FrontendGenerationMetrics.self, from: Data(legacy.utf8))
         XCTAssertEqual(decoded.submitToPlaybackScheduledMS, 24)
         XCTAssertEqual(decoded.firstChunkToPlaybackScheduledMS, 14)
+        XCTAssertNil(decoded.playbackStartSource)
 
         let encoded = try JSONEncoder().encode(decoded)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
@@ -266,6 +280,25 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(object["firstChunkToPlaybackScheduledMS"] as? Int, 14)
         XCTAssertNil(object["submitToFirstAudibleMS"])
         XCTAssertNil(object["firstChunkToAudibleMS"])
+
+        let sourced = FrontendGenerationMetrics(
+            submitToPlaybackScheduledMS: 30,
+            playbackStartSource: .finalFile,
+            playbackStartBufferedChunks: 1,
+            playbackStartBufferedAudioMS: 1_800
+        )
+        let sourcedData = try JSONEncoder().encode(sourced)
+        let sourcedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: sourcedData) as? [String: Any]
+        )
+        XCTAssertEqual(sourcedObject["playbackStartSource"] as? String, "finalFile")
+        let sourcedRoundTrip = try JSONDecoder().decode(
+            FrontendGenerationMetrics.self,
+            from: sourcedData
+        )
+        XCTAssertEqual(sourcedRoundTrip.playbackStartSource, .finalFile)
+        XCTAssertEqual(sourcedRoundTrip.playbackStartBufferedChunks, 1)
+        XCTAssertEqual(sourcedRoundTrip.playbackStartBufferedAudioMS, 1_800)
 
         let record = GenerationTelemetryRecord(
             generationID: "v7-playback",
@@ -444,6 +477,38 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(late.missedDeadlines, 3)
     }
 
+    func testSamplerStopCapturesOnlyNewestDueDeadlineAndKeepsOlderMisses() {
+        let tailRace = NativeTelemetrySampler.periodicStopAdjustment(
+            startElapsedNS: 0,
+            stopElapsedNS: 2_001_000_000,
+            intervalNanos: 500_000_000,
+            periodicSampleCount: 3,
+            missedDeadlineCount: 0
+        )
+        XCTAssertEqual(tailRace.scheduledElapsedNS, 2_000_000_000)
+        XCTAssertEqual(tailRace.additionalMissedDeadlines, 0)
+
+        let starved = NativeTelemetrySampler.periodicStopAdjustment(
+            startElapsedNS: 0,
+            stopElapsedNS: 3_001_000_000,
+            intervalNanos: 500_000_000,
+            periodicSampleCount: 1,
+            missedDeadlineCount: 0
+        )
+        XCTAssertEqual(starved.scheduledElapsedNS, 3_000_000_000)
+        XCTAssertEqual(starved.additionalMissedDeadlines, 4)
+
+        let complete = NativeTelemetrySampler.periodicStopAdjustment(
+            startElapsedNS: 0,
+            stopElapsedNS: 2_001_000_000,
+            intervalNanos: 500_000_000,
+            periodicSampleCount: 4,
+            missedDeadlineCount: 0
+        )
+        XCTAssertNil(complete.scheduledElapsedNS)
+        XCTAssertEqual(complete.additionalMissedDeadlines, 0)
+    }
+
     func testBoundarySampleCanOwnTheMemoryPeak() {
         let samples = [
             telemetrySample(tMS: 0, capturedNS: 0, kind: .start, residentMB: 100),
@@ -504,6 +569,31 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         async let third = gate.claim()
         let results = await [first, second, third]
         XCTAssertEqual(results.count(where: { $0 }), 1)
+    }
+
+    func testTerminalBoundaryCoversNonEOSCancellationAndSetupFailure() {
+        XCTAssertEqual(
+            NativeTelemetryTerminalBoundary.name(for: GenerationFinishReason.maxTokens),
+            "terminal_failure"
+        )
+        XCTAssertEqual(
+            NativeTelemetryTerminalBoundary.name(for: GenerationFinishReason.failed),
+            "terminal_failure"
+        )
+        XCTAssertEqual(
+            NativeTelemetryTerminalBoundary.name(for: GenerationFinishReason.cancelled),
+            "terminal_cancelled"
+        )
+        XCTAssertEqual(
+            NativeTelemetryTerminalBoundary.name(for: CancellationError()),
+            "terminal_cancelled"
+        )
+        XCTAssertEqual(
+            NativeTelemetryTerminalBoundary.name(
+                for: NSError(domain: "session-directory", code: 1)
+            ),
+            "terminal_failure"
+        )
     }
 
     func testModelIdentityQuantizationUsesTypedRuntimeTier() {

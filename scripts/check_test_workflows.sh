@@ -11,6 +11,32 @@ command -v rg >/dev/null 2>&1 || fail "ripgrep is required"
 
 echo "==> XCUITest workflow consistency check" >&2
 
+for required_policy_surface in \
+  config/build-output-policy.json \
+  scripts/build_output_policy.py \
+  scripts/documentation_contract.py \
+  scripts/build_cleanup.py \
+  scripts/clean_build_caches.sh \
+  scripts/lib/build_paths.sh \
+  scripts/lib/build_cache.sh \
+  scripts/lib/profile_trace_retention.py \
+  scripts/tests/test_build_output_policy.py \
+  scripts/tests/test_documentation_contract.py \
+  scripts/tests/test_build_routing_contract.py \
+  scripts/tests/test_clean_build_caches.py \
+  scripts/tests/test_profile_trace_retention.py; do
+  [[ -f "$required_policy_surface" ]] \
+    || fail "required build-output policy surface is missing: $required_policy_surface"
+done
+
+# The manifest owns every generated path. Load its validated exports before
+# checking individual producer scripts, then enforce tracked-reference and
+# compatibility-link consistency through the policy helper itself.
+# shellcheck source=lib/build_paths.sh
+. "$ROOT_DIR/scripts/lib/build_paths.sh"
+python3 scripts/build_output_policy.py validate \
+  || fail "build-output policy validation failed"
+
 for required in \
   Tests/UIAutomationSupport \
   Tests/VocelloMacUITests \
@@ -70,6 +96,8 @@ active=(AGENTS.md README.md .gitignore .agents benchmarks docs scripts config .g
 excludes=(
   --glob '!scripts/check_test_workflows.sh'
   --glob '!scripts/clean_build_caches.sh'
+  --glob '!scripts/documentation_contract.py'
+  --glob '!scripts/tests/test_documentation_contract.py'
 )
 
 # Match the retired IDE by its development-context terms, not the generic UI/CSS
@@ -98,19 +126,8 @@ out="$(rg -n --pcre2 "$release_ui_gate_pattern" AGENTS.md README.md .agents docs
 
 # Pinned research may retain obsolete procedures only when every directly
 # openable report identifies itself before the historical body begins.
-python3 - <<'PY'
-from pathlib import Path
-
-reports = sorted(Path("QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10").glob("*.md"))
-reports.append(Path("docs/reference/backend-optimization-research-report.md"))
-errors = []
-for path in reports:
-    opening = "\n".join(path.read_text(encoding="utf-8").splitlines()[:10])
-    if "Historical snapshot" not in opening:
-        errors.append(f"{path}: missing opening historical-snapshot notice")
-if errors:
-    raise SystemExit("\n".join(errors))
-PY
+python3 scripts/documentation_contract.py \
+  || fail "active documentation contract failed"
 
 # Current guidance uses the typed playback-scheduled and heartbeat metrics. Keep
 # the retired display names in compatibility code and historical evidence only.
@@ -215,6 +232,67 @@ out="$(rg -n '\b(?:sleep|usleep)\s*\(|Thread\.sleep|coordinate\s*\(' \
 out="$(rg -n 'matching\s*\(\s*NSPredicate\s*\(\s*format:\s*"label|buttons\s*\[\s*"(?:Generate|Custom|Design|Clone|Dismiss)' \
   Tests/UIAutomationSupport Tests/VocelloMacUITests Tests/VocelloiOSUITests 2>/dev/null || true)"
 [[ -z "$out" ]] || fail "UI tests must use stable accessibility identifiers, not visible-label fallbacks:\n$out"
+
+# Temporary Xcode work must live below build/scratch/derived-data. Keep the two
+# historical one-off roots recognizable only in the cleanup migration; a new
+# top-level *DerivedData* spelling in an active script would silently recreate
+# the storage explosion that routine cleanup repairs.
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+errors = []
+roots = [Path("scripts"), Path(".github/workflows")]
+legacy_cleanup_names = {
+    "TelemetryAuditDerivedData",
+    "DerivedData-ios-memory",
+    "DerivedData-memory-failure",
+}
+# Match an actual repository-local top-level path component, not API/JSON
+# identifiers such as `derivedDataPath` or `externalXcodeDerivedData`.
+token = re.compile(
+    r"(?P<path>(?:build|\$BUILD_DIR|\$\{BUILD_DIR\})/"
+    r"(?P<name>[A-Za-z0-9._-]*DerivedData[A-Za-z0-9._-]*))"
+)
+for root in roots:
+    if not root.exists():
+        continue
+    for path in root.rglob("*"):
+        if not path.is_file() or "tests" in path.parts:
+            continue
+        if path.suffix not in {".sh", ".py", ".yml", ".yaml"}:
+            continue
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for match in token.finditer(line):
+                name = match.group("name")
+                if path in {
+                    Path("scripts/clean_build_caches.sh"),
+                    Path("scripts/check_test_workflows.sh"),
+                } and name in legacy_cleanup_names:
+                    continue
+                errors.append(
+                    f"{path}:{line_number}: ad hoc DerivedData root {name}; "
+                    "use build/scratch/derived-data/<purpose>"
+                )
+if errors:
+    raise SystemExit("\n".join(errors))
+PY
+
+[[ "$QVOICE_SCRATCH_FOUNDATION" == "$QVOICE_BUILD_ROOT/scratch/"* ]] \
+  || fail "QVOICE_SCRATCH_FOUNDATION must remain a classified scratch path"
+[[ "$QVOICE_ARTIFACTS_FOUNDATION" == "$QVOICE_BUILD_ROOT/artifacts/"* ]] \
+  || fail "QVOICE_ARTIFACTS_FOUNDATION must remain a classified artifact path"
+[[ "$QVOICE_XCODE_SOURCE_PACKAGES" == "$QVOICE_BUILD_ROOT/cache/"* ]] \
+  || fail "QVOICE_XCODE_SOURCE_PACKAGES must remain a classified cache path"
+for foundation_policy_variable in \
+  QVOICE_SCRATCH_FOUNDATION \
+  QVOICE_ARTIFACTS_FOUNDATION \
+  QVOICE_XCODE_SOURCE_PACKAGES; do
+  rg -Fq "\$$foundation_policy_variable" scripts/build_foundation_targets.sh \
+    || fail "foundation compile checks must consume $foundation_policy_variable from the build policy"
+done
+rg -q -- '--prune-ui-results' scripts/ui_test.sh \
+  || fail "successful XCUITest runs must prune superseded result bundles"
 
 # The macOS runner may signal only PIDs whose executable resolves to its exact
 # DerivedData product. A name-wide kill could terminate a user's other Vocello.
@@ -352,8 +430,8 @@ for root in roots:
         if path != Path("docs/reference/backend-optimization-research-report.md")
     )
 allowed = {
-    "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "crashes", "debug", "logs", "profile", "preflight", "device-state", "gate", "help"},
-    "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "gate", "release-readiness", "models", "help"},
+    "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
+    "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "memory", "gate", "release-readiness", "models", "help"},
     "ui_test.sh": {"macos", "ios"},
 }
 errors = []
@@ -426,10 +504,17 @@ out="$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- ':!scripts/check_test_workflows
 python3 scripts/validate_backend_risk_spine.py
 
 python3 -m unittest \
+  scripts.tests.test_build_output_policy \
+  scripts.tests.test_documentation_contract \
+  scripts.tests.test_build_routing_contract \
+  scripts.tests.test_clean_build_caches \
+  scripts.tests.test_profile_trace_retention \
+  scripts.tests.test_benchmark_memory \
   scripts.tests.test_benchmark_history \
   scripts.tests.test_bench_command_contract \
   scripts.tests.test_publish_benchmark_history \
   scripts.tests.test_ios_device_benchmark_contract \
+  scripts.tests.test_ios_memory_field_report \
   scripts.tests.test_profile_capture_contract \
   scripts.tests.test_telemetry_overhead \
   scripts.tests.test_summarize_generation_telemetry \

@@ -212,6 +212,9 @@ actor NativeEngineRuntime {
     /// Swapped per generation in `prepareGeneration` so stage marks land on a fresh
     /// recorder whose start clock matches the session's memory sampler.
     private var telemetryRecorder: NativeTelemetryRecorder?
+    /// Retained so asynchronous pressure/warning/trim events can force a
+    /// same-clock memory boundary sample while a generation is active.
+    private var activeTelemetrySampler: NativeTelemetrySampler?
     private let customPrewarmPolicy: NativeCustomPrewarmPolicy
     private let diagnosticEventSink: (@Sendable (String, [String: String]) async -> Void)?
     private let diagnosticAppSupportBox: DiagnosticAppSupportBox?
@@ -293,6 +296,10 @@ actor NativeEngineRuntime {
         await clearCloneState()
         await clearQwen3MemoryCachesIfNeeded()
         await telemetryRecorder?.mark(stage: .unload)
+        await activeTelemetrySampler?.captureBoundary("memory_unload")
+        await telemetryRecorder?.mark(
+            metadata: MemoryUnloadMetadata(reason: "runtime_unload", source: .runtime)
+        )
     }
 
     /// Stamp the raw kernel memory-pressure signal onto the active generation's
@@ -302,8 +309,33 @@ actor NativeEngineRuntime {
     /// mutation), so a pressure moment is captured even when the resulting trim
     /// defers. No-op when no per-generation recorder is active.
     func recordMemoryPressureObserved(level: NativeMemoryTrimLevel) async {
+        await activeTelemetrySampler?.captureBoundary("memory_pressure_signal")
         await telemetryRecorder?.mark(
-            metadata: MemoryPressureMetadata(level: level)
+            metadata: MemoryPressureMetadata(level: level, source: .kernel)
+        )
+    }
+
+    func recordApplicationMemoryWarning(reason: String) async {
+        await activeTelemetrySampler?.captureBoundary("application_memory_warning")
+        await telemetryRecorder?.mark(
+            metadata: MemoryWarningMetadata(reason: reason, source: .uiApplication)
+        )
+    }
+
+    func recordMemoryBudgetTransition(
+        from previousBand: IOSMemoryPressureBand,
+        to currentBand: IOSMemoryPressureBand,
+        reason: String
+    ) async {
+        guard previousBand != currentBand else { return }
+        await activeTelemetrySampler?.captureBoundary("memory_budget_transition")
+        await telemetryRecorder?.mark(
+            metadata: MemoryBudgetTransitionMetadata(
+                previousBand: previousBand,
+                currentBand: currentBand,
+                reason: reason,
+                source: .runtime
+            )
         )
     }
 
@@ -325,8 +357,15 @@ actor NativeEngineRuntime {
         }
         defer { releasePrewarmSlot() }
 
+        await activeTelemetrySampler?.captureBoundary("before_memory_trim")
+        let eventSource: NativeMemoryEventSource = {
+            if reason.contains("memory_warning") { return .uiApplication }
+            if reason.contains("memory_pressure") { return .kernel }
+            if reason.contains("post_generation") { return .postGeneration }
+            return .runtime
+        }()
         await telemetryRecorder?.mark(
-            metadata: MemoryTrimMetadata(level: level, reason: reason)
+            metadata: MemoryTrimMetadata(level: level, reason: reason, source: eventSource)
         )
 
         switch level {
@@ -348,6 +387,7 @@ actor NativeEngineRuntime {
         case .fullUnload:
             await unloadModel()
         }
+        await activeTelemetrySampler?.captureBoundary("after_memory_trim")
     }
 
     func prepareInteractiveReadiness(
@@ -469,9 +509,12 @@ actor NativeEngineRuntime {
                   ) else { return nil }
             return NativeTelemetrySampler(
                 clock: telemetryRecorder.clock,
-                sampleIntervalMS: sampleIntervalMS
+                sampleIntervalMS: sampleIntervalMS,
+                processRole: .engine,
+                boundaryRequirements: TelemetryBoundaryRequirement.engineGeneration
             )
         }()
+        activeTelemetrySampler = telemetrySampler
         await telemetrySampler?.start()
         await telemetrySampler?.captureBoundary("before_preparation")
         do {
@@ -541,6 +584,7 @@ actor NativeEngineRuntime {
 
         let cloneConditioning: ResolvedCloneConditioning?
         let wasPrimed: Bool
+        await telemetrySampler?.captureBoundary("before_mode_preparation")
         switch request.payload {
         case .clone(let reference):
             var conditioning = try await resolveCloneConditioning(
@@ -581,13 +625,16 @@ actor NativeEngineRuntime {
             activeCloneConditioningKey = conditioning.internalIdentityKey
             if wasPrimed,
                let primeTimings = clonePrimeTimingOverridesMS[conditioning.internalIdentityKey] {
+                await telemetrySampler?.captureBoundary("prewarm_skipped")
                 timingOverridesMS.merge(primeTimings) { current, _ in current }
             } else {
+                await telemetrySampler?.captureBoundary("before_prewarm")
                 let prewarmTimings = try await ensureWarmStateIfNeeded(
                     for: request,
                     model: model,
                     cloneConditioning: conditioning
                 )
+                await telemetrySampler?.captureBoundary("after_prewarm")
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
                 booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
             }
@@ -607,6 +654,7 @@ actor NativeEngineRuntime {
             wasPrimed = false
             if shouldSkipDedicatedCustomPrewarm(for: request, model: model) {
                 booleanFlags["custom_dedicated_prewarm_skipped"] = true
+                await telemetrySampler?.captureBoundary("prewarm_skipped")
                 await recordDiagnosticEvent(
                     "runtime-prepare-custom-skip-dedicated-prewarm",
                     request: request,
@@ -626,11 +674,13 @@ actor NativeEngineRuntime {
                 // is the warm-short bucket cutoff (~30 chars) so it
                 // matches the bench harness's warm-short cell.
                 let customPrewarmDepth = Self.customPrewarmDepth(for: request)
+                await telemetrySampler?.captureBoundary("before_prewarm")
                 let prewarmTimings = try await ensureWarmStateIfNeeded(
                     for: request,
                     model: model,
                     customPrewarmDepth: customPrewarmDepth
                 )
+                await telemetrySampler?.captureBoundary("after_prewarm")
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
                 booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
             }
@@ -639,11 +689,13 @@ actor NativeEngineRuntime {
         case .design:
             cloneConditioning = nil
             wasPrimed = false
+            await telemetrySampler?.captureBoundary("before_prewarm")
             let warmState = try await ensureDesignConditioningWarmStateIfNeeded(
                 for: request,
                 model: model,
                 source: .generation
             )
+            await telemetrySampler?.captureBoundary("after_prewarm")
             timingOverridesMS.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
             timingOverridesMS["prewarm_slot_wait_ms"] = warmState.prewarmSlotWaitMS
             booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
@@ -660,6 +712,7 @@ actor NativeEngineRuntime {
             stringFlags["design_conditioning_request_key"] = warmState.requestKey
             mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
         }
+        await telemetrySampler?.captureBoundary("after_mode_preparation")
 
         if cloneConditioning?.cloneCacheHit != nil {
             booleanFlags["prepared_clone_cache_hit"] = cloneConditioning?.cloneCacheHit ?? false

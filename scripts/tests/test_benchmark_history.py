@@ -309,6 +309,111 @@ class BenchmarkHistoryTests(unittest.TestCase):
         self.assertIn("macos-bench-20260712-120000", self.index.read_text())
         self.assertFalse(any(path.name.startswith(".") for path in first.parent.iterdir()))
 
+    def test_full_29_take_memory_record_uses_bounded_canonical_storage(self) -> None:
+        # Match the production macOS UI shape: 29 exact takes, 11 aggregate
+        # cells, and the complete per-take performance/memory/frontend payload.
+        # The intentionally dirty source list also protects exploratory runs,
+        # where exact changed-path provenance is larger than a clean baseline.
+        metric_keys = {
+            "alignedAppSampleCoverage", "alignedEngineSampleCoverage",
+            "alignedProcessSampleCount", "alignedProcessSampleCoverage",
+            "audioSeconds", "blockIOOperations", "chunksForwarded", "chunksReceived",
+            "contextSwitches", "continuityFailures", "cpuSystemSeconds", "cpuUserSeconds",
+            "decodeWallSeconds", "delayedHeartbeatCount", "finalizationMS",
+            "firstChunkToPlaybackScheduledMS", "generatedTokens",
+            "gpuRecommendedWorkingSetMB", "gpuWorkingSetUsageRatioPeak",
+            "heartbeatCoverage", "maximumPressureLevel", "maximumTrimLevel",
+            "memoryExitCount", "memoryPressureEventCount", "memoryTimeToPeakMS",
+            "memoryTrimCount", "memoryWarningCount", "minimumQueueDurationMS",
+            "mlxActivePeakMB", "mlxCachePeakMB", "mlxPeakMB", "modelLoadMS",
+            "pageFaults", "peakCompressedMB", "peakGPUAllocatedMB",
+            "peakPhysicalFootprintMB", "peakResidentMB", "physicalFootprintDeltaMB",
+            "physicalFootprintEndMB", "physicalFootprintStartMB", "playbackScheduledMS",
+            "requestToFirstChunkMS", "residentDeltaMB", "residentEndMB",
+            "residentStartMB", "rtf", "samplerBoundarySampleCount",
+            "samplerCaptureFailureCount", "samplerCoverage",
+            "samplerEffectiveMedianIntervalMS", "samplerMaximumDriftMS",
+            "samplerMaximumLatenessMS", "samplerMissedDeadlineCount",
+            "samplerPeriodicSampleCount", "samplerSampleCount",
+            "samplerTargetIntervalMS", "startBufferDepth", "submitToCompletedMS",
+            "submitToFirstChunkMS", "tokensPerSecond", "transportChunkGaps",
+            "transportDuplicateChunks", "transportOutOfOrderChunks",
+            "uiMaximumDelayedHeartbeatMS", "underruns",
+        }
+        zero_metrics = {
+            "samplerCaptureFailureCount", "memoryWarningCount", "memoryExitCount",
+            "memoryPressureEventCount", "memoryTrimCount", "maximumPressureLevel",
+            "maximumTrimLevel", "continuityFailures", "underruns", "transportChunkGaps",
+            "transportDuplicateChunks", "transportOutOfOrderChunks",
+        }
+        coverage_metrics = {
+            "samplerCoverage", "alignedProcessSampleCoverage",
+            "alignedEngineSampleCoverage", "alignedAppSampleCoverage", "heartbeatCoverage",
+        }
+        runtime_signature = (
+            "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|"
+            "auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish"
+        )
+        cell_counts = (1, 3, 3, 3, 1, 3, 3, 3, 3, 3, 3)
+        takes: list[dict] = []
+        for cell_index, count in enumerate(cell_counts, start=1):
+            for repetition in range(1, count + 1):
+                take_index = len(takes) + 1
+                length = ("short", "medium", "long")[cell_index % 3]
+                take = generation_take(take_index, length=length)
+                take.update({
+                    "cell": f"custom/cell-{cell_index:02d}/warm/{length}#{repetition}",
+                    "layers": ["engine", "engine-service", "app", "merged"],
+                    "memoryStatus": "qualified",
+                    "playbackStartSource": "finalFile",
+                    "runtimeProfileSignature": runtime_signature,
+                    "sampleSidecarDigest": f"{take_index:064x}",
+                })
+                take["metrics"] = {key: 1.0 for key in metric_keys}
+                take["metrics"].update({key: 0.0 for key in zero_metrics})
+                take["metrics"].update({key: 1.0 for key in coverage_metrics})
+                takes.append(take)
+
+        record = record_fixture(
+            run_id="full-memory-v2-regression", takes=takes, dirty=True,
+        )
+        record["schemaVersion"] = 2
+        record["models"][0]["runtimeProfileSignature"] = runtime_signature
+        record["source"]["changedPaths"] = [
+            f"Sources/Generated/TelemetryEvidenceComponent{index:03d}WithLongName.swift"
+            for index in range(320)
+        ]
+        record["evidence"].update({
+            "telemetrySchemaVersion": 8,
+            "memoryContractVersion": 1,
+            "memoryQualified": True,
+            "sampleSidecarCount": 58,
+            "sampleSidecarsDigest": "a" * 64,
+        })
+
+        directory = self.write_manifest({"historyRecord": record}, "full-memory-v2")
+        path = history.record_manifest(directory)
+        stored = path.read_bytes()
+        published = json.loads(stored)
+
+        # This is the exact regression: presentation whitespace alone would
+        # exceed the contract, while no allowlisted evidence needs removing.
+        pretty = (json.dumps(published, indent=2, sort_keys=True) + "\n").encode()
+        self.assertGreater(len(pretty), history.MAX_RECORD_BYTES)
+        self.assertLessEqual(len(stored), history.MAX_RECORD_BYTES)
+        self.assertEqual(stored, history.stored_json_bytes(published))
+        self.assertEqual(len(published["takes"]), 29)
+        self.assertEqual(len(published["cells"]), 11)
+        self.assertEqual(set(published["takes"][0]["metrics"]), metric_keys)
+        self.assertEqual(set(published["cells"][0]["statistics"]), metric_keys)
+        self.assertIn("output", published["takes"][0])
+        self.assertIn("audioQC", published["takes"][0])
+
+        before = stored
+        self.assertEqual(history.record_manifest(directory), path)
+        self.assertEqual(path.read_bytes(), before)
+        history.validate_all()
+
     def test_take_seed_is_optional_but_must_be_uint64(self) -> None:
         valid = record_fixture(run_id="seed-valid")
         valid["takes"][0]["seed"] = (1 << 64) - 1
@@ -320,6 +425,20 @@ class BenchmarkHistoryTests(unittest.TestCase):
             record["takes"][0]["seed"] = seed
             with self.subTest(seed=seed), self.assertRaises(history.HistoryError):
                 self.publish(record, f"seed-invalid-{index}")
+
+    def test_take_playback_start_source_is_optional_and_typed(self) -> None:
+        valid = record_fixture(run_id="playback-source-valid")
+        valid["takes"][0]["playbackStartSource"] = "finalFile"
+        path = self.publish(valid, "playback-source-valid")
+        self.assertEqual(
+            json.loads(path.read_text())["takes"][0]["playbackStartSource"],
+            "finalFile",
+        )
+
+        invalid = record_fixture(run_id="playback-source-invalid")
+        invalid["takes"][0]["playbackStartSource"] = "unknown"
+        with self.assertRaisesRegex(history.HistoryError, "playbackStartSource"):
+            self.publish(invalid, "playback-source-invalid")
 
     def test_language_take_accuracy_gate_is_bounded_and_paired(self) -> None:
         valid = record_fixture(run_id="accuracy-valid", kind="language")
@@ -385,6 +504,101 @@ class BenchmarkHistoryTests(unittest.TestCase):
         tampered_counts["takes"][0]["metrics"]["characterSubstitutions"] = 3.0
         with self.assertRaisesRegex(history.HistoryError, "do not match tracked counts"):
             self.publish(tampered_counts, "accuracy-tampered-counts")
+
+    def test_schema_v2_language_requires_complete_memory_qualification(self) -> None:
+        valid = record_fixture(run_id="language-memory-v2", kind="language")
+        valid["schemaVersion"] = 2
+        valid["evidence"].update({
+            "telemetrySchemaVersion": 8,
+            "memoryContractVersion": 1,
+            "memoryQualified": True,
+            "sampleSidecarCount": 1,
+            "sampleSidecarsDigest": "a" * 64,
+        })
+        take = valid["takes"][0]
+        take["memoryStatus"] = "qualified"
+        take["sampleSidecarDigest"] = "b" * 64
+        take["metrics"].update({key: 0.0 for key in history.MEMORY_REQUIRED_METRICS})
+        take["metrics"].update({
+            "samplerCoverage": 1.0,
+            "samplerSampleCount": 10.0,
+            "samplerBoundarySampleCount": 8.0,
+            "samplerPeriodicSampleCount": 1.0,
+            "gpuRecommendedWorkingSetMB": 4096.0,
+            "mlxActivePeakMB": 100.0,
+            "mlxCachePeakMB": 10.0,
+            "mlxPeakMB": 110.0,
+        })
+        path = self.publish(valid, "language-memory-v2")
+        published = json.loads(path.read_text())
+        self.assertTrue(published["evidence"]["memoryQualified"])
+        self.assertEqual(published["takes"][0]["memoryStatus"], "qualified")
+
+        for name, mutate in (
+            (
+                "missing-run-digest",
+                lambda record: record["evidence"].pop("sampleSidecarsDigest"),
+            ),
+            (
+                "missing-take-digest",
+                lambda record: record["takes"][0].pop("sampleSidecarDigest"),
+            ),
+            (
+                "legacy-telemetry",
+                lambda record: record["evidence"].__setitem__("telemetrySchemaVersion", 7),
+            ),
+        ):
+            candidate = copy.deepcopy(valid)
+            candidate["run"]["id"] = f"language-memory-v2-{name}"
+            mutate(candidate)
+            with self.subTest(name=name), self.assertRaises(history.HistoryError):
+                self.publish(candidate, f"language-memory-v2-{name}")
+
+    def test_schema_v2_macos_ui_requires_both_aligned_process_coverages(self) -> None:
+        valid = record_fixture(run_id="macos-ui-memory-v2")
+        valid["schemaVersion"] = 2
+        valid["evidence"].update({
+            "telemetrySchemaVersion": 8,
+            "memoryContractVersion": 1,
+            "memoryQualified": True,
+            "sampleSidecarCount": 2,
+            "sampleSidecarsDigest": "a" * 64,
+        })
+        take = valid["takes"][0]
+        take["memoryStatus"] = "qualified"
+        take["sampleSidecarDigest"] = "b" * 64
+        take["playbackStartSource"] = "finalFile"
+        take["metrics"].update({key: 0.0 for key in history.MEMORY_REQUIRED_METRICS})
+        take["metrics"].update({
+            "samplerCoverage": 1.0,
+            "samplerSampleCount": 10.0,
+            "samplerBoundarySampleCount": 8.0,
+            "samplerPeriodicSampleCount": 1.0,
+            "gpuRecommendedWorkingSetMB": 4096.0,
+            "mlxActivePeakMB": 100.0,
+            "mlxCachePeakMB": 10.0,
+            "mlxPeakMB": 110.0,
+            "alignedProcessSampleCount": 10.0,
+            "alignedProcessSampleCoverage": 1.0,
+            "alignedEngineSampleCoverage": 1.0,
+            "alignedAppSampleCoverage": 1.0,
+        })
+        self.publish(valid, "macos-ui-memory-v2")
+
+        for key in ("alignedEngineSampleCoverage", "alignedAppSampleCoverage"):
+            missing = copy.deepcopy(valid)
+            missing["run"]["id"] = f"macos-ui-memory-v2-missing-{key}"
+            missing["takes"][0]["metrics"].pop(key)
+            with self.subTest(key=key), self.assertRaisesRegex(
+                history.HistoryError, "memory-qualified take metrics are incomplete"
+            ):
+                self.publish(missing, missing["run"]["id"])
+
+        invalid = copy.deepcopy(valid)
+        invalid["run"]["id"] = "macos-ui-memory-v2-app-coverage-low"
+        invalid["takes"][0]["metrics"]["alignedAppSampleCoverage"] = 0.94
+        with self.assertRaisesRegex(history.HistoryError, "alignedAppSampleCoverage"):
+            self.publish(invalid, invalid["run"]["id"])
 
     def test_nested_manifest_selects_only_current_run(self) -> None:
         payload = {
@@ -588,6 +802,152 @@ class BenchmarkHistoryTests(unittest.TestCase):
             }
             with self.assertRaises(history.HistoryError):
                 self.publish(record, f"profile-invalid-{index}")
+
+    def test_memory_instrument_profile_requires_and_accepts_target_rows(self) -> None:
+        record = record_fixture(run_id="profile-memory-valid", kind="instrument-profile")
+        record["schemaVersion"] = 2
+        record["run"]["matrixScope"] = "instrumented"
+        record["run"]["classification"] = "instrumented"
+        record["evidence"].update({
+            "telemetrySchemaVersion": 8,
+            "memoryContractVersion": 1,
+            "memoryQualified": True,
+            "sampleSidecarCount": 1,
+            "sampleSidecarsDigest": "a" * 64,
+        })
+        take = record["takes"][0]
+        take["memoryStatus"] = "qualified"
+        take["sampleSidecarDigest"] = "b" * 64
+        take["metrics"].update({key: 0.0 for key in history.MEMORY_REQUIRED_METRICS})
+        take["metrics"].update({
+            "samplerCoverage": 1.0,
+            "samplerSampleCount": 10.0,
+            "samplerBoundarySampleCount": 8.0,
+            "samplerPeriodicSampleCount": 1.0,
+            "gpuRecommendedWorkingSetMB": 4096.0,
+            "mlxActivePeakMB": 100.0,
+            "mlxCachePeakMB": 10.0,
+            "mlxPeakMB": 110.0,
+        })
+        summary = {
+            **trace_summary(),
+            "memoryTraceEvidenceVersion": 2,
+            "allocationTargetDataBytes": 4096,
+            "allocationTrackPresent": True,
+            "allocationListPresent": True,
+            "allocationDataExportStatus": "notExportable",
+            "allocationTargetRowCount": 0,
+            "vmTrackerTrackPresent": True,
+            "vmTrackerRegionMapPresent": True,
+            "vmTrackerDataExportStatus": "notExportable",
+            "vmTrackerTargetRowCount": 0,
+        }
+        # TOC-advertised schemas are retained even when exact-PID filtering
+        # yields no rows. Zero is valid for an ancillary schema; aggregate CPU,
+        # signpost, allocation, and VM requirements remain independently strict.
+        summary["capturedRowsBySchema"]["kdebug-signpost"] = 0
+        record["evidence"]["trace"] = {
+            "digest": "f" * 64,
+            "template": "CPU Profiler + Allocations + VM Tracker + os_signpost",
+            "durationSeconds": 10,
+            "validated": True,
+            "summary": summary,
+        }
+        # A v2 record published before trace-retention metadata existed remains
+        # valid for read-only history compatibility.
+        self.publish(record, "profile-memory-valid")
+
+        retained = copy.deepcopy(record)
+        retained["run"]["id"] = "profile-memory-retention-valid"
+        retained["evidence"]["rawTelemetryDigest"] = "1" * 64
+        capture_settings = {
+            "profileKind": "memory",
+            "template": retained["evidence"]["trace"]["template"],
+            "requestedDurationSeconds": 10.0,
+            "targetProcess": summary["targetProcess"],
+            "exactPID": True,
+        }
+        retained["evidence"]["trace"].update({
+            "originalEphemeralPath": summary["artifact"],
+            "summaryArtifact": {
+                "path": "build/profiles/fixture-summary.json",
+                "digest": "e" * 64,
+            },
+            "rawTraceRetained": False,
+            "retentionPolicy": "summaryOnly",
+            "captureSettings": capture_settings,
+            "captureSettingsDigest": history.sha256_bytes(
+                history.canonical_bytes(capture_settings)
+            ),
+        })
+        self.publish(retained, "profile-memory-retention-valid")
+
+        explicit = copy.deepcopy(retained)
+        explicit["run"]["id"] = "profile-memory-retention-kept"
+        explicit["evidence"]["rawTelemetryDigest"] = "2" * 64
+        explicit["evidence"]["trace"]["retentionPolicy"] = "keptExplicitly"
+        explicit["evidence"]["trace"]["rawTraceRetained"] = True
+        self.publish(explicit, "profile-memory-retention-kept")
+
+        for label, mutate, message in (
+            (
+                "missing",
+                lambda trace: trace.pop("summaryArtifact"),
+                "metadata is incomplete",
+            ),
+            (
+                "policy",
+                lambda trace: trace.__setitem__("rawTraceRetained", True),
+                "conflicts with its retentionPolicy",
+            ),
+            (
+                "capture-digest",
+                lambda trace: trace.__setitem__("captureSettingsDigest", "0" * 64),
+                "does not match captureSettings",
+            ),
+            (
+                "summary-inside-trace",
+                lambda trace: trace["summaryArtifact"].__setitem__(
+                    "path", "build/profiles/fixture.trace/summary.json"
+                ),
+                "outside the ephemeral trace bundle",
+            ),
+        ):
+            invalid = copy.deepcopy(retained)
+            invalid["run"]["id"] = f"profile-memory-retention-{label}"
+            invalid["evidence"]["rawTelemetryDigest"] = str(
+                3 + ("missing", "policy", "capture-digest", "summary-inside-trace").index(label)
+            ) * 64
+            mutate(invalid["evidence"]["trace"])
+            with self.subTest(retention=label), self.assertRaisesRegex(
+                history.HistoryError, message
+            ):
+                self.publish(invalid, f"profile-memory-retention-{label}")
+
+        for key in (
+            "memoryTraceEvidenceVersion", "allocationTargetDataBytes",
+            "allocationTrackPresent", "allocationListPresent",
+            "allocationDataExportStatus", "allocationTargetRowCount",
+            "vmTrackerTrackPresent", "vmTrackerRegionMapPresent",
+            "vmTrackerDataExportStatus", "vmTrackerTargetRowCount",
+        ):
+            invalid = copy.deepcopy(record)
+            invalid["run"]["id"] = f"profile-memory-missing-{key}"
+            invalid["evidence"]["trace"]["summary"].pop(key)
+            with self.subTest(key=key), self.assertRaises(history.HistoryError):
+                self.publish(invalid, f"profile-memory-missing-{key}")
+
+        for status_key, count_key, label in (
+            ("allocationDataExportStatus", "allocationTargetRowCount", "Allocations"),
+            ("vmTrackerDataExportStatus", "vmTrackerTargetRowCount", "VM Tracker"),
+        ):
+            invalid = copy.deepcopy(record)
+            invalid["run"]["id"] = f"profile-memory-empty-{count_key}"
+            invalid["evidence"]["trace"]["summary"][status_key] = "targetRows"
+            with self.subTest(label=label), self.assertRaisesRegex(
+                history.HistoryError, f"exact-PID {label} exported rows"
+            ):
+                self.publish(invalid, f"profile-memory-empty-{count_key}")
 
     def test_prosody_requires_exact_aggregate_semantics(self) -> None:
         run_id = "prosody-invalid"

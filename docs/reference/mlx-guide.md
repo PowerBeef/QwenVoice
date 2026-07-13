@@ -499,7 +499,8 @@ QWENVOICE_DEBUG=1 QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac \
 python3 scripts/summarize_generation_telemetry.py <diag-dir> \
   --run-id <run-id> --evidence-manifest <run-artifact-dir>/benchmark-evidence.json
 
-# Capture and validate an Instruments trace (untracked; compact PASS metadata is registered)
+# Capture and validate Instruments evidence. The compact PASS summary is durable;
+# the multi-gigabyte raw trace is deleted after publication unless --keep-trace is explicit.
 scripts/macos_test.sh profile custom:speed:
 ```
 

@@ -33,6 +33,8 @@ final class VocelloiOSBenchmarkUITests: VocelloiOSUITestCase {
         // first generation; no headless inventory or model repair is invoked.
         assertVisibleModelReadiness()
         _ = assertRequiredCloneVoice()
+        let autoplayWasEnabled = ensureAutoplayEnabled()
+        defer { restoreAutoplayPreference(originallyEnabled: autoplayWasEnabled) }
 
         var previousTake: VocelloUIBenchMatrix.Take?
         var preparedMode: VocelloUIBenchMatrix.Mode?

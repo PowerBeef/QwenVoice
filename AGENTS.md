@@ -20,7 +20,9 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 
 1. **Resume active work** — read [`docs/development-progress.md`](docs/development-progress.md) when it exists, then confirm its checkpoint against the current checkout.
 2. **Pick a role** — read [`.agents/<role>.md`](.agents/) (backend, iOS, macOS, release-qa, website).
-3. **Inspect capabilities** — for relevant tasks, inspect the installed OpenAI plugin and skill inventory before choosing optional tooling. Read every selected skill before use.
+3. **Inspect capabilities** — for relevant tasks, inspect the currently callable OpenAI plugin and
+   skill inventory before choosing optional tooling. Installation is user-scoped and transient;
+   read every selected skill before use and never infer availability from a cache directory.
 4. **Minimal diff** — no drive-by refactors; preserve module boundaries and stable `accessibilityIdentifier` values.
 5. **Ask** when the target platform or test scope is ambiguous. Commit/push policy is not
    ambiguous: deterministic verification is sufficient to preserve and share development work.
@@ -30,7 +32,8 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 1. Restore a clean `main` from `origin/main`; never discard a dirty tree without reviewing it.
 2. Confirm Xcode, the paired physical iPhone, signing identities, and the repository scripts before
    explicit frontend acceptance. Ordinary deterministic development does not require a phone.
-3. Inspect the installed OpenAI plugin and skill inventory for optional build/debug assistance.
+3. Inspect the currently callable OpenAI plugin and skill inventory for optional build/debug
+   assistance. A cached plugin is not proof that its server or skill is enabled for the task.
    Repository scripts and XCUITest remain authoritative; `~/.codex` remains user-scoped state.
 4. Run the deterministic development checks below. Run XCUITest only when frontend acceptance is
    explicitly requested or when preparing the corresponding platform release.
@@ -41,16 +44,19 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 | --- | --- |
 | **iOS runtime/UI = physical device + XCUITest** | Never use Simulator. XCUITest drives the paired physical iPhone; scripts provide deterministic device/telemetry proof. The generic physical-device SDK compile needs no phone. `scripts/ios_device.sh gate` remains a physical-device runtime diagnostic, not a UI-result gate. |
 | **`project.yml`, not pbxproj** | After edit: `./scripts/regenerate_project.sh` + `./scripts/check_project_inputs.sh`. iOS resources: `sources:` + `buildPhase: resources` (not `resources:`). |
+| **Generated output follows one contract** | `config/build-output-policy.json` owns every ignored build path. Persistent Xcode caches are `build/cache/xcode/{macos,ios-device}`; packages are shared; scratch, evidence, symbols, and distribution outputs stay in their classified trees. Run `python3 scripts/build_output_policy.py validate`; never add an ad hoc DerivedData or `.build`. |
 | **Release-only config** | The project has no Debug configuration or generic `DEBUG` symbol. Runtime diagnostics use `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); compile-time test isolation belongs in test targets or a narrowly named compilation condition, never hidden app behavior. |
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Privacy** | No PII in tracked user-facing files. |
 | **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. No Simulator, alternate desktop-control MCP, or coordinate bridge is active. |
 | **No hidden test UI** | XCUITest observes genuine visible controls. Test-only code belongs in test targets; shippable app targets must not contain preview routes, invisible state markers, seeded UI state, or onboarding bypasses. |
-| **One shared XcodeBuildMCP** | OpenAI Build iOS Apps supplies the shared server; Build macOS Apps consumes it. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never configure a second server. Repository scripts remain the final gate. |
-| **Codex/ChatGPT Desktop only** | This repository has no compatibility layer for another agent IDE. Codex/ChatGPT Desktop, installed OpenAI plugins, repository skills, and repository scripts are the supported development environment. |
+| **One shared XcodeBuildMCP** | When the OpenAI Apple build plugins and their server are installed and callable, Build iOS Apps owns the single shared XcodeBuildMCP route and Build macOS Apps may consume it. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never configure a second server. Repository scripts remain the final gate. |
+| **Codex/ChatGPT Desktop only** | This repository has no compatibility layer for another agent IDE. Codex/ChatGPT Desktop, currently available OpenAI plugins and skills, repository guidance, and repository scripts are the supported development environment. Optional user-scoped capabilities are never repository prerequisites. |
 | **Publishing is deterministic-only** | Commits, pushes, pull requests, ordinary merges, ordinary CI, and release packaging require deterministic verification only. Missing models, a physical device, or XCUITest evidence must never block preserving, sharing, signing, notarizing, or uploading work. UI lanes run only for explicit frontend QA. |
-| **Benchmark history is PASS-only** | Successful benchmark runners publish one privacy-safe record under `benchmarks/runs/` and regenerate `benchmarks/HISTORY.md`. Raw telemetry, WAVs, screenshots, traces, and `.xcresult` bundles remain untracked. Publication never stages, commits, pushes, or turns model/device availability into a development gate. |
+| **Benchmark history is PASS-only** | Successful memory-qualified benchmark runners publish one privacy-safe record under `benchmarks/runs/` and regenerate `benchmarks/HISTORY.md`. Raw telemetry, WAVs, screenshots, traces, and `.xcresult` bundles remain untracked. Publication never stages, commits, pushes, or turns model/device availability into a development gate. The telemetry-overhead observer-effect experiment is local-only because instrumenting its `off` lane would invalidate the comparison. |
+| **Raw profile traces are ephemeral** | Exact-PID profiles hash, validate, summarize, and publish before discarding the multi-gigabyte raw trace. Use `--keep-trace` only for an explicit Instruments debugging session. `scripts/clean_build_caches.sh --routine` prunes superseded local evidence and scratch DerivedData without touching the current app, canonical caches, dSYMs, models, source, or tracked history. |
+| **Memory evidence must be qualified** | New publishable generation benchmarks require telemetry schema v8 plus benchmark-evidence manifest v2: exact run-scoped sample sidecars, start/stop and lifecycle boundaries, zero capture failures, ≥95% sampler coverage, and no critical pressure, memory warning/exit, `hardTrim`, or `fullUnload`. macOS app/engine totals are uptime-aligned; never add independent process peaks. |
 | **Audio QA is autonomous** | Engine/language promotion uses deterministic PCM QC, fixed-seed evidence, locale-locked ASR consensus, and the applicable prosody/delivery gates. Human listening is optional annotation only. A QC warning may be tracked as `passedWithWarnings`, but it is not promotion-quality until a deterministic rule or code fix clears it. |
 
 Every active invariant must live here, in a role playbook, or in an authoritative reference document.
@@ -186,11 +192,19 @@ scripts/macos_test.sh core-test
 scripts/macos_test.sh lang-bench --subset quick
 scripts/macos_test.sh test
 scripts/macos_test.sh telemetry-overhead
+scripts/macos_test.sh profile --kind memory custom:speed:
+scripts/macos_test.sh memory --label retained-check   # fixed retained-memory sequence
 scripts/ui_test.sh macos smoke
 scripts/ui_test.sh macos benchmark
 scripts/ui_test.sh ios smoke
 scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh lang-bench --subset quick
+scripts/ios_device.sh profile --kind memory
+scripts/ios_device.sh memory --voice-id <saved-voice-id> --label retained-check
+scripts/ios_device.sh memory-field-report       # local-only delayed MetricKit aggregate
+python3 scripts/build_output_policy.py status
+python3 scripts/build_output_policy.py validate
+scripts/clean_build_caches.sh --routine --dry-run
 ```
 
 Full lanes: [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md), [`docs/reference/ios-device-testing.md`](docs/reference/ios-device-testing.md).
@@ -207,7 +221,7 @@ configuration and plugin state are never repository sources of truth.
 | MLX / engine | `.agents/backend-mlx.md`, `docs/reference/mlx-guide.md`, shell scripts |
 | iOS | `.agents/ios-engineer.md`, `docs/reference/ios-app-guide.md`, `scripts/ios_device.sh` on a physical device only |
 | macOS / XPC | `.agents/macos-engineer.md`, `docs/reference/macos-app-guide.md`, macOS Codex skills where relevant |
-| Scripts / CI / GitHub | `.agents/release-qa-engineer.md`, shell scripts, installed GitHub integration |
+| Scripts / CI / GitHub | `.agents/release-qa-engineer.md`, shell scripts, GitHub integration when callable, otherwise `gh` |
 | Website | `.agents/website-engineer.md`, Browser for localhost verification |
 | macOS frontend QA | `scripts/ui_test.sh macos smoke|benchmark`; native macOS target only |
 | iOS frontend QA | `scripts/ui_test.sh ios smoke|benchmark`; paired physical iPhone only |

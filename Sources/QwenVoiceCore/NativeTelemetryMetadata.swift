@@ -32,15 +32,91 @@ extension NativeTelemetryRecorder {
 
 // MARK: - Memory lifecycle
 
+public enum NativeMemoryEventSource: String, Codable, Hashable, Sendable {
+    case kernel
+    case uiApplication = "ui-application"
+    case runtime
+    case postGeneration = "post-generation"
+    case metricKit = "metric-kit"
+}
+
+public struct MemoryBudgetTransitionMetadata: NativeTelemetryMetadata {
+    public static let stage = "memory_budget_transition"
+
+    public let previousBand: IOSMemoryPressureBand
+    public let currentBand: IOSMemoryPressureBand
+    public let reason: String
+    public let source: NativeMemoryEventSource
+
+    public init(
+        previousBand: IOSMemoryPressureBand,
+        currentBand: IOSMemoryPressureBand,
+        reason: String,
+        source: NativeMemoryEventSource = .runtime
+    ) {
+        self.previousBand = previousBand
+        self.currentBand = currentBand
+        self.reason = String(reason.prefix(64))
+        self.source = source
+    }
+
+    public init?(dictionary: [String: String]) {
+        guard let previous = dictionary["previousBand"].flatMap(IOSMemoryPressureBand.init(rawValue:)),
+              let current = dictionary["currentBand"].flatMap(IOSMemoryPressureBand.init(rawValue:)) else {
+            return nil
+        }
+        self.previousBand = previous
+        self.currentBand = current
+        self.reason = String((dictionary["reason"] ?? "memory_budget_transition").prefix(64))
+        self.source = dictionary["source"].flatMap(NativeMemoryEventSource.init(rawValue:)) ?? .runtime
+    }
+
+    public var dictionaryRepresentation: [String: String] {
+        [
+            "previousBand": previousBand.rawValue,
+            "currentBand": currentBand.rawValue,
+            "reason": reason,
+            "source": source.rawValue,
+        ]
+    }
+}
+
+public struct MemoryUnloadMetadata: NativeTelemetryMetadata {
+    public static let stage = "memory_unload"
+
+    public let reason: String
+    public let source: NativeMemoryEventSource
+
+    public init(reason: String, source: NativeMemoryEventSource = .runtime) {
+        self.reason = String(reason.prefix(64))
+        self.source = source
+    }
+
+    public init?(dictionary: [String: String]) {
+        self.reason = String((dictionary["reason"] ?? "runtime_unload").prefix(64))
+        self.source = dictionary["source"].flatMap(NativeMemoryEventSource.init(rawValue:)) ?? .runtime
+    }
+
+    public var dictionaryRepresentation: [String: String] {
+        ["reason": reason, "source": source.rawValue]
+    }
+}
+
 public struct MemoryTrimMetadata: NativeTelemetryMetadata {
     public static let stage = "memory_trim"
 
     public let level: NativeMemoryTrimLevel
     public let reason: String
+    public let source: NativeMemoryEventSource
 
-    public init(level: NativeMemoryTrimLevel, reason: String) {
+    public init(
+        level: NativeMemoryTrimLevel,
+        reason: String,
+        source: NativeMemoryEventSource = .runtime
+    ) {
         self.level = level
-        self.reason = reason
+        self.reason = String(reason.prefix(64))
+        self.source = source
     }
 
     public init?(dictionary: [String: String]) {
@@ -49,13 +125,15 @@ public struct MemoryTrimMetadata: NativeTelemetryMetadata {
             return nil
         }
         self.level = level
-        self.reason = dictionary["reason"] ?? ""
+        self.reason = String((dictionary["reason"] ?? "").prefix(64))
+        self.source = dictionary["source"].flatMap(NativeMemoryEventSource.init(rawValue:)) ?? .runtime
     }
 
     public var dictionaryRepresentation: [String: String] {
         [
             "level": level.rawValue,
             "reason": reason,
+            "source": source.rawValue,
         ]
     }
 }
@@ -64,9 +142,11 @@ public struct MemoryPressureMetadata: NativeTelemetryMetadata {
     public static let stage = "memory_pressure"
 
     public let level: NativeMemoryTrimLevel
+    public let source: NativeMemoryEventSource
 
-    public init(level: NativeMemoryTrimLevel) {
+    public init(level: NativeMemoryTrimLevel, source: NativeMemoryEventSource = .kernel) {
         self.level = level
+        self.source = source
     }
 
     public init?(dictionary: [String: String]) {
@@ -75,10 +155,39 @@ public struct MemoryPressureMetadata: NativeTelemetryMetadata {
             return nil
         }
         self.level = level
+        self.source = dictionary["source"].flatMap(NativeMemoryEventSource.init(rawValue:)) ?? .kernel
     }
 
     public var dictionaryRepresentation: [String: String] {
-        ["level": level.rawValue]
+        [
+            "level": level.rawValue,
+            "source": source.rawValue,
+        ]
+    }
+}
+
+public struct MemoryWarningMetadata: NativeTelemetryMetadata {
+    public static let stage = "memory_warning"
+
+    public let reason: String
+    public let source: NativeMemoryEventSource
+
+    public init(reason: String, source: NativeMemoryEventSource = .uiApplication) {
+        self.reason = String(reason.prefix(64))
+        self.source = source
+    }
+
+    public init?(dictionary: [String: String]) {
+        self.reason = String((dictionary["reason"] ?? "memory_warning").prefix(64))
+        self.source = dictionary["source"].flatMap(NativeMemoryEventSource.init(rawValue:))
+            ?? .uiApplication
+    }
+
+    public var dictionaryRepresentation: [String: String] {
+        [
+            "reason": reason,
+            "source": source.rawValue,
+        ]
     }
 }
 

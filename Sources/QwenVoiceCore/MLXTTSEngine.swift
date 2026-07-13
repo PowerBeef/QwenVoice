@@ -1343,6 +1343,22 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         IOSMemorySnapshot.capture(role: role)
     }
 
+    public func recordApplicationMemoryWarning(reason: String) async {
+        await runtime.recordApplicationMemoryWarning(reason: reason)
+    }
+
+    public func recordMemoryBudgetTransition(
+        from previousBand: IOSMemoryPressureBand,
+        to currentBand: IOSMemoryPressureBand,
+        reason: String
+    ) async {
+        await runtime.recordMemoryBudgetTransition(
+            from: previousBand,
+            to: currentBand,
+            reason: reason
+        )
+    }
+
     public func trimMemory(level: NativeMemoryTrimLevel, reason: String) async {
         if level == .fullUnload {
             cancelIdleUnload()

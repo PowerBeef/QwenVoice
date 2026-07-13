@@ -13,6 +13,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_HELPERS = ROOT / "scripts" / "tests"
+if str(TEST_HELPERS) not in sys.path:
+    sys.path.insert(0, str(TEST_HELPERS))
+from test_benchmark_memory import ENGINE_BOUNDARIES, row as memory_row, samples as memory_samples
 CHECK = ROOT / "scripts" / "check_ios_ui_benchmark.py"
 RUNNER = ROOT / "scripts" / "ui_test.sh"
 RUN_ID = "ios-ui-order-fixture"
@@ -26,11 +30,7 @@ def make_row(index: int, mode: str, length: str, warm_state: str) -> dict:
         "warmState": warm_state,
         "finishReason": "completed",
         "derivedMetrics": {"generatedTokenCount": 200 + index},
-        "summary": {
-            "stageMarks": [
-                {"stage": "memory_trim", "metadata": {"level": "fullUnload"}},
-            ] if index == 1 else [],
-        },
+        "summary": {"stageMarks": []},
         "notes": {"benchRunID": RUN_ID, "promptChars": str(prompt_chars)},
         "outputMetrics": {
             "readableWAV": True,
@@ -67,17 +67,33 @@ def v7_frontend() -> dict:
         "delayedHeartbeatCount50": 0, "scheduledHeartbeatCount": 10,
         "completedHeartbeatCount": 10, "heartbeatCoveragePPM": 1_000_000,
         "playbackChunksReceived": 4, "playbackContinuityFailures": 0,
-        "playbackUnderruns": 0, "playbackStartBufferedChunks": 2,
+        "playbackUnderruns": 0, "playbackStartSource": "liveStream",
+        "playbackStartBufferedChunks": 2,
         "playbackStartBufferedAudioMS": 120, "playbackMinimumQueuedAudioMS": 80,
     }
 
 
-def upgrade_rows_to_v7(engine_rows: list[dict], app_rows: list[dict]) -> None:
+def upgrade_rows_to_v8(
+    engine_rows: list[dict], app_rows: list[dict], diagnostics: Path
+) -> None:
     for row in engine_rows:
         mode = row["mode"]
         model_id = f"pro_{mode}_speed"
-        row["schemaVersion"] = 7
-        row["summary"] = v7_summary()
+        sidecar = memory_samples(
+            role="engine", boundaries=ENGINE_BOUNDARIES, ios=True,
+            footprint=3000 + int(str(row["generationID"]).rsplit("-", 1)[-1]),
+        )
+        memory = memory_row(row["generationID"], sidecar, layer="engine", ios=True)
+        row["schemaVersion"] = 8
+        row["summary"] = {**memory["summary"], **v7_summary()}
+        row["summary"]["sampleCount"] = len(sidecar)
+        row["summary"]["periodicSampleCount"] = 1
+        row["summary"]["boundarySampleCount"] = len(ENGINE_BOUNDARIES)
+        row["summary"]["captureFailureCount"] = 0
+        row["summary"]["missedPeriodicDeadlineCount"] = 0
+        row["summary"]["captureCoverage"] = memory["summary"]["captureCoverage"]
+        row["summary"]["boundaryCoverage"] = memory["summary"]["boundaryCoverage"]
+        row["memoryMetrics"] = memory["memoryMetrics"]
         row["backendMetrics"] = {"timings": [], "stages": []}
         row["modelID"] = model_id
         row["modelRuntimeIdentity"] = {
@@ -90,8 +106,11 @@ def upgrade_rows_to_v7(engine_rows: list[dict], app_rows: list[dict]) -> None:
         if mode in {"design", "clone"}:
             row["modelRuntimeIdentity"]["fixtureDigest"] = "d" * 64
         row["notes"]["promptDigest"] = "c" * 64
+        (diagnostics / "engine" / f"samples-{row['generationID']}.jsonl").write_text(
+            "".join(json.dumps(item) + "\n" for item in sidecar), encoding="utf-8"
+        )
     for row in app_rows:
-        row["schemaVersion"] = 7
+        row["schemaVersion"] = 8
         row["frontendMetrics"] = v7_frontend()
 
 
@@ -134,6 +153,7 @@ class CheckIOSUIBenchmarkTests(unittest.TestCase):
                 }
                 for row in rows
             ]
+            upgrade_rows_to_v8(rows, app_rows, diagnostics)
             if mutate_app_rows is not None:
                 mutate_app_rows(app_rows)
             (engine / "generations.jsonl").write_text(
@@ -260,8 +280,10 @@ class CheckIOSUIBenchmarkTests(unittest.TestCase):
         self.assertTrue(manifest["historyRecord"]["evidence"]["validatorPassed"])
         first_metrics = manifest["historyRecord"]["takes"][0]["metrics"]
         self.assertEqual(first_metrics["generatedTokens"], 201)
-        self.assertEqual(first_metrics["memoryTrimCount"], 1)
-        self.assertEqual(first_metrics["maximumTrimLevel"], 3)
+        self.assertEqual(first_metrics["memoryTrimCount"], 0)
+        self.assertEqual(first_metrics["maximumTrimLevel"], 0)
+        self.assertEqual(self.last_manifest["schemaVersion"], 2)
+        self.assertTrue(self.last_manifest["historyRecord"]["evidence"]["memoryQualified"])
 
     def test_missing_app_row_fails_without_evidence(self) -> None:
         def remove_app(rows: list[dict]) -> None:
@@ -289,45 +311,63 @@ class CheckIOSUIBenchmarkTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("malformed JSON", result.stdout + result.stderr)
 
-    def test_schema_v7_complete_accuracy_evidence_passes(self) -> None:
-        def engine(rows):
-            self._pending_v7_engine = rows
-        def app(rows):
-            upgrade_rows_to_v7(self._pending_v7_engine, rows)
+    def test_schema_v8_complete_accuracy_evidence_passes(self) -> None:
         result = self.run_checker(
-            self.expected_order, mutate_rows=engine, mutate_app_rows=app
+            self.expected_order,
+            evidence=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(
+            all(
+                take["playbackStartSource"] == "liveStream"
+                for take in self.last_manifest["historyRecord"]["takes"]
+            )
+        )
 
-    def test_schema_v7_missing_sampler_resource_or_environment_fails(self) -> None:
+    def test_schema_v8_missing_sampler_resource_or_environment_fails(self) -> None:
         for field, message in (
             ("maximumDriftNS", "invalid sampler maximumDriftNS"),
             ("processResourceUsage", "incomplete process resource deltas"),
             ("runEnvironment", "missing run environment"),
         ):
-            def engine(rows):
-                self._pending_v7_engine = rows
             def app(rows, field=field):
-                upgrade_rows_to_v7(self._pending_v7_engine, rows)
-                self._pending_v7_engine[0]["summary"].pop(field)
+                self._current_rows[0]["summary"].pop(field)
             with self.subTest(field=field):
+                def engine(rows):
+                    self._current_rows = rows
                 result = self.run_checker(
                     self.expected_order, mutate_rows=engine, mutate_app_rows=app
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(message, result.stdout + result.stderr)
 
-    def test_schema_v7_frontend_lifecycle_and_playback_health_are_required(self) -> None:
-        def engine(rows):
-            self._pending_v7_engine = rows
+    def test_schema_v8_frontend_lifecycle_and_playback_health_are_required(self) -> None:
         def app(rows):
-            upgrade_rows_to_v7(self._pending_v7_engine, rows)
             rows[0]["frontendMetrics"].pop("playbackMinimumQueuedAudioMS")
         result = self.run_checker(
-            self.expected_order, mutate_rows=engine, mutate_app_rows=app
+            self.expected_order, mutate_app_rows=app
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("incomplete typed frontend lifecycle/playback", result.stdout + result.stderr)
+
+    def test_schema_v8_typed_playback_start_source_is_required(self) -> None:
+        def app(rows):
+            rows[0]["frontendMetrics"].pop("playbackStartSource")
+        result = self.run_checker(
+            self.expected_order, mutate_app_rows=app
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing or invalid typed playback start source", result.stdout + result.stderr)
+
+    def test_schema_v8_final_file_uses_one_active_file_buffer(self) -> None:
+        def app(rows):
+            rows[0]["frontendMetrics"]["playbackStartSource"] = "finalFile"
+            rows[0]["frontendMetrics"]["playbackStartBufferedChunks"] = 2
+        result = self.run_checker(
+            self.expected_order, mutate_app_rows=app
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("final-file playback must expose one active file buffer", result.stdout + result.stderr)
 
     def test_unrelated_historical_rows_are_not_selected(self) -> None:
         def append_unrelated(rows: list[dict]) -> None:

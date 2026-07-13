@@ -570,8 +570,10 @@ def collect(
                     )
                 row = matches[0]
                 notes = row.get("notes") if isinstance(row.get("notes"), dict) else {}
-                if row.get("schemaVersion") != 7:
-                    raise EvidenceError(f"{layer}: generation {generation} is not telemetry schema v7")
+                if not isinstance(row.get("schemaVersion"), int) or row["schemaVersion"] < 7:
+                    raise EvidenceError(
+                        f"{layer}: generation {generation} is older than telemetry schema v7"
+                    )
                 if row.get("layer") != layer:
                     raise EvidenceError(
                         f"{layer}: generation {generation} declares layer {row.get('layer')!r}"

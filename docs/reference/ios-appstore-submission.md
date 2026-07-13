@@ -96,11 +96,21 @@ release. The workflow archives `VocelloiOS`, asserts the
 export QWENVOICE_DEVELOPMENT_TEAM=<your-team-id>
 ./scripts/regenerate_project.sh
 scripts/ios_device.sh preflight
-xcodebuild archive -scheme VocelloiOS -destination 'generic/platform=iOS' \
-  -archivePath build/ios/Vocello.xcarchive -allowProvisioningUpdates
+mkdir -p build/cache/xcode/source-packages build/scratch/derived-data/release-ios build/dist/ios
+xcodebuild -resolvePackageDependencies -project QwenVoice.xcodeproj -scheme VocelloiOS \
+  -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+  -derivedDataPath build/scratch/derived-data/release-ios
+xcodebuild archive -project QwenVoice.xcodeproj -scheme VocelloiOS -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -derivedDataPath build/scratch/derived-data/release-ios \
+  -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+  -disableAutomaticPackageResolution \
+  -archivePath build/dist/ios/Vocello.xcarchive -allowProvisioningUpdates \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
 /usr/libexec/PlistBuddy -c "Add :teamID string $QWENVOICE_DEVELOPMENT_TEAM" ExportOptions-appstore.plist
-xcodebuild -exportArchive -archivePath build/ios/Vocello.xcarchive \
-  -exportOptionsPlist ExportOptions-appstore.plist -exportPath build/ios/export -allowProvisioningUpdates
+xcodebuild -exportArchive -archivePath build/dist/ios/Vocello.xcarchive \
+  -exportOptionsPlist ExportOptions-appstore.plist -exportPath build/dist/ios/export \
+  -allowProvisioningUpdates
 ```
 
 Then verify (the full, metadata-driven check — author a `release_metadata.txt` capturing your on-device
@@ -108,13 +118,13 @@ validation per `scripts/verify_ios_release_archive.sh`'s usage):
 
 ```sh
 ./scripts/check_ios_catalog.sh
-./scripts/verify_ios_release_archive.sh build/ios/Vocello.xcarchive build/ios/export release_metadata.txt
+./scripts/verify_ios_release_archive.sh build/dist/ios/Vocello.xcarchive build/dist/ios/export release_metadata.txt
 ```
 
 When frontend acceptance is explicitly requested, run `scripts/ui_test.sh ios smoke` and
 `scripts/ui_test.sh ios benchmark` separately; their result bundles do not gate the archive.
 
-Upload the IPA via Transporter or `xcrun altool --upload-app -f build/ios/export/Vocello.ipa -t ios \
+Upload the IPA via Transporter or `xcrun altool --upload-app -f build/dist/ios/export/Vocello.ipa -t ios \
   --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>` (with `AuthKey_<KEY_ID>.p8` in `~/.appstoreconnect/private_keys/`).
 
 ## 5. Pre-flight (run before every submission)

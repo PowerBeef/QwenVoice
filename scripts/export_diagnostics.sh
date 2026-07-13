@@ -4,8 +4,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=lib/build_paths.sh
+. "$SCRIPT_DIR/lib/build_paths.sh"
 TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
-OUTPUT_ROOT="${1:-$PROJECT_DIR/build/diagnostics/qwenvoice-diagnostics-$TIMESTAMP}"
+OUTPUT_BASENAME="${1:-qwenvoice-diagnostics-$TIMESTAMP}"
+
+case "$OUTPUT_BASENAME" in
+    ""|.|..|*/*)
+        echo "error: diagnostic export name must be a basename without path separators" >&2
+        exit 1
+        ;;
+esac
+OUTPUT_ROOT="$QVOICE_ARTIFACTS_DIAGNOSTICS/$OUTPUT_BASENAME"
 
 mkdir -p "$OUTPUT_ROOT"
 
@@ -22,8 +32,8 @@ mkdir -p "$OUTPUT_ROOT"
 cp "$PROJECT_DIR/config/apple-platform-capability-matrix.json" "$OUTPUT_ROOT/" 2>/dev/null || true
 cp "$PROJECT_DIR/Sources/Resources/qwenvoice_contract.json" "$OUTPUT_ROOT/" 2>/dev/null || true
 
-if [ -f "$PROJECT_DIR/build/release-metadata.txt" ]; then
-    cp "$PROJECT_DIR/build/release-metadata.txt" "$OUTPUT_ROOT/"
+if [ -f "$QVOICE_DIST_MACOS/release-metadata.txt" ]; then
+    cp "$QVOICE_DIST_MACOS/release-metadata.txt" "$OUTPUT_ROOT/"
 fi
 
 /usr/bin/log show \

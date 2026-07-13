@@ -1,0 +1,581 @@
+{
+  "schemaVersion": 1,
+  "buildRoot": "build",
+  "buildRootEnv": "QVOICE_BUILD_ROOT",
+  "producerMetadataFilename": "last-build.json",
+  "entries": [
+    {
+      "id": "xcode-macos-derived-data",
+      "path": "build/cache/xcode/macos",
+      "class": "cache",
+      "owner": "macOS build and XCUITest lanes",
+      "cleanup": "aggressive",
+      "retention": "Persistent incremental macOS Xcode cache",
+      "env": "QVOICE_XCODE_MACOS_DERIVED"
+    },
+    {
+      "id": "xcode-ios-device-derived-data",
+      "path": "build/cache/xcode/ios-device",
+      "class": "cache",
+      "owner": "Physical-device iOS build and XCUITest lanes",
+      "cleanup": "aggressive",
+      "retention": "Persistent incremental physical-device Xcode cache",
+      "env": "QVOICE_XCODE_IOS_DERIVED"
+    },
+    {
+      "id": "xcode-source-packages",
+      "path": "build/cache/xcode/source-packages",
+      "class": "cache",
+      "owner": "Serialized Xcode SwiftPM resolver",
+      "cleanup": "aggressive",
+      "retention": "Shared pinned Xcode package checkout and artifact store",
+      "env": "QVOICE_XCODE_SOURCE_PACKAGES"
+    },
+    {
+      "id": "swiftpm-mlx-audio-runtime",
+      "path": "build/cache/swiftpm/mlx-audio-runtime",
+      "class": "cache",
+      "owner": "Vendored MLX Audio runtime SwiftPM commands",
+      "cleanup": "aggressive",
+      "retention": "Persistent package-specific SwiftPM scratch cache",
+      "env": "QVOICE_SWIFTPM_RUNTIME_CACHE"
+    },
+    {
+      "id": "scratch-foundation",
+      "path": "build/scratch/derived-data/foundation",
+      "class": "scratch",
+      "owner": "Foundation target compile-safety lane",
+      "cleanup": "routine",
+      "retention": "Delete after successful invocation and during routine cleanup",
+      "env": "QVOICE_SCRATCH_FOUNDATION"
+    },
+    {
+      "id": "scratch-package-resolution",
+      "path": "build/scratch/derived-data/package-resolution",
+      "class": "scratch",
+      "owner": "Serialized Xcode SwiftPM resolver",
+      "cleanup": "routine",
+      "retention": "Ephemeral resolver intermediates; the shared checkout lives under build/cache",
+      "env": "QVOICE_SCRATCH_PACKAGE_RESOLUTION"
+    },
+    {
+      "id": "scratch-transient-tools",
+      "path": "build/scratch/transient",
+      "class": "scratch",
+      "owner": "One-off repository tooling and migration-only diagnostic probes",
+      "cleanup": "routine",
+      "retention": "Invocation-local helpers and obsolete untracked probes; routine cleanup removes them",
+      "env": "QVOICE_SCRATCH_TRANSIENT"
+    },
+    {
+      "id": "scratch-release-macos",
+      "path": "build/scratch/derived-data/release-macos",
+      "class": "scratch",
+      "owner": "macOS release build and archive lane",
+      "cleanup": "routine",
+      "retention": "Isolated release DerivedData; never reused as a development cache",
+      "env": "QVOICE_SCRATCH_RELEASE_MACOS"
+    },
+    {
+      "id": "scratch-release-ios",
+      "path": "build/scratch/derived-data/release-ios",
+      "class": "scratch",
+      "owner": "Local iOS archive and export lane",
+      "cleanup": "routine",
+      "retention": "Isolated local archive DerivedData; never reused as a development cache",
+      "env": "QVOICE_SCRATCH_RELEASE_IOS"
+    },
+    {
+      "id": "scratch-xcodebuildmcp-macos",
+      "path": "build/scratch/derived-data/xcodebuildmcp/macos",
+      "class": "scratch",
+      "owner": "XcodeBuildMCP macOS profile",
+      "cleanup": "routine",
+      "retention": "Session scratch; repository scripts remain authoritative",
+      "env": "QVOICE_SCRATCH_XCODEBUILDMCP_MACOS"
+    },
+    {
+      "id": "scratch-xcodebuildmcp-ios-device",
+      "path": "build/scratch/derived-data/xcodebuildmcp/ios-device",
+      "class": "scratch",
+      "owner": "XcodeBuildMCP physical-device iOS profile",
+      "cleanup": "routine",
+      "retention": "Session scratch; repository scripts remain authoritative",
+      "env": "QVOICE_SCRATCH_XCODEBUILDMCP_IOS"
+    },
+    {
+      "id": "scratch-ci",
+      "path": "build/scratch/derived-data/ci",
+      "class": "scratch",
+      "owner": "GitHub Actions deterministic compile and archive lanes",
+      "cleanup": "routine",
+      "retention": "Ephemeral CI DerivedData",
+      "env": "QVOICE_SCRATCH_CI"
+    },
+    {
+      "id": "artifacts-macos",
+      "path": "build/artifacts/macos",
+      "class": "artifact",
+      "owner": "macOS deterministic, benchmark, and profile validators",
+      "cleanup": "governed",
+      "retention": "Retain compact summaries and publication-repair evidence; prune raw evidence only after validation",
+      "env": "QVOICE_ARTIFACTS_MACOS"
+    },
+    {
+      "id": "artifacts-ios",
+      "path": "build/artifacts/ios",
+      "class": "artifact",
+      "owner": "Physical-device iOS diagnostics, benchmarks, and profiles",
+      "cleanup": "governed",
+      "retention": "Retain compact summaries and publication-repair evidence; prune raw evidence only after validation",
+      "env": "QVOICE_ARTIFACTS_IOS"
+    },
+    {
+      "id": "artifacts-ui-tests",
+      "path": "build/artifacts/ui-tests",
+      "class": "artifact",
+      "owner": "Unified macOS and physical-device XCUITest runner",
+      "cleanup": "prune-ui-results",
+      "retention": "Keep policy-selected passing and failure result bundles",
+      "env": "QVOICE_ARTIFACTS_UI_TESTS"
+    },
+    {
+      "id": "artifacts-diagnostics",
+      "path": "build/artifacts/diagnostics",
+      "class": "artifact",
+      "owner": "Cross-platform logs, crash deltas, and local diagnostics",
+      "cleanup": "governed",
+      "retention": "Validator-owned; preserve unresolved failure and publication-repair evidence",
+      "env": "QVOICE_ARTIFACTS_DIAGNOSTICS"
+    },
+    {
+      "id": "symbols-macos",
+      "path": "build/artifacts/symbols/macos",
+      "class": "artifact",
+      "owner": "macOS build and release identity checks",
+      "cleanup": "preserve",
+      "retention": "Keep only symbols whose UUIDs match the current macOS app and XPC products",
+      "env": "QVOICE_SYMBOLS_MACOS"
+    },
+    {
+      "id": "symbols-ios",
+      "path": "build/artifacts/symbols/ios",
+      "class": "artifact",
+      "owner": "Physical-device iOS build and archive identity checks",
+      "cleanup": "preserve",
+      "retention": "Keep only symbols whose UUIDs match the current iOS app product",
+      "env": "QVOICE_SYMBOLS_IOS"
+    },
+    {
+      "id": "artifacts-foundation",
+      "path": "build/artifacts/foundation",
+      "class": "artifact",
+      "owner": "Foundation compile-safety result bundles and logs",
+      "cleanup": "routine",
+      "retention": "Retain the latest useful compile-safety result; older output is disposable",
+      "env": "QVOICE_ARTIFACTS_FOUNDATION"
+    },
+    {
+      "id": "dist-macos",
+      "path": "build/dist/macos",
+      "class": "distribution",
+      "owner": "macOS signing, notarization, and packaging lane",
+      "cleanup": "dist",
+      "retention": "Never remove during routine or aggressive cleanup; explicit distribution cleanup only",
+      "env": "QVOICE_DIST_MACOS"
+    },
+    {
+      "id": "dist-ios",
+      "path": "build/dist/ios",
+      "class": "distribution",
+      "owner": "iOS archive and TestFlight export lane",
+      "cleanup": "dist",
+      "retention": "Never remove during routine or aggressive cleanup; explicit distribution cleanup only",
+      "env": "QVOICE_DIST_IOS"
+    }
+  ],
+  "publicLinks": [
+    {
+      "path": "build/Vocello.app",
+      "targetEntry": "xcode-macos-derived-data",
+      "targetSuffix": "Build/Products/Release/Vocello.app"
+    },
+    {
+      "path": "build/vocello",
+      "targetEntry": "xcode-macos-derived-data",
+      "targetSuffix": "Build/Products/Release/vocello"
+    }
+  ],
+  "externalXcodeDerivedData": {
+    "path": "~/Library/Developer/Xcode/DerivedData",
+    "projectNames": [
+      "QwenVoice.xcodeproj",
+      "QwenVoice"
+    ],
+    "policy": "report-only"
+  },
+  "migrations": [
+    {
+      "id": "legacy-macos-source-packages",
+      "source": "build/DerivedData/SourcePackages",
+      "destination": "build/cache/xcode/source-packages",
+      "equivalence": "swiftpm-checkouts"
+    },
+    {
+      "id": "legacy-ios-source-packages",
+      "source": "build/ios/SourcePackages",
+      "destination": "build/cache/xcode/source-packages",
+      "equivalence": "swiftpm-checkouts"
+    },
+    {
+      "id": "legacy-release-source-packages",
+      "source": "build/source-packages",
+      "destination": "build/cache/xcode/source-packages",
+      "equivalence": "swiftpm-checkouts"
+    },
+    {
+      "id": "legacy-macos-derived-data",
+      "source": "build/DerivedData",
+      "destination": "build/cache/xcode/macos"
+    },
+    {
+      "id": "legacy-vendored-swiftpm-cache",
+      "source": "third_party_patches/mlx-audio-swift/.build",
+      "destination": "build/cache/swiftpm/mlx-audio-runtime"
+    },
+    {
+      "id": "legacy-global-build-cache",
+      "source": "build/.cache",
+      "destination": "build/cache/xcode/source-packages/.qwenvoice-cache"
+    },
+    {
+      "id": "legacy-foundation-artifacts",
+      "source": "build/foundation",
+      "destination": "build/artifacts/foundation"
+    },
+    {
+      "id": "legacy-ui-test-artifacts",
+      "source": "build/ui-tests",
+      "destination": "build/artifacts/ui-tests"
+    },
+    {
+      "id": "legacy-macos-symbols",
+      "source": "build/macos/dsyms",
+      "destination": "build/artifacts/symbols/macos"
+    },
+    {
+      "id": "legacy-macos-artifacts",
+      "source": "build/macos",
+      "destination": "build/artifacts/macos",
+      "mode": "merge"
+    },
+    {
+      "id": "legacy-ios-diagnostics",
+      "source": "build/ios-diagnostics",
+      "destination": "build/artifacts/diagnostics/ios"
+    },
+    {
+      "id": "legacy-ios-log-artifacts",
+      "source": "build/ios-logs",
+      "destination": "build/artifacts/diagnostics/ios/logs"
+    },
+    {
+      "id": "legacy-ios-build-products",
+      "source": "build/ios/Build",
+      "destination": "build/cache/xcode/ios-device/Build"
+    },
+    {
+      "id": "legacy-ios-module-cache",
+      "source": "build/ios/ModuleCache.noindex",
+      "destination": "build/cache/xcode/ios-device/ModuleCache.noindex"
+    },
+    {
+      "id": "legacy-ios-index",
+      "source": "build/ios/Index.noindex",
+      "destination": "build/cache/xcode/ios-device/Index.noindex"
+    },
+    {
+      "id": "legacy-ios-compilation-cache",
+      "source": "build/ios/CompilationCache.noindex",
+      "destination": "build/cache/xcode/ios-device/CompilationCache.noindex"
+    },
+    {
+      "id": "legacy-ios-sdk-stat-cache",
+      "source": "build/ios/SDKStatCaches.noindex",
+      "destination": "build/cache/xcode/ios-device/SDKStatCaches.noindex"
+    },
+    {
+      "id": "legacy-ios-logs",
+      "source": "build/ios/Logs",
+      "destination": "build/cache/xcode/ios-device/Logs"
+    },
+    {
+      "id": "legacy-ios-test-results",
+      "source": "build/ios/TestResults",
+      "destination": "build/cache/xcode/ios-device/TestResults"
+    },
+    {
+      "id": "legacy-ios-derived-info",
+      "source": "build/ios/info.plist",
+      "destination": "build/cache/xcode/ios-device/info.plist"
+    },
+    {
+      "id": "legacy-ios-symbols",
+      "source": "build/ios/dsyms",
+      "destination": "build/artifacts/symbols/ios"
+    },
+    {
+      "id": "legacy-ios-profiles",
+      "source": "build/ios/profiles",
+      "destination": "build/artifacts/ios/profiles"
+    },
+    {
+      "id": "legacy-ios-remaining-artifacts",
+      "source": "build/ios",
+      "destination": "build/artifacts/ios",
+      "mode": "merge"
+    },
+    {
+      "id": "legacy-prosody-calibration",
+      "source": "build/prosody-calibration",
+      "destination": "build/artifacts/macos/prosody-calibration"
+    },
+    {
+      "id": "legacy-project-map-verification",
+      "source": "build/project-map-verify",
+      "destination": "build/scratch/transient/project-map-verify"
+    },
+    {
+      "id": "legacy-local-tools",
+      "source": "build/tools",
+      "destination": "build/scratch/transient/tools"
+    },
+    {
+      "id": "legacy-ios-clone-diagnostics",
+      "source": "build/ios-diagnostics-clone",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/clone"
+    },
+    {
+      "id": "legacy-ios-repro-diagnostics",
+      "source": "build/ios-diagnostics-repro",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/repro"
+    },
+    {
+      "id": "legacy-ios-benchmark-log",
+      "source": "build/ios-bench-full-run.log",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/ios-bench-full-run.log"
+    },
+    {
+      "id": "legacy-device-shot-after-resume",
+      "source": "build/device-shot-after-resume.png",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/device-shot-after-resume.png"
+    },
+    {
+      "id": "legacy-device-shot-now",
+      "source": "build/device-shot-now.png",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/device-shot-now.png"
+    },
+    {
+      "id": "legacy-device-shot-now-2",
+      "source": "build/device-shot-now2.png",
+      "destination": "build/scratch/transient/obsolete-ios-diagnostics/device-shot-now2.png"
+    },
+    {
+      "id": "legacy-xctrace-combined-probe-directory",
+      "source": "build/xctrace-combined-probe",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe"
+    },
+    {
+      "id": "legacy-xctrace-combined-probe-trace",
+      "source": "build/xctrace-combined-probe.trace",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe.trace"
+    },
+    {
+      "id": "legacy-xctrace-cpu-signpost-probe-directory",
+      "source": "build/xctrace-cpu-signpost-probe",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe"
+    },
+    {
+      "id": "legacy-xctrace-cpu-signpost-probe-trace",
+      "source": "build/xctrace-cpu-signpost-probe.trace",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe.trace"
+    },
+    {
+      "id": "legacy-xctrace-instrument-probe-trace",
+      "source": "build/xctrace-instrument-probe.trace",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-instrument-probe.trace"
+    },
+    {
+      "id": "legacy-xctrace-signpost-probe-runtime",
+      "source": "build/xctrace-signpost-probe-runtime",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe-runtime"
+    },
+    {
+      "id": "legacy-xctrace-signpost-probe-trace",
+      "source": "build/xctrace-signpost-probe.trace",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe.trace"
+    },
+    {
+      "id": "legacy-xctrace-combined-arg-export",
+      "source": "build/xctrace-combined-probe-os-signpost-arg.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe-os-signpost-arg.xml"
+    },
+    {
+      "id": "legacy-xctrace-combined-interval-export",
+      "source": "build/xctrace-combined-probe-os-signpost-interval.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe-os-signpost-interval.xml"
+    },
+    {
+      "id": "legacy-xctrace-combined-signpost-export",
+      "source": "build/xctrace-combined-probe-os-signpost.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe-os-signpost.xml"
+    },
+    {
+      "id": "legacy-xctrace-combined-time-export",
+      "source": "build/xctrace-combined-probe-time-profile.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe-time-profile.xml"
+    },
+    {
+      "id": "legacy-xctrace-combined-toc",
+      "source": "build/xctrace-combined-probe-toc.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe-toc.xml"
+    },
+    {
+      "id": "legacy-xctrace-combined-log",
+      "source": "build/xctrace-combined-probe.log",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-combined-probe.log"
+    },
+    {
+      "id": "legacy-xctrace-cpu-profile-export",
+      "source": "build/xctrace-cpu-signpost-probe-cpu-profile.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe-cpu-profile.xml"
+    },
+    {
+      "id": "legacy-xctrace-cpu-interval-export",
+      "source": "build/xctrace-cpu-signpost-probe-os-signpost-interval.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe-os-signpost-interval.xml"
+    },
+    {
+      "id": "legacy-xctrace-cpu-signpost-export",
+      "source": "build/xctrace-cpu-signpost-probe-os-signpost.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe-os-signpost.xml"
+    },
+    {
+      "id": "legacy-xctrace-cpu-toc",
+      "source": "build/xctrace-cpu-signpost-probe-toc.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe-toc.xml"
+    },
+    {
+      "id": "legacy-xctrace-cpu-log",
+      "source": "build/xctrace-cpu-signpost-probe.log",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-cpu-signpost-probe.log"
+    },
+    {
+      "id": "legacy-xctrace-instrument-toc",
+      "source": "build/xctrace-instrument-probe-toc.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-instrument-probe-toc.xml"
+    },
+    {
+      "id": "legacy-xctrace-instrument-log",
+      "source": "build/xctrace-instrument-probe.log",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-instrument-probe.log"
+    },
+    {
+      "id": "legacy-xctrace-signpost-arg-export",
+      "source": "build/xctrace-signpost-probe-os-signpost-arg.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe-os-signpost-arg.xml"
+    },
+    {
+      "id": "legacy-xctrace-signpost-interval-export",
+      "source": "build/xctrace-signpost-probe-os-signpost-interval.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe-os-signpost-interval.xml"
+    },
+    {
+      "id": "legacy-xctrace-signpost-export",
+      "source": "build/xctrace-signpost-probe-os-signpost.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe-os-signpost.xml"
+    },
+    {
+      "id": "legacy-xctrace-signpost-toc",
+      "source": "build/xctrace-signpost-probe-toc.xml",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe-toc.xml"
+    },
+    {
+      "id": "legacy-xctrace-signpost-log",
+      "source": "build/xctrace-signpost-probe.log",
+      "destination": "build/scratch/transient/legacy-profile-probes/xctrace-signpost-probe.log"
+    }
+  ],
+  "referencePolicy": {
+    "scanRoots": [
+      "AGENTS.md",
+      ".agents",
+      ".github",
+      ".xcodebuildmcp",
+      "README.md",
+      "benchmarks",
+      "config",
+      "docs",
+      "project.yml",
+      "scripts",
+      "Sources/Resources/voice-previews/README.md",
+      "website"
+    ],
+    "excludePrefixes": [
+      "benchmarks/HISTORY.md",
+      "benchmarks/LEGACY_HISTORY.md",
+      "benchmarks/runs",
+      "config/build-output-policy.json",
+      "docs/releases",
+      "scripts/tests"
+    ],
+    "retiredPrefixes": [
+      "build/DerivedData",
+      "build/source-packages",
+      "build/foundation",
+      "build/ui-tests",
+      "build/macos",
+      "build/ios/",
+      "build/ios-diagnostics",
+      "build/ios-logs",
+      "build/TelemetryAuditDerivedData",
+      "build/DerivedData-ios-memory",
+      "build/DerivedData-memory-failure",
+      "build/.cache",
+      "build/prosody-calibration",
+      "build/project-map-verify",
+      "build/tools",
+      "build/ios-diagnostics-clone",
+      "build/ios-diagnostics-repro",
+      "build/xctrace-combined-probe",
+      "build/xctrace-cpu-signpost-probe",
+      "build/xctrace-instrument-probe",
+      "build/xctrace-signpost-probe",
+      "third_party_patches/mlx-audio-swift/.build"
+    ],
+    "retiredFragments": [
+      "$BUILD_DIR/DerivedData",
+      "${BUILD_DIR}/DerivedData",
+      "$BUILD_DIR/source-packages",
+      "${BUILD_DIR}/source-packages",
+      "$BUILD_DIR/foundation",
+      "${BUILD_DIR}/foundation",
+      "$BUILD_DIR/ui-tests",
+      "${BUILD_DIR}/ui-tests",
+      "$BUILD_DIR/macos",
+      "${BUILD_DIR}/macos",
+      "$BUILD_DIR/ios",
+      "${BUILD_DIR}/ios",
+      "$BUILD_DIR/ios-diagnostics",
+      "${BUILD_DIR}/ios-diagnostics",
+      "$BUILD_DIR/ios-logs",
+      "${BUILD_DIR}/ios-logs",
+      "$BUILD_DIR/TelemetryAuditDerivedData",
+      "${BUILD_DIR}/TelemetryAuditDerivedData",
+      "$BUILD_DIR/DerivedData-ios-memory",
+      "${BUILD_DIR}/DerivedData-ios-memory",
+      "$BUILD_DIR/DerivedData-memory-failure",
+      "${BUILD_DIR}/DerivedData-memory-failure"
+    ]
+  }
+}

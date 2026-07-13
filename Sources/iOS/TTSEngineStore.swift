@@ -412,6 +412,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
 
     @discardableResult
     func refreshMemoryContext(reason: String, source: String = "store") async -> IOSMemoryContext {
+        let previousBand = latestMemoryContext.pressureBand
         let appSnapshot = memorySnapshotProvider()
         // The engine runs IN-PROCESS (commit 7822a8a), so a context measures this single
         // app process. The old double-count failure mode — sampling the app twice (once as
@@ -424,6 +425,13 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         )
         let effectiveContext = contextApplyingDebugForcedBand(context)
         applyMemoryPolicyContext(effectiveContext)
+        if previousBand != effectiveContext.pressureBand {
+            await backend.recordMemoryBudgetTransition(
+                from: previousBand,
+                to: effectiveContext.pressureBand,
+                reason: reason
+            )
+        }
         return effectiveContext
     }
 
@@ -449,6 +457,15 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
         )
         syncFromBackend()
         notifyMemoryContextDidChange()
+    }
+
+    func recordApplicationMemoryWarning(reason: String) async {
+        await backend.recordApplicationMemoryWarning(reason: reason)
+        diagnosticsRecorder?.recordAction(
+            event: "application_memory_warning",
+            reason: reason,
+            context: latestMemoryContext
+        )
     }
 
     private func notifyMemoryContextDidChange() {
@@ -870,6 +887,12 @@ final class AnyTTSEngineBackend {
     private let clearVisibleErrorBlock: () -> Void
     private let setVisibleErrorBlock: (String?) -> Void
     private let setAllowsProactiveWarmOperationsBlock: (Bool) -> Void
+    private let recordApplicationMemoryWarningBlock: (String) async -> Void
+    private let recordMemoryBudgetTransitionBlock: (
+        IOSMemoryPressureBand,
+        IOSMemoryPressureBand,
+        String
+    ) async -> Void
     private let trimMemoryBlock: (NativeMemoryTrimLevel, String) async -> Void
     private let captureMemorySnapshotBlock: (IOSMemoryProcessRole) async -> IOSMemorySnapshot?
     private let engineLifecycleStateBlock: () -> EngineLifecycleState
@@ -931,12 +954,24 @@ final class AnyTTSEngineBackend {
         if let engine = engine as? any TTSEngineRuntimeControlling {
             self.setVisibleErrorBlock = { engine.setVisibleError($0) }
             self.setAllowsProactiveWarmOperationsBlock = { engine.setAllowsProactiveWarmOperations($0) }
+            self.recordApplicationMemoryWarningBlock = { reason in
+                await engine.recordApplicationMemoryWarning(reason: reason)
+            }
+            self.recordMemoryBudgetTransitionBlock = { previousBand, currentBand, reason in
+                await engine.recordMemoryBudgetTransition(
+                    from: previousBand,
+                    to: currentBand,
+                    reason: reason
+                )
+            }
             self.trimMemoryBlock = { level, reason in
                 await engine.trimMemory(level: level, reason: reason)
             }
         } else {
             self.setVisibleErrorBlock = { _ in }
             self.setAllowsProactiveWarmOperationsBlock = { _ in }
+            self.recordApplicationMemoryWarningBlock = { _ in }
+            self.recordMemoryBudgetTransitionBlock = { _, _, _ in }
             self.trimMemoryBlock = { _, _ in }
         }
         if let engine = engine as? any NativeMemoryReporting {
@@ -994,6 +1029,16 @@ final class AnyTTSEngineBackend {
     func clearVisibleError() { clearVisibleErrorBlock() }
     func setVisibleError(_ message: String?) { setVisibleErrorBlock(message) }
     func setAllowsProactiveWarmOperations(_ allow: Bool) { setAllowsProactiveWarmOperationsBlock(allow) }
+    func recordMemoryBudgetTransition(
+        from previousBand: IOSMemoryPressureBand,
+        to currentBand: IOSMemoryPressureBand,
+        reason: String
+    ) async {
+        await recordMemoryBudgetTransitionBlock(previousBand, currentBand, reason)
+    }
+    func recordApplicationMemoryWarning(reason: String) async {
+        await recordApplicationMemoryWarningBlock(reason)
+    }
     func trimMemory(level: NativeMemoryTrimLevel, reason: String) async { await trimMemoryBlock(level, reason) }
     func captureMemorySnapshot(role: IOSMemoryProcessRole) async -> IOSMemorySnapshot? {
         await captureMemorySnapshotBlock(role)

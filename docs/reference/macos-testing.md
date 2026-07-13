@@ -64,8 +64,72 @@ never the diagnostics directory's historical population. A PASS publishes one pr
 under `benchmarks/runs/ui-generation/` and regenerates `benchmarks/HISTORY.md`. Raw telemetry, WAVs,
 screenshots, and `.xcresult` remain untracked; publication never stages, commits, or pushes.
 
+New publishable generation runs use telemetry schema v8 and evidence manifest v2. Their exact
+`samples-<generationID>.jsonl` files must begin/end with one start/stop sample, contain the required
+load/stream/finalization boundaries, match summary counts, have zero capture failures, and retain at
+least 95% periodic coverage. macOS UI/XPC totals are calculated only from app and engine samples
+paired by absolute uptime within one 500 ms cadence; independent process maxima are never added.
+Critical pressure, app memory warning/exit, `hardTrim`, or `fullUnload` fails publication. Guarded
+pressure, `softTrim`, or 95–<100% coverage publishes only as an explicit warning.
+
 Smoke is intentionally smaller: it asserts visible completion and History plus the runner's
 single-process/crash-delta checks; it does not claim the benchmark's per-take telemetry matrix.
+
+## Instruments profiles
+
+```sh
+# CPU/signpost profile (default)
+scripts/macos_test.sh profile custom:speed:
+
+# CPU + Allocations + VM Tracker + signposts
+scripts/macos_test.sh profile --kind memory custom:speed:
+
+# Explicit diagnostic exception: retain the raw Instruments document.
+scripts/macos_test.sh profile --kind memory --keep-trace custom:speed:
+```
+
+The memory profile captures one cold long take so Allocations/VM Tracker include model-load and
+sustained-generation peaks. It uses Apple's Allocations template, which contains both memory tracks
+with automatic VM snapshots disabled; standalone VM Tracker auto-snapshots suspend the target and
+would legitimately lower its 500 ms sampler coverage. Publication verifies that setting from the
+captured trace and still enforces the unmodified 95% coverage floor. The default 180-second safety
+cap accommodates a cold long take, while target exit ends recording early. `scripts/macos_test.sh
+memory` owns the repeated retained-growth qualification.
+
+Both commands build the exact CLI, suspend one owned process, attach Instruments to that exact PID,
+resume it only after xctrace reports recording, and validate the exported trace table of contents.
+The memory lane enables verbose per-sample telemetry and remains PASS-only. Headless CLI profiles
+report the owning engine process; XPC UI benchmarks use the uptime-aligned app+engine aggregate.
+The runner requires at least 5 GiB free for CPU profiles and 15 GiB for memory profiles before it
+launches the target. After successful trace validation and history publication, the raw trace is
+deleted by default; the record retains its digest, capture settings, extracted summary, original
+ephemeral path, and retention status. `--keep-trace` is the explicit diagnostic exception. A
+failure retains only the newest raw failure for that platform/profile kind. Sidecars and retained
+diagnostics remain under `build/` and untracked.
+
+Retained-memory qualification is a distinct non-Instruments lane:
+
+```sh
+scripts/macos_test.sh memory --label retained-check
+```
+
+It runs the policy-owned Custom→Design→Clone Speed/medium sequence with three canonically named
+`retained#0...2` takes per mode (plus the CLI's genuine Custom/Design cold takes) in one process.
+Those retained takes still report their actual engine warm state. Policy
+`retained-memory-v1` compares the first and last completed retained-take footprint within each mode;
+the maximum positive growth must stay at or below 5% of physical RAM. Intended cross-mode model
+residency is diagnostic and is not mislabeled as a leak. A PASS creates a
+`memory-qualification` record; a generation, memory, QC, or retention failure leaves only local
+artifacts.
+
+## Generated-output ownership
+
+macOS development and UI lanes reuse only `build/cache/xcode/macos/`; shared package checkouts live
+under `build/cache/xcode/source-packages/`. Result bundles, diagnostics, profiles, and current dSYMs
+are untracked artifacts under `build/artifacts/`, while release packaging is isolated under
+`build/scratch/derived-data/release-macos/` and `build/dist/macos/`. `build/Vocello.app` and
+`build/vocello` are public symlinks to current canonical products, not copied applications. See the
+authoritative owner/lifetime table in [`privacy-storage.md`](privacy-storage.md).
 
 ## Release boundary
 

@@ -19,6 +19,7 @@ import json
 import math
 import os
 from pathlib import Path
+import plistlib
 import re
 import shlex
 import subprocess
@@ -32,6 +33,16 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 HISTORY_SCRIPT = ROOT / "scripts" / "benchmark_history.py"
+MEMORY_POLICY_PATH = ROOT / "config" / "memory-qualification-policy.json"
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from benchmark_memory import (  # noqa: E402
+    MemoryEvidenceError,
+    REQUIRED_TELEMETRY_SCHEMA,
+    qualify_memory_rows,
+)
 SUCCESS_FINISH = {"eos", "max_tokens", "maxtokens", "completed", "complete", "success", "ok"}
 TRIM_SEVERITY = {"softTrim": 1, "hardTrim": 2, "fullUnload": 3}
 UINT64_MAX = (1 << 64) - 1
@@ -375,7 +386,7 @@ def validate_language_app_row(
     frontend = row.get("frontendMetrics") if isinstance(row.get("frontendMetrics"), dict) else {}
     submit_to_completed = finite_number(frontend.get("submitToCompletedMS"))
     if (
-        row.get("schemaVersion") != 7
+        not isinstance(row.get("schemaVersion"), int) or row["schemaVersion"] < 7
         or row.get("layer") != "app"
         or row.get("generationID") is None
         or row.get("mode") != planned_take.get("mode")
@@ -386,6 +397,78 @@ def validate_language_app_row(
         or submit_to_completed <= 0
     ):
         raise PublicationError(f"language cell {cell_id} app telemetry identity is invalid")
+
+
+def correlated_ios_app_rows(
+    *,
+    diagnostics: Path,
+    engine_rows: Iterable[dict[str, Any]],
+    takes: Iterable[dict[str, Any]],
+    run_id: str,
+) -> list[dict[str, Any]]:
+    """Select one completed app row for each ordered iOS engine generation.
+
+    iOS uses one process, so the engine sampler remains the sole owner of process
+    memory and its sidecar. The app row is nevertheless mandatory frontend
+    lifecycle evidence and is bound into the selected-evidence digest.
+    """
+    ordered_engine = list(engine_rows)
+    ordered_takes = list(takes)
+    if len(ordered_engine) != len(ordered_takes) or not ordered_engine:
+        raise PublicationError("iOS app correlation requires matching non-empty engine/take rows")
+    indexed: dict[str, list[dict[str, Any]]] = {}
+    for row in load_app_rows(diagnostics):
+        generation_id = row.get("generationID")
+        if isinstance(generation_id, str):
+            indexed.setdefault(generation_id.lower(), []).append(row)
+
+    selected: list[dict[str, Any]] = []
+    for index, (engine, take) in enumerate(zip(ordered_engine, ordered_takes), start=1):
+        generation_id = engine.get("generationID")
+        if not isinstance(generation_id, str) or not generation_id:
+            raise PublicationError("iOS engine telemetry lacks a generation ID")
+        if str(take.get("generationID", "")).lower() != generation_id.lower():
+            raise PublicationError(
+                f"iOS take {index} does not identify engine generation {generation_id}"
+            )
+        matches = indexed.get(generation_id.lower(), [])
+        if len(matches) != 1:
+            raise PublicationError(
+                f"iOS generation {generation_id} has {len(matches)} app rows; expected exactly one"
+            )
+        app = matches[0]
+        notes = app.get("notes") if isinstance(app.get("notes"), dict) else {}
+        frontend = (
+            app.get("frontendMetrics")
+            if isinstance(app.get("frontendMetrics"), dict) else {}
+        )
+        timings = app.get("timingsMS") if isinstance(app.get("timingsMS"), dict) else {}
+        frontend_completed = finite_number(frontend.get("submitToCompletedMS"))
+        timing_completed = finite_number(timings.get("submitToCompletedMS"))
+        finish = str(app.get("finishReason", "")).lower()
+        expected_cell = take.get("cell")
+        expected_mode = take.get("mode")
+        if (
+            not isinstance(app.get("schemaVersion"), int) or app["schemaVersion"] < 8
+            or app.get("layer") != "app"
+            or str(app.get("generationID", "")).lower() != generation_id.lower()
+            or app.get("mode") != expected_mode
+            or finish not in SUCCESS_FINISH
+            or notes.get("benchRunID") != run_id
+            or str(notes.get("benchTakeIndex", "")) != str(index)
+            or notes.get("benchCell") != expected_cell
+            or frontend_completed is None or frontend_completed <= 0
+            or timing_completed is None or timing_completed != frontend_completed
+        ):
+            raise PublicationError(
+                f"iOS generation {generation_id} app telemetry identity/completion is invalid"
+            )
+        if app.get("summary") not in (None, {}) or app.get("memoryMetrics") not in (None, {}):
+            raise PublicationError(
+                f"iOS generation {generation_id} app row must not own process-memory evidence"
+            )
+        selected.append(app)
+    return selected
 
 
 def rows_by_generation(rows: Iterable[dict[str, Any]], generation_ids: Iterable[str]) -> list[dict[str, Any]]:
@@ -791,6 +874,125 @@ def engine_take(
     return result
 
 
+def apply_memory_qualification(
+    takes: list[dict[str, Any]],
+    qualified: Iterable[Any],
+) -> None:
+    by_id = {item.generation_id: item for item in qualified}
+    if set(by_id) != {take.get("generationID") for take in takes}:
+        raise PublicationError("memory-sidecar selection does not match the ordered benchmark takes")
+    for take in takes:
+        memory = by_id[str(take["generationID"])]
+        take["metrics"].update(memory.metrics)
+        take["sampleSidecarDigest"] = memory.sidecar_digest
+        take["memoryStatus"] = memory.status
+        take["warnings"] = sorted(set(take.get("warnings", [])).union(memory.warnings))
+        take["status"] = "passedWithWarnings" if take["warnings"] else "passed"
+
+
+def compact_memory_evidence(memory_run: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: memory_run[key]
+        for key in (
+            "memoryContractVersion", "memoryQualified", "sampleSidecarCount",
+            "sampleSidecarsDigest",
+        )
+    }
+
+
+def memory_retention_evidence(
+    results: dict[str, Any],
+    takes: list[dict[str, Any]],
+    platform: str,
+) -> tuple[dict[str, Any], str]:
+    if not MEMORY_POLICY_PATH.is_file():
+        raise PublicationError(
+            "memory qualification policy is missing: config/memory-qualification-policy.json"
+        )
+    policy = load_json(MEMORY_POLICY_PATH)
+    required_policy = {
+        "schemaVersion": 1,
+        "policyID": "retained-memory-v1",
+        "metric": "withinModeRetainedPhysicalFootprintGrowth",
+        "modes": ["custom", "design", "clone"],
+        "variant": "speed",
+        "length": "medium",
+        "repetitionsPerMode": 3,
+        "seed": 19790615,
+        "retentionThresholdFractionOfPhysicalMemory": 0.05,
+        "expectedTakeCounts": {"macos": 11, "ios": 9},
+    }
+    if policy != required_policy:
+        raise PublicationError("memory qualification policy differs from the retained-memory-v1 contract")
+    declaration = results.get("memoryQualification")
+    if not isinstance(declaration, dict) or declaration.get("policyID") != policy["policyID"]:
+        raise PublicationError(
+            "bench-results.json is missing memoryQualification.policyID=retained-memory-v1; "
+            "run the benchmark with the memory-qualification option"
+        )
+    if results.get("seed") != policy["seed"]:
+        raise PublicationError("memory qualification seed does not match the canonical policy")
+    if len(takes) != policy["expectedTakeCounts"][platform]:
+        raise PublicationError("memory qualification take count does not match the platform policy")
+    expected_modes: list[str] = []
+    expected_states: list[str] = []
+    for mode in policy["modes"]:
+        if platform == "macos" and mode != "clone":
+            expected_modes.append(mode)
+            expected_states.append("cold#0")
+        expected_modes.extend([mode] * policy["repetitionsPerMode"])
+        expected_states.extend(
+            f"retained#{index}" for index in range(policy["repetitionsPerMode"])
+        )
+    observed_modes = [str(take.get("mode")) for take in takes]
+    observed_states = [str(take.get("cell")).rsplit("/", 1)[-1] for take in takes]
+    if observed_modes != expected_modes or observed_states != expected_states:
+        raise PublicationError("memory qualification ordered matrix differs from canonical policy")
+    for take in takes:
+        if take.get("mode") not in policy["modes"]:
+            raise PublicationError("memory qualification contains an unexpected mode")
+        if take.get("variant") != policy["variant"] or take.get("length") != policy["length"]:
+            raise PublicationError("memory qualification variant/length differs from policy")
+
+    growth_by_mode: dict[str, float] = {}
+    for mode in policy["modes"]:
+        retained_takes = [
+            take for take in takes
+            if take.get("mode") == mode and "/retained#" in str(take.get("cell"))
+        ]
+        if len(retained_takes) != policy["repetitionsPerMode"]:
+            raise PublicationError(
+                f"memory qualification mode {mode} does not contain exactly three retained takes"
+            )
+        retained_ends = [
+            finite_number(take["metrics"].get("physicalFootprintEndMB"))
+            for take in retained_takes
+        ]
+        if any(value is None for value in retained_ends):
+            raise PublicationError(f"memory qualification mode {mode} lacks post-trim footprint evidence")
+        baseline = float(retained_ends[0])
+        growth_by_mode[mode] = max(
+            0.0,
+            max(float(value) for value in retained_ends[1:]) - baseline,
+        )
+    maximum_growth_mb = max(growth_by_mode.values(), default=0.0)
+    memory_mb = float(canonical_hardware_profile(platform)["memoryBytes"]) / 1_048_576.0
+    growth_fraction = maximum_growth_mb / memory_mb
+    threshold = float(policy["retentionThresholdFractionOfPhysicalMemory"])
+    if growth_fraction > threshold:
+        raise PublicationError(
+            f"retained-memory growth {growth_fraction:.3%} exceeds policy threshold {threshold:.3%}"
+        )
+    return ({
+        "memoryPolicyID": policy["policyID"],
+        "retentionMetric": policy["metric"],
+        "retentionThresholdFraction": threshold,
+        "maximumRetainedGrowthMB": maximum_growth_mb,
+        "maximumRetainedGrowthFraction": growth_fraction,
+        "retentionPassed": True,
+    }, digest_file(MEMORY_POLICY_PATH))
+
+
 def minimal_take(index: int, cell: str, row: dict[str, Any]) -> dict[str, Any]:
     successful_row(row)
     notes = row.get("notes") if isinstance(row.get("notes"), dict) else {}
@@ -846,6 +1048,7 @@ def record_shell(
     hardware_evidence: Iterable[dict[str, Any]] | None = None,
     models: list[dict[str, Any]] | None = None,
     crash_delta: dict[str, Any] | None = None,
+    memory_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     effective_label = label or run_id
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}", effective_label):
@@ -879,8 +1082,10 @@ def record_shell(
     }
     if trace is not None:
         evidence["trace"] = trace
+    if memory_evidence is not None:
+        evidence.update(memory_evidence)
     history_record: dict[str, Any] = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "run": {
             "id": run_id,
             "kind": kind,
@@ -906,7 +1111,7 @@ def record_shell(
     if models is not None:
         history_record["models"] = models
     outer: dict[str, Any] = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "benchmarkKind": kind,
         "platform": platform,
         "runID": run_id,
@@ -966,6 +1171,8 @@ def engine_command(args: argparse.Namespace, *, kind: str = "engine-generation",
     seed = results.get("seed")
     if telemetry_mode not in {"lightweight", "verbose"} or not isinstance(streaming, bool):
         raise PublicationError("bench-results.json lacks exact telemetry/streaming configuration")
+    if telemetry_mode != "verbose":
+        raise PublicationError("memory-qualified benchmark publication requires telemetryMode=verbose")
     if seed is not None and (not isinstance(seed, int) or isinstance(seed, bool) or seed < 0):
         raise PublicationError("bench-results.json has an invalid sampling seed")
     generation_ids: list[str] = []
@@ -977,10 +1184,37 @@ def engine_command(args: argparse.Namespace, *, kind: str = "engine-generation",
             raise PublicationError("bench-results generation IDs must be unique non-empty strings")
         generation_ids.append(generation_id)
     selected = rows_by_generation(load_engine_rows(args.diagnostics), generation_ids)
+    selected_app = (
+        correlated_ios_app_rows(
+            diagnostics=args.diagnostics,
+            engine_rows=selected,
+            takes=result_takes,
+            run_id=args.run_id,
+        )
+        if args.platform == "ios" else []
+    )
     takes = [
         engine_take(index, result_take, row, args.output_dir, run_id=args.run_id)
         for index, (result_take, row) in enumerate(zip(result_takes, selected), start=1)
     ]
+    if selected_app:
+        for take in takes:
+            take["layers"] = ["engine", "app"]
+    try:
+        qualified_memory, memory_run = qualify_memory_rows(
+            rows=selected,
+            diagnostics=args.diagnostics,
+            platform=args.platform,
+        )
+    except MemoryEvidenceError as error:
+        raise PublicationError(str(error)) from error
+    apply_memory_qualification(takes, qualified_memory)
+    retention_evidence: dict[str, Any] = {}
+    memory_policy_digest = "not-applicable"
+    if kind == "memory-qualification":
+        retention_evidence, memory_policy_digest = memory_retention_evidence(
+            results, takes, args.platform
+        )
     delivery_takes = [take for take in result_takes if take.get("delivery")]
     prosody_path = args.diagnostics / "bench-prosody.json"
     prosody_rows: list[dict[str, Any]] = []
@@ -1035,9 +1269,18 @@ def engine_command(args: argparse.Namespace, *, kind: str = "engine-generation",
             for source, target in mapping.items():
                 if (value := finite_number(metrics.get(source))) is not None:
                     tracked_take["metrics"][target] = value
-    telemetry_schema = max(int(row.get("schemaVersion", 0)) for row in selected)
+    telemetry_schema = max(
+        int(row.get("schemaVersion", 0)) for row in [*selected, *selected_app]
+    )
     qc_algorithm = max(int((row.get("audioQC") or {}).get("algorithmVersion", 1)) for row in selected)
-    raw_digest = digest_bytes(canonical_bytes({"telemetry": selected, "prosody": prosody_rows}))
+    raw_digest_payload: dict[str, Any] = {
+        "telemetry": selected,
+        "prosody": prosody_rows,
+        "sampleSidecars": memory_run["digestPayload"],
+    }
+    if selected_app:
+        raw_digest_payload["appTelemetry"] = selected_app
+    raw_digest = digest_bytes(canonical_bytes(raw_digest_payload))
     started_at = str(results.get("startedAt"))
     finished_at = str(results.get("finishedAt"))
     matrix_scope = "instrumented" if kind == "instrument-profile" else "focused"
@@ -1060,7 +1303,10 @@ def engine_command(args: argparse.Namespace, *, kind: str = "engine-generation",
                 "streaming": streaming,
                 "seed": seed,
             })),
-            "analysisProfileHash": analysis_profile_digest,
+            "analysisProfileHash": (
+                memory_policy_digest if kind == "memory-qualification"
+                else analysis_profile_digest
+            ),
         },
         hardware=hardware_context(selected),
         models=exact_models(args.platform, takes),
@@ -1069,13 +1315,14 @@ def engine_command(args: argparse.Namespace, *, kind: str = "engine-generation",
             expected_scope="macos" if args.platform == "macos" else "ios",
             diagnostics=args.diagnostics if args.platform == "ios" else None,
         ),
-        executable_paths={"vocello": "build/vocello"} if args.platform == "macos" else {"Vocello": "build/ios/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
+        executable_paths={"vocello": "build/vocello"} if args.platform == "macos" else {"Vocello": "build/cache/xcode/ios-device/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
         optimization="-Onone",
         classification=(
             "instrumented" if kind == "instrument-profile"
             else "exploratory" if uses_forced_memory_profile(selected)
             else None
         ),
+        memory_evidence={**compact_memory_evidence(memory_run), **retention_evidence},
     )
     return write_and_record(
         args.artifact_dir, manifest,
@@ -1112,7 +1359,23 @@ def ios_engine_command(
         "wallSeconds": sentinel.get("wallSeconds"),
         "audioSeconds": sentinel.get("durationSeconds"),
     }
+    selected_app = correlated_ios_app_rows(
+        diagnostics=args.diagnostics,
+        engine_rows=rows,
+        takes=[take_source],
+        run_id=args.run_id,
+    )
     take = engine_take(1, take_source, row, None, run_id=args.run_id)
+    take["layers"] = ["engine", "app"]
+    try:
+        qualified_memory, memory_run = qualify_memory_rows(
+            rows=rows,
+            diagnostics=args.diagnostics,
+            platform="ios",
+        )
+    except MemoryEvidenceError as error:
+        raise PublicationError(str(error)) from error
+    apply_memory_qualification([take], qualified_memory)
     fixture_digest = sentinel.get("fixtureDigest")
     require_fixture_cross_check(
         [take],
@@ -1125,8 +1388,14 @@ def ios_engine_command(
         started_at=str(sentinel.get("startedAt")), finished_at=str(sentinel.get("finishedAt")),
         matrix_scope="instrumented" if kind == "instrument-profile" else "focused",
         artifact_dir=args.artifact_dir, snapshot=args.snapshot,
-        takes=[take], raw_digest=digest_bytes(canonical_bytes(rows)),
-        telemetry_schema=int(row.get("schemaVersion", 0)),
+        takes=[take], raw_digest=digest_bytes(canonical_bytes({
+            "telemetry": rows,
+            "appTelemetry": selected_app,
+            "sampleSidecars": memory_run["digestPayload"],
+        })),
+        telemetry_schema=max(
+            int(candidate.get("schemaVersion", 0)) for candidate in [*rows, *selected_app]
+        ),
         qc_algorithm=int((row.get("audioQC") or {}).get("algorithmVersion", 1)),
         inputs={"corpusHash": prompt_corpus_digest(rows)},
         trace=trace,
@@ -1137,13 +1406,14 @@ def ios_engine_command(
             args.snapshot, expected_scope="ios", diagnostics=args.diagnostics
             if getattr(args, "crash_diagnostics", None) is None else args.crash_diagnostics
         ),
-        executable_paths={"Vocello": "build/ios/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
+        executable_paths={"Vocello": "build/cache/xcode/ios-device/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
         optimization="-Onone",
         classification=(
             "instrumented" if kind == "instrument-profile"
             else "exploratory" if uses_forced_memory_profile(rows)
             else None
         ),
+        memory_evidence=compact_memory_evidence(memory_run),
     )
     return write_and_record(
         args.artifact_dir, manifest,
@@ -1864,6 +2134,21 @@ def language_command(args: argparse.Namespace) -> Path:
             expected_output = sum(not bool(cell.get("skipOutputVerification")) for cell in cells)
             take["metrics"]["outputCellsPassed"] = float(expected_output)
             take["metrics"]["outputCellsExpected"] = float(expected_output)
+    # Language benchmarks are generation benchmarks, not metadata-only checks.
+    # New schema-v2 publication therefore binds the same exact schema-v8 raw
+    # memory sidecars as UI and engine lanes. iOS is a single process, so its
+    # engine sample stream owns app+engine memory even though frontend timing
+    # remains correlated through the separate app telemetry row.
+    try:
+        qualified_memory, memory_run = qualify_memory_rows(
+            rows=selected,
+            diagnostics=args.diagnostics,
+            platform=args.platform,
+            require_app_layer=False,
+        )
+    except MemoryEvidenceError as error:
+        raise PublicationError(f"language memory qualification failed: {error}") from error
+    apply_memory_qualification(takes, qualified_memory)
     matrix_scope = "focused" if output_verified else "partial"
     started = args.started_at
     finished = args.finished_at or utc_now()
@@ -1918,6 +2203,7 @@ def language_command(args: argparse.Namespace) -> Path:
     selected_digest_payload: dict[str, Any] = {
         "telemetry": selected,
         "outputVerification": asr_evidence,
+        "memorySidecars": memory_run["digestPayload"],
     }
     if selected_app:
         selected_digest_payload["appTelemetry"] = selected_app
@@ -1945,9 +2231,10 @@ def language_command(args: argparse.Namespace) -> Path:
             diagnostics=(getattr(args, "crash_diagnostics", None) or args.diagnostics)
             if args.platform == "ios" else None,
         ),
-        executable_paths={"vocello": "build/vocello"} if args.platform == "macos" else {"Vocello": "build/ios/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
+        executable_paths={"vocello": "build/vocello"} if args.platform == "macos" else {"Vocello": "build/cache/xcode/ios-device/Build/Products/Release-iphoneos/Vocello.app/Vocello"},
         optimization="-Onone",
         classification=("exploratory" if uses_forced_memory_profile(selected) else None),
+        memory_evidence=compact_memory_evidence(memory_run),
     )
     if asr_evidence:
         manifest["historyRecord"]["evidence"]["languageVerification"] = {
@@ -1965,6 +2252,14 @@ def language_command(args: argparse.Namespace) -> Path:
 
 
 def telemetry_overhead_command(args: argparse.Namespace) -> Path:
+    raise PublicationError(
+        "telemetry-overhead is an observer-effect diagnostic and cannot publish "
+        "schema-v2 history without memory-complete evidence for the telemetry-off lane"
+    )
+
+
+def _legacy_telemetry_overhead_record(args: argparse.Namespace) -> Path:
+    """Retained parser for old local verdict fixtures; not history-publishable."""
     verdict = load_json(args.verdict)
     if verdict.get("status") != "pass" or verdict.get("schemaVersion") != 2:
         raise PublicationError("telemetry-overhead verdict is not successful schema v2 evidence")
@@ -1974,8 +2269,8 @@ def telemetry_overhead_command(args: argparse.Namespace) -> Path:
     telemetry_schema = summary.get("telemetrySchemaVersion")
     model_id = summary.get("modelID")
     model_runtime_identity = summary.get("modelRuntimeIdentity")
-    if telemetry_schema != 7 or model_id != "pro_custom_speed":
-        raise PublicationError("telemetry-overhead lacks exact schema-v7 Custom Speed identity")
+    if not isinstance(telemetry_schema, int) or telemetry_schema < 8 or model_id != "pro_custom_speed":
+        raise PublicationError("telemetry-overhead lacks schema-v8 Custom Speed identity")
     typed_identity = runtime_identity({
         "schemaVersion": telemetry_schema,
         "modelID": model_id,
@@ -2211,7 +2506,7 @@ def extract_trace_data_summary(
         schema for schema in schemas
         if re.fullmatch(r"[A-Za-z0-9._-]+", schema)
         and any(token in schema.lower() for token in (
-            "cpu-profile", "time-profile", "signpost", "allocation", "energy", "gpu", "wakeup",
+            "cpu-profile", "time-profile", "signpost", "allocation", "vm", "energy", "gpu", "wakeup",
         ))
     })
     if not relevant:
@@ -2359,10 +2654,191 @@ def extract_trace_data_summary(
     return summary
 
 
+def _memory_trace_export_evidence(rows_by_schema: dict[str, int]) -> dict[str, Any]:
+    """Describe target-PID memory rows without confusing TOC labels with data.
+
+    Xcode currently exposes Allocations and VM Tracker as configured tracks even
+    when it does not expose their backing data as an exportable table.  A table
+    advertised in the trace TOC is exportable, however, and in that case a
+    memory profile is only valid when the table contains rows owned by the
+    requested PID.  `extract_trace_data_summary` has already applied that PID
+    filter, so zero here also covers the wrong-PID-only case.
+    """
+
+    allocation_schemas = {
+        name: count for name, count in rows_by_schema.items()
+        if "allocation" in name.lower()
+    }
+    vm_schemas = {
+        name: count for name, count in rows_by_schema.items()
+        if (
+            name.lower().startswith("vm")
+            or "vm-tracker" in name.lower()
+            or "vm_tracker" in name.lower()
+            or "virtual-memory" in name.lower()
+            or "virtual_memory" in name.lower()
+        )
+    }
+    allocation_rows = sum(allocation_schemas.values())
+    vm_rows = sum(vm_schemas.values())
+    if allocation_schemas and allocation_rows <= 0:
+        raise PublicationError(
+            "memory profile exposes Allocations tables but contains no target-PID rows"
+        )
+    if vm_schemas and vm_rows <= 0:
+        raise PublicationError(
+            "memory profile exposes VM Tracker tables but contains no target-PID rows"
+        )
+    return {
+        "allocationDataExportStatus": "targetRows" if allocation_schemas else "notExportable",
+        "allocationTargetRowCount": allocation_rows,
+        "vmTrackerDataExportStatus": "targetRows" if vm_schemas else "notExportable",
+        "vmTrackerTargetRowCount": vm_rows,
+    }
+
+
+def require_vm_tracker_auto_snapshot_disabled(trace: Path) -> None:
+    """Reject macOS memory traces that can suspend their own telemetry source.
+
+    A standalone VM Tracker instrument added to a Blank trace enables automatic
+    snapshots. Those snapshots stop the exact target process, so its in-process
+    500 ms sampler cannot observe the interval and correctly reports missed
+    deadlines. Apple's Allocations template contains the same Allocations and
+    VM Tracker tracks with ``XRVMInstrumentKey_autoSnapshot`` disabled. Inspect
+    the captured template rather than trusting the requested template name.
+    """
+
+    template = trace / "form.template"
+    if not template.is_file():
+        raise PublicationError("memory trace is missing its captured Instruments template")
+    try:
+        with template.open("rb") as stream:
+            archive = plistlib.load(stream)
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise PublicationError("memory trace contains an invalid captured Instruments template") from error
+    objects = archive.get("$objects") if isinstance(archive, dict) else None
+    if not isinstance(objects, list):
+        raise PublicationError("memory trace template is not a keyed Instruments archive")
+    key_indexes = {
+        index for index, value in enumerate(objects)
+        if value == "XRVMInstrumentKey_autoSnapshot"
+    }
+    observed: list[bool] = []
+    for value in objects:
+        if not isinstance(value, dict):
+            continue
+        keys = value.get("NS.keys")
+        values = value.get("NS.objects")
+        if not isinstance(keys, list) or not isinstance(values, list) or len(keys) != len(values):
+            continue
+        for key, setting in zip(keys, values, strict=True):
+            if not isinstance(key, plistlib.UID) or key.data not in key_indexes:
+                continue
+            resolved = objects[setting.data] if isinstance(setting, plistlib.UID) else setting
+            if not isinstance(resolved, bool):
+                raise PublicationError("VM Tracker automatic-snapshot setting is not boolean")
+            observed.append(resolved)
+    if not observed:
+        raise PublicationError("memory trace does not expose the VM Tracker automatic-snapshot setting")
+    if any(observed):
+        raise PublicationError(
+            "VM Tracker automatic snapshots are enabled and can invalidate sampler coverage"
+        )
+
+
+def _build_relative_artifact(path: Path, *, suffix: str, description: str) -> str:
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve())
+    except ValueError as error:
+        raise PublicationError(
+            f"{description} must remain under the repository's untracked build directory"
+        ) from error
+    if not relative.parts or relative.parts[0] != "build" or relative.suffix != suffix:
+        raise PublicationError(
+            f"{description} must be a {suffix} artifact under the repository build directory"
+        )
+    return relative.as_posix()
+
+
+def write_trace_summary_artifact(
+    args: argparse.Namespace,
+    *,
+    trace_digest: str,
+    original_ephemeral_path: str,
+    trace_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Freeze compact trace evidence before history publication and retention.
+
+    The platform runner owns deletion.  This function records the intended
+    post-publication policy but deliberately leaves the raw bundle untouched;
+    therefore a failed manifest or history step always preserves the trace.
+    """
+
+    retention_policy = getattr(args, "retention_policy", "summaryOnly")
+    if retention_policy not in {"summaryOnly", "keptExplicitly"}:
+        raise PublicationError(f"unsupported trace retention policy: {retention_policy!r}")
+    profile_kind = getattr(args, "profile_kind", "cpu")
+    template = Path(args.template).name
+    capture_settings = {
+        "profileKind": profile_kind,
+        "template": template,
+        "requestedDurationSeconds": float(args.duration),
+        "targetProcess": str(args.target_process),
+        "exactPID": True,
+    }
+    capture_settings_digest = digest_bytes(canonical_bytes(capture_settings))
+
+    configured_summary = getattr(args, "summary_artifact", None)
+    summary_path = (
+        Path(configured_summary)
+        if configured_summary is not None
+        else args.trace.with_name(f"{args.trace.stem}-summary.json")
+    )
+    if not summary_path.is_absolute():
+        summary_path = ROOT / summary_path
+    try:
+        summary_path.resolve().relative_to(args.trace.resolve())
+    except ValueError:
+        pass
+    else:
+        raise PublicationError("trace summary artifact must live outside the raw trace bundle")
+    summary_reference = _build_relative_artifact(
+        summary_path, suffix=".json", description="trace summary artifact"
+    )
+    summary_payload = {
+        "schemaVersion": 1,
+        "runID": str(args.run_id),
+        "traceDigest": trace_digest,
+        "originalEphemeralPath": original_ephemeral_path,
+        "retentionPolicy": retention_policy,
+        # Intended durable state after successful history publication. The
+        # runner retains the raw trace and writes failure metadata if any later
+        # validation/publication step fails before this policy is finalized.
+        "rawTraceRetained": retention_policy == "keptExplicitly",
+        "captureSettings": capture_settings,
+        "captureSettingsDigest": capture_settings_digest,
+        "validated": True,
+        "traceSummary": trace_summary,
+    }
+    atomic_json(summary_path, summary_payload)
+    return {
+        "originalEphemeralPath": original_ephemeral_path,
+        "summaryArtifact": {
+            "path": summary_reference,
+            "digest": digest_file(summary_path),
+        },
+        "rawTraceRetained": retention_policy == "keptExplicitly",
+        "retentionPolicy": retention_policy,
+        "captureSettings": capture_settings,
+        "captureSettingsDigest": capture_settings_digest,
+    }
+
+
 def trace_evidence(
     args: argparse.Namespace,
     *,
     expected_correlations: set[tuple[str, int, str]],
+    require_disabled_vm_auto_snapshot: bool = False,
 ) -> dict[str, Any]:
     if not expected_correlations:
         raise PublicationError("profile publication has no expected take correlation")
@@ -2374,10 +2850,9 @@ def trace_evidence(
         toc = ET.parse(args.toc)
     except (OSError, ET.ParseError) as error:
         raise PublicationError(f"xctrace table-of-contents is invalid XML: {error}") from error
-    try:
-        artifact_reference = args.trace.resolve().relative_to(ROOT.resolve()).as_posix()
-    except ValueError as error:
-        raise PublicationError("trace must remain under the repository's untracked build directory") from error
+    artifact_reference = _build_relative_artifact(
+        args.trace, suffix=".trace", description="trace"
+    )
     table_count = sum(
         element.tag.rsplit("}", 1)[-1].lower() == "table"
         for element in toc.getroot().iter()
@@ -2454,6 +2929,30 @@ def trace_evidence(
         schemas.add(token)
         if "signpost" in token:
             signpost_schemas.add(token)
+    profile_kind = getattr(args, "profile_kind", "cpu")
+    track_details: dict[str, set[str]] = {}
+    for element in toc.getroot().iter():
+        if element.tag.rsplit("}", 1)[-1].lower() != "track":
+            continue
+        name = str(element.attrib.get("name") or "").strip().lower()
+        if not name:
+            continue
+        track_details[name] = {
+            str(child.attrib.get("name") or "").strip().lower()
+            for child in element.iter()
+            if child.tag.rsplit("}", 1)[-1].lower() == "detail"
+        }
+    if profile_kind == "memory":
+        if "allocations" not in track_details:
+            raise PublicationError("memory profile lacks the Allocations track")
+        if "vm tracker" not in track_details:
+            raise PublicationError("memory profile lacks the VM Tracker track")
+        if "allocations list" not in track_details["allocations"]:
+            raise PublicationError("memory profile lacks the Allocations List detail")
+        if "regions map" not in track_details["vm tracker"]:
+            raise PublicationError("memory profile lacks the VM Tracker Regions Map detail")
+        if require_disabled_vm_auto_snapshot:
+            require_vm_tracker_auto_snapshot_disabled(args.trace)
     extracted = extract_trace_data_summary(
         args.trace,
         schemas,
@@ -2461,25 +2960,54 @@ def trace_evidence(
         target_pid=target_pid,
         expected_correlations=expected_correlations,
     )
+    if profile_kind == "memory":
+        allocation_files = list(args.trace.glob(f"Trace*.run/event_data_{target_pid}.oa"))
+        allocation_target_bytes = sum(
+            path.stat().st_size for path in allocation_files if path.is_file()
+        )
+        if allocation_target_bytes <= 0:
+            raise PublicationError("memory profile contains no exact-PID allocation event data")
+        exported_memory = _memory_trace_export_evidence(extracted["capturedRowsBySchema"])
+        extracted = {
+            **extracted,
+            "memoryTraceEvidenceVersion": 2,
+            "allocationTargetDataBytes": allocation_target_bytes,
+            # These are deliberately named as TOC-presence facts.  They do not
+            # claim that xctrace exported target-process rows.
+            "allocationTrackPresent": True,
+            "allocationListPresent": True,
+            "vmTrackerTrackPresent": True,
+            "vmTrackerRegionMapPresent": True,
+            **exported_memory,
+        }
+    trace_digest = digest_bytes(canonical_bytes([
+        [path.relative_to(args.trace).as_posix(), digest_file(path)]
+        for path in sorted(args.trace.rglob("*")) if path.is_file()
+    ]))
+    summary = {
+        "artifact": artifact_reference,
+        "tocDigest": digest_file(args.toc),
+        "tableCount": table_count,
+        "schemaCount": len(schemas),
+        "signpostSchemaCount": len(signpost_schemas),
+        "processCount": len(set(process_entries)),
+        "targetProcess": args.target_process,
+        "targetPIDVerified": True,
+        **extracted,
+    }
+    retention = write_trace_summary_artifact(
+        args,
+        trace_digest=trace_digest,
+        original_ephemeral_path=artifact_reference,
+        trace_summary=summary,
+    )
     return {
-        "digest": digest_bytes(canonical_bytes([
-            [path.relative_to(args.trace).as_posix(), digest_file(path)]
-            for path in sorted(args.trace.rglob("*")) if path.is_file()
-        ])),
+        "digest": trace_digest,
         "template": Path(args.template).name,
         "durationSeconds": float(args.duration),
         "validated": True,
-        "summary": {
-            "artifact": artifact_reference,
-            "tocDigest": digest_file(args.toc),
-            "tableCount": table_count,
-            "schemaCount": len(schemas),
-            "signpostSchemaCount": len(signpost_schemas),
-            "processCount": len(set(process_entries)),
-            "targetProcess": args.target_process,
-            "targetPIDVerified": True,
-            **extracted,
-        },
+        "summary": summary,
+        **retention,
     }
 
 
@@ -2518,7 +3046,9 @@ def _profile_correlations(args: argparse.Namespace, *, ios: bool) -> set[tuple[s
 
 def profile_command(args: argparse.Namespace) -> Path:
     trace = trace_evidence(
-        args, expected_correlations=_profile_correlations(args, ios=False)
+        args,
+        expected_correlations=_profile_correlations(args, ios=False),
+        require_disabled_vm_auto_snapshot=args.profile_kind == "memory",
     )
     return engine_command(args, kind="instrument-profile", trace=trace)
 
@@ -2633,6 +3163,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     engine = subparsers.add_parser("engine", help="publish a vocello bench run")
     add_engine(engine)
 
+    memory = subparsers.add_parser(
+        "memory-qualification", help="publish a retained-memory qualification run"
+    )
+    add_engine(memory)
+
     ios_engine = subparsers.add_parser("ios-engine", help="publish one physical-iPhone headless run")
     add_snapshot(ios_engine)
     ios_engine.add_argument("--run-id", required=True)
@@ -2659,7 +3194,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     language.add_argument("--design-fixture-digest")
     language.add_argument("--defer-record", action="store_true")
 
-    overhead = subparsers.add_parser("telemetry-overhead", help="publish the rotated parity lane")
+    overhead = subparsers.add_parser(
+        "telemetry-overhead",
+        help="reject schema-v2 publication of the local-only rotated parity lane",
+    )
     add_snapshot(overhead)
     overhead.add_argument("--verdict", type=Path, required=True)
 
@@ -2671,6 +3209,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     profile.add_argument("--duration", type=float, required=True)
     profile.add_argument("--target-process", required=True)
     profile.add_argument("--target-pid", type=int)
+    profile.add_argument("--profile-kind", choices=("cpu", "memory"), default="cpu")
+    profile.add_argument(
+        "--retention-policy", choices=("summaryOnly", "keptExplicitly"),
+        default="summaryOnly",
+    )
+    profile.add_argument("--summary-artifact", type=Path)
 
     ios_profile = subparsers.add_parser("ios-profile", help="publish a validated physical-iPhone Instruments capture")
     add_snapshot(ios_profile)
@@ -2685,6 +3229,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ios_profile.add_argument("--duration", type=float, required=True)
     ios_profile.add_argument("--target-process", required=True)
     ios_profile.add_argument("--target-pid", type=int)
+    ios_profile.add_argument("--profile-kind", choices=("cpu", "memory"), default="cpu")
+    ios_profile.add_argument(
+        "--retention-policy", choices=("summaryOnly", "keptExplicitly"),
+        default="summaryOnly",
+    )
+    ios_profile.add_argument("--summary-artifact", type=Path)
     ios_profile.add_argument("--defer-record", action="store_true")
 
     prosody = subparsers.add_parser("prosody", help="publish a successful calibration corpus")
@@ -2702,6 +3252,8 @@ def main(argv: list[str] | None = None) -> int:
             print(args.output)
         elif args.command == "engine":
             print(engine_command(args))
+        elif args.command == "memory-qualification":
+            print(engine_command(args, kind="memory-qualification"))
         elif args.command == "ios-engine":
             print(ios_engine_command(args))
         elif args.command == "language":

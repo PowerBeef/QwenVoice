@@ -3,21 +3,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ROOT_DIR="$PROJECT_DIR"
+export ROOT_DIR="$PROJECT_DIR"
+# shellcheck source=lib/build_paths.sh
+. "$SCRIPT_DIR/lib/build_paths.sh"
 PROJECT_FILE="$PROJECT_DIR/QwenVoice.xcodeproj"
 SCHEME="QwenVoice"
 CONFIGURATION="Release"
-# Single-package layout: release and dev share build/ (and its DerivedData +
-# .cache). release.sh builds the Release config optimized (-O); build.sh builds
-# it -Onone. Switching between them triggers a recompile, which is fine.
-BUILD_ROOT="$PROJECT_DIR/build"
-BUILD_DIR="$BUILD_ROOT"
-SOURCE_PACKAGES_DIR="$BUILD_DIR/source-packages"
-DERIVED_DATA_PATH="$BUILD_DIR/DerivedData"
-BUILD_RESULT_BUNDLE_PATH="$BUILD_DIR/macos-release-build.xcresult"
+# Release compilation is deliberately isolated from the incremental developer
+# cache. Only the signed app, DMG, and metadata live under dist/macos.
+BUILD_DIR="$QVOICE_DIST_MACOS"
+SOURCE_PACKAGES_DIR="$QVOICE_XCODE_SOURCE_PACKAGES"
+DERIVED_DATA_PATH="$QVOICE_SCRATCH_RELEASE_MACOS"
+RELEASE_ARTIFACT_DIR="$QVOICE_ARTIFACTS_MACOS/release"
+BUILD_RESULT_BUNDLE_PATH="$RELEASE_ARTIFACT_DIR/macos-release-build.xcresult"
 DEFAULT_OUTPUT_NAME="Vocello-macos26"
 TOTAL_START="$(date +%s)"
-BUILD_CACHE_DIR="$BUILD_DIR/.cache"
+export BUILD_CACHE_DIR="$SOURCE_PACKAGES_DIR/.qwenvoice-cache"
 
 # shellcheck source=lib/build_cache.sh
 . "$SCRIPT_DIR/lib/build_cache.sh"
@@ -217,9 +218,8 @@ fi
 echo "  notarize: $([ "$NOTARIZE" = "1" ] && echo "yes" || echo "no")"
 echo ""
 
-mkdir -p "$BUILD_DIR"
-mkdir -p "$SOURCE_PACKAGES_DIR"
-SHOW_BUILD_SETTINGS_LOG="$BUILD_DIR/release-build-settings.log"
+mkdir -p "$BUILD_DIR" "$SOURCE_PACKAGES_DIR" "$RELEASE_ARTIFACT_DIR"
+SHOW_BUILD_SETTINGS_LOG="$RELEASE_ARTIFACT_DIR/release-build-settings.log"
 
 STEP_START="$(date +%s)"
 echo "[1/7] Ensuring Xcode project is up to date..."
@@ -239,7 +239,8 @@ fi
 
 STEP_START="$(date +%s)"
 echo "[2/7] Ensuring Swift packages are resolved..."
-ensure_spm_resolved "$DERIVED_DATA_PATH" "$SOURCE_PACKAGES_DIR" release
+ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
+    release "$SCHEME" "$CONFIGURATION" 'platform=macOS,arch=arm64'
 echo "[2/7] Swift packages ready — done ($(step_time "$STEP_START"))"
 echo ""
 
@@ -248,11 +249,11 @@ if $SKIP_BUILD; then
     echo "[3/7] Build Release — skipped"
 else
     echo "[3/7] Building macOS Release app..."
-    rm -f "$BUILD_DIR/xcodebuild-release.log"
+    rm -f "$RELEASE_ARTIFACT_DIR/xcodebuild-release.log"
     rm -rf "$DERIVED_DATA_PATH"
     rm -rf "$BUILD_RESULT_BUNDLE_PATH"
     set +e
-    xcodebuild -project "$PROJECT_FILE" \
+    xcb_run -project "$PROJECT_FILE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
         -destination "platform=macOS,arch=arm64" \
@@ -262,24 +263,35 @@ else
         -derivedDataPath "$DERIVED_DATA_PATH" \
         -resultBundlePath "$BUILD_RESULT_BUNDLE_PATH" \
         -resultBundleVersion 3 \
+        CODE_SIGN_STYLE=Manual \
         CODE_SIGN_IDENTITY="-" \
         QWENVOICE_DEVELOPMENT_TEAM="$RELEASE_TEAM_ID" \
         CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
         ONLY_ACTIVE_ARCH=YES \
         ARCHS=arm64 \
-        build 2>&1 | tee "$BUILD_DIR/xcodebuild-release.log"
+        SWIFT_OPTIMIZATION_LEVEL="-O" \
+        SWIFT_COMPILATION_MODE="wholemodule" \
+        build 2>&1 | tee "$RELEASE_ARTIFACT_DIR/xcodebuild-release.log"
     XCODEBUILD_STATUS=${PIPESTATUS[0]}
     set -e
     if [ "$XCODEBUILD_STATUS" -ne 0 ]; then
-        release_fail "xcodebuild failed (see $BUILD_DIR/xcodebuild-release.log)"
+        release_fail "xcodebuild failed (see $RELEASE_ARTIFACT_DIR/xcodebuild-release.log)"
     fi
+    write_build_provenance "$DERIVED_DATA_PATH/last-build.json" \
+        "scripts/release.sh" "$SCHEME" "$CONFIGURATION" \
+        "platform=macOS,arch=arm64" arm64 O ad-hoc \
+        "$DERIVED_DATA_PATH" "$SOURCE_PACKAGES_DIR"
+    write_build_provenance "$RELEASE_ARTIFACT_DIR/last-build.json" \
+        "scripts/release.sh" "$SCHEME" "$CONFIGURATION" \
+        "platform=macOS,arch=arm64" arm64 O ad-hoc \
+        "$DERIVED_DATA_PATH" "$SOURCE_PACKAGES_DIR"
 fi
 echo "[3/7] Build Release — done ($(step_time "$STEP_START"))"
 echo ""
 
 STEP_START="$(date +%s)"
 echo "[4/7] Resolving and copying built app..."
-xcodebuild -project "$PROJECT_FILE" \
+xcb_run -project "$PROJECT_FILE" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination "platform=macOS,arch=arm64" \
@@ -293,10 +305,15 @@ resolve_build_metadata "$SHOW_BUILD_SETTINGS_LOG"
 
 APP_SOURCE="$BUILT_PRODUCTS_DIR/$WRAPPER_NAME"
 [ -d "$APP_SOURCE" ] || release_fail "Built app not found at $APP_SOURCE"
+assert_macos_bundle_arm64_only "$APP_SOURCE"
+preserve_macos_dsyms "$BUILT_PRODUCTS_DIR" "$APP_SOURCE" "$QVOICE_SYMBOLS_MACOS"
+write_build_provenance "$QVOICE_SYMBOLS_MACOS/last-build.json" \
+    "scripts/release.sh" "$SCHEME" "$CONFIGURATION" \
+    "platform=macOS,arch=arm64" arm64 O ad-hoc \
+    "$DERIVED_DATA_PATH" "$SOURCE_PACKAGES_DIR"
 
 APP_PATH="$BUILD_DIR/$WRAPPER_NAME"
-rm -rf "$APP_PATH"
-cp -a "$APP_SOURCE" "$APP_PATH"
+copy_tree_clone_first "$APP_SOURCE" "$APP_PATH"
 
 APP_RESOURCES="$APP_PATH/Contents/Resources"
 rm -rf "$APP_RESOURCES/backend" "$APP_RESOURCES/python" "$APP_RESOURCES/vendor" 2>/dev/null || true
@@ -404,6 +421,10 @@ METADATA_PATH="$BUILD_DIR/release-metadata.txt"
     echo "app_executable_name=$EXECUTABLE_NAME"
     echo "built_at_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 } > "$METADATA_PATH"
+write_build_provenance "$BUILD_DIR/last-build.json" \
+    "scripts/release.sh" "$SCHEME" "$CONFIGURATION" \
+    "platform=macOS,arch=arm64" arm64 O "$SIGNING_MODE" \
+    "$DERIVED_DATA_PATH" "$SOURCE_PACKAGES_DIR"
 echo "[7/7] Release metadata written to $METADATA_PATH ($(step_time "$STEP_START"))"
 echo ""
 

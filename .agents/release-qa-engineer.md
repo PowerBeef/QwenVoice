@@ -8,7 +8,8 @@
 **Owns:**
 - `scripts/*.sh` and `scripts/lib/`
 - `.github/workflows/release.yml`
-- `benchmarks/` schema-v1 records, generated history, and preserved reference baselines
+- `benchmarks/` schema-v1 compatibility/schema-v2 memory-qualified records, generated history,
+  and preserved reference baselines
 - `docs/releases/`
 - Release verification scripts (`scripts/verify_*.sh`, `scripts/create_dmg.sh`, etc.)
 
@@ -33,8 +34,8 @@ Before changing scripts or CI, read:
 ## Tools and skills (Codex)
 
 - **Shell scripts are the source of truth**; run them directly and preserve their artifacts.
-- Use the installed GitHub integration for PR, release, and Actions context; use `gh` when the
-  integration does not expose the required operation or log detail.
+- Use a GitHub integration when it is currently callable for PR, release, and Actions context;
+  otherwise use `gh`. User-scoped installation state is not a repository prerequisite.
 - Use relevant installed Codex skills for test triage, performance, signing, packaging, or
   telemetry after reading their instructions. Start from script output and generated artifacts.
 - XCUITest is the sole autonomous app UI driver. It runs against the native macOS app or a paired
@@ -48,13 +49,20 @@ Before changing scripts or CI, read:
   QA. iOS archive/TestFlight uses
   its signing, archive, entitlement, catalog, and artifact verification. XCUITest is optional
   explicit frontend QA and never a signing, notarization, packaging, or upload prerequisite.
-- **iOS artifact paths** (see [`ios-device-testing.md`](../docs/reference/ios-device-testing.md)):
-  `.xcresult` bundles and exported screenshots from physical-device XCUITest,
-  `build/ios-diagnostics/` (headless generation telemetry + crashes),
-  `build/ios/gate-<runID>/verdict.txt`, `build/ios/profiles/<runID>/<runID>.trace`.
-- **Benchmark registry:** successful benchmark-like lanes publish a compact record under
-  `benchmarks/runs/<kind>/` and regenerate `benchmarks/HISTORY.md`. Raw telemetry, WAVs,
-  screenshots, `.xcresult`, and traces stay untracked. Publication never stages, commits, or pushes.
+- **Generated-output contract:** `config/build-output-policy.json` owns the persistent caches,
+  scratch DerivedData, untracked evidence, current symbols, and distribution outputs. Do not add an
+  ad hoc build root or allow an Xcode/SwiftPM invocation to choose its own cache.
+- **Evidence artifacts:** `build/artifacts/ui-tests/` owns `.xcresult` bundles and exported
+  screenshots; `build/artifacts/diagnostics/` owns pulled/headless generation telemetry and crashes;
+  platform gate/profile outputs remain below `build/artifacts/{macos,ios}/`; current dSYMs live
+  under `build/artifacts/symbols/{macos,ios}/`.
+- **Benchmark registry:** successful memory-qualified benchmark lanes publish a compact record under
+  `benchmarks/runs/<kind>/` and regenerate `benchmarks/HISTORY.md`. The telemetry-overhead
+  observer-effect diagnostic stays local because instrumenting its `off` lane would invalidate the
+  comparison. Raw telemetry, WAVs, screenshots, `.xcresult`, and traces stay untracked. Publication
+  never stages, commits, or pushes. Successful profiles are summary-only by default: the runner
+  publishes the trace digest/settings/extracted evidence before deleting the raw trace. Use
+  `--keep-trace` only when the raw Instruments document must be reopened.
 
 ## Build / test commands
 
@@ -117,9 +125,17 @@ python3 scripts/summarize_generation_telemetry.py \
 
 # Crash/profile (PASS-only; failed traces or generations never publish benchmark history)
 scripts/macos_test.sh crashes
-scripts/macos_test.sh profile [spec]
+scripts/macos_test.sh profile [--kind cpu|memory] [--keep-trace] [spec]
+scripts/macos_test.sh memory [--label ID]
 scripts/ios_device.sh crashes
-scripts/ios_device.sh profile [spec]
+scripts/ios_device.sh profile [--kind cpu|memory] [--keep-trace] [spec]
+scripts/ios_device.sh memory --voice-id SAVED_VOICE_ID [--label ID]
+# Reads already-pulled delayed MetricKit aggregates; it does not contact the phone or publish history.
+scripts/ios_device.sh memory-field-report [pulled-diagnostics]
+python3 scripts/build_output_policy.py status [--json]
+python3 scripts/build_output_policy.py validate
+scripts/clean_build_caches.sh --routine --dry-run
+scripts/clean_build_caches.sh --routine
 ```
 
 ## Invariants (do not regress)
@@ -127,7 +143,9 @@ scripts/ios_device.sh profile [spec]
 - **Single shippable config: `Release` only.** There is no `Debug` config or generic `DEBUG` symbol.
   `build.sh` compiles `-Onone`; `release.sh` compiles optimized.
 - **XcodeGen project generation.** `project.yml` is the source of truth; never edit
-  `QwenVoice.xcodeproj/project.pbxproj` directly.
+  `QwenVoice.xcodeproj/project.pbxproj` directly. The generated `VocelloCLI` shared scheme is the
+  one narrow exception to XcodeGen output: `scripts/generate_cli_scheme.py` renders it from the
+  checked-in template after regeneration because XcodeGen 2.45.4 traps on tool-product schemes.
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
 - **Ordinary CI is deterministic-only.** GitHub CI builds `VocelloiOS` with
@@ -136,6 +154,19 @@ scripts/ios_device.sh profile [spec]
 - **Committed benchmark records ≤256 KB.** Records use a strict privacy allowlist; raw JSONL,
   WAVs, screenshots, result bundles, and traces are gitignored. `HISTORY.md` is generated, never
   manually appended.
+- **Profile storage is bounded.** A successful profile is retained as compact history plus local
+  summary metadata; its raw trace is deleted only after publication succeeds unless `--keep-trace`
+  was explicit. A failed lane retains at most the newest raw trace per platform/profile kind.
+- **Build outputs have one owner.** macOS and physical-device iOS keep exactly two persistent Xcode
+  caches, package resolution uses the shared locked checkout, and release/MCP/compile-safety work is
+  scratch. Release files live only under `build/dist/` and routine cleanup never removes them.
+- **Memory-qualified publication is strict.** New generation/profile records require telemetry v8
+  and evidence manifest v2, exact sidecar digests, ≥95% sampler coverage, zero capture failures,
+  and no critical pressure, memory warning/exit, `hardTrim`, or `fullUnload`. A 95–<100% coverage
+  result or guarded/soft-trim state is retained as `passedWithWarnings`; it is never silently clean.
+- **MetricKit field evidence stays local and delayed.** `memory-field-report` summarizes only
+  already-pulled privacy-reduced aggregates. It never wakes a device, and its daily/non-run-
+  correlated values cannot qualify or retroactively fail a benchmark take.
 - **Audio QA is autonomous.** Require the applicable fixed-seed exact-WAV QC, three-pass
   locale-locked ASR, and prosody/delivery evidence. Listening is optional annotation and cannot
   clear a machine warning or failure.
@@ -159,5 +190,6 @@ scripts/ios_device.sh profile [spec]
   development-publishing prerequisite.
 - Committing raw `.jsonl` telemetry to `benchmarks/`.
 - Editing `benchmarks/HISTORY.md` by hand or treating a failed/incomplete run as publishable.
-- Forgetting to preserve dSYMs (`scripts/build.sh` copies them to `build/macos/dsyms`).
+- Forgetting to validate current dSYM UUIDs under `build/artifacts/symbols/{macos,ios}` after a
+  product rebuild.
 - Changing signing/notarization env vars without updating the workflow secret docs.

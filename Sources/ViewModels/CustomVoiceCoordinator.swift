@@ -69,7 +69,7 @@ final class CustomVoiceCoordinator {
                     model: model,
                     outputPath: outputPath
                 )
-                AppGenerationTimeline.shared.recordSubmitted(
+                await AppGenerationTimeline.shared.recordSubmitted(
                     id: generationRequest.generationID,
                     mode: generationRequest.modeIdentifier
                 )
@@ -78,15 +78,6 @@ final class CustomVoiceCoordinator {
                     LivePreviewEstimate(text: draft.text)
                 )
                 let result = try await ttsEngineStore.generate(generationRequest)
-                await AppGenerationTimeline.shared.recordCompleted(
-                    id: generationRequest.generationID,
-                    mode: generationRequest.modeIdentifier,
-                    usedStreaming: result.usedStreaming,
-                    finishReason: result.finishReason?.rawValue,
-                    summary: result.telemetrySummary
-                )
-                GenerationTelemetryMerger.scheduleMerge(generationID: generationRequest.generationID)
-
                 var generation = Generation(
                     text: draft.text,
                     mode: model.mode.rawValue,
@@ -106,6 +97,18 @@ final class CustomVoiceCoordinator {
                     audioPlayer: audioPlayer,
                     caller: "CustomVoiceCoordinator"
                 )
+                // Keep the frontend timeline open through the genuine player
+                // handoff. Short clips can complete before live playback has
+                // started, in which case final-file autoplay is the first real
+                // playback-scheduled event.
+                await AppGenerationTimeline.shared.recordCompleted(
+                    id: generationRequest.generationID,
+                    mode: generationRequest.modeIdentifier,
+                    usedStreaming: result.usedStreaming,
+                    finishReason: result.finishReason?.rawValue,
+                    summary: result.telemetrySummary
+                )
+                GenerationTelemetryMerger.scheduleMerge(generationID: generationRequest.generationID)
             } catch is CancellationError {
                 await AppGenerationTimeline.shared.recordFailed(
                     id: submittedGenerationID,

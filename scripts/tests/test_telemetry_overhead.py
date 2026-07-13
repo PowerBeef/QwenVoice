@@ -38,7 +38,7 @@ def engine_row(
     runtime_profile: str = "pro_custom_speed:fixture-v1",
 ) -> dict:
     return {
-        "schemaVersion": 7,
+        "schemaVersion": 8,
         "generationID": generation_id,
         "layer": "engine",
         "modelID": "pro_custom_speed",
@@ -69,6 +69,12 @@ class TelemetryOverheadIdentityTests(unittest.TestCase):
             stream.setsampwidth(2)
             stream.setframerate(24_000)
             stream.writeframes(frames)
+
+    def test_artifact_root_comes_from_validated_build_policy(self) -> None:
+        self.assertEqual(
+            overhead.managed_output_path("QVOICE_ARTIFACTS_MACOS"),
+            SCRIPT.parents[1] / "build" / "artifacts" / "macos",
+        )
 
     def test_pcm_digest_rejects_zero_duration_audio(self) -> None:
         empty = self.root / "empty.wav"
@@ -101,11 +107,11 @@ class TelemetryOverheadIdentityTests(unittest.TestCase):
                 self.root, ["take-one", "take-two"], run_id="overhead-subrun"
             )
 
-    def test_rejects_missing_schema_v7_runtime_identity(self) -> None:
+    def test_rejects_missing_schema_v8_runtime_identity(self) -> None:
         row = engine_row("take-one")
         row["schemaVersion"] = 6
         self.write_rows([row])
-        with self.assertRaisesRegex(RuntimeError, "not schema-v7"):
+        with self.assertRaisesRegex(RuntimeError, "not schema-v8"):
             overhead.load_model_runtime_identity(
                 self.root, ["take-one"], run_id="overhead-subrun"
             )

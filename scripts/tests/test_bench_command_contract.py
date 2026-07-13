@@ -71,6 +71,35 @@ class BenchCommandSourceContractTests(unittest.TestCase):
         self.assertLess(label, generation)
         self.assertIn(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$", self.source)
 
+    def test_memory_qualification_is_a_fixed_verbose_retention_protocol(self) -> None:
+        self.assertIn('args.string("memory-qualification")', self.source)
+        self.assertIn('rawPolicy == "retained-memory-v1"', self.source)
+        self.assertIn('modes == ["custom", "design", "clone"]', self.source)
+        self.assertIn('variants == ["speed"]', self.source)
+        self.assertIn('lengths == ["medium"]', self.source)
+        self.assertIn("warm == 3", self.source)
+        self.assertIn("telemetryVerbose", self.source)
+        self.assertIn("expectedTakeCount: 11", self.source)
+        self.assertIn("let memoryQualification: BenchMemoryQualification?", self.source)
+        self.assertIn('publisherSubcommand: memoryQualification == nil', self.source)
+        self.assertIn('"memory-qualification"', self.source)
+        self.assertIn('memoryQualification != nil && mode == .clone && n == 0', self.source)
+        self.assertIn('let retainedWarmState', self.source)
+        self.assertIn('intendedWarmState: retainedWarmState', self.source)
+
+    def test_history_producing_benchmarks_default_to_verbose_memory_evidence(self) -> None:
+        self.assertIn('args.string("telemetry") ?? "verbose"', self.source)
+        self.assertIn("telemetryOff || telemetryVerbose || noSummary", self.source)
+        self.assertIn("schema-v2 memory evidence", self.source)
+
+    def test_zero_warm_is_an_explicit_cold_only_diagnostic_contract(self) -> None:
+        self.assertIn("parsedWarm >= 0", self.source)
+        self.assertIn("--warm must be a non-negative whole number", self.source)
+        self.assertIn('warm == 0, modes.contains("clone")', self.source)
+        self.assertIn('warm == 0, !deliveryItems.isEmpty', self.source)
+        self.assertIn("Zero is", self.source)
+        self.assertNotIn("let warm = max(1", self.source)
+
 
 class BenchDeliveryProsodyTests(unittest.TestCase):
     def setUp(self) -> None:

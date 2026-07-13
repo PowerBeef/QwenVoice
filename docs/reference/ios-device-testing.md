@@ -55,7 +55,7 @@ Pro `iPhone18,1` profile. Dirty-source successes are exploratory even on that ha
 
 ## Headless device diagnostics
 
-`bench`, `lang-bench`, `profile`, and the deliberate crash diagnostic launch
+`bench`, `lang-bench`, `profile`, `memory`, and the deliberate crash diagnostic launch
 `IOSDeviceDiagnosticsRunner` through a purpose-specific `QVOICE_IOS_DEVICE_DIAGNOSTICS_*`
 environment contract. The runner writes `device-diagnostics-done.json`; it never drives or inspects
 the app UI. Clone diagnostics require the exact prepared voice ID, and `--memory-profile` can apply a
@@ -103,10 +103,71 @@ installing or launching the app unless `xcrun xctrace list devices` reports that
 the unreliable physical-device Darwin-notification callback. Any target suspended by a later failure
 is terminated automatically.
 
+For allocation and VM evidence, use the Instruments memory profile:
+
+```sh
+scripts/ios_device.sh profile --kind memory custom:speed:
+
+# Retain the raw trace only when it must be reopened in Instruments.
+scripts/ios_device.sh profile --kind memory --keep-trace custom:speed:
+```
+
+This keeps CPU Profiler and correlated `os_signpost` data while adding Allocations and VM Tracker in
+the same exact-PID trace, and forces verbose run-scoped samples. New publishable device runs require
+telemetry schema v8 and evidence manifest v2: exact start/periodic/boundary/stop sidecars, summary
+agreement, zero capture failures, and at least 95% sampler coverage. Critical pressure, an app memory
+warning/exit, `hardTrim`, or `fullUnload` fails publication; guarded pressure, `softTrim`, or 95–<100%
+coverage is explicit warning evidence. The record retains footprint/resident start, end, delta, and
+peak; compressed/GPU peaks; minimum headroom and peak process-budget utilization; sampler coverage;
+and pressure/trim/warning/exit counters. iPhone admission is also strict: physical footprint ≥5.2
+GB, minimum headroom <384 MB, or Metal working-set ratio ≥0.8 fails; footprint ≥4.5 GB or
+headroom <768 MB warns. The lane requires 15 GiB free before device launch. After validation and
+history publication, the raw trace is discarded by default while its digest/settings/extracted
+summary and retention status remain in compact evidence; `--keep-trace` opts into local retention.
+Raw traces and sample rows remain untracked.
+
+Retained-memory qualification is separate from Instruments:
+
+```sh
+scripts/ios_device.sh memory --voice-id <exact-prepared-saved-voice-id> --label retained-check
+```
+
+One persistent app/engine process executes three medium Speed takes for Custom, then Design, then
+Clone (nine total). The terminal sentinel is written only after all output/QC/telemetry proofs pass.
+Policy `retained-memory-v1` compares first-to-last retained-take footprint growth within each mode and allows
+at most 5% of physical RAM; cross-mode residency is diagnostic because different models are
+intentionally loaded. A PASS creates `memory-qualification`, while any generation, memory,
+retention, output, or crash failure leaves tracked history unchanged.
+
+MetricKit supplies a complementary delayed field view, not per-take benchmark attribution. After a
+normal explicit pull, summarize only the already-local privacy-reduced aggregate with:
+
+```sh
+scripts/ios_device.sh memory-field-report build/artifacts/diagnostics/ios
+```
+
+The command never resolves, wakes, pulls from, or otherwise contacts an iPhone. MetricKit delivery
+may take a day or longer; no payload reports `notYetDelivered` with success status and cannot qualify
+or retroactively fail a benchmark run.
+
 The validator atomically writes an untracked `benchmark-evidence.json` with the exact ordered
 generation IDs/cells and verdicts. A PASS publishes one privacy-safe record under
 `benchmarks/runs/ui-generation/` and regenerates `benchmarks/HISTORY.md`. Raw pulled JSONL, WAVs,
 screenshots, traces, and `.xcresult` stay untracked; publication never stages, commits, or pushes.
+
+Physical-iPhone acceptance of the telemetry-v8/evidence-v2 memory contract and the new memory trace
+lane is `pending-device` until the next attended device session. Repository contract/unit checks do not substitute
+for that on-device run, and no Simulator result is accepted.
+
+## Generated-output ownership
+
+Physical-device development and UI lanes reuse only `build/cache/xcode/ios-device/`; Xcode package
+checkouts are shared under `build/cache/xcode/source-packages/`. Pulled diagnostics, UI results,
+profiles, gates, and current UUID-matched symbols live under `build/artifacts/`, never inside the
+incremental cache. Archive/export products live only under `build/dist/ios/`. Local release
+DerivedData is isolated under `build/scratch/derived-data/release-ios/`; CI uses its
+own `build/scratch/derived-data/ci/ios-archive/` leaf. See the authoritative owner/lifetime table in
+[`privacy-storage.md`](privacy-storage.md).
 
 ## Release boundary
 

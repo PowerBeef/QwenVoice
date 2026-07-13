@@ -122,6 +122,29 @@ open QwenVoice.xcodeproj
 
 The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`.agents/backend-mlx.md`](.agents/backend-mlx.md).
 
+Generated output is owned by [`config/build-output-policy.json`](config/build-output-policy.json),
+not by individual scripts. Local development reuses exactly two persistent platform Xcode caches
+under `build/cache/xcode/`, one shared Xcode package checkout, and the dedicated vendored SwiftPM
+cache. Temporary builds live under `build/scratch/`, local evidence and current symbols under
+`build/artifacts/`, and release products under `build/dist/`. The public `build/Vocello.app` and
+`build/vocello` paths are symlinks to the current canonical macOS products, not duplicate copies.
+Do not add an ad hoc DerivedData root or allow a `.build` directory below the vendored source.
+
+Inventory and cleanup are explicit and bounded:
+
+```sh
+python3 scripts/build_output_policy.py status       # sizes, owners, and reclaimable bytes
+python3 scripts/build_output_policy.py validate     # manifest, references, symlinks, docs, and symbol identity
+scripts/clean_build_caches.sh                       # read-only inventory
+scripts/clean_build_caches.sh --routine --dry-run   # preview scratch/evidence pruning
+scripts/clean_build_caches.sh --routine             # preserve canonical caches, app, symbols, dist, models, history
+```
+
+Use `--aggressive`, `--prune-ui-results`, `--dist`, `--models`, `--external-xcode --yes`, or
+`--clobber --yes` only for the cleanup class named by the option. Full ownership and retention
+semantics are generated from the manifest in
+[`docs/reference/privacy-storage.md`](docs/reference/privacy-storage.md).
+
 Useful checks:
 
 ```sh

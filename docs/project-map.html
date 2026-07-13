@@ -1615,7 +1615,7 @@ scripts/macos_test.sh test
   </section>
 
   <footer class="map-footer">
-    <div>Canonical Vocello engineering atlas · code and manifests win over this map · reviewed 2026-07-11</div>
+    <div>Canonical Vocello engineering atlas · code and manifests win over this map · reviewed 2026-07-13</div>
     <div>MIT · QwenVoice monorepo</div>
   </footer>
 </div>
@@ -1625,7 +1625,7 @@ scripts/macos_test.sh test
 {
   "meta": {
     "title": "Vocello project map",
-    "reviewed": "2026-07-12",
+    "reviewed": "2026-07-13",
     "canonicalPath": "docs/project-map.html",
     "sourcesOfTruth": [
       "Sources/",
@@ -1657,7 +1657,7 @@ scripts/macos_test.sh test
     {"name":"Onboarding and hardware gate","macos":"no","ios":"yes","cli":"no","note":"Welcome → Install → Ready; iPhone 15 Pro+ support gate"},
     {"name":"XPC engine isolation","macos":"yes","ios":"no","cli":"no","note":"Single-envelope macOS service boundary"},
     {"name":"Accessibility preferences","macos":"yes","ios":"yes","cli":"no","note":"Reduce Motion/Transparency and stable identifiers"},
-    {"name":"Telemetry and benchmark gates","macos":"yes","ios":"yes","cli":"yes","note":"Schema-v7 run-scoped JSONL, complete layer joins, audio QC, and PASS-only privacy-safe history"}
+    {"name":"Telemetry and benchmark gates","macos":"yes","ios":"yes","cli":"yes","note":"Schema-v8 run-scoped JSONL, complete layer joins, audio QC, memory completeness, and PASS-only privacy-safe history"}
   ],
   "featureBands": [
     {
@@ -1849,7 +1849,7 @@ scripts/macos_test.sh test
     },
     {
       "title":"Telemetry join",
-      "steps":["Gate sampling and durable writes with TelemetryGate.resolvedEnabled","Record schema-v7 typed app, XPC transport, backend, output, sampler-drift, and process-resource metrics using one generation ID","Validate terminal agreement, complete required layers, exact run/take order, final barrier, readable WAV, QC, and crash delta","Publish one allowlisted record and regenerate HISTORY.md while raw evidence remains untracked"],
+      "steps":["Gate sampling and durable writes with TelemetryGate.resolvedEnabled","Record schema-v8 typed app, XPC transport, backend, output, memory, sampler-drift, and process-resource metrics using one generation ID","Validate terminal agreement, complete required layers, exact run/take order, lifecycle boundaries, memory coverage, readable WAV, QC, and crash delta","Publish one allowlisted schema-v2 record and regenerate HISTORY.md while raw evidence remains untracked"],
       "note":"v1–v6 rows and legacy maps remain readable. Raw script, transcript, path, and voice description are never persisted; raw JSONL remains untracked."
     },
     {
@@ -1922,7 +1922,7 @@ scripts/macos_test.sh test
       "name":"Sources/iOSSupport/","plat":"iOS","desc":"App Group paths, persistence, model delivery, diagnostics, crashes/interruption recording, and support view models.",
       "children":[
         {"name":"Services/IOSModelDeliverySupport.swift","desc":"Catalog and integrity rules"},
-        {"name":"Services/IOSCrashObserver.swift","desc":"MetricKit/crash diagnostics"},
+        {"name":"Services/IOSCrashObserver.swift · IOSMetricKitMemoryReporter.swift","desc":"MetricKit crash diagnostics plus bounded delayed memory/exit field summaries"},
         {"name":"Models/GenerationDrafts.swift","desc":"Mode drafts and clone readiness"}
       ]
     },
@@ -1957,7 +1957,7 @@ scripts/macos_test.sh test
     {
       "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",
       "children":[
-        {"name":"VocelloCoreTests/","desc":"Language, schema-v7 compatibility, sampler/QC, and atomic WAV tests"},
+        {"name":"VocelloCoreTests/","desc":"Language, schema-v8 memory/coverage compatibility, sampler/QC, and atomic WAV tests"},
         {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"},
         {"name":"UIAutomationSupport/","desc":"Shared waits, fixtures, queries, and evidence helpers"},
         {"name":"VocelloMacUITests/ · VocelloiOSUITests/","desc":"Explicit smoke and benchmark XCUITest lanes"}
@@ -1966,8 +1966,11 @@ scripts/macos_test.sh test
     {
       "name":"scripts/ · config/ · benchmarks/","plat":"operations","desc":"Build, gates, device tooling, benchmark matrices, analyzers, PASS-only history, baselines, and release verification.",
       "children":[
-        {"name":"macos_test.sh","desc":"macOS deterministic test/gate/profile router"},
+        {"name":"build-output-policy.json · build_output_policy.py","desc":"Machine-readable cache/scratch/artifact/dist ownership, inventory, validation, and migration"},
+        {"name":"generate_cli_scheme.py · xcode-schemes/VocelloCLI.xcscheme.template","desc":"Deterministic post-XcodeGen CLI scheme required for fully managed DerivedData"},
+        {"name":"macos_test.sh","desc":"macOS deterministic test/gate, exact-PID profile, and retained-memory router"},
         {"name":"ui_test.sh","desc":"Unified explicit XCUITest smoke and benchmark entry point"},
+        {"name":"clean_build_caches.sh","desc":"Policy-bounded routine/aggressive/UI/dist/external/clobber cleanup"},
         {"name":"benchmark_history.py","desc":"Validate/publish privacy-safe records and reproduce HISTORY.md"},
         {"name":"backend-risk-spine.json","desc":"Tracked backend report-risk contract"},
         {"name":"ios_device.sh","desc":"Physical-device build/test/bench/gate router"},
@@ -1984,7 +1987,7 @@ scripts/macos_test.sh test
     {
       "name":".github/workflows/","plat":"CI","desc":"iOS compile safety, macOS package/release, and optional iOS archive jobs.",
       "children":[
-        {"name":"ci.yml","desc":"Compile checks and manual macOS smoke"},
+        {"name":"ci.yml","desc":"Project inputs, generic iOS compile safety, and macOS deterministic tests"},
         {"name":"release.yml","desc":"DMG release, iOS compile, optional archive"}
       ]
     }
@@ -2017,7 +2020,7 @@ scripts/macos_test.sh test
     {"name":"UniformTypeIdentifiers","role":"Reference import and generated-audio export types","owners":"macOS/iOS views"},
     {"name":"OSLog · os_signpost","role":"Runtime logs, performance intervals, and diagnostics","owners":"core, apps, XPC service"},
     {"name":"NSXPCConnection","role":"macOS app-to-engine-service isolation","owners":"QwenVoiceNative / EngineService"},
-    {"name":"MetricKit · CallKit","role":"iOS crash/hang and interruption diagnostics","owners":"iOSSupport"}
+    {"name":"MetricKit · CallKit","role":"iOS crash/hang, delayed memory/exit field summaries, and interruption diagnostics","owners":"iOSSupport"}
   ],
   "externalSystems": [
     {"name":"Hugging Face","role":"Pinned model repository downloads over HTTPS","boundary":"No inference or user-script upload"},
@@ -2033,29 +2036,36 @@ scripts/macos_test.sh test
       {"cmd":"./scripts/check_project_inputs.sh","desc":"Validate generated inputs and resource conventions"},
       {"cmd":"./scripts/build.sh build|run|cli","desc":"Primary macOS app/CLI local loop; Release config at -Onone"},
       {"cmd":"./scripts/build_foundation_targets.sh macos|ios","desc":"Compile-safety for shared framework targets"},
-      {"cmd":"./scripts/release.sh","desc":"Optimized signing, DMG creation, notarization and verification"}
+      {"cmd":"./scripts/release.sh","desc":"Isolated optimized signing/notarization under build/scratch and build/dist"},
+      {"cmd":"python3 scripts/build_output_policy.py status|validate","desc":"Inventory and enforce the two-cache classified output contract"}
     ],
     "macOS test":[
       {"cmd":"scripts/macos_test.sh models ensure","desc":"Explicit repair/bootstrap for real-engine Speed model fixtures"},
       {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, and owned Qwen3 runtime tests; no frontend driving"},
       {"cmd":"scripts/ui_test.sh macos smoke","desc":"Native-app navigation, visible readiness, one Custom generation, player, History, and screenshots"},
       {"cmd":"scripts/ui_test.sh macos benchmark","desc":"Full 29-take UI matrix with complete app/XPC/engine evidence and PASS-only history"},
-      {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Three-rotation PCM and RTF/TTFC observer-effect diagnostic"},
+      {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Local-only three-rotation PCM and RTF/TTFC observer-effect diagnostic"},
+      {"cmd":"scripts/macos_test.sh profile --kind memory [--keep-trace]","desc":"Exact-PID memory profile; compact summary by default, raw trace opt-in"},
+      {"cmd":"scripts/macos_test.sh memory","desc":"Custom→Design→Clone retained-memory policy qualification"},
       {"cmd":"scripts/macos_test.sh gate","desc":"Deterministic macOS platform and crash gate"}
     ],
     "iOS device":[
       {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, app, and dSYM readiness"},
       {"cmd":"scripts/ui_test.sh ios smoke","desc":"Physical-iPhone semantic, accessibility, generation, and screenshot assertions"},
       {"cmd":"scripts/ui_test.sh ios benchmark","desc":"Physical-iPhone full UI matrix with run-scoped app/engine evidence"},
-      {"cmd":"scripts/ios_device.sh lang-bench|profile|crashes","desc":"Headless language, profiling, and crash evidence"},
+      {"cmd":"scripts/ios_device.sh lang-bench|profile|crashes","desc":"Headless language, exact-PID profiling, and crash evidence"},
+      {"cmd":"scripts/ios_device.sh memory --voice-id ID","desc":"One-process nine-take retained-memory qualification"},
+      {"cmd":"scripts/ios_device.sh memory-field-report","desc":"Local-only delayed MetricKit memory/exit aggregate"},
       {"cmd":"scripts/ios_device.sh gate","desc":"Physical-device deterministic/runtime gate"}
     ],
     "Bench":[
       {"cmd":"QWENVOICE_DEBUG=1 ./build/vocello bench … --seed N","desc":"Seedable headless perf/quality matrix; PASS publishes an engine-generation record"},
+      {"cmd":"scripts/macos_test.sh memory | scripts/ios_device.sh memory","desc":"Schema-v8/evidence-v2 memory qualification; raw sidecars remain local"},
       {"cmd":"python3 scripts/check_language_hints.py","desc":"Validate requested language hints"},
       {"cmd":"python3 scripts/check_language_output.py","desc":"Validate exact-WAV, three-pass locale-locked ASR consensus"},
       {"cmd":"python3 scripts/summarize_generation_telemetry.py … --run-id ID --evidence-manifest PATH","desc":"Summarize one exact ordered run, never historical rows"},
-      {"cmd":"python3 scripts/benchmark_history.py validate --all","desc":"Validate privacy/size/digests and reproducible generated history"}
+      {"cmd":"python3 scripts/benchmark_history.py validate --all","desc":"Validate privacy/size/digests and reproducible generated history"},
+      {"cmd":"scripts/clean_build_caches.sh --routine --dry-run","desc":"Inspect bounded scratch and superseded-evidence reclamation; distribution is preserved"}
     ],
     "CI / release":[
       {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build"},
@@ -2066,7 +2076,7 @@ scripts/macos_test.sh test
     "Codex workflow":[
       {"cmd":"AGENTS.md → .agents/<role>.md","desc":"Durable repo rules first, then the subsystem playbook"},
       {"cmd":"Use matching installed skills/plugins","desc":"Read the selected SKILL.md completely before acting"},
-      {"cmd":"Build iOS Apps → shared XcodeBuildMCP","desc":"One server for macOS and physical-device iOS; repository scripts remain authoritative"},
+      {"cmd":"Optional Apple build plugins → shared XcodeBuildMCP","desc":"When installed and callable, Build iOS Apps owns one server for macOS and physical-device iOS; repository scripts remain authoritative"},
       {"cmd":"scripts/ui_test.sh macos|ios smoke|benchmark","desc":"Sole autonomous app UI stack; iOS requires the paired physical phone"},
       {"cmd":"scripts/macos_test.sh release-readiness","desc":"Project-input check, exact app build, deterministic tests, and crash delta before packaging"},
       {"cmd":"Git publishing","desc":"Commit, push, pull request, and ordinary merge never require models, devices, or XCUITest results"},
@@ -2139,6 +2149,8 @@ scripts/macos_test.sh test
     "Production telemetry stays runtime-gated through TelemetryGate.resolvedEnabled",
     "Telemetry-off constructs no sampler, sink, chunk QC, or expensive derived diagnostics",
     "Benchmark history is PASS-only; HISTORY.md is generated and raw evidence stays untracked",
+    "Memory-qualified history requires telemetry v8, evidence v2, at least 95% sampler coverage, and no critical pressure or memory exit",
+    "macOS app plus engine memory is uptime-aligned; independent process peaks are never added",
     "XCUITest is the sole autonomous app UI driver; no hidden UI-test markers or coordinate bridge",
     "Smoke and benchmark are independent explicit acceptance lanes",
     "Batch generation stays absent from iOS unless a device-proven sequential streaming design replaces it"

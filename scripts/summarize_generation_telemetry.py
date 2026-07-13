@@ -135,12 +135,19 @@ def load_evidence_selection(path, requested_run_id=""):
         ) from error
     if not isinstance(payload, dict):
         raise TelemetrySelectionError("evidence manifest root must be an object")
-    if payload.get("schemaVersion") != 1:
+    if payload.get("schemaVersion") not in {1, 2}:
         raise TelemetrySelectionError(
             f"unsupported evidence schemaVersion={payload.get('schemaVersion')!r}"
         )
-    if payload.get("benchmarkKind") != "ui-generation":
-        raise TelemetrySelectionError("evidence manifest is not a ui-generation benchmark")
+    benchmark_kind = payload.get("benchmarkKind")
+    if benchmark_kind in {
+        "engine-generation", "language", "instrument-profile", "memory-qualification",
+    }:
+        return _load_non_ui_evidence_selection(payload, requested_run_id=requested_run_id)
+    if benchmark_kind != "ui-generation":
+        raise TelemetrySelectionError(
+            f"unsupported evidence benchmarkKind={benchmark_kind!r}"
+        )
     if payload.get("status") not in {"pass", "passedWithWarnings"}:
         raise TelemetrySelectionError("evidence manifest does not describe a successful run")
     run_id = payload.get("runID")
@@ -194,6 +201,107 @@ def load_evidence_selection(path, requested_run_id=""):
             value is True for value in completeness.values()
         ):
             raise TelemetrySelectionError(f"evidence take {index} has incomplete layers")
+        generation_ids.append(generation_id)
+        cell_by_id[generation_id] = cell
+    return payload, run_id, generation_ids, cell_by_id
+
+
+def _load_non_ui_evidence_selection(payload, *, requested_run_id=""):
+    """Select exact engine rows from a validated non-UI history manifest.
+
+    Non-UI publishers freeze their ordered takes under ``historyRecord`` rather
+    than the UI validator's top-level matrix. Keep the UI contract strict while
+    accepting the three generation-backed headless kinds that invoke this
+    summarizer after their own validator has passed.
+    """
+    if payload.get("status") not in {"passed", "passedWithWarnings"}:
+        raise TelemetrySelectionError(
+            "non-UI evidence manifest does not describe a successful run"
+        )
+    run_id = payload.get("runID")
+    if not isinstance(run_id, str) or not run_id:
+        raise TelemetrySelectionError("non-UI evidence manifest has no runID")
+    if requested_run_id and requested_run_id != run_id:
+        raise TelemetrySelectionError(
+            f"--run-id {requested_run_id!r} does not match evidence runID {run_id!r}"
+        )
+
+    history_record = payload.get("historyRecord")
+    if not isinstance(history_record, dict):
+        raise TelemetrySelectionError("non-UI evidence manifest has no historyRecord")
+    if history_record.get("schemaVersion") not in {1, 2}:
+        raise TelemetrySelectionError(
+            "non-UI evidence historyRecord has an unsupported schemaVersion"
+        )
+    platform = payload.get("platform")
+    if not isinstance(platform, str) or not platform:
+        raise TelemetrySelectionError("non-UI evidence manifest has no platform")
+    history_run = history_record.get("run")
+    if (
+        not isinstance(history_run, dict)
+        or history_run.get("id") != run_id
+        or history_run.get("kind") != payload.get("benchmarkKind")
+        or history_run.get("platform") != platform
+        or history_run.get("status") != payload.get("status")
+    ):
+        raise TelemetrySelectionError("non-UI evidence run identity is inconsistent")
+    takes = history_record.get("takes")
+    expected_count = payload.get("expectedTakeCount")
+    actual_count = payload.get("actualTakeCount")
+    if (
+        not isinstance(takes, list)
+        or not takes
+        or expected_count != len(takes)
+        or actual_count != len(takes)
+    ):
+        raise TelemetrySelectionError("non-UI evidence take counts are inconsistent")
+
+    generation_ids = []
+    cell_by_id = {}
+    for index, take in enumerate(takes, start=1):
+        if not isinstance(take, dict) or take.get("takeIndex") != index:
+            raise TelemetrySelectionError(
+                f"non-UI evidence takeIndex sequence is invalid at take {index}"
+            )
+        generation_id = take.get("generationID")
+        cell = take.get("cell")
+        if not isinstance(generation_id, str) or not generation_id:
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} has no generationID"
+            )
+        if generation_id in cell_by_id:
+            raise TelemetrySelectionError(
+                f"duplicate evidence generationID: {generation_id}"
+            )
+        if not isinstance(cell, str) or not cell:
+            raise TelemetrySelectionError(f"non-UI evidence take {index} has no cell")
+        if take.get("status") not in {"passed", "passedWithWarnings"}:
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} is not successful"
+            )
+        if take.get("finishReason") not in _BENCHMARK_SUCCESS_FINISH_REASONS:
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} has an unsuccessful finishReason"
+            )
+        output = take.get("output")
+        if (
+            not isinstance(output, dict)
+            or output.get("readableWAV") is not True
+            or output.get("atomicPublish") is not True
+        ):
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} has invalid output proof"
+            )
+        audio_qc = take.get("audioQC")
+        if not isinstance(audio_qc, dict) or audio_qc.get("verdict") not in {"pass", "warn"}:
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} has invalid audioQC proof"
+            )
+        layers = take.get("layers")
+        if take.get("layerCompleteness") != "complete" or not isinstance(layers, list) or "engine" not in layers:
+            raise TelemetrySelectionError(
+                f"non-UI evidence take {index} has incomplete engine telemetry"
+            )
         generation_ids.append(generation_id)
         cell_by_id[generation_id] = cell
     return payload, run_id, generation_ids, cell_by_id

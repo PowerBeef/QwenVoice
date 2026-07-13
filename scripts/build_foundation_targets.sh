@@ -4,10 +4,16 @@ set -euo pipefail
 MODE="${1:-all}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FOUNDATION_BUILD_ROOT="$ROOT_DIR/build/foundation/local-builds"
 PROJECT_FILE="$ROOT_DIR/QwenVoice.xcodeproj"
 MATRIX_PATH="$ROOT_DIR/config/apple-platform-capability-matrix.json"
 . "$ROOT_DIR/scripts/lib/shared.sh"
+# shellcheck source=lib/build_paths.sh
+. "$ROOT_DIR/scripts/lib/build_paths.sh"
+# shellcheck source=lib/build_cache.sh
+. "$ROOT_DIR/scripts/lib/build_cache.sh"
+FOUNDATION_BUILD_ROOT="$QVOICE_ARTIFACTS_FOUNDATION"
+FOUNDATION_DERIVED_ROOT="$QVOICE_SCRATCH_FOUNDATION"
+SOURCE_PACKAGES_DIR="$QVOICE_XCODE_SOURCE_PACKAGES"
 
 usage() {
   cat >&2 <<'EOF'
@@ -16,7 +22,7 @@ EOF
 }
 
 prepare_paths() {
-  mkdir -p "$FOUNDATION_BUILD_ROOT"
+  mkdir -p "$FOUNDATION_BUILD_ROOT" "$FOUNDATION_DERIVED_ROOT"
 }
 
 # The foundation build exists only to prove the targets compile. Its DerivedData
@@ -25,10 +31,7 @@ prepare_paths() {
 # .xcresult bundles + summary.json are kept for inspection. This enforces the
 # "single build at a time" policy: no second build tree lingers on disk.
 cleanup_foundation_derived_data() {
-  rm -rf \
-    "$FOUNDATION_BUILD_ROOT/macos-derived-data" \
-    "$FOUNDATION_BUILD_ROOT/ios-derived-data" \
-    2>/dev/null || true
+  rm -rf "$FOUNDATION_DERIVED_ROOT" 2>/dev/null || true
 }
 
 write_summary() {
@@ -55,46 +58,72 @@ PY
 }
 
 build_macos() {
-  local derived_data_path="$FOUNDATION_BUILD_ROOT/macos-derived-data"
+  local derived_data_path="$FOUNDATION_DERIVED_ROOT/macos"
   local result_bundle_path="$FOUNDATION_BUILD_ROOT/qwenvoice-macos-build.xcresult"
 
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
+    foundation-macos QwenVoice Release 'platform=macOS,arch=arm64'
   rm -rf "$derived_data_path" "$result_bundle_path"
 
-  xcodebuild \
+  xcb_run \
     -project "$PROJECT_FILE" \
     -scheme QwenVoice \
     -configuration Release \
-    -destination 'platform=macOS' \
+    -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$derived_data_path" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
     -resultBundlePath "$result_bundle_path" \
     -resultBundleVersion 3 \
+    ARCHS=arm64 \
+    ONLY_ACTIVE_ARCH=YES \
+    CODE_SIGN_STYLE=Manual \
     CODE_SIGN_IDENTITY="-" \
     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
     SWIFT_OPTIMIZATION_LEVEL="-Onone" \
     SWIFT_COMPILATION_MODE="incremental" \
     build
+  write_build_provenance "$FOUNDATION_BUILD_ROOT/last-build.json" \
+    "scripts/build_foundation_targets.sh macos" QwenVoice Release \
+    "platform=macOS,arch=arm64" arm64 Onone ad-hoc \
+    "$derived_data_path" "$SOURCE_PACKAGES_DIR"
 }
 
 build_ios() {
-  local derived_data_path="$FOUNDATION_BUILD_ROOT/ios-derived-data"
+  local derived_data_path="$FOUNDATION_DERIVED_ROOT/ios"
   local result_bundle_path="$FOUNDATION_BUILD_ROOT/vocello-ios-generic-build.xcresult"
 
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
+    foundation-ios VocelloiOS Release 'generic/platform=iOS'
   rm -rf "$derived_data_path" "$result_bundle_path"
 
-  xcodebuild \
+  xcb_run \
     -project "$PROJECT_FILE" \
     -scheme VocelloiOS \
+    -configuration Release \
     -destination 'generic/platform=iOS' \
     -derivedDataPath "$derived_data_path" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
     -resultBundlePath "$result_bundle_path" \
     -resultBundleVersion 3 \
     CODE_SIGNING_ALLOWED=NO \
+    ARCHS=arm64 \
     ONLY_ACTIVE_ARCH=YES \
+    SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+    SWIFT_COMPILATION_MODE="incremental" \
     build
+  write_build_provenance "$FOUNDATION_BUILD_ROOT/last-build.json" \
+    "scripts/build_foundation_targets.sh ios" VocelloiOS Release \
+    "generic/platform=iOS" arm64 Onone disabled \
+    "$derived_data_path" "$SOURCE_PACKAGES_DIR"
 }
 
 prepare_paths
 trap cleanup_foundation_derived_data EXIT
+ensure_project_regenerated
 
 case "$MODE" in
   macos)

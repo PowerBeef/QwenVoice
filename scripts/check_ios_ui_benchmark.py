@@ -13,6 +13,16 @@ from pathlib import Path
 import sys
 import tempfile
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from benchmark_memory import (  # noqa: E402
+    MemoryEvidenceError,
+    REQUIRED_TELEMETRY_SCHEMA,
+    qualify_memory_rows,
+)
+
 DEFAULT_MODES = ["custom", "design", "clone"]
 DEFAULT_LENGTHS = ["short", "medium", "long"]
 SUCCESS_FINISH = {"eos", "max_tokens", "maxTokens", "completed"}
@@ -207,8 +217,13 @@ def validate_v7_frontend(row: dict) -> list[str]:
     )
     if any(not _number(frontend.get(key)) or frontend[key] < 0 for key in required_nonnegative):
         return [f"{generation}: incomplete typed frontend lifecycle/playback metrics"]
+    start_source = frontend.get("playbackStartSource")
+    if start_source not in {"liveStream", "finalFile"}:
+        return [f"{generation}: missing or invalid typed playback start source"]
     if frontend["playbackChunksReceived"] <= 0 or frontend["playbackStartBufferedChunks"] <= 0:
         return [f"{generation}: invalid frontend playback health"]
+    if start_source == "finalFile" and frontend["playbackStartBufferedChunks"] != 1:
+        return [f"{generation}: final-file playback must expose one active file buffer"]
     return []
 
 
@@ -337,6 +352,7 @@ def tracked_metrics(engine: dict, app: dict) -> dict[str, float | int]:
 
 
 def build_manifest(
+    diagnostics: Path,
     run_id: str,
     label: str,
     modes: list[str],
@@ -346,12 +362,19 @@ def build_manifest(
     engine_rows: list[dict],
     app_rows: list[dict],
 ) -> dict:
+    memory_evidence, memory_run = qualify_memory_rows(
+        rows=engine_rows,
+        diagnostics=diagnostics,
+        platform="ios",
+    )
+    memory_by_id = {item.generation_id: item for item in memory_evidence}
     takes = []
     warning_count = 0
     for index, (row, cell) in enumerate(zip(engine_rows, cells, strict=True), start=1):
         output = row.get("outputMetrics") or {}
         qc = row.get("audioQC") or output.get("audioQC") or {}
-        if qc.get("verdict") == "warn":
+        memory = memory_by_id[row["generationID"]]
+        if qc.get("verdict") == "warn" or memory.warnings:
             warning_count += 1
         completeness = {"engine": True, "app": True}
         takes.append({
@@ -362,7 +385,7 @@ def build_manifest(
             "length": cell[1],
             "warmState": cell[2],
             "repetition": cell[3],
-            "status": "passedWithWarnings" if qc.get("verdict") == "warn" else "pass",
+            "status": "passedWithWarnings" if qc.get("verdict") == "warn" or memory.warnings else "pass",
             "finishReason": row.get("finishReason"),
             "readableWAV": True,
             "atomicPublish": True,
@@ -381,7 +404,11 @@ def build_manifest(
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     started_at = recorded[0] if recorded else now
     finished_at = recorded[-1] if recorded else now
-    selected_telemetry = {"engine": engine_rows, "app": app_rows}
+    selected_telemetry = {
+        "engine": engine_rows,
+        "app": app_rows,
+        "sampleSidecars": memory_run["digestPayload"],
+    }
     raw_telemetry_digest = hashlib.sha256(
         json.dumps(
             selected_telemetry,
@@ -406,7 +433,13 @@ def build_manifest(
     app_by_id = {row.get("generationID"): row for row in app_rows}
     for take, row in zip(takes, engine_rows, strict=True):
         model_identity = row.get("modelRuntimeIdentity") or {}
-        metrics = tracked_metrics(row, app_by_id.get(take["generationID"]) or {})
+        app_row = app_by_id.get(take["generationID"]) or {}
+        memory = memory_by_id[take["generationID"]]
+        metrics = tracked_metrics(row, app_row)
+        metrics.update(memory.metrics)
+        playback_start_source = (app_row.get("frontendMetrics") or {}).get(
+            "playbackStartSource"
+        )
         qc = take["audioQC"]
         raw_qc = row.get("audioQC") or (row.get("outputMetrics") or {}).get("audioQC") or {}
         qc_metrics = {}
@@ -420,7 +453,10 @@ def build_manifest(
             value = raw_qc.get(source)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 qc_metrics[destination] = value
-        history_takes.append({
+        take_warnings = sorted(set(
+            (qc["flags"] if qc["verdict"] == "warn" else []) + list(memory.warnings)
+        ))
+        history_take = {
             "takeIndex": take["takeIndex"],
             "generationID": take["generationID"],
             "cell": take["cell"],
@@ -437,7 +473,7 @@ def build_manifest(
             "warmState": take["warmState"],
             "length": take["length"],
             "finishReason": "completed",
-            "status": "passedWithWarnings" if qc["verdict"] == "warn" else "passed",
+            "status": "passedWithWarnings" if take_warnings else "passed",
             "layerCompleteness": "complete",
             "layers": ["engine", "app"],
             "metrics": metrics,
@@ -455,8 +491,13 @@ def build_manifest(
                 "metrics": qc_metrics,
             },
             "thermalState": ((row.get("summary") or {}).get("thermalState") or {}).get("worst", "unknown"),
-            "warnings": qc["flags"] if qc["verdict"] == "warn" else [],
-        })
+            "warnings": take_warnings,
+            "memoryStatus": memory.status,
+            "sampleSidecarDigest": memory.sidecar_digest,
+        }
+        if playback_start_source in {"liveStream", "finalFile"}:
+            history_take["playbackStartSource"] = playback_start_source
+        history_takes.append(history_take)
     history_record = {
         "run": {
             "id": run_id,
@@ -467,7 +508,7 @@ def build_manifest(
             "matrixScope": scope,
             "startedAt": started_at,
             "finishedAt": finished_at,
-            "warnings": [],
+            "warnings": memory_run["warnings"],
         },
         "hardware": hardware,
         "toolchain": {"optimization": "-O"},
@@ -481,11 +522,15 @@ def build_manifest(
             "rawTelemetryDigest": raw_telemetry_digest,
             "telemetrySchemaVersion": telemetry_schema,
             "qcAlgorithmVersion": qc_algorithm,
+            "memoryContractVersion": memory_run["memoryContractVersion"],
+            "memoryQualified": memory_run["memoryQualified"],
+            "sampleSidecarCount": memory_run["sampleSidecarCount"],
+            "sampleSidecarsDigest": memory_run["sampleSidecarsDigest"],
         },
         "takes": history_takes,
     }
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "benchmarkKind": "ui-generation",
         "platform": "ios",
         "runID": run_id,
@@ -680,6 +725,11 @@ def main() -> int:
                 failures.append(f"{row.get('generationID', '?')}: missing privacy-safe prompt digest")
             if row.get("mode") in {"design", "clone"} and not is_digest(identity.get("fixtureDigest")):
                 failures.append(f"{row.get('generationID', '?')}: missing exact fixture digest")
+        if row.get("schemaVersion", 0) < REQUIRED_TELEMETRY_SCHEMA:
+            failures.append(
+                f"{row.get('generationID', '?')}: benchmark publication requires telemetry "
+                f"schema v{REQUIRED_TELEMETRY_SCHEMA} or newer"
+            )
 
     valid_ids = [value for value in generation_ids if isinstance(value, str) and value]
     failures.extend(validate_layer("app", app_rows, valid_ids, expected_count))
@@ -687,6 +737,16 @@ def main() -> int:
         if row.get("schemaVersion", 0) < 7:
             continue
         failures.extend(validate_v7_frontend(row))
+
+    if not failures:
+        try:
+            qualify_memory_rows(
+                rows=engine_rows,
+                diagnostics=args.diagnostics,
+                platform="ios",
+            )
+        except MemoryEvidenceError as error:
+            failures.append(str(error))
 
     print(
         f"iOS XCUITest benchmark: runID={args.run_id} rows={len(engine_rows)} "
@@ -702,6 +762,7 @@ def main() -> int:
 
     if args.evidence_manifest:
         manifest = build_manifest(
+            args.diagnostics,
             args.run_id,
             args.label,
             modes,

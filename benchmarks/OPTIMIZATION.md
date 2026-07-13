@@ -1,10 +1,12 @@
-# Optimization progress
+# Historical optimization decision ledger
 
-Durable record of backend/MLX + output-quality optimization work — what was investigated, decided,
-shipped, and deferred. The historical blow-by-blow lives in git history + `LEGACY_HISTORY.md`; validated
-new runs are indexed in generated `HISTORY.md`. This file is the **standing status** so a future session
-(or maintainer) can resume without re-deriving it. Anchored to the reference baseline. Point-in-time as
-of **2026-06-16** (§H complete; §I is the delivery-accuracy program record).
+Durable, dated record of backend/MLX and output-quality optimization work that was investigated,
+decided, shipped, or deferred through the 2026-06-16 program and its explicitly dated follow-ups.
+It is not the current runtime, telemetry, memory, or benchmark acceptance contract. Use generated
+[`HISTORY.md`](HISTORY.md) for current validated runs,
+[`../docs/development-progress.md`](../docs/development-progress.md) for the active checkpoint, and
+[`../docs/reference/telemetry-and-benchmarking.md`](../docs/reference/telemetry-and-benchmarking.md)
+for current measurement semantics. Git history and `LEGACY_HISTORY.md` retain the older narrative.
 
 ## Reference baseline
 

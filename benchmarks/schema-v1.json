@@ -273,6 +273,7 @@
         "modelRepository": {"type": "string"},
         "modelRevision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
         "output": {"$ref": "#/$defs/output"},
+        "playbackStartSource": {"enum": ["liveStream", "finalFile"]},
         "runtimeProfileSignature": {"type": "string"},
         "seed": {"minimum": 0, "type": "integer"},
         "accuracyMetric": {"enum": ["wordErrorRate", "characterErrorRate"]},

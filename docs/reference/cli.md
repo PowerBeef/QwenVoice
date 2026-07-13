@@ -26,8 +26,9 @@ bench in debug context, see [`testing-runbook.md`](testing-runbook.md) "Model re
 build/vocello <command> [options]      # run the already-built binary
 ```
 
-`build/vocello` is a symlink to the real binary under `build/DerivedData/…`; macOS resolves it so the
-adjacent MLX shader bundle (`default.metallib`) stays reachable. **Don't copy the binary elsewhere** —
+`build/vocello` is the public symlink to the real binary under the policy-owned
+`build/cache/xcode/macos/…` product tree; macOS resolves it so the adjacent MLX shader bundle
+(`default.metallib`) stays reachable. **Don't copy the binary elsewhere** —
 it must run in place. The contract (`qwenvoice_contract.json`) is bundled into the tool, and is also
 discovered repo-relative, so the CLI works from the repo root or any subdirectory; pass `--manifest`
 to override.

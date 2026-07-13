@@ -37,7 +37,8 @@ the recurring permission pain.
   `Apple Development` identity in the keychain → ad-hoc with a warning.
   Nothing is hardcoded; get a certificate via Xcode → Settings → Accounts →
   Manage Certificates.
-- The resolved identity is fingerprinted in `build/.cache/dev-signing-identity`;
+- The resolved identity is fingerprinted inside the managed shared-package cache at
+  `build/cache/xcode/source-packages/.qwenvoice-cache/dev-signing-identity`;
   changing it forces a fresh sign + restage, and `build.sh` asserts the app
   *and* the embedded XPC service ended up signed as expected.
 - The dev-signed app and the shipped (Developer ID) app have different

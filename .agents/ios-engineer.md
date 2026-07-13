@@ -36,15 +36,21 @@ Before changing iOS UI or behavior, read:
   - `scripts/ios_device.sh preflight`
   - `scripts/ios_device.sh build|install|launch`
   - `scripts/ios_device.sh bench|lang-bench`
-  - `scripts/ios_device.sh profile [spec]`
+  - `scripts/ios_device.sh profile [--kind cpu|memory] [--keep-trace] [spec]`
+  - `scripts/ios_device.sh memory --voice-id ID [--label ID]` (one-process retained-memory sequence)
+  - `scripts/ios_device.sh memory-field-report [pulled-diagnostics]` (local-only; never contacts the phone)
   - `scripts/ios_device.sh crashes`
   - `scripts/ios_device.sh gate`
-- Use OpenAI Build iOS Apps skills for code structure and physical-device build/run/debug support.
-  The plugin supplies the one shared XcodeBuildMCP server: call `session_show_defaults`, select
-  `ios-device`, and set the paired device ID at runtime. Never select or invoke Simulator support.
+- When currently installed and callable, use OpenAI Build iOS Apps skills for code structure and
+  physical-device build/run/debug support. If its shared XcodeBuildMCP route is available, call
+  `session_show_defaults`, select `ios-device`, and set the paired device ID at runtime. Never
+  select Simulator support or configure a replacement server when the optional route is absent.
   Repository scripts remain authoritative for build, launch, telemetry, profiling, and crash proof.
-- Use authoritative Apple documentation for current framework APIs. GitHub integration may be
-  used for repository context; scripts remain the test interface.
+- Generated output must use `config/build-output-policy.json`. Do not add an iOS DerivedData,
+  package, evidence, symbol, or archive root outside the manifest; route policy changes through
+  `.agents/release-qa-engineer.md`.
+- Use authoritative Apple documentation for current framework APIs. Use a GitHub integration when
+  callable, otherwise `gh`, for repository context; scripts remain the test interface.
 - **XCUITest owns iOS UI.** It runs only on the paired physical iPhone. Run smoke and
   benchmark lanes only for explicitly requested frontend acceptance.
   Missing device, UI, or model evidence never blocks a commit, push, pull request, ordinary merge,
@@ -77,6 +83,11 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
   `AppLaunchConfiguration.performAnimated`; Liquid Glass falls back to solid fills when reduced
   transparency is enabled.
 - **`increased-memory-limit` entitlement.** Required for model load headroom. Do not remove.
+- **Memory-qualified benchmark evidence.** New publishable device generations require telemetry v8
+  sample sidecars, lifecycle-boundary coverage, zero capture failures, at least 95% periodic
+  coverage, and no critical pressure, app memory warning/exit, `hardTrim`, or `fullUnload`.
+  Delayed MetricKit memory/exit aggregates are field diagnostics only: they are not run-correlated
+  and their absence is `notYetDelivered`, never a benchmark failure.
 - **Supported hardware gate.** `IOSDeviceSupport.isSupportedHardware` enforces iPhone 15 Pro+.
 - **No batch on iOS** (removed 2026-07-02, maintainer decision — dead UI, native engine unsupported, Jetsam risk; macOS batch unaffected). Re-adding requires a sequential-streaming design validated on device.
 - **Clone load profile.** Respect `.fullCapabilities` vs `.iOSProductionDefault`

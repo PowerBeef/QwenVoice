@@ -15,8 +15,10 @@
 #   scripts/macos_test.sh telemetry-overhead        # seeded PCM + RTF/TTFC (explicit, model-dependent)
 #   scripts/macos_test.sh crashes [--test]          # collect + xcsym-symbolicate .ips (app + XPC service)
 #   scripts/macos_test.sh debug                     # LLDB attach guidance (app + XPC service PID)
-#   scripts/macos_test.sh logs                      # retained os_log → build/macos-logs/<run>.log
-#   scripts/macos_test.sh profile [spec]            # read-only model check → xctrace vocello bench
+#   scripts/macos_test.sh logs                      # retained os_log → build/artifacts/macos/logs/<run>.log
+#   scripts/macos_test.sh profile [--kind cpu|memory] [--keep-trace] [spec]
+#                                                    # exact-PID xctrace vocello bench
+#   scripts/macos_test.sh memory [--label ID]        # retained-memory qualification sequence
 #   scripts/macos_test.sh gate                      # inputs → build_foundation → test → crashes
 #                                                    # optional: QWENVOICE_GATE_BENCH=1 adds bounded vocello bench
 #   scripts/macos_test.sh release-readiness         # deterministic packaging gate (no UI)
@@ -27,14 +29,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/scripts"
+# shellcheck source=lib/build_paths.sh
+. "$SCRIPT_DIR/lib/build_paths.sh"
+# shellcheck source=lib/build_cache.sh
+. "$SCRIPT_DIR/lib/build_cache.sh"
 . "$SCRIPT_DIR/lib/test_models.sh"
 test_models_init "$ROOT_DIR"
 APP_NAME="Vocello"
 BUNDLE_ID="com.qwenvoice.app"
-APP_BUNDLE="$ROOT_DIR/build/$APP_NAME.app"
+APP_BUNDLE="$QVOICE_BUILD_ROOT/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 XPC_BUNDLE="$APP_BUNDLE/Contents/XPCServices/QwenVoiceEngineService.xpc"
-DSYM_DIR="$ROOT_DIR/build/macos/dsyms"
+DSYM_DIR="$QVOICE_SYMBOLS_MACOS"
 
 note() { printf '\033[0;36m==>\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[0;33m[warn]\033[0m %s\n' "$*" >&2; }
@@ -78,6 +84,51 @@ record_benchmark_history() {
   }
 }
 
+# Bash 3.2 has no timed `wait`. Treat a disappeared or zombie child as
+# waitable, then let the caller collect its real exit status with `wait`.
+profile_child_finished() {
+  local pid="$1" state=""
+  [[ -n "$pid" ]] || return 0
+  kill -0 "$pid" >/dev/null 2>&1 || return 0
+  state="$(ps -o state= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  [[ -z "$state" || "$state" == *Z* ]]
+}
+
+# Bash 3.2 unwinds function-local variables before an EXIT trap executes. Keep
+# the one active profile's owned process/retention state in explicitly prefixed
+# globals so failure cleanup is effective rather than a static-looking no-op.
+PROFILE_TRACE_ACTIVE=0
+PROFILE_TRACE_PUBLISHED=0
+PROFILE_TRACE_KIND=""
+PROFILE_TRACE_PHASE=""
+PROFILE_TRACE_ARTIFACTS=""
+PROFILE_TRACE_PATH=""
+PROFILE_TRACE_TARGET_PID=""
+PROFILE_TRACE_LAUNCHER_PID=""
+PROFILE_TRACE_XCTRACE_PID=""
+
+profile_failure_cleanup() {
+  local status=$?
+  trap - EXIT
+  set +e
+  [[ -z "$PROFILE_TRACE_XCTRACE_PID" ]] \
+    || kill "$PROFILE_TRACE_XCTRACE_PID" >/dev/null 2>&1 || true
+  [[ -z "$PROFILE_TRACE_TARGET_PID" ]] \
+    || kill -CONT "$PROFILE_TRACE_TARGET_PID" >/dev/null 2>&1 || true
+  [[ -z "$PROFILE_TRACE_TARGET_PID" ]] \
+    || kill "$PROFILE_TRACE_TARGET_PID" >/dev/null 2>&1 || true
+  [[ -z "$PROFILE_TRACE_LAUNCHER_PID" ]] \
+    || kill "$PROFILE_TRACE_LAUNCHER_PID" >/dev/null 2>&1 || true
+  if (( status != 0 && PROFILE_TRACE_ACTIVE == 1 && PROFILE_TRACE_PUBLISHED == 0 )); then
+    python3 "$SCRIPT_DIR/lib/profile_trace_retention.py" mark-failure \
+      --root "$ROOT_DIR" --platform macos --kind "$PROFILE_TRACE_KIND" \
+      --artifact-dir "$PROFILE_TRACE_ARTIFACTS" --trace "$PROFILE_TRACE_PATH" \
+      --phase "$PROFILE_TRACE_PHASE" --exit-code "$status" >/dev/null \
+      || warn "could not compact older failed $PROFILE_TRACE_KIND profile traces"
+  fi
+  exit "$status"
+}
+
 ensure_app() { [[ -d "$APP_BUNDLE" ]] || "$SCRIPT_DIR/build.sh" build; }
 
 # Xcode 26.6 can finish compilation and then wait indefinitely before spawning
@@ -85,16 +136,37 @@ ensure_app() { [[ -d "$APP_BUNDLE" ]] || "$SCRIPT_DIR/build.sh" build; }
 # then execute the built deterministic bundles directly through the native runner.
 build_mac_test_bundles() {
   local log_path="$1"
-  xcodebuild build-for-testing -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
+  mkdir -p "$(dirname "$log_path")"
+  ensure_project_regenerated || return 1
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$QVOICE_XCODE_SOURCE_PACKAGES" \
+    macos-test QwenVoice Release 'platform=macOS,arch=arm64' || return 1
+  local xcode_status=0
+  xcb_run build-for-testing -project "$ROOT_DIR/QwenVoice.xcodeproj" -scheme QwenVoice \
     -configuration Release -destination 'platform=macOS,arch=arm64' \
-    -derivedDataPath "$ROOT_DIR/build/DerivedData" \
-    CODE_SIGN_IDENTITY="-" ENABLE_TESTABILITY=YES \
-    > "$log_path" 2>&1
+    -derivedDataPath "$QVOICE_XCODE_MACOS_DERIVED" \
+    -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
+    -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile \
+    ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+    CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+    SWIFT_OPTIMIZATION_LEVEL="-Onone" SWIFT_COMPILATION_MODE="incremental" \
+    ENABLE_TESTABILITY=YES > "$log_path" 2>&1 || xcode_status=$?
+  (( xcode_status == 0 )) || return "$xcode_status"
+  local products="$QVOICE_XCODE_MACOS_DERIVED/Build/Products/Release"
+  assert_macos_bundle_arm64_only "$products/Vocello.app" || return 1
+  preserve_macos_dsyms "$products" "$products/Vocello.app" "$QVOICE_SYMBOLS_MACOS" || return 1
+  write_build_provenance "$QVOICE_XCODE_MACOS_DERIVED/last-build.json" \
+    "scripts/macos_test.sh test" QwenVoice Release \
+    "platform=macOS,arch=arm64" arm64 Onone ad-hoc \
+    "$QVOICE_XCODE_MACOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES" || return 1
+  write_build_provenance "$QVOICE_SYMBOLS_MACOS/last-build.json" \
+    "scripts/macos_test.sh test" QwenVoice Release \
+    "platform=macOS,arch=arm64" arm64 Onone ad-hoc \
+    "$QVOICE_XCODE_MACOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES" || return 1
 }
 
 run_mac_test_bundle() {
   local bundle_name="$1" log_path="$2"
-  local products="$ROOT_DIR/build/DerivedData/Build/Products/Release"
+  local products="$QVOICE_XCODE_MACOS_DERIVED/Build/Products/Release"
   local bundle="$products/$bundle_name.xctest"
   [[ -d "$bundle" ]] || { echo "missing test bundle: $bundle" > "$log_path"; return 1; }
   DYLD_FRAMEWORK_PATH="$products" xcrun xctest "$bundle" > "$log_path" 2>&1
@@ -121,7 +193,7 @@ cmd_crashes() {
     sleep 5   # let macOS write the .ips
   fi
 
-  local dest="$ROOT_DIR/build/macos/crashes-$(date +%Y%m%d-%H%M%S)"
+  local dest="$QVOICE_ARTIFACTS_MACOS/crashes/crashes-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$dest"
   note "collecting .ips from $dr (app: Vocello*, service: QwenVoiceEngineService* / *engine-service*)"
   local n=0 f
@@ -172,84 +244,334 @@ cmd_debug() {
 }
 
 # logs: retain the app + XPC service os_log (subsystem com.qwenvoice.app) to a file
-# under build/macos-logs/<run>.log. Ctrl-C to stop.
+# under build/artifacts/macos/logs/<run>.log. Ctrl-C to stop.
 cmd_logs() {
-  local out="$ROOT_DIR/build/macos-logs/macos-logs-$(date +%Y%m%d-%H%M%S).log"
+  local out="$QVOICE_ARTIFACTS_MACOS/logs/macos-logs-$(date +%Y%m%d-%H%M%S).log"
   mkdir -p "$(dirname "$out")"
   note "streaming os_log (subsystem $BUNDLE_ID) → $out (Ctrl-C to stop)"
   /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\"" 2>&1 | tee "$out"
   note "saved $out"
 }
 
-# profile [spec]: Instruments/xctrace trace of a headless generation via the `vocello` CLI
+# profile [--kind cpu|memory] [spec]: Instruments/xctrace trace of a headless generation via the `vocello` CLI
 # (engine IN-PROCESS — the deterministic engine profile; the same engine code runs in the
 # XPC service). The engine emits OSSignpost intervals under subsystem com.qwenvoice.app,
-# category 'performance'. The lane always records CPU Profiler and os_signpost in one
-# trace; QVOICE_MAC_PROFILE_DURATION controls the capture window (seconds, default 90).
-# Produces build/macos/profiles/<run-id>/<run-id>.trace. (To profile the XPC service
+# category 'performance'. The CPU lane records CPU Profiler + os_signpost. The memory
+# lane also records Allocations + VM Tracker in that same trace. QVOICE_MAC_PROFILE_DURATION
+# controls the capture window (seconds, default 90); QVOICE_MAC_MEMORY_PROFILE_DURATION
+# overrides the memory safety cap (default 180). QVOICE_MAC_PROFILE_GRACE_TIMEOUT bounds target/tracer
+# shutdown after the requested capture window (default 30 seconds for CPU, 60 for memory).
+# Produces build/artifacts/macos/profiles/<run-id>/<run-id>.trace. (To profile the XPC service
 # specifically — the production path — launch the app, 'xctrace record --attach
 # QwenVoiceEngineService', and generate via the UI; see macos-testing.md.)
 cmd_profile() {
-  local spec="${1:-custom:speed:Profile headless generation.}"
+  local kind="cpu"
+  local spec=""
+  local keep_trace=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --kind) kind="${2:-}"; shift 2 ;;
+      --kind=*) kind="${1#*=}"; shift ;;
+      --keep-trace) keep_trace=1; shift ;;
+      -*) die "unknown profile flag: $1 (try --kind cpu|memory [--keep-trace])" ;;
+      *) [[ -z "$spec" ]] || die "profile accepts one generation spec"; spec="$1"; shift ;;
+    esac
+  done
+  case "$kind" in cpu|memory) ;; *) die "profile kind must be cpu or memory" ;; esac
+  spec="${spec:-custom:speed:Profile headless generation.}"
   [[ "$spec" == *:* ]] || spec="custom:speed:$spec"
   local mode="${spec%%:*}"
   local rest="${spec#*:}"
   local variant="${rest%%:*}"
   local cpu_instrument="CPU Profiler"
+  local allocations_instrument="Allocations"
+  local vm_tracker_instrument="VM Tracker"
+  local memory_template="Allocations"
+  local -a instrument_args
   local capture_instruments="$cpu_instrument + os_signpost"
+  if [[ "$kind" == "memory" ]]; then
+    # Apple's Allocations template already owns both Allocations and VM Tracker,
+    # and configures VM Tracker with automatic snapshots disabled. Adding a
+    # standalone VM Tracker instrument to a Blank trace enables stop-the-world
+    # automatic snapshots, which can suspend the exact target for 1-2 seconds
+    # and make its honest 500 ms in-process sampler fall below the 95% gate.
+    instrument_args=(--template "$memory_template" --instrument "$cpu_instrument")
+    capture_instruments="$cpu_instrument + $allocations_instrument + $vm_tracker_instrument + os_signpost"
+  else
+    instrument_args=(--instrument "$cpu_instrument")
+  fi
+  instrument_args+=(--instrument os_signpost)
   local duration="${QVOICE_MAC_PROFILE_DURATION:-90}"
-  [[ "$duration" =~ ^[1-9][0-9]*$ ]] || die "QVOICE_MAC_PROFILE_DURATION must be a positive whole number of seconds"
+  local profile_length="medium" profile_warm="1"
+  [[ "$kind" != "memory" ]] || duration="${QVOICE_MAC_MEMORY_PROFILE_DURATION:-180}"
+  if [[ "$kind" == "memory" ]]; then
+    # Retention has its own multi-take lane. The Instruments memory lane focuses
+    # on one cold long take: this captures model-load and sustained-generation
+    # peaks while providing enough genuine 500 ms cadence opportunities for the
+    # strict 95% coverage gate. The Allocations template above avoids automatic
+    # VM snapshots rather than discounting profiler-induced sampler gaps.
+    profile_length="long"
+    profile_warm="0"
+  fi
+  local tracer_start_timeout="${QVOICE_MAC_PROFILE_START_TIMEOUT:-30}"
+  local default_profile_grace_timeout=30
+  [[ "$kind" != "memory" ]] || default_profile_grace_timeout=60
+  local profile_grace_timeout="${QVOICE_MAC_PROFILE_GRACE_TIMEOUT:-$default_profile_grace_timeout}"
+  [[ "$duration" =~ ^[1-9][0-9]*$ ]] \
+    || die "the selected macOS profile duration must be a positive whole number of seconds"
+  [[ "$tracer_start_timeout" =~ ^[1-9][0-9]*$ ]] \
+    || die "QVOICE_MAC_PROFILE_START_TIMEOUT must be a positive whole number of seconds"
+  [[ "$profile_grace_timeout" =~ ^[1-9][0-9]*$ ]] \
+    || die "QVOICE_MAC_PROFILE_GRACE_TIMEOUT must be a positive whole number of seconds"
+  python3 "$SCRIPT_DIR/lib/profile_trace_retention.py" preflight \
+    --root "$ROOT_DIR" --kind "$kind" >/dev/null \
+    || die "profile disk-space preflight failed before launching the target"
   command -v xctrace >/dev/null 2>&1 || die "xctrace not found — install Xcode and use Instruments for native profiling"
   # Rebuild immediately before provenance capture so the recorded source and
   # executable identity cannot describe a stale CLI binary.
   "$SCRIPT_DIR/build.sh" cli >/dev/null
   require_profile_model "$mode" "$variant"
   local run_id
-  run_id="mac-profile-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
-  local artifacts="$ROOT_DIR/build/macos/profiles/$run_id"
+  run_id="mac-${kind}-profile-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_MACOS/profiles/$run_id"
   local runtime="$artifacts/runtime"
+  # The launcher is disposable generated tooling, not durable profile evidence.
+  # Keep it below the policy-owned transient scratch root so routine cleanup can
+  # reclaim it without touching validated profile summaries.
+  local suspended_launcher="$QVOICE_SCRATCH_TRANSIENT/tools/spawn-suspended"
+  local suspended_launcher_source="$SCRIPT_DIR/lib/spawn_suspended.c"
+  mkdir -p "$(dirname "$suspended_launcher")"
+  if [[ ! -x "$suspended_launcher" || "$suspended_launcher_source" -nt "$suspended_launcher" ]]; then
+    xcrun clang -O2 -Wall -Wextra "$suspended_launcher_source" -o "$suspended_launcher" \
+      || die "could not build exact-PID suspended launcher"
+  fi
   local trace="$artifacts/$run_id.trace"
   local toc="$artifacts/trace-toc.xml"
+  local profile_summary="$artifacts/profile-summary.json"
+  local history_record="$ROOT_DIR/benchmarks/runs/instrument-profile/$run_id.json"
+  local retention_policy="summaryOnly"
+  (( keep_trace == 0 )) || retention_policy="keptExplicitly"
+  local target_pid_file="$artifacts/target.pid"
   mkdir -p "$runtime"
   ln -s "$(debug_models_dir)" "$runtime/models"
-  if [[ -d "$HOME/Library/Application Support/QwenVoice-Debug/voices" ]]; then
-    ln -s "$HOME/Library/Application Support/QwenVoice-Debug/voices" "$runtime/voices"
+  if [[ -f "$HOME/Library/Application Support/QwenVoice-Debug/voices/$MAC_TEST_CLONE_VOICE_NAME.wav" ]]; then
+    mkdir -p "$runtime/voices"
+    ln -s "$HOME/Library/Application Support/QwenVoice-Debug/voices/$MAC_TEST_CLONE_VOICE_NAME.wav" \
+      "$runtime/voices/$MAC_TEST_CLONE_VOICE_NAME.wav"
+    if [[ -f "$HOME/Library/Application Support/QwenVoice-Debug/voices/$MAC_TEST_CLONE_VOICE_NAME.txt" ]]; then
+      ln -s "$HOME/Library/Application Support/QwenVoice-Debug/voices/$MAC_TEST_CLONE_VOICE_NAME.txt" \
+        "$runtime/voices/$MAC_TEST_CLONE_VOICE_NAME.txt"
+    fi
   fi
   capture_benchmark_source "$artifacts"
-  note "profile: instruments='$capture_instruments', ${duration}s, vocello bench (mode=$mode variant=$variant) — engine in-process"
+  local profile_label="instrument-${kind}-profile"
+  note "profile: kind=$kind, instruments='$capture_instruments', ${duration}s, vocello bench (mode=$mode variant=$variant length=$profile_length warm=$profile_warm) — engine in-process"
   note "(engine OSSignpost intervals: subsystem com.qwenvoice.engine, category 'runtime')"
-  # Launch through Instruments so the exact CLI process is traced from its first instruction.
-  # `--no-summary` prevents the child engine lane from publishing a second, non-instrumented record.
-  xcrun xctrace record --instrument "$cpu_instrument" --instrument os_signpost \
-    --time-limit "${duration}s" --no-prompt \
-    --output "$trace" --env QWENVOICE_DEBUG=1 --launch -- \
-    "$ROOT_DIR/build/vocello" bench --modes "$mode" --variants "$variant" \
-    --lengths medium --warm 1 --run-id "$run_id" --label "instrument-profile" \
-    --data-dir "$runtime" --no-summary \
-    >"$artifacts/xctrace.log" 2>&1 \
-    || die "xctrace or its launched vocello benchmark failed (see $artifacts/xctrace.log)"
+  # Start one owned shell process suspended, attach Instruments to that exact PID, then
+  # exec the exact CLI binary in place. The PID survives exec, so trace TOC validation
+  # proves the capture belongs to this run rather than another process with the same name.
+  # `--no-summary` prevents the child engine lane from publishing a second record.
+  local target_pid="" launcher_pid="" xctrace_pid=""
+  PROFILE_TRACE_ACTIVE=1
+  PROFILE_TRACE_PUBLISHED=0
+  PROFILE_TRACE_KIND="$kind"
+  PROFILE_TRACE_PHASE="target-launch"
+  PROFILE_TRACE_ARTIFACTS="$artifacts"
+  PROFILE_TRACE_PATH="$trace"
+  PROFILE_TRACE_TARGET_PID=""
+  PROFILE_TRACE_LAUNCHER_PID=""
+  PROFILE_TRACE_XCTRACE_PID=""
+  trap profile_failure_cleanup EXIT
+  # Instruments records the target environment in the raw local trace. Start
+  # the launcher under an explicit allowlist so unrelated desktop credentials
+  # cannot be captured even though the trace itself remains untracked.
+  PROFILE_TRACE_PHASE="final-disk-preflight"
+  python3 "$SCRIPT_DIR/lib/profile_trace_retention.py" preflight \
+    --root "$ROOT_DIR" --kind "$kind" >/dev/null \
+    || die "profile disk-space preflight failed after build and before target launch"
+  PROFILE_TRACE_PHASE="target-launch"
+  (
+    exec /usr/bin/env -i \
+      HOME="$HOME" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
+      LANG="${LANG:-C.UTF-8}" LC_ALL="${LC_ALL:-C.UTF-8}" NO_COLOR=1 \
+      QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose \
+      "$suspended_launcher" "$target_pid_file" "$QVOICE_BUILD_ROOT/vocello" bench \
+      --modes "$mode" --variants "$variant" \
+      --lengths "$profile_length" --warm "$profile_warm" \
+      --run-id "$run_id" --label "$profile_label" \
+      --data-dir "$runtime" --no-summary
+  ) >"$artifacts/target.log" 2>&1 &
+  launcher_pid=$!
+  PROFILE_TRACE_LAUNCHER_PID="$launcher_pid"
+  local target_start_deadline=$((SECONDS + tracer_start_timeout))
+  local target_suspended=0
+  while kill -0 "$launcher_pid" >/dev/null 2>&1; do
+    if [[ -s "$target_pid_file" ]]; then
+      target_pid="$(tr -d '[:space:]' < "$target_pid_file")"
+    fi
+    if [[ "$target_pid" =~ ^[1-9][0-9]*$ ]] \
+      && kill -0 "$target_pid" >/dev/null 2>&1 \
+      && [[ "$(ps -o state= -p "$target_pid" 2>/dev/null || true)" == *T* ]]; then
+      PROFILE_TRACE_TARGET_PID="$target_pid"
+      target_suspended=1
+      break
+    fi
+    (( SECONDS < target_start_deadline )) || die "profile target did not suspend within ${tracer_start_timeout}s"
+    sleep 0.1
+  done
+  (( target_suspended == 1 )) || die "profile target exited before exact-PID attachment"
+  PROFILE_TRACE_PHASE="trace-recording"
+  xcrun xctrace record "${instrument_args[@]}" --attach "$target_pid" \
+    --time-limit "${duration}s" --no-prompt --output "$trace" \
+    >"$artifacts/xctrace.log" 2>&1 &
+  xctrace_pid=$!
+  PROFILE_TRACE_XCTRACE_PID="$xctrace_pid"
+  local tracer_start_deadline=$((SECONDS + tracer_start_timeout))
+  local tracer_started=0
+  while kill -0 "$xctrace_pid" >/dev/null 2>&1; do
+    if grep -q '^Starting recording' "$artifacts/xctrace.log" 2>/dev/null; then
+      tracer_started=1
+      break
+    fi
+    (( SECONDS < tracer_start_deadline )) || die "xctrace did not report tracing startup within ${tracer_start_timeout}s"
+    sleep 0.1
+  done
+  (( tracer_started == 1 )) || die "xctrace exited before reporting tracing startup"
+  kill -CONT "$target_pid" >/dev/null 2>&1 || die "could not resume exact profiling target PID $target_pid"
+  local profiled_pid="$target_pid"
+  local target_status=0 tracer_status=0
+  local target_finished=0 tracer_finished=0
+  local profile_deadline=$((SECONDS + duration + profile_grace_timeout))
+  while (( target_finished == 0 || tracer_finished == 0 )); do
+    if (( target_finished == 0 )) && profile_child_finished "$launcher_pid"; then
+      wait "$launcher_pid" || target_status=$?
+      launcher_pid=""
+      target_pid=""
+      PROFILE_TRACE_LAUNCHER_PID=""
+      PROFILE_TRACE_TARGET_PID=""
+      target_finished=1
+      (( target_status == 0 )) \
+        || die "profiled vocello benchmark failed (see $artifacts/target.log; artifacts preserved in $artifacts)"
+    fi
+    if (( tracer_finished == 0 )) && profile_child_finished "$xctrace_pid"; then
+      wait "$xctrace_pid" || tracer_status=$?
+      xctrace_pid=""
+      PROFILE_TRACE_XCTRACE_PID=""
+      tracer_finished=1
+      (( tracer_status == 0 )) \
+        || die "xctrace failed (see $artifacts/xctrace.log; artifacts preserved in $artifacts)"
+    fi
+    (( target_finished == 0 || tracer_finished == 0 )) || break
+    if (( SECONDS >= profile_deadline )); then
+      die "profile target/tracer exceeded ${duration}s + ${profile_grace_timeout}s grace; artifacts preserved in $artifacts"
+    fi
+    sleep 0.1
+  done
+  (( target_status == 0 )) || die "profiled vocello benchmark failed (see $artifacts/target.log)"
+  (( tracer_status == 0 )) || die "xctrace failed (see $artifacts/xctrace.log)"
   [[ -d "$trace" ]] || die "no trace produced at $trace"
+  PROFILE_TRACE_PHASE="trace-export"
   xcrun xctrace export --input "$trace" --toc --output "$toc" \
     >"$artifacts/xctrace-export.log" 2>&1 \
     || die "trace table-of-contents validation failed (see $artifacts/xctrace-export.log)"
   [[ -s "$toc" ]] || die "trace table-of-contents export is empty"
+  PROFILE_TRACE_PHASE="evidence-validation"
   python3 "$SCRIPT_DIR/publish_benchmark_history.py" profile \
     --artifact-dir "$artifacts" --snapshot "$artifacts/benchmark-source.json" \
     --platform macos --run-id "$run_id" \
     --results "$runtime/diagnostics/bench-results.json" \
     --diagnostics "$runtime/diagnostics" --output-dir "$runtime/outputs/bench" \
     --trace "$trace" --toc "$toc" --template "$capture_instruments" --duration "$duration" \
-    --target-process vocello --defer-record \
+    --target-process vocello --target-pid "$profiled_pid" --profile-kind "$kind" --defer-record \
+    --retention-policy "$retention_policy" --summary-artifact "$profile_summary" \
     || die "profile passed but evidence validation failed; artifacts are preserved in $artifacts"
   python3 "$SCRIPT_DIR/summarize_generation_telemetry.py" "$runtime/diagnostics" \
     --run-id "$run_id" --evidence-manifest "$artifacts/benchmark-evidence.json" \
-    --engine-only --label "instrument-profile" >&2 \
+    --engine-only --label "$profile_label" >&2 \
     || die "profile evidence was valid but its frozen telemetry summary failed"
+  PROFILE_TRACE_PHASE="history-publication"
   record_benchmark_history "$artifacts" >/dev/null \
     || die "profile history publication failed"
-  note "trace → $trace"
-  note "analyze: open in Instruments, or use optional: xcprof analyze \"$trace\""
+  PROFILE_TRACE_PUBLISHED=1
+  PROFILE_TRACE_PHASE="retention-finalization"
+  python3 "$SCRIPT_DIR/lib/profile_trace_retention.py" finalize-success \
+    --root "$ROOT_DIR" --platform macos --kind "$kind" \
+    --artifact-dir "$artifacts" --trace "$trace" --policy "$retention_policy" \
+    --summary-artifact "$profile_summary" --history-record "$history_record" \
+    || die "profile was published but raw-trace retention finalization failed; run routine cleanup"
+  trap - EXIT
+  PROFILE_TRACE_ACTIVE=0
+  if (( keep_trace )); then
+    note "trace retained explicitly → $trace"
+    note "analyze: open in Instruments, or use optional: xcprof analyze \"$trace\""
+  else
+    note "validated summary → $profile_summary"
+    note "raw trace removed after successful history publication (use --keep-trace to retain one)"
+  fi
   note "XPC service profile (production path): launch app, 'xctrace record --attach QwenVoiceEngineService', generate via UI."
+}
+
+# memory [--label ID]: retained-memory qualification, separate from Instruments.
+# Runs one in-process Custom→Design→Clone Speed/medium sequence with three retained takes per
+# mode (plus the CLI's real cold Custom/Design takes), then publishes only when telemetry-v8
+# sidecars and the versioned within-mode retention policy pass. Use `profile --kind memory`
+# when allocation stacks or VM maps are needed instead.
+cmd_memory() {
+  local label="memory-qualification"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --label) label="${2:-}"; shift 2 ;;
+      --label=*) label="${1#*=}"; shift ;;
+      *) die "memory accepts only --label ID; its mode order and take counts are policy-owned" ;;
+    esac
+  done
+  validate_benchmark_label "$label"
+  local policy="$ROOT_DIR/config/memory-qualification-policy.json"
+  [[ -f "$policy" ]] || die "memory qualification policy is missing: $policy"
+  "$SCRIPT_DIR/build.sh" cli >/dev/null
+  require_mac_benchmark_models pro_custom_speed pro_design_speed pro_clone_speed
+  require_mac_benchmark_clone_fixture
+
+  local run_id="mac-memory-qualification-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_MACOS/memory/$run_id"
+  local runtime="$artifacts/runtime"
+  local debug_voices="$HOME/Library/Application Support/QwenVoice-Debug/voices"
+  mkdir -p "$runtime"
+  ln -s "$(debug_models_dir)" "$runtime/models"
+  # FileManager's directory enumerator does not descend through a symlink used
+  # as the voices-directory root. Keep a real isolated directory and expose
+  # only the exact approved fixture files as symlinked entries.
+  mkdir -p "$runtime/voices"
+  ln -s "$debug_voices/$MAC_TEST_CLONE_VOICE_NAME.wav" \
+    "$runtime/voices/$MAC_TEST_CLONE_VOICE_NAME.wav"
+  ln -s "$debug_voices/$MAC_TEST_CLONE_VOICE_NAME.txt" \
+    "$runtime/voices/$MAC_TEST_CLONE_VOICE_NAME.txt"
+  capture_benchmark_source "$artifacts"
+
+  note "memory qualification: Custom→Design→Clone, Speed/medium, 3 retained takes per mode"
+  QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose \
+    "$QVOICE_BUILD_ROOT/vocello" bench \
+      --modes custom,design,clone --variants speed --lengths medium --warm 3 \
+      --voice "$MAC_TEST_CLONE_VOICE_NAME" --telemetry verbose --seed 19790615 \
+      --memory-qualification retained-memory-v1 \
+      --run-id "$run_id" --label "$label" --data-dir "$runtime" --no-summary \
+      >"$artifacts/bench.log" 2>&1 \
+    || die "memory qualification generation sequence failed (see $artifacts/bench.log)"
+  local results="$runtime/diagnostics/bench-results.json"
+  [[ -s "$results" ]] || die "memory qualification did not produce bench-results.json"
+  python3 "$SCRIPT_DIR/publish_benchmark_history.py" memory-qualification \
+    --artifact-dir "$artifacts" --snapshot "$artifacts/benchmark-source.json" \
+    --platform macos --run-id "$run_id" --results "$results" \
+    --diagnostics "$runtime/diagnostics" --output-dir "$runtime/outputs/bench" \
+    --label "$label" --defer-record \
+    || die "memory sequence passed but qualification failed; artifacts are preserved in $artifacts"
+  python3 "$SCRIPT_DIR/summarize_generation_telemetry.py" "$runtime/diagnostics" \
+    --run-id "$run_id" --evidence-manifest "$artifacts/benchmark-evidence.json" \
+    --engine-only --label "$label" >"$artifacts/summary.txt" 2>&1 \
+    || die "memory qualification evidence was valid but its frozen summary failed"
+  record_benchmark_history "$artifacts" >/dev/null \
+    || die "memory qualification history publication failed"
+  note "memory qualification PASS · $artifacts"
 }
 
 # preflight: one-shot readiness — Xcode, the app bundle, the embedded XPC service,
@@ -267,7 +589,16 @@ cmd_preflight() {
   command -v xcodebuild >/dev/null 2>&1 && note "  xcodebuild: OK" || { warn "  xcodebuild: ✗ not found"; rc=1; }
   if [[ -d "$APP_BUNDLE" ]]; then note "  app: OK $APP_BUNDLE"; else warn "  app: ✗ not built (run: scripts/build.sh build)"; rc=1; fi
   [[ -d "$XPC_BUNDLE" ]] && note "  xpc service: OK" || warn "  xpc service: ✗ not in bundle (rebuild)"
-  [[ -d "$DSYM_DIR" ]] && note "  dsyms: OK $DSYM_DIR" || warn "  dsyms: ✗ none (run: scripts/build.sh build)"
+  if [[ -d "$DSYM_DIR" && -d "$APP_BUNDLE" ]] \
+      && validate_dsym_uuid "$APP_BINARY" "$DSYM_DIR/Vocello.app.dSYM" "Vocello" \
+      && validate_dsym_uuid \
+        "$XPC_BUNDLE/Contents/MacOS/QwenVoiceEngineService" \
+        "$DSYM_DIR/QwenVoiceEngineService.xpc.dSYM" "QwenVoiceEngineService"; then
+    note "  dsyms: OK $DSYM_DIR (UUID-matched)"
+  else
+    warn "  dsyms: ✗ missing or UUID-mismatched (run: scripts/build.sh build)"
+    rc=1
+  fi
   if (( strict_models == 1 )); then
     check_mac_test_models --strict || rc=1
   else
@@ -319,9 +650,9 @@ cmd_core_test() {
   note "core-test: VocelloCoreTests (QwenVoiceCore language semantics, no models)"
   set +e
   local build_st=0 st=0
-  build_mac_test_bundles "$ROOT_DIR/build/macos/core-test-build.log" || build_st=$?
+  build_mac_test_bundles "$QVOICE_ARTIFACTS_MACOS/tests/core-test-build.log" || build_st=$?
   if (( build_st == 0 )); then
-    run_mac_test_bundle VocelloCoreTests "$ROOT_DIR/build/macos/core-test.log" || st=$?
+    run_mac_test_bundle VocelloCoreTests "$QVOICE_ARTIFACTS_MACOS/tests/core-test.log" || st=$?
   else
     st="$build_st"
   fi
@@ -329,7 +660,7 @@ cmd_core_test() {
   if (( st == 0 )); then
     note "core-test PASS"
   else
-    warn "core-test FAIL (see build/macos/core-test.log)"
+    warn "core-test FAIL (see build/artifacts/macos/tests/core-test.log)"
   fi
   return "$st"
 }
@@ -371,7 +702,7 @@ PY
 
   local run_id
   run_id="mac-lang-bench-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
-  local artifacts="$ROOT_DIR/build/macos/lang-bench-$run_id"
+  local artifacts="$QVOICE_ARTIFACTS_MACOS/language/lang-bench-$run_id"
   local started_at
   started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local diag_root
@@ -395,7 +726,7 @@ PY
     text="$(CELL="$cell_json" python3 -c 'import json,os; print(json.loads(os.environ["CELL"])["script"], end="")')"
     export QVOICE_MAC_BENCH_CELL="$cell_id"
     local -a generate_command=(
-      "$ROOT_DIR/build/vocello" generate --mode "$mode" --variant "$variant"
+      "$QVOICE_BUILD_ROOT/vocello" generate --mode "$mode" --variant "$variant"
     )
     if [[ "$mode" == "design" ]]; then
       generate_command+=(--voice-brief "$voice_brief")
@@ -408,7 +739,10 @@ PY
     fi
     note "lang-bench cell $cell_count: $cell_id ($mode/$variant, uiHint=$ui_hint)"
     set +e
-    "${generate_command[@]}" >>"$artifacts/generate.log" 2>&1
+    # Scoped per generation: schema-v2 language publication requires the raw
+    # v8 memory sidecar, while the caller's telemetry preference must survive.
+    QWENVOICE_NATIVE_TELEMETRY_MODE=verbose \
+      "${generate_command[@]}" >>"$artifacts/generate.log" 2>&1
     st=$?
     set -e
     if (( st != 0 )); then
@@ -467,7 +801,7 @@ PY
 # process is launched and no frontend action is synthesized.
 cmd_test() {
   local run_id="mac-test-$(date +%Y%m%d-%H%M%S)"
-  local artifacts="$ROOT_DIR/build/macos/test-artifacts/$run_id"
+  local artifacts="$QVOICE_ARTIFACTS_MACOS/tests/$run_id"
   mkdir -p "$artifacts"
   local test_build_st=0 core_st=0 transport_st=0 runtime_st=0
 
@@ -488,23 +822,43 @@ cmd_test() {
 
   note "test: Qwen3RuntimeTests (owned vendored runtime, seeded Metal fixture)"
   local runtime_package="$ROOT_DIR/third_party_patches/mlx-audio-swift"
-  local mlx_bundle="$ROOT_DIR/build/DerivedData/Build/Products/Release/mlx-swift_Cmlx.bundle"
-  if swift build --package-path "$runtime_package" --build-tests \
+  local mlx_bundle="$QVOICE_XCODE_MACOS_DERIVED/Build/Products/Release/mlx-swift_Cmlx.bundle"
+  if ensure_swiftpm_scratch_location "$runtime_package" "$QVOICE_SWIFTPM_RUNTIME_CACHE" \
+      && swift build --package-path "$runtime_package" \
+      --scratch-path "$QVOICE_SWIFTPM_RUNTIME_CACHE" --configuration debug \
+      --build-tests \
       > "$artifacts/runtime-build.log" 2>&1; then
     local runtime_bin runtime_resources
-    runtime_bin="$(swift build --package-path "$runtime_package" --show-bin-path)"
+    runtime_bin="$(swift build --package-path "$runtime_package" \
+      --scratch-path "$QVOICE_SWIFTPM_RUNTIME_CACHE" --configuration debug \
+      --show-bin-path)"
     runtime_resources="$runtime_bin/MLXAudioPackageTests.xctest/Contents/Resources"
     if [[ -d "$mlx_bundle" ]]; then
       mkdir -p "$runtime_resources"
       rm -rf "$runtime_resources/mlx-swift_Cmlx.bundle"
       cp -R "$mlx_bundle" "$runtime_resources/"
-      # Partition-invariance is a full-float determinism contract. Disabling
-      # TF32 also avoids MLX's NAX float32 GEMM path, whose runtime-compiled
-      # kernel is not accepted by the Metal compiler bundled with Xcode 26.5
-      # on GitHub's macOS 26 runner. No test is skipped or moved off Metal.
-      MLX_ENABLE_TF32=0 swift test --package-path "$runtime_package" --skip-build \
-        --filter Qwen3RuntimeTests \
-        > "$artifacts/runtime.log" 2>&1 || runtime_st=$?
+      if assert_macho_arm64_only \
+          "$runtime_bin/MLXAudioPackageTests.xctest/Contents/MacOS/MLXAudioPackageTests" \
+          "MLXAudioPackageTests"; then
+        # Partition-invariance is a full-float determinism contract. Disabling
+        # TF32 also avoids MLX's NAX float32 GEMM path, whose runtime-compiled
+        # kernel is not accepted by the Metal compiler bundled with Xcode 26.5
+        # on GitHub's macOS 26 runner. No test is skipped or moved off Metal.
+        MLX_ENABLE_TF32=0 swift test --package-path "$runtime_package" \
+          --scratch-path "$QVOICE_SWIFTPM_RUNTIME_CACHE" --configuration debug \
+          --skip-build \
+          --filter Qwen3RuntimeTests \
+          > "$artifacts/runtime.log" 2>&1 || runtime_st=$?
+      else
+        runtime_st=1
+      fi
+      if (( runtime_st == 0 )); then
+        write_build_provenance "$QVOICE_SWIFTPM_RUNTIME_CACHE/last-build.json" \
+          "scripts/macos_test.sh runtime" Qwen3RuntimeTests Debug \
+          "platform=macOS,arch=arm64" arm64 Onone unsigned \
+          "$QVOICE_SWIFTPM_RUNTIME_CACHE" "$QVOICE_SWIFTPM_RUNTIME_CACHE" \
+          || runtime_st=$?
+      fi
     else
       echo "missing MLX Metal resource bundle after Xcode test build: $mlx_bundle" \
         > "$artifacts/runtime.log"
@@ -535,9 +889,9 @@ cmd_telemetry_overhead() {
   local verdict_path
   note "telemetry-overhead: 3 counterbalanced rotations; warm-up×1 + measured×2 per mode/rotation"
   verdict_path="$(python3 "$SCRIPT_DIR/telemetry_overhead.py" "$@")" \
-    || die "telemetry-overhead FAIL (raw evidence under build/macos/telemetry-overhead)"
+    || die "telemetry-overhead FAIL (see the artifact path reported by telemetry_overhead.py)"
   [[ -f "$verdict_path" ]] || die "telemetry-overhead verdict missing: $verdict_path"
-  note "telemetry-overhead PASS · $verdict_path"
+  note "telemetry-overhead PASS (local diagnostic; not benchmark-history eligible) · $verdict_path"
 }
 
 # gate: one-command macOS deterministic gate — inputs → build → Core,
@@ -560,7 +914,7 @@ run_gate_bench() {
   ln -s "$(debug_models_dir)" "$runtime/models"
   capture_benchmark_source "$artifacts"
 
-  QWENVOICE_DEBUG=1 "$ROOT_DIR/build/vocello" bench --modes custom --variants speed \
+  QWENVOICE_DEBUG=1 "$QVOICE_BUILD_ROOT/vocello" bench --modes custom --variants speed \
     --lengths medium --warm 1 --run-id "$run_id" --label "mac-gate-bench" \
     --data-dir "$runtime" --force --no-summary >>"$log" 2>&1 || return 1
   [[ -s "$run_diag/engine/generations.jsonl" ]] \
@@ -617,7 +971,7 @@ PY
 
 cmd_gate() {
   local run_id="mac-gate-$(date +%Y%m%d-%H%M%S)"
-  local gate_dir="$ROOT_DIR/build/macos/gate-$run_id"
+  local gate_dir="$QVOICE_ARTIFACTS_MACOS/gates/gate-$run_id"
   local verdict="$gate_dir/verdict.txt"
   mkdir -p "$gate_dir"
   local overall=0
@@ -700,7 +1054,7 @@ cmd_gate() {
 cmd_release_readiness() {
   [[ $# -eq 0 ]] || die "release-readiness accepts no arguments"
   local run_id="release-readiness-$(date +%Y%m%d-%H%M%S)"
-  local out="$ROOT_DIR/build/macos/$run_id"
+  local out="$QVOICE_ARTIFACTS_MACOS/release-readiness/$run_id"
   local crash_marker="$out/.crash-marker"
   mkdir -p "$out"
   touch "$crash_marker"
@@ -731,6 +1085,7 @@ main() {
     debug)   cmd_debug "$@" ;;
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
+    memory)  cmd_memory "$@" ;;
     preflight) cmd_preflight "$@" ;;
     core-test) cmd_core_test "$@" ;;
     lang-bench) cmd_lang_bench "$@" ;;
@@ -742,7 +1097,7 @@ main() {
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2
       ;;
-    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|telemetry-overhead|crashes|debug|logs|profile|gate|release-readiness|models|help)" ;;
+    *) die "unknown subcommand '$sub' (try: preflight|core-test|lang-bench|test|telemetry-overhead|crashes|debug|logs|profile|memory|gate|release-readiness|models|help)" ;;
   esac
 }
 

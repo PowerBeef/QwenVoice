@@ -1048,13 +1048,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                     scheduleLeadingSilence()
                 }
                 livePlayerNode.play()
-                livePlaybackStarted = true
-                AppPerformanceSignposts.emit("Live Engine Play")
                 AppGenerationTimeline.shared.recordPlaybackScheduled(
                     id: liveSessionID,
+                    source: .liveStream,
                     queuedChunks: liveScheduledCount,
                     queuedAudioSeconds: liveQueuedAudioSeconds
                 )
+                livePlaybackStarted = true
+                AppPerformanceSignposts.emit("Live Engine Play")
             }
             isPlaying = true
             setLivePreviewPhase(.playing)
@@ -1200,6 +1201,14 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     private func switchToFinalFilePlayback(preserveCurrentTime: TimeInterval, autoPlay: Bool) {
         guard let finalFilePath = liveFinalFilePath else { return }
+        // Short generations can finish before the live prebuffer threshold is
+        // reached. In that case autoplay starts from the finalized WAV instead
+        // of AVAudioPlayerNode, but it is still the genuine frontend playback
+        // scheduling boundary. Capture the live-session identity before
+        // `applyFilePlayback` clears the streaming fields; the finalized-file
+        // path records its own active buffer semantics at the successful
+        // `AVAudioPlayer.play()` call.
+        let telemetrySessionID = liveSessionID
         AppPerformanceSignposts.emit("Switch To File Playback")
         setLivePreviewPhase(.finalizing)
 
@@ -1210,7 +1219,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
                 preserveCurrentTime: preserveCurrentTime,
                 autoPlay: autoPlay,
                 transitionFromLive: true,
-                presentationContext: playbackPresentationContext
+                presentationContext: playbackPresentationContext,
+                playbackTelemetrySessionID: telemetrySessionID
             )
         } catch {
             playbackError = error.localizedDescription
@@ -1365,7 +1375,8 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         preserveCurrentTime: TimeInterval,
         autoPlay: Bool,
         transitionFromLive: Bool,
-        presentationContext: PlaybackPresentationContext
+        presentationContext: PlaybackPresentationContext,
+        playbackTelemetrySessionID: String? = nil
     ) throws {
         let url = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: filePath) else {
@@ -1417,7 +1428,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         extractWaveform(from: url, replace: true)
 
         if autoPlay {
-            attemptFilePlay()
+            attemptFilePlay(playbackTelemetrySessionID: playbackTelemetrySessionID)
         }
     }
 
@@ -1432,7 +1443,7 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         stopTimer()
     }
 
-    private func attemptFilePlay() {
+    private func attemptFilePlay(playbackTelemetrySessionID: String? = nil) {
         guard var player else { return }
 
         if player.currentTime >= player.duration, player.duration > 0 {
@@ -1440,6 +1451,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
 
         if player.play() {
+            recordFinalFilePlaybackScheduled(
+                sessionID: playbackTelemetrySessionID,
+                player: player
+            )
             playbackError = nil
             isPlaying = true
             currentTime = player.currentTime
@@ -1464,6 +1479,10 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         player = rebuilt
 
         if player.play() {
+            recordFinalFilePlaybackScheduled(
+                sessionID: playbackTelemetrySessionID,
+                player: player
+            )
             playbackError = nil
             isPlaying = true
             currentTime = player.currentTime
@@ -1472,6 +1491,22 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         } else {
             playbackError = "Playback could not start."
         }
+    }
+
+    private func recordFinalFilePlaybackScheduled(
+        sessionID: String?,
+        player: AVAudioPlayer
+    ) {
+        guard let sessionID else { return }
+        // The finalized WAV is the active playback buffer on this path, not
+        // the live AVAudioPlayerNode queue that was just discarded. Model it
+        // as one fully available file with its remaining audio.
+        AppGenerationTimeline.shared.recordPlaybackScheduled(
+            id: sessionID,
+            source: .finalFile,
+            queuedChunks: 1,
+            queuedAudioSeconds: max(player.duration - player.currentTime, 0)
+        )
     }
 
     private func clearPendingFirstChunkInterval() {

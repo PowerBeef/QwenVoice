@@ -82,6 +82,17 @@ public struct BackendCounterMetric: Hashable, Codable, Sendable {
     }
 }
 
+/// Identifies the player path that accepted the first successful `play()` call.
+///
+/// A streaming generation can begin through queued live PCM or, for short clips
+/// that finish before the live prebuffer threshold, through the finalized WAV.
+/// Keeping the source typed prevents their different buffer semantics from being
+/// compared as though both were AVAudioPlayerNode queues.
+public enum FrontendPlaybackStartSource: String, Codable, Sendable, Hashable {
+    case liveStream
+    case finalFile
+}
+
 public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
     public let submitToFirstChunkMS: Int?
     /// Submission to the point where playback was scheduled. This does not claim
@@ -99,6 +110,7 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
     public let playbackChunksReceived: Int
     public let playbackContinuityFailures: Int
     public let playbackUnderruns: Int
+    public let playbackStartSource: FrontendPlaybackStartSource?
     public let playbackStartBufferedChunks: Int?
     public let playbackStartBufferedAudioMS: Int?
     public let playbackMinimumQueuedAudioMS: Int?
@@ -134,6 +146,7 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
         playbackChunksReceived: Int = 0,
         playbackContinuityFailures: Int = 0,
         playbackUnderruns: Int = 0,
+        playbackStartSource: FrontendPlaybackStartSource? = nil,
         playbackStartBufferedChunks: Int? = nil,
         playbackStartBufferedAudioMS: Int? = nil,
         playbackMinimumQueuedAudioMS: Int? = nil,
@@ -156,6 +169,7 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
         self.playbackChunksReceived = playbackChunksReceived
         self.playbackContinuityFailures = playbackContinuityFailures
         self.playbackUnderruns = playbackUnderruns
+        self.playbackStartSource = playbackStartSource
         self.playbackStartBufferedChunks = playbackStartBufferedChunks
         self.playbackStartBufferedAudioMS = playbackStartBufferedAudioMS
         self.playbackMinimumQueuedAudioMS = playbackMinimumQueuedAudioMS
@@ -177,6 +191,7 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
         case playbackChunksReceived
         case playbackContinuityFailures
         case playbackUnderruns
+        case playbackStartSource
         case playbackStartBufferedChunks
         case playbackStartBufferedAudioMS
         case playbackMinimumQueuedAudioMS
@@ -205,6 +220,10 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
         self.playbackChunksReceived = try container.decodeIfPresent(Int.self, forKey: .playbackChunksReceived) ?? 0
         self.playbackContinuityFailures = try container.decodeIfPresent(Int.self, forKey: .playbackContinuityFailures) ?? 0
         self.playbackUnderruns = try container.decodeIfPresent(Int.self, forKey: .playbackUnderruns) ?? 0
+        self.playbackStartSource = try container.decodeIfPresent(
+            FrontendPlaybackStartSource.self,
+            forKey: .playbackStartSource
+        )
         self.playbackStartBufferedChunks = try container.decodeIfPresent(Int.self, forKey: .playbackStartBufferedChunks)
         self.playbackStartBufferedAudioMS = try container.decodeIfPresent(Int.self, forKey: .playbackStartBufferedAudioMS)
         self.playbackMinimumQueuedAudioMS = try container.decodeIfPresent(Int.self, forKey: .playbackMinimumQueuedAudioMS)
@@ -225,6 +244,7 @@ public struct FrontendGenerationMetrics: Hashable, Codable, Sendable {
         try container.encode(playbackChunksReceived, forKey: .playbackChunksReceived)
         try container.encode(playbackContinuityFailures, forKey: .playbackContinuityFailures)
         try container.encode(playbackUnderruns, forKey: .playbackUnderruns)
+        try container.encodeIfPresent(playbackStartSource, forKey: .playbackStartSource)
         try container.encodeIfPresent(playbackStartBufferedChunks, forKey: .playbackStartBufferedChunks)
         try container.encodeIfPresent(playbackStartBufferedAudioMS, forKey: .playbackStartBufferedAudioMS)
         try container.encodeIfPresent(playbackMinimumQueuedAudioMS, forKey: .playbackMinimumQueuedAudioMS)
@@ -238,13 +258,19 @@ public struct PlaybackHealthAccumulator: Hashable, Sendable {
     public private(set) var chunksReceived = 0
     public private(set) var continuityFailures = 0
     public private(set) var underruns = 0
+    public private(set) var startSource: FrontendPlaybackStartSource?
     public private(set) var startBufferedChunks: Int?
     public private(set) var startBufferedAudioMS: Int?
     public private(set) var minimumQueuedAudioMS: Int?
 
     public init() {}
 
-    public mutating func playbackScheduled(queuedChunks: Int, queuedAudioMS: Int) {
+    public mutating func playbackScheduled(
+        source: FrontendPlaybackStartSource,
+        queuedChunks: Int,
+        queuedAudioMS: Int
+    ) {
+        startSource = source
         startBufferedChunks = max(queuedChunks, 0)
         startBufferedAudioMS = max(queuedAudioMS, 0)
         observeQueueDepth(queuedAudioMS: queuedAudioMS)
@@ -426,7 +452,8 @@ public struct GenerationOutputMetrics: Hashable, Codable, Sendable {
 public enum GenerationTelemetryCompatibilityAdapter {
     public static func frontend(
         timingsMS: [String: Int],
-        counters: [String: Int]
+        counters: [String: Int],
+        playbackStartSource: FrontendPlaybackStartSource? = nil
     ) -> FrontendGenerationMetrics {
         FrontendGenerationMetrics(
             submitToFirstChunkMS: timingsMS["submitToFirstChunkMS"],
@@ -445,6 +472,7 @@ public enum GenerationTelemetryCompatibilityAdapter {
             playbackChunksReceived: counters["playbackChunksReceived"] ?? 0,
             playbackContinuityFailures: counters["playbackContinuityFailures"] ?? 0,
             playbackUnderruns: counters["playbackUnderruns"] ?? 0,
+            playbackStartSource: playbackStartSource,
             playbackStartBufferedChunks: counters["playbackStartBufferedChunks"],
             playbackStartBufferedAudioMS: timingsMS["playbackStartBufferedAudioMS"],
             playbackMinimumQueuedAudioMS: timingsMS["playbackMinimumQueuedAudioMS"]
@@ -549,6 +577,166 @@ public enum GenerationTelemetryPrivacy {
     }
 }
 
+public enum GenerationMemoryEventKind: String, Hashable, Codable, Sendable {
+    case pressureSignal = "pressure-signal"
+    case applicationWarning = "application-warning"
+    case budgetTransition = "budget-transition"
+    case trimAction = "trim-action"
+    case unload
+    /// Delayed MetricKit exit aggregates are not generation-correlated, but use
+    /// the same stable vocabulary in their local privacy-reduced document.
+    case memoryExit = "memory-exit"
+}
+
+/// Typed, privacy-safe memory lifecycle evidence derived from stage marks. It
+/// retains only code-owned enum values and a bounded reason code.
+public struct GenerationMemoryEvent: Hashable, Codable, Sendable {
+    public let tMS: Int
+    public let tNS: UInt64?
+    public let sequence: Int?
+    public let kind: GenerationMemoryEventKind
+    public let source: NativeMemoryEventSource
+    public let trimLevel: NativeMemoryTrimLevel?
+    public let previousPressureBand: IOSMemoryPressureBand?
+    public let currentPressureBand: IOSMemoryPressureBand?
+    public let reasonCode: String?
+
+    public init(
+        tMS: Int,
+        tNS: UInt64?,
+        sequence: Int?,
+        kind: GenerationMemoryEventKind,
+        source: NativeMemoryEventSource,
+        trimLevel: NativeMemoryTrimLevel? = nil,
+        previousPressureBand: IOSMemoryPressureBand? = nil,
+        currentPressureBand: IOSMemoryPressureBand? = nil,
+        reasonCode: String? = nil
+    ) {
+        self.tMS = tMS
+        self.tNS = tNS
+        self.sequence = sequence
+        self.kind = kind
+        self.source = source
+        self.trimLevel = trimLevel
+        self.previousPressureBand = previousPressureBand
+        self.currentPressureBand = currentPressureBand
+        self.reasonCode = reasonCode.map { String($0.prefix(64)) }
+    }
+
+    static func derive(from stageMarks: [NativeTelemetryStageMark]) -> [GenerationMemoryEvent] {
+        stageMarks.sorted(by: NativeTelemetryStageMark.chronologicallyPrecedes).compactMap { mark in
+            if mark.stage == MemoryPressureMetadata.stage,
+               let metadata = mark.typedMetadata(as: MemoryPressureMetadata.self) {
+                return GenerationMemoryEvent(
+                    tMS: mark.tMS,
+                    tNS: mark.tNS,
+                    sequence: mark.sequence,
+                    kind: .pressureSignal,
+                    source: metadata.source,
+                    trimLevel: metadata.level
+                )
+            }
+            if mark.stage == MemoryWarningMetadata.stage,
+               let metadata = mark.typedMetadata(as: MemoryWarningMetadata.self) {
+                return GenerationMemoryEvent(
+                    tMS: mark.tMS,
+                    tNS: mark.tNS,
+                    sequence: mark.sequence,
+                    kind: .applicationWarning,
+                    source: metadata.source,
+                    reasonCode: metadata.reason
+                )
+            }
+            if mark.stage == MemoryBudgetTransitionMetadata.stage,
+               let metadata = mark.typedMetadata(as: MemoryBudgetTransitionMetadata.self) {
+                return GenerationMemoryEvent(
+                    tMS: mark.tMS,
+                    tNS: mark.tNS,
+                    sequence: mark.sequence,
+                    kind: .budgetTransition,
+                    source: metadata.source,
+                    previousPressureBand: metadata.previousBand,
+                    currentPressureBand: metadata.currentBand,
+                    reasonCode: metadata.reason
+                )
+            }
+            if mark.stage == MemoryTrimMetadata.stage,
+               let metadata = mark.typedMetadata(as: MemoryTrimMetadata.self) {
+                return GenerationMemoryEvent(
+                    tMS: mark.tMS,
+                    tNS: mark.tNS,
+                    sequence: mark.sequence,
+                    kind: .trimAction,
+                    source: metadata.source,
+                    trimLevel: metadata.level,
+                    reasonCode: metadata.reason
+                )
+            }
+            if mark.stage == MemoryUnloadMetadata.stage,
+               let metadata = mark.typedMetadata(as: MemoryUnloadMetadata.self) {
+                return GenerationMemoryEvent(
+                    tMS: mark.tMS,
+                    tNS: mark.tNS,
+                    sequence: mark.sequence,
+                    kind: .unload,
+                    source: metadata.source,
+                    reasonCode: metadata.reason
+                )
+            }
+            return nil
+        }
+    }
+}
+
+/// Typed headline memory evidence for validators and history exporters. Raw
+/// process samples and the full per-stage MLX map remain in their existing
+/// fields; this payload makes coverage/events/cumulative MLX peaks explicit.
+public struct GenerationMemoryMetrics: Hashable, Codable, Sendable {
+    public let processRole: TelemetryProcessRole?
+    public let captureCoverage: TelemetryCaptureCoverage?
+    public let boundaryCoverage: TelemetryBoundaryCoverage?
+    public let worstPressureBand: IOSMemoryPressureBand?
+    public let events: [GenerationMemoryEvent]
+    public let mlxCumulativePeakMB: Double?
+    public let mlxActivePeakMB: Double?
+    public let mlxCachePeakMB: Double?
+    public let mlxStageCount: Int
+    public let mlxStageNames: [String]
+
+    public init(
+        summary: TelemetrySummary?,
+        stageMarks: [NativeTelemetryStageMark],
+        mlxMemoryByStage: [String: NativeMLXMemorySnapshot]?
+    ) {
+        self.processRole = summary?.processRole
+        self.captureCoverage = summary?.captureCoverage
+        self.boundaryCoverage = summary?.boundaryCoverage
+        self.worstPressureBand = Self.worstPressureBand(for: summary)
+        self.events = GenerationMemoryEvent.derive(from: stageMarks)
+        let snapshots = mlxMemoryByStage.map { Array($0.values) } ?? []
+        self.mlxCumulativePeakMB = snapshots.compactMap(\.peakMB).max()
+        self.mlxActivePeakMB = snapshots.compactMap(\.activeMB).max()
+        self.mlxCachePeakMB = snapshots.compactMap(\.cacheMB).max()
+        self.mlxStageNames = Array((mlxMemoryByStage?.keys.sorted() ?? []).prefix(64))
+        self.mlxStageCount = mlxMemoryByStage?.count ?? 0
+    }
+
+    /// The shipping pressure bands are an iOS process-budget policy. macOS
+    /// retains the same raw footprint and Metal metrics, but must not be judged
+    /// against iPhone absolute limits.
+    static func worstPressureBand(for summary: TelemetrySummary?) -> IOSMemoryPressureBand? {
+        #if os(iOS)
+        IOSMemoryBudgetPolicy.iPhoneShippingDefault.worstBand(
+            headroomMinMB: summary?.headroomMinMB,
+            physFootprintPeakMB: summary?.physFootprintPeakMB,
+            gpuWorkingSetUsageRatioPeak: summary?.gpuWorkingSetUsageRatioPeak
+        )
+        #else
+        nil
+        #endif
+    }
+}
+
 /// One durable telemetry row for a single generation, written by one layer.
 ///
 /// Every layer (engine / engine-service / app) emits its own
@@ -575,9 +763,12 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
     /// `tNS`/`sequence`, sample `tNS`/`actualElapsedNS`, chunk `arrivalNS`). v6
     /// added typed frontend/transport/backend/output payloads. v7 adds explicit
     /// sampler scheduling/capture accuracy, process resource deltas, merge
-    /// completeness, and accurate playback-scheduled frontend naming. All new
-    /// payload fields remain optional or compatibility-decoded.
-    public static let currentSchemaVersion = 7
+    /// completeness, and accurate playback-scheduled frontend naming. v8 splits
+    /// memory/thread/resource capture coverage, adds cross-process uptime and
+    /// process roles, aligned iOS budget/Metal evidence, lifecycle-boundary
+    /// coverage, and typed memory events/MLX peaks. All new payload fields remain
+    /// optional or compatibility-decoded so v7 rows remain readable.
+    public static let currentSchemaVersion = 8
 
     public let clockSource: String?
 
@@ -629,6 +820,7 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
     public let backendMetrics: BackendGenerationMetrics?
     public let outputMetrics: GenerationOutputMetrics?
     public let modelRuntimeIdentity: ModelRuntimeIdentity?
+    public let memoryMetrics: GenerationMemoryMetrics?
 
     public init(
         generationID: String,
@@ -654,6 +846,7 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
         backendMetrics: BackendGenerationMetrics? = nil,
         outputMetrics: GenerationOutputMetrics? = nil,
         modelRuntimeIdentity: ModelRuntimeIdentity? = nil,
+        memoryMetrics: GenerationMemoryMetrics? = nil,
         clockSource: String? = "mach_absolute_time",
         schemaVersion: Int = GenerationTelemetryRecord.currentSchemaVersion,
         processName: String = ProcessInfo.processInfo.processName,
@@ -718,6 +911,21 @@ public struct GenerationTelemetryRecord: Hashable, Codable, Sendable {
                     runtimeProfileSignature: notes["qwen3RuntimeProfileSignature"],
                     nativeLoadCapabilityProfile: notes["nativeLoadCapabilityProfile"],
                     fixtureDigest: notes["fixtureDigest"]
+                )
+                : nil
+        )
+        self.memoryMetrics = memoryMetrics ?? (
+            summary != nil || mlxMemoryByStage != nil || stageMarks.contains(where: {
+                $0.stage == MemoryPressureMetadata.stage
+                    || $0.stage == MemoryWarningMetadata.stage
+                    || $0.stage == MemoryBudgetTransitionMetadata.stage
+                    || $0.stage == MemoryTrimMetadata.stage
+                    || $0.stage == MemoryUnloadMetadata.stage
+            })
+                ? GenerationMemoryMetrics(
+                    summary: summary,
+                    stageMarks: stageMarks,
+                    mlxMemoryByStage: mlxMemoryByStage
                 )
                 : nil
         )

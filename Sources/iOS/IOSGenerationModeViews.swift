@@ -371,7 +371,7 @@ struct IOSCustomVoiceView: View {
                 // AudioPlayerViewModel play chunks as they arrive (it already subscribes on
                 // iOS) and seamlessly hand off to the final file at completion.
                 audioPlayer.setLivePreviewEstimate(LivePreviewEstimate(text: promptText))
-                AppGenerationTimeline.shared.recordSubmitted(
+                await AppGenerationTimeline.shared.recordSubmitted(
                     id: generationID,
                     mode: GenerationMode.custom.rawValue
                 )
@@ -408,6 +408,15 @@ struct IOSCustomVoiceView: View {
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
                 }
+                // Finalize or hand off playback while the frontend timeline is
+                // still open. Short clips can reach final-file autoplay before
+                // live playback starts, and that genuine scheduling event must
+                // be recorded before the durable app telemetry row is written.
+                audioPlayer.completeStreamingPreview(
+                    result: result,
+                    title: String(promptText.prefix(40)),
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
                 await AppGenerationTimeline.shared.recordCompleted(
                     id: generationID,
                     mode: GenerationMode.custom.rawValue,
@@ -417,11 +426,6 @@ struct IOSCustomVoiceView: View {
                 )
                 IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
                     generationID: generationID
-                )
-                audioPlayer.completeStreamingPreview(
-                    result: result,
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
                 )
                 let generation = Generation(
                     text: promptText,
@@ -1013,7 +1017,7 @@ struct IOSVoiceDesignView: View {
             let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
             do {
                 audioPlayer.setLivePreviewEstimate(LivePreviewEstimate(text: promptText))
-                AppGenerationTimeline.shared.recordSubmitted(
+                await AppGenerationTimeline.shared.recordSubmitted(
                     id: generationID,
                     mode: GenerationMode.design.rawValue
                 )
@@ -1048,6 +1052,11 @@ struct IOSVoiceDesignView: View {
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
                 }
+                audioPlayer.completeStreamingPreview(
+                    result: result,
+                    title: String(promptText.prefix(40)),
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
                 await AppGenerationTimeline.shared.recordCompleted(
                     id: generationID,
                     mode: GenerationMode.design.rawValue,
@@ -1057,11 +1066,6 @@ struct IOSVoiceDesignView: View {
                 )
                 IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
                     generationID: generationID
-                )
-                audioPlayer.completeStreamingPreview(
-                    result: result,
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
                 )
                 let generation = Generation(
                     text: promptText,
@@ -1617,7 +1621,7 @@ struct IOSVoiceCloningView: View {
 
                 let outputPath = makeOutputPath(subfolder: model.outputSubfolder, text: promptText)
                 audioPlayer.setLivePreviewEstimate(LivePreviewEstimate(text: promptText))
-                AppGenerationTimeline.shared.recordSubmitted(
+                await AppGenerationTimeline.shared.recordSubmitted(
                     id: generationID,
                     mode: GenerationMode.clone.rawValue
                 )
@@ -1655,6 +1659,11 @@ struct IOSVoiceCloningView: View {
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
                 }
+                audioPlayer.completeStreamingPreview(
+                    result: result,
+                    title: String(promptText.prefix(40)),
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
                 await AppGenerationTimeline.shared.recordCompleted(
                     id: generationID,
                     mode: GenerationMode.clone.rawValue,
@@ -1664,11 +1673,6 @@ struct IOSVoiceCloningView: View {
                 )
                 IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
                     generationID: generationID
-                )
-                audioPlayer.completeStreamingPreview(
-                    result: result,
-                    title: String(promptText.prefix(40)),
-                    shouldAutoPlay: AudioService.shouldAutoPlay
                 )
                 let voiceName = selectedVoice?.name ?? URL(fileURLWithPath: refPath).deletingPathExtension().lastPathComponent
                 let generation = Generation(

@@ -1,0 +1,5618 @@
+{
+  "cells": [
+    {
+      "count": 1,
+      "key": "custom/medium/cold",
+      "length": "medium",
+      "maximumTrimLevel": 0,
+      "mode": "custom",
+      "modelID": "pro_custom",
+      "statistics": {
+        "audioSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 6.0,
+          "median": 6.0,
+          "min": 6.0
+        },
+        "blockIOOperations": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 11.0,
+          "median": 11.0,
+          "min": 11.0
+        },
+        "contextSwitches": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 54596.0,
+          "median": 54596.0,
+          "min": 54596.0
+        },
+        "continuityFailures": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.150873,
+          "median": 1.150873,
+          "min": 1.150873
+        },
+        "cpuUserSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.4966859999999997,
+          "median": 1.4966859999999997,
+          "min": 1.4966859999999997
+        },
+        "decodeWallSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3.249,
+          "median": 3.249,
+          "min": 3.249
+        },
+        "delayedHeartbeatCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1579.0,
+          "median": 1579.0,
+          "min": 1579.0
+        },
+        "generatedTokens": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 75.0,
+          "median": 75.0,
+          "min": 75.0
+        },
+        "heartbeatCoverage": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3440.6377563476562,
+          "median": 3440.6377563476562,
+          "min": 3440.6377563476562
+        },
+        "minimumQueueDurationMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 327.0,
+          "median": 327.0,
+          "min": 327.0
+        },
+        "pageFaults": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 135421.0,
+          "median": 135421.0,
+          "min": 135421.0
+        },
+        "peakCompressedMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2570.765625,
+          "median": 2570.765625,
+          "min": 2570.765625
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2703.3622436523438,
+          "median": 2703.3622436523438,
+          "min": 2703.3622436523438
+        },
+        "peakResidentMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2218.625,
+          "median": 2218.625,
+          "min": 2218.625
+        },
+        "playbackScheduledMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2272.0,
+          "median": 2272.0,
+          "min": 2272.0
+        },
+        "rtf": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.8467220683287164,
+          "median": 1.8467220683287164,
+          "min": 1.8467220683287164
+        },
+        "samplerBoundarySampleCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 519.5397919999999,
+          "median": 519.5397919999999,
+          "min": 519.5397919999999
+        },
+        "samplerMaximumDriftMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 46.659875,
+          "median": 46.659875,
+          "min": 46.659875
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 46.659875,
+          "median": 46.659875,
+          "min": 46.659875
+        },
+        "samplerTargetIntervalMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 6.0,
+          "median": 6.0,
+          "min": 6.0
+        },
+        "submitToCompletedMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3684.0,
+          "median": 3684.0,
+          "min": 3684.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 692.0,
+          "median": 692.0,
+          "min": 692.0
+        },
+        "tokensPerSecond": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 23.07259257183845,
+          "median": 23.07259257183845,
+          "min": 23.07259257183845
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 75.0,
+          "median": 75.0,
+          "min": 75.0
+        },
+        "underruns": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "cold",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "custom/short/warm",
+      "length": "short",
+      "maximumTrimLevel": 0,
+      "mode": "custom",
+      "modelID": "pro_custom",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.16000000000000014,
+          "max": 2.32,
+          "median": 2.16,
+          "min": 2.0
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 5.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 1469.5,
+          "max": 20271.0,
+          "median": 18728.0,
+          "min": 17332.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.020823000000000036,
+          "max": 0.3163319999999999,
+          "median": 0.288173,
+          "min": 0.2746859999999997
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.0366659999999992,
+          "max": 0.491521999999999,
+          "median": 0.45662800000000064,
+          "min": 0.4181900000000005
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.10349999999999993,
+          "max": 1.317,
+          "median": 1.189,
+          "min": 1.11
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 89.5,
+          "max": 1101.0,
+          "median": 1004.0,
+          "min": 922.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 2.0,
+          "max": 29.0,
+          "median": 27.0,
+          "min": 25.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.038461499999999926,
+          "max": 1.0,
+          "median": 0.9285709999999999,
+          "min": 0.9230769999999999
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 8.1484375,
+          "max": 3579.6846313476562,
+          "median": 3569.8721313476562,
+          "min": 3563.3877563476562
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 11.0,
+          "max": 702.0,
+          "median": 701.0,
+          "min": 680.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 1.0625,
+          "max": 2243.953125,
+          "median": 2243.953125,
+          "min": 2241.828125
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 8.1484375,
+          "max": 2580.6122436523438,
+          "median": 2574.1278686523438,
+          "min": 2564.3153686523438
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.1328125,
+          "max": 2229.046875,
+          "median": 2223.125,
+          "min": 2212.78125
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 95.0,
+          "max": 1484.0,
+          "median": 1387.0,
+          "min": 1294.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.02753665114217707,
+          "max": 1.8166526492851136,
+          "median": 1.8018018018018016,
+          "min": 1.7615793470007592
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 9.51362499999999,
+          "max": 519.0559999999999,
+          "median": 500.53827099999995,
+          "min": 500.02875
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 12.0011875,
+          "max": 49.595917,
+          "median": 38.111999999999995,
+          "min": 25.593542
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 12.0011875,
+          "max": 49.595917,
+          "median": 38.111999999999995,
+          "min": 25.593542
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 5.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 95.0,
+          "max": 1484.0,
+          "median": 1387.0,
+          "min": 1294.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 5.5,
+          "max": 383.0,
+          "median": 383.0,
+          "min": 372.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.3724084223775215,
+          "max": 22.73797198808912,
+          "median": 22.48656586724516,
+          "min": 21.993155143334075
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "custom/medium/warm",
+      "length": "medium",
+      "maximumTrimLevel": 0,
+      "mode": "custom",
+      "modelID": "pro_custom",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.6399999999999997,
+          "max": 7.12,
+          "median": 6.4,
+          "min": 5.84
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 1.0,
+          "max": 13.0,
+          "median": 12.0,
+          "min": 11.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 5059.0,
+          "max": 59653.0,
+          "median": 54217.0,
+          "min": 49535.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.06824799999999986,
+          "max": 0.8465319999999997,
+          "median": 0.7760809999999997,
+          "min": 0.7100360000000001
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.1324869999999989,
+          "max": 1.386185999999998,
+          "median": 1.2453169999999991,
+          "min": 1.1212119999999997
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.34099999999999975,
+          "max": 3.848,
+          "median": 3.493,
+          "min": 3.166
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 3.0,
+          "max": 1588.0,
+          "median": 1587.0,
+          "min": 1582.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 8.0,
+          "max": 89.0,
+          "median": 80.0,
+          "min": 73.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 18.40625,
+          "max": 3508.1690063476562,
+          "median": 3505.3721313476562,
+          "min": 3471.3565063476562
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 156.0,
+          "max": 1100.0,
+          "median": 862.0,
+          "min": 788.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 43.4296875,
+          "max": 2599.875,
+          "median": 2583.390625,
+          "min": 2513.015625
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 18.40625,
+          "max": 2672.6434936523438,
+          "median": 2638.6278686523438,
+          "min": 2635.8309936523438
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 7.5546875,
+          "max": 2231.1875,
+          "median": 2220.359375,
+          "min": 2216.078125
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 1.5,
+          "max": 1964.0,
+          "median": 1962.0,
+          "min": 1961.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.009037974969838602,
+          "max": 1.8503118503118503,
+          "median": 1.844598862918509,
+          "min": 1.832235900372173
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 7.7892289999999775,
+          "max": 509.66625,
+          "median": 495.097292,
+          "min": 494.087792
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 5.486521000000003,
+          "max": 48.708875,
+          "median": 44.853083,
+          "min": 37.735833
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 5.486521000000003,
+          "max": 48.708875,
+          "median": 44.853083,
+          "min": 37.735833
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 6.0,
+          "median": 6.0,
+          "min": 6.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 341.0,
+          "max": 3956.0,
+          "median": 3590.0,
+          "min": 3274.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 3.0,
+          "max": 380.0,
+          "median": 377.0,
+          "min": 374.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.1125660807349469,
+          "max": 23.142075021642242,
+          "median": 23.02485357463703,
+          "min": 22.91694286017235
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 2.0,
+          "max": 67.0,
+          "median": 64.0,
+          "min": 63.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "custom/long/warm",
+      "length": "long",
+      "maximumTrimLevel": 0,
+      "mode": "custom",
+      "modelID": "pro_custom",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.8800000000000008,
+          "max": 8.88,
+          "median": 8.72,
+          "min": 7.12
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 1.5,
+          "max": 16.0,
+          "median": 16.0,
+          "min": 13.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 7154.5,
+          "max": 74857.0,
+          "median": 74242.0,
+          "min": 60548.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.09623649999999939,
+          "max": 1.0471359999999996,
+          "median": 1.04492,
+          "min": 0.8546630000000005
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.15709400000000273,
+          "max": 1.6936680000000015,
+          "median": 1.681398000000001,
+          "min": 1.379479999999996
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.46499999999999986,
+          "max": 4.777,
+          "median": 4.764,
+          "min": 3.847
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 2.0,
+          "max": 1581.0,
+          "median": 1580.0,
+          "min": 1577.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 11.0,
+          "max": 111.0,
+          "median": 109.0,
+          "min": 89.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 20.546875,
+          "max": 3498.7471313476562,
+          "median": 3478.5752563476562,
+          "min": 3457.6533813476562
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 168.5,
+          "max": 1264.0,
+          "median": 1027.0,
+          "min": 927.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 38.65625,
+          "max": 2596.953125,
+          "median": 2571.234375,
+          "min": 2519.640625
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 20.546875,
+          "max": 2686.3466186523438,
+          "median": 2668.7059936523438,
+          "min": 2645.2528686523438
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.3125,
+          "max": 2234.46875,
+          "median": 2223.515625,
+          "min": 2217.84375
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 6.0,
+          "max": 1962.0,
+          "median": 1961.0,
+          "min": 1950.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.014256318804402701,
+          "max": 1.8589072639732052,
+          "median": 1.8507928255783728,
+          "min": 1.8303946263643998
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 5.217104500000005,
+          "max": 510.43983399999996,
+          "median": 506.46637499999997,
+          "min": 500.00562499999995
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 20.5746665,
+          "max": 49.307583,
+          "median": 44.210125,
+          "min": 8.158249999999999
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 20.5746665,
+          "max": 49.307583,
+          "median": 44.210125,
+          "min": 8.158249999999999
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 6.0,
+          "median": 6.0,
+          "min": 6.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 468.5,
+          "max": 4894.0,
+          "median": 4868.0,
+          "min": 3957.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 4.0,
+          "max": 381.0,
+          "median": 381.0,
+          "min": 373.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.17929797165382055,
+          "max": 23.23960030708747,
+          "median": 23.102535514852335,
+          "min": 22.88100436377983
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 6.0,
+          "max": 64.0,
+          "median": 63.0,
+          "min": 52.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 1,
+      "key": "design/medium/cold",
+      "length": "medium",
+      "maximumTrimLevel": 0,
+      "mode": "design",
+      "modelID": "pro_design",
+      "statistics": {
+        "audioSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 6.56,
+          "median": 6.56,
+          "min": 6.56
+        },
+        "blockIOOperations": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 7.0,
+          "median": 7.0,
+          "min": 7.0
+        },
+        "contextSwitches": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 65768.0,
+          "median": 65768.0,
+          "min": 65768.0
+        },
+        "continuityFailures": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.247948,
+          "median": 1.247948,
+          "min": 1.247948
+        },
+        "cpuUserSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.551062,
+          "median": 1.551062,
+          "min": 1.551062
+        },
+        "decodeWallSeconds": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3.386,
+          "median": 3.386,
+          "min": 3.386
+        },
+        "delayedHeartbeatCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1823.0,
+          "median": 1823.0,
+          "min": 1823.0
+        },
+        "generatedTokens": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 82.0,
+          "median": 82.0,
+          "min": 82.0
+        },
+        "heartbeatCoverage": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3011.3722915649414,
+          "median": 3011.3722915649414,
+          "min": 3011.3722915649414
+        },
+        "minimumQueueDurationMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1013.0,
+          "median": 1013.0,
+          "min": 1013.0
+        },
+        "pageFaults": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 135524.0,
+          "median": 135524.0,
+          "min": 135524.0
+        },
+        "peakCompressedMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2916.328125,
+          "median": 2916.328125,
+          "min": 2916.328125
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3132.6277084350586,
+          "median": 3132.6277084350586,
+          "min": 3132.6277084350586
+        },
+        "peakResidentMB": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 2219.796875,
+          "median": 2219.796875,
+          "min": 2219.796875
+        },
+        "playbackScheduledMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 3648.0,
+          "median": 3648.0,
+          "min": 3648.0
+        },
+        "rtf": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1.9373892498523329,
+          "median": 1.9373892498523329,
+          "min": 1.9373892498523329
+        },
+        "samplerBoundarySampleCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 504.996333,
+          "median": 504.996333,
+          "min": 504.996333
+        },
+        "samplerMaximumDriftMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 47.474416,
+          "median": 47.474416,
+          "min": 47.474416
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 47.474416,
+          "median": 47.474416,
+          "min": 47.474416
+        },
+        "samplerTargetIntervalMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 4984.0,
+          "median": 4984.0,
+          "min": 4984.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 1825.0,
+          "median": 1825.0,
+          "min": 1825.0
+        },
+        "tokensPerSecond": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 24.21306811661767,
+          "median": 24.21306811661767,
+          "min": 24.21306811661767
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 51.0,
+          "median": 51.0,
+          "min": 51.0
+        },
+        "underruns": {
+          "count": 1,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "cold",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "design/short/warm",
+      "length": "short",
+      "maximumTrimLevel": 0,
+      "mode": "design",
+      "modelID": "pro_design",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.8399999999999999,
+          "max": 3.68,
+          "median": 2.72,
+          "min": 2.0
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 4.0,
+          "median": 3.0,
+          "min": 3.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 6874.5,
+          "max": 30770.0,
+          "median": 23071.0,
+          "min": 17021.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.08041200000000026,
+          "max": 0.4195110000000004,
+          "median": 0.3264430000000002,
+          "min": 0.2586869999999999
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.1288740000000007,
+          "max": 0.6709490000000006,
+          "median": 0.5252029999999995,
+          "min": 0.4132009999999991
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.40200000000000014,
+          "max": 1.896,
+          "median": 1.386,
+          "min": 1.092
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 420.0,
+          "max": 1737.0,
+          "median": 1251.0,
+          "min": 897.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 10.5,
+          "max": 46.0,
+          "median": 34.0,
+          "min": 25.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.017857000000000012,
+          "max": 0.9523809999999999,
+          "median": 0.9375,
+          "min": 0.916667
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 86.1796875,
+          "max": 3559.0129165649414,
+          "median": 3404.6222915649414,
+          "min": 3386.6535415649414
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 48.5,
+          "max": 801.0,
+          "median": 767.0,
+          "min": 704.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 49.9609375,
+          "max": 2381.78125,
+          "median": 2283.984375,
+          "min": 2281.859375
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 86.1796875,
+          "max": 2757.3464584350586,
+          "median": 2739.3777084350586,
+          "min": 2584.9870834350586
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 5.9609375,
+          "max": 2234.375,
+          "median": 2222.453125,
+          "min": 2222.453125
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 420.0,
+          "max": 2117.0,
+          "median": 1634.0,
+          "min": 1277.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.06549006549006586,
+          "max": 1.9624819624819627,
+          "median": 1.9409282700421944,
+          "min": 1.8315018315018314
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 4.80942749999997,
+          "max": 509.641417,
+          "median": 500.0745,
+          "min": 500.022562
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 6.7808335,
+          "max": 35.874333,
+          "median": 23.289583999999998,
+          "min": 22.312666
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 6.7808335,
+          "max": 35.874333,
+          "median": 23.289583999999998,
+          "min": 22.312666
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 4.0,
+          "median": 3.0,
+          "min": 3.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 422.5,
+          "max": 2122.0,
+          "median": 1634.0,
+          "min": 1277.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 1.5,
+          "max": 383.0,
+          "median": 380.0,
+          "min": 380.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.8085170228539234,
+          "max": 24.52049786435265,
+          "median": 24.264355202984696,
+          "min": 22.9034638186448
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "design/medium/warm",
+      "length": "medium",
+      "maximumTrimLevel": 0,
+      "mode": "design",
+      "modelID": "pro_design",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.20000000000000018,
+          "max": 6.96,
+          "median": 6.56,
+          "min": 6.56
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 7.0,
+          "median": 7.0,
+          "min": 7.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 1359.5,
+          "max": 57746.0,
+          "median": 55554.0,
+          "min": 55027.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.013294499999999987,
+          "max": 0.7399539999999998,
+          "median": 0.7176310000000004,
+          "min": 0.7133649999999998
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.030017999999999878,
+          "max": 1.2474140000000007,
+          "median": 1.1946210000000028,
+          "min": 1.1873780000000007
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.08699999999999974,
+          "max": 3.598,
+          "median": 3.435,
+          "min": 3.424
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 3.5,
+          "max": 1807.0,
+          "median": 1806.0,
+          "min": 1800.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 2.5,
+          "max": 87.0,
+          "median": 82.0,
+          "min": 82.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 58.3671875,
+          "max": 3107.5129165649414,
+          "median": 3088.1535415649414,
+          "min": 2990.7785415649414
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 69.5,
+          "max": 1072.0,
+          "median": 953.0,
+          "min": 933.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 21.1953125,
+          "max": 2958.84375,
+          "median": 2943.0,
+          "min": 2916.453125
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 58.3671875,
+          "max": 3153.2214584350586,
+          "median": 3055.8464584350586,
+          "min": 3036.4870834350586
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.421875,
+          "max": 2237.234375,
+          "median": 2226.3125,
+          "min": 2220.390625
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 10.0,
+          "max": 2190.0,
+          "median": 2187.0,
+          "min": 2170.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.012327728569891061,
+          "max": 1.934408004446915,
+          "median": 1.9158878504672896,
+          "min": 1.9097525473071324
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 3.666708500000027,
+          "max": 507.412896,
+          "median": 500.150625,
+          "min": 500.079479
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 1.5190204999999963,
+          "max": 49.539625,
+          "median": 47.504957999999995,
+          "min": 46.501584
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 1.5190204999999963,
+          "max": 49.539625,
+          "median": 47.504957999999995,
+          "min": 46.501584
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 100.5,
+          "max": 3742.0,
+          "median": 3544.0,
+          "min": 3541.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 6.0,
+          "max": 383.0,
+          "median": 381.0,
+          "min": 371.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.15708299851430496,
+          "max": 24.207900675179243,
+          "median": 23.944884834668706,
+          "min": 23.893734678150633
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 12.0,
+          "max": 94.0,
+          "median": 90.0,
+          "min": 70.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passedWithWarnings",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 1,
+      "worstQCVerdict": "warn",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "design/long/warm",
+      "length": "long",
+      "maximumTrimLevel": 0,
+      "mode": "design",
+      "modelID": "pro_design",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 1.4400000000000013,
+          "max": 12.08,
+          "median": 9.6,
+          "min": 9.2
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 1.5,
+          "max": 12.0,
+          "median": 10.0,
+          "min": 9.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 11637.0,
+          "max": 99747.0,
+          "median": 79982.0,
+          "min": 76473.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.1457349999999995,
+          "max": 1.2613059999999996,
+          "median": 1.0243899999999995,
+          "min": 0.9698360000000003
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.2546154999999999,
+          "max": 2.1564670000000006,
+          "median": 1.726487000000001,
+          "min": 1.6472360000000008
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.7894999999999994,
+          "max": 6.325,
+          "median": 5.069,
+          "min": 4.746
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 2.0,
+          "median": 2.0,
+          "min": 1.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 5.5,
+          "max": 1806.0,
+          "median": 1805.0,
+          "min": 1795.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 18.0,
+          "max": 151.0,
+          "median": 120.0,
+          "min": 115.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 25.03125,
+          "max": 3092.9504165649414,
+          "median": 3091.2941665649414,
+          "min": 3042.8879165649414
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 176.0,
+          "max": 1390.0,
+          "median": 1178.0,
+          "min": 1038.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 104.3671875,
+          "max": 2993.546875,
+          "median": 2993.421875,
+          "min": 2784.8125
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 25.03125,
+          "max": 3101.1120834350586,
+          "median": 3052.7058334350586,
+          "min": 3051.0495834350586
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.6796875,
+          "max": 2234.921875,
+          "median": 2217.9375,
+          "min": 2217.5625
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 6.5,
+          "max": 2186.0,
+          "median": 2185.0,
+          "min": 2173.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.022304918629445503,
+          "max": 1.938474504846186,
+          "median": 1.909881422924901,
+          "min": 1.8938646675872952
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 3.6291249999999877,
+          "max": 510.05075,
+          "median": 505.48191599999996,
+          "min": 502.79249999999996
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 13.441499499999999,
+          "max": 48.882791,
+          "median": 43.499375,
+          "min": 21.999792
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 13.441499499999999,
+          "max": 48.882791,
+          "median": 43.499375,
+          "min": 21.999792
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 775.0,
+          "max": 6446.0,
+          "median": 5156.0,
+          "min": 4896.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 1.0,
+          "max": 381.0,
+          "median": 379.0,
+          "min": 379.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.28078923231666764,
+          "max": 24.236620018662418,
+          "median": 23.846933493763796,
+          "min": 23.675041554029082
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 3.0,
+          "max": 86.0,
+          "median": 84.0,
+          "min": 80.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "clone/short/warm",
+      "length": "short",
+      "maximumTrimLevel": 0,
+      "mode": "clone",
+      "modelID": "pro_clone",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.3200000000000003,
+          "max": 3.2,
+          "median": 2.96,
+          "min": 2.56
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 3.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 3307.5,
+          "max": 42988.0,
+          "median": 39800.0,
+          "min": 36373.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.0573300000000001,
+          "max": 0.5030630000000001,
+          "median": 0.4709660000000001,
+          "min": 0.3884029999999999
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.06863450000000015,
+          "max": 0.8088760000000003,
+          "median": 0.7577259999999997,
+          "min": 0.671607
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.238,
+          "max": 2.136,
+          "median": 2.019,
+          "min": 1.66
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 200.5,
+          "max": 1815.0,
+          "median": 1666.0,
+          "min": 1414.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 4.0,
+          "max": 40.0,
+          "median": 37.0,
+          "min": 32.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.004577000000000053,
+          "max": 0.956522,
+          "median": 0.9523809999999999,
+          "min": 0.947368
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 14.124988555908203,
+          "max": 3218.590950012207,
+          "median": 3194.5909271240234,
+          "min": 3190.3409729003906
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 192.5,
+          "max": 1227.0,
+          "median": 849.0,
+          "min": 842.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 104.0390625,
+          "max": 2746.21875,
+          "median": 2641.125,
+          "min": 2538.140625
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 14.124988555908203,
+          "max": 2953.6590270996094,
+          "median": 2949.4090728759766,
+          "min": 2925.409049987793
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.9296875,
+          "max": 2445.140625,
+          "median": 2430.734375,
+          "min": 2427.28125
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 208.0,
+          "max": 2322.0,
+          "median": 2186.0,
+          "min": 1906.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.03804818083627226,
+          "max": 1.5421686746987953,
+          "median": 1.4981273408239701,
+          "min": 1.4660723130262505
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 0.024239499999964664,
+          "max": 500.061854,
+          "median": 500.0315,
+          "min": 500.013375
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 1.3901664999999999,
+          "max": 3.034541,
+          "median": 0.48691599999999996,
+          "min": 0.254208
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 1.3901664999999999,
+          "max": 3.034541,
+          "median": 0.48691599999999996,
+          "min": 0.254208
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 3.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 210.5,
+          "max": 2327.0,
+          "median": 2187.0,
+          "min": 1906.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 14.5,
+          "max": 521.0,
+          "median": 507.0,
+          "min": 492.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.4762405540840362,
+          "max": 19.26978427440109,
+          "median": 18.72816029589599,
+          "min": 18.317303166233017
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 4.0,
+          "max": 9.0,
+          "median": 8.0,
+          "min": 1.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "clone/medium/warm",
+      "length": "medium",
+      "maximumTrimLevel": 0,
+      "mode": "clone",
+      "modelID": "pro_clone",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.20000000000000018,
+          "max": 7.36,
+          "median": 7.2,
+          "min": 6.96
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 8.0,
+          "median": 7.0,
+          "min": 7.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 2560.5,
+          "max": 97776.0,
+          "median": 96080.0,
+          "min": 92655.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.034751499999999824,
+          "max": 1.070893,
+          "median": 1.0337820000000002,
+          "min": 1.0013900000000004
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.046754499999999144,
+          "max": 1.8094779999999993,
+          "median": 1.746755000000001,
+          "min": 1.715969000000001
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.1620000000000008,
+          "max": 4.874,
+          "median": 4.676,
+          "min": 4.55
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 1.0,
+          "max": 2.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 2.0,
+          "max": 2176.0,
+          "median": 2174.0,
+          "min": 2172.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 2.5,
+          "max": 92.0,
+          "median": 90.0,
+          "min": 87.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 97.3202896118164,
+          "max": 2978.2003021240234,
+          "median": 2947.184700012207,
+          "min": 2783.5597229003906
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 55.5,
+          "max": 1160.0,
+          "median": 1050.0,
+          "min": 1049.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 119.796875,
+          "max": 3322.6875,
+          "median": 3160.25,
+          "min": 3083.09375
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 100.4374771118164,
+          "max": 3360.1121520996094,
+          "median": 3196.815299987793,
+          "min": 3159.2371978759766
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.9140625,
+          "max": 2450.375,
+          "median": 2433.078125,
+          "min": 2432.546875
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 2.5,
+          "max": 2724.0,
+          "median": 2724.0,
+          "min": 2719.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.014862121703015152,
+          "max": 1.5397775876817792,
+          "median": 1.5296703296703298,
+          "min": 1.510053344275749
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 0.01135450000003857,
+          "max": 500.041292,
+          "median": 500.027625,
+          "min": 500.018583
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 0.8552709999999948,
+          "max": 47.296417,
+          "median": 45.84975,
+          "min": 45.585875
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 0.8552709999999948,
+          "max": 47.296417,
+          "median": 45.84975,
+          "min": 45.585875
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 127.0,
+          "max": 4947.0,
+          "median": 4839.0,
+          "min": 4693.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 2.0,
+          "max": 550.0,
+          "median": 548.0,
+          "min": 546.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.17104369789098328,
+          "max": 19.233366478670984,
+          "median": 19.1152120921913,
+          "min": 18.89127908288902
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 3.0,
+          "max": 27.0,
+          "median": 27.0,
+          "min": 21.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    },
+    {
+      "count": 3,
+      "key": "clone/long/warm",
+      "length": "long",
+      "maximumTrimLevel": 0,
+      "mode": "clone",
+      "modelID": "pro_clone",
+      "statistics": {
+        "audioSeconds": {
+          "count": 3,
+          "iqr": 0.040000000000000924,
+          "max": 10.32,
+          "median": 10.24,
+          "min": 10.24
+        },
+        "blockIOOperations": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "chunksReceived": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 10.0,
+          "median": 10.0,
+          "min": 10.0
+        },
+        "contextSwitches": {
+          "count": 3,
+          "iqr": 488.5,
+          "max": 136549.0,
+          "median": 136416.0,
+          "min": 135572.0
+        },
+        "continuityFailures": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "cpuSystemSeconds": {
+          "count": 3,
+          "iqr": 0.005663500000000488,
+          "max": 1.4641650000000008,
+          "median": 1.459173999999999,
+          "min": 1.4528379999999999
+        },
+        "cpuUserSeconds": {
+          "count": 3,
+          "iqr": 0.042683499999998986,
+          "max": 2.6127599999999984,
+          "median": 2.5887230000000017,
+          "min": 2.527393
+        },
+        "decodeWallSeconds": {
+          "count": 3,
+          "iqr": 0.034000000000000696,
+          "max": 6.794,
+          "median": 6.727,
+          "min": 6.726
+        },
+        "delayedHeartbeatCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "finalizationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "firstChunkToPlaybackScheduledMS": {
+          "count": 3,
+          "iqr": 5.0,
+          "max": 2187.0,
+          "median": 2180.0,
+          "min": 2177.0
+        },
+        "generatedTokens": {
+          "count": 3,
+          "iqr": 0.5,
+          "max": 129.0,
+          "median": 128.0,
+          "min": 128.0
+        },
+        "heartbeatCoverage": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 1.0,
+          "median": 1.0,
+          "min": 1.0
+        },
+        "maximumTrimLevel": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "memoryTrimCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "minimumHeadroomMB": {
+          "count": 3,
+          "iqr": 12.734386444091797,
+          "max": 2674.2940979003906,
+          "median": 2666.340950012207,
+          "min": 2648.825325012207
+        },
+        "minimumQueueDurationMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 560.0,
+          "median": 560.0,
+          "min": 560.0
+        },
+        "modelLoadMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "pageFaults": {
+          "count": 3,
+          "iqr": 215.0,
+          "max": 1546.0,
+          "median": 1170.0,
+          "min": 1116.0
+        },
+        "peakCompressedMB": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "peakGPUAllocatedMB": {
+          "count": 3,
+          "iqr": 79.2109375,
+          "max": 3345.71875,
+          "median": 3288.109375,
+          "min": 3187.296875
+        },
+        "peakPhysicalFootprintMB": {
+          "count": 3,
+          "iqr": 12.734386444091797,
+          "max": 3495.174674987793,
+          "median": 3477.659049987793,
+          "min": 3469.7059020996094
+        },
+        "peakResidentMB": {
+          "count": 3,
+          "iqr": 8.8203125,
+          "max": 2454.203125,
+          "median": 2453.46875,
+          "min": 2436.5625
+        },
+        "playbackScheduledMS": {
+          "count": 3,
+          "iqr": 8.0,
+          "max": 2741.0,
+          "median": 2733.0,
+          "min": 2725.0
+        },
+        "rtf": {
+          "count": 3,
+          "iqr": 0.0017314257538287858,
+          "max": 1.5224501932798098,
+          "median": 1.5222238739408354,
+          "min": 1.518987341772152
+        },
+        "samplerBoundarySampleCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 9.0,
+          "median": 9.0,
+          "min": 9.0
+        },
+        "samplerCaptureFailureCount": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        },
+        "samplerEffectiveMedianIntervalMS": {
+          "count": 3,
+          "iqr": 0.049458000000015545,
+          "max": 500.104333,
+          "median": 500.08462499999996,
+          "min": 500.00541699999997
+        },
+        "samplerMaximumDriftMS": {
+          "count": 3,
+          "iqr": 2.8738539999999944,
+          "max": 48.397332999999996,
+          "median": 46.883209,
+          "min": 42.649625
+        },
+        "samplerMaximumLatenessMS": {
+          "count": 3,
+          "iqr": 2.8738539999999944,
+          "max": 48.397332999999996,
+          "median": 46.883209,
+          "min": 42.649625
+        },
+        "samplerTargetIntervalMS": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 500.0,
+          "median": 500.0,
+          "min": 500.0
+        },
+        "startBufferDepth": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 4.0,
+          "median": 4.0,
+          "min": 4.0
+        },
+        "submitToCompletedMS": {
+          "count": 3,
+          "iqr": 33.0,
+          "max": 6930.0,
+          "median": 6869.0,
+          "min": 6864.0
+        },
+        "submitToFirstChunkMS": {
+          "count": 3,
+          "iqr": 3.5,
+          "max": 555.0,
+          "median": 553.0,
+          "min": 548.0
+        },
+        "tokensPerSecond": {
+          "count": 3,
+          "iqr": 0.016584685888233253,
+          "max": 19.02520206867492,
+          "median": 19.014666117009504,
+          "min": 18.992032696898455
+        },
+        "uiMaximumDelayedHeartbeatMS": {
+          "count": 3,
+          "iqr": 8.0,
+          "max": 44.0,
+          "median": 32.0,
+          "min": 28.0
+        },
+        "underruns": {
+          "count": 3,
+          "iqr": 0.0,
+          "max": 0.0,
+          "median": 0.0,
+          "min": 0.0
+        }
+      },
+      "status": "passed",
+      "variant": "speed",
+      "warmState": "warm",
+      "warningCount": 0,
+      "worstQCVerdict": "pass",
+      "worstThermalState": "nominal"
+    }
+  ],
+  "comparison": {
+    "baselineRunID": null,
+    "comparable": false,
+    "deltas": {},
+    "key": "8784432a549edfaa927b3f3d9bc205876ec5f711b78878e306d76bfcd540d305"
+  },
+  "digest": "94b4b2c818684e7c0b8b7f4d73797f0bdd392a43232061fd2eba25e3ea58ab20",
+  "evidence": {
+    "actualTakeCount": 29,
+    "crashCount": 0,
+    "crashDeltaPassed": true,
+    "expectedTakeCount": 29,
+    "manifestDigest": "1a241c6cb99d7e8a01d078ec2b0150ef3256e095bc07723889bc00dc61114e4b",
+    "qcAlgorithmVersion": 3,
+    "rawTelemetryDigest": "b4e27448f6d1f262f52d6c772cb057b55abe3a970ac0966440e7256b8472c3d7",
+    "resultBundleDigest": "f9d16c74a9b8bf4cc77a1a0f17b61061f1d1915b480ec290868e4daa539e7052",
+    "screenshotDigests": [
+      {
+        "digest": "383392c66b994e7f69850a85c846ea30a9cf4cf4642e7a05048577d0f29d2d26",
+        "name": "9B09427E-AFDC-4897-AB59-569DF3267D34.png"
+      },
+      {
+        "digest": "f237b501bc15123c44205766b14334adc8251578ea8a739a48f988782da40e67",
+        "name": "9B3BD4CB-345A-42C8-97BD-10D8D9FFE02A.png"
+      },
+      {
+        "digest": "a010aeef8603fd7951782dd9c5cc28c169b6c94a5bcf76b171d2889c4d9243e9",
+        "name": "ED75FF81-DE43-4894-8FEB-71315491DB53.png"
+      }
+    ],
+    "selectedEvidenceDigest": "ed33d2ec2fb724e87a7e09e4b157161afb27743c76b48b93aeef3fc439378e7c",
+    "telemetrySchemaVersion": 7,
+    "validatorPassed": true,
+    "validatorSchemaVersion": 1
+  },
+  "hardware": {
+    "chip": "Apple A19 Pro",
+    "cpuCores": 6,
+    "efficiencyCores": 4,
+    "freeStorageBytes": 58205679616,
+    "loadAverage1M": 2.74853515625,
+    "lowPowerMode": false,
+    "marketingName": "iPhone 17 Pro",
+    "memoryBytes": 12884901888,
+    "modelIdentifier": "iPhone18,1",
+    "osBuild": "23F84",
+    "osName": "iOS",
+    "osVersion": "26.5.2",
+    "performanceCores": 2,
+    "profileID": "iphone-17-pro",
+    "thermalState": "nominal",
+    "transport": "local-network",
+    "uptimeSeconds": 61066.81213204167
+  },
+  "inputs": {
+    "analysisProfileHash": "not-applicable",
+    "contractHash": "8183d0ee88da8b501975f37dc4c304f91e224fb125e6b4adf5fe3b0a1e0dd47a",
+    "corpusHash": "516261b6053e99cda16c41389fa404a4f12a044c009444d11cc1d158a2382572",
+    "dependencyLockHash": "e90f4e43f0e7182c481fb02a5827ceabbb1e8fbf653b2ea7fdfb610ca005e990",
+    "harnessHash": "64521937b67676e34958198ab7bd4035ad941c375410160ab80ac42e5700cbab",
+    "matrixHash": "1f71f4c2b1eaf30dfa1fb0de690d50fffe3caeb136b032a92c7f6d454918c3dc",
+    "projectInputHash": "bf9159c2e72648b29205c230aec324aacfd1cd4365892121eb62f56bee997b38"
+  },
+  "listening": {
+    "annotatedAt": null,
+    "note": "",
+    "status": "not-performed"
+  },
+  "models": [
+    {
+      "artifactVersion": "2026.04.05.2",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "integrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "mode": "clone",
+      "modelID": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "quantization": "4-bit",
+      "revision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "variant": "speed"
+    },
+    {
+      "artifactVersion": "2026.04.05.2",
+      "fixtureDigest": "not-applicable",
+      "integrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "mode": "custom",
+      "modelID": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "quantization": "4-bit",
+      "revision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "variant": "speed"
+    },
+    {
+      "artifactVersion": "2026.04.05.2",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "integrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "mode": "design",
+      "modelID": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "quantization": "4-bit",
+      "revision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "variant": "speed"
+    }
+  ],
+  "run": {
+    "classification": "exploratory",
+    "durationSeconds": 862.0,
+    "finishedAt": "2026-07-13T04:46:51Z",
+    "id": "ios-xcui-benchmark-20260713-043229-ec64bf4e",
+    "kind": "ui-generation",
+    "label": "ios-xcui-benchmark-20260713-043229-ec64bf4e",
+    "matrixScope": "canonical",
+    "platform": "ios",
+    "startedAt": "2026-07-13T04:32:29Z",
+    "status": "passedWithWarnings",
+    "warnings": []
+  },
+  "schemaVersion": 1,
+  "source": {
+    "changedPaths": [
+      "Sources/SharedSupport/ViewModels/AudioPlayerViewModel.swift",
+      "Sources/iOS/IOSGenerationModeViews.swift",
+      "Tests/VocelloiOSUITests/VocelloiOSBenchmarkUITests.swift",
+      "Tests/VocelloiOSUITests/VocelloiOSUITestCase.swift"
+    ],
+    "commit": "04083b15a4e23af5ef06ff415b9876c29d70730e",
+    "dirty": true,
+    "fingerprintsMatch": true,
+    "postFingerprint": "47275e2403397116daed42a1e0e3aa173be28ca17028fac5ceb0d391f18465d5",
+    "preFingerprint": "47275e2403397116daed42a1e0e3aa173be28ca17028fac5ceb0d391f18465d5",
+    "workspaceFingerprint": "47275e2403397116daed42a1e0e3aa173be28ca17028fac5ceb0d391f18465d5"
+  },
+  "takes": [
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -1.0345458984375e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 40,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/medium/cold#0",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "9864864F-F8C3-460C-96E5-6C133171E6B3",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.0,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 11.0,
+        "contextSwitches": 54596.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.150873,
+        "cpuUserSeconds": 1.4966859999999997,
+        "decodeWallSeconds": 3.249,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1579.0,
+        "generatedTokens": 75.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3440.6377563476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 327.0,
+        "pageFaults": 135421.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2570.765625,
+        "peakPhysicalFootprintMB": 2703.3622436523438,
+        "peakResidentMB": 2218.625,
+        "playbackScheduledMS": 2272.0,
+        "rtf": 1.8467220683287164,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 519.5397919999999,
+        "samplerMaximumDriftMS": 46.659875,
+        "samplerMaximumLatenessMS": 46.659875,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 3684.0,
+        "submitToFirstChunkMS": 692.0,
+        "tokensPerSecond": 23.07259257183845,
+        "uiMaximumDelayedHeartbeatMS": 75.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 1,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "cold",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 7.621256510416666e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 24,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/short/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "A9927DDD-1E3D-44DA-A6BE-318A8F3ABC32",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.0,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 4.0,
+        "contextSwitches": 17332.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.2746859999999997,
+        "cpuUserSeconds": 0.4181900000000005,
+        "decodeWallSeconds": 1.11,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 922.0,
+        "generatedTokens": 25.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3569.8721313476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 701.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2241.828125,
+        "peakPhysicalFootprintMB": 2574.1278686523438,
+        "peakResidentMB": 2223.125,
+        "playbackScheduledMS": 1294.0,
+        "rtf": 1.8018018018018016,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 519.0559999999999,
+        "samplerMaximumDriftMS": 38.111999999999995,
+        "samplerMaximumLatenessMS": 38.111999999999995,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 1294.0,
+        "submitToFirstChunkMS": 372.0,
+        "tokensPerSecond": 22.48656586724516,
+        "uiMaximumDelayedHeartbeatMS": 0.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 2,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 0.0001188743261643398,
+          "discontinuityCount": 2,
+          "longestSilenceMS": 38,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/short/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "602E0A35-45A7-4504-AFF0-B4ED56791EF4",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.16,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 4.0,
+        "contextSwitches": 18728.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.288173,
+        "cpuUserSeconds": 0.45662800000000064,
+        "decodeWallSeconds": 1.189,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1004.0,
+        "generatedTokens": 27.0,
+        "heartbeatCoverage": 0.9230769999999999,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3579.6846313476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 680.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2243.953125,
+        "peakPhysicalFootprintMB": 2564.3153686523438,
+        "peakResidentMB": 2212.78125,
+        "playbackScheduledMS": 1387.0,
+        "rtf": 1.8166526492851136,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.53827099999995,
+        "samplerMaximumDriftMS": 49.595917,
+        "samplerMaximumLatenessMS": 49.595917,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 1387.0,
+        "submitToFirstChunkMS": 383.0,
+        "tokensPerSecond": 22.73797198808912,
+        "uiMaximumDelayedHeartbeatMS": 1.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2.16,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 3,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -3.0498395020934357e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 41,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/short/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "7AD03D03-C953-4616-8B94-FA1628BB03EE",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.32,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 5.0,
+        "contextSwitches": 20271.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.3163319999999999,
+        "cpuUserSeconds": 0.491521999999999,
+        "decodeWallSeconds": 1.317,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1101.0,
+        "generatedTokens": 29.0,
+        "heartbeatCoverage": 0.9285709999999999,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3563.3877563476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 702.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2243.953125,
+        "peakPhysicalFootprintMB": 2580.6122436523438,
+        "peakResidentMB": 2229.046875,
+        "playbackScheduledMS": 1484.0,
+        "rtf": 1.7615793470007592,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.02875,
+        "samplerMaximumDriftMS": 25.593542,
+        "samplerMaximumLatenessMS": 25.593542,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 5.0,
+        "submitToCompletedMS": 1484.0,
+        "submitToFirstChunkMS": 383.0,
+        "tokensPerSecond": 21.993155143334075,
+        "uiMaximumDelayedHeartbeatMS": 1.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2.32,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 4,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -9.901523590087891e-06,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 415,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/medium/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "10DA9114-C4EC-4EC1-BE98-FF9812B949AC",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.4,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 12.0,
+        "contextSwitches": 54217.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.7760809999999997,
+        "cpuUserSeconds": 1.2453169999999991,
+        "decodeWallSeconds": 3.493,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1582.0,
+        "generatedTokens": 80.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3471.3565063476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1100.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2583.390625,
+        "peakPhysicalFootprintMB": 2672.6434936523438,
+        "peakResidentMB": 2216.078125,
+        "playbackScheduledMS": 1961.0,
+        "rtf": 1.832235900372173,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 494.087792,
+        "samplerMaximumDriftMS": 37.735833,
+        "samplerMaximumLatenessMS": 37.735833,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 3590.0,
+        "submitToFirstChunkMS": 380.0,
+        "tokensPerSecond": 22.91694286017235,
+        "uiMaximumDelayedHeartbeatMS": 63.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.4,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 5,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.6365701625409643e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 363,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/medium/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "64224FCD-B063-4EBC-BD63-BF20E29FA476",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 7.12,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 13.0,
+        "contextSwitches": 59653.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.8465319999999997,
+        "cpuUserSeconds": 1.386185999999998,
+        "decodeWallSeconds": 3.848,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1587.0,
+        "generatedTokens": 89.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3508.1690063476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 862.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2513.015625,
+        "peakPhysicalFootprintMB": 2635.8309936523438,
+        "peakResidentMB": 2231.1875,
+        "playbackScheduledMS": 1964.0,
+        "rtf": 1.8503118503118503,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 509.66625,
+        "samplerMaximumDriftMS": 44.853083,
+        "samplerMaximumLatenessMS": 44.853083,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 3956.0,
+        "submitToFirstChunkMS": 377.0,
+        "tokensPerSecond": 23.142075021642242,
+        "uiMaximumDelayedHeartbeatMS": 67.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 7.12,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 6,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -1.5794849831219676e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 70,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/medium/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "8F3583E8-5E76-4887-9A5F-87AEAD6414F4",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 5.84,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 11.0,
+        "contextSwitches": 49535.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.7100360000000001,
+        "cpuUserSeconds": 1.1212119999999997,
+        "decodeWallSeconds": 3.166,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1588.0,
+        "generatedTokens": 73.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3505.3721313476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 788.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2599.875,
+        "peakPhysicalFootprintMB": 2638.6278686523438,
+        "peakResidentMB": 2220.359375,
+        "playbackScheduledMS": 1962.0,
+        "rtf": 1.844598862918509,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 495.097292,
+        "samplerMaximumDriftMS": 48.708875,
+        "samplerMaximumLatenessMS": 48.708875,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 3274.0,
+        "submitToFirstChunkMS": 374.0,
+        "tokensPerSecond": 23.02485357463703,
+        "uiMaximumDelayedHeartbeatMS": 64.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 5.84,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 7,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -4.242144593405067e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 150,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/long/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "02FF6676-D326-4C0E-969F-4926706662BC",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 8.72,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 16.0,
+        "contextSwitches": 74242.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.04492,
+        "cpuUserSeconds": 1.681398000000001,
+        "decodeWallSeconds": 4.764,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1581.0,
+        "generatedTokens": 109.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3478.5752563476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1264.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2519.640625,
+        "peakPhysicalFootprintMB": 2668.7059936523438,
+        "peakResidentMB": 2217.84375,
+        "playbackScheduledMS": 1962.0,
+        "rtf": 1.8303946263643998,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 510.43983399999996,
+        "samplerMaximumDriftMS": 44.210125,
+        "samplerMaximumLatenessMS": 44.210125,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 4868.0,
+        "submitToFirstChunkMS": 381.0,
+        "tokensPerSecond": 22.88100436377983,
+        "uiMaximumDelayedHeartbeatMS": 64.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 8.72,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 8,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -9.84246308381135e-06,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 385,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/long/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "3CCAF44A-77BD-4DB6-BF31-3F4B6AA2A7D1",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 8.88,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 16.0,
+        "contextSwitches": 74857.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.0471359999999996,
+        "cpuUserSeconds": 1.6936680000000015,
+        "decodeWallSeconds": 4.777,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1577.0,
+        "generatedTokens": 111.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3498.7471313476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 1.0,
+        "pageFaults": 1027.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2596.953125,
+        "peakPhysicalFootprintMB": 2645.2528686523438,
+        "peakResidentMB": 2234.46875,
+        "playbackScheduledMS": 1950.0,
+        "rtf": 1.8589072639732052,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.00562499999995,
+        "samplerMaximumDriftMS": 8.158249999999999,
+        "samplerMaximumLatenessMS": 8.158249999999999,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 4894.0,
+        "submitToFirstChunkMS": 373.0,
+        "tokensPerSecond": 23.23960030708747,
+        "uiMaximumDelayedHeartbeatMS": 52.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 8.88,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 9,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -4.470482301176264e-06,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 161,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "custom/long/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "not-applicable",
+      "generationID": "0C933B2A-584C-4CBE-A1A3-2E68AB382EB6",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 7.12,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 13.0,
+        "contextSwitches": 60548.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.8546630000000005,
+        "cpuUserSeconds": 1.379479999999996,
+        "decodeWallSeconds": 3.847,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1580.0,
+        "generatedTokens": 89.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3457.6533813476562,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 927.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2571.234375,
+        "peakPhysicalFootprintMB": 2686.3466186523438,
+        "peakResidentMB": 2223.515625,
+        "playbackScheduledMS": 1961.0,
+        "rtf": 1.8507928255783728,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 506.46637499999997,
+        "samplerMaximumDriftMS": 49.307583,
+        "samplerMaximumLatenessMS": 49.307583,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 6.0,
+        "submitToCompletedMS": 3957.0,
+        "submitToFirstChunkMS": 381.0,
+        "tokensPerSecond": 23.102535514852335,
+        "uiMaximumDelayedHeartbeatMS": 63.0,
+        "underruns": 0.0
+      },
+      "mode": "custom",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_custom",
+      "modelIntegrityDigest": "35ca3a1135ff6a9477dbafd7938cdbae153e2e165fbfc57b9eb5b8738d6438a2",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+      "modelRevision": "f35faf19b0cc2160865af64ecf0f22f83d335135",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 7.12,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|custom_voice|4bit|24000|qwen3_tts_tokenizer_12hz|auto,chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish|aiden,dylan,eric,ono_anna,ryan,serena,sohee,uncle_fu,vivian|pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 10,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.097986577972164e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 58,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/medium/cold#0",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "EF2F8728-8E18-42FA-A219-65E186741AE3",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.56,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 65768.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.247948,
+        "cpuUserSeconds": 1.551062,
+        "decodeWallSeconds": 3.386,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1823.0,
+        "generatedTokens": 82.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3011.3722915649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 1013.0,
+        "pageFaults": 135524.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2916.328125,
+        "peakPhysicalFootprintMB": 3132.6277084350586,
+        "peakResidentMB": 2219.796875,
+        "playbackScheduledMS": 3648.0,
+        "rtf": 1.9373892498523329,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 504.996333,
+        "samplerMaximumDriftMS": 47.474416,
+        "samplerMaximumLatenessMS": 47.474416,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 4984.0,
+        "submitToFirstChunkMS": 1825.0,
+        "tokensPerSecond": 24.21306811661767,
+        "uiMaximumDelayedHeartbeatMS": 51.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.56,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 11,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "cold",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.538267322615081e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 108,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/short/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "01A48E86-84C9-455A-A936-12DB39B95815",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.72,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 3.0,
+        "contextSwitches": 23071.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.3264430000000002,
+        "cpuUserSeconds": 0.5252029999999995,
+        "decodeWallSeconds": 1.386,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1251.0,
+        "generatedTokens": 34.0,
+        "heartbeatCoverage": 0.9375,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3404.6222915649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 767.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2281.859375,
+        "peakPhysicalFootprintMB": 2739.3777084350586,
+        "peakResidentMB": 2222.453125,
+        "playbackScheduledMS": 1634.0,
+        "rtf": 1.9624819624819627,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.022562,
+        "samplerMaximumDriftMS": 23.289583999999998,
+        "samplerMaximumLatenessMS": 23.289583999999998,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 3.0,
+        "submitToCompletedMS": 1634.0,
+        "submitToFirstChunkMS": 383.0,
+        "tokensPerSecond": 24.52049786435265,
+        "uiMaximumDelayedHeartbeatMS": 0.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2.72,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 12,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -0.00014432271321614584,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 9,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/short/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "7B44D98B-5FE0-457B-AF97-E0AF9D6ED59E",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.0,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 3.0,
+        "contextSwitches": 17021.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.2586869999999999,
+        "cpuUserSeconds": 0.4132009999999991,
+        "decodeWallSeconds": 1.092,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 897.0,
+        "generatedTokens": 25.0,
+        "heartbeatCoverage": 0.916667,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3559.0129165649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 704.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2283.984375,
+        "peakPhysicalFootprintMB": 2584.9870834350586,
+        "peakResidentMB": 2234.375,
+        "playbackScheduledMS": 1277.0,
+        "rtf": 1.8315018315018314,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.0745,
+        "samplerMaximumDriftMS": 22.312666,
+        "samplerMaximumLatenessMS": 22.312666,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 3.0,
+        "submitToCompletedMS": 1277.0,
+        "submitToFirstChunkMS": 380.0,
+        "tokensPerSecond": 22.9034638186448,
+        "uiMaximumDelayedHeartbeatMS": 0.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 13,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.241341964058254e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 223,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/short/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "443D715A-69AB-471C-8D18-648C2286B253",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 3.68,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 4.0,
+        "contextSwitches": 30770.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.4195110000000004,
+        "cpuUserSeconds": 0.6709490000000006,
+        "decodeWallSeconds": 1.896,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1737.0,
+        "generatedTokens": 46.0,
+        "heartbeatCoverage": 0.9523809999999999,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3386.6535415649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 801.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2381.78125,
+        "peakPhysicalFootprintMB": 2757.3464584350586,
+        "peakResidentMB": 2222.453125,
+        "playbackScheduledMS": 2117.0,
+        "rtf": 1.9409282700421944,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 509.641417,
+        "samplerMaximumDriftMS": 35.874333,
+        "samplerMaximumLatenessMS": 35.874333,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 2122.0,
+        "submitToFirstChunkMS": 380.0,
+        "tokensPerSecond": 24.264355202984696,
+        "uiMaximumDelayedHeartbeatMS": 1.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 3.68,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 14,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "warn",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -4.071317067960413e-05,
+          "discontinuityCount": 131,
+          "longestSilenceMS": 261,
+          "nonFiniteCount": 0
+        },
+        "verdict": "warn",
+        "warningCodes": [
+          "clicks"
+        ],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/medium/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "C038600D-609B-4EBF-A1EA-50276F869617",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.56,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 55554.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.7133649999999998,
+        "cpuUserSeconds": 1.1873780000000007,
+        "decodeWallSeconds": 3.435,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1800.0,
+        "generatedTokens": 82.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3088.1535415649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1072.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2943.0,
+        "peakPhysicalFootprintMB": 3055.8464584350586,
+        "peakResidentMB": 2220.390625,
+        "playbackScheduledMS": 2170.0,
+        "rtf": 1.9097525473071324,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.079479,
+        "samplerMaximumDriftMS": 47.504957999999995,
+        "samplerMaximumLatenessMS": 47.504957999999995,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 3544.0,
+        "submitToFirstChunkMS": 371.0,
+        "tokensPerSecond": 23.893734678150633,
+        "uiMaximumDelayedHeartbeatMS": 70.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.56,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passedWithWarnings",
+      "takeIndex": 15,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": [
+        "clicks"
+      ]
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.1291360622499046e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 489,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/medium/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "17010CBC-4A5C-4215-8AE8-81BECDB53AB0",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.56,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 55027.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.7176310000000004,
+        "cpuUserSeconds": 1.1946210000000028,
+        "decodeWallSeconds": 3.424,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1806.0,
+        "generatedTokens": 82.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3107.5129165649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 933.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2958.84375,
+        "peakPhysicalFootprintMB": 3036.4870834350586,
+        "peakResidentMB": 2237.234375,
+        "playbackScheduledMS": 2187.0,
+        "rtf": 1.9158878504672896,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 507.412896,
+        "samplerMaximumDriftMS": 49.539625,
+        "samplerMaximumLatenessMS": 49.539625,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 3541.0,
+        "submitToFirstChunkMS": 381.0,
+        "tokensPerSecond": 23.944884834668706,
+        "uiMaximumDelayedHeartbeatMS": 90.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.56,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 16,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -3.1917031240645953e-06,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 261,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/medium/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "A9D24EAF-BE05-4B84-8B5A-423C46823931",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.96,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 57746.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.7399539999999998,
+        "cpuUserSeconds": 1.2474140000000007,
+        "decodeWallSeconds": 3.598,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1807.0,
+        "generatedTokens": 87.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2990.7785415649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 953.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2916.453125,
+        "peakPhysicalFootprintMB": 3153.2214584350586,
+        "peakResidentMB": 2226.3125,
+        "playbackScheduledMS": 2190.0,
+        "rtf": 1.934408004446915,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.150625,
+        "samplerMaximumDriftMS": 46.501584,
+        "samplerMaximumLatenessMS": 46.501584,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 3742.0,
+        "submitToFirstChunkMS": 383.0,
+        "tokensPerSecond": 24.207900675179243,
+        "uiMaximumDelayedHeartbeatMS": 94.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.96,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 17,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.0387788482059707e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 507,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/long/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "19885A43-E2ED-4283-87AB-FA4913431043",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 12.08,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 12.0,
+        "contextSwitches": 99747.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.2613059999999996,
+        "cpuUserSeconds": 2.1564670000000006,
+        "decodeWallSeconds": 6.325,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 2.0,
+        "firstChunkToPlaybackScheduledMS": 1806.0,
+        "generatedTokens": 151.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3042.8879165649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1390.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2993.421875,
+        "peakPhysicalFootprintMB": 3101.1120834350586,
+        "peakResidentMB": 2217.5625,
+        "playbackScheduledMS": 2185.0,
+        "rtf": 1.909881422924901,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 502.79249999999996,
+        "samplerMaximumDriftMS": 43.499375,
+        "samplerMaximumLatenessMS": 43.499375,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 6446.0,
+        "submitToFirstChunkMS": 379.0,
+        "tokensPerSecond": 23.846933493763796,
+        "uiMaximumDelayedHeartbeatMS": 84.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 12.08,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 18,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.0573191001363423e-05,
+          "discontinuityCount": 54,
+          "longestSilenceMS": 33,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/long/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "565200BF-27C7-4859-B0DA-D8CB5E557A13",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 9.2,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 9.0,
+        "contextSwitches": 76473.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.9698360000000003,
+        "cpuUserSeconds": 1.6472360000000008,
+        "decodeWallSeconds": 4.746,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 2.0,
+        "firstChunkToPlaybackScheduledMS": 1795.0,
+        "generatedTokens": 115.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3091.2941665649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1178.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2993.546875,
+        "peakPhysicalFootprintMB": 3052.7058334350586,
+        "peakResidentMB": 2234.921875,
+        "playbackScheduledMS": 2173.0,
+        "rtf": 1.938474504846186,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 510.05075,
+        "samplerMaximumDriftMS": 21.999792,
+        "samplerMaximumLatenessMS": 21.999792,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 4896.0,
+        "submitToFirstChunkMS": 379.0,
+        "tokensPerSecond": 24.236620018662418,
+        "uiMaximumDelayedHeartbeatMS": 80.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 9.2,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 19,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -7.201380199856228e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 704,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "design/long/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "1b5c3c6f76cb16efcc0ad17bb96f499627f7488699583fc6751e96fe7053f1bf",
+      "generationID": "28EB0520-5462-48F7-B68C-39E42B655A98",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 9.6,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 10.0,
+        "contextSwitches": 79982.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.0243899999999995,
+        "cpuUserSeconds": 1.726487000000001,
+        "decodeWallSeconds": 5.069,
+        "delayedHeartbeatCount": 1.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1805.0,
+        "generatedTokens": 120.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3092.9504165649414,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1038.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2784.8125,
+        "peakPhysicalFootprintMB": 3051.0495834350586,
+        "peakResidentMB": 2217.9375,
+        "playbackScheduledMS": 2186.0,
+        "rtf": 1.8938646675872952,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 505.48191599999996,
+        "samplerMaximumDriftMS": 48.882791,
+        "samplerMaximumLatenessMS": 48.882791,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 5156.0,
+        "submitToFirstChunkMS": 381.0,
+        "tokensPerSecond": 23.675041554029082,
+        "uiMaximumDelayedHeartbeatMS": 86.0,
+        "underruns": 0.0
+      },
+      "mode": "design",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_design",
+      "modelIntegrityDigest": "c656810d39e2ad1ce36af2b6c18e1cfd913158fd8435d083de741b96b9f102a9",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+      "modelRevision": "5c390979e4b93af5f2932f90742ca99c7dd04687",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 9.6,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|voice_design|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|instruction",
+      "status": "passed",
+      "takeIndex": 20,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.9091864426930746e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 70,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/short/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "11596099-6D01-4081-AD09-773BDE6F0FE8",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.56,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 3.0,
+        "contextSwitches": 36373.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.3884029999999999,
+        "cpuUserSeconds": 0.671607,
+        "decodeWallSeconds": 1.66,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1414.0,
+        "generatedTokens": 32.0,
+        "heartbeatCoverage": 0.947368,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3194.5909271240234,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1227.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2538.140625,
+        "peakPhysicalFootprintMB": 2949.4090728759766,
+        "peakResidentMB": 2430.734375,
+        "playbackScheduledMS": 1906.0,
+        "rtf": 1.5421686746987953,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.0315,
+        "samplerMaximumDriftMS": 3.034541,
+        "samplerMaximumLatenessMS": 3.034541,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 3.0,
+        "submitToCompletedMS": 1906.0,
+        "submitToFirstChunkMS": 492.0,
+        "tokensPerSecond": 19.26978427440109,
+        "uiMaximumDelayedHeartbeatMS": 9.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2.56,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 21,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.0531657450907939e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 56,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/short/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "DEE0B607-5625-431F-B605-1994E8CA1A7A",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 2.96,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 4.0,
+        "contextSwitches": 39800.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.4709660000000001,
+        "cpuUserSeconds": 0.7577259999999997,
+        "decodeWallSeconds": 2.019,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 1666.0,
+        "generatedTokens": 37.0,
+        "heartbeatCoverage": 0.9523809999999999,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3218.590950012207,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 849.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2746.21875,
+        "peakPhysicalFootprintMB": 2925.409049987793,
+        "peakResidentMB": 2427.28125,
+        "playbackScheduledMS": 2186.0,
+        "rtf": 1.4660723130262505,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.013375,
+        "samplerMaximumDriftMS": 0.48691599999999996,
+        "samplerMaximumLatenessMS": 0.48691599999999996,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 2187.0,
+        "submitToFirstChunkMS": 521.0,
+        "tokensPerSecond": 18.317303166233017,
+        "uiMaximumDelayedHeartbeatMS": 8.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 2.96,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 22,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.4444986979166667e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 110,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/short/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "96D5AE39-F13C-447D-B7A0-C131A698644F",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "short",
+      "metrics": {
+        "audioSeconds": 3.2,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 4.0,
+        "contextSwitches": 42988.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 0.5030630000000001,
+        "cpuUserSeconds": 0.8088760000000003,
+        "decodeWallSeconds": 2.136,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 1815.0,
+        "generatedTokens": 40.0,
+        "heartbeatCoverage": 0.956522,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 3190.3409729003906,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 842.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 2641.125,
+        "peakPhysicalFootprintMB": 2953.6590270996094,
+        "peakResidentMB": 2445.140625,
+        "playbackScheduledMS": 2322.0,
+        "rtf": 1.4981273408239701,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.061854,
+        "samplerMaximumDriftMS": 0.254208,
+        "samplerMaximumLatenessMS": 0.254208,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 2327.0,
+        "submitToFirstChunkMS": 507.0,
+        "tokensPerSecond": 18.72816029589599,
+        "uiMaximumDelayedHeartbeatMS": 1.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 3.2,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 23,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.9529764203057774e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 86,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/medium/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "ED4077FF-A9C6-4F13-A71A-B803773978DD",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 7.36,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 8.0,
+        "contextSwitches": 97776.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.070893,
+        "cpuUserSeconds": 1.8094779999999993,
+        "decodeWallSeconds": 4.874,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 2174.0,
+        "generatedTokens": 92.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2783.5597229003906,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1160.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3322.6875,
+        "peakPhysicalFootprintMB": 3360.1121520996094,
+        "peakResidentMB": 2432.546875,
+        "playbackScheduledMS": 2724.0,
+        "rtf": 1.510053344275749,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.018583,
+        "samplerMaximumDriftMS": 45.84975,
+        "samplerMaximumLatenessMS": 45.84975,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 4947.0,
+        "submitToFirstChunkMS": 550.0,
+        "tokensPerSecond": 18.89127908288902,
+        "uiMaximumDelayedHeartbeatMS": 27.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 7.36,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 24,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": -8.675628238254123e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 65,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/medium/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "E208EB45-EEB3-4F43-9B22-82BEF11E241C",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 7.2,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 96080.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.0337820000000002,
+        "cpuUserSeconds": 1.746755000000001,
+        "decodeWallSeconds": 4.676,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 2.0,
+        "firstChunkToPlaybackScheduledMS": 2176.0,
+        "generatedTokens": 90.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2978.2003021240234,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1050.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3160.25,
+        "peakPhysicalFootprintMB": 3159.2371978759766,
+        "peakResidentMB": 2450.375,
+        "playbackScheduledMS": 2724.0,
+        "rtf": 1.5397775876817792,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.041292,
+        "samplerMaximumDriftMS": 47.296417,
+        "samplerMaximumLatenessMS": 47.296417,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 4839.0,
+        "submitToFirstChunkMS": 548.0,
+        "tokensPerSecond": 19.233366478670984,
+        "uiMaximumDelayedHeartbeatMS": 27.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 7.2,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 25,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.2805726793077256e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 96,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/medium/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "3EBD7C42-1543-4FD9-857F-20D404A53526",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "medium",
+      "metrics": {
+        "audioSeconds": 6.96,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 7.0,
+        "contextSwitches": 92655.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.0013900000000004,
+        "cpuUserSeconds": 1.715969000000001,
+        "decodeWallSeconds": 4.55,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 0.0,
+        "firstChunkToPlaybackScheduledMS": 2172.0,
+        "generatedTokens": 87.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2947.184700012207,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1049.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3083.09375,
+        "peakPhysicalFootprintMB": 3196.815299987793,
+        "peakResidentMB": 2433.078125,
+        "playbackScheduledMS": 2719.0,
+        "rtf": 1.5296703296703298,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.027625,
+        "samplerMaximumDriftMS": 45.585875,
+        "samplerMaximumLatenessMS": 45.585875,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 4693.0,
+        "submitToFirstChunkMS": 546.0,
+        "tokensPerSecond": 19.1152120921913,
+        "uiMaximumDelayedHeartbeatMS": 21.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 6.96,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 26,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 2.95559565226237e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 52,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/long/warm#0",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "2D39FF30-D681-4398-A057-A9758B408FE6",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 10.24,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 10.0,
+        "contextSwitches": 135572.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.4528379999999999,
+        "cpuUserSeconds": 2.527393,
+        "decodeWallSeconds": 6.727,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 2187.0,
+        "generatedTokens": 128.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2674.2940979003906,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1546.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3187.296875,
+        "peakPhysicalFootprintMB": 3469.7059020996094,
+        "peakResidentMB": 2453.46875,
+        "playbackScheduledMS": 2741.0,
+        "rtf": 1.5222238739408354,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.104333,
+        "samplerMaximumDriftMS": 48.397332999999996,
+        "samplerMaximumLatenessMS": 48.397332999999996,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 6869.0,
+        "submitToFirstChunkMS": 555.0,
+        "tokensPerSecond": 19.014666117009504,
+        "uiMaximumDelayedHeartbeatMS": 44.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 10.24,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 27,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.215947171052297e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 167,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/long/warm#1",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "0EC9678C-8141-46CB-97EC-A93BED045ADE",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 10.24,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 10.0,
+        "contextSwitches": 136549.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.459173999999999,
+        "cpuUserSeconds": 2.5887230000000017,
+        "decodeWallSeconds": 6.726,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 2177.0,
+        "generatedTokens": 128.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2666.340950012207,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1170.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3288.109375,
+        "peakPhysicalFootprintMB": 3477.659049987793,
+        "peakResidentMB": 2436.5625,
+        "playbackScheduledMS": 2725.0,
+        "rtf": 1.5224501932798098,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.00541699999997,
+        "samplerMaximumDriftMS": 46.883209,
+        "samplerMaximumLatenessMS": 46.883209,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 6864.0,
+        "submitToFirstChunkMS": 548.0,
+        "tokensPerSecond": 19.02520206867492,
+        "uiMaximumDelayedHeartbeatMS": 28.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 10.24,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 28,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    },
+    {
+      "audioQC": {
+        "algorithmVersion": 3,
+        "instabilityVerdict": "pass",
+        "metrics": {
+          "clipCount": 0,
+          "dcOffset": 1.981104375164022e-05,
+          "discontinuityCount": 0,
+          "longestSilenceMS": 97,
+          "nonFiniteCount": 0
+        },
+        "verdict": "pass",
+        "warningCodes": [],
+        "writtenOutputVerdict": "pass"
+      },
+      "cell": "clone/long/warm#2",
+      "finishReason": "completed",
+      "fixtureDigest": "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35",
+      "generationID": "8E4EAAAA-9D23-46B9-B95F-3FA76343A1A8",
+      "layerCompleteness": "complete",
+      "layers": [
+        "engine",
+        "app"
+      ],
+      "length": "long",
+      "metrics": {
+        "audioSeconds": 10.32,
+        "blockIOOperations": 0.0,
+        "chunksReceived": 10.0,
+        "contextSwitches": 136416.0,
+        "continuityFailures": 0.0,
+        "cpuSystemSeconds": 1.4641650000000008,
+        "cpuUserSeconds": 2.6127599999999984,
+        "decodeWallSeconds": 6.794,
+        "delayedHeartbeatCount": 0.0,
+        "finalizationMS": 1.0,
+        "firstChunkToPlaybackScheduledMS": 2180.0,
+        "generatedTokens": 129.0,
+        "heartbeatCoverage": 1.0,
+        "maximumTrimLevel": 0.0,
+        "memoryTrimCount": 0.0,
+        "minimumHeadroomMB": 2648.825325012207,
+        "minimumQueueDurationMS": 560.0,
+        "modelLoadMS": 0.0,
+        "pageFaults": 1116.0,
+        "peakCompressedMB": 0.0,
+        "peakGPUAllocatedMB": 3345.71875,
+        "peakPhysicalFootprintMB": 3495.174674987793,
+        "peakResidentMB": 2454.203125,
+        "playbackScheduledMS": 2733.0,
+        "rtf": 1.518987341772152,
+        "samplerBoundarySampleCount": 9.0,
+        "samplerCaptureFailureCount": 0.0,
+        "samplerEffectiveMedianIntervalMS": 500.08462499999996,
+        "samplerMaximumDriftMS": 42.649625,
+        "samplerMaximumLatenessMS": 42.649625,
+        "samplerTargetIntervalMS": 500.0,
+        "startBufferDepth": 4.0,
+        "submitToCompletedMS": 6930.0,
+        "submitToFirstChunkMS": 553.0,
+        "tokensPerSecond": 18.992032696898455,
+        "uiMaximumDelayedHeartbeatMS": 32.0,
+        "underruns": 0.0
+      },
+      "mode": "clone",
+      "modelArtifactVersion": "2026.04.05.2",
+      "modelID": "pro_clone",
+      "modelIntegrityDigest": "692c6f6f8ab22b258ae9f90ec9b021ffeba0156bbaadfc6106700994e83ccb34",
+      "modelQuantization": "4-bit",
+      "modelRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "output": {
+        "atomicPublish": true,
+        "durationSeconds": 10.32,
+        "readableWAV": true
+      },
+      "runtimeProfileSignature": "qwen3_tts|base_clone|4bit|24000|qwen3_tts_tokenizer_12hz|chinese,english,french,german,italian,japanese,korean,portuguese,russian,spanish||pro1b7|no_instruction",
+      "status": "passed",
+      "takeIndex": 29,
+      "thermalState": "nominal",
+      "variant": "speed",
+      "warmState": "warm",
+      "warnings": []
+    }
+  ],
+  "toolchain": {
+    "appBuild": "18",
+    "appVersion": "2.1.0",
+    "executableHashes": {
+      "Vocello": "80ad49f05bf0e52a4768a28a8d10ace67ca010c3e484454eed3edda971e2f845"
+    },
+    "executableUUIDs": {
+      "Vocello[arm64]": "F89D6208-DEEF-3601-801E-E9472312C8F7"
+    },
+    "optimization": "-O",
+    "sdkName": "iphoneos",
+    "sdkVersion": "26.5",
+    "swiftVersion": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)",
+    "xcodeBuild": "17F113",
+    "xcodeVersion": "26.6"
+  }
+}

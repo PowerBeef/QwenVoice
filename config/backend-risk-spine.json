@@ -61,10 +61,10 @@
     },
     {
       "id": "M3",
-      "title": "Typed telemetry v7, legacy compatibility, privacy, disabled work, and measured overhead",
+      "title": "Typed telemetry v8 memory evidence, legacy compatibility, privacy, disabled work, and measured overhead",
       "source": "Sources/QwenVoiceCore/GenerationTelemetryRecord.swift",
       "tests": [
-        "VocelloCoreTests/GenerationTelemetrySchemaTests/testSchemaV7RoundTripCarriesTypedBackendMetrics",
+        "VocelloCoreTests/GenerationTelemetrySchemaTests/testSchemaV8RoundTripCarriesTypedBackendMetrics",
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testLegacyV1ThroughV5RowsRemainDecodable",
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testTelemetryOffPlansNoSamplerSinkChunkQCOrDerivedDiagnostics",
         "VocelloCoreTests/GenerationTelemetrySchemaTests/testFailurePrivacyAdapterDoesNotPersistRawMessageOrPath",

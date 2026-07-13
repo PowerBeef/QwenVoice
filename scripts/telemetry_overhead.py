@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import statistics
 import subprocess
@@ -20,7 +21,7 @@ import wave
 ROOT = Path(__file__).resolve().parents[1]
 DEBUG_ROOT = Path.home() / "Library" / "Application Support" / "QwenVoice-Debug"
 MODES = ("off", "lightweight", "verbose")
-TELEMETRY_SCHEMA_VERSION = 7
+TELEMETRY_SCHEMA_VERSION = 8
 MODEL_ID = "pro_custom_speed"
 ROTATIONS = (
     ("off", "lightweight", "verbose"),
@@ -41,6 +42,43 @@ OPTIONAL_MODEL_RUNTIME_IDENTITY_FIELDS = (
     "nativeLoadCapabilityProfile",
     "fixtureDigest",
 )
+
+
+def build_policy_environment() -> dict[str, str]:
+    """Load validated repository-owned build paths without duplicating the manifest."""
+    helper = ROOT / "scripts" / "build_output_policy.py"
+    completed = subprocess.run(
+        [sys.executable, str(helper), "shell-env"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(f"could not load build-output policy: {detail}")
+
+    environment: dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        fields = shlex.split(line)
+        if len(fields) != 2 or fields[0] != "export" or "=" not in fields[1]:
+            raise RuntimeError("build-output policy emitted malformed shell environment")
+        name, value = fields[1].split("=", 1)
+        environment[name] = value
+    return environment
+
+
+def managed_output_path(variable: str) -> Path:
+    environment = build_policy_environment()
+    raw_path = environment.get(variable)
+    if not raw_path:
+        raise RuntimeError(f"build-output policy did not define {variable}")
+    path = Path(raw_path)
+    try:
+        path.relative_to(ROOT / "build")
+    except ValueError as error:
+        raise RuntimeError(f"build-output policy path escapes the build root: {path}") from error
+    return path
 
 
 def pcm_digest(path: Path) -> str:
@@ -232,7 +270,7 @@ def run_lane(args: argparse.Namespace) -> dict:
     started_at = utc_now()
     nonce = hashlib.sha256(os.urandom(32)).hexdigest()[:8]
     run_id = "telemetry-overhead-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S") + f"-{nonce}"
-    run_dir = ROOT / "build" / "macos" / "telemetry-overhead" / run_id
+    run_dir = managed_output_path("QVOICE_ARTIFACTS_MACOS") / "telemetry-overhead" / run_id
     run_dir.mkdir(parents=True)
     snapshot = run_dir / "benchmark-source.json"
     snapshot_command = [
@@ -248,6 +286,7 @@ def run_lane(args: argparse.Namespace) -> dict:
     source_models = DEBUG_ROOT / "models"
     if not source_models.exists():
         raise RuntimeError(f"debug model root is missing: {source_models}")
+    vocello = managed_output_path("QVOICE_BUILD_ROOT") / "vocello"
 
     results: dict[str, dict] = {mode: {"samples": [], "pcmSHA256": {}} for mode in MODES}
     contexts: list[dict] = []
@@ -260,7 +299,7 @@ def run_lane(args: argparse.Namespace) -> dict:
             subrun_id = f"{run_id}-r{rotation_index}-{mode}"
             before = machine_context()
             command = [
-                str(ROOT / "build" / "vocello"), "bench",
+                str(vocello), "bench",
                 "--modes", "custom", "--variants", "speed", "--lengths", "medium",
                 "--warm", "3", "--seed", str(args.seed), "--run-id", subrun_id,
                 "--telemetry", mode, "--data-dir", str(data_dir), "--no-summary",
@@ -402,15 +441,12 @@ def run_lane(args: argparse.Namespace) -> dict:
     if failures:
         raise RuntimeError("; ".join(failures))
 
-    publish_command = [
-        sys.executable, str(ROOT / "scripts" / "publish_benchmark_history.py"),
-        "telemetry-overhead", "--artifact-dir", str(run_dir),
-        "--snapshot", str(snapshot), "--verdict", str(verdict_path),
-    ]
-    published = subprocess.run(publish_command, cwd=ROOT, text=True, capture_output=True)
-    if published.returncode:
-        detail = published.stderr.strip() or published.stdout.strip()
-        raise RuntimeError(f"history publication failed: {detail}")
+    # This diagnostic intentionally compares telemetry-off with enabled modes.
+    # Instrumenting the off lane with the in-process v8 memory sampler would
+    # change the observer whose overhead is being measured.  Keep the complete
+    # verdict local instead of publishing a memory-incomplete schema-v2 history
+    # record.  A future external observer may make this lane publishable without
+    # changing the experiment, but absence of such evidence must fail closed.
     print(verdict_path)
     return verdict
 
