@@ -128,6 +128,12 @@ macOS has **both Speed (4-bit) and Quality (8-bit)** variants (unlike iOS Speed-
 Settings → Voice Models shows per-mode packages. Download via `settings_download_<id>`;
 cancel via `settings_cancel_<id>`; repair via `settings_repair_<id>`.
 
+The shared foreground downloader distinguishes queued, waiting for connectivity, downloading,
+retrying, verifying, installing, and cancelling. Active transfer shows bytes, smoothed speed, ETA,
+and a separate 20-second no-progress indication. Transient failures retry up to three times; Retry
+preserves verified files, while explicit Cancel discards that package's staged data. Every terminal
+foreground path invalidates its URLSession. Details: [`model-delivery.md`](model-delivery.md).
+
 The Studio's Generate CTA (`textInput_generateButton`) appears only when the mode's model
 is installed — otherwise the app prompts to download from Settings.
 

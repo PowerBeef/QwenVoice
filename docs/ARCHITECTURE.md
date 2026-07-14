@@ -109,7 +109,7 @@ graph.)
 | `VocelloCoreTests` | bundle.unit-test | macOS | `VocelloCoreTests` | `com.qwenvoice.core.tests` | Core semantics, typed telemetry compatibility, and atomic/readable output contracts. |
 | `VocelloEngineIntegrationTests` | bundle.unit-test | macOS | `VocelloEngineIntegrationTests` | `com.qwenvoice.engine-integration.tests` | Injectable XPC client/transport lifecycle and correlation contracts; never launches frontend UI. |
 | `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | Explicit native-app smoke and benchmark XCUITest lanes. |
-| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | Explicit paired-physical-iPhone smoke and benchmark XCUITest lanes; never Simulator. |
+| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | Explicit paired-physical-iPhone smoke/benchmark lanes plus the isolated opt-in model-delivery lifecycle proof; never Simulator. |
 
 ### Testing lanes (see [`docs/reference/testing-runbook.md`](reference/testing-runbook.md))
 
@@ -118,6 +118,7 @@ graph.)
 | **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
 | **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of XCUITest |
 | **UI regression** | `ui_test.sh macos smoke\|benchmark` XCUITest | `ui_test.sh ios smoke\|benchmark` XCUITest on a paired physical iPhone | Explicit frontend QA only; never required for publishing or packaging |
+| **Model-delivery lifecycle** | Isolated CLI install | `ui_test.sh ios model-download` on a paired physical iPhone | Opt-in diagnostic only; never part of smoke, benchmark, CI, or release |
 | **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` device diagnostics | Explicit performance/release QA |
 | **UI evidence** | Named XCTest attachments from the native app | Named XCTest attachments from the physical iPhone | Independent explicit-acceptance artifacts |
 
@@ -679,12 +680,19 @@ served at `bundle://vocello/ios/catalog/v1/models.json` via
 `Info.plist … QVoiceModelCatalogURL`) and `voice-previews/` (24 kHz mono Int16
 WAVs named by speaker id, played by `IOSVoicePreviewPlayer`).
 
-**Download** (`Sources/QwenVoiceCore/HuggingFaceDownloader.swift`, SwiftHuggingFace):
-list files at the pinned revision → stage under `.qwenvoice-downloads/` → verify
-each file's size + **CryptoKit SHA-256** → atomic move → persist a
-`ModelAssetIntegrityManifest.json`. Downloads come from Hugging Face over HTTPS;
-**no cloud inference**. iOS catalog validation: `scripts/check_ios_catalog.sh`.
-Headless install: `vocello models install <id>` (CLI) or the app Settings UI.
+**Download** (`Sources/QwenVoiceCore/HuggingFaceDownloader.swift`): list files at the pinned
+revision, stage, verify exact size plus **CryptoKit SHA-256**, atomically swap the directory, and
+persist `ModelAssetIntegrityManifest.json`. A verified-artifact receipt avoids a second full-file
+hash in the same process; a relaunch rehashes staged data once before reuse. macOS and CLI own
+terminal foreground-session teardown. iPhone owns one bundle-aware background session for the app
+lifetime, an atomic schema-v2 ledger, exact task adoption, durable delegate staging, and UIKit
+completion deferral until postprocessing is durable. Explicit Cancel discards staging; Retry keeps
+verified files. Typed transient retries cover connection loss and HTTP 408/429/5xx, while permanent
+TLS/filesystem/configuration errors fail without retry. Compact local diagnostics are capped at 20
+records and 5 MB and contain no raw URLs or absolute paths. Downloads come from Hugging Face over
+HTTPS; **no cloud inference**. iOS catalog validation: `scripts/check_ios_catalog.sh`. Headless
+install: `vocello models install <id>` (CLI) or the app Settings UI. Full lifecycle and storage
+contract: [`reference/model-delivery.md`](reference/model-delivery.md).
 
 **macOS test fixtures:** UI smoke and bench lanes with `QWENVOICE_DEBUG=1` read
 `QwenVoice-Debug/models`; the test driver symlinks that path to the canonical

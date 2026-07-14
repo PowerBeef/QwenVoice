@@ -16,6 +16,16 @@
   transcript-backed Voice Design reference; a Custom Voice output is not an acceptable substitute.
 - No preview/browser-mirror route, invisible accessibility state marker, alternate UI driver,
   coordinate bridge, or hidden UI bootstrap belongs in the shippable app.
+- Model delivery uses one shared integrity/atomic-install implementation. iPhone now owns one
+  bundle-aware app-lifetime background session plus an atomic schema-v2 request ledger, exact task
+  adoption, cancellation barriers, durable delegate staging, and bounded privacy-safe diagnostics.
+  macOS and CLI retain foreground delivery with terminal session teardown. Cancel discards staging;
+  Retry reuses verified files. The isolated `scripts/ui_test.sh ios model-download` lifecycle proof
+  is explicit QA and never joins smoke, benchmark, CI, packaging, or release gates. The 2026-07-14
+  isolated Custom Speed proofs passed on both canonical platforms: macOS verified and removed its
+  temporary 2.31 GB install, while the physical-iPhone test preserved monotonic progress across
+  backgrounding, termination, and relaunch, installed with exact wire bytes and no retry, then
+  deleted the isolated model through visible Settings. No connection or chunking default changed.
 - Benchmark evidence now uses collision-resistant run IDs, atomic run-scoped manifests, and a
   privacy-safe PASS-only registry. `benchmarks/HISTORY.md` is generated from canonical JSON records;
   raw telemetry, audio, screenshots, traces, and `.xcresult` bundles remain untracked.

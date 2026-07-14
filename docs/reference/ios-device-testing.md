@@ -26,6 +26,8 @@ also checks signing plus the existing app-build and dSYM readiness. `device-stat
 reachability as its only blocker. The XCUITest runner independently rejects a phone that
 CoreDevice reports as locked before invoking `xcodebuild`. Install or repair iOS models through the
 visible Settings → Model Downloads UI; neither device scripts nor normal UI tests install them.
+The sole exception is the separately selected `scripts/ui_test.sh ios model-download` lifecycle
+diagnostic, which uses an isolated app-support root and is never part of smoke or benchmark.
 
 ## Explicit XCUITest lanes
 
@@ -34,6 +36,9 @@ scripts/ui_test.sh ios smoke
 scripts/ui_test.sh ios benchmark
 # Filtered benchmark example:
 scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
+
+# Explicit isolated background-transfer lifecycle proof, not a normal UI lane:
+scripts/ui_test.sh ios model-download
 ```
 
 The iPhone matrix keeps the shared short/medium/long ordering, but its long script is exactly the
@@ -44,6 +49,7 @@ the iPhone lane never bypasses its user-facing script limit.
 | --- | --- |
 | Smoke | Exact app launch, Studio mode and tab navigation, visible model and clone-reference readiness, one real Custom generation, completed player, and History |
 | Benchmark | Ordered, configurable Studio matrix with pulled telemetry, readable audio, audio QC, thermal and timing evidence; the default is exactly 29 takes |
+| Model delivery | One isolated Custom Speed install; background/process relaunch adoption, monotonic progress, integrity, and visible cleanup |
 
 Every lane uses the paired physical-device destination. Tests use stable accessibility identifiers,
 condition-based waits, XCTest activities, screenshots, and failure attachments. Coordinate tables,

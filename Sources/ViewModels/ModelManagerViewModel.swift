@@ -9,9 +9,13 @@ final class ModelManagerViewModel {
 
     struct DownloadProgress: Equatable, Sendable {
         enum Phase: String, Equatable, Sendable {
+            case queued
+            case waitingForConnectivity
             case downloading
+            case retrying
             case verifying
             case installing
+            case cancelling
         }
 
         let downloadedBytes: Int64
@@ -20,6 +24,9 @@ final class ModelManagerViewModel {
         let totalFiles: Int?
         let bytesPerSecond: Int64?
         let isStalled: Bool
+        let estimatedSecondsRemaining: Double?
+        let retryCount: Int
+        let statusMessage: String?
         let phase: Phase
 
         static let initial = DownloadProgress(
@@ -29,6 +36,9 @@ final class ModelManagerViewModel {
             totalFiles: nil,
             bytesPerSecond: nil,
             isStalled: false,
+            estimatedSecondsRemaining: nil,
+            retryCount: 0,
+            statusMessage: nil,
             phase: .downloading
         )
     }
@@ -488,17 +498,31 @@ final class ModelManagerViewModel {
 
     private func downloadDetail(for progress: DownloadProgress) -> String? {
         if progress.isStalled {
-            return "Waiting for the connection to resume."
+            return "No progress for 20 seconds."
         }
+        var details: [String] = []
         if let totalBytes = progress.totalBytes, totalBytes > 0 {
             let downloaded = Self.formattedFileSize(progress.downloadedBytes)
             let total = Self.formattedFileSize(totalBytes)
-            return "\(downloaded) of \(total)"
+            details.append("\(downloaded) of \(total)")
+        } else if let totalFiles = progress.totalFiles, totalFiles > 0 {
+            details.append("\(progress.completedFiles) of \(totalFiles) files")
         }
-        if let totalFiles = progress.totalFiles, totalFiles > 0 {
-            return "\(progress.completedFiles) of \(totalFiles) files"
+        if let bytesPerSecond = progress.bytesPerSecond, bytesPerSecond > 0,
+           progress.phase == .downloading {
+            details.append("\(Self.formattedFileSize(bytesPerSecond))/s")
         }
-        return nil
+        if let eta = progress.estimatedSecondsRemaining, eta.isFinite,
+           progress.phase == .downloading {
+            details.append("about \(max(1, Int(eta.rounded())))s remaining")
+        }
+        if progress.phase == .retrying, progress.retryCount > 0 {
+            details.append("retry \(progress.retryCount); verified files will be reused")
+        }
+        if let statusMessage = progress.statusMessage, !statusMessage.isEmpty {
+            details.append(statusMessage)
+        }
+        return details.isEmpty ? nil : details.joined(separator: " · ")
     }
 
     private func repairDetail(missingRequiredPaths: [String]) -> String {
@@ -573,37 +597,47 @@ final class ModelManagerViewModel {
         let targetDir = model.installDirectory(in: modelsDirectory)
         let modelsDirectory = self.modelsDirectory
 
-        // Clear any stale downloader/task for this model before starting fresh.
-        // The stale cancel is fire-and-forget here because no staging deletion follows it;
-        // the new download will recreate staging if needed.
+        // A replacement must not register tasks until the previous downloader's cancellation
+        // callbacks have finished. Preserve staging for retry, but serialize session ownership.
         let staleDownloader = downloaders.removeValue(forKey: modelID)
-        downloadTasks[modelID]?.cancel()
-        downloadTasks.removeValue(forKey: modelID)
-        if let staleDownloader {
-            Task { await staleDownloader.cancel() }
-        }
+        let staleTask = downloadTasks.removeValue(forKey: modelID)
+        staleTask?.cancel()
 
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
         removeInstallMetadata(for: model)
 
-        let downloader = HuggingFaceDownloader(progressHandler: { [weak self] progress in
-            Task { @MainActor [weak self] in
-                self?.publishDownloadProgressIfCurrent(
-                    epoch: epoch,
-                    modelID: modelID,
-                    progress: progress
-                )
-            }
-        })
+        let diagnostics = ModelDownloadDiagnosticsStore(
+            directory: modelsDirectory
+                .deletingLastPathComponent()
+                .appendingPathComponent("diagnostics/model-downloads", isDirectory: true)
+        )
+        let downloader = HuggingFaceDownloader(
+            progressHandler: { [weak self] progress in
+                diagnostics.record(progress: progress)
+                Task { @MainActor [weak self] in
+                    self?.publishDownloadProgressIfCurrent(
+                        epoch: epoch,
+                        modelID: modelID,
+                        progress: progress
+                    )
+                }
+            },
+            transferMetricsHandler: { diagnostics.record(metrics: $0) }
+        )
         downloaders[modelID] = downloader
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
+            if let staleDownloader {
+                await staleDownloader.cancel()
+                await staleTask?.value
+            }
             await self.runModelDownload(
                 model: model,
                 epoch: epoch,
                 downloader: downloader,
-                targetDir: targetDir
+                targetDir: targetDir,
+                diagnostics: diagnostics
             )
         }
         downloadTasks[modelID] = task
@@ -615,7 +649,8 @@ final class ModelManagerViewModel {
         model: TTSModel,
         epoch: Int,
         downloader: HuggingFaceDownloader,
-        targetDir: URL
+        targetDir: URL,
+        diagnostics: ModelDownloadDiagnosticsStore
     ) async {
         do {
             try await downloader.downloadRepo(
@@ -629,6 +664,9 @@ final class ModelManagerViewModel {
                 lastFailureMessages[model.id] = "Download finished, but required model files are still missing."
             } else {
                 persistInstallMetadata(for: model, snapshot: postDownloadSnapshot)
+                diagnostics.recordSuccess(
+                    expectedBytes: model.estimatedDownloadBytes ?? Int64(postDownloadSnapshot.sizeBytes)
+                )
             }
         } catch is CancellationError {
             guard isCurrentEpoch(epoch, for: model.id) else { return }
@@ -638,10 +676,20 @@ final class ModelManagerViewModel {
             case .cancelled:
                 lastFailureMessages.removeValue(forKey: model.id)
             default:
+                ModelDownloadDiagnosticsStore(
+                    directory: modelsDirectory
+                        .deletingLastPathComponent()
+                        .appendingPathComponent("diagnostics/model-downloads", isDirectory: true)
+                ).recordFailure(classification: "download", message: dlError.localizedDescription)
                 lastFailureMessages[model.id] = dlError.localizedDescription
             }
         } catch {
             guard isCurrentEpoch(epoch, for: model.id) else { return }
+            ModelDownloadDiagnosticsStore(
+                directory: modelsDirectory
+                    .deletingLastPathComponent()
+                    .appendingPathComponent("diagnostics/model-downloads", isDirectory: true)
+            ).recordFailure(classification: "download", message: error.localizedDescription)
             lastFailureMessages[model.id] = error.localizedDescription
         }
         await handleMutationCompletion(for: model.id)
@@ -1054,6 +1102,9 @@ final class ModelManagerViewModel {
                 totalFiles: progress.totalFiles > 0 ? progress.totalFiles : nil,
                 bytesPerSecond: progress.bytesPerSecond,
                 isStalled: progress.isStalled,
+                estimatedSecondsRemaining: progress.estimatedSecondsRemaining,
+                retryCount: progress.retryCount,
+                statusMessage: progress.statusMessage,
                 phase: DownloadProgress.Phase(progress.phase)
             )
         )
@@ -1063,23 +1114,39 @@ final class ModelManagerViewModel {
 private extension ModelManagerViewModel.DownloadProgress.Phase {
     var displayLabel: String {
         switch self {
+        case .queued:
+            return "Queued"
+        case .waitingForConnectivity:
+            return "Waiting for network"
         case .downloading:
             return "Downloading"
+        case .retrying:
+            return "Retrying"
         case .verifying:
             return "Verifying"
         case .installing:
             return "Installing"
+        case .cancelling:
+            return "Cancelling"
         }
     }
 
     init(_ phase: HuggingFaceDownloader.DownloadPhase) {
         switch phase {
+        case .queued:
+            self = .queued
+        case .waitingForConnectivity:
+            self = .waitingForConnectivity
         case .downloading:
             self = .downloading
+        case .retrying:
+            self = .retrying
         case .verifying:
             self = .verifying
         case .installing:
             self = .installing
+        case .cancelling:
+            self = .cancelling
         }
     }
 }

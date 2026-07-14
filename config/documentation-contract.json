@@ -28,7 +28,7 @@
       "authority": "derived from source, project.yml, scripts, and machine-readable contracts",
       "audience": "maintainers",
       "reviewTriggers": ["target or scheme changes", "runtime topology", "telemetry schema", "test workflow"],
-      "paths": ["docs/ARCHITECTURE.md", "docs/development-progress.md", "docs/project-map.html", "docs/qwen_tone.md", "docs/reference/*.md", "Sources/Resources/voice-previews/README.md"]
+      "paths": ["docs/ARCHITECTURE.md", "docs/decisions/*.md", "docs/development-progress.md", "docs/project-map.html", "docs/qwen_tone.md", "docs/reference/*.md", "Sources/Resources/voice-previews/README.md"]
     },
     {
       "id": "benchmarking",

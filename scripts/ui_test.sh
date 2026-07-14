@@ -37,8 +37,10 @@ Usage:
   scripts/ui_test.sh macos benchmark [--modes custom,design,clone] [--lengths short,medium,long] [--warm 3] [--label RUN_ID]
   scripts/ui_test.sh ios smoke
   scripts/ui_test.sh ios benchmark [--modes custom,design,clone] [--lengths short,medium,long] [--warm 3] [--label RUN_ID]
+  scripts/ui_test.sh ios model-download
 
 The iOS destination is the paired physical iPhone only. Simulator destinations are unsupported.
+`model-download` is an opt-in isolated lifecycle proof and never runs in smoke, benchmark, CI, or release.
 No lane retries automatically. A failed run keeps its log, xcresult, screenshots, and diagnostics.
 RUN_ID is an opaque 1-96 character identifier using letters, digits, dot, underscore, or hyphen.
 EOF
@@ -50,7 +52,8 @@ platform="$1"
 lane="$2"
 shift 2
 [[ "$platform" == "macos" || "$platform" == "ios" ]] || usage
-[[ "$lane" == "smoke" || "$lane" == "benchmark" ]] || usage
+[[ "$lane" == "smoke" || "$lane" == "benchmark" || "$lane" == "model-download" ]] || usage
+[[ "$lane" != "model-download" || "$platform" == "ios" ]] || usage
 
 modes="custom,design,clone"
 lengths="short,medium,long"
@@ -72,7 +75,7 @@ while [[ $# -gt 0 ]]; do
 done
 validate_benchmark_label "$label"
 
-if [[ "$lane" == "smoke" && ( "$modes" != "custom,design,clone" || "$lengths" != "short,medium,long" || "$warm" != 3 || -n "$label" ) ]]; then
+if [[ "$lane" != "benchmark" && ( "$modes" != "custom,design,clone" || "$lengths" != "short,medium,long" || "$warm" != 3 || -n "$label" ) ]]; then
   die "benchmark flags are accepted only by the benchmark lane"
 fi
 
@@ -314,6 +317,79 @@ snapshot_ios_crashes() {
     printf '%s  %s\n' "$hash" "$relative"
   done < <(find "$destination/pull" -type f -path '*/crashes/*' -print0 2>/dev/null) \
     | sort >"$destination/hashes.txt"
+  # Crash gating needs the stable hashes, not another copy of the device's complete historical
+  # diagnostics tree. Exact payload retrieval remains available through ios_device.sh crashes.
+  rm -rf "$destination/pull"
+}
+
+pull_ios_model_download_diagnostics() {
+  local device="$1" destination="$2"
+  rm -rf "$destination"
+  mkdir -p "$destination"
+  xcrun devicectl device copy from --device "$device" \
+    --domain-type appDataContainer --domain-identifier "$BUNDLE_ID_IOS" \
+    --source "Library/Application Support/Q-Voice/model-download-acceptance/diagnostics/model-downloads" \
+    --destination "$destination" >"$out/model-download-diagnostics-pull.log" 2>&1 \
+    || return 1
+  python3 - "$destination" <<'PY'
+import json, pathlib, sys
+
+root = pathlib.Path(sys.argv[1])
+files = sorted(root.glob("*.json"))
+if not files or len(files) > 20:
+    raise SystemExit(f"expected 1-20 compact diagnostic records, found {len(files)}")
+if sum(path.stat().st_size for path in files) > 5 * 1024 * 1024:
+    raise SystemExit("model-download diagnostics exceed the 5 MiB retention contract")
+records = [json.loads(path.read_text(encoding="utf-8")) for path in files]
+successes = [
+    record for record in records
+    if record.get("kind") == "success" and record.get("finalIntegrity") is True
+]
+if not successes:
+    raise SystemExit("missing final-integrity success summary")
+latest = max(successes, key=lambda value: value.get("capturedAtUTC", ""))
+latest_time = latest.get("capturedAtUTC", "")
+prior_terminal_times = sorted(
+    record.get("capturedAtUTC", "") for record in records
+    if record.get("kind") in {"success", "failure"}
+    and record.get("capturedAtUTC", "") < latest_time
+)
+lower_bound = prior_terminal_times[-1] if prior_terminal_times else ""
+current = [
+    record for record in records
+    if lower_bound < record.get("capturedAtUTC", "") <= latest_time
+]
+metrics = [
+    record for record in current
+    if record.get("kind") == "task-metrics" and record.get("relativePath")
+]
+expected = max(
+    (record.get("totalBytes", 0) for record in current if record.get("kind") == "phase"),
+    default=latest.get("expectedBytes", 0),
+)
+wire = sum(max(0, record.get("transferredBytes", 0)) for record in metrics)
+protocols = sorted({record.get("protocolName") for record in metrics if record.get("protocolName")})
+if expected <= 0 or wire < expected or not protocols:
+    raise SystemExit("selected success is missing complete transfer metrics")
+summary = {
+    "schemaVersion": 1,
+    "capturedAtUTC": latest_time,
+    "finalIntegrity": True,
+    "expectedBytes": expected,
+    "wireBytes": wire,
+    "duplicateBytes": wire - expected,
+    "retryCount": latest.get("retryCount", 0),
+    "protocols": protocols,
+    "thermalState": latest.get("thermalState"),
+    "networkSeconds": latest.get("networkSeconds"),
+    "verificationSeconds": latest.get("verificationSeconds"),
+    "installationSeconds": latest.get("installationSeconds"),
+}
+(root.parent / "validated-summary.json").write_text(
+    json.dumps(summary, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
 }
 
 run_xcodebuild() {
@@ -450,13 +526,15 @@ else
 
   if [[ "$lane" == "smoke" ]]; then
     only_test="VocelloiOSUITests/VocelloiOSSmokeUITests/testPhysicalDeviceSmokeJourney"
-  else
+  elif [[ "$lane" == "benchmark" ]]; then
     only_test="VocelloiOSUITests/VocelloiOSBenchmarkUITests/testOrderedConfigurableMatrix"
     export TEST_RUNNER_QVOICE_IOS_BENCH_RUN_ID="$run_id"
     export TEST_RUNNER_QVOICE_IOS_BENCH_MODES="$modes"
     export TEST_RUNNER_QVOICE_IOS_BENCH_LENGTHS="$lengths"
     export TEST_RUNNER_QVOICE_IOS_BENCH_WARM="$warm"
     export TEST_RUNNER_QVOICE_IOS_BENCH_LABEL="${label:-$run_id}"
+  else
+    only_test="VocelloiOSUITests/VocelloiOSModelDownloadUITests/testIsolatedBackgroundDownloadAdoptionAndCleanup"
   fi
 
   note "physical-iPhone XCUITest $lane on $device → $out"
@@ -472,6 +550,11 @@ else
     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
     SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "physical-iPhone XCUITest failed (see $out/xcodebuild.log)"
+
+  if [[ "$lane" == "model-download" ]]; then
+    pull_ios_model_download_diagnostics "$device" "$out/model-download-diagnostics" \
+      || die "could not collect or validate compact model-download diagnostics (see $out/model-download-diagnostics-pull.log)"
+  fi
 
   snapshot_ios_crashes "$out/crashes-after" \
     || die "could not establish the post-run iPhone crash snapshot"

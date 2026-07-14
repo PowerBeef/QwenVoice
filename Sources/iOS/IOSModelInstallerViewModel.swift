@@ -6,13 +6,19 @@ final class IOSModelInstallerViewModel: ObservableObject {
     enum OperationState: Equatable {
         case idle
         case available(estimatedBytes: Int64?)
-        case downloading(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
-        case interrupted(message: String?, downloadedBytes: Int64, totalBytes: Int64?)
-        case resuming(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
-        case restarting(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
-        case paused(progress: Double?, downloadedBytes: Int64, totalBytes: Int64?)
+        case queued
+        case waitingForConnectivity(downloadedBytes: Int64, totalBytes: Int64?)
+        case downloading(
+            progress: Double?, downloadedBytes: Int64, totalBytes: Int64?,
+            bytesPerSecond: Int64?, estimatedSecondsRemaining: Double?, message: String?
+        )
+        case retrying(
+            progress: Double?, downloadedBytes: Int64, totalBytes: Int64?,
+            retryCount: Int, reason: String?
+        )
         case verifying
         case installing
+        case cancelling
         case installed
         case deleting
         case unavailable(String)
@@ -128,14 +134,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
     }
 
     func cancel(_ model: TTSModel) {
-        let bumpedGeneration = (lastAcceptedGeneration[model.id] ?? 0) + 1
-        lastAcceptedGeneration[model.id] = bumpedGeneration
-        // Immediately show available state before background refresh
-        if let descriptor = modelAssetStore?.descriptor(id: model.id)?.model {
-            states[model.id] = .available(estimatedBytes: descriptor.estimatedDownloadBytes)
-        } else {
-            states.removeValue(forKey: model.id)
-        }
+        states[model.id] = .cancelling
         guard let coordinator else { return }
         Task {
             await coordinator.cancel(modelID: model.id)
@@ -192,6 +191,13 @@ final class IOSModelInstallerViewModel: ObservableObject {
         lastAcceptedGeneration[snapshot.modelID] = snapshot.operationGeneration
 
         switch snapshot.phase {
+        case .queued:
+            states[snapshot.modelID] = .queued
+        case .waitingForConnectivity:
+            states[snapshot.modelID] = .waitingForConnectivity(
+                downloadedBytes: snapshot.downloadedBytes,
+                totalBytes: snapshot.totalBytes
+            )
         case .downloading:
             let progress: Double?
             if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
@@ -202,54 +208,31 @@ final class IOSModelInstallerViewModel: ObservableObject {
             states[snapshot.modelID] = .downloading(
                 progress: progress,
                 downloadedBytes: snapshot.downloadedBytes,
-                totalBytes: snapshot.totalBytes
+                totalBytes: snapshot.totalBytes,
+                bytesPerSecond: snapshot.bytesPerSecond,
+                estimatedSecondsRemaining: snapshot.estimatedSecondsRemaining,
+                message: snapshot.message
             )
-        case .interrupted:
-            states[snapshot.modelID] = .interrupted(
-                message: snapshot.message,
-                downloadedBytes: snapshot.downloadedBytes,
-                totalBytes: snapshot.totalBytes
-            )
-        case .resuming:
+        case .retrying:
             let progress: Double?
             if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
                 progress = Double(snapshot.downloadedBytes) / Double(totalBytes)
             } else {
                 progress = nil
             }
-            states[snapshot.modelID] = .resuming(
+            states[snapshot.modelID] = .retrying(
                 progress: progress,
                 downloadedBytes: snapshot.downloadedBytes,
-                totalBytes: snapshot.totalBytes
-            )
-        case .restarting:
-            let progress: Double?
-            if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
-                progress = Double(snapshot.downloadedBytes) / Double(totalBytes)
-            } else {
-                progress = nil
-            }
-            states[snapshot.modelID] = .restarting(
-                progress: progress,
-                downloadedBytes: snapshot.downloadedBytes,
-                totalBytes: snapshot.totalBytes
-            )
-        case .paused:
-            let progress: Double?
-            if let totalBytes = snapshot.totalBytes, totalBytes > 0 {
-                progress = Double(snapshot.downloadedBytes) / Double(totalBytes)
-            } else {
-                progress = nil
-            }
-            states[snapshot.modelID] = .paused(
-                progress: progress,
-                downloadedBytes: snapshot.downloadedBytes,
-                totalBytes: snapshot.totalBytes
+                totalBytes: snapshot.totalBytes,
+                retryCount: snapshot.retryCount,
+                reason: snapshot.message
             )
         case .verifying:
             states[snapshot.modelID] = .verifying
         case .installing:
             states[snapshot.modelID] = .installing
+        case .cancelling:
+            states[snapshot.modelID] = .cancelling
         case .installed:
             states[snapshot.modelID] = .installed
             let modelID = snapshot.modelID

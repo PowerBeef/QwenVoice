@@ -75,13 +75,19 @@ enum AppPaths {
         modelDownloadRootDir.appendingPathComponent("staging", isDirectory: true)
     }
 
+    static var modelDownloadDelegateFilesDir: URL {
+        modelDownloadStagingDir.appendingPathComponent("delegate-files", isDirectory: true)
+    }
+
+    static var modelDownloadDiagnosticsDir: URL {
+        appSupportDir.appendingPathComponent("diagnostics/model-downloads", isDirectory: true)
+    }
+
     static var modelDeliveryStateFile: URL {
         modelDownloadRootDir.appendingPathComponent("ios_model_delivery_state.json", isDirectory: false)
     }
 
-    /// Lightweight in-flight download records for relaunch recovery (Phase 2). Lists downloads
-    /// that were interrupted by an app kill so the coordinator can reattach their background
-    /// URLSession (by identifier) and restore UI state on next launch.
+    /// Retired schema-v1 location, read only by the one-time migration.
     static var iosInFlightDownloadsFile: URL {
         modelDownloadRootDir.appendingPathComponent("ios_inflight_downloads.json", isDirectory: false)
     }

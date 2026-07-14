@@ -583,13 +583,9 @@ struct IOSModelRow: View {
             installedControls
         case .available:
             installButton(title: "Install", accessibilityIdentifier: "iosModelDownload_\(model.id)")
-        case .downloading, .resuming, .restarting:
+        case .queued, .waitingForConnectivity, .downloading, .retrying:
             installButton(title: "Cancel", action: requestCancelOptions, accessibilityIdentifier: "iosModelCancel_\(model.id)")
-        case .interrupted:
-            installButton(title: "Cancel", action: requestDirectCancel, accessibilityIdentifier: "iosModelCancel_\(model.id)")
-        case .paused:
-            installButton(title: "Resume", action: requestInstall, accessibilityIdentifier: "iosModelResume_\(model.id)")
-        case .verifying, .installing, .deleting:
+        case .verifying, .installing, .cancelling, .deleting:
             ProgressView()
         case .unavailable:
             if case .incomplete = status {
@@ -638,40 +634,43 @@ struct IOSModelRow: View {
     @ViewBuilder
     private var statusDetailView: some View {
         switch operationState {
-        case .downloading(let progress, let downloadedBytes, let totalBytes):
+        case .downloading(
+            let progress, let downloadedBytes, let totalBytes,
+            let bytesPerSecond, let estimatedSecondsRemaining, let message
+        ):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: progress ?? 0)
                     .tint(IOSBrandTheme.modeColor(for: model.mode))
                     .accessibilityIdentifier("iosModelProgress_\(model.id)")
-                Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
+                Text(progressText(
+                    downloadedBytes: downloadedBytes,
+                    totalBytes: totalBytes,
+                    bytesPerSecond: bytesPerSecond,
+                    estimatedSecondsRemaining: estimatedSecondsRemaining,
+                    suffix: message
+                ))
                     .font(.system(size: 12))
                     .foregroundStyle(IOSAppTheme.textSecondary)
             }
-        case .interrupted(let message, let downloadedBytes, let totalBytes):
+        case .waitingForConnectivity(let downloadedBytes, let totalBytes):
             VStack(alignment: .leading, spacing: 6) {
-                Text(message ?? "Download interrupted.")
+                Text("Waiting for connectivity")
                     .font(.system(size: 12))
                     .foregroundStyle(IOSAppTheme.textSecondary)
                 Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
                     .font(.system(size: 12))
                     .foregroundStyle(IOSAppTheme.textSecondary)
             }
-        case .resuming(let progress, let downloadedBytes, let totalBytes),
-                .restarting(let progress, let downloadedBytes, let totalBytes):
-            VStack(alignment: .leading, spacing: 6) {
-                ProgressView(value: progress ?? 0)
-                    .tint(IOSBrandTheme.modeColor(for: model.mode))
-                    .accessibilityIdentifier("iosModelProgress_\(model.id)")
-                Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
-                    .font(.system(size: 12))
-                    .foregroundStyle(IOSAppTheme.textSecondary)
-            }
-        case .paused(let progress, let downloadedBytes, let totalBytes):
+        case .retrying(let progress, let downloadedBytes, let totalBytes, let retryCount, let reason):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: progress ?? 0)
                     .tint(IOSBrandTheme.modeColor(for: model.mode))
                     .accessibilityIdentifier("iosModelProgress_\(model.id)")
-                Text(progressText(downloadedBytes: downloadedBytes, totalBytes: totalBytes))
+                Text(progressText(
+                    downloadedBytes: downloadedBytes,
+                    totalBytes: totalBytes,
+                    suffix: "Retry \(retryCount)\(reason.map { ": \($0)" } ?? "") · verified files will be reused"
+                ))
                     .font(.system(size: 12))
                     .foregroundStyle(IOSAppTheme.textSecondary)
             }
@@ -680,7 +679,7 @@ struct IOSModelRow: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
-        case .available, .verifying, .installing, .installed, .deleting, .unavailable, .idle:
+        case .available, .queued, .verifying, .installing, .cancelling, .installed, .deleting, .unavailable, .idle:
             EmptyView()
         }
     }
@@ -716,7 +715,7 @@ struct IOSModelRow: View {
 
     private var showsStatusDetail: Bool {
         switch operationState {
-        case .downloading, .interrupted, .resuming, .restarting, .paused:
+        case .waitingForConnectivity, .downloading, .retrying:
             return true
         case .failed:
             return true
@@ -744,20 +743,20 @@ struct IOSModelRow: View {
             return "Active"
         case .available:
             return nil
+        case .queued:
+            return "Queued…"
+        case .waitingForConnectivity:
+            return "Waiting for network…"
         case .downloading:
             return "Downloading…"
-        case .interrupted:
-            return "Interrupted"
-        case .resuming:
-            return "Resuming…"
-        case .restarting:
-            return "Restarting…"
-        case .paused:
-            return "Paused"
+        case .retrying:
+            return "Retrying…"
         case .verifying:
             return "Verifying…"
         case .installing:
             return "Installing…"
+        case .cancelling:
+            return "Cancelling…"
         case .deleting:
             return "Removing…"
         case .unavailable:
@@ -767,10 +766,27 @@ struct IOSModelRow: View {
         }
     }
 
-    private func progressText(downloadedBytes: Int64, totalBytes: Int64?) -> String {
+    private func progressText(
+        downloadedBytes: Int64,
+        totalBytes: Int64?,
+        bytesPerSecond: Int64? = nil,
+        estimatedSecondsRemaining: Double? = nil,
+        suffix: String? = nil
+    ) -> String {
         let current = IOSSettingsFormatters.fileSize(downloadedBytes)
-        guard let totalBytes else { return "\(current) downloaded" }
-        let total = IOSSettingsFormatters.fileSize(totalBytes)
-        return "\(current) / \(total)"
+        var parts: [String]
+        if let totalBytes {
+            parts = ["\(current) / \(IOSSettingsFormatters.fileSize(totalBytes))"]
+        } else {
+            parts = ["\(current) downloaded"]
+        }
+        if let bytesPerSecond, bytesPerSecond > 0 {
+            parts.append("\(IOSSettingsFormatters.fileSize(bytesPerSecond))/s")
+        }
+        if let estimatedSecondsRemaining, estimatedSecondsRemaining.isFinite {
+            parts.append("about \(max(1, Int(estimatedSecondsRemaining.rounded())))s remaining")
+        }
+        if let suffix, !suffix.isEmpty { parts.append(suffix) }
+        return parts.joined(separator: " · ")
     }
 }

@@ -1,14 +1,17 @@
 import CryptoKit
-import Foundation
-import QwenVoiceCore
+@preconcurrency import Foundation
 
 /// Downloads a HuggingFace model repository using native URLSession.
-public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
 
     public enum DownloadPhase: String, Equatable, Sendable {
+        case queued
+        case waitingForConnectivity
         case downloading
+        case retrying
         case verifying
         case installing
+        case cancelling
     }
 
     public struct RepositoryProgress: Equatable, Sendable {
@@ -18,10 +21,25 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         public let totalFiles: Int
         public let bytesPerSecond: Int64?
         public let isStalled: Bool
+        public let estimatedSecondsRemaining: Double?
+        public let retryCount: Int
+        public let statusMessage: String?
         public let phase: DownloadPhase
     }
 
-    /// Tunable download-engine parameters. Defaults match the macOS/CLI profile: 4 parallel
+    public struct TransferMetrics: Codable, Equatable, Sendable {
+        public let relativePath: String?
+        public let protocolName: String?
+        public let redirectCount: Int
+        public let reusedConnection: Bool
+        public let cellular: Bool
+        public let constrained: Bool
+        public let expensive: Bool
+        public let transferredBytes: Int64
+        public let durationSeconds: Double
+    }
+
+    /// Tunable download-engine parameters. Defaults match the macOS/CLI profile: 6 parallel
     /// connections per host and `chunkLargeFiles = false`. iOS uses a memory-safer profile:
     /// fewer parallel files and `chunkLargeFiles = false` (background URLSession throttles many
     /// small range requests, and chunks multiply in-flight buffers). The foreground URLSession's
@@ -37,7 +55,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
 
     public enum DownloadError: LocalizedError {
         case cancelled
-        case httpError(statusCode: Int, path: String)
+        case httpError(statusCode: Int, path: String, retryAfterSeconds: Double? = nil)
         case fileDownloadFailed(path: String, underlying: Error)
         case integrityCheckFailed(path: String, reason: String)
         case rangeUnsupported(path: String)
@@ -50,7 +68,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             switch self {
             case .cancelled:
                 return "Download cancelled"
-            case .httpError(let code, let path):
+            case .httpError(let code, let path, _):
                 return "HTTP \(code) downloading \(path)"
             case .fileDownloadFailed(let path, let underlying):
                 return "Failed to download \(path): \(underlying.localizedDescription)"
@@ -114,25 +132,60 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     struct DownloadedTemporaryFile: Sendable {
         let url: URL
         let statusCode: Int?
+        let retryAfterSeconds: Double?
+        let contentRange: String?
     }
 
-    final class RepositoryProgressHandlerBox: @unchecked Sendable {
-        let handler: (RepositoryProgress) -> Void
+    final class RepositoryProgressHandlerBox: Sendable {
+        let handler: @Sendable (RepositoryProgress) -> Void
 
-        init(_ handler: @escaping (RepositoryProgress) -> Void) {
+        init(_ handler: @escaping @Sendable (RepositoryProgress) -> Void) {
             self.handler = handler
         }
     }
 
+    final class TransferMetricsHandlerBox: Sendable {
+        let handler: @Sendable (TransferMetrics) -> Void
+
+        init(_ handler: @escaping @Sendable (TransferMetrics) -> Void) {
+            self.handler = handler
+        }
+    }
+
+    final class VerifiedArtifactHandlerBox: Sendable {
+        let handler: @Sendable (VerifiedArtifactReceipt) async -> Void
+
+        init(_ handler: @escaping @Sendable (VerifiedArtifactReceipt) async -> Void) {
+            self.handler = handler
+        }
+    }
+
+    /// Foundation has not annotated FileManager as Sendable. Confine that compatibility gap to
+    /// one immutable adapter instead of making the downloader broadly unchecked.
+    final class FileManagerBox: @unchecked Sendable {
+        let value: FileManager
+
+        init(_ value: FileManager) {
+            self.value = value
+        }
+    }
+
     final class TaskCancellationBox: @unchecked Sendable {
-        private let cancellation: () -> Void
+        private let task: URLSessionDownloadTask
+        private let resumeDataURL: URL?
 
         init(task: URLSessionDownloadTask, resumeDataURL: URL?) {
-            self.cancellation = {
-                task.cancel { resumeData in
+            self.task = task
+            self.resumeDataURL = resumeDataURL
+        }
+
+        func cancelAndWait() async {
+            await withCheckedContinuation { continuation in
+                task.cancel { [resumeDataURL] resumeData in
                     guard let resumeDataURL,
                           let resumeData,
                           !resumeData.isEmpty else {
+                        continuation.resume()
                         return
                     }
                     try? FileManager.default.createDirectory(
@@ -140,12 +193,9 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                         withIntermediateDirectories: true
                     )
                     try? resumeData.write(to: resumeDataURL, options: .atomic)
+                    continuation.resume()
                 }
             }
-        }
-
-        func cancel() {
-            cancellation()
         }
     }
 
@@ -172,8 +222,22 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         private var lastSpeedSampleTime: TimeInterval?
         private var lastSpeedSampleBytes: Int64 = 0
         private var lastMeasuredBytesPerSecond: Int64?
+        private var lastProgressPublicationTime: TimeInterval?
+        private var lastPublishedBytes: Int64 = -1
+        private var lastPublishedPhase: DownloadPhase?
         private var phase: DownloadPhase = .downloading
         private var heartbeatTask: Task<Void, Never>?
+        private var retryCount = 0
+        private var statusMessage: String?
+        // A download file callback precedes task metrics and the terminal task callback.
+        // Keep the durable file staged until didCompleteWithError so callers cannot publish
+        // a success summary before URLSession has delivered its final metrics.
+        private var stagedSuccessfulDownloads: [Int: (ModelDownloadTaskIdentity?, DownloadedTemporaryFile)] = [:]
+        private var unclaimedCompletionsByRelativePath: [String: DownloadedTemporaryFile] = [:]
+        private var expectedTaskIdentityByURL: [URL: ModelDownloadTaskIdentity] = [:]
+        private var adoptedTasksByRelativePath: [String: URLSessionDownloadTask] = [:]
+        private var backgroundCompletionGate = ModelDownloadBackgroundCompletionGate()
+        private var verifiedReceiptsByPath: [String: VerifiedArtifactReceipt] = [:]
 
         /// Bytes counted so far: completed files (at their exact size) plus the live sum of
         /// in-flight task bytes (single-stream or chunk). Recomputed so retries and chunks
@@ -186,7 +250,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             self.repositoryProgressHandler = repositoryProgressHandler
         }
 
-        func resetForNewRepositoryDownload() {
+        func resetForNewRepositoryDownload(preserveUnclaimedCompletions: Bool) {
             isCancelled = false
             activeCancellations.removeAll()
             continuations.removeAll()
@@ -201,7 +265,26 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             lastSpeedSampleTime = nil
             lastSpeedSampleBytes = 0
             lastMeasuredBytesPerSecond = nil
+            lastProgressPublicationTime = nil
+            lastPublishedBytes = -1
+            lastPublishedPhase = nil
             phase = .downloading
+            retryCount = 0
+            statusMessage = nil
+            if !preserveUnclaimedCompletions {
+                for (_, staged) in stagedSuccessfulDownloads.values {
+                    try? FileManager.default.removeItem(at: staged.url)
+                }
+                stagedSuccessfulDownloads.removeAll()
+                for completion in unclaimedCompletionsByRelativePath.values {
+                    try? FileManager.default.removeItem(at: completion.url)
+                }
+                unclaimedCompletionsByRelativePath.removeAll()
+            }
+            expectedTaskIdentityByURL.removeAll()
+            adoptedTasksByRelativePath.removeAll()
+            backgroundCompletionGate.resetForRequest()
+            verifiedReceiptsByPath.removeAll()
             heartbeatTask?.cancel()
             heartbeatTask = nil
         }
@@ -230,20 +313,65 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             resumeDataURL: URL?,
             fileIndex: Int,
             existingBytes: Int64 = 0
-        ) {
+        ) -> Bool {
             let taskID = task.taskIdentifier
+            if isCancelled {
+                task.cancel()
+                continuation.resume(throwing: DownloadError.cancelled)
+                return false
+            }
+            if let identity = ModelDownloadTaskIdentity.decode(taskDescription: task.taskDescription),
+               let completed = unclaimedCompletionsByRelativePath.removeValue(forKey: identity.relativePath) {
+                task.cancel()
+                continuation.resume(returning: completed)
+                return false
+            }
             activeCancellations[taskID] = TaskCancellationBox(task: task, resumeDataURL: resumeDataURL)
             continuations[taskID] = continuation
             destinations[taskID] = destination
             taskFileIndex[taskID] = fileIndex
             taskBytes[taskID] = existingBytes
+            if existingBytes > 0 {
+                let now = ProcessInfo.processInfo.systemUptime
+                applySpeedMeasurement(
+                    now: now,
+                    totalDownloaded: repositoryDownloadedBytes,
+                    advancedDelta: existingBytes
+                )
+                emitRepositoryProgress(isStalled: false)
+            }
+            return true
         }
 
-        func requestCancellation() {
+        func requestCancellation() async {
+            guard !isCancelled else { return }
             isCancelled = true
-            for cancellation in activeCancellations.values {
-                cancellation.cancel()
+            phase = .cancelling
+            statusMessage = nil
+            emitRepositoryProgress(isStalled: false, force: true)
+            let cancellations = Array(activeCancellations.values)
+            await withTaskGroup(of: Void.self) { group in
+                for cancellation in cancellations {
+                    group.addTask {
+                        await cancellation.cancelAndWait()
+                    }
+                }
             }
+            let pendingContinuations = Array(continuations.values)
+            continuations.removeAll()
+            activeCancellations.removeAll()
+            destinations.removeAll()
+            for continuation in pendingContinuations {
+                continuation.resume(throwing: DownloadError.cancelled)
+            }
+            for (_, staged) in stagedSuccessfulDownloads.values {
+                try? FileManager.default.removeItem(at: staged.url)
+            }
+            stagedSuccessfulDownloads.removeAll()
+            for completion in unclaimedCompletionsByRelativePath.values {
+                try? FileManager.default.removeItem(at: completion.url)
+            }
+            unclaimedCompletionsByRelativePath.removeAll()
         }
 
         func cancellationRequested() -> Bool {
@@ -252,7 +380,65 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
 
         func setPhase(_ phase: DownloadPhase) {
             self.phase = phase
-            emitRepositoryProgress(isStalled: false)
+            if phase != .retrying { statusMessage = nil }
+            emitRepositoryProgress(isStalled: false, force: true)
+        }
+
+        func setRetry(number: Int, reason: String) {
+            retryCount = number
+            statusMessage = reason
+            phase = .retrying
+            emitRepositoryProgress(isStalled: false, force: true)
+        }
+
+        func setWaitingForConnectivity(_ waiting: Bool) {
+            if waiting {
+                phase = .waitingForConnectivity
+                statusMessage = "Waiting for connectivity"
+            } else if phase == .waitingForConnectivity {
+                phase = .downloading
+                statusMessage = nil
+            }
+            emitRepositoryProgress(isStalled: false, force: true)
+        }
+
+        func configureExpectedTasks(_ values: [(URL, ModelDownloadTaskIdentity)]) {
+            expectedTaskIdentityByURL = Dictionary(uniqueKeysWithValues: values)
+            adoptedTasksByRelativePath.removeAll()
+        }
+
+        func expectedIdentity(for url: URL) -> ModelDownloadTaskIdentity? {
+            expectedTaskIdentityByURL[url]
+        }
+
+        func adopt(task: URLSessionDownloadTask, identity: ModelDownloadTaskIdentity) -> Bool {
+            guard !isCancelled,
+                  adoptedTasksByRelativePath[identity.relativePath] == nil else {
+                return false
+            }
+            adoptedTasksByRelativePath[identity.relativePath] = task
+            return true
+        }
+
+        func takeAdoptedTask(for url: URL) -> URLSessionDownloadTask? {
+            guard let identity = expectedTaskIdentityByURL[url] else { return nil }
+            return adoptedTasksByRelativePath.removeValue(forKey: identity.relativePath)
+        }
+
+        func markBackgroundEventsFinished() -> Bool {
+            backgroundCompletionGate.markEventsFinished()
+        }
+
+        func markPostprocessingFinished() -> Bool {
+            backgroundCompletionGate.markPostprocessingFinished()
+        }
+
+        func recordVerifiedReceipt(_ receipt: VerifiedArtifactReceipt) {
+            verifiedReceiptsByPath[receipt.relativePath] = receipt
+        }
+
+        func verifiedReceipts() -> [String: VerifiedArtifactReceipt] {
+            verifiedReceiptsByPath
         }
 
         /// Per-task progress from the URLSession delegate. Monotonic per task, so a
@@ -297,7 +483,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             repositoryCompletedFiles += 1
             let now = ProcessInfo.processInfo.systemUptime
             applySpeedMeasurement(now: now, totalDownloaded: repositoryDownloadedBytes, advancedDelta: expectedSize - liveForFile)
-            emitRepositoryProgress(isStalled: false)
+            emitRepositoryProgress(isStalled: false, force: true)
         }
 
         func finishRepositoryDownload() {
@@ -305,17 +491,52 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             heartbeatTask = nil
         }
 
-        func resumeSuccess(taskID: Int, temporaryFile: DownloadedTemporaryFile) {
+        func stageSuccess(
+            taskID: Int,
+            identity: ModelDownloadTaskIdentity?,
+            temporaryFile: DownloadedTemporaryFile
+        ) {
+            if let (_, superseded) = stagedSuccessfulDownloads.updateValue(
+                (identity, temporaryFile),
+                forKey: taskID
+            ) {
+                try? FileManager.default.removeItem(at: superseded.url)
+            }
+        }
+
+        func completeStagedSuccess(taskID: Int) {
+            guard let (identity, temporaryFile) = stagedSuccessfulDownloads.removeValue(forKey: taskID) else {
+                return
+            }
             let continuation = continuations.removeValue(forKey: taskID)
             destinations.removeValue(forKey: taskID)
             activeCancellations.removeValue(forKey: taskID)
             // NOTE: taskFileIndex/taskBytes are intentionally left in place — the file's
             // live bytes stay counted until reportFileCompleted folds them in (success) or
             // resetFileProgress clears them (retry).
-            continuation?.resume(returning: temporaryFile)
+            if isCancelled {
+                try? FileManager.default.removeItem(at: temporaryFile.url)
+                continuation?.resume(throwing: DownloadError.cancelled)
+            } else if let continuation {
+                continuation.resume(returning: temporaryFile)
+            } else if let identity {
+                // Background callbacks may arrive before launch reconciliation has registered
+                // the adopted task. Keep the durable temporary file until adoption completes.
+                if let superseded = unclaimedCompletionsByRelativePath.updateValue(
+                    temporaryFile,
+                    forKey: identity.relativePath
+                ) {
+                    try? FileManager.default.removeItem(at: superseded.url)
+                }
+            } else {
+                try? FileManager.default.removeItem(at: temporaryFile.url)
+            }
         }
 
         func resumeFailure(taskID: Int, error: Error) {
+            if let (_, staged) = stagedSuccessfulDownloads.removeValue(forKey: taskID) {
+                try? FileManager.default.removeItem(at: staged.url)
+            }
             let continuation = continuations.removeValue(forKey: taskID)
             destinations.removeValue(forKey: taskID)
             activeCancellations.removeValue(forKey: taskID)
@@ -329,10 +550,21 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         private func applySpeedMeasurement(now: TimeInterval, totalDownloaded: Int64, advancedDelta: Int64) {
             guard advancedDelta > 0 else { return }
             if let previousSpeedSampleTime = lastSpeedSampleTime {
-                let elapsed = max(now - previousSpeedSampleTime, 0.001)
+                let elapsed = now - previousSpeedSampleTime
+                guard elapsed >= 0.5 else {
+                    lastProgressAdvanceTime = now
+                    return
+                }
                 let deltaBytes = totalDownloaded - lastSpeedSampleBytes
                 if deltaBytes > 0 {
-                    lastMeasuredBytesPerSecond = Int64(Double(deltaBytes) / elapsed)
+                    let instantaneous = Double(deltaBytes) / elapsed
+                    if let previous = lastMeasuredBytesPerSecond {
+                        lastMeasuredBytesPerSecond = Int64(
+                            (Double(previous) * 0.75) + (instantaneous * 0.25)
+                        )
+                    } else {
+                        lastMeasuredBytesPerSecond = Int64(instantaneous)
+                    }
                     lastSpeedSampleTime = now
                     lastSpeedSampleBytes = totalDownloaded
                 }
@@ -359,24 +591,48 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             guard !activeCancellations.isEmpty else { return }
 
             let now = ProcessInfo.processInfo.systemUptime
-            guard let lastProgressAdvanceTime, now - lastProgressAdvanceTime >= 1.5 else {
+            guard phase == .downloading,
+                  let lastProgressAdvanceTime,
+                  now - lastProgressAdvanceTime >= 20 else {
                 return
             }
-            emitRepositoryProgress(isStalled: true)
+            emitRepositoryProgress(isStalled: true, force: true)
         }
 
-        private func emitRepositoryProgress(isStalled: Bool) {
+        private func emitRepositoryProgress(isStalled: Bool, force: Bool = false) {
+            let downloaded = min(repositoryDownloadedBytes, repositoryTotalBytes)
+            let now = ProcessInfo.processInfo.systemUptime
+            let phaseChanged = lastPublishedPhase != phase
+            let reachedCompletion = repositoryTotalBytes > 0
+                && downloaded == repositoryTotalBytes
+                && lastPublishedBytes != downloaded
+            if !force, !isStalled, !phaseChanged, !reachedCompletion,
+               let lastProgressPublicationTime,
+               now - lastProgressPublicationTime < 0.25 {
+                return
+            }
+            let remaining = max(repositoryTotalBytes - downloaded, 0)
+            let eta = lastMeasuredBytesPerSecond.flatMap { speed -> Double? in
+                guard speed > 0, phase == .downloading else { return nil }
+                return Double(remaining) / Double(speed)
+            }
             repositoryProgressHandler?.handler(
                 RepositoryProgress(
-                    downloadedBytes: min(repositoryDownloadedBytes, repositoryTotalBytes),
+                    downloadedBytes: downloaded,
                     totalBytes: repositoryTotalBytes,
                     completedFiles: min(repositoryCompletedFiles, repositoryTotalFiles),
                     totalFiles: repositoryTotalFiles,
                     bytesPerSecond: lastMeasuredBytesPerSecond,
                     isStalled: isStalled,
+                    estimatedSecondsRemaining: eta,
+                    retryCount: retryCount,
+                    statusMessage: statusMessage,
                     phase: phase
                 )
             )
+            lastProgressPublicationTime = now
+            lastPublishedBytes = downloaded
+            lastPublishedPhase = phase
         }
     }
 
@@ -434,16 +690,25 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         }
     }
 
-    private var session: URLSession!
+    // Foundation's delegate protocols are Sendable, while URLSession is initialized after
+    // self so it can retain this delegate. The session reference is assigned once during init;
+    // all mutable transfer state remains isolated by DownloadStateRegistry.
+    private nonisolated(unsafe) var session: URLSession!
     private let state: DownloadStateRegistry
     private let apiBaseURL: URL
     private let resolveBaseURL: URL
-    private let fileManager: FileManager
+    private let fileManagerBox: FileManagerBox
+    private var fileManager: FileManager { fileManagerBox.value }
     private let engineConfiguration: Configuration
+    private let isBackgroundSession: Bool
+    private let durableTemporaryDirectory: URL
+    private let verificationProcessGeneration = UUID().uuidString
     /// Invoked from `urlSessionDidFinishEvents(forBackgroundURLSession:)` (background sessions
     /// only) with the session's identifier so iOS can flush its app-delegate completion handler.
     /// macOS/CLI pass `nil` (foreground sessions never trigger this callback).
     private let backgroundSessionCompletionHandler: (@Sendable (String) -> Void)?
+    private let transferMetricsHandler: TransferMetricsHandlerBox?
+    private let verifiedArtifactHandler: VerifiedArtifactHandlerBox?
 
     static func validatedRelativeRepoPath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -594,24 +859,31 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     }
 
     public init(
-        progressHandler: ((RepositoryProgress) -> Void)?,
+        progressHandler: (@Sendable (RepositoryProgress) -> Void)?,
         sessionConfiguration: URLSessionConfiguration = .default,
         engineConfiguration: Configuration = Configuration(),
         apiBaseURL: URL = URL(string: "https://huggingface.co/api/models")!,
         resolveBaseURL: URL = URL(string: "https://huggingface.co")!,
         fileManager: FileManager = .default,
+        durableTemporaryDirectory: URL? = nil,
+        transferMetricsHandler: (@Sendable (TransferMetrics) -> Void)? = nil,
+        verifiedArtifactHandler: (@Sendable (VerifiedArtifactReceipt) async -> Void)? = nil,
         backgroundSessionCompletionHandler: (@Sendable (String) -> Void)? = nil
     ) {
         let progressBox = progressHandler.map(RepositoryProgressHandlerBox.init)
         state = DownloadStateRegistry(repositoryProgressHandler: progressBox)
         self.apiBaseURL = apiBaseURL
         self.resolveBaseURL = resolveBaseURL
-        self.fileManager = fileManager
+        self.fileManagerBox = FileManagerBox(fileManager)
         self.engineConfiguration = engineConfiguration
         self.backgroundSessionCompletionHandler = backgroundSessionCompletionHandler
+        self.transferMetricsHandler = transferMetricsHandler.map(TransferMetricsHandlerBox.init)
+        self.verifiedArtifactHandler = verifiedArtifactHandler.map(VerifiedArtifactHandlerBox.init)
+        self.isBackgroundSession = sessionConfiguration.identifier != nil
+        self.durableTemporaryDirectory = durableTemporaryDirectory ?? fileManager.temporaryDirectory
         super.init()
 
-        let isBackground = sessionConfiguration.identifier != nil
+        let isBackground = isBackgroundSession
         let config: URLSessionConfiguration
         if isBackground {
             // Background configs are effectively singletons-by-identifier; copying/mutating one
@@ -634,15 +906,20 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     /// Resolve the file list from the live HuggingFace API, then download + verify + install.
     /// macOS + CLI path.
     public func downloadRepo(repo: String, revision: String = "main", to targetDir: URL) async throws {
-        await state.resetForNewRepositoryDownload()
-        let files = try await listFiles(repo: repo, revision: revision)
-        try await runDownload(
-            files: files,
-            repo: repo,
-            revision: revision,
-            targetDir: targetDir,
-            persistStateManifest: true
-        )
+        await state.resetForNewRepositoryDownload(preserveUnclaimedCompletions: isBackgroundSession)
+        do {
+            let files = try await listFiles(repo: repo, revision: revision)
+            try await runDownload(
+                files: files,
+                repo: repo,
+                revision: revision,
+                targetDir: targetDir,
+                persistStateManifest: true
+            )
+        } catch {
+            if !isBackgroundSession { session.invalidateAndCancel() }
+            throw error
+        }
     }
 
     /// Download + verify + install a pre-resolved file list (no API call). iOS path — the caller
@@ -653,15 +930,19 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         _ files: [RepoFile],
         repo: String,
         revision: String,
-        to targetDir: URL
+        to targetDir: URL,
+        requestIdentity: ModelDownloadRequestIdentity? = nil,
+        stagingRoot explicitStagingRoot: URL? = nil
     ) async throws {
-        await state.resetForNewRepositoryDownload()
+        await state.resetForNewRepositoryDownload(preserveUnclaimedCompletions: isBackgroundSession)
         try await runDownload(
             files: files,
             repo: repo,
             revision: revision,
             targetDir: targetDir,
-            persistStateManifest: false
+            persistStateManifest: false,
+            requestIdentity: requestIdentity,
+            explicitStagingRoot: explicitStagingRoot
         )
     }
 
@@ -672,12 +953,14 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         repo: String,
         revision: String,
         targetDir: URL,
-        persistStateManifest: Bool
+        persistStateManifest: Bool,
+        requestIdentity: ModelDownloadRequestIdentity? = nil,
+        explicitStagingRoot: URL? = nil
     ) async throws {
         let totalBytes = files.reduce(Int64(0)) { $0 + $1.size }
         await state.beginRepositoryDownload(totalBytes: totalBytes, totalFiles: files.count)
 
-        let stagingRoot = Self.stagingRoot(forTargetDirectory: targetDir)
+        let stagingRoot = explicitStagingRoot ?? Self.stagingRoot(forTargetDirectory: targetDir)
         let filesRoot = stagingRoot.appendingPathComponent("files", isDirectory: true)
         let partialRoot = stagingRoot.appendingPathComponent("partials", isDirectory: true)
         let resumeRoot = stagingRoot.appendingPathComponent("resume-data", isDirectory: true)
@@ -688,6 +971,35 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         Self.markExcludedFromBackup(filesRoot)
         Self.markExcludedFromBackup(partialRoot)
         Self.markExcludedFromBackup(resumeRoot)
+        try fileManager.createDirectory(at: durableTemporaryDirectory, withIntermediateDirectories: true)
+        Self.markExcludedFromBackup(durableTemporaryDirectory)
+
+        if let requestIdentity {
+            let expectedTasks = try files.map { file -> (URL, ModelDownloadTaskIdentity) in
+                let relativePath = try Self.validatedRelativeRepoPath(file.path)
+                let url = try file.absoluteURL ?? Self.fileResolveURL(
+                    resolveBaseURL: resolveBaseURL,
+                    repo: repo,
+                    revision: revision,
+                    relativePath: relativePath
+                )
+                return (
+                    url,
+                    ModelDownloadTaskIdentity(
+                        logicalRequestID: requestIdentity.logicalRequestID,
+                        modelID: requestIdentity.modelID,
+                        artifactVersion: requestIdentity.artifactVersion,
+                        relativePath: relativePath,
+                        expectedSize: file.size,
+                        expectedSHA256: file.sha256
+                    )
+                )
+            }
+            await state.configureExpectedTasks(expectedTasks)
+            if isBackgroundSession {
+                await reconcileBackgroundTasks(expected: Dictionary(uniqueKeysWithValues: expectedTasks.map { ($0.1.relativePath, $0.1) }))
+            }
+        }
         // The download-state manifest is the macOS resume-after-crash record; iOS keeps its own
         // lightweight in-flight list, so the catalog path skips this.
         if persistStateManifest {
@@ -705,12 +1017,17 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                 files,
                 repo: repo,
                 revision: revision,
+                artifactVersion: requestIdentity?.artifactVersion ?? revision,
                 filesRoot: filesRoot,
                 partialRoot: partialRoot,
                 resumeRoot: resumeRoot
             )
             await state.setPhase(.verifying)
-            try verifyDownloadedFiles(files, in: filesRoot)
+            try await verifyDownloadedFilesUsingReceipts(
+                files,
+                artifactVersion: requestIdentity?.artifactVersion ?? revision,
+                in: filesRoot
+            )
             try persistInstalledIntegrityManifest(
                 repo: repo,
                 revision: revision,
@@ -723,11 +1040,15 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             Self.markExcludedFromBackup(targetDir)
             try? fileManager.removeItem(at: stagingRoot)
             await state.finishRepositoryDownload()
+            await completeBackgroundEventsAfterPostprocessing()
+            if !isBackgroundSession { session.finishTasksAndInvalidate() }
         } catch {
             // A failure (or cancellation) mid-download: tear down any remaining
             // in-flight URLSession tasks so the caller doesn't wait for them.
             await state.requestCancellation()
             await state.finishRepositoryDownload()
+            await completeBackgroundEventsAfterPostprocessing()
+            if !isBackgroundSession { session.invalidateAndCancel() }
             throw error
         }
     }
@@ -736,6 +1057,67 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     /// don't race against a removed directory.
     public func cancel() async {
         await state.requestCancellation()
+    }
+
+    /// Remove orphan or stale tasks when no durable request is eligible for adoption.
+    public func cancelAllSessionTasks() async {
+        let tasks = await withCheckedContinuation { continuation in
+            session.getAllTasks { continuation.resume(returning: $0) }
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for case let task as URLSessionDownloadTask in tasks {
+                group.addTask {
+                    await withCheckedContinuation { continuation in
+                        task.cancel { _ in continuation.resume() }
+                    }
+                }
+            }
+        }
+        await state.requestCancellation()
+    }
+
+    private func completeBackgroundEventsAfterPostprocessing() async {
+        guard isBackgroundSession,
+              let identifier = session.configuration.identifier,
+              await state.markPostprocessingFinished() else { return }
+        backgroundSessionCompletionHandler?(identifier)
+    }
+
+    private func reconcileBackgroundTasks(expected: [String: ModelDownloadTaskIdentity]) async {
+        let tasks = await withCheckedContinuation { continuation in
+            session.getAllTasks { continuation.resume(returning: $0) }
+        }
+        var existing: [ModelDownloadExistingTask] = []
+        var validIdentityByTaskID: [Int: ModelDownloadTaskIdentity] = [:]
+        for task in tasks {
+            var validIdentity: ModelDownloadTaskIdentity?
+            if let identity = ModelDownloadTaskIdentity.decode(taskDescription: task.taskDescription),
+               let expectedIdentity = expected[identity.relativePath],
+               identity == expectedIdentity,
+               let taskURL = task.originalRequest?.url,
+               await state.expectedIdentity(for: taskURL) == expectedIdentity {
+                validIdentity = identity
+                validIdentityByTaskID[task.taskIdentifier] = identity
+            }
+            existing.append(ModelDownloadExistingTask(
+                taskID: task.taskIdentifier,
+                identity: validIdentity
+            ))
+        }
+        let plan = ModelDownloadTaskReconciler.plan(
+            expected: Array(expected.values),
+            existing: existing
+        )
+        let cancelled = Set(plan.cancelledTaskIDs)
+        for task in tasks {
+            guard !cancelled.contains(task.taskIdentifier),
+                  let downloadTask = task as? URLSessionDownloadTask,
+                  let identity = validIdentityByTaskID[task.taskIdentifier],
+                  await state.adopt(task: downloadTask, identity: identity) else {
+                task.cancel()
+                continue
+            }
+        }
     }
 
     // MARK: - Private: List Files
@@ -783,6 +1165,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         _ files: [RepoFile],
         repo: String,
         revision: String,
+        artifactVersion: String,
         filesRoot: URL,
         partialRoot: URL,
         resumeRoot: URL
@@ -807,6 +1190,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                         fileIndex: index,
                         repo: repo,
                         revision: revision,
+                        artifactVersion: artifactVersion,
                         filesRoot: filesRoot,
                         partialRoot: partialRoot,
                         resumeRoot: resumeRoot
@@ -826,6 +1210,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                         fileIndex: index,
                         repo: repo,
                         revision: revision,
+                        artifactVersion: artifactVersion,
                         filesRoot: filesRoot,
                         partialRoot: partialRoot,
                         resumeRoot: resumeRoot
@@ -842,6 +1227,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         fileIndex: Int,
         repo: String,
         revision: String,
+        artifactVersion: String,
         filesRoot: URL,
         partialRoot: URL,
         resumeRoot: URL
@@ -858,6 +1244,13 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         try fileManager.createDirectory(at: partialURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         if fileIsValid(at: destURL, expectedSize: file.size, sha256: file.sha256) {
+            try await recordVerifiedReceipt(
+                relativePath: relativePath,
+                artifactVersion: artifactVersion,
+                expectedSize: file.size,
+                expectedSHA256: file.sha256,
+                fileURL: destURL
+            )
             await state.reportFileCompleted(fileIndex: fileIndex, expectedSize: file.size)
             return
         }
@@ -883,6 +1276,14 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             fileIndex: fileIndex
         )
 
+        try await recordVerifiedReceipt(
+            relativePath: relativePath,
+            artifactVersion: artifactVersion,
+            expectedSize: file.size,
+            expectedSHA256: file.sha256,
+            fileURL: destURL
+        )
+
         await state.reportFileCompleted(fileIndex: fileIndex, expectedSize: file.size)
     }
 
@@ -894,6 +1295,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         fileIndex: Int,
         repo: String,
         revision: String,
+        artifactVersion: String,
         filesRoot: URL,
         partialRoot: URL,
         resumeRoot: URL
@@ -904,6 +1306,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                 fileIndex: fileIndex,
                 repo: repo,
                 revision: revision,
+                artifactVersion: artifactVersion,
                 filesRoot: filesRoot,
                 partialRoot: partialRoot,
                 resumeRoot: resumeRoot
@@ -931,7 +1334,8 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         // Retry transient failures (network drops, HTTP 5xx/429, integrity mismatches)
         // so a single hiccup no longer fails the whole repo download. The partial
         // already on disk lets each attempt resume via a Range request.
-        var attempt = 0
+        var retryNumber = 0
+        var integrityRetryUsed = false
         var avoidChunking = false
         while true {
             do {
@@ -950,13 +1354,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                 )
                 return
             } catch {
-                // Cancellation and non-retryable HTTP 4xx client errors fail fast.
                 if let dlError = error as? DownloadError {
-                    if case .cancelled = dlError { throw error }
-                    if case .httpError(let code, _) = dlError,
-                       (400..<500).contains(code), code != 429 {
-                        throw error
-                    }
                     // The server ignored a byte-range request — fall back to single-stream
                     // for the remaining attempts instead of thrashing on chunks. The chunked
                     // attempt may have left a sparse/holey partial, so clear it too.
@@ -975,24 +1373,44 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                     }
                 }
 
-                attempt += 1
-                guard attempt <= engineConfiguration.maxDownloadRetries else { throw error }
-
-                // A partial that failed integrity can't be resumed into a correct file;
-                // clear it (and any resume blob) so the next attempt downloads fresh.
-                if let dlError = error as? DownloadError, case .integrityCheckFailed = dlError {
+                retryNumber += 1
+                let disposition = ModelDownloadRetryPolicy.disposition(
+                    error: error,
+                    retryNumber: retryNumber,
+                    integrityRetryAlreadyUsed: integrityRetryUsed
+                )
+                let delay: Double
+                switch disposition {
+                case .cancelled, .fail:
+                    throw error
+                case .retry(let afterSeconds):
+                    delay = afterSeconds
+                case .retryClean(let afterSeconds):
+                    delay = afterSeconds
                     try? fileManager.removeItem(at: partialURL)
                     try? fileManager.removeItem(at: resumeDataURL)
+                    if let dlError = error as? DownloadError,
+                       case .integrityCheckFailed = dlError {
+                        integrityRetryUsed = true
+                    }
                 }
 
-                let backoff = Self.retryBackoffSeconds(for: attempt)
-                try? await Task.sleep(for: .seconds(backoff))
-                if Task.isCancelled {
+                guard retryNumber <= engineConfiguration.maxDownloadRetries else { throw error }
+                guard !Task.isCancelled,
+                      !(await state.cancellationRequested()) else {
                     throw DownloadError.cancelled
                 }
-                if await state.cancellationRequested() {
+                await state.setRetry(number: retryNumber, reason: retryReason(for: error))
+                do {
+                    try await Task.sleep(for: .seconds(delay))
+                } catch {
                     throw DownloadError.cancelled
                 }
+                guard !Task.isCancelled,
+                      !(await state.cancellationRequested()) else {
+                    throw DownloadError.cancelled
+                }
+                await state.setPhase(.downloading)
             }
         }
     }
@@ -1039,6 +1457,13 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
             throw DownloadError.cancelled
         }
 
+        if completedBytes > 0, downloaded.statusCode == 206,
+           !Self.contentRange(downloaded.contentRange, startsAt: completedBytes) {
+            try? fileManager.removeItem(at: downloaded.url)
+            try? fileManager.removeItem(at: partialURL)
+            throw DownloadError.rangeUnsupported(path: url.path)
+        }
+
         try applyDownloadedTemporaryFile(
             downloaded,
             partialURL: partialURL,
@@ -1053,11 +1478,19 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         try publishDownloadedFile(partialURL, to: destination)
     }
 
-    /// Exponential backoff (with jitter) between retry attempts: ~1s, ~2s, ~4s, capped.
-    private static func retryBackoffSeconds(for attempt: Int) -> Double {
-        let base = pow(2.0, Double(attempt - 1))
-        let jitter = Double.random(in: 0...0.5)
-        return min(base + jitter, 10)
+    private func retryReason(for error: Error) -> String {
+        if let downloadError = error as? DownloadError {
+            switch downloadError {
+            case .httpError(let statusCode, _, _): return "HTTP \(statusCode)"
+            case .integrityCheckFailed: return "Integrity verification"
+            case .rangeUnsupported: return "Range response"
+            case .chunkAssemblyFailed: return "Chunk assembly"
+            case .fileDownloadFailed: return "Network transfer"
+            case .cancelled: return "Cancelled"
+            case .invalidRemotePath, .invalidLocalDestination, .apiError: return "Configuration"
+            }
+        }
+        return "Network transfer"
     }
 
     /// Download a large file as parallel byte-range chunks, assembling them into the
@@ -1125,21 +1558,22 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         let downloaded = try await withCheckedThrowingContinuation { continuation in
             let task = session.downloadTask(with: request)
             Task {
-                await state.register(
+                let shouldResume = await state.register(
                     task: task,
                     destination: url,
                     continuation: continuation,
                     resumeDataURL: nil,
                     fileIndex: fileIndex
                 )
-                task.resume()
+                if shouldResume { task.resume() }
             }
         }
 
         // The delegate treats 200 and 206 as success; for a range request 200 means the
         // server ignored Range and returned the whole file — throw a dedicated error so the
         // file-level retry falls back to a single stream instead of thrashing on chunks.
-        guard downloaded.statusCode == 206 else {
+        guard downloaded.statusCode == 206,
+              Self.contentRange(downloaded.contentRange, matchesStart: start, end: end) else {
             try? fileManager.removeItem(at: downloaded.url)
             throw DownloadError.rangeUnsupported(path: url.path)
         }
@@ -1166,19 +1600,71 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         return ranges
     }
 
+    static func contentRange(_ value: String?, startsAt expectedStart: Int64) -> Bool {
+        guard let value,
+              let match = value.range(
+                of: #"^bytes\s+([0-9]+)-([0-9]+)/(?:[0-9]+|\*)$"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) else { return false }
+        let matched = String(value[match])
+        guard let rangePart = matched.split(separator: " ").last?.split(separator: "/").first,
+              let start = rangePart.split(separator: "-").first.flatMap({ Int64($0) }) else {
+            return false
+        }
+        return start == expectedStart
+    }
+
+    static func contentRange(_ value: String?, matchesStart expectedStart: Int64, end expectedEnd: Int64) -> Bool {
+        guard contentRange(value, startsAt: expectedStart),
+              let value,
+              let rangePart = value.split(separator: " ").last?.split(separator: "/").first else {
+            return false
+        }
+        let bounds = rangePart.split(separator: "-")
+        guard bounds.count == 2, let end = Int64(bounds[1]) else { return false }
+        return end == expectedEnd
+    }
+
     private func downloadTemporaryFile(
         from url: URL,
         existingBytes: Int64,
         resumeDataURL: URL,
         fileIndex: Int
     ) async throws -> DownloadedTemporaryFile {
+        if Task.isCancelled {
+            throw DownloadError.cancelled
+        }
+        if await state.cancellationRequested() {
+            throw DownloadError.cancelled
+        }
+
+        if let adoptedTask = await state.takeAdoptedTask(for: url) {
+            return try await withCheckedThrowingContinuation { continuation in
+                Task {
+                    let receivedBytes = max(existingBytes, adoptedTask.countOfBytesReceived)
+                    let shouldResume = await state.register(
+                        task: adoptedTask,
+                        destination: url,
+                        continuation: continuation,
+                        resumeDataURL: resumeDataURL,
+                        fileIndex: fileIndex,
+                        existingBytes: receivedBytes
+                    )
+                    if shouldResume, adoptedTask.state == .suspended {
+                        adoptedTask.resume()
+                    }
+                }
+            }
+        }
+
         if fileManager.fileExists(atPath: resumeDataURL.path),
            let resumeData = try? Data(contentsOf: resumeDataURL) {
             do {
                 return try await withCheckedThrowingContinuation { continuation in
                     let task = session.downloadTask(withResumeData: resumeData)
                     Task {
-                        await state.register(
+                        task.taskDescription = await state.expectedIdentity(for: url)?.encodedTaskDescription
+                        let shouldResume = await state.register(
                             task: task,
                             destination: url,
                             continuation: continuation,
@@ -1186,19 +1672,32 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                             fileIndex: fileIndex,
                             existingBytes: existingBytes
                         )
-                        task.resume()
+                        if shouldResume { task.resume() }
                     }
                 }
             } catch {
                 try? fileManager.removeItem(at: resumeDataURL)
+                if Task.isCancelled {
+                    throw DownloadError.cancelled
+                }
+                if await state.cancellationRequested() {
+                    throw DownloadError.cancelled
+                }
             }
         }
 
+        if Task.isCancelled {
+            throw DownloadError.cancelled
+        }
+        if await state.cancellationRequested() {
+            throw DownloadError.cancelled
+        }
         let request = Self.downloadRequest(for: url, existingBytes: existingBytes)
         return try await withCheckedThrowingContinuation { continuation in
             let task = session.downloadTask(with: request)
             Task {
-                await state.register(
+                task.taskDescription = await state.expectedIdentity(for: url)?.encodedTaskDescription
+                let shouldResume = await state.register(
                     task: task,
                     destination: url,
                     continuation: continuation,
@@ -1206,7 +1705,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                     fileIndex: fileIndex,
                     existingBytes: existingBytes
                 )
-                task.resume()
+                if shouldResume { task.resume() }
             }
         }
     }
@@ -1257,15 +1756,63 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
         }
     }
 
-    private func verifyDownloadedFiles(_ files: [RepoFile], in root: URL) throws {
+    private func recordVerifiedReceipt(
+        relativePath: String,
+        artifactVersion: String,
+        expectedSize: Int64,
+        expectedSHA256: String?,
+        fileURL: URL
+    ) async throws {
+        let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
+        let fileSize = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        let modificationDate = attributes[.modificationDate] as? Date ?? .distantPast
+        let fileIdentifier = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+        let receipt = VerifiedArtifactReceipt(
+            relativePath: relativePath,
+            artifactVersion: artifactVersion,
+            expectedSize: expectedSize,
+            expectedSHA256: Self.normalizedSHA256(expectedSHA256),
+            fileSize: fileSize,
+            modificationTimeNanoseconds: Int64(modificationDate.timeIntervalSince1970 * 1_000_000_000),
+            fileIdentifier: fileIdentifier,
+            verificationProcessGeneration: verificationProcessGeneration
+        )
+        await state.recordVerifiedReceipt(receipt)
+        await verifiedArtifactHandler?.handler(receipt)
+    }
+
+    private func verifyDownloadedFilesUsingReceipts(
+        _ files: [RepoFile],
+        artifactVersion: String,
+        in root: URL
+    ) async throws {
+        let receipts = await state.verifiedReceipts()
         for file in files {
             let relativePath = try Self.validatedRelativeRepoPath(file.path)
             let destination = try Self.validatedDestinationURL(for: relativePath, in: root)
-            try Self.validateDownloadedFile(
-                at: destination,
-                expectedSize: file.size,
-                sha256: file.sha256
+            let attributes = try fileManager.attributesOfItem(atPath: destination.path)
+            let currentSize = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+            let currentModificationDate = attributes[.modificationDate] as? Date ?? .distantPast
+            let currentModificationNanoseconds = Int64(
+                currentModificationDate.timeIntervalSince1970 * 1_000_000_000
             )
+            let currentFileIdentifier = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+            guard let receipt = receipts[relativePath],
+                  receipt.matches(
+                    relativePath: relativePath,
+                    artifactVersion: artifactVersion,
+                    expectedSize: file.size,
+                    expectedSHA256: Self.normalizedSHA256(file.sha256),
+                    fileSize: currentSize,
+                    modificationTimeNanoseconds: currentModificationNanoseconds,
+                    fileIdentifier: currentFileIdentifier,
+                    processGeneration: verificationProcessGeneration
+                  ) else {
+                throw DownloadError.integrityCheckFailed(
+                    path: relativePath,
+                    reason: "missing or changed same-process verification receipt"
+                )
+            }
         }
     }
 
@@ -1405,7 +1952,18 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     /// Foreground sessions (macOS/CLI) never trigger this, so they're unaffected.
     public func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         guard let identifier = session.configuration.identifier else { return }
-        backgroundSessionCompletionHandler?(identifier)
+        Task {
+            if await state.markBackgroundEventsFinished() {
+                backgroundSessionCompletionHandler?(identifier)
+            }
+        }
+    }
+
+    public func urlSession(
+        _ session: URLSession,
+        taskIsWaitingForConnectivity task: URLSessionTask
+    ) {
+        Task { await state.setWaitingForConnectivity(true) }
     }
 
     public func urlSession(
@@ -1417,6 +1975,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     ) {
         let taskID = downloadTask.taskIdentifier
         Task {
+            await state.setWaitingForConnectivity(false)
             await state.reportProgress(taskID: taskID, totalBytesWritten: totalBytesWritten)
         }
     }
@@ -1428,27 +1987,41 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     ) {
         let taskID = downloadTask.taskIdentifier
 
-        let statusCode = (downloadTask.response as? HTTPURLResponse)?.statusCode
+        let response = downloadTask.response as? HTTPURLResponse
+        let statusCode = response?.statusCode
+        let retryAfterSeconds = Self.retryAfterSeconds(from: response)
+        let contentRange = response?.value(forHTTPHeaderField: "Content-Range")
         if let statusCode, ![200, 206].contains(statusCode) {
             Task {
                 let path = await state.destinationPath(taskID: taskID)
                 await state.resumeFailure(
                     taskID: taskID,
-                    error: DownloadError.httpError(statusCode: statusCode, path: path)
+                    error: DownloadError.httpError(
+                        statusCode: statusCode,
+                        path: path,
+                        retryAfterSeconds: retryAfterSeconds
+                    )
                 )
             }
             return
         }
 
-        let safeTmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
+        let safeTmp = durableTemporaryDirectory
+            .appendingPathComponent("task-\(taskID)-\(UUID().uuidString)")
 
         do {
-            try FileManager.default.moveItem(at: location, to: safeTmp)
+            try fileManager.createDirectory(at: durableTemporaryDirectory, withIntermediateDirectories: true)
+            try fileManager.moveItem(at: location, to: safeTmp)
             Task {
-                await state.resumeSuccess(
+                await state.stageSuccess(
                     taskID: taskID,
-                    temporaryFile: DownloadedTemporaryFile(url: safeTmp, statusCode: statusCode)
+                    identity: ModelDownloadTaskIdentity.decode(taskDescription: downloadTask.taskDescription),
+                    temporaryFile: DownloadedTemporaryFile(
+                        url: safeTmp,
+                        statusCode: statusCode,
+                        retryAfterSeconds: retryAfterSeconds,
+                        contentRange: contentRange
+                    )
                 )
             }
         } catch {
@@ -1461,12 +2034,39 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
     public func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
+        didFinishCollecting metrics: URLSessionTaskMetrics
+    ) {
+        guard let transferMetricsHandler else { return }
+        let transactions = metrics.transactionMetrics
+        let last = transactions.last
+        let identity = ModelDownloadTaskIdentity.decode(taskDescription: task.taskDescription)
+        transferMetricsHandler.handler(
+            TransferMetrics(
+                relativePath: identity?.relativePath,
+                protocolName: last?.networkProtocolName,
+                redirectCount: metrics.redirectCount,
+                reusedConnection: transactions.contains(where: { $0.isReusedConnection }),
+                cellular: transactions.contains(where: { $0.isCellular }),
+                constrained: transactions.contains(where: { $0.isConstrained }),
+                expensive: transactions.contains(where: { $0.isExpensive }),
+                transferredBytes: task.countOfBytesReceived,
+                durationSeconds: metrics.taskInterval.duration
+            )
+        )
+    }
+
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
         let taskID = task.taskIdentifier
-        guard let error else { return }
-
         Task {
+            await state.setWaitingForConnectivity(false)
+            guard let error else {
+                await state.completeStagedSuccess(taskID: taskID)
+                return
+            }
             let path = await state.destinationPath(taskID: taskID)
             if (error as NSError).code == NSURLErrorCancelled {
                 await state.resumeFailure(taskID: taskID, error: DownloadError.cancelled)
@@ -1477,5 +2077,18 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate, 
                 )
             }
         }
+    }
+
+    private static func retryAfterSeconds(from response: HTTPURLResponse?) -> Double? {
+        guard let value = response?.value(forHTTPHeaderField: "Retry-After") else { return nil }
+        if let seconds = Double(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return min(max(seconds, 0), 300)
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        guard let date = formatter.date(from: value) else { return nil }
+        return min(max(date.timeIntervalSinceNow, 0), 300)
     }
 }

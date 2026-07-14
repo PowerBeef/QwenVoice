@@ -36,6 +36,7 @@ Review when: target or scheme changes; runtime topology; telemetry schema; test 
 
 - [`Sources/Resources/voice-previews/README.md`](../Sources/Resources/voice-previews/README.md)
 - [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
+- [`docs/decisions/model-delivery-background-assets.md`](../docs/decisions/model-delivery-background-assets.md)
 - [`docs/development-progress.md`](../docs/development-progress.md)
 - [`docs/project-map.html`](../docs/project-map.html)
 - [`docs/qwen_tone.md`](../docs/qwen_tone.md)
@@ -56,6 +57,7 @@ Review when: target or scheme changes; runtime topology; telemetry schema; test 
 - [`docs/reference/mimi-codec-guide.md`](../docs/reference/mimi-codec-guide.md)
 - [`docs/reference/mlx-audio-swift-patching.md`](../docs/reference/mlx-audio-swift-patching.md)
 - [`docs/reference/mlx-guide.md`](../docs/reference/mlx-guide.md)
+- [`docs/reference/model-delivery.md`](../docs/reference/model-delivery.md)
 - [`docs/reference/privacy-storage.md`](../docs/reference/privacy-storage.md)
 - [`docs/reference/prosody-qa-research.md`](../docs/reference/prosody-qa-research.md)
 - [`docs/reference/qwen3-tts-guide.md`](../docs/reference/qwen3-tts-guide.md)

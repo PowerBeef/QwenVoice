@@ -145,14 +145,23 @@ comes from `qwenvoice_ios_model_catalog.json`.
 | State | Visible control | What it means |
 |---|---|---|
 | Not installed | `iosModelDownload_<id>` ("Install") | Default; nothing staged |
-| Downloading | `iosModelCancel_<id>` ("Cancel") + progress bar | Active download |
-| Paused | `iosModelResume_<id>` ("Resume") | Reached by the runtime when a download stalls; not a user-facing pause button |
-| Failed/incomplete | `iosModelRetry_<id>` ("Retry") / `iosModelRepair_<id>` ("Repair") | Error or interrupted |
+| Queued / waiting / downloading / retrying | `iosModelCancel_<id>` ("Cancel") plus phase/progress detail | Durable request awaiting its turn or connectivity, actively transferring, or applying a typed retry |
+| Verifying / installing / cancelling | Progress indicator | Hash/receipt validation, atomic install, or the cancellation barrier is in progress |
+| Failed/incomplete | `iosModelRetry_<id>` ("Retry") / `iosModelRepair_<id>` ("Repair") | Retry preserves verified files; Repair revalidates an incomplete installed package |
 | Installed | `iosModelDelete_<id>` (trash) | Ready to generate |
 
-Cancel opens a confirmation dialog: `iosModelCancelDownloadConfirmButton` (cancel, deletes data).
-There is no user-facing pause button; paused state is reached by the runtime. Download progress
-`iosModelProgress_<id>` (downloading / resuming / paused states).
+Cancel opens a confirmation dialog: `iosModelCancelDownloadConfirmButton` (cancel, deletes staged
+data). There is no paused state or Resume control. Waiting for connectivity comes from URLSession;
+an active task separately reports no progress after 20 seconds. `iosModelProgress_<id>` exposes
+download/retry progress, while the visible detail reports bytes, smoothed speed, ETA, retry reason,
+and verified-file reuse.
+
+One bundle-aware background URLSession lives for the app lifetime. On launch, the atomic v2 ledger
+and current catalog adopt exactly matching tasks, cancel stale/unknown/duplicate tasks, and create
+only missing tasks. Progress remains monotonic through backgrounding, process relaunch, and retry.
+Delegate files move into durable App Group staging before the callback returns, and UIKit's
+background completion waits for durable install/failure postprocessing. Full contract:
+[`model-delivery.md`](model-delivery.md).
 
 ### The Studio gates generation on the installed model
 
@@ -174,8 +183,9 @@ Generate rather than Install. Destructive install/cancel/delete actions are outs
 - **Install:** Settings → `iosModelDownload_<id>`.tap() → (wait for complete → `iosModelDelete_<id>`).
 - **Cancel:** `iosModelDownload_<id>`.tap() → `iosModelCancel_<id>`.tap() →
   `waitForConfirmationButton("iosModelCancelDownloadConfirmButton")` → tap it → Install reappears.
-- **Pause/resume/cancel:** The runtime may pause a download (showing `iosModelResume_<id>`). Tap
-  Resume, then tap Cancel and confirm with `iosModelCancelDownloadConfirmButton`.
+- **Retry/cancel:** Retry a failed request with `iosModelRetry_<id>` to reuse verified files. Cancel
+  an active request with `iosModelCancel_<id>`, then confirm `iosModelCancelDownloadConfirmButton`;
+  staging is removed only after URLSession cancellation callbacks and tasks are terminal.
 - **Delete:** `iosModelDelete_<id>`.tap() → `deleteModelSheet_confirm`.tap() → Install reappears.
 
 ---
@@ -252,8 +262,9 @@ Gotchas:
 2. Dismiss the keyboard before Generate when it obscures the button.
 3. Wait for cold model loading rather than repeating a click.
 4. Attach named screenshots at important semantic states and failures.
-5. Recording and destructive model lifecycle actions require attended setup and are outside the
-   smoke and benchmark lanes.
+5. Recording and destructive model lifecycle actions are outside smoke and benchmark. The isolated
+   physical-device model-delivery proof is selected explicitly with
+   `scripts/ui_test.sh ios model-download` and cleans up through visible Settings controls.
 
 ---
 

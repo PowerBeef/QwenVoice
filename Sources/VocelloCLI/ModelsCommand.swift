@@ -103,15 +103,33 @@ enum ModelsCommand {
         let revision = descriptor.huggingFaceRevision ?? "main"
         note("Installing \(modelID) from \(repo) (revision \(revision.prefix(7))\u{2026})")
 
-        let downloader = HuggingFaceDownloader(progressHandler: { progress in
-            let pct = progress.totalBytes > 0
-                ? Int(Double(progress.downloadedBytes) / Double(progress.totalBytes) * 100)
-                : 0
-            let speed = progress.bytesPerSecond.map { "\(humanBytes($0))/s" } ?? "—"
-            noteVerbose("  \(progress.phase.rawValue) · \(pct)% · \(humanBytes(progress.downloadedBytes))/\(humanBytes(progress.totalBytes)) · \(speed)")
-        })
+        let diagnostics = ModelDownloadDiagnosticsStore(
+            directory: ctx.modelsDirectory
+                .deletingLastPathComponent()
+                .appendingPathComponent("diagnostics/model-downloads", isDirectory: true)
+        )
+        let downloader = HuggingFaceDownloader(
+            progressHandler: { progress in
+                diagnostics.record(progress: progress)
+                let pct = progress.totalBytes > 0
+                    ? Int(Double(progress.downloadedBytes) / Double(progress.totalBytes) * 100)
+                    : 0
+                let speed = progress.bytesPerSecond.map { "\(humanBytes($0))/s" } ?? "—"
+                let eta = progress.estimatedSecondsRemaining.map { " · ETA \(max(1, Int($0.rounded())))s" } ?? ""
+                noteVerbose("  \(progress.phase.rawValue) · \(pct)% · \(humanBytes(progress.downloadedBytes))/\(humanBytes(progress.totalBytes)) · \(speed)\(eta)")
+            },
+            transferMetricsHandler: { diagnostics.record(metrics: $0) }
+        )
 
-        try await downloader.downloadRepo(repo: repo, revision: revision, to: targetDir)
+        do {
+            try await downloader.downloadRepo(repo: repo, revision: revision, to: targetDir)
+            diagnostics.recordSuccess(
+                expectedBytes: descriptor.estimatedDownloadBytes ?? directorySize(targetDir)
+            )
+        } catch {
+            diagnostics.recordFailure(classification: "download", message: error.localizedDescription)
+            throw error
+        }
 
         print("✓ Installed \(modelID) (\(humanBytes(directorySize(targetDir))))")
     }

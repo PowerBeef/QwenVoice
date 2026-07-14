@@ -111,6 +111,8 @@ scripts/macos_test.sh gate
 scripts/ios_device.sh preflight
 scripts/ui_test.sh ios smoke
 scripts/ui_test.sh ios benchmark
+# Opt-in isolated background-delivery lifecycle proof; never an ordinary UI lane.
+scripts/ui_test.sh ios model-download
 scripts/ios_device.sh gate
 ```
 
@@ -185,6 +187,7 @@ gates. Listening remains optional independent annotation →
 | `Tests/VocelloMacUITests/` | macOS smoke and benchmark UI tests |
 | `Tests/VocelloiOSUITests/` | Physical-iPhone smoke and benchmark UI tests |
 | `scripts/ui_test.sh` | Unified explicit XCUITest entry point |
+| `docs/reference/model-delivery.md` | Shared downloader, iOS restoration ledger, retry/cancel, diagnostics, and isolated live proof |
 | `benchmarks/`, `scripts/benchmark_history.py` | PASS-only, privacy-safe benchmark registry and generated index |
 | `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
 | `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |

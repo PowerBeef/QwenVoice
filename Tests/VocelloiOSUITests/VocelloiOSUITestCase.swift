@@ -20,11 +20,11 @@ class VocelloiOSUITestCase: XCTestCase {
 
     var app: XCUIApplication { session.app }
 
-    func beginSession() {
+    func beginSession(additionalEnvironment: [String: String] = [:]) {
         continueAfterFailure = false
         pendingAutoplayPreferenceRestore = nil
         session = VocelloUIApplicationSession()
-        launchApp()
+        launchApp(additionalEnvironment: additionalEnvironment)
     }
 
     func endSession() {

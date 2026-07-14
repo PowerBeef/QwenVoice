@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import QwenVoiceCore
 
@@ -232,79 +231,6 @@ enum IOSModelDeliverySupport {
         }
         try validateArtifactURL(url: url, configuration: configuration, label: "artifact")
         return url
-    }
-
-    static func verifyDownloadedModel(
-        descriptor: ModelDescriptor,
-        entry: IOSModelCatalogEntry,
-        stagedRoot: URL,
-        fileManager: FileManager = .default
-    ) throws {
-        let expectedPaths = Set(entry.files.map(\.relativePath))
-        let requiredPaths = Set(descriptor.requiredRelativePaths)
-        let missingRequired = requiredPaths.filter { relativePath in
-            !fileManager.fileExists(atPath: stagedRoot.appendingPathComponent(relativePath).path)
-        }
-        guard missingRequired.isEmpty else {
-            throw IOSModelDeliveryError.missingRequiredFiles(missingRequired.sorted())
-        }
-
-        for file in entry.files {
-            let fileURL = stagedRoot.appendingPathComponent(file.relativePath)
-            guard fileManager.fileExists(atPath: fileURL.path) else {
-                throw IOSModelDeliveryError.missingRequiredFiles([file.relativePath])
-            }
-            let digest = try sha256Hex(for: fileURL)
-            guard digest == file.sha256.lowercased() else {
-                throw IOSModelDeliveryError.fileHashMismatch(relativePath: file.relativePath)
-            }
-        }
-
-        if let enumerator = fileManager.enumerator(
-            at: stagedRoot,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) {
-            for case let fileURL as URL in enumerator {
-                let isRegularFile = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
-                guard isRegularFile else {
-                    continue
-                }
-                let relativePath = try relativePath(for: fileURL, within: stagedRoot)
-                if !expectedPaths.contains(relativePath) {
-                    throw IOSModelDeliveryError.unexpectedFile(relativePath)
-                }
-            }
-        }
-    }
-
-    private static func relativePath(for fileURL: URL, within rootURL: URL) throws -> String {
-        let normalizedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL
-        let normalizedFile = fileURL.resolvingSymlinksInPath().standardizedFileURL
-        let rootComponents = normalizedRoot.pathComponents
-        let fileComponents = normalizedFile.pathComponents
-
-        guard fileComponents.starts(with: rootComponents), fileComponents.count > rootComponents.count else {
-            throw IOSModelDeliveryError.unexpectedFile(normalizedFile.path)
-        }
-
-        return fileComponents.dropFirst(rootComponents.count).joined(separator: "/")
-    }
-
-    static func sha256Hex(for fileURL: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: fileURL)
-        defer { try? handle.close() }
-
-        var hasher = SHA256()
-        while true {
-            let chunk = try handle.read(upToCount: 1_048_576) ?? Data()
-            if chunk.isEmpty {
-                break
-            }
-            hasher.update(data: chunk)
-        }
-        let digest = hasher.finalize()
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     static func ensureSufficientDiskSpace(

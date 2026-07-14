@@ -1,23 +1,19 @@
 import Foundation
 import QwenVoiceCore
 
-/// Progress snapshot consumed by `IOSModelInstallerViewModel`. (Moved here from the deleted
-/// `IOSModelDeliveryActor`; the coordinator emits the same contract so the view model's `apply`
-/// is unchanged. Only `downloading/verifying/installing/installed/deleting/deleted/failed` are
-/// produced by the new engine — the pause/interrupt cases are dead.)
 struct IOSModelDeliverySnapshot: Equatable, Sendable {
     enum Phase: String, Codable, Sendable {
+        case queued
+        case waitingForConnectivity
         case downloading
-        case interrupted
-        case resuming
-        case restarting
-        case paused
+        case retrying
         case verifying
         case installing
+        case cancelling
         case installed
+        case failed
         case deleting
         case deleted
-        case failed
     }
 
     let modelID: String
@@ -25,16 +21,40 @@ struct IOSModelDeliverySnapshot: Equatable, Sendable {
     let downloadedBytes: Int64
     let totalBytes: Int64?
     let estimatedBytes: Int64?
+    let bytesPerSecond: Int64?
+    let estimatedSecondsRemaining: Double?
+    let retryCount: Int
     let message: String?
-    /// Monotonic token so the view model can ignore stale progress after cancel/fail.
     let operationGeneration: UInt64
+
+    init(
+        modelID: String,
+        phase: Phase,
+        downloadedBytes: Int64,
+        totalBytes: Int64?,
+        estimatedBytes: Int64?,
+        bytesPerSecond: Int64? = nil,
+        estimatedSecondsRemaining: Double? = nil,
+        retryCount: Int = 0,
+        message: String?,
+        operationGeneration: UInt64
+    ) {
+        self.modelID = modelID
+        self.phase = phase
+        self.downloadedBytes = downloadedBytes
+        self.totalBytes = totalBytes
+        self.estimatedBytes = estimatedBytes
+        self.bytesPerSecond = bytesPerSecond
+        self.estimatedSecondsRemaining = estimatedSecondsRemaining
+        self.retryCount = retryCount
+        self.message = message
+        self.operationGeneration = operationGeneration
+    }
 }
 
-/// Lightweight record of an in-flight download, persisted so the coordinator can reattach the
-/// background URLSession (by identifier) and restore UI state after an app kill/relaunch.
-/// URLSession auto-resumes pending tasks by identifier; the on-disk partials let each task
-/// Range-resume, so the app only needs this list to know what was in flight.
-struct IOSInFlightDownloadRecord: Codable, Sendable {
+/// Schema-v1 compatibility record. It is decoded only by the one-time migration and is never
+/// written again. The absolute target path is reduced to its final folder name before v2 storage.
+private struct IOSLegacyInFlightDownloadRecord: Codable, Sendable {
     let modelID: String
     let artifactVersion: String
     let backgroundSessionIdentifier: String
@@ -44,55 +64,43 @@ struct IOSInFlightDownloadRecord: Codable, Sendable {
     let totalBytes: Int64
 }
 
-struct IOSInFlightDownloadsDocument: Codable, Sendable {
-    static let currentSchemaVersion = 1
+private struct IOSLegacyInFlightDownloadsDocument: Codable, Sendable {
     let schemaVersion: Int
-    let downloads: [IOSInFlightDownloadRecord]
+    let downloads: [IOSLegacyInFlightDownloadRecord]
 }
 
-/// Drives the shared `HuggingFaceDownloader` engine for iOS model downloads over a **background**
-/// URLSession so large model downloads survive app backgrounding and device locking. Profile:
-/// **one native `downloadTask` per file** (byte-range chunking OFF — manual chunking caused uneven
-/// throughput) + the model's files downloading concurrently (`maxConcurrentFiles = 6`) for speed,
-/// and **one model at a time** (`maxConcurrentModels = 1`; a second request queues). Cancelling
-/// discards the partial (no resume). On app relaunch, in-flight records let the coordinator
-/// reattach to the same background-session identifier and resume from on-disk partials. Preserves
-/// the `IOSModelDeliverySnapshot` contract the view model consumes. macOS/CLI keep byte-range ON
-/// (fast there); iOS trades that for stability/background survivability.
-///
-/// The `backgroundSessionIdentifier` / `IOSModelDeliveryBackgroundEventRelay` /
-/// `backgroundSessionCompletionHandler` plumbing is active: `HuggingFaceDownloader` forwards
-/// `urlSessionDidFinishEvents(forBackgroundURLSession:)` so the app delegate's system completion
-/// handler is always called.
+/// Owns one bundle-aware background URLSession for the whole iOS app lifetime. One model runs at
+/// a time, queued requests are durable, and task adoption occurs inside `HuggingFaceDownloader`
+/// before any missing task is created.
 @MainActor
 final class IOSModelDownloadCoordinator {
     struct InFlightDownload {
         let modelID: String
-        let downloader: HuggingFaceDownloader   // retained for the download's lifetime
+        let logicalRequestID: String
         let task: Task<Void, Never>
         let targetDir: URL
-        /// Background session identifier used to reattach after app relaunch.
-        let backgroundSessionIdentifier: String
+        let stagingRoot: URL
         let totalBytes: Int64
         let operationGeneration: UInt64
     }
 
     typealias SnapshotSink = @MainActor (IOSModelDeliverySnapshot) -> Void
 
-    /// Maximum number of models downloading concurrently. **1 on iOS** (concurrent model downloads
-    /// don't behave well on device — kept single). The bounded queue stays, so a second Download
-    /// request queues and starts when the first terminates; bump this to re-enable concurrency.
     private static let maxConcurrentModels = 1
-
     private let modelAssetStore: LocalModelAssetStore
     private let configuration: IOSModelDeliveryConfiguration
     private let fileManager: FileManager
     private let snapshotSink: SnapshotSink
     private let catalogSession: URLSession
+    private let ledgerStore: IOSModelDownloadLedgerStore
+    private let diagnosticsStore: ModelDownloadDiagnosticsStore
     private var inflight: [String: InFlightDownload] = [:]
     private var pending: [ModelDescriptor] = []
     private var cachedCatalog: IOSModelCatalogDocument?
     private var operationGeneration: UInt64 = 0
+    private var lastLedgerProgressWrite: [String: TimeInterval] = [:]
+
+    private lazy var downloader: HuggingFaceDownloader = makeSharedDownloader()
 
     init(
         modelAssetStore: LocalModelAssetStore,
@@ -105,154 +113,161 @@ final class IOSModelDownloadCoordinator {
         self.fileManager = fileManager
         self.snapshotSink = snapshotSink
         self.catalogSession = URLSession(configuration: .ephemeral)
+        self.ledgerStore = IOSModelDownloadLedgerStore(
+            fileURL: AppPaths.modelDeliveryStateFile,
+            fileManager: fileManager
+        )
+        self.diagnosticsStore = ModelDownloadDiagnosticsStore(
+            directory: AppPaths.modelDownloadDiagnosticsDir,
+            fileManager: fileManager
+        )
     }
 
-    // MARK: - Public (mirrors what IOSModelInstallerViewModel calls)
-
-    /// Request a model download. Returns immediately; the bounded queue runs up to
-    /// `maxConcurrentModels` at once. A model already queued or downloading is a no-op.
-    /// Cancel = discard (no resume).
     func install(model: ModelDescriptor) async throws {
         guard model.iosDownloadEligible else {
             throw IOSModelDeliveryError.notEligibleForIOS(modelID: model.id)
         }
-        if inflight[model.id] != nil { return }
-        if pending.contains(where: { $0.id == model.id }) { return }
+        if inflight[model.id] != nil || pending.contains(where: { $0.id == model.id }) { return }
 
-        try fileManager.createDirectory(at: AppPaths.modelsDir, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: AppPaths.modelDownloadStagingDir, withIntermediateDirectories: true)
-        try? IOSModelDeliverySupport.excludeFromBackup(AppPaths.modelsDir)
-        try? IOSModelDeliverySupport.excludeFromBackup(AppPaths.modelDownloadStagingDir)
+        try prepareDirectories()
+        let entry = try IOSModelDeliverySupport.matchingCatalogEntry(
+            for: model,
+            in: try await fetchCatalog(),
+            configuration: configuration
+        )
+        let totalBytes = entry.totalBytes > 0
+            ? entry.totalBytes
+            : entry.files.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        try IOSModelDeliverySupport.ensureSufficientDiskSpace(
+            requiredBytes: totalBytes,
+            at: AppPaths.appSupportDir,
+            fileManager: fileManager
+        )
 
+        var ledger = try ledgerStore.load()
+        if let index = ledger.requests.firstIndex(where: { $0.modelID == model.id }) {
+            ledger.requests[index].status = .queued
+            ledger.requests[index].totalBytes = totalBytes
+        } else {
+            ledger.requests.append(makeLedgerRequest(model: model, entry: entry, totalBytes: totalBytes))
+        }
+        try ledgerStore.save(ledger)
         pending.append(model)
+        publishSnapshot(for: model, phase: .queued, downloadedBytes: ledgerRequest(model.id, in: ledger)?.receivedBytes ?? 0)
         await startPendingDownloads()
     }
 
-    /// Cancel a download (in-flight or queued) and discard its staged partial (true cancel).
     func cancel(modelID: String) async {
-        // Queued but not yet started: just drop it from the queue.
         if let pendingIndex = pending.firstIndex(where: { $0.id == modelID }) {
             pending.remove(at: pendingIndex)
-            let descriptor = modelAssetStore.descriptor(id: modelID)?.model
-            publish(.init(
-                modelID: modelID, phase: .deleted, downloadedBytes: 0, totalBytes: nil,
-                estimatedBytes: descriptor?.estimatedDownloadBytes, message: nil,
-                operationGeneration: endOperation()
-            ))
+            markLedgerTerminal(modelID: modelID, status: .deleted)
+            discardStaging(modelID: modelID)
+            publishTerminal(modelID: modelID, phase: .deleted)
             return
         }
         guard let active = inflight[modelID] else { return }
-        let terminalGeneration = endOperation()
-        await active.downloader.cancel()
+
+        updateLedger(modelID: modelID) { $0.status = .cancelRequested }
+        publishSnapshot(
+            modelID: modelID,
+            phase: .cancelling,
+            downloadedBytes: ledgerReceivedBytes(modelID: modelID),
+            totalBytes: active.totalBytes,
+            message: nil,
+            generation: active.operationGeneration
+        )
+
+        await downloader.cancel()
         active.task.cancel()
-        HuggingFaceDownloader.discardStaging(forTargetDirectory: active.targetDir)
+        await active.task.value
         inflight.removeValue(forKey: modelID)
-        removeInFlightRecord(modelID: modelID)
-        let descriptor = modelAssetStore.descriptor(id: modelID)?.model
-        publish(.init(
-            modelID: modelID, phase: .deleted, downloadedBytes: 0, totalBytes: nil,
-            estimatedBytes: descriptor?.estimatedDownloadBytes, message: nil,
-            operationGeneration: terminalGeneration
-        ))
-        await startPendingDownloads()   // drain the freed slot
+        try? fileManager.removeItem(at: active.stagingRoot)
+        markLedgerTerminal(modelID: modelID, status: .deleted)
+        publishTerminal(modelID: modelID, phase: .deleted)
+        await startPendingDownloads()
     }
 
-    /// Delete an installed model (and cancel first if it's mid-download).
     func delete(model: ModelDescriptor) async throws {
         if inflight[model.id] != nil || pending.contains(where: { $0.id == model.id }) {
             await cancel(modelID: model.id)
         }
-
         let generation = beginOperation()
-        publish(.init(
-            modelID: model.id, phase: .deleting, downloadedBytes: 0, totalBytes: nil,
-            estimatedBytes: model.estimatedDownloadBytes, message: nil,
-            operationGeneration: generation
-        ))
-
+        publishSnapshot(
+            modelID: model.id,
+            phase: .deleting,
+            downloadedBytes: 0,
+            totalBytes: nil,
+            message: nil,
+            generation: generation
+        )
         let targetDir = model.installDirectory(in: AppPaths.modelsDir)
         if fileManager.fileExists(atPath: targetDir.path) {
             try fileManager.removeItem(at: targetDir)
         }
-        HuggingFaceDownloader.discardStaging(forTargetDirectory: targetDir)
-
-        let terminalGeneration = endOperation()
-        publish(.init(
-            modelID: model.id, phase: .deleted, downloadedBytes: 0, totalBytes: nil,
-            estimatedBytes: model.estimatedDownloadBytes, message: nil,
-            operationGeneration: terminalGeneration
-        ))
+        discardStaging(modelID: model.id)
+        markLedgerTerminal(modelID: model.id, status: .deleted)
+        publishTerminal(modelID: model.id, phase: .deleted)
     }
 
-    /// On app launch: resume any downloads that were in flight when the app was killed/backgrounded.
-    /// The background URLSession reattaches by identifier; on-disk partials let each file
-    /// Range-resume. Records beyond the concurrency cap are re-queued.
     func restoreInFlightDownloadsIfNeeded() async {
-        let records = loadInFlightRecords()
-        var activeSessionIDs = Set<String>()
-        for record in records {
-            guard let descriptor = modelAssetStore.descriptor(id: record.modelID)?.model else {
-                removeInFlightRecord(modelID: record.modelID)
-                continue
-            }
-            let targetDir = URL(fileURLWithPath: record.targetFolderPath, isDirectory: true)
-            let alreadyInstalled = (try? descriptor.isAvailable(in: AppPaths.modelsDir, fileManager: fileManager)) == true
-            // Stale if the catalog's artifact version bumped or the model finished installing.
-            if descriptor.artifactVersion != record.artifactVersion || alreadyInstalled {
-                HuggingFaceDownloader.discardStaging(forTargetDirectory: targetDir)
-                removeInFlightRecord(modelID: record.modelID)
-                continue
-            }
+        do {
+            try prepareDirectories()
+            try await migrateV1IfNeeded()
+            var ledger = try ledgerStore.load()
+            var restored: [ModelDescriptor] = []
 
-            // At cap: re-queue so it starts when a slot frees (its record stays for recovery).
-            guard inflight.count < Self.maxConcurrentModels else {
-                if !pending.contains(where: { $0.id == record.modelID }) {
-                    pending.append(descriptor)
+            for index in ledger.requests.indices {
+                let request = ledger.requests[index]
+                guard let descriptor = modelAssetStore.descriptor(id: request.modelID)?.model,
+                      descriptor.artifactVersion == request.artifactVersion else {
+                    ledger.requests[index].status = .failed
+                    continue
                 }
-                continue
+                let installed = descriptor.isAvailable(
+                    in: AppPaths.modelsDir,
+                    fileManager: fileManager
+                )
+                if installed {
+                    ledger.requests[index].status = .installed
+                    continue
+                }
+                if request.status == .cancelRequested || request.status == .deleted {
+                    discardStaging(modelID: request.modelID)
+                    ledger.requests[index].status = .deleted
+                    continue
+                }
+                if request.status != .installed {
+                    ledger.requests[index].status = .queued
+                    restored.append(descriptor)
+                }
             }
-
-            guard let files = try? await resolveFiles(for: descriptor) else {
-                removeInFlightRecord(modelID: record.modelID)
-                continue
+            try ledgerStore.save(ledger)
+            pending = restored
+            if restored.isEmpty {
+                await downloader.cancelAllSessionTasks()
+                IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: [])
+            } else {
+                IOSModelDeliveryBackgroundEventRelay.completeOrphans(
+                    keeping: [configuration.backgroundSessionIdentifier]
+                )
+                await startPendingDownloads()
             }
-
-            activeSessionIDs.insert(record.backgroundSessionIdentifier)
-            let generation = beginOperation()
-            let downloader = makeDownloader(
-                modelID: record.modelID, totalBytes: record.totalBytes,
-                estimatedBytes: descriptor.estimatedDownloadBytes, generation: generation,
-                sessionID: record.backgroundSessionIdentifier
-            )
-            publish(.init(
-                modelID: record.modelID, phase: .downloading, downloadedBytes: 0,
-                totalBytes: record.totalBytes, estimatedBytes: descriptor.estimatedDownloadBytes,
-                message: nil, operationGeneration: generation
-            ))
-            inflight[record.modelID] = startRun(
-                modelID: record.modelID, files: files, repo: record.repo, revision: record.revision,
-                targetDir: targetDir, downloader: downloader, generation: generation,
-                totalBytes: record.totalBytes, estimatedBytes: descriptor.estimatedDownloadBytes,
-                sessionID: record.backgroundSessionIdentifier
-            )
+        } catch {
+            diagnosticsStore.recordFailure(classification: "ledger-restore", message: error.localizedDescription)
+            await downloader.cancelAllSessionTasks()
+            IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: [])
         }
-        // Flush orphan completion handlers for sessions we did NOT reattach.
-        IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: activeSessionIDs)
     }
 
-    /// Flush any pending background completion handler for a session we're not running, while
-    /// keeping handlers for sessions that have in-flight records (about to be restored) or an
-    /// active downloader.
     func resumeBackgroundEventsIfNeeded() async {
-        let records = loadInFlightRecords()
-        let active = Set(inflight.values.map(\.backgroundSessionIdentifier))
-            .union(records.map(\.backgroundSessionIdentifier))
-        IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: active)
+        let hasActiveWork = (try? ledgerStore.load().requests.contains(where: {
+            ![.installed, .failed, .deleted].contains($0.status)
+        })) == true
+        IOSModelDeliveryBackgroundEventRelay.completeOrphans(
+            keeping: hasActiveWork ? [configuration.backgroundSessionIdentifier] : []
+        )
     }
 
-    // MARK: - Private: queue
-
-    /// Launch queued downloads until the concurrency cap is reached.
     private func startPendingDownloads() async {
         while inflight.count < Self.maxConcurrentModels, let model = pending.first {
             pending.removeFirst()
@@ -260,193 +275,137 @@ final class IOSModelDownloadCoordinator {
         }
     }
 
-    /// Resolve one queued model against the (cached) catalog and start its download.
     private func beginDownload(_ model: ModelDescriptor) async {
-        let entry: IOSModelCatalogEntry
         do {
             let catalog = try await fetchCatalog()
-            entry = try IOSModelDeliverySupport.matchingCatalogEntry(
-                for: model, in: catalog, configuration: configuration
+            let entry = try IOSModelDeliverySupport.matchingCatalogEntry(
+                for: model,
+                in: catalog,
+                configuration: configuration
+            )
+            let files = resolveFiles(entry: entry)
+            let totalBytes = entry.totalBytes > 0
+                ? entry.totalBytes
+                : entry.files.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            let targetDir = model.installDirectory(in: AppPaths.modelsDir)
+            let stagingRoot = stagingRoot(modelID: model.id)
+            let generation = beginOperation()
+
+            var ledger = try ledgerStore.load()
+            guard let request = ledgerRequest(model.id, in: ledger) else {
+                throw IOSModelDownloadLedgerError.invalidDocument
+            }
+            updateRequest(model.id, in: &ledger) { $0.status = .downloading }
+            try ledgerStore.save(ledger)
+
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.runDownload(
+                    model: model,
+                    request: request,
+                    files: files,
+                    targetDir: targetDir,
+                    stagingRoot: stagingRoot,
+                    generation: generation,
+                    totalBytes: totalBytes
+                )
+            }
+            inflight[model.id] = InFlightDownload(
+                modelID: model.id,
+                logicalRequestID: request.logicalRequestID,
+                task: task,
+                targetDir: targetDir,
+                stagingRoot: stagingRoot,
+                totalBytes: totalBytes,
+                operationGeneration: generation
             )
         } catch {
+            markLedgerTerminal(modelID: model.id, status: .failed)
             publishFailed(modelID: model.id, message: error.localizedDescription)
-            return
         }
-        let totalBytes = entry.totalBytes > 0
-            ? entry.totalBytes
-            : entry.files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        do {
-            try IOSModelDeliverySupport.ensureSufficientDiskSpace(
-                requiredBytes: totalBytes, at: AppPaths.appSupportDir, fileManager: fileManager
-            )
-        } catch {
-            publishFailed(modelID: model.id, message: error.localizedDescription)
-            return
-        }
-
-        let files = resolveFiles(entry: entry)
-        let repo = model.huggingFaceRepo
-        let revision = model.huggingFaceRevision ?? "main"
-        let targetDir = model.installDirectory(in: AppPaths.modelsDir)
-        let sessionID = "com.qwenvoice.ios.model-download.\(model.id)"
-        let generation = beginOperation()
-        let downloader = makeDownloader(
-            modelID: model.id, totalBytes: totalBytes,
-            estimatedBytes: model.estimatedDownloadBytes, generation: generation,
-            sessionID: sessionID
-        )
-
-        upsertInFlightRecord(.init(
-            modelID: model.id, artifactVersion: model.artifactVersion,
-            backgroundSessionIdentifier: sessionID, repo: repo, revision: revision,
-            targetFolderPath: targetDir.path, totalBytes: totalBytes
-        ))
-        inflight[model.id] = startRun(
-            modelID: model.id, files: files, repo: repo, revision: revision, targetDir: targetDir,
-            downloader: downloader, generation: generation,
-            totalBytes: totalBytes, estimatedBytes: model.estimatedDownloadBytes, sessionID: sessionID
-        )
-    }
-
-    /// Spawn the download Task and return the `InFlightDownload` handle. The Task reconciles the
-    /// terminal state, gated on `generation` so a cancel/fail that supersedes it is a no-op.
-    private func startRun(
-        modelID: String,
-        files: [HuggingFaceDownloader.RepoFile],
-        repo: String,
-        revision: String,
-        targetDir: URL,
-        downloader: HuggingFaceDownloader,
-        generation: UInt64,
-        totalBytes: Int64,
-        estimatedBytes: Int64?,
-        sessionID: String
-    ) -> InFlightDownload {
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.runDownload(
-                modelID: modelID, files: files, repo: repo, revision: revision, targetDir: targetDir,
-                downloader: downloader, generation: generation,
-                totalBytes: totalBytes, estimatedBytes: estimatedBytes
-            )
-        }
-        return InFlightDownload(
-            modelID: modelID, downloader: downloader, task: task, targetDir: targetDir,
-            backgroundSessionIdentifier: sessionID, totalBytes: totalBytes, operationGeneration: generation
-        )
     }
 
     private func runDownload(
-        modelID: String,
+        model: ModelDescriptor,
+        request: IOSModelDownloadLedger.Request,
         files: [HuggingFaceDownloader.RepoFile],
-        repo: String,
-        revision: String,
         targetDir: URL,
-        downloader: HuggingFaceDownloader,
+        stagingRoot: URL,
         generation: UInt64,
-        totalBytes: Int64,
-        estimatedBytes: Int64?
+        totalBytes: Int64
     ) async {
         do {
-            try await downloader.downloadFiles(files, repo: repo, revision: revision, to: targetDir)
-            guard inflight[modelID]?.operationGeneration == generation else { return }
-            inflight.removeValue(forKey: modelID)
-            removeInFlightRecord(modelID: modelID)
-            publish(.init(
-                modelID: modelID, phase: .installed, downloadedBytes: totalBytes,
-                totalBytes: totalBytes, estimatedBytes: estimatedBytes, message: nil,
-                operationGeneration: generation
-            ))
+            try await downloader.downloadFiles(
+                files,
+                repo: request.repo,
+                revision: request.revision,
+                to: targetDir,
+                requestIdentity: ModelDownloadRequestIdentity(
+                    logicalRequestID: request.logicalRequestID,
+                    modelID: request.modelID,
+                    artifactVersion: request.artifactVersion
+                ),
+                stagingRoot: stagingRoot
+            )
+            guard inflight[model.id]?.operationGeneration == generation else { return }
+            inflight.removeValue(forKey: model.id)
+            markLedgerTerminal(modelID: model.id, status: .installed, receivedBytes: totalBytes)
+            diagnosticsStore.recordSuccess(expectedBytes: totalBytes)
+            publishSnapshot(
+                modelID: model.id,
+                phase: .installed,
+                downloadedBytes: totalBytes,
+                totalBytes: totalBytes,
+                message: nil,
+                generation: generation
+            )
         } catch is CancellationError {
-            // Cancel is handled by `cancel(modelID:)` (inflight already cleared); no-op here.
             return
-        } catch let dlError as HuggingFaceDownloader.DownloadError {
-            if case .cancelled = dlError { return }
-            guard inflight[modelID]?.operationGeneration == generation else { return }
-            inflight.removeValue(forKey: modelID)
-            removeInFlightRecord(modelID: modelID)
-            publish(.init(
-                modelID: modelID, phase: .failed, downloadedBytes: 0, totalBytes: totalBytes,
-                estimatedBytes: estimatedBytes, message: dlError.localizedDescription,
-                operationGeneration: generation
-            ))
+        } catch let error as HuggingFaceDownloader.DownloadError {
+            if case .cancelled = error { return }
+            guard inflight[model.id]?.operationGeneration == generation else { return }
+            inflight.removeValue(forKey: model.id)
+            markLedgerTerminal(modelID: model.id, status: .failed)
+            diagnosticsStore.recordFailure(classification: "transfer", message: error.localizedDescription)
+            publishFailed(modelID: model.id, message: error.localizedDescription)
         } catch {
-            guard inflight[modelID]?.operationGeneration == generation else { return }
-            inflight.removeValue(forKey: modelID)
-            removeInFlightRecord(modelID: modelID)
-            publish(.init(
-                modelID: modelID, phase: .failed, downloadedBytes: 0, totalBytes: totalBytes,
-                estimatedBytes: estimatedBytes, message: error.localizedDescription,
-                operationGeneration: generation
-            ))
+            guard inflight[model.id]?.operationGeneration == generation else { return }
+            inflight.removeValue(forKey: model.id)
+            markLedgerTerminal(modelID: model.id, status: .failed)
+            diagnosticsStore.recordFailure(classification: "filesystem", message: error.localizedDescription)
+            publishFailed(modelID: model.id, message: error.localizedDescription)
         }
-        // A slot just freed (success or failure) — drain the next queued download. (The cancel
-        // paths `return` above, so this only runs for terminal success/failure; cancel drains
-        // itself in `cancel(modelID:)`.)
         await startPendingDownloads()
     }
 
-    private func publishFailed(modelID: String, message: String) {
-        let descriptor = modelAssetStore.descriptor(id: modelID)?.model
-        publish(.init(
-            modelID: modelID, phase: .failed, downloadedBytes: 0, totalBytes: nil,
-            estimatedBytes: descriptor?.estimatedDownloadBytes, message: message,
-            operationGeneration: endOperation()
-        ))
-    }
-
-    // MARK: - Private: catalog + downloader
-
-    /// Resolve a catalog entry's files into engine `RepoFile`s with host-allowlist-validated URLs.
-    private func resolveFiles(entry: IOSModelCatalogEntry) -> [HuggingFaceDownloader.RepoFile] {
-        entry.files.map { f in
-            let url = (try? IOSModelDeliverySupport.downloadURL(for: f, entry: entry, configuration: configuration))
-            return HuggingFaceDownloader.RepoFile(
-                path: f.relativePath, size: f.sizeBytes, sha256: f.sha256, absoluteURL: url
-            )
-        }
-    }
-
-    /// Resolve files for `descriptor` via the (cached) catalog (used by relaunch-restore).
-    private func resolveFiles(for descriptor: ModelDescriptor) async throws -> [HuggingFaceDownloader.RepoFile] {
-        let catalog = try await fetchCatalog()
-        let entry = try IOSModelDeliverySupport.matchingCatalogEntry(
-            for: descriptor, in: catalog, configuration: configuration
-        )
-        return resolveFiles(entry: entry)
-    }
-
-    /// Build the engine with the iOS background-session profile: one `URLSession` per model
-    /// (singleton by identifier), byte-range chunking off, 6 concurrent files. The background
-    /// configuration lets downloads continue while the app is backgrounded or the device is locked.
-    private func makeDownloader(
-        modelID: String,
-        totalBytes: Int64,
-        estimatedBytes: Int64?,
-        generation: UInt64,
-        sessionID: String
-    ) -> HuggingFaceDownloader {
+    private func makeSharedDownloader() -> HuggingFaceDownloader {
         var engineConfig = HuggingFaceDownloader.Configuration()
-        engineConfig.maxConcurrentFiles = 6          // the model's files download concurrently (6)
-        engineConfig.chunkLargeFiles = false         // one native downloadTask per file — stable, even throughput (no chunk tapering)
+        engineConfig.maxConcurrentFiles = 6
+        engineConfig.chunkLargeFiles = false
 
-        let sessionConfig = URLSessionConfiguration.background(withIdentifier: sessionID)
-        sessionConfig.isDiscretionary = false        // user-initiated; do not defer
+        let sessionConfig = URLSessionConfiguration.background(
+            withIdentifier: configuration.backgroundSessionIdentifier
+        )
+        sessionConfig.isDiscretionary = false
         sessionConfig.waitsForConnectivity = true
         sessionConfig.sessionSendsLaunchEvents = true
         sessionConfig.httpMaximumConnectionsPerHost = 6
 
         return HuggingFaceDownloader(
             progressHandler: { [weak self] progress in
-                Task { @MainActor [weak self] in
-                    self?.handleProgress(
-                        modelID: modelID, generation: generation, totalBytes: totalBytes,
-                        estimatedBytes: estimatedBytes, progress: progress
-                    )
-                }
+                Task { @MainActor [weak self] in self?.handleProgress(progress) }
             },
             sessionConfiguration: sessionConfig,
             engineConfiguration: engineConfig,
+            durableTemporaryDirectory: AppPaths.modelDownloadDelegateFilesDir,
+            // The diagnostics store is internally serialized. Record synchronously so the
+            // terminal success summary cannot overtake URLSession's final task metrics.
+            transferMetricsHandler: { [diagnosticsStore] metrics in
+                diagnosticsStore.record(metrics: metrics)
+            },
+            verifiedArtifactHandler: { [weak self] receipt in
+                await MainActor.run { [weak self] in self?.recordVerifiedFile(receipt) }
+            },
             backgroundSessionCompletionHandler: { identifier in
                 Task { @MainActor in
                     IOSModelDeliveryBackgroundEventRelay.complete(forSessionIdentifier: identifier)
@@ -455,56 +414,205 @@ final class IOSModelDownloadCoordinator {
         )
     }
 
-    private func handleProgress(
-        modelID: String,
-        generation: UInt64,
-        totalBytes: Int64,
-        estimatedBytes: Int64?,
-        progress: HuggingFaceDownloader.RepositoryProgress
-    ) {
-        guard inflight[modelID]?.operationGeneration == generation else { return }   // stale
+    private func handleProgress(_ progress: HuggingFaceDownloader.RepositoryProgress) {
+        diagnosticsStore.record(progress: progress)
+        guard let active = inflight.values.first,
+              let descriptor = modelAssetStore.descriptor(id: active.modelID)?.model else { return }
         let phase: IOSModelDeliverySnapshot.Phase
+        let ledgerStatus: IOSModelDownloadLedger.Status
         switch progress.phase {
-        case .downloading: phase = .downloading
-        case .verifying: phase = .verifying
-        case .installing: phase = .installing
+        case .queued:
+            phase = .queued; ledgerStatus = .queued
+        case .waitingForConnectivity:
+            phase = .waitingForConnectivity; ledgerStatus = .waitingForConnectivity
+        case .downloading:
+            phase = .downloading; ledgerStatus = .downloading
+        case .retrying:
+            phase = .retrying; ledgerStatus = .retrying
+        case .verifying:
+            phase = .verifying; ledgerStatus = .verifying
+        case .installing:
+            phase = .installing; ledgerStatus = .installing
+        case .cancelling:
+            phase = .cancelling; ledgerStatus = .cancelRequested
         }
-        publish(.init(
-            modelID: modelID, phase: phase, downloadedBytes: progress.downloadedBytes,
-            totalBytes: progress.totalBytes > 0 ? progress.totalBytes : totalBytes,
-            estimatedBytes: estimatedBytes, message: nil, operationGeneration: generation
-        ))
+        let visibleBytes = ModelDownloadProgressReconciler.visibleBytes(
+            current: progress.downloadedBytes,
+            persisted: ledgerReceivedBytes(modelID: active.modelID),
+            total: active.totalBytes
+        )
+        persistProgressIfNeeded(
+            modelID: active.modelID,
+            status: ledgerStatus,
+            bytes: visibleBytes,
+            retryCount: progress.retryCount
+        )
+        publishSnapshot(
+            modelID: active.modelID,
+            phase: phase,
+            downloadedBytes: visibleBytes,
+            totalBytes: progress.totalBytes > 0 ? progress.totalBytes : active.totalBytes,
+            bytesPerSecond: progress.phase == .downloading ? progress.bytesPerSecond : nil,
+            estimatedSecondsRemaining: progress.estimatedSecondsRemaining,
+            retryCount: progress.retryCount,
+            message: progress.isStalled ? "No progress for 20 seconds" : progress.statusMessage,
+            generation: active.operationGeneration,
+            estimatedBytes: descriptor.estimatedDownloadBytes
+        )
     }
 
-    private func publish(_ snapshot: IOSModelDeliverySnapshot) {
-        snapshotSink(snapshot)
+    private func resolveFiles(entry: IOSModelCatalogEntry) -> [HuggingFaceDownloader.RepoFile] {
+        entry.files.map { file in
+            HuggingFaceDownloader.RepoFile(
+                path: file.relativePath,
+                size: file.sizeBytes,
+                sha256: file.sha256,
+                absoluteURL: try? IOSModelDeliverySupport.downloadURL(
+                    for: file,
+                    entry: entry,
+                    configuration: configuration
+                )
+            )
+        }
     }
 
     private func fetchCatalog() async throws -> IOSModelCatalogDocument {
         if let cachedCatalog { return cachedCatalog }
-        let document = try await fetchCatalogUncached()
-        cachedCatalog = document
-        return document
-    }
-
-    private func fetchCatalogUncached() async throws -> IOSModelCatalogDocument {
+        let document: IOSModelCatalogDocument
         if configuration.catalogURL.isBundledModelCatalog {
-            guard let catalogURL = Bundle.main.url(
+            guard let url = Bundle.main.url(
                 forResource: IOSModelDeliveryConfiguration.bundledCatalogResourceName,
                 withExtension: IOSModelDeliveryConfiguration.bundledCatalogResourceExtension
             ) else {
                 throw IOSModelDeliveryError.invalidCatalog("Bundled iPhone model catalog is missing.")
             }
-            let data = try Data(contentsOf: catalogURL)
-            return try JSONDecoder().decode(IOSModelCatalogDocument.self, from: data)
+            document = try JSONDecoder().decode(IOSModelCatalogDocument.self, from: Data(contentsOf: url))
+        } else {
+            let (data, response) = try await catalogSession.data(from: configuration.catalogURL)
+            guard let response = response as? HTTPURLResponse,
+                  (200..<300).contains(response.statusCode) else {
+                throw IOSModelDeliveryError.invalidCatalog("Catalog endpoint returned an unexpected response.")
+            }
+            document = try JSONDecoder().decode(IOSModelCatalogDocument.self, from: data)
         }
+        cachedCatalog = document
+        return document
+    }
 
-        let (data, response) = try await catalogSession.data(from: configuration.catalogURL)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw IOSModelDeliveryError.invalidCatalog("Catalog endpoint returned an unexpected response.")
+    private func makeLedgerRequest(
+        model: ModelDescriptor,
+        entry: IOSModelCatalogEntry,
+        totalBytes: Int64
+    ) -> IOSModelDownloadLedger.Request {
+        IOSModelDownloadLedger.Request(
+            logicalRequestID: UUID().uuidString,
+            modelID: model.id,
+            artifactVersion: model.artifactVersion,
+            repo: model.huggingFaceRepo,
+            revision: model.huggingFaceRevision ?? "main",
+            targetFolder: model.installDirectory(in: AppPaths.modelsDir).lastPathComponent,
+            expectedFiles: entry.files.map(\.relativePath).sorted(),
+            verifiedFiles: [],
+            retryCount: 0,
+            receivedBytes: 0,
+            totalBytes: totalBytes,
+            status: .queued
+        )
+    }
+
+    private func prepareDirectories() throws {
+        for directory in [
+            AppPaths.modelsDir,
+            AppPaths.modelDownloadRootDir,
+            AppPaths.modelDownloadStagingDir,
+            AppPaths.modelDownloadDelegateFilesDir,
+            AppPaths.modelDownloadDiagnosticsDir,
+        ] {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? IOSModelDeliverySupport.excludeFromBackup(directory)
         }
-        return try JSONDecoder().decode(IOSModelCatalogDocument.self, from: data)
+    }
+
+    private func stagingRoot(modelID: String) -> URL {
+        AppPaths.modelDownloadStagingDir.appendingPathComponent(modelID, isDirectory: true)
+    }
+
+    private func discardStaging(modelID: String) {
+        try? fileManager.removeItem(at: stagingRoot(modelID: modelID))
+    }
+
+    private func persistProgressIfNeeded(
+        modelID: String,
+        status: IOSModelDownloadLedger.Status,
+        bytes: Int64,
+        retryCount: Int
+    ) {
+        let now = ProcessInfo.processInfo.systemUptime
+        let last = lastLedgerProgressWrite[modelID] ?? 0
+        guard now - last >= 0.5 || status != .downloading else { return }
+        lastLedgerProgressWrite[modelID] = now
+        updateLedger(modelID: modelID) {
+            $0.status = status
+            $0.receivedBytes = max($0.receivedBytes, bytes)
+            $0.retryCount = max($0.retryCount, retryCount)
+        }
+    }
+
+    private func recordVerifiedFile(_ receipt: VerifiedArtifactReceipt) {
+        guard let modelID = inflight.values.first?.modelID else { return }
+        updateLedger(modelID: modelID) { request in
+            request.verifiedFiles.removeAll { $0.relativePath == receipt.relativePath }
+            request.verifiedFiles.append(.init(
+                relativePath: receipt.relativePath,
+                expectedSize: receipt.expectedSize,
+                sha256: receipt.expectedSHA256
+            ))
+            request.verifiedFiles.sort { $0.relativePath < $1.relativePath }
+        }
+    }
+
+    private func updateLedger(
+        modelID: String,
+        mutate: (inout IOSModelDownloadLedger.Request) -> Void
+    ) {
+        do {
+            var ledger = try ledgerStore.load()
+            updateRequest(modelID, in: &ledger, mutate: mutate)
+            try ledgerStore.save(ledger)
+        } catch {
+            diagnosticsStore.recordFailure(classification: "ledger-write", message: error.localizedDescription)
+        }
+    }
+
+    private func updateRequest(
+        _ modelID: String,
+        in ledger: inout IOSModelDownloadLedger,
+        mutate: (inout IOSModelDownloadLedger.Request) -> Void
+    ) {
+        guard let index = ledger.requests.firstIndex(where: { $0.modelID == modelID }) else { return }
+        mutate(&ledger.requests[index])
+    }
+
+    private func ledgerRequest(
+        _ modelID: String,
+        in ledger: IOSModelDownloadLedger
+    ) -> IOSModelDownloadLedger.Request? {
+        ledger.requests.first(where: { $0.modelID == modelID })
+    }
+
+    private func ledgerReceivedBytes(modelID: String) -> Int64 {
+        (try? ledgerStore.load().requests.first(where: { $0.modelID == modelID })?.receivedBytes) ?? 0
+    }
+
+    private func markLedgerTerminal(
+        modelID: String,
+        status: IOSModelDownloadLedger.Status,
+        receivedBytes: Int64? = nil
+    ) {
+        updateLedger(modelID: modelID) {
+            $0.status = status
+            if let receivedBytes { $0.receivedBytes = receivedBytes }
+        }
     }
 
     private func beginOperation() -> UInt64 {
@@ -512,38 +620,181 @@ final class IOSModelDownloadCoordinator {
         return operationGeneration
     }
 
-    @discardableResult
-    private func endOperation() -> UInt64 {
-        operationGeneration += 1
-        return operationGeneration
-    }
-
-    // MARK: - In-flight persistence
-
-    private func loadInFlightRecords() -> [IOSInFlightDownloadRecord] {
-        guard let data = try? Data(contentsOf: AppPaths.iosInFlightDownloadsFile),
-              let document = try? JSONDecoder().decode(IOSInFlightDownloadsDocument.self, from: data) else {
-            return []
-        }
-        return document.downloads
-    }
-
-    private func saveInFlightRecords(_ records: [IOSInFlightDownloadRecord]) {
-        let document = IOSInFlightDownloadsDocument(
-            schemaVersion: IOSInFlightDownloadsDocument.currentSchemaVersion,
-            downloads: records
+    private func publishSnapshot(
+        for model: ModelDescriptor,
+        phase: IOSModelDeliverySnapshot.Phase,
+        downloadedBytes: Int64
+    ) {
+        publishSnapshot(
+            modelID: model.id,
+            phase: phase,
+            downloadedBytes: downloadedBytes,
+            totalBytes: model.estimatedDownloadBytes,
+            message: nil,
+            generation: beginOperation(),
+            estimatedBytes: model.estimatedDownloadBytes
         )
-        guard let data = try? JSONEncoder().encode(document) else { return }
-        try? data.write(to: AppPaths.iosInFlightDownloadsFile, options: .atomic)
     }
 
-    private func upsertInFlightRecord(_ record: IOSInFlightDownloadRecord) {
-        var records = loadInFlightRecords().filter { $0.modelID != record.modelID }
-        records.append(record)
-        saveInFlightRecords(records)
+    private func publishSnapshot(
+        modelID: String,
+        phase: IOSModelDeliverySnapshot.Phase,
+        downloadedBytes: Int64,
+        totalBytes: Int64?,
+        bytesPerSecond: Int64? = nil,
+        estimatedSecondsRemaining: Double? = nil,
+        retryCount: Int = 0,
+        message: String?,
+        generation: UInt64,
+        estimatedBytes: Int64? = nil
+    ) {
+        snapshotSink(.init(
+            modelID: modelID,
+            phase: phase,
+            downloadedBytes: downloadedBytes,
+            totalBytes: totalBytes,
+            estimatedBytes: estimatedBytes ?? modelAssetStore.descriptor(id: modelID)?.model.estimatedDownloadBytes,
+            bytesPerSecond: bytesPerSecond,
+            estimatedSecondsRemaining: estimatedSecondsRemaining,
+            retryCount: retryCount,
+            message: message,
+            operationGeneration: generation
+        ))
     }
 
-    private func removeInFlightRecord(modelID: String) {
-        saveInFlightRecords(loadInFlightRecords().filter { $0.modelID != modelID })
+    private func publishTerminal(modelID: String, phase: IOSModelDeliverySnapshot.Phase) {
+        publishSnapshot(
+            modelID: modelID,
+            phase: phase,
+            downloadedBytes: 0,
+            totalBytes: nil,
+            message: nil,
+            generation: beginOperation()
+        )
+    }
+
+    private func publishFailed(modelID: String, message: String) {
+        publishSnapshot(
+            modelID: modelID,
+            phase: .failed,
+            downloadedBytes: ledgerReceivedBytes(modelID: modelID),
+            totalBytes: modelAssetStore.descriptor(id: modelID)?.model.estimatedDownloadBytes,
+            message: message,
+            generation: beginOperation()
+        )
+    }
+
+    private func migrateV1IfNeeded() async throws {
+        let legacyURL = AppPaths.iosInFlightDownloadsFile
+        guard fileManager.fileExists(atPath: legacyURL.path) else { return }
+        let data = try Data(contentsOf: legacyURL)
+        let legacy = try JSONDecoder().decode(IOSLegacyInFlightDownloadsDocument.self, from: data)
+        guard legacy.schemaVersion == 1 else {
+            throw IOSModelDownloadLedgerError.unsupportedSchema(legacy.schemaVersion)
+        }
+
+        var ledger = try ledgerStore.load()
+        for record in legacy.downloads {
+            let legacyConfig = URLSessionConfiguration.background(
+                withIdentifier: record.backgroundSessionIdentifier
+            )
+            let legacySession = URLSession(configuration: legacyConfig)
+            let tasks = await withCheckedContinuation { continuation in
+                legacySession.getAllTasks { continuation.resume(returning: $0) }
+            }
+            await withTaskGroup(of: Void.self) { group in
+                for case let task as URLSessionDownloadTask in tasks {
+                    group.addTask {
+                        await withCheckedContinuation { continuation in
+                            task.cancel { _ in continuation.resume() }
+                        }
+                    }
+                }
+            }
+            guard await waitUntilSessionIsEmpty(legacySession) else {
+                legacySession.invalidateAndCancel()
+                throw IOSModelDownloadLedgerError.invalidDocument
+            }
+            legacySession.finishTasksAndInvalidate()
+
+            guard let descriptor = modelAssetStore.descriptor(id: record.modelID)?.model,
+                  descriptor.artifactVersion == record.artifactVersion,
+                  let entry = try? IOSModelDeliverySupport.matchingCatalogEntry(
+                    for: descriptor,
+                    in: try await fetchCatalog(),
+                    configuration: configuration
+                  ) else { continue }
+            try migrateLegacyStagingIfPresent(record: record)
+            if !ledger.requests.contains(where: { $0.modelID == record.modelID }) {
+                ledger.requests.append(makeLedgerRequest(
+                    model: descriptor,
+                    entry: entry,
+                    totalBytes: record.totalBytes
+                ))
+            }
+        }
+        try ledgerStore.save(ledger)
+        try fileManager.removeItem(at: legacyURL)
+    }
+
+    private func waitUntilSessionIsEmpty(_ session: URLSession) async -> Bool {
+        for _ in 0..<100 {
+            let tasks = await withCheckedContinuation { continuation in
+                session.getAllTasks { continuation.resume(returning: $0) }
+            }
+            if tasks.isEmpty { return true }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
+    /// Move recoverable v1 partials into the single v2 staging hierarchy. Conflicting files are
+    /// retained under `legacy-conflicts` for a clean revalidation instead of being discarded or
+    /// trusted without hashing.
+    private func migrateLegacyStagingIfPresent(record: IOSLegacyInFlightDownloadRecord) throws {
+        let targetName = URL(fileURLWithPath: record.targetFolderPath).lastPathComponent
+        guard !targetName.isEmpty else { return }
+        let legacyRoot = AppPaths.modelsDir
+            .appendingPathComponent(".qwenvoice-downloads", isDirectory: true)
+            .appendingPathComponent(targetName, isDirectory: true)
+        guard fileManager.fileExists(atPath: legacyRoot.path) else { return }
+
+        let destinationRoot = AppPaths.modelDownloadStagingDir
+            .appendingPathComponent(record.modelID, isDirectory: true)
+        try fileManager.createDirectory(at: destinationRoot, withIntermediateDirectories: true)
+        guard let enumerator = fileManager.enumerator(
+            at: legacyRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let legacyComponents = legacyRoot.standardizedFileURL.pathComponents
+        for case let source as URL in enumerator {
+            let values = try source.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { continue }
+            let relativeComponents = source.standardizedFileURL.pathComponents
+                .dropFirst(legacyComponents.count)
+            guard !relativeComponents.isEmpty,
+                  !relativeComponents.contains("..") else { continue }
+            let relativePath = relativeComponents.joined(separator: "/")
+            var destination = destinationRoot.appendingPathComponent(relativePath)
+            if fileManager.fileExists(atPath: destination.path) {
+                let sourceSize = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
+                let destinationSize = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -2
+                if sourceSize == destinationSize {
+                    try fileManager.removeItem(at: source)
+                    continue
+                }
+                destination = destinationRoot
+                    .appendingPathComponent("legacy-conflicts", isDirectory: true)
+                    .appendingPathComponent("\(UUID().uuidString)-\(source.lastPathComponent)")
+            }
+            try fileManager.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.moveItem(at: source, to: destination)
+        }
+        try? fileManager.removeItem(at: legacyRoot)
     }
 }

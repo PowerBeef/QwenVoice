@@ -426,7 +426,8 @@ targets:
       - package: SwiftHuggingFace
         product: HuggingFace
 
-  # Pure logic unit tests for QwenVoiceCore language semantics (no models, no XPC).
+  # Pure logic unit tests for QwenVoiceCore language and model-delivery lifecycle semantics
+  # (no models, no network, no Simulator, no XPC).
   # Run: scripts/macos_test.sh core-test
   VocelloCoreTests:
     type: bundle.unit-test

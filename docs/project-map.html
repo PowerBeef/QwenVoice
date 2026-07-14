@@ -1694,7 +1694,7 @@ scripts/macos_test.sh test
     {
       "label":"Library",
       "title":"Saved Voices · History · Models",
-      "body":"Record or import references, optionally transcribe locally, cache prepared clone prompts, replay/export generations, and manage per-mode model packages. iOS background-session reattachment is not the same as the macOS repair affordance.",
+      "body":"Record or import references, optionally transcribe locally, cache prepared clone prompts, replay/export generations, and manage per-mode model packages. iOS uses one durable ledger and app-lifetime background session; macOS uses terminally invalidated foreground sessions.",
       "chips":[
         {"t":"PreparedVoice","c":""},
         {"t":"LocalDocumentIO","c":""},
@@ -1839,8 +1839,8 @@ scripts/macos_test.sh test
     },
     {
       "title":"Model install",
-      "steps":["Read the model contract or iOS catalog","List the pinned Hugging Face revision","Download into .qwenvoice-downloads staging","Verify required paths, sizes, and integrity metadata","Atomically move into models/ and refresh inventory"],
-      "note":"macOS exposes repair for incomplete installs. iOS reattaches background URLSession transfers and treats explicit cancel as discard."
+      "steps":["Read the model contract or iOS catalog","Reconcile the durable request ledger with existing background tasks","Download into platform-owned staging","Verify exact size and SHA-256 once per process generation","Atomically move into models/ and refresh inventory"],
+      "note":"macOS and CLI tear down foreground sessions on terminal paths. iOS uses one app-lifetime bundle-aware background session, adopts only exact task identities, defers UIKit completion until durable postprocessing, preserves verified files for Retry, and treats explicit Cancel as discard."
     },
     {
       "title":"Persistence and playback",
@@ -2134,7 +2134,7 @@ scripts/macos_test.sh test
   "storage": [
     {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and prepared artifacts","history.sqlite","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
     {"title":"macOS debug","root":"~/Library/Application Support/QwenVoice-Debug/","items":["Same logical layout as release","Model fixtures may symlink to the canonical store","Raw diagnostics remain gitignored"]},
-    {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages and staging","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
+    {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages","One downloads/staging tree plus the atomic model-delivery ledger","Bounded privacy-safe model-download diagnostics","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
     {"title":"Privacy boundary","root":"local-first runtime","items":["No cloud TTS or bundled model weights","Recording, transcription, generation, playback, and History stay local","Network use is model download, release/CI, and website delivery","Production telemetry is disabled by default"]}
   ],
   "invariants": [
