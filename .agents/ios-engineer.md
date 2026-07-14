@@ -36,6 +36,7 @@ Before changing iOS UI or behavior, read:
   - `scripts/ios_device.sh preflight`
   - `scripts/ios_device.sh build|install|launch`
   - `scripts/ios_device.sh bench|lang-bench`
+  - `scripts/ios_device.sh speech-assets` (explicit DE/ES/JA/ZH DictationTranscriber install plus legacy Speech recheck)
   - `scripts/ios_device.sh profile [--kind cpu|memory] [--keep-trace] [spec]`
   - `scripts/ios_device.sh memory --voice-id ID [--label ID]` (one-process retained-memory sequence)
   - `scripts/ios_device.sh memory-field-report [pulled-diagnostics]` (local-only; never contacts the phone)

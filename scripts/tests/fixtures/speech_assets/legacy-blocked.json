@@ -1,0 +1,64 @@
+{
+  "aggregateStatusAfter": "installed",
+  "assetInventoryReady": true,
+  "failureCode": "legacy_recognizer_not_ready",
+  "locales": [
+    {
+      "installedLocalePresentAfter": true,
+      "legacyRecognizerAvailable": true,
+      "legacyRecognizerIdentifier": "de_DE",
+      "legacySupportsOnDeviceRecognition": true,
+      "requestedIdentifier": "de_DE",
+      "resolvedIdentifier": "de_DE",
+      "statusAfter": "installed",
+      "vocelloLegacyReady": true,
+      "vocelloSelectedLegacyAvailable": true,
+      "vocelloSelectedLegacyIdentifier": "de-DE",
+      "vocelloSelectedLegacySupportsOnDeviceRecognition": true
+    },
+    {
+      "installedLocalePresentAfter": true,
+      "legacyRecognizerAvailable": true,
+      "legacyRecognizerIdentifier": "es_ES",
+      "legacySupportsOnDeviceRecognition": false,
+      "requestedIdentifier": "es_419",
+      "resolvedIdentifier": "es_ES",
+      "statusAfter": "installed",
+      "vocelloLegacyReady": false,
+      "vocelloSelectedLegacyAvailable": true,
+      "vocelloSelectedLegacyIdentifier": "es-ES",
+      "vocelloSelectedLegacySupportsOnDeviceRecognition": false
+    },
+    {
+      "installedLocalePresentAfter": true,
+      "legacyRecognizerAvailable": true,
+      "legacyRecognizerIdentifier": "ja_JP",
+      "legacySupportsOnDeviceRecognition": true,
+      "requestedIdentifier": "ja_JP",
+      "resolvedIdentifier": "ja_JP",
+      "statusAfter": "installed",
+      "vocelloLegacyReady": true,
+      "vocelloSelectedLegacyAvailable": true,
+      "vocelloSelectedLegacyIdentifier": "ja-JP",
+      "vocelloSelectedLegacySupportsOnDeviceRecognition": true
+    },
+    {
+      "installedLocalePresentAfter": true,
+      "legacyRecognizerAvailable": true,
+      "legacyRecognizerIdentifier": "zh_CN",
+      "legacySupportsOnDeviceRecognition": true,
+      "requestedIdentifier": "zh_CN",
+      "resolvedIdentifier": "zh_CN",
+      "statusAfter": "installed",
+      "vocelloLegacyReady": true,
+      "vocelloSelectedLegacyAvailable": true,
+      "vocelloSelectedLegacyIdentifier": "zh-CN",
+      "vocelloSelectedLegacySupportsOnDeviceRecognition": true
+    }
+  ],
+  "requestedLocaleIdentifiers": ["de_DE", "es_419", "ja_JP", "zh_CN"],
+  "runID": "ios-speech-assets-fixture",
+  "schemaVersion": 1,
+  "status": "failed",
+  "vocelloLegacyReady": false
+}

@@ -10,9 +10,9 @@ import QwenVoiceCore
 /// `NativeRuntimeFactory` (see `IOSAppBootstrap.makeBackend`) — the app process gets
 /// the `com.apple.developer.kernel.increased-memory-limit` entitlement's raised limit,
 /// whereas the (since-removed) `VocelloEngineExtension` did not and was jetsam-killed
-/// loading the model. The headless `IOSDeviceDiagnosticsRunner`
-/// (`QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC`) drives a generation with no UI for
-/// `scripts/ios_device.sh bench`; it ships inert.
+/// loading the model. The headless `IOSDeviceDiagnosticsRunner` drives explicit
+/// non-UI device diagnostics, including generation and Speech-asset bootstrap;
+/// it ships inert unless a repository command supplies its purpose-specific environment.
 @main
 struct QVoiceiOSApp: App {
     @StateObject private var deps: IOSAppDependenciesContainer
@@ -123,8 +123,8 @@ struct QVoiceiOSApp: App {
                 if TelemetryGate.resolvedEnabled {
                     print("[QVoiceiOSApp] Engine initialized.")
                 }
-                // Headless, non-UI on-device diagnostics runner. No-op unless
-                // QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC is set by scripts/ios_device.sh.
+                // Headless, non-UI on-device diagnostics runner. No-op unless a
+                // purpose-specific environment key is set by scripts/ios_device.sh.
                 IOSDeviceDiagnosticsRunner.runIfRequested(engine: engine)
             } catch {
                 didInitializeEngine = false

@@ -2,13 +2,14 @@ import AVFoundation
 import CryptoKit
 import Foundation
 import QwenVoiceCore
+import Speech
 import UIKit
 
 /// Headless, non-UI on-device diagnostics runner — the iOS analog of `vocello bench`.
 ///
-/// Fires **only** when `QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC` is present and non-empty in the launch
-/// environment, so it ships completely inert (a normal user launch never sets it).
-/// `scripts/ios_device.sh bench` sets it — together with `QWENVOICE_DEBUG=1` (lights
+/// Fires **only** when one of its purpose-specific diagnostics environment variables is present
+/// and non-empty, so it ships completely inert (a normal user launch never sets one).
+/// `scripts/ios_device.sh bench` sets the generation spec — together with `QWENVOICE_DEBUG=1` (lights
 /// up `TelemetryGate`, so the engine appends its decode/RTF/audioQC row to
 /// `diagnostics/engine/generations.jsonl`) and `QVOICE_IOS_DEVICE_RUN_ID=<runID>`
 /// (tags the run) — launches the app over `devicectl`, polls for the completion
@@ -47,6 +48,8 @@ enum IOSDeviceDiagnosticsRunner {
     private static let environmentKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC"
     private static let memoryQualificationEnvironmentKey =
         "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC"
+    private static let speechAssetLocalesEnvironmentKey =
+        "QVOICE_IOS_SPEECH_ASSET_LOCALES"
     private static let runIDKey = "QVOICE_IOS_DEVICE_RUN_ID"
     private static let languageEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE"
     private static let verifyOutputEnvKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT"
@@ -71,7 +74,11 @@ enum IOSDeviceDiagnosticsRunner {
 
     /// True when the launch environment requested a diagnostic generation.
     static var isRequested: Bool {
-        [environmentKey, memoryQualificationEnvironmentKey].contains { key in
+        [
+            environmentKey,
+            memoryQualificationEnvironmentKey,
+            speechAssetLocalesEnvironmentKey,
+        ].contains { key in
             guard let raw = ProcessInfo.processInfo.environment[key]?
                 .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
             return !raw.isEmpty
@@ -92,6 +99,12 @@ enum IOSDeviceDiagnosticsRunner {
             fatalError("QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST: deliberate diagnostics crash")
         }
         #endif
+        if let rawLocales = trimmedEnvironmentValue(speechAssetLocalesEnvironmentKey) {
+            Task { @MainActor in
+                await runSpeechAssetBootstrap(rawLocales: rawLocales)
+            }
+            return
+        }
         if let rawMemorySpec = trimmedEnvironmentValue(memoryQualificationEnvironmentKey) {
             IOSInterruptionRecorder.shared.start()
             Task { @MainActor in
@@ -135,6 +148,256 @@ enum IOSDeviceDiagnosticsRunner {
             spec.text = parts[2]
         }
         return spec
+    }
+
+    // MARK: - Speech assets
+
+    /// Explicit physical-device bootstrap for the on-device Speech assets used by the language
+    /// output gate. This path is independent from generation and never runs during a normal app
+    /// launch. `AssetInventory` automatically reserves resolved locale assets when it creates the
+    /// combined installation request; this code never releases unrelated reservations.
+    private static func runSpeechAssetBootstrap(rawLocales: String) async {
+        let idleTimerWasDisabled = UIApplication.shared.isIdleTimerDisabled
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer {
+            UIApplication.shared.isIdleTimerDisabled = idleTimerWasDisabled
+        }
+
+        let runID = safeRunID(from: trimmedEnvironmentValue(runIDKey)) ?? "ios-speech-assets"
+        let startedAt = ISO8601DateFormatter().string(from: Date())
+        let requestedIdentifiers = speechAssetLocaleIdentifiers(from: rawLocales)
+        var result = SpeechAssetBootstrapResult(
+            runID: runID,
+            startedAt: startedAt,
+            requestedLocaleIdentifiers: requestedIdentifiers
+        )
+        var prepared: [PreparedSpeechAssetModule] = []
+        var failureCode: SpeechAssetFailureCode?
+
+        do {
+            guard !requestedIdentifiers.isEmpty else {
+                throw SpeechAssetBootstrapError(.invalidLocaleList)
+            }
+
+            let reservedBefore = await AssetInventory.reservedLocales
+            let installedBefore = await DictationTranscriber.installedLocales
+            result.maximumReservedLocales = AssetInventory.maximumReservedLocales
+            result.reservedLocaleCountBefore = reservedBefore.count
+            result.installedLocaleCountBefore = installedBefore.count
+
+            for requestedIdentifier in requestedIdentifiers {
+                let requestedLocale = Locale(identifier: requestedIdentifier)
+                guard let resolvedLocale = await DictationTranscriber.supportedLocale(
+                    equivalentTo: requestedLocale
+                ) else {
+                    result.locales.append(SpeechAssetLocaleResult(
+                        requestedIdentifier: requestedIdentifier
+                    ))
+                    failureCode = .unsupportedLocale
+                    continue
+                }
+
+                let module = DictationTranscriber(
+                    locale: resolvedLocale,
+                    preset: .shortDictation
+                )
+                let statusBefore = await AssetInventory.status(forModules: [module])
+                let resolvedIdentifier = resolvedLocale.identifier
+                result.locales.append(SpeechAssetLocaleResult(
+                    requestedIdentifier: requestedIdentifier,
+                    resolvedIdentifier: resolvedIdentifier,
+                    moduleSelectedIdentifiers: module.selectedLocales.map(\.identifier),
+                    statusBefore: speechAssetStatusLabel(statusBefore),
+                    reservedBefore: containsEquivalentLocale(
+                        resolvedLocale,
+                        in: reservedBefore
+                    ),
+                    installedLocalePresentBefore: containsEquivalentLocale(
+                        resolvedLocale,
+                        in: installedBefore
+                    )
+                ))
+                prepared.append(PreparedSpeechAssetModule(
+                    recordIndex: result.locales.count - 1,
+                    resolvedLocale: resolvedLocale,
+                    module: module
+                ))
+            }
+
+            guard failureCode == nil, prepared.count == requestedIdentifiers.count else {
+                throw SpeechAssetBootstrapError(failureCode ?? .unsupportedLocale)
+            }
+
+            let modules: [any SpeechModule] = prepared.map(\.module)
+            result.aggregateStatusBefore = speechAssetStatusLabel(
+                await AssetInventory.status(forModules: modules)
+            )
+            if let installationRequest = try await AssetInventory.assetInstallationRequest(
+                supporting: modules
+            ) {
+                result.installationRequestCreated = true
+                result.installationAttempted = true
+                try await installationRequest.downloadAndInstall()
+            }
+
+        } catch let error as SpeechAssetBootstrapError {
+            failureCode = error.code
+        } catch {
+            let nsError = error as NSError
+            result.failureDomain = boundedSpeechAssetFailureDomain(nsError.domain)
+            result.failureCodeValue = nsError.code
+            failureCode = result.installationAttempted ? .downloadFailed : .installationRequestFailed
+        }
+
+        // Always re-read the device after the installation attempt. Apple can throw while a
+        // system-managed retry continues, and partial installs must remain visible to the caller.
+        let assetInventoryReady = await finalizeSpeechAssetBootstrapResult(
+            &result,
+            prepared: prepared
+        )
+        result.assetInventoryReady = assetInventoryReady
+        if assetInventoryReady, result.vocelloLegacyReady == true {
+            result.status = "pass"
+            result.failureCode = nil
+            result.failureDomain = nil
+            result.failureCodeValue = nil
+        } else {
+            result.status = "failed"
+            if failureCode == nil {
+                failureCode = assetInventoryReady
+                    ? .legacyRecognizerNotReady
+                    : .postInstallationVerificationFailed
+            }
+            result.failureCode = (failureCode ?? .unknown).rawValue
+        }
+        result.finishedAt = ISO8601DateFormatter().string(from: Date())
+        writeSpeechAssetSentinel(result, runID: runID)
+    }
+
+    private static func finalizeSpeechAssetBootstrapResult(
+        _ result: inout SpeechAssetBootstrapResult,
+        prepared: [PreparedSpeechAssetModule]
+    ) async -> Bool {
+        guard !prepared.isEmpty,
+              prepared.count == result.requestedLocaleIdentifiers.count else {
+            return false
+        }
+
+        let modules: [any SpeechModule] = prepared.map(\.module)
+        let reservedAfter = await AssetInventory.reservedLocales
+        let installedAfter = await DictationTranscriber.installedLocales
+        let aggregateStatusAfter = await AssetInventory.status(forModules: modules)
+        var perModuleStatuses: [AssetInventory.Status] = []
+        perModuleStatuses.reserveCapacity(prepared.count)
+        for preparedModule in prepared {
+            perModuleStatuses.append(
+                await AssetInventory.status(forModules: [preparedModule.module])
+            )
+        }
+
+        result.reservedLocaleCountAfter = reservedAfter.count
+        result.installedLocaleCountAfter = installedAfter.count
+        result.aggregateStatusAfter = speechAssetStatusLabel(aggregateStatusAfter)
+
+        // SFSpeechRecognizer is not Sendable. All AssetInventory awaits above are complete before
+        // fresh recognizers are created and read on this @MainActor task.
+        let vocelloSelections = VoiceClipTranscriber.liveSelectedCapabilities()
+        var allInstalled = aggregateStatusAfter == .installed
+        for (preparedModule, statusAfter) in zip(prepared, perModuleStatuses) {
+            let installedLocalePresent = containsEquivalentLocale(
+                preparedModule.resolvedLocale,
+                in: installedAfter
+            )
+            let reserved = containsEquivalentLocale(
+                preparedModule.resolvedLocale,
+                in: reservedAfter
+            )
+            let legacyExact = VoiceClipTranscriber.liveRecognizerObservation(
+                for: preparedModule.resolvedLocale
+            )
+            let vocelloSelection = vocelloSelections.first {
+                $0.language == legacyExact.language
+            }
+            let vocelloReady = vocelloSelection?.isAvailable == true
+                && vocelloSelection?.supportsOnDeviceRecognition == true
+
+            result.locales[preparedModule.recordIndex].statusAfter =
+                speechAssetStatusLabel(statusAfter)
+            result.locales[preparedModule.recordIndex].reservedAfter = reserved
+            result.locales[preparedModule.recordIndex].installedLocalePresentAfter =
+                installedLocalePresent
+            result.locales[preparedModule.recordIndex].legacyRecognizerIdentifier =
+                legacyExact.recognizerIdentifier
+            result.locales[preparedModule.recordIndex].legacyRecognizerAvailable =
+                legacyExact.isAvailable
+            result.locales[preparedModule.recordIndex].legacySupportsOnDeviceRecognition =
+                legacyExact.supportsOnDeviceRecognition
+            result.locales[preparedModule.recordIndex].vocelloSelectedLegacyIdentifier =
+                vocelloSelection?.identifier
+            result.locales[preparedModule.recordIndex].vocelloSelectedLegacyAvailable =
+                vocelloSelection?.isAvailable
+            result.locales[preparedModule.recordIndex]
+                .vocelloSelectedLegacySupportsOnDeviceRecognition =
+                vocelloSelection?.supportsOnDeviceRecognition
+            result.locales[preparedModule.recordIndex].vocelloLegacyReady = vocelloReady
+
+            allInstalled = allInstalled
+                && statusAfter == .installed
+                && installedLocalePresent
+        }
+        result.vocelloLegacyReady = result.locales.allSatisfy {
+            $0.vocelloLegacyReady == true
+        }
+        return allInstalled
+    }
+
+    private static func speechAssetLocaleIdentifiers(from raw: String) -> [String] {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !["1", "on", "true", "yes"].contains(trimmed.lowercased()) else {
+            return ["de_DE", "es_419", "ja_JP", "zh_CN"]
+        }
+        var seen: Set<String> = []
+        return trimmed.split(separator: ",").compactMap { component in
+            let identifier = component.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !identifier.isEmpty,
+                  identifier.count <= 32,
+                  identifier.unicodeScalars.allSatisfy({ scalar in
+                      CharacterSet.alphanumerics.contains(scalar)
+                          || scalar == "_"
+                          || scalar == "-"
+                  }) else {
+                return nil
+            }
+            let key = normalizedLocaleIdentifier(identifier)
+            return seen.insert(key).inserted ? identifier : nil
+        }
+    }
+
+    private static func containsEquivalentLocale(_ locale: Locale, in locales: [Locale]) -> Bool {
+        let expected = normalizedLocaleIdentifier(locale.identifier)
+        return locales.contains {
+            normalizedLocaleIdentifier($0.identifier) == expected
+        }
+    }
+
+    private static func normalizedLocaleIdentifier(_ identifier: String) -> String {
+        identifier.replacingOccurrences(of: "-", with: "_").lowercased()
+    }
+
+    private static func speechAssetStatusLabel(_ status: AssetInventory.Status) -> String {
+        switch status {
+        case .unsupported: "unsupported"
+        case .supported: "supported"
+        case .downloading: "downloading"
+        case .installed: "installed"
+        @unknown default: "unknown"
+        }
+    }
+
+    private static func boundedSpeechAssetFailureDomain(_ value: String) -> String? {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        let bounded = String(value.unicodeScalars.filter { allowed.contains($0) }.prefix(96))
+        return bounded.isEmpty ? nil : bounded
     }
 
     // MARK: - Run
@@ -1023,6 +1286,31 @@ enum IOSDeviceDiagnosticsRunner {
         return dir.appendingPathComponent("\(runID).wav", isDirectory: false).path
     }
 
+    private static func writeSpeechAssetSentinel(
+        _ record: SpeechAssetBootstrapResult,
+        runID: String
+    ) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(record) else {
+            print("[speech-assets] could not encode completion evidence")
+            return
+        }
+        let fileName = "speech-assets-done.json"
+        let appGroupURL = AppPaths.appSupportDir
+            .appendingPathComponent("diagnostics", isDirectory: true)
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
+        writeData(data, to: appGroupURL, label: "speech assets (app-group)")
+
+        guard let pullableRoot = IOSPullableDiagnosticsMirror.pullableRoot else { return }
+        let pullableURL = pullableRoot
+            .appendingPathComponent(runID, isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
+        // This is the final write observed by the host poller.
+        writeData(data, to: pullableURL, label: "speech assets (pullable)")
+    }
+
     private static func writeSentinel(_ record: SentinelRecord, runID: String) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1133,6 +1421,73 @@ enum IOSDeviceDiagnosticsRunner {
         let fixtureDigests: [String: String]
         let memoryQualification: MemoryQualificationDeclaration
         let takes: [MemoryQualificationTakeResult]
+    }
+
+    private struct PreparedSpeechAssetModule {
+        let recordIndex: Int
+        let resolvedLocale: Locale
+        let module: DictationTranscriber
+    }
+
+    private enum SpeechAssetFailureCode: String {
+        case invalidLocaleList = "invalid_locale_list"
+        case unsupportedLocale = "unsupported_locale"
+        case installationRequestFailed = "installation_request_failed"
+        case downloadFailed = "download_failed"
+        case postInstallationVerificationFailed = "post_installation_verification_failed"
+        case legacyRecognizerNotReady = "legacy_recognizer_not_ready"
+        case unknown
+    }
+
+    private struct SpeechAssetBootstrapError: Error {
+        let code: SpeechAssetFailureCode
+
+        init(_ code: SpeechAssetFailureCode) {
+            self.code = code
+        }
+    }
+
+    private struct SpeechAssetBootstrapResult: Codable {
+        var schemaVersion = 1
+        let runID: String
+        let startedAt: String
+        var finishedAt: String?
+        var status = "failed"
+        let requestedLocaleIdentifiers: [String]
+        var maximumReservedLocales: Int?
+        var reservedLocaleCountBefore: Int?
+        var reservedLocaleCountAfter: Int?
+        var installedLocaleCountBefore: Int?
+        var installedLocaleCountAfter: Int?
+        var aggregateStatusBefore: String?
+        var aggregateStatusAfter: String?
+        var installationRequestCreated = false
+        var installationAttempted = false
+        var assetInventoryReady: Bool?
+        var vocelloLegacyReady: Bool?
+        var failureCode: String?
+        var failureDomain: String?
+        var failureCodeValue: Int?
+        var locales: [SpeechAssetLocaleResult] = []
+    }
+
+    private struct SpeechAssetLocaleResult: Codable {
+        let requestedIdentifier: String
+        var resolvedIdentifier: String?
+        var moduleSelectedIdentifiers: [String] = []
+        var statusBefore: String?
+        var statusAfter: String?
+        var reservedBefore: Bool?
+        var reservedAfter: Bool?
+        var installedLocalePresentBefore: Bool?
+        var installedLocalePresentAfter: Bool?
+        var legacyRecognizerIdentifier: String?
+        var legacyRecognizerAvailable: Bool?
+        var legacySupportsOnDeviceRecognition: Bool?
+        var vocelloSelectedLegacyIdentifier: String?
+        var vocelloSelectedLegacyAvailable: Bool?
+        var vocelloSelectedLegacySupportsOnDeviceRecognition: Bool?
+        var vocelloLegacyReady: Bool?
     }
 
     private struct SentinelRecord: Codable {

@@ -46,13 +46,24 @@ the Swift verdict.
    Allemand, Espagnol, Japonais (Romaji), Chinois simplifié (Pinyin QWERTY).
 2. **Dictation languages:** Settings → search *dictée* → **Langues de Dictée** — enable
    Allemand, Espagnol, Japonais, Mandarin (and any variants listed for your locale).
-3. **Wi‑Fi download:** Keep the phone on Wi‑Fi until Settings no longer shows that voice
-   content for those languages will download later (French UI: *sera téléchargé plus tard
-   lorsque l'iPhone sera connecté au Wi‑Fi*).
-4. **Re-run** after assets finish: `scripts/ios_device.sh lang-bench --subset full --label "lang-full-output-v3"`.
+3. **Explicit asset bootstrap:** With the unlocked phone on Wi‑Fi, run
+   `scripts/ios_device.sh speech-assets`. Vocello resolves the device-supported equivalents for
+   `de_DE`, `es_419`, `ja_JP`, and `zh_CN`, creates DictationTranscriber modules, checks
+   AssetInventory before and after one combined `downloadAndInstall()` request, and requires every
+   resolved locale to report installed. The command also prints a separate
+   `vocello_legacy_gate` verdict from fresh SFSpeechRecognizer instances and the same deterministic
+   locale-selection policy used by the output verifier.
+4. **Interpret both results:** `asset_inventory=PASS` proves the modern assets installed.
+   `vocello_legacy_gate=PASS` is additionally required by the current Phase 3 verifier. If the
+   modern gate passes but the legacy gate remains blocked, do not claim language readiness or run
+   the full matrix as promotion evidence; preserve the local diagnostic result and investigate the
+   OS-level legacy recognizer state.
+5. **Re-run** once both are ready:
+   `scripts/ios_device.sh lang-bench --subset full --label "lang-full-output-v3"`.
 
-Confirm Speech assets visually in Settings on the physical device before running the matrix; this
-is an operational download prerequisite, not a subjective audio review.
+Settings remains useful for confirming enabled Dictation languages, but the explicit command owns
+asset installation and machine verification. This is an operational prerequisite, not a subjective
+audio review.
 Vocello UI expectations remain documented in [`ios-ui-reference.md`](ios-ui-reference.md).
 Language-benchmark labels are opaque privacy-safe identifiers matching
 `[A-Za-z0-9][A-Za-z0-9._-]{0,95}`; they are not free-form notes.
@@ -112,8 +123,9 @@ The table below is preserved as dated operational evidence; it is not the curren
 state. Current PASS evidence must exist in `benchmarks/runs/language/` and appear in generated
 `benchmarks/HISTORY.md`, while the active resume status lives in
 [`../development-progress.md`](../development-progress.md). The current tracked registry contains
-macOS hint-only records but no physical-iPhone language PASS record, so a fresh output-gated iOS
-run remains required before claiming current Phase 3 acceptance.
+a clean physical-iPhone quick PASS record covering the seven EN/FR cells, plus historical macOS
+hint-only records. Full Phase 3 multilingual acceptance still requires a clean 19-cell iPhone run
+with all 18 output-gated cells passing after the DE/ES/ZH/JA Speech-asset bootstrap.
 
 | Run | Subset | Hint gate | Output gate | Notes |
 | --- | --- | --- | --- | --- |
@@ -144,6 +156,7 @@ macOS hint-only evidence is therefore explicitly `partial` in benchmark history.
 ## Offline gate tests
 
 ```sh
+python3 -m unittest scripts.test_check_ios_speech_assets
 python3 scripts/test_check_language_hints.py
 python3 scripts/test_check_language_output.py
 ```

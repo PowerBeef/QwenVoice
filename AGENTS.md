@@ -125,8 +125,10 @@ any take. `models ensure` is explicit repair/bootstrap, never a substitute for t
 
 ```sh
 scripts/macos_test.sh core-test                              # Phase 1 — macOS unit tests (no models)
+python3 -m unittest scripts.test_check_ios_speech_assets     # offline Speech-bootstrap evidence fixtures
 python3 scripts/test_check_language_hints.py                 # offline hint-gate fixtures
 python3 scripts/test_check_language_output.py                # offline output-gate fixtures
+scripts/ios_device.sh speech-assets                          # explicit DE/ES/JA/ZH system-asset bootstrap
 scripts/macos_test.sh lang-bench --subset quick              # Phase 2 — macOS CLI hint gate (needs models)
 scripts/ios_device.sh lang-bench --subset quick --label "lang-quick"  # Phases 2–3 — on-device hint + output (needs Speed)
 scripts/ios_device.sh lang-bench --subset full --label "lang-full"   # full 19-cell matrix (hint + output gates)
@@ -137,8 +139,10 @@ scripts/ios_device.sh lang-bench --diagnostic-cohort                  # fixed 15
 and **`output_gate=PASS`** (quick: 6/6 output cells; full: 18/18 — negative control is hint-only).
 `check_language_hints.py` matches `notes.languageHint` to `config/language-bench-matrix.json`.
 Phase 3 adds locale-locked ASR via `check_language_output.py`. **DE/ES/ZH/JA output cells**
-require on-device Speech assets — setup: [`language-bench.md`](docs/reference/language-bench.md)
-§ Phase 3 prerequisites (dictation languages + Wi‑Fi download on the phone).
+require on-device Speech assets. `speech-assets` explicitly resolves and installs the modern
+DictationTranscriber modules, then reports whether Vocello's legacy SFSpeechRecognizer gate is
+ready; setup and interpretation: [`language-bench.md`](docs/reference/language-bench.md)
+§ Phase 3 prerequisites.
 No listening verdict is required: exact fixed-seed WAV evidence, three-pass on-device ASR consensus,
 PCM QC, and the applicable prosody gates own the automated result.
 
@@ -201,6 +205,7 @@ scripts/ui_test.sh macos benchmark
 scripts/ui_test.sh ios smoke
 scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh lang-bench --subset quick
+scripts/ios_device.sh speech-assets
 scripts/ios_device.sh profile --kind memory
 scripts/ios_device.sh memory --voice-id <saved-voice-id> --label retained-check
 scripts/ios_device.sh memory-field-report       # local-only delayed MetricKit aggregate

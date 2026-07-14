@@ -438,7 +438,7 @@ for root in roots:
         if path != Path("docs/reference/backend-optimization-research-report.md")
     )
 allowed = {
-    "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
+    "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
     "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "memory", "gate", "release-readiness", "models", "help"},
     "ui_test.sh": {"macos", "ios"},
 }
@@ -531,6 +531,7 @@ python3 -m unittest \
   scripts.test_check_macos_xpc_bench \
   scripts.test_check_ios_ui_benchmark \
   scripts.test_language_bench_evidence \
+  scripts.test_check_ios_speech_assets \
   scripts.test_check_language_hints \
   scripts.test_check_language_output \
   scripts.test_device_state_classifier \

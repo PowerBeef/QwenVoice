@@ -1,0 +1,18 @@
+{
+  "aggregateStatusAfter": "supported",
+  "assetInventoryReady": false,
+  "failureCode": "download_failed",
+  "failureCodeValue": 1,
+  "failureDomain": "SFSpeechErrorDomain",
+  "locales": [
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "de_DE", "resolvedIdentifier": "de_DE", "statusAfter": "supported"},
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "es_419", "resolvedIdentifier": "es_ES", "statusAfter": "supported"},
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "ja_JP", "resolvedIdentifier": "ja_JP", "statusAfter": "supported"},
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "zh_CN", "resolvedIdentifier": "zh_CN", "statusAfter": "supported"}
+  ],
+  "requestedLocaleIdentifiers": ["de_DE", "es_419", "ja_JP", "zh_CN"],
+  "runID": "ios-speech-assets-fixture",
+  "schemaVersion": 1,
+  "status": "failed",
+  "vocelloLegacyReady": false
+}

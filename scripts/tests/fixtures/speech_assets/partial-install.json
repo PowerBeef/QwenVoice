@@ -1,0 +1,16 @@
+{
+  "aggregateStatusAfter": "downloading",
+  "assetInventoryReady": false,
+  "failureCode": "post_installation_verification_failed",
+  "locales": [
+    {"installedLocalePresentAfter": true, "requestedIdentifier": "de_DE", "resolvedIdentifier": "de_DE", "statusAfter": "installed"},
+    {"installedLocalePresentAfter": true, "requestedIdentifier": "es_419", "resolvedIdentifier": "es_ES", "statusAfter": "installed"},
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "ja_JP", "resolvedIdentifier": "ja_JP", "statusAfter": "downloading"},
+    {"installedLocalePresentAfter": false, "requestedIdentifier": "zh_CN", "resolvedIdentifier": "zh_CN", "statusAfter": "supported"}
+  ],
+  "requestedLocaleIdentifiers": ["de_DE", "es_419", "ja_JP", "zh_CN"],
+  "runID": "ios-speech-assets-fixture",
+  "schemaVersion": 1,
+  "status": "failed",
+  "vocelloLegacyReady": false
+}

@@ -28,6 +28,8 @@
 #                               [--diagnostic-cohort[=PATH]]
 #                                                 # headless language/output matrix; optional
 #                                                 # fixed-seed diagnostic cohort never publishes history
+#   scripts/ios_device.sh speech-assets           # resolve/install DE/ES/JA/ZH DictationTranscriber
+#                                                 # assets and recheck Vocello's legacy Speech readiness
 #   scripts/ios_device.sh crashes [--test]         # pull + symbolicate on-device crash/hang diagnostics (MetricKit)
 #   scripts/ios_device.sh debug [spec]             # attached launch + LLDB attach guidance (get-task-allow build)
 #   scripts/ios_device.sh logs [spec] [--voice-id SAVED_VOICE_ID]
@@ -54,6 +56,8 @@
 #                                (otherwise automatic, with auto-fallback to manual)
 #   QVOICE_IOS_DEVICE_ID         (optional) devicectl device id/name/udid; else auto
 #   QVOICE_IOS_BENCH_TIMEOUT     (optional) bench sentinel timeout seconds (default 300)
+#   QVOICE_IOS_SPEECH_ASSET_TIMEOUT
+#                                (optional) Speech asset bootstrap timeout seconds (default 1800)
 #   QVOICE_IOS_PROFILE_START_TIMEOUT
 #                                (optional) maximum tracer-start wait seconds (default 30)
 #   QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID
@@ -535,6 +539,76 @@ cmd_install() {
   local dev; dev="$(resolve_device)"
   note "installing on $dev"
   xcrun devicectl device install app --device "$dev" "$APP_PATH"
+}
+
+speech_asset_env_json() {
+  local run_id="$1" locales="$2"
+  QV_RUNID="$run_id" QV_LOCALES="$locales" python3 -c '
+import json, os
+print(json.dumps({
+    "QWENVOICE_DEBUG": "1",
+    "QVOICE_IOS_DEVICE_RUN_ID": os.environ["QV_RUNID"],
+    "QVOICE_IOS_SPEECH_ASSET_LOCALES": os.environ["QV_LOCALES"],
+}))'
+}
+
+pull_speech_asset_run() {
+  local dev="$1" run_id="$2" destination="$3"
+  rm -rf "$destination"
+  mkdir -p "$destination"
+  xcrun devicectl device copy from --device "$dev" \
+    --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
+    --source "Library/Caches/Vocello/diagnostics/$run_id" \
+    --destination "$destination" >/dev/null 2>&1
+}
+
+# Explicit, non-generation Speech bootstrap for the physical iPhone. AssetInventory's combined
+# request installs only the four language-output locales and automatically manages this app's
+# reservations. The result is local diagnostic evidence, never benchmark history.
+cmd_speech_assets() {
+  [[ $# -eq 0 ]] || die "speech-assets accepts no arguments"
+  local locales="de_DE,es_419,ja_JP,zh_CN"
+  local run_id="ios-speech-assets-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_DIAGNOSTICS/ios/speech-assets/$run_id"
+  local pulled="$artifacts/pulled"
+  local timeout="${QVOICE_IOS_SPEECH_ASSET_TIMEOUT:-1800}"
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] \
+    || die "QVOICE_IOS_SPEECH_ASSET_TIMEOUT must be a positive integer"
+
+  note "building and installing the exact Vocello app for Speech asset bootstrap"
+  cmd_build
+  cmd_install >/dev/null
+
+  local dev env_json
+  dev="$(resolve_device)"
+  env_json="$(speech_asset_env_json "$run_id" "$locales")"
+  note "requesting DictationTranscriber assets for $locales (runID=$run_id)"
+  xcrun devicectl device process launch --device "$dev" --terminate-existing \
+    -e "$env_json" "$BUNDLE_ID" >/dev/null
+
+  local waited=0 sentinel=""
+  while (( waited < timeout )); do
+    sleep 10
+    waited=$((waited + 10))
+    if pull_speech_asset_run "$dev" "$run_id" "$pulled"; then
+      sentinel="$(find "$pulled" -type f -name speech-assets-done.json 2>/dev/null | head -1)"
+      [[ -z "$sentinel" ]] || break
+    fi
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    [[ "$verdict" != "DEVICE_UNREACHABLE" ]] \
+      || die "Speech asset bootstrap stopped at ${waited}s: $(device_state_advice "$verdict")"
+    if (( waited % 30 == 0 )); then
+      note "…Speech assets still resolving/downloading (${waited}s, runID=$run_id)"
+    fi
+  done
+  [[ -n "$sentinel" && -f "$sentinel" ]] \
+    || die "no Speech asset completion evidence after ${timeout}s (runID=$run_id)"
+
+  python3 "$ROOT_DIR/scripts/check_ios_speech_assets.py" "$sentinel" --run-id "$run_id"
+
+  note "Speech asset evidence → $sentinel"
 }
 
 device_diagnostics_env_json() {
@@ -1712,6 +1786,7 @@ main() {
     pull)    cmd_pull "$@" ;;
     bench)   cmd_bench "$@" ;;
     lang-bench) cmd_lang_bench "$@" ;;
+    speech-assets) cmd_speech_assets "$@" ;;
     crashes) cmd_crashes "$@" ;;
     debug)   cmd_debug "$@" ;;
     logs)    cmd_logs "$@" ;;
@@ -1722,7 +1797,7 @@ main() {
     gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|speech-assets|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
   esac
 }
 

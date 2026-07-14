@@ -107,6 +107,14 @@ enum VoiceClipTranscriber {
         var supportsOnDeviceRecognition: Bool
     }
 
+    struct LiveRecognizerObservation: Sendable, Equatable {
+        var requestedIdentifier: String
+        var recognizerIdentifier: String?
+        var language: Qwen3SupportedLanguage
+        var isAvailable: Bool
+        var supportsOnDeviceRecognition: Bool
+    }
+
     private struct CandidateLocale: Sendable, Equatable {
         var locale: Locale
         var language: Qwen3SupportedLanguage
@@ -447,6 +455,48 @@ enum VoiceClipTranscriber {
             }
     }
 
+    /// Reads the legacy Speech recognizer state for one exact locale. The iOS speech-asset
+    /// bootstrap uses this after installing the modern `DictationTranscriber` assets so its
+    /// report reflects the same `SFSpeechRecognizer.supportsOnDeviceRecognition` signal that
+    /// Vocello's output verifier consumes.
+    static func liveRecognizerObservation(for locale: Locale) -> LiveRecognizerObservation {
+        let recognizer = SFSpeechRecognizer(locale: locale)
+        return LiveRecognizerObservation(
+            requestedIdentifier: locale.identifier,
+            recognizerIdentifier: recognizer?.locale.identifier,
+            language: Qwen3SupportedLanguage.normalized(
+                locale.language.languageCode?.identifier
+            ),
+            isAvailable: recognizer?.isAvailable ?? false,
+            supportsOnDeviceRecognition: recognizer?.supportsOnDeviceRecognition ?? false
+        )
+    }
+
+    static func liveCapability(for locale: Locale) -> LocaleCapability {
+        let observation = liveRecognizerObservation(for: locale)
+        return LocaleCapability(
+            // Preserve the identifier supplied by `supportedLocales()`. Region ranking and the
+            // selected locale used for recognition must not change merely because a recognizer
+            // reports a canonicalized identifier.
+            identifier: locale.identifier,
+            language: observation.language,
+            isAvailable: observation.isAvailable,
+            supportsOnDeviceRecognition: observation.supportsOnDeviceRecognition
+        )
+    }
+
+    /// Re-evaluates the complete legacy locale inventory and applies Vocello's deterministic
+    /// selection policy. This is intentionally a fresh read rather than cached capability data.
+    static func liveSelectedCapabilities(
+        preferredLanguages: [String] = Locale.preferredLanguages
+    ) -> [LocaleCapability] {
+        let capabilities = SFSpeechRecognizer.supportedLocales().map(liveCapability(for:))
+        return selectedCapabilities(
+            from: capabilities,
+            preferredLanguages: preferredLanguages
+        )
+    }
+
     private static func normalizedWordTokens(_ text: String) -> [String] {
         text
             .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
@@ -525,16 +575,7 @@ enum VoiceClipTranscriber {
 
     /// One deterministic, available, on-device-capable locale per Qwen language.
     private static func candidateLocales() -> [CandidateLocale] {
-        let capabilities = SFSpeechRecognizer.supportedLocales().map { locale -> LocaleCapability in
-            let recognizer = SFSpeechRecognizer(locale: locale)
-            return LocaleCapability(
-                identifier: locale.identifier,
-                language: Qwen3SupportedLanguage.normalized(locale.language.languageCode?.identifier),
-                isAvailable: recognizer?.isAvailable ?? false,
-                supportsOnDeviceRecognition: recognizer?.supportsOnDeviceRecognition ?? false
-            )
-        }
-        return selectedCapabilities(from: capabilities, preferredLanguages: Locale.preferredLanguages)
+        liveSelectedCapabilities()
             .map {
                 CandidateLocale(
                     locale: Locale(identifier: $0.identifier),
