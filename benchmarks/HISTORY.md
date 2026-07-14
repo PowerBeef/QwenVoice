@@ -61,6 +61,7 @@ from schema-v2 memory trends.
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-14 | [`ios-memory-qualification-20260714-112015-8aa21f7e`](runs/memory-qualification/ios-memory-qualification-20260714-112015-8aa21f7e.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 9 | `fe15820531a5` dirty | `excluded` | baseline | ios-memory-qualification-20260714-112015-8aa21f7e |
+| 2026-07-14 | [`ios-memory-qualification-20260714-112536-32554d95`](runs/memory-qualification/ios-memory-qualification-20260714-112536-32554d95.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 9 | `ab102beda89b` | `7482ce732e47` | baseline | ios-memory-qualification-20260714-112536-32554d95 |
 
 ## memory-qualification / macos / mac-mini-m2-8gb / config `664a0267b9b5`
 
