@@ -31,7 +31,7 @@
 
 - 🎙️ **Three ways to make a voice** — pick a built-in speaker, describe one in plain language, or clone a reference clip you have rights to (record it in the app, or import a file).
 - 🔒 **Private by default** — after a one-time model download, every line renders on your device. No scripts uploaded, no audio sent to a cloud service.
-- ⚡ **Fast, native Swift + MLX** — faster than realtime on Apple Silicon, down to 8 GB Macs. No Python runtime, no bundled weights, no cloud queue.
+- ⚡ **Responsive, native Swift + MLX** — local generation on supported Apple Silicon Macs, down to 8 GB. No Python runtime, no bundled weights, no cloud queue.
 - 🌍 **Speaks ten languages** — with automatic language detection, ten delivery styles, and reproducible takes.
 
 ## Get Vocello
@@ -45,7 +45,7 @@
 ## Why Vocello
 
 - **Private by default.** After models are installed, generation runs locally. Your scripts, history, recorded clips, and generated audio stay in local app storage unless you choose to export them.
-- **Faster than realtime, even on 8 GB Macs.** A native Swift + MLX engine (no Python runtime, no bundled weights) generates speech faster than it plays back on Apple Silicon. The 2.1 backend work pushed the entry-level 8 GB Mac past realtime, with smoother memory behavior while you generate.
+- **Responsive native generation on supported Apple Silicon.** The Swift + MLX engine needs no Python runtime, bundled weights, or cloud queue. Performance varies by mode, text length, model state, and hardware; the canonical engineering record is tracked rather than generalized into a universal marketing claim.
 - **Ten languages, auto-detected.** Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian. The language selector shows the language detected from your script (`Language · Auto`) and lets you pin a specific one.
 - **Ten delivery styles with intensity.** Neutral, Happy, Sad, Angry, Fearful, Surprised, Whisper, Dramatic, Calm, and Excited — each at subtle, normal, or strong intensity, plus a free-text custom tone when you want to describe the delivery in your own words.
 - **A real voice library.** Record a reference clip with your Mac's microphone (or import one), let it transcribe on-device, save the result, and reuse it. Voice Design results can be saved and re-used for cloning, and the speaker and language pickers surface recommendations that follow the language you're writing in.
@@ -89,13 +89,18 @@ A `release-metadata.txt` (commit SHA, Xcode version, SDK, marketing version, bui
 ## System requirements
 
 - **macOS 26.0+** on an Apple Silicon Mac — available now.
-- **iPhone (iOS 26.0+)** on Apple Silicon — arriving soon via App Store / TestFlight.
+- **iPhone 15 Pro or newer (iOS 26.0+)** — arriving soon via App Store / TestFlight.
 - **8 GB RAM minimum** (16 GB+ recommended for Quality variants and heavy batches).
 - Voice models installed from **Settings → Model downloads**.
 
-**Speed** models are smaller 4-bit packages for faster startup and lower memory use — the recommended default, and what runs faster than realtime on an 8 GB Mac. **Quality** models are larger 8-bit packages for devices with more headroom.
+**Speed** models are smaller 4-bit packages for faster startup and lower memory use, and are the recommended default. **Quality** models are larger 8-bit packages for devices with more headroom. In the current clean canonical Mac mini M2 8 GB record, selected warm Custom medium/long cells reached approximately realtime while Design, Clone, short, and cold cells remained below it; see the [tracked record](benchmarks/runs/ui-generation/macos-xcui-benchmark-20260713-185716-7f12cd35.json).
 
 Vocello 2.1.0 is the current stable macOS release. For macOS 15, use [QwenVoice v1.2.3](https://github.com/PowerBeef/QwenVoice/releases/tag/v1.2.3); no 2.x backport is planned. Every macOS GitHub Release ships a notarized, stapled, Developer ID–signed DMG — a normal double-click install with no Gatekeeper workarounds.
+
+Support floors and benchmark machines are different facts. Minimum support is an Apple Silicon Mac
+with 8 GB or an iPhone 15 Pro or newer. Canonical performance evidence uses a Mac mini M2 with 8 GB
+and an iPhone 17 Pro. Any additional tested hardware must be backed by a tracked or explicitly
+referenced validation record.
 
 ## Local-first privacy
 
@@ -123,7 +128,8 @@ open QwenVoice.xcodeproj
 The Xcode project is generated from [`project.yml`](project.yml) (edit it, not the `.xcodeproj`, then rerun `regenerate_project.sh`). SPM dependencies — MLX, Swift HuggingFace, GRDB, and the vendored mlx-audio — are deliberately **pinned to exact versions** for backend determinism; bumping them follows a benchmark-gated process documented in [`.agents/backend-mlx.md`](.agents/backend-mlx.md).
 
 Generated output is owned by [`config/build-output-policy.json`](config/build-output-policy.json),
-not by individual scripts. Local development reuses exactly two persistent platform Xcode caches
+not by individual scripts. This contract governs native repository output under `build/`;
+`website/dist/` is Vite-owned website deployment output. Local development reuses exactly two persistent platform Xcode caches
 under `build/cache/xcode/`, one shared Xcode package checkout, and the dedicated vendored SwiftPM
 cache. Temporary builds live under `build/scratch/`, local evidence and current symbols under
 `build/artifacts/`, and release products under `build/dist/`. The public `build/Vocello.app` and

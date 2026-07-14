@@ -1,6 +1,6 @@
-# MLX Audio Swift — Vocello Qwen3-TTS subset
+# Vocello Qwen3 audio runtime
 
-This directory is Vocello's owned, specialized fork of
+This directory is Vocello's owned, specialized runtime derived from
 [`mlx-audio-swift`](https://github.com/Blaizzy/mlx-audio-swift). It is not the upstream multi-model SDK.
 The import was narrowed to the Qwen3-TTS runtime and the codec primitives that runtime needs; deleted
 upstream model families remain recoverable from Git history or the recorded upstream baseline.
@@ -31,10 +31,14 @@ The local implementation and family-level API notes live in:
 Do not add a model to this README as a declaration of support. Update the contract, loader validation,
 tests, and benchmark evidence together when the product adopts a new artifact.
 
-## Integration
+## Integration and ownership
 
-Vocello consumes this package as a local dependency from the generated Xcode project. Keep the MLX
-dependency versions in this package synchronized with `project.yml`; see the repository backend role
+Vocello consumes this package as a local dependency from the generated Xcode project.
+`QwenVoiceCore` coordinates the product engine while this package owns Qwen3 model loading,
+sampling, streaming, Mimi decoding, and clone artifacts. `QwenVoiceBackendCore` contains shared
+provenance/policy vocabulary; it does not re-export this package.
+
+Keep MLX dependency versions synchronized with `project.yml`; see the repository backend role
 playbook for the required upgrade gates.
 
 ```swift
@@ -58,6 +62,8 @@ committing or publishing ordinary development work.
 
 ## Provenance and license
 
-The specialization baseline is documented in `Package.swift` and the repository's backend ownership
-guides. Upstream attribution remains with the original project and its contributors. This fork remains
-under the MIT license; see [`LICENSE`](LICENSE).
+The import baseline, last upstream review, file inventory, and semantic deltas are recorded in
+[`VENDOR_MANIFEST.json`](VENDOR_MANIFEST.json), [`UPSTREAM_BASELINE.json`](UPSTREAM_BASELINE.json),
+and [`PATCHES.json`](PATCHES.json). Active performance design is in
+[`PERFORMANCE.md`](PERFORMANCE.md). Upstream attribution remains with the original project and its
+contributors. This runtime remains under the MIT license; see [`LICENSE`](LICENSE).

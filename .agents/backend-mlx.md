@@ -10,6 +10,8 @@
 - `Sources/QwenVoiceBackendCore/`
 - `Sources/QwenVoiceCore/` (engine core, generation semantics, model registry, downloader, telemetry)
 - `third_party_patches/mlx-audio-swift/`
+- Typed telemetry semantics and the owned-runtime manifest, upstream baseline, semantic patch
+  ledger, performance contract, and clone-artifact specification
 - `Sources/Resources/qwenvoice_contract.json`
 
 **Does NOT own:**
@@ -51,6 +53,9 @@ Before changing anything in this layer, read:
   frontend acceptance only and never a prerequisite for a commit, push, pull request, ordinary
   merge, ordinary CI, or release package. Frontend observations do not prove backend completion;
   typed app/XPC/backend rows must still join by `generationID`.
+- Telemetry or benchmark schema-version changes require backend, the affected macOS or iOS capture
+  owner, and release/QA review. Backend owns field meaning; platform roles own capture/transport;
+  release/QA owns schemas, publication, and history compatibility.
 
 ## Build / test commands
 

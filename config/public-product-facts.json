@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "stableMacRelease": {
+    "version": "2.1.0",
+    "tag": "v2.1.0",
+    "minimumOS": "macOS 26.0",
+    "distribution": "signed-notarized-dmg"
+  },
+  "fallbackMacRelease": {
+    "version": "1.2.3",
+    "tag": "v1.2.3",
+    "minimumOS": "macOS 15"
+  },
+  "ios": {
+    "minimumOS": "iOS 26.0",
+    "minimumDevice": "iPhone 15 Pro",
+    "distributionStatus": "implemented-distribution-pending"
+  },
+  "minimumMac": {
+    "processor": "Apple Silicon",
+    "memoryBytes": 8589934592
+  },
+  "canonicalBenchmarkProfiles": {
+    "macos": "mac-mini-m2-8gb",
+    "ios": "iphone-17-pro"
+  },
+  "authoritativeReferences": {
+    "modelsAndSpeakers": "Sources/Resources/qwenvoice_contract.json",
+    "benchmarkHardware": "benchmarks/hardware-profiles.json",
+    "projectVersion": "project.yml"
+  }
+}

@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "referenceFormat": "target/class/test",
   "evidence": {
-    "reportDirectory": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10",
+    "reportDirectory": "docs/audits/archive/2026-07-10",
     "reportCommit": "05bd2b6d24b3f43351f3b388622a72d8f0d6ecce",
     "validatedAgainst": "current-source-at-test-time",
     "policy": "implemented requires every resolvable test reference and an empty remaining list"
@@ -10,6 +10,7 @@
   "items": [
     {
       "id": "H1",
+      "vendorPatchID": "CONC-001",
       "title": "Generation-gate FIFO, cancellation transfer, holder failure, and deterministic stress",
       "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
@@ -24,6 +25,7 @@
     },
     {
       "id": "H2",
+      "vendorPatchID": "PKG-001",
       "title": "Dedicated owned Qwen3 runtime target with Metal resources",
       "source": "third_party_patches/mlx-audio-swift/Package.swift",
       "tests": [
@@ -34,6 +36,7 @@
     },
     {
       "id": "MH1",
+      "vendorPatchID": "LOAD-001",
       "title": "Requested learned tokenizer and speaker components require real weights",
       "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
@@ -45,6 +48,7 @@
     },
     {
       "id": "MH2",
+      "vendorPatchID": "CLONE-001",
       "title": "Clone artifact atomic publication, tensor round trip, integrity, and mode requirements",
       "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
@@ -77,6 +81,7 @@
     },
     {
       "id": "STREAM",
+      "vendorPatchID": "STREAM-001",
       "title": "Streaming bounded retention, scheduling, cancellation, and final barrier",
       "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
@@ -90,6 +95,7 @@
     },
     {
       "id": "DECODER",
+      "vendorPatchID": "CODEC-001",
       "title": "Seeded Metal decoder partition invariance, reset isolation, and timing parity",
       "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
       "tests": [
@@ -131,7 +137,7 @@
     }
   ],
   "deferredMatrix": {
-    "source": "QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10/06_Verification_Test_and_Benchmark_Matrix.md",
+    "source": "docs/audits/archive/2026-07-10/06_Verification_Test_and_Benchmark_Matrix.md",
     "policy": "The remaining corrected-report rows are explicitly deferred; no row is covered without an executable test or validator reference."
   }
 }

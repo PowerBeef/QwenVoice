@@ -9,22 +9,7 @@ import MLXNN
 import os
 import Tokenizers
 
-/// Engine probe Phase 2b infrastructure: fine-grained `os_signpost`
-/// markers around the per-token hot path so Instruments / xctrace
-/// traces can correlate Metal GPU activity with the engine stages we
-/// already wall-clock via `ChunkSubstageTimings`.
-///
-/// Subsystem `com.qwenvoice.engine.qwen3` keeps these distinct from
-/// the coarser `com.qwenvoice.engine` signposts in
-/// `NativeStreamingSynthesisSession`. Capture template:
-///
-///     xctrace record --template "Time Profiler" \
-///         --output /tmp/vocello.trace \
-///         --launch -- "$APP/Contents/MacOS/Vocello"
-///
-/// Open the resulting `.trace` in Instruments and add the
-/// "os_signpost" instrument to see these intervals aligned with
-/// the Metal GPU + Time Profiler tracks.
+/// TEL-001: stage signposts correlate the Qwen hot path with typed chunk timings.
 private enum Qwen3Signposts {
     static let signposter = OSSignposter(
         subsystem: "com.qwenvoice.engine.qwen3",
@@ -36,9 +21,7 @@ private func qwen3TTSLog(_ message: String) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 
-/// Phase 2a helper: estimate talker KV-cache footprint for a given
-/// effective sequence length. Assumes one K + one V tensor per layer
-/// (hence the factor of 2). `dtypeBytes` is 2 for bfloat16/float16.
+/// TEL-001: estimate K+V talker cache bytes for the effective sequence length.
 private func estimatedKVCacheFootprintMB(layers: Int, heads: Int, seq: Int, headDim: Int, dtypeBytes: Int) -> Double {
     let bytes = 2 * layers * heads * seq * headDim * dtypeBytes
     return Double(bytes) / Double(1_024 * 1_024)
@@ -406,30 +389,8 @@ private enum Qwen3StreamStepEvalPolicy: String, Sendable {
     case eosOnly = "eos-only"
     case deferred
 
-    /// May 2026 finding: `.deferred` is NOT a wall-clock win.
-    ///
-    /// The Phase 2a probe (commit 37c21c3) showed `stream_step_eval`
-    /// — the eager `eval(inputEmbeds, isEOS)` flush at every token
-    /// step — accounted for ~80 % of per-chunk wall time. A direct
-    /// smoke test with `.deferred` (skip the eager eval, let
-    /// `nextToken.item()` force the sync implicitly) showed
-    /// `stream_step_eval` correctly dropping to 0 ms — but
-    /// `infer_ms` *increased* slightly (CV medium: 1021 → 1111 ms
-    /// per chunk). The MLX work just moved: `audio_chunk_eval` grew
-    /// ~90 ms, `stream_step_eos_read` grew ~15 ms, and an untracked
-    /// portion landed in the next iteration's implicit sync.
-    /// Conclusion: `stream_step_eval` was a *visible attribution*
-    /// of the per-token forward sync, not extra work. The bottleneck
-    /// is the underlying MLX kernel compute (talker forward + code
-    /// predictor + audio decoder produce + sample), not the
-    /// scheduling timing of the flush.
-    ///
-    /// Keeping `.full` as production default — it surfaces errors
-    /// earlier and gives the cleanest wall-clock attribution for
-    /// future profiling. Real optimization requires kernel-level work
-    /// (Phase 2b / 3): Instruments + signposts to find which of
-    /// talker_core_eval / talker_decoder_layers_eval / code predictor
-    /// codebook batching has slack.
+    /// SAMPLER-001: `.full` is the production default. Deferring the flush only
+    /// moves the same MLX synchronization to a later read and obscures attribution.
     static func resolve(
         explicitPolicy: String? = nil
     ) -> Qwen3StreamStepEvalPolicy {
@@ -2770,11 +2731,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var lastChunkCodePredictorMS = 0
         var lastChunkStreamingDecoderMS = 0
         var lastChunkMimiDecoderBreakdown = MimiDecoderStepTimings()
-        // Mode-agnostic accumulators for the three Phase 2a sub-stages
-        // — eval cadence, EOS read, and audio-chunk eval. Existing
-        // mode-specific `design*` / `custom*` / `clone*` totals (above);
-        // these aggregate the same work mode-agnostically so the per-chunk
-        // delta logic can read a single counter without branching on mode.
+        // TEL-001: mode-agnostic counters feed one per-chunk delta path.
         var streamStepEvalTotalMS = 0
         var streamStepEvalEnqueueTotalMS = 0
         var streamStepEvalWaitTotalMS = 0
@@ -2785,7 +2742,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         var lastChunkStreamStepEvalWaitMS = 0
         var lastChunkStreamStepEOSReadMS = 0
         var lastChunkAudioChunkEvalMS = 0
-        // Phase 2a: track peak KV-cache footprint across the generation.
+        // TEL-001: track peak KV-cache footprint across the generation.
         var peakKVCacheSeqLength = 0
         var peakKVCacheFootprintMB = 0.0
         var kvCacheTypeAtPeak = talker.model.latestCreatedCacheType
@@ -3074,9 +3031,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             Qwen3Signposts.signposter.endInterval("Step Eval Flush", stepEvalSignpost)
             let streamStepEvalElapsed = streamStepEvalStartedAt.elapsedMilliseconds
             streamStepEvalTotalMS += streamStepEvalElapsed
-            // Phase 2a baseline: synchronous eval path. Enqueue captures the
-            // total eval wall time; wait is 0. Future async instrumentation
-            // will split the GPU drain wait out separately.
+            // TEL-001: synchronous eval attributes total wall time to enqueue; wait is zero.
             streamStepEvalEnqueueTotalMS += streamStepEvalElapsed
             streamStepEvalWaitTotalMS += 0
             if isPureVoiceDesign {
@@ -3149,23 +3104,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     let audioChunk = decoded[0]
                     let audioChunkEvalStartedAt = ContinuousClock.now
                     let audioChunkEvalSignpost = Qwen3Signposts.signposter.beginInterval("Audio Chunk Eval")
-                    // Phase 2c — Audio Chunk Eval pipelining. The
-                    // Phase 2b trace identified `eval(audioChunk)` as
-                    // ~13 % of per-chunk wall time (135 ms p50 / chunk
-                    // for medium CV cold), and parallel-codebook
-                    // batching turned out to be architecturally
-                    // infeasible (see `Phase 2c` bullet in
-                    // `docs/reference/mlx-audio-swift-patching.md` for
-                    // the autoregressive dependency analysis). Switch
-                    // the in-loop materialisation from `eval` to
-                    // `asyncEval`: the streaming decoder kernel + any
-                    // accumulated lazy work get queued, but the engine
-                    // returns to the per-token loop immediately
-                    // instead of CPU-blocking on Metal command buffer
-                    // drain. Downstream `samples.asArray(Float.self)`
-                    // in `NativeStreamingSynthesisSession` blocks on
-                    // the consumer side instead — that thread is
-                    // already off the engine's critical path.
+                    // STREAM-001: non-final chunks evaluate asynchronously so decoding can
+                    // overlap the next token loop; the consumer materializes samples off-path.
                     asyncEval(audioChunk)
                     Qwen3Signposts.signposter.endInterval("Audio Chunk Eval", audioChunkEvalSignpost)
                     let audioChunkEvalElapsed = audioChunkEvalStartedAt.elapsedMilliseconds
@@ -3301,30 +3241,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     cloneFirstChunkDecoderTokens = codesForDecoder.dim(2)
                 }
                 let audioChunkEvalStartedAt = ContinuousClock.now
-                // Phase 2c — trailing chunk MUST stay synchronous
-                // (eval, not asyncEval). The first cut of Phase 2c
-                // also asyncEval'd this final chunk, but live
-                // playback then truncated mid-script: the engine
-                // returned immediately, the awaited result raced
-                // back to `AudioPlayerViewModel.completeStreamingPreview`
-                // (sets `liveFinalFilePath`) on MainActor BEFORE the
-                // last few `GenerationChunkBroker`-published chunks
-                // had drained through their MainActor `Task` hop +
-                // been scheduled in the live AVAudioEngine queue. As
-                // soon as the next live buffer played out and
-                // `liveScheduledCount` momentarily hit zero, the
-                // `liveScheduledCount == 0 && liveFinalFilePath != nil`
-                // branch in `handleLiveBufferPlaybackCompletion` fired
-                // an early file-playback handoff and the user heard
-                // the preview cut off. Blocking the engine on the
-                // last chunk closes that race: by the time the
-                // generation function returns, all chunks have been
-                // materialised, NSS has finished its event loop, and
-                // the broker's chunk publications are already queued
-                // ahead of the awaited-result continuation. The
-                // in-loop chunks above keep `asyncEval` because each
-                // one HAS a next iteration to overlap with — that's
-                // where the wall-clock pipelining win lives.
+                // STREAM-001: the final chunk is a synchronous completion barrier. Returning
+                // before materialization can race playback handoff and truncate the preview.
                 eval(audioChunk)
                 let audioChunkEvalElapsed = audioChunkEvalStartedAt.elapsedMilliseconds
                 audioChunkEvalTotalMS += audioChunkEvalElapsed

@@ -21,6 +21,7 @@ REQUIRED_SURFACES=(
     "scripts/build_foundation_targets.sh"
     "scripts/build_output_policy.py"
     "scripts/documentation_contract.py"
+    "scripts/vendor_runtime_contract.py"
     "scripts/build_cleanup.py"
     "scripts/clean_build_caches.sh"
     "scripts/lib/build_paths.sh"
@@ -42,6 +43,7 @@ REQUIRED_SURFACES=(
     "scripts/test_check_language_output.py"
     "scripts/tests/test_build_output_policy.py"
     "scripts/tests/test_documentation_contract.py"
+    "scripts/tests/test_vendor_runtime_contract.py"
     "scripts/tests/test_build_routing_contract.py"
     "scripts/tests/test_generate_cli_scheme.py"
     "scripts/tests/test_clean_build_caches.py"
@@ -56,8 +58,13 @@ REQUIRED_SURFACES=(
     "config/language-bench-diagnostic-cohort.json"
     "config/memory-qualification-policy.json"
     "config/build-output-policy.json"
+    "config/documentation-contract.json"
+    "config/public-product-facts.json"
     "config/xcode-schemes/VocelloCLI.xcscheme.template"
     "config/apple-platform-capability-matrix.json"
+    "third_party_patches/mlx-audio-swift/VENDOR_MANIFEST.json"
+    "third_party_patches/mlx-audio-swift/UPSTREAM_BASELINE.json"
+    "third_party_patches/mlx-audio-swift/PATCHES.json"
     "Tests/UIAutomationSupport"
     "Tests/VocelloMacUITests"
     "Tests/VocelloiOSUITests"
@@ -267,6 +274,8 @@ fi
 # access models, or require a physical device.
 python3 "$SCRIPT_DIR/benchmark_history.py" validate --all
 python3 "$SCRIPT_DIR/benchmark_history.py" rebuild-index --check
+python3 "$SCRIPT_DIR/vendor_runtime_contract.py" validate
+python3 "$SCRIPT_DIR/documentation_contract.py"
 
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --project
 "$SCRIPT_DIR/check_qwen3_backend_only.sh"

@@ -4,9 +4,9 @@
 > `05bd2b6d24b3f43351f3b388622a72d8f0d6ecce` and the upstream revisions listed below. It is
 > retained as research evidence, not as the current runtime, telemetry, or benchmark contract.
 > Several findings were resolved after the snapshot. For current behavior, start with
-> [`docs/reference/telemetry-and-benchmarking.md`](../docs/reference/telemetry-and-benchmarking.md),
-> [`docs/reference/benchmarking-procedure.md`](../docs/reference/benchmarking-procedure.md), and the
-> generated [`benchmarks/HISTORY.md`](../benchmarks/HISTORY.md).
+> [`docs/reference/telemetry-and-benchmarking.md`](../../../reference/telemetry-and-benchmarking.md),
+> [`docs/reference/benchmarking-procedure.md`](../../../reference/benchmarking-procedure.md), and the
+> generated [`benchmarks/HISTORY.md`](../../../../benchmarks/HISTORY.md).
 
 
 - **QwenVoice/Vocello:** `05bd2b6d24b3f43351f3b388622a72d8f0d6ecce`

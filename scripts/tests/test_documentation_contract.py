@@ -99,26 +99,39 @@ class DocumentationContractTests(unittest.TestCase):
         )
         self.assertEqual(DOCUMENTATION.validate_optional_capabilities(self.root, [source]), [])
 
-    def test_current_status_distinguishes_exploratory_from_clean_canonical(self) -> None:
+    def test_local_markdown_heading_anchor_is_validated(self) -> None:
+        target = self.write("docs/guide.md", "# Guide\n\n## Exact heading\n")
+        source = self.write("README.md", "[good](docs/guide.md#exact-heading)\n")
+        self.assertEqual(DOCUMENTATION.validate_relative_links(self.root, [source]), [])
+        source.write_text("[bad](docs/guide.md#missing-heading)\n", encoding="utf-8")
+        self.assertTrue(DOCUMENTATION.validate_relative_links(self.root, [source]))
+        self.assertIn("exact-heading", DOCUMENTATION.headings(target))
+
+    def test_project_inventory_parser_counts_only_top_level_entries(self) -> None:
+        project = "targets:\n  One:\n    type: app\n  Two:\n    type: framework\nschemes:\n  Main:\n    build:\n"
+        self.assertEqual(DOCUMENTATION._top_level_names(project, "targets"), ["One", "Two"])
+        self.assertEqual(DOCUMENTATION._top_level_names(project, "schemes"), ["Main"])
+
+    def test_clean_canonical_status_is_derived_from_history(self) -> None:
         self.write(
-            "docs/development-progress.md",
-            "Existing records are exploratory; clean canonical schema-v2 comparison baselines remain pending.\n",
+            "benchmarks/runs/ui-generation/mac.json",
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "run": {"platform": "macos", "classification": "canonical", "status": "passedWithWarnings"},
+                    "source": {"dirty": False},
+                }
+            ),
         )
-        self.write(
-            "docs/reference/language-bench.md",
-            "### Historical validation snapshot (2026-07-06)\n",
-        )
-        self.write("benchmarks/OPTIMIZATION.md", "# Historical decision ledger\n")
-        self.write(
-            "docs/project-map.html",
-            'reviewed 2026-07-13\n"reviewed": "2026-07-13"\n',
-        )
-        self.assertEqual(DOCUMENTATION.validate_current_status(self.root), [])
-        progress = self.root / "docs/development-progress.md"
-        progress.write_text("first native schema-v2 canonical records\n", encoding="utf-8")
-        errors = DOCUMENTATION.validate_current_status(self.root)
-        self.assertTrue(any("exploratory" in error for error in errors))
-        self.assertTrue(any("presented as a first canonical" in error for error in errors))
+        self.assertTrue(DOCUMENTATION.benchmark_baseline_status(self.root, "macos"))
+        self.assertFalse(DOCUMENTATION.benchmark_baseline_status(self.root, "ios"))
+
+    def test_visible_website_copy_rejects_universal_performance_and_em_dash(self) -> None:
+        source = self.write("website/src/Hero.jsx", 'const copy = "Faster than realtime — everywhere";\n')
+        errors = DOCUMENTATION.validate_website_copy(self.root)
+        self.assertEqual(len(errors), 2)
+        source.write_text('const copy = "Responsive native generation";\n', encoding="utf-8")
+        self.assertEqual(DOCUMENTATION.validate_website_copy(self.root), [])
 
     def test_historical_snapshot_may_retain_retired_terminology(self) -> None:
         active = self.write("README.md", "Computer Use is an old harness.\n")

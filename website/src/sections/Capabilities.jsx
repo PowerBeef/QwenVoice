@@ -2,8 +2,8 @@ import React from "react";
 
 const ROWS = [
   {
-    k: "Faster than realtime",
-    v: "Generation keeps pace with playback on Apple Silicon, down to 8 GB Macs, so a finished line is ready about as fast as you can listen to it.",
+    k: "Responsive native generation",
+    v: "Native Swift and MLX keep generation local and responsive on Apple Silicon, including supported 8 GB Macs.",
     tone: "var(--gold-300)",
   },
   {

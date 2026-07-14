@@ -15,8 +15,8 @@ export const Hero = () => (
         </h1>
         <p className="hero-sub">
           Write a script, pick a preset or describe a voice, and generate speech locally
-          on your Apple Silicon Mac. Ten languages, faster than realtime, after a one-time
-          model download.
+          on your Apple Silicon Mac. Ten languages and responsive native generation after
+          a one-time model download.
         </p>
         <div className="hero-ctas">
           <a className="btn btn-primary" href={RELEASE_LATEST} target="_blank" rel="noreferrer">

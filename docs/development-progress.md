@@ -51,10 +51,11 @@
   `build/artifacts/macos/` and does
   not publish schema-v2 history. Its `off` lane deliberately constructs no sampler, so requiring
   in-process memory evidence there would change the experiment rather than qualify it.
-- The tracked registry contains schema-v2 macOS UI, memory-profile, and retained-memory successes,
-  including a full 29-take UI run, but they were captured from a dirty checkout and are therefore
-  exploratory. They validate the implementation path without establishing a clean canonical trend
-  baseline.
+- A clean canonical macOS schema-v2 baseline exists: the 29-take Mac mini M2 8 GB run at source
+  commit `4e05f6fd…` passed with the allowed `memory.pressure.soft_trim` warning and is preserved in
+  the tracked registry. Earlier dirty schema-v2 records remain exploratory and are excluded from
+  canonical trends. The clean canonical iPhone schema-v2 baseline remains pending physical-device
+  acceptance.
 - The physical-iPhone language lane predeclares a one-based, fixed-seed run plan; retains only the
   exact selected WAV and telemetry evidence; requires three-pass locale-locked on-device Speech
   consensus; and offers a retry-free 15-take diagnostic cohort that never publishes history.

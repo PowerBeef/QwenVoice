@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "indexPath": "docs/INDEX.md",
+  "groups": [
+    {
+      "id": "onboarding",
+      "title": "Onboarding and product",
+      "status": "active",
+      "owner": "release-qa",
+      "authority": "repository guidance",
+      "audience": "contributors and users",
+      "reviewTriggers": ["release facts", "workflow changes", "platform support"],
+      "paths": ["AGENTS.md", "README.md", "PRODUCT.md", ".agents/*.md", "website/AGENTS.md", "website/DESIGN.md", "website/PRODUCT.md", "website/README.md"]
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture and active references",
+      "status": "active",
+      "owner": "backend-and-platform",
+      "authority": "derived from source, project.yml, scripts, and machine-readable contracts",
+      "audience": "maintainers",
+      "reviewTriggers": ["target or scheme changes", "runtime topology", "telemetry schema", "test workflow"],
+      "paths": ["docs/ARCHITECTURE.md", "docs/development-progress.md", "docs/project-map.html", "docs/qwen_tone.md", "docs/reference/*.md", "Sources/Resources/voice-previews/README.md"]
+    },
+    {
+      "id": "benchmarking",
+      "title": "Benchmark governance",
+      "status": "active",
+      "owner": "release-qa",
+      "authority": "benchmark schemas, validators, and tracked PASS records",
+      "audience": "performance and release maintainers",
+      "reviewTriggers": ["benchmark schema", "telemetry schema", "hardware profiles", "publication rules"],
+      "paths": ["benchmarks/README.md", "benchmarks/OPTIMIZATION.md"]
+    },
+    {
+      "id": "vendor-runtime",
+      "title": "Owned Qwen3 runtime",
+      "status": "active",
+      "owner": "backend-mlx",
+      "authority": "vendor manifest, upstream baseline, and semantic patch ledger",
+      "audience": "backend maintainers",
+      "reviewTriggers": ["vendor source changes", "dependency pins", "upstream review", "performance semantics"],
+      "paths": ["third_party_patches/mlx-audio-swift/README.md", "third_party_patches/mlx-audio-swift/UPSTREAM.md", "third_party_patches/mlx-audio-swift/PERFORMANCE.md", "third_party_patches/mlx-audio-swift/CLONE_ARTIFACT_FORMAT.md"]
+    },
+    {
+      "id": "generated",
+      "title": "Generated indexes",
+      "status": "generated",
+      "owner": "release-qa",
+      "authority": "generators",
+      "audience": "maintainers",
+      "reviewTriggers": ["source manifest or benchmark record changes"],
+      "paths": ["docs/INDEX.md", "benchmarks/HISTORY.md"]
+    },
+    {
+      "id": "historical",
+      "title": "Historical evidence",
+      "status": "historical",
+      "owner": "archive",
+      "authority": "pinned historical snapshot only",
+      "audience": "research and provenance review",
+      "reviewTriggers": ["link repair or archive classification only"],
+      "paths": ["benchmarks/LEGACY_HISTORY.md", "benchmarks/baseline-*.md", "docs/releases/*.md", "docs/audits/archive/**/*.md", "docs/reference/backend-optimization-research-report.md"]
+    }
+  ]
+}

@@ -64,19 +64,29 @@ Two design-context files in this directory encode the website's rules:
   - Say *local*, not *offline* or *on-device*, unless the technical distinction matters.
   - Sentence case. Reserve all caps for tiny labels only.
   - **No em dashes in visible copy.** Use commas, colons, semicolons, periods, or parentheses.
-    After any copy change, manually scan visible text for the em-dash character (there is no
-    automated CI gate for the website).
+    After any copy change, scan visible text for the em-dash character; the repository
+    documentation contract enforces this policy.
   - No emoji, no celebration copy, no hype claims, no first-person plural.
 - **`DESIGN.md`** — color strategy, typography rules, motion rules, bans. Specifically: no gradient text, no side-stripe borders >1px on cards, no decorative glassmorphism, no identical card grids, no repeated uppercase eyebrow scaffolding.
 
 The product's ground truth lives in the parent QwenVoice app repo. When making product claims on the site (model variants, hardware requirements, emotion presets, speaker names, OS requirements), cross-reference:
 
 - `../AGENTS.md` — repo facts: model variant policy, architecture, distribution.
+- `../config/public-product-facts.json` — public release, platform status, minimum support, and
+  canonical benchmark-profile references.
 - `../Sources/Resources/qwenvoice_contract.json` — model registry, speakerMetadata, Hugging Face revisions.
 - `../Sources/QwenVoiceCore/EmotionPreset.swift` — actual emotion presets (9 non-Neutral × 3 intensities + Neutral = 10 total).
 - Voice Cloning has no controllable delivery — the engine path doesn't accept emotion/intensity for clone.
 
 The site has drifted from ground truth multiple times during iteration. Don't trust the existing copy — verify against the upstream.
+
+| Website claim | Authoritative source |
+| --- | --- |
+| Current/fallback Mac release, public iPhone status, minimum support | `../config/public-product-facts.json` plus `../project.yml` |
+| Model names, variants, speakers, languages, revisions | `../Sources/Resources/qwenvoice_contract.json` |
+| Delivery styles and intensity | `../Sources/QwenVoiceCore/EmotionPreset.swift` |
+| Canonical performance hardware | `../benchmarks/hardware-profiles.json` |
+| Performance statements | Compatible clean records in `../benchmarks/runs/` and generated `../benchmarks/HISTORY.md` |
 
 ## Brand tokens (in `tokens.css`)
 

@@ -16,7 +16,8 @@ The job: bring text, leave with audio that sounds right, in seconds, without lea
 
 Vocello is a local-first text-to-speech application that runs Qwen3-TTS / MLX models entirely on-device. Three generation modes share one chrome:
 
-- **Custom Voice** — generate with a chosen preset speaker, controllable emotion + speed.
+- **Custom Voice** — generate with a chosen preset speaker, delivery style, and intensity. “Speed”
+  names the 4-bit model variant, not a delivery control.
 - **Voice Design** — describe a voice in natural language; the model produces it.
 - **Voice Cloning** — provide a 10–20 s reference clip (record it in-app or import a file; the transcript can auto-fill via on-device transcription); the model speaks the user's text in that voice.
 

@@ -1,50 +1,60 @@
-# mlx-audio-swift Vendor Metadata
+# Vocello Qwen3 audio runtime provenance
 
-This directory is a vendored snapshot of:
+This directory is Vocello-owned product source derived from
+[`Blaizzy/mlx-audio-swift`](https://github.com/Blaizzy/mlx-audio-swift). It is copied into the
+repository, not tracked as a submodule and not maintained as a rebasing fork.
 
-```text
-https://github.com/Blaizzy/mlx-audio-swift
-```
+Machine-readable provenance, package facts, and semantic deltas are authoritative:
 
-It is copied into the root repository as source, not tracked as a nested git submodule. The root `project.yml` routes production use through the QwenVoice-owned `QwenVoiceBackendCore` target, which re-exports only the MLX, `MLXAudioCore`, and `MLXAudioTTS` surfaces needed by Vocello.
+- [`VENDOR_MANIFEST.json`](VENDOR_MANIFEST.json)
+- [`UPSTREAM_BASELINE.json`](UPSTREAM_BASELINE.json)
+- [`PATCHES.json`](PATCHES.json)
 
-**Specialized to Qwen3-TTS on 2026-06-09.** The upstream multi-model surface was deleted from the snapshot: the `MLXAudioSTT`/`MLXAudioSTS`/`MLXAudioVAD`/`MLXAudioLID`/`MLXAudioG2P`/`MLXAudioUI`/`Tools` targets, the eight non-Mimi codec families (`BigVGAN`, `DACVAE`, `Descript`, `EcapaTdnn`, `Encodec`, `FishS1DAC`, `SNAC`, `Vocos`), `Mimi/Mimi.swift` + `AudioCodecModel.swift` (the Qwen3 speech tokenizer uses only the Mimi `Transformer`/`Conv`/`Quantization`/`Seanet` primitives), and the unused `MLXAudioCore` files (`AudioPlayer`, `AudioSessionManager`, `PCMStreamConverter`, `UnigramTokenizer`). ~36K of ~49K LOC removed; everything is restorable from upstream `fcbd04d` or git history. The snapshot intentionally no longer stays close to upstream — a future upstream sync is a selective re-port of specific fixes into the Qwen3 surface, not a rebase.
+## Import and review points
 
-## Local Delta Rationale
+- Imported release: `v0.1.2`
+- Imported commit: `fcbd04daa1bfebe881932f630af2ba6ce9af3274`
+- Last reviewed upstream head: `d302a5c6080d2bb97bae38c7418f82abb76013b6` on 2026-07-14
+- Official Qwen model family: [`QwenLM/Qwen3-TTS`](https://github.com/QwenLM/Qwen3-TTS)
 
-QwenVoice/Vocello keeps this snapshot in-tree so the native Apple-platform runtime can depend on a deterministic MLXAudio surface for Qwen3 TTS, custom voice, voice design, clone prompt handling, local model-directory loading, and final WAV integration.
+The import was specialized to Qwen3-TTS. Vocello retains `MLXAudioCore`, the Mimi subset of
+`MLXAudioCodecs`, `MLXAudioTTS`, and product-owned Qwen3 tests. STT, STS, VAD, LID, G2P, UI/tools,
+non-Qwen TTS models, and non-Mimi codec families are outside the production package surface.
 
-The May 2026 backend reset uses upstream `mlx-audio-swift` `v0.1.2` as the provenance seed and then applies only QwenVoice-required patches. Quality-first full-result generation is the production default; streaming probes remain available for diagnostics and future preview work, but must not affect the final waveform.
+## Current integration boundary
 
-## Rebase Checklist
+`QwenVoiceCore` owns model coordination, generation semantics, memory policy, telemetry sessions,
+and the application-facing engine. The vendored package owns the lower-level Qwen3 model,
+tokenizer, sampler, streaming, codec, and clone-artifact implementation.
 
-- Record the upstream commit or release used for the new snapshot.
-- Preserve Qwen3 TTS, custom voice, voice design, clone prompt, quality-first full-result generation, and diagnostic streaming behavior expected by `Sources/QwenVoiceCore/`.
-- Regenerate the Xcode project when package products or transitive dependency pins change.
-- Run the Swift, contract, native, macOS foundation, and iPhone foundation gates listed in `docs/reference/mlx-audio-swift-patching.md`.
-- Verify packaging still excludes `Contents/Resources/backend`, `Contents/Resources/python`, and `Contents/Resources/ffmpeg`.
+`QwenVoiceBackendCore` does **not** re-export MLX or MLXAudio. It contains provenance, shared
+generation defaults and policy vocabulary, finish reasons, and a minimal app-owned backend
+abstraction.
 
-## Current Upstream Revision
+The macOS app reaches the engine through an XPC service. The iPhone engine runs in-process. There
+is no iPhone extension engine and no repository-owned Python inference runtime.
 
-- Upstream repository: `https://github.com/Blaizzy/mlx-audio-swift`
-- Upstream release tag: `v0.1.2`
-- Upstream commit: `fcbd04daa1bfebe881932f630af2ba6ce9af3274`
-- QwenVoice integration target: `Sources/QwenVoiceBackendCore/`
+## Production posture
 
-Retained QwenVoice deltas:
+Production generation uses bounded chunked streaming for Custom Voice, Voice Design, and Voice
+Clone. The pipeline asynchronously materializes non-final chunks, synchronizes consumers, and
+uses a final barrier before reporting completion or publishing the final WAV. Full-result helpers
+remain useful for explicit offline/diagnostic paths; they are not the universal production default.
 
-- Prepared local model-directory loading through `QwenVoiceCore`.
-- Contract-backed model variants and pinned Hugging Face revisions.
-- XPC and iPhone extension process isolation.
-- Cancellation and unload coordination owned by the app engine boundary.
-- Qwen3-TTS quality-first full-result generation using official sampling defaults and full-text nonstreaming conditioning for Custom Voice and Voice Design.
-- Final WAV/output integration and production diagnostic metadata.
-- Incremental `Set<Int>` maintenance for Qwen3 repetition-penalty token IDs in the hot generation loop (`Qwen3TTS.swift`), avoiding per-token `Array(Set(tokens))` rebuilds during streaming decode.
-- Sampling-order fix re-ported from upstream Python mlx-audio `a730a68` (#735, 2026-05-22): `sampleToken` scales logits by temperature immediately after the greedy check and samples `categorical()` at T = 1.0, so top-p/min-p truncate the tempered distribution. (The v0.1.2-era order filtered raw logits and divided by temperature only at the final sample — temperature-blind nucleus truncation. Mathematically a no-op at the shipped official defaults `topP=1.0 / minP=0`; prerequisite for any topP/minP-based delivery tuning.)
+Sampling follows the checkpoint’s official talker defaults. The Code Predictor/subtalker inherits
+the effective talker temperature, top-k, and top-p unless a controlled diagnostic override is set.
+See [`PERFORMANCE.md`](PERFORMANCE.md) for the active, diagnostic, dormant, and rejected mechanisms.
 
-Intentionally omitted from the owned production path:
+## Selective upstream intake
 
-- Repo-owned Python backend or Python runtime.
-- Standalone CLI surface.
-- RC1 short text-length token clamps and Custom Voice `0.7 / 0.9` sampling override.
-- Production dependence on async streaming chunk decode or live-preview chunk handoff.
+Future updates are selective ports, not rebases:
+
+1. Record the upstream head reviewed in `VENDOR_MANIFEST.json`.
+2. Compare it with the pinned baseline and current semantic ledger.
+3. Port only behavior that preserves Vocello’s model, artifact, streaming, cancellation, memory,
+   output, and telemetry contracts.
+4. Update the affected `PATCHES.json` entries with upstream disposition and removal criteria.
+5. Run `python3 scripts/vendor_runtime_contract.py validate` and the deterministic backend gates.
+
+Never replace the directory wholesale, infer parity from matching filenames, or treat a newer
+upstream implementation as equivalent without the relevant deterministic and benchmark evidence.

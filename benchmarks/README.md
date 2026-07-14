@@ -15,8 +15,8 @@ before the raw trace is discarded. `--keep-trace` is an explicit local diagnosti
 - **`hardware-profiles.json`** — the canonical Mac mini M2 8 GB and iPhone 17 Pro profiles.
 - **`schema-v2.json`** — the current memory-complete record shape. **`schema-v1.json`** remains the
   read-only compatibility schema; `scripts/benchmark_history.py` is the executable validator.
-- **`OPTIMIZATION.md`** — the standing optimization-progress log: what was investigated, decided, shipped,
-  and deferred (workstreams + findings + invariants + next steps), anchored to the reference baseline.
+- **`OPTIMIZATION.md`** — a dated historical optimization decision ledger. Current performance truth
+  comes from validated records in `runs/`, the generated `HISTORY.md`, and current telemetry documentation.
 - Existing dated Markdown/JSON snapshots and `benchmarks/baselines/` remain preserved reference
   artifacts. They are not silently converted into complete schema-v2 evidence. New successful runs
   use `runs/<kind>/`; optional baseline comparisons remain local model-dependent QA and never an

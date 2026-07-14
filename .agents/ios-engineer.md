@@ -55,6 +55,9 @@ Before changing iOS UI or behavior, read:
   benchmark lanes only for explicitly requested frontend acceptance.
   Missing device, UI, or model evidence never blocks a commit, push, pull request, ordinary merge,
   or ordinary CI. Never add a Simulator route, alternate UI driver, or coordinate table.
+- iOS owns on-device capture, frontend/engine correlation, transport, memory-warning, MetricKit,
+  and platform-pressure evidence. Typed field semantics remain backend-owned and schema/publication
+  changes require release/QA review.
 
 ## Build / test commands
 

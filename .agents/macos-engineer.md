@@ -58,6 +58,8 @@ Before changing macOS app or XPC code, read:
 - XCUITest is the sole autonomous macOS app UI driver. Run the smoke and benchmark lanes
   only for explicitly requested frontend acceptance. Missing UI evidence never blocks committing,
   pushing, opening a pull request, merging, ordinary CI, or release packaging.
+- macOS owns app/XPC capture, uptime alignment, transport, and platform-pressure evidence. Typed
+  field semantics remain backend-owned and schema/publication changes require release/QA review.
 
 ## Build / test commands
 

@@ -376,7 +376,10 @@ Vocello's effective defaults:
 | `do_sample` | true | App policy |
 | `repetition_penalty` | 1.05 | App policy |
 
-The **Code Predictor** uses greedy sampling (`temperature = 0`, `top_k = 1`) in the reference implementation; Vocello follows the same convention.
+The **Code Predictor** inherits the effective Talker sampling policy by default. Vocello can apply
+independent subtalker overrides when they are explicitly configured; it is not unconditionally
+greedy. This keeps the default residual-codebook sampling aligned with the public generation
+policy while preserving a typed override surface for controlled experiments.
 
 Streaming:
 

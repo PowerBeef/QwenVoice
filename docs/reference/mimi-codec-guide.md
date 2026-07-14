@@ -2,7 +2,7 @@
 
 > **Living document.** A project-specific reference for the Mimi-style neural audio codec used by Vocello's Qwen3-TTS backend. It focuses on the Qwen3-TTS speech tokenizer as vendored in `third_party_patches/mlx-audio-swift/`, with Kyutai's canonical Mimi as architectural background. When this doc disagrees with the code, the code wins — fix this file.
 >
-> Last reviewed: 2026-06-15. Upstream snapshot: `mlx-audio-swift` `v0.1.2` / `fcbd04d`, with Vocello-specific deltas.
+> Last reviewed: 2026-07-14. Upstream snapshot: `mlx-audio-swift` `v0.1.2` / `fcbd04d`, with Vocello-specific deltas.
 
 ---
 
@@ -311,9 +311,10 @@ The decoder has three operating modes:
 | --- | --- | --- | --- |
 | Full batch | `callAsFunction(_:)` | Full utterance | Offline synthesis, quality baseline. |
 | Chunked | `chunkedDecode(_:)` | 300 tokens (+25 left context) | Non-streaming but memory-bounded synthesis. |
-| Streaming | `streamingStep(_:)` | Variable (default 100 in `streamingDecode`) | Real-time playback as tokens arrive. |
+| Generic streaming helper | `streamingStep(_:)` via `streamingDecode` | Variable (helper default 100) | Low-level API and diagnostics. |
+| Vocello production streaming | Qwen3 runtime schedule | Derived from `appStreamingInterval` and mode-specific later-chunk policy | Bounded playback chunks with a final barrier. |
 
-Smaller chunks increase boundary count and can amplify any residual drift bug. Larger chunks increase peak memory and delay the first audio sample. Vocello's default 100-token streaming chunk (~0.8 s of audio) is a compromise tuned on 8 GB machines.
+Smaller chunks increase boundary count and can amplify any residual drift bug. Larger chunks increase peak memory and delay the first audio sample. At 12.5 frames per second, 100 codec frames represent approximately **8 seconds**, not 0.8 seconds. The `streamingDecode` default is a generic helper default; Vocello production generation derives its first and later decode batches from `appStreamingInterval` and the owned runtime's mode-specific scheduling policy.
 
 ---
 
@@ -329,7 +330,8 @@ MLX uses **unified memory** on Apple Silicon. Decoder weights and KV caches live
 
 ### 6.2 Chunk size
 
-`streamingDecode(_:chunkTokens:)` defaults to 100 tokens. Trade-offs:
+The generic `streamingDecode(_:chunkTokens:)` helper defaults to 100 tokens. Production Vocello
+streaming does not treat that value as its schedule. Trade-offs:
 
 - **Smaller chunks** — lower latency, but more `eval()` boundaries and more opportunity for streaming-state overhead.
 - **Larger chunks** — better amortized kernel launch cost, but higher peak memory and longer time-to-first-audio.

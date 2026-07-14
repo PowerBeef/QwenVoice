@@ -9,6 +9,8 @@
 **Vocello** (`QwenVoice` repo): local-first TTS on Apple Silicon — **Qwen3-TTS + MLX**, Swift 6, macOS/iOS 26+. No bundled weights; models download from Hugging Face. Also ships the `vocello` CLI, `scripts/`, benchmarks, and `website/`.
 
 macOS **2.1.0** released; iOS is on-device-capable on `main`, not publicly distributed yet.
+Minimum support is Apple Silicon Mac with 8 GB or iPhone 15 Pro or newer. Canonical benchmark
+evidence uses Mac mini M2 8 GB and iPhone 17 Pro; support and evidence hardware are not synonyms.
 
 ## Source of truth
 
@@ -44,11 +46,11 @@ Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Reso
 | --- | --- |
 | **iOS runtime/UI = physical device + XCUITest** | Never use Simulator. XCUITest drives the paired physical iPhone; scripts provide deterministic device/telemetry proof. The generic physical-device SDK compile needs no phone. `scripts/ios_device.sh gate` remains a physical-device runtime diagnostic, not a UI-result gate. |
 | **`project.yml`, not pbxproj** | After edit: `./scripts/regenerate_project.sh` + `./scripts/check_project_inputs.sh`. iOS resources: `sources:` + `buildPhase: resources` (not `resources:`). |
-| **Generated output follows one contract** | `config/build-output-policy.json` owns every ignored build path. Persistent Xcode caches are `build/cache/xcode/{macos,ios-device}`; packages are shared; scratch, evidence, symbols, and distribution outputs stay in their classified trees. Run `python3 scripts/build_output_policy.py validate`; never add an ad hoc DerivedData or `.build`. |
+| **Generated output follows one contract** | `config/build-output-policy.json` owns native repository output under `build/`. Persistent Xcode caches are `build/cache/xcode/{macos,ios-device}`; packages are shared; scratch, evidence, symbols, and distribution outputs stay in their classified trees. `website/dist` is Vite-owned website output. Run `python3 scripts/build_output_policy.py validate`; never add an ad hoc DerivedData or `.build`. |
 | **Release-only config** | The project has no Debug configuration or generic `DEBUG` symbol. Runtime diagnostics use `DebugMode.isEnabled` (`QWENVOICE_DEBUG=1`); compile-time test isolation belongs in test targets or a narrowly named compilation condition, never hidden app behavior. |
 | **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
 | **Engine invariants** | Prewarm slots, event streams, cancellation, memory policy → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
-| **Privacy** | No PII in tracked user-facing files. |
+| **Privacy** | No PII, device identity, usernames, absolute paths, prompts, transcripts, secrets, or private metadata in any tracked content. |
 | **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. No Simulator, alternate desktop-control MCP, or coordinate bridge is active. |
 | **No hidden test UI** | XCUITest observes genuine visible controls. Test-only code belongs in test targets; shippable app targets must not contain preview routes, invisible state markers, seeded UI state, or onboarding bypasses. |
 | **One shared XcodeBuildMCP** | When the OpenAI Apple build plugins and their server are installed and callable, Build iOS Apps owns the single shared XcodeBuildMCP route and Build macOS Apps may consume it. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never configure a second server. Repository scripts remain the final gate. |
@@ -163,7 +165,7 @@ gates. Listening remains optional independent annotation →
 | Path | Purpose |
 | --- | --- |
 | `Sources/QwenVoiceCore/` | Engine, download, generation semantics |
-| `Sources/QwenVoiceBackendCore/` | MLX/audio primitives |
+| `Sources/QwenVoiceBackendCore/` | Backend provenance, defaults, policy vocabulary, finish reason, and minimal synthesis abstraction |
 | `Sources/QwenVoiceNative/`, `Sources/QwenVoiceEngineService/`, `Sources/QwenVoiceEngineSupport/` | macOS XPC stack |
 | `Sources/iOS/`, `Sources/iOSSupport/` | iOS app |
 | `Sources/iOS/IOSDeviceDiagnosticsRunner.swift` | Headless, non-UI physical-device diagnostics used by `ios_device.sh` |

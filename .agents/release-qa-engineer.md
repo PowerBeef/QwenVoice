@@ -7,7 +7,9 @@
 
 **Owns:**
 - `scripts/*.sh` and `scripts/lib/`
-- `.github/workflows/release.yml`
+- `.github/workflows/ci.yml` and `.github/workflows/release.yml`
+- `config/build-output-policy.json`, `config/documentation-contract.json`, and
+  `config/public-product-facts.json`
 - `benchmarks/` schema-v1 compatibility/schema-v2 memory-qualified records, generated history,
   and preserved reference baselines
 - `docs/releases/`
@@ -63,6 +65,10 @@ Before changing scripts or CI, read:
   never stages, commits, or pushes. Successful profiles are summary-only by default: the runner
   publishes the trace digest/settings/extracted evidence before deleting the raw trace. Use
   `--keep-trace` only when the raw Instruments document must be reopened.
+- **Documentation and public facts:** this role owns lifecycle/index validation and public release,
+  platform, support, and canonical-hardware references. Model implementation facts remain backend-owned.
+- **Schema review:** telemetry or benchmark schema-version changes require backend, the affected
+  platform owner, and release/QA review before publication contracts change.
 
 ## Build / test commands
 

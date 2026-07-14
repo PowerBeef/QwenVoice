@@ -13,8 +13,11 @@ echo "==> XCUITest workflow consistency check" >&2
 
 for required_policy_surface in \
   config/build-output-policy.json \
+  config/documentation-contract.json \
+  config/public-product-facts.json \
   scripts/build_output_policy.py \
   scripts/documentation_contract.py \
+  scripts/vendor_runtime_contract.py \
   scripts/build_cleanup.py \
   scripts/clean_build_caches.sh \
   scripts/lib/build_paths.sh \
@@ -22,6 +25,7 @@ for required_policy_surface in \
   scripts/lib/profile_trace_retention.py \
   scripts/tests/test_build_output_policy.py \
   scripts/tests/test_documentation_contract.py \
+  scripts/tests/test_vendor_runtime_contract.py \
   scripts/tests/test_build_routing_contract.py \
   scripts/tests/test_clean_build_caches.py \
   scripts/tests/test_profile_trace_retention.py; do
@@ -92,12 +96,13 @@ for retired in \
   [[ ! -e "$retired" ]] || fail "retired UI harness artifact still exists: $retired"
 done
 
-active=(AGENTS.md README.md .gitignore .agents benchmarks docs scripts config .github project.yml QwenVoice.xcodeproj/project.pbxproj Sources Tests website QwenVoice_MLXAudio_Corrected_Report_Series_2026-07-10)
+active=(AGENTS.md README.md .gitignore .agents benchmarks docs scripts config .github project.yml QwenVoice.xcodeproj/project.pbxproj Sources Tests website third_party_patches/mlx-audio-swift)
 excludes=(
   --glob '!scripts/check_test_workflows.sh'
   --glob '!scripts/clean_build_caches.sh'
   --glob '!scripts/documentation_contract.py'
   --glob '!scripts/tests/test_documentation_contract.py'
+  --glob '!docs/audits/archive/**'
 )
 
 # Match the retired IDE by its development-context terms, not the generic UI/CSS
@@ -128,6 +133,8 @@ out="$(rg -n --pcre2 "$release_ui_gate_pattern" AGENTS.md README.md .agents docs
 # openable report identifies itself before the historical body begins.
 python3 scripts/documentation_contract.py \
   || fail "active documentation contract failed"
+python3 scripts/vendor_runtime_contract.py validate \
+  || fail "owned vendor-runtime contract failed"
 
 # Current guidance uses the typed playback-scheduled and heartbeat metrics. Keep
 # the retired display names in compatibility code and historical evidence only.
@@ -149,6 +156,7 @@ files.extend(
     path
     for path in Path("docs").rglob("*.md")
     if "releases" not in path.parts
+    and not {"audits", "archive"}.issubset(path.parts)
     and path != Path("docs/reference/backend-optimization-research-report.md")
 )
 
@@ -506,6 +514,7 @@ python3 scripts/validate_backend_risk_spine.py
 python3 -m unittest \
   scripts.tests.test_build_output_policy \
   scripts.tests.test_documentation_contract \
+  scripts.tests.test_vendor_runtime_contract \
   scripts.tests.test_build_routing_contract \
   scripts.tests.test_clean_build_caches \
   scripts.tests.test_profile_trace_retention \

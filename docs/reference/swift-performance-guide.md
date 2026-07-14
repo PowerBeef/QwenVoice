@@ -200,7 +200,7 @@ Generic functions are monomorphized (specialized) when the caller's concrete typ
 
 - Keep generic hot-path code in the same module as its callers, or use `@inlinable` / `@usableFromInline` across modules.
 - Avoid type-erasing a homogeneous collection into `[any P]` if all elements are the same type; use `[ConcreteType]` or a generic `Array<T>`.
-- For MLX-specific wrappers in `QwenVoiceBackendCore`, small generic helpers that operate on `MLXArray` are usually specialized because the concrete type is always `MLXArray`.
+- For MLX-specific wrappers in `QwenVoiceCore` or the owned Qwen3 runtime, small generic helpers that operate on `MLXArray` are usually specialized because the concrete type is always `MLXArray`. `QwenVoiceBackendCore` itself is the narrow provenance and policy layer.
 
 ---
 

@@ -5,7 +5,7 @@
 > lifecycle, persistence, model management, and telemetry. When this doc disagrees
 > with the code, **the code wins** — fix this doc.
 >
-> Last reviewed: 2026-07-13.
+> Last reviewed: 2026-07-14.
 
 ## TL;DR
 
@@ -23,7 +23,9 @@ One engine core (`QwenVoiceCore` / `MLXTTSEngine`) is hosted three ways:
 | **iOS app** | Engine runs **in-process** (`MLXTTSEngine` via `NativeRuntimeFactory`) | `Sources/iOS/TTSEngineStore.swift` | `VocelloiOS` |
 | **CLI** | Engine runs **in-process** | `VocelloCLI` (`CLIRuntime`) | `vocello` binary |
 
-Platforms: macOS 26+, iOS 26+, Apple Silicon (`arm64`), Xcode 26, Swift 6.
+Platforms: macOS 26+, iOS 26+, Apple Silicon (`arm64`), Xcode 26, Swift 6. Minimum
+hardware support is an Apple Silicon Mac with 8 GB or iPhone 15 Pro or newer; canonical benchmark
+hardware is separately defined as Mac mini M2 8 GB and iPhone 17 Pro.
 Stable macOS release: **Vocello 2.1.0**. iOS is on-device-capable on `main` but
 not yet distributed.
 
@@ -36,7 +38,7 @@ not yet distributed.
 ## 1. Module & target dependency graph
 
 The Xcode project is generated from [`project.yml`](../project.yml) (XcodeGen
-2.45.4). There are ten Swift targets split into **cross-platform frameworks**,
+2.45.4). There are 12 targets split into **cross-platform frameworks**,
 **macOS-only frameworks + XPC service**, and **apps/CLI/tests**.
 
 ```mermaid
@@ -54,7 +56,7 @@ graph TD
     QwenVoiceEngineService["QwenVoiceEngineService<br/>(macOS XPC service)"]:::macfw
     QwenVoiceEngineSupport["QwenVoiceEngineSupport<br/>(macOS runtime helpers)"]:::macfw
     QwenVoiceCore["QwenVoiceCore<br/>(engine core · iOS+macOS)"]:::fw
-    QwenVoiceBackendCore["QwenVoiceBackendCore<br/>(MLX/audio primitives · iOS+macOS)"]:::fw
+    QwenVoiceBackendCore["QwenVoiceBackendCore<br/>(provenance + policy vocabulary · iOS+macOS)"]:::fw
 
     GRDB["GRDB.swift"]:::spm
     MLXAudio["MLXAudio<br/>(Core, Codecs, TTS) — vendored"]:::spm
@@ -100,7 +102,7 @@ graph.)
 | `VocelloiOS` | application | iOS | `QVoiceiOS` | `com.patricedery.vocello` | iOS SwiftUI app; engine runs in-process. App Group `group.com.patricedery.vocello.shared`. |
 | `VocelloCLI` | tool | macOS | `VocelloCLI` | `com.qwenvoice.cli` | Headless `vocello` binary; engine in-process. |
 | `QwenVoiceCore` | framework.static | iOS + macOS | `QwenVoiceCore` | `com.qwenvoice.core` | **Engine core**: `TTSEngine` protocol, `MLXTTSEngine`, generation semantics, runtime, memory policy, telemetry. |
-| `QwenVoiceBackendCore` | framework.static | iOS + macOS | `QwenVoiceBackendCore` | `com.qwenvoice.backend-core` | Low-level MLX + audio primitives (model load, synthesis, codecs). |
+| `QwenVoiceBackendCore` | framework.static | iOS + macOS | `QwenVoiceBackendCore` | `com.qwenvoice.backend-core` | Backend provenance, generation defaults and policy vocabulary, finish reason, and the minimal synthesis abstraction. MLX loading, synthesis, and codecs live in `QwenVoiceCore` and the owned Qwen3 runtime. |
 | `QwenVoiceEngineSupport` | framework.static | macOS | `QwenVoiceEngineSupport` | `com.qwenvoice.engine-support` | macOS runtime helpers + the **XPC wire protocol** (`EngineCommand`, envelopes, codec). |
 | `QwenVoiceNative` | framework.static | macOS | `QwenVoiceNative` | `com.qwenvoice.native` | macOS app-facing XPC client/coordinator/store bridging XPC to SwiftUI. |
 | `QwenVoiceEngineService` | xpc-service | macOS | `QwenVoiceEngineService` | `com.qwenvoice.app.engine-service` | Out-of-process engine host for crash isolation + memory containment. |
@@ -122,14 +124,16 @@ graph.)
 Release packaging is deterministic and does not consume UI results. Frontend evidence remains
 platform-specific and is created only when explicitly requested.
 
-**Four schemes**: `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
+**Five shared schemes**: the four XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
 (iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
-iOS XCUITest). The UI schemes are isolated from ordinary test actions. A single shippable config,
+iOS XCUITest), plus the separately generated `VocelloCLI` scheme. The UI schemes are isolated from ordinary test actions. A single shippable config,
 **`Release`**, is the only config — there is no `Debug` config or generic `DEBUG` symbol.
 
 ### Key layering rule
 
-`QwenVoiceBackendCore` ← `QwenVoiceCore` ← {macOS frameworks, apps, CLI}. The
+`QwenVoiceBackendCore` ← `QwenVoiceCore` ← {macOS frameworks, apps, CLI}. BackendCore is a narrow
+contract/provenance layer; `QwenVoiceCore` and the owned Qwen3 runtime implement model loading,
+synthesis, streaming, and codecs. The
 **iOS app deliberately does not link** `QwenVoiceNative`, `QwenVoiceEngineService`,
 or `QwenVoiceEngineSupport` — those are macOS-only (the XPC stack). iOS reaches
 the engine in-process through `QwenVoiceCore` alone. This single dependency
@@ -623,8 +627,8 @@ Layout under the root: `models/` (downloaded HF weights, staged in
 
 ### Repository-local generated output
 
-`config/build-output-policy.json` is the machine-readable owner and lifetime contract for ignored
-repository output. Local development has two persistent Xcode platform caches,
+`config/build-output-policy.json` is the machine-readable owner and lifetime contract for native
+repository output under `build/`. Local development has two persistent Xcode platform caches,
 `build/cache/xcode/macos/` and `build/cache/xcode/ios-device/`, plus one serialized shared package
 checkout at `build/cache/xcode/source-packages/`. The vendored MLX Audio runtime uses its separate
 policy-owned SwiftPM scratch cache and must not leave `.build` state in the source tree.
@@ -643,6 +647,8 @@ dSYMs are accepted only when their Mach-O UUIDs match the current app/XPC or iOS
 `python3 scripts/build_output_policy.py status|validate`; use
 `scripts/clean_build_caches.sh --routine --dry-run` before bounded cleanup. The generated owner and
 lifetime table is maintained in [`reference/privacy-storage.md`](reference/privacy-storage.md).
+The website has an independent Vite lifecycle: `website/dist/` is website-owned deployment output,
+not a native DerivedData, evidence, symbol, or distribution path in the build-output manifest.
 
 ---
 
