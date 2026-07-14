@@ -55,6 +55,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-12 | [`mac-profile-20260712-210447-f2761314`](runs/instrument-profile/mac-profile-20260712-210447-f2761314.json) | instrumented | exploratory | passed | memory-contract-incomplete | 2 | `1ef1669326b5` dirty | `excluded` | baseline | instrument-profile |
 
+## language / ios / iphone-17-pro / config `b79ed611e84b`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-14 | [`ios-lang-bench-20260714-115552-6abc66a9`](runs/language/ios-lang-bench-20260714-115552-6abc66a9.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 7 | `c6157ee65880` | `b79ed611e84b` | baseline | ios-lang-quick-v2 |
+
 ## language / macos / mac-mini-m2-8gb / config `642f6a5a33ac`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
