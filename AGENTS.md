@@ -230,6 +230,7 @@ scripts/ios_device.sh logic-test
 scripts/ios_device.sh speech-assets
 scripts/ios_device.sh profile --kind memory
 scripts/ios_device.sh memory --voice-id <saved-voice-id> --label retained-check
+scripts/ios_device.sh clone-conditioning --label focused-clone-proof  # local two-mode semantic proof
 scripts/ios_device.sh memory-field-report       # local-only delayed MetricKit aggregate
 python3 scripts/build_output_policy.py status
 python3 scripts/build_output_policy.py validate

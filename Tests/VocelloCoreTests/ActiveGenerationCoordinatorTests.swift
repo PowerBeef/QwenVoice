@@ -20,6 +20,42 @@ private actor TestGenerationGate {
     }
 }
 
+private enum TestMemoryPressureAction: Equatable, Sendable {
+    case observed(NativeMemoryTrimLevel)
+    case cancellationRequested(GenerationCancellationReason)
+    case workerTerminated
+    case terminalBarrierPassed
+    case trimmed(NativeMemoryTrimLevel, String)
+}
+
+private actor TestMemoryPressureActionLog {
+    private struct Waiter {
+        let minimumCount: Int
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    private var actions: [TestMemoryPressureAction] = []
+    private var waiters: [Waiter] = []
+
+    func append(_ action: TestMemoryPressureAction) {
+        actions.append(action)
+        let ready = waiters.filter { actions.count >= $0.minimumCount }
+        waiters.removeAll { actions.count >= $0.minimumCount }
+        ready.forEach { $0.continuation.resume() }
+    }
+
+    func waitForCount(_ minimumCount: Int) async {
+        guard actions.count < minimumCount else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(Waiter(minimumCount: minimumCount, continuation: continuation))
+        }
+    }
+
+    func snapshot() -> [TestMemoryPressureAction] {
+        actions
+    }
+}
+
 final class ActiveGenerationCoordinatorTests: XCTestCase {
     func testCancellationRetainsOwnershipUntilTaskTerminates() async throws {
         let coordinator = ActiveGenerationCoordinator()
@@ -123,5 +159,104 @@ final class ActiveGenerationCoordinatorTests: XCTestCase {
         await coordinator.finish(registration)
         let isActiveAfterFinish = await coordinator.hasActiveGeneration
         XCTAssertFalse(isActiveAfterFinish)
+    }
+
+    func testCriticalKernelPressureWaitsForTypedCancellationBarrierBeforeHardTrim() async throws {
+        let coordinator = ActiveGenerationCoordinator()
+        let terminalGate = TestGenerationGate()
+        let actions = TestMemoryPressureActionLog()
+        let worker = Task {
+            await terminalGate.wait()
+            await actions.append(.workerTerminated)
+        }
+        let registration = try await coordinator.register(
+            cancel: { worker.cancel() },
+            waitForTermination: { _ = await worker.result }
+        )
+        let executor = NativeMemoryPressureResponseExecutor(
+            recordObservation: { level in
+                await actions.append(.observed(level))
+            },
+            cancelActiveGeneration: { reason in
+                await actions.append(.cancellationRequested(reason))
+                await coordinator.cancelCurrent(reason: reason)
+                await actions.append(.terminalBarrierPassed)
+            },
+            trim: { level, reason in
+                await actions.append(.trimmed(level, reason))
+            }
+        )
+
+        let response = Task {
+            await executor.execute(
+                level: .hardTrim,
+                reason: "test_kernel_pressure_hardTrim"
+            )
+        }
+
+        await actions.waitForCount(2)
+        let beforeTerminal = await actions.snapshot()
+        XCTAssertEqual(
+            beforeTerminal,
+            [
+                .observed(.hardTrim),
+                .cancellationRequested(.memoryPressure),
+            ]
+        )
+        XCTAssertFalse(
+            beforeTerminal.contains {
+                if case .trimmed(_, _) = $0 { return true }
+                return false
+            },
+            "Hard trim must not run before the generation terminal barrier"
+        )
+        let activeBeforeTerminal = await coordinator.hasActiveGeneration
+        XCTAssertTrue(activeBeforeTerminal)
+
+        await terminalGate.open()
+        await response.value
+
+        let afterTerminal = await actions.snapshot()
+        XCTAssertEqual(
+            afterTerminal,
+            [
+                .observed(.hardTrim),
+                .cancellationRequested(.memoryPressure),
+                .workerTerminated,
+                .terminalBarrierPassed,
+                .trimmed(.hardTrim, "test_kernel_pressure_hardTrim"),
+            ]
+        )
+        let terminalReason = await coordinator.finish(registration)
+        XCTAssertEqual(terminalReason, .memoryPressure)
+    }
+
+    func testWarningKernelPressureSoftTrimsWithoutCancellingGeneration() async {
+        let actions = TestMemoryPressureActionLog()
+        let executor = NativeMemoryPressureResponseExecutor(
+            recordObservation: { level in
+                await actions.append(.observed(level))
+            },
+            cancelActiveGeneration: { reason in
+                await actions.append(.cancellationRequested(reason))
+            },
+            trim: { level, reason in
+                await actions.append(.trimmed(level, reason))
+            }
+        )
+
+        await executor.execute(
+            level: .softTrim,
+            reason: "test_kernel_pressure_softTrim"
+        )
+
+        let recorded = await actions.snapshot()
+        XCTAssertEqual(
+            recorded,
+            [
+                .observed(.softTrim),
+                .trimmed(.softTrim, "test_kernel_pressure_softTrim"),
+            ]
+        )
     }
 }

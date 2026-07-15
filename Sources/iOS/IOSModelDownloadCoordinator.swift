@@ -300,26 +300,37 @@ final class IOSModelDownloadCoordinator {
             pending = restored
             if restored.isEmpty {
                 await downloader.cancelAllSessionTasks()
-                IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: [])
-            } else {
-                IOSModelDeliveryBackgroundEventRelay.completeOrphans(
-                    keeping: [configuration.backgroundSessionIdentifier]
+                IOSModelDeliveryBackgroundEventRelay.complete(
+                    forOwnedSessionIdentifier: configuration.backgroundSessionIdentifier
                 )
+            } else {
                 await startPendingDownloads()
             }
         } catch {
             diagnosticsStore.recordFailure(classification: "ledger-restore", message: error.localizedDescription)
             await downloader.cancelAllSessionTasks()
-            IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: [])
+            IOSModelDeliveryBackgroundEventRelay.complete(
+                forOwnedSessionIdentifier: configuration.backgroundSessionIdentifier
+            )
         }
     }
 
     func resumeBackgroundEventsIfNeeded() async {
-        let hasActiveWork = (try? ledgerStore.load().requests.contains(where: {
-            ![.installed, .failed, .deleted].contains($0.status)
-        })) == true
-        IOSModelDeliveryBackgroundEventRelay.completeOrphans(
-            keeping: hasActiveWork ? [configuration.backgroundSessionIdentifier] : []
+        let hasActiveWork: Bool
+        do {
+            hasActiveWork = try ledgerStore.load().requests.contains(where: {
+                ![.installed, .failed, .deleted].contains($0.status)
+            })
+        } catch {
+            diagnosticsStore.recordFailure(
+                classification: "background-event-reconciliation",
+                message: error.localizedDescription
+            )
+            return
+        }
+        guard !hasActiveWork else { return }
+        IOSModelDeliveryBackgroundEventRelay.complete(
+            forOwnedSessionIdentifier: configuration.backgroundSessionIdentifier
         )
     }
 
@@ -452,6 +463,7 @@ final class IOSModelDownloadCoordinator {
         sessionConfig.waitsForConnectivity = true
         sessionConfig.sessionSendsLaunchEvents = true
         sessionConfig.httpMaximumConnectionsPerHost = 6
+        let backgroundSessionIdentifier = configuration.backgroundSessionIdentifier
 
         return HuggingFaceDownloader(
             progressHandler: { [weak self] progress in
@@ -470,7 +482,10 @@ final class IOSModelDownloadCoordinator {
             },
             backgroundSessionCompletionHandler: { identifier in
                 Task { @MainActor in
-                    IOSModelDeliveryBackgroundEventRelay.complete(forSessionIdentifier: identifier)
+                    guard identifier == backgroundSessionIdentifier else { return }
+                    IOSModelDeliveryBackgroundEventRelay.complete(
+                        forOwnedSessionIdentifier: backgroundSessionIdentifier
+                    )
                 }
             },
             artifactURLPolicy: ModelArtifactURLPolicy(

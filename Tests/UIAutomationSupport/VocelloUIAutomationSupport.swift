@@ -144,6 +144,34 @@ public enum VocelloUIWait {
     }
 }
 
+/// Normalizes the stable boolean and English values XCTest returns for genuine
+/// Toggle and Switch controls. Unknown or localized strings remain unknown so
+/// callers can fail closed instead of mutating a preference blindly.
+@MainActor
+public enum VocelloUIToggle {
+    public static func state(of toggle: XCUIElement) -> Bool? {
+        state(from: toggle.value)
+    }
+
+    public static func state(from rawValue: Any?) -> Bool? {
+        if let value = rawValue as? Bool { return value }
+        if let value = rawValue as? NSNumber { return value.boolValue }
+        guard let value = rawValue as? String else { return nil }
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "on", "true", "selected": return true
+        case "0", "off", "false", "not selected": return false
+        default: return nil
+        }
+    }
+
+    /// Returns whether a primary action is required, or `nil` when XCTest's
+    /// value is not trustworthy enough to make a mutation decision.
+    public static func mutationRequired(currentValue: Any?, desiredState: Bool) -> Bool? {
+        guard let currentState = state(from: currentValue) else { return nil }
+        return currentState != desiredState
+    }
+}
+
 /// The platform-native primary activation gesture, always against an exact element.
 @MainActor
 public enum VocelloUIPrimaryAction {

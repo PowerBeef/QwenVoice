@@ -39,6 +39,8 @@
 #                                                 # exact-PID Instruments diagnostic generation
 #   scripts/ios_device.sh memory --voice-id SAVED_VOICE_ID [--label ID]
 #                                                 # one-process retained-memory qualification
+#   scripts/ios_device.sh clone-conditioning [--label ID]
+#                                                 # local-only transcript-backed vs x-vector proof
 #   scripts/ios_device.sh memory-field-report [pulled-diagnostics]
 #                                                 # local-only delayed MetricKit summary; never contacts phone
 #   scripts/ios_device.sh preflight                # paired-device, signing, build, and dSYM readiness
@@ -70,6 +72,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/lib/build_paths.sh"
 . "$ROOT_DIR/scripts/lib/required_steps.sh"
+. "$ROOT_DIR/scripts/lib/test_models.sh"
 
 SCHEME="VocelloiOS"
 CONFIG="Release"
@@ -458,11 +461,13 @@ cmd_doctor() {
 }
 
 cmd_build() {
-  local diagnostics_crash_build=0
-  if [[ "${1:-}" == "--device-diagnostics-crash-test" ]]; then
-    diagnostics_crash_build=1
-    shift
-  fi
+  local diagnostics_build=0
+  case "${1:-}" in
+    --device-diagnostics|--device-diagnostics-crash-test)
+      diagnostics_build=1
+      shift
+      ;;
+  esac
   [[ $# -eq 0 ]] || die "unknown build argument: $1"
   require_team
   ensure_project_regenerated
@@ -471,6 +476,8 @@ cmd_build() {
     'generic/platform=iOS'
   local team; team="$(derive_team)"
   local dev; dev="$(resolve_device)"
+  local producer="scripts/ios_device.sh build"
+  (( diagnostics_build == 0 )) || producer+=" --device-diagnostics"
   note "building $SCHEME ($CONFIG, -Onone) for $dev (team $team)"
   mkdir -p "$DERIVED"
   local log="$DERIVED/device-build.log"
@@ -489,7 +496,7 @@ cmd_build() {
       -onlyUsePackageVersionsFromResolvedFile
       "${SIGN_ARGS[@]}"
     )
-    if (( diagnostics_crash_build )); then
+    if (( diagnostics_build )); then
       command+=('OTHER_SWIFT_FLAGS=$(inherited) -DQVOICE_DEVICE_DIAGNOSTICS')
     fi
     command+=(
@@ -514,7 +521,7 @@ cmd_build() {
 
   [[ -d "$APP_PATH" ]] || die "build finished but $APP_PATH is missing"
   write_build_provenance "$DERIVED/last-build.json" \
-    "scripts/ios_device.sh build" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
+    "$producer" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
     Onone "$mode" "$DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
 
   # Preserve this build's dSYM so `crashes` can symbolicate MetricKit/.ips payloads.
@@ -525,7 +532,7 @@ cmd_build() {
     /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH/Info.plist" \
       > "$(dirname "$dsym_dst")/build-version.txt" 2>/dev/null || true
     write_build_provenance "$QVOICE_SYMBOLS_IOS/last-build.json" \
-      "scripts/ios_device.sh build" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
+      "$producer" "$SCHEME" "$CONFIG" "id=$dev" arm64 \
       Onone "$mode" "$DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
     note "preserved dSYM → $dsym_dst (for crash symbolication)"
   else
@@ -850,6 +857,56 @@ PY
     note "…memory qualification still running (${waited}s / runID=$run_id)"
   done
   die "no memory-qualification-result.json after ${timeout}s for runID=$run_id"
+}
+
+# wait_clone_conditioning_sentinel RUN_ID TIMEOUT DEST
+# Poll for the two-take PASS record. A bounded allowlisted failure marker stops the
+# wait promptly but can never be mistaken for acceptance evidence.
+wait_clone_conditioning_sentinel() {
+  local run_id="$1" timeout="${2:-900}" dest="$3"
+  local waited=0 sentinel="" failure=""
+  while (( waited < timeout )); do
+    sleep 10
+    waited=$((waited + 10))
+    cmd_pull "$dest" >/dev/null 2>&1 || true
+    failure="$(find "$dest" -type f -path "*/${run_id}/clone-conditioning-failure.json" 2>/dev/null | head -1)"
+    if [[ -n "$failure" && -f "$failure" ]]; then
+      python3 - "$failure" "$run_id" <<'PY' >&2 || true
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+record = json.loads(path.read_text(encoding="utf-8"))
+allowed = {
+    "schemaVersion", "status", "runID", "failedAt", "failureCode",
+    "completedTakeCount", "expectedTakeCount", "failedTakeIndex",
+}
+if path.stat().st_size > 4096 or set(record) - allowed:
+    raise SystemExit(1)
+if record.get("schemaVersion") != 1 or record.get("status") != "failed":
+    raise SystemExit(2)
+if record.get("runID") != sys.argv[2]:
+    raise SystemExit(3)
+print(
+    "clone-conditioning acceptance failed "
+    f"code={record.get('failureCode', 'unknown')} "
+    f"completed={record.get('completedTakeCount', '?')}/2"
+)
+PY
+      return 22
+    fi
+    sentinel="$(find "$dest" -type f -path "*/${run_id}/clone-conditioning-result.json" 2>/dev/null | head -1)"
+    if [[ -n "$sentinel" && -f "$sentinel" ]]; then
+      note "clone-conditioning sentinel found after ${waited}s (runID=$run_id)"
+      printf '%s\n' "$sentinel"
+      return 0
+    fi
+    local state verdict
+    state="$(probe_device_state 2>/dev/null || true)"
+    verdict="${state%%|*}"
+    [[ "$verdict" != "DEVICE_UNREACHABLE" ]] \
+      || die "clone-conditioning acceptance doomed at ${waited}s: $(device_state_advice "$verdict")"
+    note "…clone-conditioning acceptance still running (${waited}s / runID=$run_id)"
+  done
+  die "no clone-conditioning-result.json after ${timeout}s for runID=$run_id"
 }
 
 read_devicectl_launch_pid() {
@@ -1660,6 +1717,96 @@ PY
   note "memory qualification PASS · $artifacts"
 }
 
+# clone-conditioning [--label ID]: run two clone generations in one exact app process.
+# Take 1 uses the canonical saved voice with its transcript; take 2 uses an exact
+# purpose-owned audio copy without a sidecar or prepared voice ID. This is a local
+# semantic acceptance lane and deliberately never publishes benchmark history.
+cmd_clone_conditioning() {
+  require_team
+  local label="clone-conditioning" timeout="${QVOICE_IOS_CLONE_CONDITIONING_TIMEOUT:-900}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --label) label="${2:-}"; shift 2 ;;
+      --label=*) label="${1#*=}"; shift ;;
+      *) die "clone-conditioning accepts only --label ID" ;;
+    esac
+  done
+  validate_benchmark_label "$label"
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] \
+    || die "QVOICE_IOS_CLONE_CONDITIONING_TIMEOUT must be a positive whole number of seconds"
+
+  local run_id="ios-clone-conditioning-$(date -u +%Y%m%d-%H%M%S)-$(benchmark_nonce)"
+  local artifacts="$QVOICE_ARTIFACTS_IOS/clone-conditioning/$run_id"
+  local dest="$artifacts/device-diagnostics"
+  local launch_json="$artifacts/launch.json"
+  mkdir -p "$artifacts"
+
+  cmd_build --device-diagnostics
+  cmd_install >/dev/null
+  capture_benchmark_source "$artifacts"
+  rm -rf "$dest"
+
+  local dev env_json target_pid cleanup_command sentinel diag engine_jsonl output_dir
+  dev="$(resolve_device)"
+  export QVOICE_IOS_DEVICE_CLONE_CONDITIONING_ACCEPTANCE=1
+  export QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID="$MAC_TEST_CLONE_VOICE_NAME"
+  export QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_AUDIO_SHA256="$MAC_TEST_CLONE_REF_SHA256"
+  export QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_TRANSCRIPT_SHA256="$MAC_TEST_CLONE_REF_TRANSCRIPT_SHA256"
+  export QVOICE_IOS_DEVICE_RUN_ID="$run_id"
+  export QVOICE_MAC_BENCH_RUN_ID="$run_id"
+  export QWENVOICE_NATIVE_TELEMETRY_MODE=verbose
+  env_json="$(python3 -c '
+import json, os
+keys = (
+    "QVOICE_IOS_DEVICE_CLONE_CONDITIONING_ACCEPTANCE",
+    "QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID",
+    "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_AUDIO_SHA256",
+    "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_TRANSCRIPT_SHA256",
+    "QVOICE_IOS_DEVICE_RUN_ID",
+    "QVOICE_MAC_BENCH_RUN_ID",
+    "QWENVOICE_NATIVE_TELEMETRY_MODE",
+)
+print(json.dumps({"QWENVOICE_DEBUG": "1", **{key: os.environ[key] for key in keys}}, sort_keys=True))
+')"
+  note "clone-conditioning: transcript-backed then x-vector-only in one exact process"
+  xcrun devicectl device process launch --device "$dev" --terminate-existing \
+    -e "$env_json" --json-output "$launch_json" "$BUNDLE_ID" >"$artifacts/launch.log" 2>&1 \
+    || die "could not launch clone-conditioning acceptance (see $artifacts/launch.log)"
+  target_pid="$(read_devicectl_launch_pid "$launch_json")" \
+    || die "clone-conditioning launch did not return its exact process PID"
+  [[ "$target_pid" =~ ^[0-9]+$ ]] || die "clone-conditioning returned an invalid process PID"
+  printf -v cleanup_command \
+    'xcrun devicectl device process terminate --device %q --pid %q --quiet >/dev/null 2>&1 || true' \
+    "$dev" "$target_pid"
+  trap "$cleanup_command" EXIT
+  unset QVOICE_IOS_DEVICE_CLONE_CONDITIONING_ACCEPTANCE \
+    QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID \
+    QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_AUDIO_SHA256 \
+    QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_TRANSCRIPT_SHA256 \
+    QVOICE_IOS_DEVICE_RUN_ID QVOICE_MAC_BENCH_RUN_ID QWENVOICE_NATIVE_TELEMETRY_MODE
+
+  sentinel="$({ wait_clone_conditioning_sentinel "$run_id" "$timeout" "$dest"; })" \
+    || die "clone-conditioning acceptance failed; no PASS evidence was accepted (see $artifacts)"
+  eval "$cleanup_command"
+  trap - EXIT
+  cmd_pull "$dest" >/dev/null 2>&1 || true
+
+  diag="$dest"
+  engine_jsonl="$(find "$dest" -path '*/engine/generations.jsonl' 2>/dev/null | head -1)"
+  [[ -n "$engine_jsonl" ]] && diag="$(dirname "$(dirname "$engine_jsonl")")"
+  output_dir="$(dirname "$sentinel")/outputs"
+  python3 "$ROOT_DIR/scripts/check_ios_clone_conditioning.py" \
+    --result "$sentinel" --diagnostics "$diag" --outputs "$output_dir" \
+    --snapshot "$artifacts/benchmark-source.json" --crash-diagnostics "$dest" \
+    --run-id "$run_id" --label "$label" \
+    --expected-voice-id "$MAC_TEST_CLONE_VOICE_NAME" \
+    --expected-audio-sha256 "$MAC_TEST_CLONE_REF_SHA256" \
+    --expected-transcript-sha256 "$MAC_TEST_CLONE_REF_TRANSCRIPT_SHA256" \
+    --output "$artifacts/clone-conditioning-validation.json" \
+    || die "clone-conditioning evidence validation failed (see $artifacts)"
+  note "clone-conditioning PASS · local evidence only · $artifacts"
+}
+
 # memory-field-report [pulled-diagnostics]: summarize privacy-reduced MetricKit memory
 # aggregates already present on disk. MetricKit delivery is delayed and not run-correlated,
 # so absence reports notYetDelivered and remains nonfatal. This command intentionally does
@@ -1857,12 +2004,13 @@ main() {
     logs)    cmd_logs "$@" ;;
     profile) cmd_profile "$@" ;;
     memory)  cmd_memory "$@" ;;
+    clone-conditioning) cmd_clone_conditioning "$@" ;;
     memory-field-report) cmd_memory_field_report "$@" ;;
     preflight) cmd_preflight "$@" ;;
     gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|logic-test|install|launch|console|device-state|pull|bench|lang-bench|speech-assets|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|logic-test|install|launch|console|device-state|pull|bench|lang-bench|speech-assets|crashes|debug|logs|profile|memory|clone-conditioning|memory-field-report|preflight|gate|help)" ;;
   esac
 }
 

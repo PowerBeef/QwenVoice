@@ -110,7 +110,7 @@ class VocelloMacUITestCase: XCTestCase {
             XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
             XCTAssertTrue(
                 VocelloUIWait.condition("Auto-play toggle to become enabled", timeout: 15) {
-                    self.toggleState(of: toggle) == true
+                    VocelloUIToggle.state(of: toggle) == true
                 }
             )
         }
@@ -128,27 +128,16 @@ class VocelloMacUITestCase: XCTestCase {
         navigate(to: .settings)
         let toggle = element("preferences_autoPlayToggle")
         XCTAssertTrue(VocelloUIWait.exists(toggle, timeout: 20))
-        if toggleState(of: toggle) != false {
+        if VocelloUIToggle.state(of: toggle) != false {
             XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
             XCTAssertTrue(
                 VocelloUIWait.condition("Auto-play toggle to restore disabled", timeout: 15) {
-                    self.toggleState(of: toggle) == false
+                    VocelloUIToggle.state(of: toggle) == false
                 }
             )
         }
-        if toggleState(of: toggle) == false {
+        if VocelloUIToggle.state(of: toggle) == false {
             pendingAutoplayPreferenceRestore = nil
-        }
-    }
-
-    private func toggleState(of toggle: XCUIElement) -> Bool? {
-        if let value = toggle.value as? Bool { return value }
-        if let value = toggle.value as? NSNumber { return value.boolValue }
-        guard let value = toggle.value as? String else { return nil }
-        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "1", "on", "true", "selected": return true
-        case "0", "off", "false", "not selected": return false
-        default: return nil
         }
     }
 

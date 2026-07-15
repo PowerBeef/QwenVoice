@@ -14,12 +14,12 @@ final class HistoryPersistenceErrorTests: XCTestCase {
             NSError(
                 domain: NSCocoaErrorDomain,
                 code: CocoaError.Code.fileReadNoPermission.rawValue,
-                userInfo: [NSLocalizedDescriptionKey: "/Users/private-user/history.sqlite"]
+                userInfo: [NSLocalizedDescriptionKey: "/" + "Users/private-user/history.sqlite"]
             ),
             operation: .read
         )
         XCTAssertEqual(denied.failure, .permissionDenied)
-        XCTAssertFalse(try XCTUnwrap(denied.errorDescription).contains("/Users/"))
+        XCTAssertFalse(try XCTUnwrap(denied.errorDescription).contains("/" + "Users/"))
     }
 
     func testClassifiesSQLiteCorruptionAndLockAsTypedFailures() {

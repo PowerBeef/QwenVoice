@@ -7,9 +7,11 @@
   Produces: an App-Store-Connect-uploadable .ipa.
 
   teamID is intentionally NOT committed (maintainer-privacy rule — no hardcoded Apple
-  team IDs in tracked files). Inject it before export:
-      /usr/libexec/PlistBuddy -c "Add :teamID string $YOUR_TEAM_ID" ExportOptions-appstore.plist
-  The archive-ios CI job does this from the QWENVOICE_DEVELOPMENT_TEAM secret. With automatic
+  team IDs in tracked files). Copy this template to a governed scratch path, then inject it there:
+      cp ExportOptions-appstore.plist build/scratch/transient/ios-release/ExportOptions-appstore.plist
+      /usr/libexec/PlistBuddy -c "Add :teamID string $YOUR_TEAM_ID" build/scratch/transient/ios-release/ExportOptions-appstore.plist
+  Never mutate the tracked template. The archive-ios CI job does this from the
+  QWENVOICE_DEVELOPMENT_TEAM secret. With automatic
   signing + a logged-in single-team Xcode, a local maintainer export resolves the team without it.
 
   Signing: signingStyle=automatic relies on -allowProvisioningUpdates (CI authenticates with the

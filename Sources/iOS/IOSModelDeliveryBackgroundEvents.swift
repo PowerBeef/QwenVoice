@@ -1,13 +1,13 @@
 import Foundation
 import UIKit
 
-/// Relays iOS background-URLSession completion handlers, keyed by session identifier. The app
-/// delegate stashes each handler here (keyed by the session id from
+/// Relays iOS background-URLSession completion handlers for the exact session owned by this app
+/// process. The app delegate stashes each accepted handler here (keyed by the session id from
 /// `handleEventsForBackgroundURLSession`); the in-flight `HuggingFaceDownloader` flushes its own
 /// session's handler from `urlSessionDidFinishEvents(forBackgroundURLSession:)` when that session
-/// finishes all events. Calling the system completion handler is App-Store-required — iOS kills
-/// the app otherwise — so orphans (handlers for sessions we never reattach) are flushed on
-/// restore/resume.
+/// finishes all events. Canonical and debug-isolated delivery sessions must never complete or
+/// retain one another's handlers. An owned handler with no durable work is completed explicitly
+/// after restore/resume reconciliation.
 @MainActor
 enum IOSModelDeliveryBackgroundEventRelay {
     /// Registered by the app bootstrap: routes a `(identifier, completionHandler)` pair into the
@@ -15,26 +15,25 @@ enum IOSModelDeliveryBackgroundEventRelay {
     /// background event.
     static var handler: ((String, @escaping () -> Void) -> Void)?
 
-    private static var pendingBySession: [String: () -> Void] = [:]
+    private static let pendingHandlers = IOSModelDeliveryBackgroundEventHandlerStore()
 
-    static func store(_ completionHandler: @escaping () -> Void, forSessionIdentifier identifier: String) {
-        pendingBySession[identifier] = completionHandler
+    @discardableResult
+    static func store(
+        _ completionHandler: @escaping () -> Void,
+        forSessionIdentifier identifier: String,
+        ownedSessionIdentifier: String
+    ) -> Bool {
+        pendingHandlers.store(
+            completionHandler,
+            forDeliveredSessionIdentifier: identifier,
+            ownedSessionIdentifier: ownedSessionIdentifier
+        )
     }
 
     /// Called by a downloader's `urlSessionDidFinishEvents` hook when its background session has
     /// finished delivering all events.
-    static func complete(forSessionIdentifier identifier: String) {
-        if let handler = pendingBySession.removeValue(forKey: identifier) {
-            handler()
-        }
-    }
-
-    /// Complete orphan handlers whose session isn't in `keeping` — e.g. the download finished
-    /// before the app reattached the session on relaunch.
-    static func completeOrphans(keeping activeSessionIdentifiers: Set<String>) {
-        for key in pendingBySession.keys where !activeSessionIdentifiers.contains(key) {
-            pendingBySession.removeValue(forKey: key)?()
-        }
+    static func complete(forOwnedSessionIdentifier identifier: String) {
+        pendingHandlers.completeOwnedSession(identifier)
     }
 }
 
@@ -48,11 +47,15 @@ final class IOSAppDelegate: NSObject, UIApplicationDelegate {
             if let handler = IOSModelDeliveryBackgroundEventRelay.handler {
                 handler(identifier, completionHandler)
             } else {
-                // Handler not registered yet — stash for later. The coordinator flushes it once it
-                // reconnects (or as an orphan if no download reattaches).
+                // Handler not registered yet — retain this callback only when it belongs to the
+                // current canonical or debug-isolated delivery namespace. The coordinator flushes
+                // an owned no-work callback once durable reconciliation finishes.
+                let ownedIdentifier = IOSModelDeliveryConfiguration.default()
+                    .backgroundSessionIdentifier
                 IOSModelDeliveryBackgroundEventRelay.store(
                     completionHandler,
-                    forSessionIdentifier: identifier
+                    forSessionIdentifier: identifier,
+                    ownedSessionIdentifier: ownedIdentifier
                 )
             }
         }

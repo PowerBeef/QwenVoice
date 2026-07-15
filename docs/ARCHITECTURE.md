@@ -362,6 +362,10 @@ production**, and no Quality→Speed OOM fallback. `apply(_:)`
 also configures `Qwen3StreamingMemoryTuning` (per-token cache clear cadence +
 optional sliding-window talker KV cache via `QVOICE_TALKER_KV_WINDOW`).
 Trim levels (`NativeMemoryTrimLevel`): `.softTrim`, `.hardTrim`, `.fullUnload`.
+`NativeMemoryPressureResponseExecutor` records every kernel signal before acting. Warning pressure
+performs the existing non-interrupting `.softTrim`; critical pressure first requests typed
+`.memoryPressure` cancellation and awaits the active generation's terminal barrier before the
+`.hardTrim` may clear runtime state.
 
 ### 4.6 Streaming
 

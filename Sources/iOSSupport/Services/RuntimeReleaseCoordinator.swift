@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import QwenVoiceCore
 
 @MainActor
 enum RuntimeReleaseAction: Equatable {
@@ -22,6 +23,37 @@ enum MemoryPressureReliefAction: Equatable {
     case none
     case deferred(reason: String)
     case execute(reason: String, cancelActiveGeneration: Bool)
+}
+
+@MainActor
+enum CriticalMemoryReliefOutcome: Equatable {
+    case completed
+    case cancellationFailed
+    case alreadyInFlight
+}
+
+/// Orders critical-pressure relief behind the engine's typed terminal
+/// cancellation barrier, then releases runtime ownership only after the relief
+/// closure returns. Neither later phase runs when termination cannot be
+/// proven, which keeps a full unload from racing live MLX compute and keeps UI
+/// admission closed until that unload has completed.
+@MainActor
+enum CriticalMemoryReliefExecutor {
+    static func execute(
+        cancel: (GenerationCancellationReason) async throws -> Void,
+        applyRelief: () async -> Void,
+        releaseOwnership: () async -> Void
+    ) async -> CriticalMemoryReliefOutcome {
+        do {
+            try await cancel(.memoryPressure)
+        } catch {
+            return .cancellationFailed
+        }
+
+        await applyRelief()
+        await releaseOwnership()
+        return .completed
+    }
 }
 
 @MainActor

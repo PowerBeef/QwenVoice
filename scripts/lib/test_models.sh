@@ -27,6 +27,7 @@ MAC_TEST_CLONE_VOICE_NAME="A_warm_elderly_woman"
 MAC_TEST_CLONE_VOICE_BRIEF="An elderly woman in her late seventies with a warm, textured alto voice, gentle breathiness, precise diction, and a kindly storytelling cadence. Distinctly feminine, mature, intimate, and unhurried."
 MAC_TEST_CLONE_REF_TRANSCRIPT="Hello, dear. I have spent a lifetime collecting stories from quiet railway towns, and I still delight in sharing them with anyone who cares to listen."
 MAC_TEST_CLONE_REF_SHA256="03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35"
+MAC_TEST_CLONE_REF_TRANSCRIPT_SHA256="98a8e46ed2cd48354f6056dc889f9209641824e610a687eeb9ab91d310477234"
 
 _test_models_app_support_base() {
   echo "${HOME}/Library/Application Support"

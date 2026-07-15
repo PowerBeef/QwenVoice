@@ -486,6 +486,15 @@ PY
   return 0
 }
 
+validate_ios_smoke() {
+  local diagnostics="$out/diagnostics"
+  rm -rf "$diagnostics"
+  "$ROOT_DIR/scripts/ios_device.sh" pull "$diagnostics" >/dev/null \
+    || return 1
+  python3 "$ROOT_DIR/scripts/check_ios_smoke_acceptance.py" "$diagnostics" \
+    --run-id "$run_id" | tee "$out/smoke-gate.txt"
+}
+
 if [[ "$platform" == "macos" ]]; then
   terminate_macos_app
   if [[ "$lane" == "smoke" ]]; then
@@ -541,6 +550,7 @@ else
 
   if [[ "$lane" == "smoke" ]]; then
     only_test="VocelloiOSUITests/VocelloiOSSmokeUITests/testPhysicalDeviceSmokeJourney"
+    export TEST_RUNNER_QVOICE_IOS_SMOKE_RUN_ID="$run_id"
   elif [[ "$lane" == "benchmark" ]]; then
     only_test="VocelloiOSUITests/VocelloiOSBenchmarkUITests/testOrderedConfigurableMatrix"
     export TEST_RUNNER_QVOICE_IOS_BENCH_RUN_ID="$run_id"
@@ -574,6 +584,9 @@ else
 
   required_step_run "$step_ledger" crash-delta check_ios_crash_delta \
     || die "could not establish a clean post-run iPhone crash delta"
+  [[ "$lane" != "smoke" ]] || required_step_run "$step_ledger" \
+    smoke-diagnostics validate_ios_smoke \
+    || die "iOS smoke memory-pressure diagnostics gate failed"
   write_build_provenance "$IOS_DERIVED/last-build.json" \
     "scripts/ui_test.sh ios $lane" VocelloiOSUI Release "id=$device" arm64 \
     O automatic "$IOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"

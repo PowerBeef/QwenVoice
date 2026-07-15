@@ -70,7 +70,10 @@ encoded model/artifact/file identity exactly matches the ledger and current cata
 Unknown, stale, or duplicate tasks are cancelled, and only missing files receive new tasks.
 Delegate temporary files are synchronously moved into durable app-group staging before the callback
 returns. UIKit's background-session completion handler is released only after all delegate events
-and durable install/failure postprocessing finish.
+and durable install/failure postprocessing finish. Completion routing is exact-identifier scoped:
+the canonical and debug-isolated coordinators retain and acknowledge only their own session's
+handler. A foreign handler is neither stored nor completed, while an owned session with no durable
+work is completed after reconciliation.
 
 iPhone runs one model request at a time. macOS keeps its existing foreground concurrency. Both
 platforms keep per-file range chunking disabled by default.
@@ -111,7 +114,8 @@ Deterministic tests are model-free and Simulator-free. Live delivery is an expli
 ./build/vocello models install pro_custom_speed \
   --data-dir build/scratch/transient/model-download-acceptance/ --verbose
 
-# paired physical iPhone; isolated app-support root, visible Settings controls
+# paired physical iPhone; safe leaf under managed Application Support,
+# never the canonical App Group model tree
 scripts/ui_test.sh ios model-download
 ```
 
@@ -128,6 +132,15 @@ never classified as duplicate model payload. The iPhone XCUITest completed its
 background/relaunch/install/visible-delete lifecycle in
 81.6 seconds and reported HTTP/2 plus HTTP/1.1 with fair thermal state. This is lifecycle evidence,
 not a performance baseline, and did not change concurrency or range-chunking defaults.
+
+The lane also enters canonical Settings before and after the isolated lifecycle and requires all
+three production models to remain installed with no visible canonical transfer in flight. The
+debug isolation override accepts only an absolute
+diagnostic path or one safe relative leaf; traversal and nested relative paths fail closed. Only
+the managed relative leaf selects a separate app-lifetime background session, and its identifier
+contains a one-way digest rather than the leaf itself. Production and absolute diagnostic roots
+retain the historical bundle-scoped session identifier, so private paths cannot create arbitrary
+URLSession namespaces.
 
 That proof predates redirect-policy enforcement. The next explicitly requested isolated iPhone
 delivery proof must therefore confirm that the provider's live redirect chain remains within the

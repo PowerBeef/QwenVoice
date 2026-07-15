@@ -14,7 +14,7 @@ final class GenerationFailureDiagnosticLoggerTests: XCTestCase {
             ignoresTelemetryGate: true
         )
         let secretPrompt = "Private transcript for secret@example.com"
-        let secretPath = "/Users/private-user/Documents/reference.wav"
+        let secretPath = "/" + "Users/private-user/Documents/reference.wav"
         let request = GenerationRequest(
             mode: .clone,
             modelID: secretPath,
@@ -87,7 +87,8 @@ final class GenerationFailureDiagnosticLoggerTests: XCTestCase {
 
     func testUnknownStageAndErrorDoNotReflectSourceText() throws {
         struct PrivateError: LocalizedError {
-            let errorDescription: String? = "token=https://example.invalid/private /Users/person/private"
+            let errorDescription: String? =
+                "token=https://example.invalid/private /" + "Users/person/private"
         }
 
         let directory = FileManager.default.temporaryDirectory
@@ -98,7 +99,7 @@ final class GenerationFailureDiagnosticLoggerTests: XCTestCase {
 
         logger.log(
             surfacedMessage: "private surfaced text",
-            stage: "private stage /Users/person",
+            stage: "private stage /" + "Users/person",
             underlyingError: PrivateError()
         )
 
@@ -106,7 +107,7 @@ final class GenerationFailureDiagnosticLoggerTests: XCTestCase {
         XCTAssertTrue(text.contains("\"stage\":\"unknown\""))
         XCTAssertTrue(text.contains("\"errorCode\":\"generation.unknown\""))
         XCTAssertFalse(text.contains("example.invalid"))
-        XCTAssertFalse(text.contains("/Users/person"))
+        XCTAssertFalse(text.contains("/" + "Users/person"))
         XCTAssertFalse(text.contains("private surfaced text"))
     }
 

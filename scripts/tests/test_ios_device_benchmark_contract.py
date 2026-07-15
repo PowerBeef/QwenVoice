@@ -14,6 +14,8 @@ INTERRUPTION_RECORDER = (
     Path(__file__).resolve().parents[2]
     / "Sources/iOSSupport/Services/IOSInterruptionRecorder.swift"
 )
+ENGINE_STORE = Path(__file__).resolve().parents[2] / "Sources/iOS/TTSEngineStore.swift"
+IOS_APP = Path(__file__).resolve().parents[2] / "Sources/iOS/QVoiceiOSApp.swift"
 
 
 def shell_function(text: str, name: str) -> str:
@@ -29,6 +31,8 @@ class IOSDeviceBenchmarkContractTests(unittest.TestCase):
         cls.text = SCRIPT.read_text(encoding="utf-8")
         cls.runner = RUNNER.read_text(encoding="utf-8")
         cls.interruption_recorder = INTERRUPTION_RECORDER.read_text(encoding="utf-8")
+        cls.engine_store = ENGINE_STORE.read_text(encoding="utf-8")
+        cls.ios_app = IOS_APP.read_text(encoding="utf-8")
 
     def test_canonical_device_cell_matches_publisher_identity(self) -> None:
         function = shell_function(self.text, "device_benchmark_cell")
@@ -230,6 +234,109 @@ class IOSDeviceBenchmarkContractTests(unittest.TestCase):
         self.assertRegex(build, r"command\+=\([\s\S]*?\n\s+build\n\s+\)")
         self.assertIn('"${command[@]}" 2>&1 | tee "$log"', build)
         self.assertNotIn('"${diagnostic_flags[@]}"', build)
+        self.assertIn('producer+=" --device-diagnostics"', build)
+        self.assertIn('write_build_provenance "$DERIVED/last-build.json"', build)
+        self.assertIn('"$producer" "$SCHEME"', build)
+
+    def test_clone_conditioning_lane_is_compile_gated_and_local_only(self) -> None:
+        build = shell_function(self.text, "cmd_build")
+        lane = shell_function(self.text, "cmd_clone_conditioning")
+        self.assertIn("--device-diagnostics|--device-diagnostics-crash-test", build)
+        self.assertIn("-DQVOICE_DEVICE_DIAGNOSTICS", build)
+        self.assertIn("cmd_build --device-diagnostics", lane)
+        self.assertIn("check_ios_clone_conditioning.py", lane)
+        self.assertIn("MAC_TEST_CLONE_REF_SHA256", lane)
+        self.assertIn("MAC_TEST_CLONE_REF_TRANSCRIPT_SHA256", lane)
+        self.assertNotIn("record_benchmark_history", lane)
+        self.assertNotIn("publish_benchmark_history.py", lane)
+
+    def test_clone_conditioning_runner_proves_both_semantic_modes(self) -> None:
+        self.assertIn("#if QVOICE_DEVICE_DIAGNOSTICS", self.runner)
+        self.assertIn("runCloneConditioningAcceptance", self.runner)
+        self.assertIn('expectedConditioningMode: "transcript_backed"', self.runner)
+        self.assertIn('expectedConditioningMode: "x_vector_only"', self.runner)
+        self.assertIn('expectedArtifactScope: "saved_voice"', self.runner)
+        self.assertIn('expectedArtifactScope: "transient_reference"', self.runner)
+        self.assertIn("scratchCleanupVerified: true", self.runner)
+        self.assertIn("promptAssemblySHA256", self.runner)
+        output_function_start = self.runner.index(
+            "private static func makeCloneConditioningOutputPath"
+        )
+        output_function_end = self.runner.index("\n    #endif", output_function_start)
+        output_function = self.runner[output_function_start:output_function_end]
+        self.assertIn('scratchDirectory.appendingPathComponent("outputs"', output_function)
+        self.assertNotIn("AppPaths.outputsDir", output_function)
+        self.assertNotIn("benchmark-evidence.json", shell_function(self.text, "cmd_clone_conditioning"))
+
+    def test_critical_memory_relief_owns_generation_until_full_unload_completes(self) -> None:
+        generate_start = self.engine_store.index("func generate(_ request:")
+        generate_end = self.engine_store.index("\n    func listPreparedVoices", generate_start)
+        generate = self.engine_store[generate_start:generate_end]
+        admission = generate.index("guardModelAdmission")
+        ownership_guard = generate.index(
+            "guard !hasActiveGeneration, !criticalMemoryActionInFlight"
+        )
+        self.assertLess(ownership_guard, admission)
+        self.assertEqual(
+            generate.count("guard !hasActiveGeneration, !criticalMemoryActionInFlight"),
+            2,
+        )
+
+        defer_start = generate.index("defer {")
+        defer_end = generate.index("\n        // The physical-device", defer_start)
+        cleanup = generate[defer_start:defer_end]
+        self.assertIn("if criticalMemoryActionInFlight", cleanup)
+        critical_branch, normal_branch = cleanup.split("} else {", 1)
+        self.assertNotIn("stopActiveGenerationMemoryGuard", critical_branch)
+        self.assertNotIn("hasActiveGeneration = false", critical_branch)
+        self.assertIn("stopActiveGenerationMemoryGuard", normal_branch)
+        guard_start = self.engine_store.index("private func startActiveGenerationMemoryGuard")
+        guard_end = self.engine_store.index(
+            "\n    private func stopActiveGenerationMemoryGuard", guard_start
+        )
+        memory_guard = self.engine_store[guard_start:guard_end]
+        self.assertEqual(memory_guard.count("outcome == .completed"), 2)
+        self.assertNotIn("outcome != .cancellationFailed", memory_guard)
+
+        action_start = self.engine_store.index(
+            "private func enforceCriticalMemoryContext"
+        )
+        action_end = self.engine_store.index(
+            "\n    private func applyCriticalFullUnload", action_start
+        )
+        action = self.engine_store[action_start:action_end]
+        cancellation = action.index("cancelActiveGeneration(reason: reason)")
+        trim = action.index(
+            "await self.applyCriticalFullUnload(context)",
+            action.index("applyRelief:"),
+        )
+        release = action.index("self.completeCriticalMemoryAction()")
+        self.assertLess(cancellation, trim)
+        self.assertLess(trim, release)
+
+        unload_start = self.engine_store.index("private func applyCriticalFullUnload")
+        unload_end = self.engine_store.index(
+            "\n    private func beginCriticalMemoryAction", unload_start
+        )
+        unload = self.engine_store[unload_start:unload_end]
+        trim_completion = unload.index("await backend.trimMemory")
+        diagnostic_completion = unload.index('event: "critical_full_unload"')
+        clear_activity = unload.index("backend.clearGenerationActivity()")
+        self.assertLess(trim_completion, diagnostic_completion)
+        self.assertLess(diagnostic_completion, clear_activity)
+        self.assertEqual(unload.count("clearGenerationActivity()"), 1)
+
+    def test_application_critical_pressure_uses_store_owned_barrier(self) -> None:
+        function_start = self.ios_app.index(
+            "private func performMemoryPressureReliefAfterCancellingGeneration"
+        )
+        function_end = self.ios_app.index(
+            "\n    private func performMemoryPressureRelief(", function_start
+        )
+        function = self.ios_app[function_start:function_end]
+        self.assertIn("engine.performCriticalMemoryPressureRelief(reason: reason)", function)
+        self.assertNotIn("engine.cancelActiveGeneration", function)
+        self.assertNotIn("applyMemoryPressureRelief", function)
 
 
 if __name__ == "__main__":

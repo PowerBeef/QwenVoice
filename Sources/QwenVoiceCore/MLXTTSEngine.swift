@@ -561,15 +561,25 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         guard deviceClass == .floor8GBMac || deviceClass == .mid16GBMac || deviceClass == .iPhonePro else { return }
         memoryPressureMonitor.start()
         let runtime = runtime
+        let activeGenerationCoordinator = activeGenerationCoordinator
         let reasonPrefix = deviceClass == .iPhonePro ? "ios_memory_pressure" : "macos_memory_pressure"
-        memoryPressureTask = Task { [memoryPressureMonitor] in
-            for await level in memoryPressureMonitor.events {
-                // Stamp the raw kernel signal first (always captured), then act on
-                // it. The trim's own `memory_trim` mark is skipped if the prewarm
-                // slot is contended, so this guarantees the pressure moment lands
-                // on the active generation's timeline regardless.
+        let responseExecutor = NativeMemoryPressureResponseExecutor(
+            recordObservation: { level in
                 await runtime.recordMemoryPressureObserved(level: level)
-                await runtime.trimMemory(
+            },
+            cancelActiveGeneration: { reason in
+                // `cancelCurrent` returns only after the registered task's
+                // terminal barrier. A critical hard trim therefore cannot
+                // clear MLX state while generation is still using it.
+                await activeGenerationCoordinator.cancelCurrent(reason: reason)
+            },
+            trim: { level, reason in
+                await runtime.trimMemory(level: level, reason: reason)
+            }
+        )
+        memoryPressureTask = Task { [memoryPressureMonitor, responseExecutor] in
+            for await level in memoryPressureMonitor.events {
+                await responseExecutor.execute(
                     level: level,
                     reason: "\(reasonPrefix)_\(level.rawValue)"
                 )

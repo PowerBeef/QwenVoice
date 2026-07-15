@@ -126,7 +126,10 @@ from **two independent criteria**, and the engine band is the worse of them:
 
 `NativeMemoryPressureMonitor` maps kernel pressure → trim: `.warning → softTrim`,
 `.critical → hardTrim`, `.normal → clear`. It is started on `iPhonePro` (and the constrained Mac
-tiers). On iPhone hard-trim / unload / failure, `NativeEngineRuntime.clearQwen3MemoryCachesIfNeeded()`
+tiers). Warning pressure keeps the existing non-interrupting soft-trim policy. Critical pressure
+uses the typed `.memoryPressure` reason to cancel the active generation and await its terminal
+barrier before the hard trim can begin. On iPhone hard-trim / unload / failure,
+`NativeEngineRuntime.clearQwen3MemoryCachesIfNeeded()`
 calls `Qwen3TTSMemoryCaches.clearAll()` — **iPhone-only**; macOS deliberately preserves Qwen3
 prepared/conditioning/decoder cache warmth across trims so warm-after-idle stays fast.
 

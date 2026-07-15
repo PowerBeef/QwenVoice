@@ -211,6 +211,7 @@ private struct IOSHistoryLibrarySection: View {
                         )
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
+                        .accessibilityIdentifier("history_noMatchesState")
                     } else {
                         ForEach(groupedItems, id: \.bucket.id) { group in
                             IOSSectionHeading(group.bucket.title)

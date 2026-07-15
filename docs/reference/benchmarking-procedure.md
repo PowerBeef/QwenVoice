@@ -309,6 +309,17 @@ app. `retained-memory-v1` compares first-to-last retained-take footprint growth 
 of physical-RAM limit; cross-mode model residency is diagnostic. The terminal sentinel is atomic and
 a PASS publishes `memory-qualification`, not `instrument-profile`.
 
+Clone-conditioning semantics have a separate local acceptance command:
+
+```sh
+scripts/ios_device.sh clone-conditioning --label focused-clone-proof
+```
+
+It proves transcript-backed and genuine x-vector-only conditioning with the exact canonical
+reference in one physical-iPhone process. It is intentionally not a timing matrix and never creates
+a benchmark-history record; the compact validation and its raw telemetry/WAV evidence remain under
+the untracked iOS artifact tree.
+
 ### 4.7c iOS benchmark ownership
 
 The XCUITest benchmark lane validates the only supported UI matrix. For engine RTF without UI

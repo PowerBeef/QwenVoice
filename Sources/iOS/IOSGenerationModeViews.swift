@@ -404,6 +404,9 @@ struct IOSCustomVoiceView: View {
                         id: generationID,
                         finishReason: .cancelled
                     )
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
                     try? FileManager.default.removeItem(atPath: result.audioPath)
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
@@ -464,12 +467,18 @@ struct IOSCustomVoiceView: View {
                     id: generationID,
                     finishReason: .cancelled
                 )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
+                )
                 audioPlayer.abortLivePreviewIfNeeded()
                 await MainActor.run { coordinator.errorMessage = nil }
             } catch {
                 await AppGenerationTimeline.shared.recordFailed(
                     id: generationID,
                     finishReason: Task.isCancelled ? .cancelled : .failed
+                )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
                 )
                 audioPlayer.abortLivePreviewIfNeeded()
                 if Task.isCancelled {
@@ -1048,6 +1057,9 @@ struct IOSVoiceDesignView: View {
                         id: generationID,
                         finishReason: .cancelled
                     )
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
                     try? FileManager.default.removeItem(atPath: result.audioPath)
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
@@ -1105,12 +1117,18 @@ struct IOSVoiceDesignView: View {
                     id: generationID,
                     finishReason: .cancelled
                 )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
+                )
                 audioPlayer.abortLivePreviewIfNeeded()
                 await MainActor.run { coordinator.errorMessage = nil }
             } catch {
                 await AppGenerationTimeline.shared.recordFailed(
                     id: generationID,
                     finishReason: Task.isCancelled ? .cancelled : .failed
+                )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
                 )
                 audioPlayer.abortLivePreviewIfNeeded()
                 if Task.isCancelled {
@@ -1661,6 +1679,9 @@ struct IOSVoiceCloningView: View {
                         id: generationID,
                         finishReason: .cancelled
                     )
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
                     try? FileManager.default.removeItem(atPath: result.audioPath)
                     audioPlayer.abortLivePreviewIfNeeded()
                     return
@@ -1718,12 +1739,18 @@ struct IOSVoiceCloningView: View {
                     id: generationID,
                     finishReason: .cancelled
                 )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
+                )
                 audioPlayer.abortLivePreviewIfNeeded()
                 await MainActor.run { coordinator.errorMessage = nil }
             } catch {
                 await AppGenerationTimeline.shared.recordFailed(
                     id: generationID,
                     finishReason: Task.isCancelled ? .cancelled : .failed
+                )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                    generationID: generationID
                 )
                 audioPlayer.abortLivePreviewIfNeeded()
                 if Task.isCancelled {

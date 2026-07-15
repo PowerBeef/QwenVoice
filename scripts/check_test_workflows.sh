@@ -230,13 +230,17 @@ PY
 
 python3 - <<'PY'
 from pathlib import Path
+import hashlib
+import re
 
 text = Path("scripts/lib/test_models.sh").read_text(encoding="utf-8")
 approved_clone_sha256 = "03187893a3d82d38264d433f24828982c67ed42cddb71eefccb776b37ab9fe35"
+approved_transcript_sha256 = "98a8e46ed2cd48354f6056dc889f9209641824e610a687eeb9ab91d310477234"
 required = (
     'MAC_TEST_CLONE_VOICE_BRIEF=',
     'MAC_TEST_CLONE_REF_TRANSCRIPT=',
     f'MAC_TEST_CLONE_REF_SHA256="{approved_clone_sha256}"',
+    f'MAC_TEST_CLONE_REF_TRANSCRIPT_SHA256="{approved_transcript_sha256}"',
     'generate --mode design --variant speed',
     '--voice-brief "$MAC_TEST_CLONE_VOICE_BRIEF"',
     'mac_test_clone_fixture_current',
@@ -246,8 +250,32 @@ required = (
 missing = [token for token in required if token not in text]
 if missing:
     raise SystemExit(f"clone benchmark fixture lost Voice Design provenance: {missing}")
+transcript_match = re.search(r'^MAC_TEST_CLONE_REF_TRANSCRIPT="([^"]+)"$', text, re.MULTILINE)
+if not transcript_match or hashlib.sha256(transcript_match.group(1).encode()).hexdigest() != approved_transcript_sha256:
+    raise SystemExit("clone fixture transcript digest no longer identifies the exact stored transcript")
 if 'generate --mode custom --variant speed' in text:
     raise SystemExit("clone benchmark fixture must not be synthesized from the default Custom speaker")
+
+device_script = Path("scripts/ios_device.sh").read_text(encoding="utf-8")
+runner = Path("Sources/iOS/IOSDeviceDiagnosticsRunner.swift").read_text(encoding="utf-8")
+validator = Path("scripts/check_ios_clone_conditioning.py")
+for token in (
+    "clone-conditioning)",
+    "cmd_build --device-diagnostics",
+    "check_ios_clone_conditioning.py",
+):
+    if token not in device_script:
+        raise SystemExit(f"physical-iPhone clone-conditioning contract lost {token!r}")
+for token in (
+    "#if QVOICE_DEVICE_DIAGNOSTICS",
+    'expectedConditioningMode: "transcript_backed"',
+    'expectedConditioningMode: "x_vector_only"',
+    "scratchCleanupVerified: true",
+):
+    if token not in runner:
+        raise SystemExit(f"compile-gated clone-conditioning runner lost {token!r}")
+if not validator.is_file():
+    raise SystemExit("clone-conditioning validator is missing")
 PY
 
 out="$(rg -n '\b(?:sleep|usleep)\s*\(|Thread\.sleep|coordinate\s*\(' \
@@ -475,7 +503,7 @@ for root in roots:
         if path != Path("docs/reference/backend-optimization-research-report.md")
     )
 allowed = {
-    "ios_device.sh": {"doctor", "build", "logic-test", "install", "launch", "console", "pull", "bench", "lang-bench", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
+    "ios_device.sh": {"doctor", "build", "logic-test", "install", "launch", "console", "pull", "bench", "lang-bench", "clone-conditioning", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
     "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "memory", "gate", "release-readiness", "models", "help"},
     "ui_test.sh": {"macos", "ios"},
 }
@@ -563,6 +591,8 @@ python3 -m unittest \
   scripts.tests.test_benchmark_history \
   scripts.tests.test_bench_command_contract \
   scripts.tests.test_publish_benchmark_history \
+  scripts.tests.test_check_ios_clone_conditioning \
+  scripts.tests.test_check_ios_smoke_acceptance \
   scripts.tests.test_ios_device_benchmark_contract \
   scripts.tests.test_ios_memory_field_report \
   scripts.tests.test_profile_capture_contract \

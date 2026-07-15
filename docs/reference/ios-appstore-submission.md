@@ -110,7 +110,8 @@ can proceed.
 export QWENVOICE_DEVELOPMENT_TEAM=<your-team-id>
 ./scripts/regenerate_project.sh
 scripts/ios_device.sh preflight
-mkdir -p build/cache/xcode/source-packages build/scratch/derived-data/release-ios build/dist/ios
+mkdir -p build/cache/xcode/source-packages build/scratch/derived-data/release-ios \
+  build/scratch/transient/ios-release build/dist/ios
 xcodebuild -resolvePackageDependencies -project QwenVoice.xcodeproj -scheme VocelloiOS \
   -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
   -derivedDataPath build/scratch/derived-data/release-ios
@@ -121,9 +122,11 @@ xcodebuild archive -project QwenVoice.xcodeproj -scheme VocelloiOS -configuratio
   -disableAutomaticPackageResolution \
   -archivePath build/dist/ios/Vocello.xcarchive -allowProvisioningUpdates \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
-/usr/libexec/PlistBuddy -c "Add :teamID string $QWENVOICE_DEVELOPMENT_TEAM" ExportOptions-appstore.plist
+export_options=build/scratch/transient/ios-release/ExportOptions-appstore.plist
+cp ExportOptions-appstore.plist "$export_options"
+/usr/libexec/PlistBuddy -c "Add :teamID string $QWENVOICE_DEVELOPMENT_TEAM" "$export_options"
 xcodebuild -exportArchive -archivePath build/dist/ios/Vocello.xcarchive \
-  -exportOptionsPlist ExportOptions-appstore.plist -exportPath build/dist/ios/export \
+  -exportOptionsPlist "$export_options" -exportPath build/dist/ios/export \
   -allowProvisioningUpdates
 ```
 
@@ -141,6 +144,8 @@ python3 scripts/verify_ios_release_artifacts.py \
 This local route may produce a development-signed archive that Xcode re-signs during export. That is
 valid: the verifier requires a trusted Apple signing/profile relationship on the archive, then applies
 the final App Store distribution rules to the exported IPA and compares signature-normalized code.
+The tracked export-options template is read-only input; inject maintainer identity only into the
+governed scratch copy shown above.
 
 When a separate physical-device release-validation session was explicitly performed, its local
 metadata can additionally be checked with the older device-context verifier. That optional evidence

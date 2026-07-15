@@ -58,7 +58,12 @@ override; shipped production behavior ignores it:
 QVOICE_APP_SUPPORT_DIR=/path/to/custom/app-support
 ```
 
-(for test/hermetic runs; production uses the App Group container when available).
+For physical-device XCUITest, a single safe relative component such as
+`model-download-acceptance` resolves beneath the app's managed Application Support root. Path
+separators and traversal components are rejected. That managed leaf also receives a stable,
+one-way-digested background-session identity distinct from production; the leaf and any absolute
+diagnostic path are never disclosed in the identifier. Production uses the App Group container and
+its historical bundle-scoped background-session identifier when the debug master gate is absent.
 
 Maintained iPhone subtrees:
 

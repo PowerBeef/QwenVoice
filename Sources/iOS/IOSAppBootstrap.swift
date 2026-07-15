@@ -28,7 +28,7 @@ final class IOSAppDependenciesContainer: ObservableObject {
             self.modelManager = selectedBackend.modelManager
             self.modelInstaller = installer
             IOSModelDeliveryBackgroundEventRelay.handler = { identifier, completionHandler in
-                installer.handleBackgroundEventsCompletion(identifier, completionHandler)
+                _ = installer.handleBackgroundEventsCompletion(identifier, completionHandler)
             }
             self.startupError = nil
         } catch {

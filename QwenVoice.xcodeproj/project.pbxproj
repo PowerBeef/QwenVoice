@@ -306,6 +306,7 @@
 		E165360BF4E7A07DF979A8B9 /* GenerationEnginePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37D3D0691D493C308EB2B348 /* GenerationEnginePresentation.swift */; };
 		E180DB5FA1A255E2E4A90A27 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73645F4C6E07C717ABF11961 /* AppPaths.swift */; };
 		E1F3D5FAECEE93CAB3C2D0B6 /* NativeTelemetrySampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B6A4BEC2A7485ACA5C4C78 /* NativeTelemetrySampler.swift */; };
+		E36C809B2425122F4AD617EC /* RuntimeReleaseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43033F9668B23257EDC8EEE3 /* RuntimeReleaseCoordinator.swift */; };
 		E447EEA77FF3E8CF88579794 /* MacTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F29561FAD2A80235462F4B6 /* MacTTSEngine.swift */; };
 		E4A1017F2F4529E7438EA004 /* uncle_fu.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8EA3CF699353B8B928488B93 /* uncle_fu.wav */; };
 		E4CEA3E7589F1B62509C9AC0 /* VocelloQwen3Core in Frameworks */ = {isa = PBXBuildFile; productRef = E5CE7911DE113C3DED3EB345 /* VocelloQwen3Core */; };
@@ -2317,6 +2318,7 @@
 			files = (
 				E180DB5FA1A255E2E4A90A27 /* AppPaths.swift in Sources */,
 				4A73409EDBFCF8597B31A965 /* IOSModelDeliverySupport.swift in Sources */,
+				E36C809B2425122F4AD617EC /* RuntimeReleaseCoordinator.swift in Sources */,
 				ADC0F735E395E389213CF868 /* VocelloiOSLogicTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -48,6 +48,12 @@ enum IOSDeviceDiagnosticsRunner {
     private static let environmentKey = "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC"
     private static let memoryQualificationEnvironmentKey =
         "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC"
+    private static let cloneConditioningAcceptanceEnvironmentKey =
+        "QVOICE_IOS_DEVICE_CLONE_CONDITIONING_ACCEPTANCE"
+    private static let expectedCloneAudioSHA256EnvironmentKey =
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_AUDIO_SHA256"
+    private static let expectedCloneTranscriptSHA256EnvironmentKey =
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_TRANSCRIPT_SHA256"
     private static let speechAssetLocalesEnvironmentKey =
         "QVOICE_IOS_SPEECH_ASSET_LOCALES"
     private static let runIDKey = "QVOICE_IOS_DEVICE_RUN_ID"
@@ -76,11 +82,15 @@ enum IOSDeviceDiagnosticsRunner {
 
     /// True when the launch environment requested a diagnostic generation.
     static var isRequested: Bool {
-        [
+        var keys = [
             environmentKey,
             memoryQualificationEnvironmentKey,
             speechAssetLocalesEnvironmentKey,
-        ].contains { key in
+        ]
+        #if QVOICE_DEVICE_DIAGNOSTICS
+        keys.append(cloneConditioningAcceptanceEnvironmentKey)
+        #endif
+        return keys.contains { key in
             guard let raw = ProcessInfo.processInfo.environment[key]?
                 .trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
             return !raw.isEmpty
@@ -99,6 +109,13 @@ enum IOSDeviceDiagnosticsRunner {
         if ProcessInfo.processInfo.environment["QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST"] == "1" {
             print("[device-diagnostics] deliberate crash requested for the capture/symbolication lane")
             fatalError("QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST: deliberate diagnostics crash")
+        }
+        if trimmedEnvironmentValue(cloneConditioningAcceptanceEnvironmentKey) == "1" {
+            IOSInterruptionRecorder.shared.start()
+            Task { @MainActor in
+                await runCloneConditioningAcceptance(engine: engine)
+            }
+            return
         }
         #endif
         if let rawLocales = trimmedEnvironmentValue(speechAssetLocalesEnvironmentKey) {
@@ -568,6 +585,304 @@ enum IOSDeviceDiagnosticsRunner {
         }
         writeSentinel(record, runID: runID)
     }
+
+    #if QVOICE_DEVICE_DIAGNOSTICS
+    /// Two-take, local-only proof that the owned Qwen runtime keeps transcript-backed and
+    /// x-vector-only clone conditioning semantically distinct on the same physical-device
+    /// process. The canonical saved voice is read but never modified. The audio-only take uses
+    /// a purpose-owned copy with no transcript sidecar and removes that copy before PASS.
+    private static func runCloneConditioningAcceptance(engine: TTSEngineStore) async {
+        let runID = safeRunID(from: trimmedEnvironmentValue(runIDKey))
+            ?? "clone-conditioning-acceptance"
+        let scratchDirectory = cloneConditioningScratchDirectory()
+        var failureCode = CloneConditioningAcceptanceFailureCode.invalidEnvironment
+        var completedTakeCount = 0
+        var failedTakeIndex: Int?
+        let startedAt = ISO8601DateFormatter().string(from: Date())
+        defer { BenchRunContext.clearCurrentTakeFile() }
+
+        do {
+            guard NativeTelemetryMode.current() == .verbose, TelemetryGate.resolvedEnabled else {
+                throw DiagnosticsError("clone-conditioning acceptance requires verbose telemetry")
+            }
+            guard let voiceID = trimmedEnvironmentValue(cloneVoiceIDEnvKey),
+                  let expectedAudioSHA256 = validatedSHA256EnvironmentValue(
+                    expectedCloneAudioSHA256EnvironmentKey
+                  ),
+                  let expectedTranscriptSHA256 = validatedSHA256EnvironmentValue(
+                    expectedCloneTranscriptSHA256EnvironmentKey
+                  ) else {
+                throw DiagnosticsError("clone-conditioning acceptance fixture identity is incomplete")
+            }
+            guard let model = ModelDescriptor.model(for: .clone),
+                  let capabilities = model.qwen3Capabilities,
+                  capabilities.supportsXVectorOnlyClone else {
+                failureCode = .runtimeCapabilityUnavailable
+                throw DiagnosticsError("the active clone model does not support x-vector-only conditioning")
+            }
+
+            failureCode = .fixtureUnavailable
+            let voices = try await engine.listPreparedVoices()
+            guard let voice = voices.first(where: { $0.id == voiceID }),
+                  let transcript = try voice.loadTranscript(),
+                  !transcript.isEmpty else {
+                throw DiagnosticsError("the exact transcript-backed clone fixture is unavailable")
+            }
+            let sourceAudioURL = URL(fileURLWithPath: voice.audioPath)
+            guard try sha256Hex(for: sourceAudioURL) == expectedAudioSHA256,
+                  sha256Hex(forText: transcript) == expectedTranscriptSHA256 else {
+                failureCode = .fixtureIdentityMismatch
+                throw DiagnosticsError("the clone fixture digest does not match the acceptance contract")
+            }
+
+            failureCode = .scratchPreparationFailed
+            let fileManager = FileManager.default
+            try? fileManager.removeItem(at: scratchDirectory)
+            try fileManager.createDirectory(at: scratchDirectory, withIntermediateDirectories: true)
+            let scratchAudioURL = scratchDirectory.appendingPathComponent(
+                "reference.wav",
+                isDirectory: false
+            )
+            try copyAtomically(sourceAudioURL, to: scratchAudioURL)
+            let scratchTranscriptURL = scratchAudioURL
+                .deletingPathExtension()
+                .appendingPathExtension("txt")
+            try? fileManager.removeItem(at: scratchTranscriptURL)
+            guard try sha256Hex(for: scratchAudioURL) == expectedAudioSHA256,
+                  !fileManager.fileExists(atPath: scratchTranscriptURL.path) else {
+                throw DiagnosticsError("the audio-only scratch fixture is not exact")
+            }
+
+            let plans = [
+                CloneConditioningAcceptancePlan(
+                    takeIndex: 1,
+                    cell: "clone/speed/conditioning/transcript-backed",
+                    expectedConditioningMode: "transcript_backed",
+                    expectedTranscriptMode: "inline",
+                    expectedArtifactScope: "saved_voice",
+                    expectedTranscriptBacked: true,
+                    expectedXVectorOnly: false,
+                    reference: CloneReference(
+                        audioPath: sourceAudioURL.path,
+                        transcript: transcript,
+                        preparedVoiceID: voice.id
+                    )
+                ),
+                CloneConditioningAcceptancePlan(
+                    takeIndex: 2,
+                    cell: "clone/speed/conditioning/x-vector-only",
+                    expectedConditioningMode: "x_vector_only",
+                    expectedTranscriptMode: "none",
+                    expectedArtifactScope: "transient_reference",
+                    expectedTranscriptBacked: false,
+                    expectedXVectorOnly: true,
+                    reference: CloneReference(
+                        audioPath: scratchAudioURL.path,
+                        transcript: nil,
+                        preparedVoiceID: nil
+                    )
+                ),
+            ]
+            var takeResults: [CloneConditioningAcceptanceTakeResult] = []
+            let seed: UInt64 = 19_790_615
+
+            print("[clone-conditioning] start runID=\(runID) takes=2")
+            for plan in plans {
+                failedTakeIndex = plan.takeIndex
+                let actualWarmState = engine.loadState.currentModelID == model.id ? "warm" : "cold"
+                failureCode = .takeIdentityUnavailable
+                try BenchRunContext.writeCurrentTakeFile(
+                    takeIndex: plan.takeIndex,
+                    cell: plan.cell,
+                    intendedWarmState: actualWarmState
+                )
+                let generationID = UUID()
+                let outputFileName = String(
+                    format: "take-%02d-%@.wav",
+                    plan.takeIndex,
+                    plan.expectedConditioningMode
+                )
+                let outputPath = makeCloneConditioningOutputPath(
+                    scratchDirectory: scratchDirectory,
+                    outputFileName: outputFileName
+                )
+                let request = GenerationRequest(
+                    mode: .clone,
+                    modelID: model.id,
+                    text: defaultText,
+                    outputPath: outputPath,
+                    shouldStream: true,
+                    streamingInterval: GenerationSemantics.appStreamingInterval,
+                    languageHint: Qwen3SupportedLanguage.english.rawValue,
+                    payload: .clone(reference: plan.reference),
+                    generationID: generationID,
+                    seed: seed,
+                    variation: .consistent
+                )
+                let promptAssemblyDigest = try digest(
+                    GenerationSemantics.qwen3PromptAssembly(for: request, capabilities: capabilities)
+                )
+
+                var appTimelineSubmitted = false
+                do {
+                    failureCode = .generationFailed
+                    await AppGenerationTimeline.shared.recordSubmitted(
+                        id: generationID,
+                        mode: GenerationMode.clone.rawValue
+                    )
+                    appTimelineSubmitted = true
+                    let generationStartedAt = Date()
+                    let result = try await engine.generate(request)
+                    await AppGenerationTimeline.shared.recordCompleted(
+                        id: generationID,
+                        mode: GenerationMode.clone.rawValue,
+                        usedStreaming: result.usedStreaming,
+                        finishReason: result.finishReason?.rawValue,
+                        summary: result.telemetrySummary
+                    )
+                    appTimelineSubmitted = false
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
+
+                    failureCode = .conditioningContractFailed
+                    let booleans = result.diagnosticBooleanFlags
+                    let strings = result.diagnosticStringFlags
+                    let promptMaterialized = booleans["clone_prompt_artifact_hit"] == true
+                        || booleans["clone_prompt_memory_hit"] == true
+                        || booleans["clone_prompt_built"] == true
+                    guard booleans["clone_transcript_backed"] == plan.expectedTranscriptBacked,
+                          booleans["clone_x_vector_only"] == plan.expectedXVectorOnly,
+                          booleans["clone_optimized_handler_used"] == true,
+                          strings["clone_conditioning_mode"] == plan.expectedConditioningMode,
+                          strings["clone_transcript_mode"] == plan.expectedTranscriptMode,
+                          strings["clone_prompt_artifact_scope"] == plan.expectedArtifactScope,
+                          strings["qwen3_supports_x_vector_only_clone"] == "true",
+                          promptMaterialized else {
+                        throw DiagnosticsError("the runtime clone-conditioning flags are inconsistent")
+                    }
+
+                    let audioURL = URL(fileURLWithPath: result.audioPath)
+                    failureCode = .outputValidationFailed
+                    let outputEvidence = try makeOutputEvidence(
+                        for: audioURL,
+                        artifactRelativePath: "outputs/\(outputFileName)"
+                    )
+                    let outputVerification = await GenerationOutputVerifier.verify(
+                        audioURL: audioURL,
+                        expectedScript: defaultText,
+                        expectedLanguage: .english
+                    )
+                    guard outputVerification.pass else {
+                        throw DiagnosticsError("clone-conditioning output verification failed")
+                    }
+
+                    failureCode = .telemetryValidationFailed
+                    _ = try requireQualificationTelemetry(
+                        generationID: generationID,
+                        expectedMode: .clone,
+                        expectedModelID: model.id,
+                        expectedCell: plan.cell,
+                        expectedTakeIndex: plan.takeIndex
+                    )
+                    failureCode = .outputMirrorFailed
+                    _ = try mirrorQualificationOutput(
+                        audioURL,
+                        runID: runID,
+                        outputFileName: outputFileName
+                    )
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(
+                        generationID: generationID
+                    )
+
+                    takeResults.append(
+                        CloneConditioningAcceptanceTakeResult(
+                            takeIndex: plan.takeIndex,
+                            generationID: generationID.uuidString,
+                            cell: plan.cell,
+                            mode: GenerationMode.clone.rawValue,
+                            modelID: model.id,
+                            conditioningMode: strings["clone_conditioning_mode"] ?? "",
+                            transcriptMode: strings["clone_transcript_mode"] ?? "",
+                            promptArtifactScope: strings["clone_prompt_artifact_scope"] ?? "",
+                            transcriptBacked: booleans["clone_transcript_backed"] == true,
+                            xVectorOnly: booleans["clone_x_vector_only"] == true,
+                            supportsXVectorOnlyClone: true,
+                            optimizedHandlerUsed: booleans["clone_optimized_handler_used"] == true,
+                            promptMaterialized: promptMaterialized,
+                            conditioningReused: booleans["clone_conditioning_reused"] == true,
+                            preparedCloneCacheHit: booleans["prepared_clone_cache_hit"] == true,
+                            referenceAudioSHA256: expectedAudioSHA256,
+                            promptAssemblySHA256: promptAssemblyDigest,
+                            wallSeconds: Date().timeIntervalSince(generationStartedAt),
+                            outputFileName: outputFileName,
+                            outputEvidence: outputEvidence,
+                            outputVerification: outputVerification
+                        )
+                    )
+                    completedTakeCount = takeResults.count
+                    failedTakeIndex = nil
+                    print(
+                        "[clone-conditioning] take \(plan.takeIndex)/2 "
+                        + "\(plan.expectedConditioningMode) PASS"
+                    )
+                } catch {
+                    if appTimelineSubmitted {
+                        await AppGenerationTimeline.shared.recordFailed(id: generationID)
+                    }
+                    throw error
+                }
+            }
+
+            failureCode = .conditioningContractFailed
+            guard takeResults.count == 2,
+                  takeResults[0].promptAssemblySHA256 != takeResults[1].promptAssemblySHA256 else {
+                throw DiagnosticsError("clone-conditioning prompt identities were not distinct")
+            }
+            failureCode = .interrupted
+            let interruptions = IOSInterruptionRecorder.shared.snapshot()
+            guard interruptions.isEmpty else {
+                throw DiagnosticsError("clone-conditioning acceptance was interrupted")
+            }
+            failureCode = .scratchCleanupFailed
+            try fileManager.removeItem(at: scratchDirectory)
+            guard !fileManager.fileExists(atPath: scratchDirectory.path) else {
+                throw DiagnosticsError("clone-conditioning scratch cleanup was incomplete")
+            }
+
+            let terminal = CloneConditioningAcceptanceResult(
+                runID: runID,
+                startedAt: startedAt,
+                finishedAt: ISO8601DateFormatter().string(from: Date()),
+                seed: seed,
+                samplingVariation: Qwen3SamplingVariation.consistent.rawValue,
+                voiceIDDigest: sha256Hex(forText: voice.id),
+                referenceAudioSHA256: expectedAudioSHA256,
+                referenceTranscriptSHA256: expectedTranscriptSHA256,
+                scratchCleanupVerified: true,
+                takes: takeResults
+            )
+            failureCode = .resultWriteFailed
+            try writeCloneConditioningResult(terminal, runID: runID)
+            print("[clone-conditioning] PASS runID=\(runID)")
+        } catch {
+            try? FileManager.default.removeItem(at: scratchDirectory)
+            let failure = CloneConditioningAcceptanceFailure(
+                runID: runID,
+                failedAt: ISO8601DateFormatter().string(from: Date()),
+                failureCode: failureCode.rawValue,
+                completedTakeCount: completedTakeCount,
+                expectedTakeCount: 2,
+                failedTakeIndex: failedTakeIndex
+            )
+            try? writeCloneConditioningFailure(failure, runID: runID)
+            print(
+                "[clone-conditioning] FAIL code=\(failureCode.rawValue) "
+                + "completed=\(completedTakeCount)/2"
+            )
+        }
+    }
+    #endif
 
     /// Executes the canonical retained-memory plan in one app/engine process.
     /// `memory-qualification-result.json` remains the only PASS barrier. A failed
@@ -1137,6 +1452,39 @@ enum IOSDeviceDiagnosticsRunner {
         }
     }
 
+    #if QVOICE_DEVICE_DIAGNOSTICS
+    private static func cloneConditioningScratchDirectory() -> URL {
+        AppPaths.appSupportDir
+            .appendingPathComponent("cache", isDirectory: true)
+            .appendingPathComponent("clone-conditioning-acceptance", isDirectory: true)
+    }
+
+    private static func validatedSHA256EnvironmentValue(_ key: String) -> String? {
+        guard let value = trimmedEnvironmentValue(key), value.count == 64,
+              value.unicodeScalars.allSatisfy({ scalar in
+                  CharacterSet(charactersIn: "0123456789abcdef").contains(scalar)
+              }) else {
+            return nil
+        }
+        return value
+    }
+
+    private static func sha256Hex(forText text: String) -> String {
+        SHA256.hash(data: Data(text.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    private static func makeCloneConditioningOutputPath(
+        scratchDirectory: URL,
+        outputFileName: String
+    ) -> String {
+        let directory = scratchDirectory.appendingPathComponent("outputs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent(outputFileName, isDirectory: false).path
+    }
+    #endif
+
     private static func makeQualificationOutputPath(
         runID: String,
         model: ModelDescriptor,
@@ -1238,7 +1586,69 @@ enum IOSDeviceDiagnosticsRunner {
         try data.write(to: pullableURL, options: .atomic)
     }
 
-    private static func makeOutputEvidence(for url: URL) throws -> OutputEvidence {
+    #if QVOICE_DEVICE_DIAGNOSTICS
+    private static func writeCloneConditioningResult(
+        _ record: CloneConditioningAcceptanceResult,
+        runID: String
+    ) throws {
+        try writeCloneConditioningRecord(
+            record,
+            relativeName: "clone-conditioning-result.json",
+            runID: runID,
+            maximumEncodedBytes: 256 * 1024
+        )
+    }
+
+    private static func writeCloneConditioningFailure(
+        _ record: CloneConditioningAcceptanceFailure,
+        runID: String
+    ) throws {
+        try writeCloneConditioningRecord(
+            record,
+            relativeName: "clone-conditioning-failure.json",
+            runID: runID,
+            maximumEncodedBytes: 4096
+        )
+    }
+
+    private static func writeCloneConditioningRecord<T: Encodable>(
+        _ record: T,
+        relativeName: String,
+        runID: String,
+        maximumEncodedBytes: Int
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(record)
+        guard data.count <= maximumEncodedBytes else {
+            throw DiagnosticsError("clone-conditioning terminal record exceeded its size bound")
+        }
+        let destinations: [URL] = [
+            AppPaths.appSupportDir
+                .appendingPathComponent("diagnostics", isDirectory: true)
+                .appendingPathComponent(runID, isDirectory: true)
+                .appendingPathComponent(relativeName, isDirectory: false),
+            IOSPullableDiagnosticsMirror.pullableRoot?
+                .appendingPathComponent(runID, isDirectory: true)
+                .appendingPathComponent(relativeName, isDirectory: false),
+        ].compactMap { $0 }
+        guard destinations.count == 2 else {
+            throw DiagnosticsError("pullable diagnostics directory is unavailable")
+        }
+        for destination in destinations {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: destination, options: .atomic)
+        }
+    }
+    #endif
+
+    private static func makeOutputEvidence(
+        for url: URL,
+        artifactRelativePath: String = "output.wav"
+    ) throws -> OutputEvidence {
         let file = try AVAudioFile(forReading: url)
         let frameCount = Int64(file.length)
         let sampleRate = file.fileFormat.sampleRate
@@ -1251,7 +1661,7 @@ enum IOSDeviceDiagnosticsRunner {
             throw DiagnosticsError("generated WAV has no readable file size")
         }
         return OutputEvidence(
-            artifactRelativePath: "output.wav",
+            artifactRelativePath: artifactRelativePath,
             sha256: try sha256Hex(for: url),
             byteCount: Int64(fileSize),
             durationSeconds: Double(frameCount) / sampleRate,
@@ -1441,6 +1851,86 @@ enum IOSDeviceDiagnosticsRunner {
         let memoryQualification: MemoryQualificationDeclaration
         let takes: [MemoryQualificationTakeResult]
     }
+
+    #if QVOICE_DEVICE_DIAGNOSTICS
+    private struct CloneConditioningAcceptancePlan {
+        let takeIndex: Int
+        let cell: String
+        let expectedConditioningMode: String
+        let expectedTranscriptMode: String
+        let expectedArtifactScope: String
+        let expectedTranscriptBacked: Bool
+        let expectedXVectorOnly: Bool
+        let reference: CloneReference
+    }
+
+    private struct CloneConditioningAcceptanceTakeResult: Codable {
+        let takeIndex: Int
+        let generationID: String
+        let cell: String
+        let mode: String
+        let modelID: String
+        let conditioningMode: String
+        let transcriptMode: String
+        let promptArtifactScope: String
+        let transcriptBacked: Bool
+        let xVectorOnly: Bool
+        let supportsXVectorOnlyClone: Bool
+        let optimizedHandlerUsed: Bool
+        let promptMaterialized: Bool
+        let conditioningReused: Bool
+        let preparedCloneCacheHit: Bool
+        let referenceAudioSHA256: String
+        let promptAssemblySHA256: String
+        let wallSeconds: Double
+        let outputFileName: String
+        let outputEvidence: OutputEvidence
+        let outputVerification: GenerationOutputVerifier.Result
+    }
+
+    private struct CloneConditioningAcceptanceResult: Codable {
+        var schemaVersion = 1
+        var status = "pass"
+        let runID: String
+        let startedAt: String
+        let finishedAt: String
+        let seed: UInt64
+        let samplingVariation: String
+        let voiceIDDigest: String
+        let referenceAudioSHA256: String
+        let referenceTranscriptSHA256: String
+        let scratchCleanupVerified: Bool
+        let takes: [CloneConditioningAcceptanceTakeResult]
+    }
+
+    private struct CloneConditioningAcceptanceFailure: Codable {
+        var schemaVersion = 1
+        var status = "failed"
+        let runID: String
+        let failedAt: String
+        let failureCode: String
+        let completedTakeCount: Int
+        let expectedTakeCount: Int
+        let failedTakeIndex: Int?
+    }
+
+    private enum CloneConditioningAcceptanceFailureCode: String {
+        case invalidEnvironment = "invalid_environment"
+        case runtimeCapabilityUnavailable = "runtime_capability_unavailable"
+        case fixtureUnavailable = "fixture_unavailable"
+        case fixtureIdentityMismatch = "fixture_identity_mismatch"
+        case scratchPreparationFailed = "scratch_preparation_failed"
+        case takeIdentityUnavailable = "take_identity_unavailable"
+        case generationFailed = "generation_failed"
+        case conditioningContractFailed = "conditioning_contract_failed"
+        case outputValidationFailed = "output_validation_failed"
+        case telemetryValidationFailed = "telemetry_validation_failed"
+        case outputMirrorFailed = "output_mirror_failed"
+        case interrupted
+        case scratchCleanupFailed = "scratch_cleanup_failed"
+        case resultWriteFailed = "result_write_failed"
+    }
+    #endif
 
     private struct PreparedSpeechAssetModule {
         let recordIndex: Int

@@ -22,6 +22,7 @@ class VocelloiOSUITestCase: XCTestCase {
 
     func beginSession(additionalEnvironment: [String: String] = [:]) {
         continueAfterFailure = false
+        assertToggleNormalizerContract()
         pendingAutoplayPreferenceRestore = nil
         session = VocelloUIApplicationSession()
         launchApp(additionalEnvironment: additionalEnvironment)
@@ -142,14 +143,21 @@ class VocelloiOSUITestCase: XCTestCase {
         select(tab: .settings)
         let toggle = element("iosSettings_autoPlayToggle")
         XCTAssertTrue(VocelloUIWait.exists(toggle, timeout: 20))
-        let wasEnabled = (toggle.value as? String) == "On"
+        guard let wasEnabled = VocelloUIToggle.state(of: toggle) else {
+            XCTFail("Auto-play toggle exposed an unknown value; refusing to mutate it")
+            return true
+        }
         if !wasEnabled {
             // Register the rollback before touching the production control.
             // If the tap or its assertion aborts, endSession still owns the
             // original preference and restores it through this same UI.
             pendingAutoplayPreferenceRestore = wasEnabled
             XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
-            XCTAssertTrue(VocelloUIWait.value(toggle, contains: "On", timeout: 15))
+            XCTAssertTrue(
+                VocelloUIWait.condition("Auto-play toggle to become enabled", timeout: 15) {
+                    VocelloUIToggle.state(of: toggle) == true
+                }
+            )
         }
         return wasEnabled
     }
@@ -168,11 +176,19 @@ class VocelloiOSUITestCase: XCTestCase {
         select(tab: .settings)
         let toggle = element("iosSettings_autoPlayToggle")
         XCTAssertTrue(VocelloUIWait.exists(toggle, timeout: 20))
-        if (toggle.value as? String) != "Off" {
-            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
-            XCTAssertTrue(VocelloUIWait.value(toggle, contains: "Off", timeout: 15))
+        guard let currentState = VocelloUIToggle.state(of: toggle) else {
+            XCTFail("Auto-play toggle exposed an unknown value; refusing to restore it blindly")
+            return
         }
-        if (toggle.value as? String) == "Off" {
+        if currentState {
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
+            XCTAssertTrue(
+                VocelloUIWait.condition("Auto-play toggle to restore disabled", timeout: 15) {
+                    VocelloUIToggle.state(of: toggle) == false
+                }
+            )
+        }
+        if VocelloUIToggle.state(of: toggle) == false {
             pendingAutoplayPreferenceRestore = nil
         }
     }
@@ -213,8 +229,17 @@ class VocelloiOSUITestCase: XCTestCase {
             XCTAssertTrue(VocelloUIWait.exists(selectedReference, timeout: 30))
             let consent = element("voiceCloning_consentAcknowledgment")
             XCTAssertTrue(VocelloUIWait.exists(consent, timeout: 20))
-            if (consent.value as? String) != "1" && (consent.value as? String) != "On" {
+            guard let consentState = VocelloUIToggle.state(of: consent) else {
+                XCTFail("Clone consent exposed an unknown value; refusing to mutate it")
+                return
+            }
+            if !consentState {
                 XCTAssertTrue(VocelloUIPrimaryAction.perform(on: consent, timeout: 20))
+                XCTAssertTrue(
+                    VocelloUIWait.condition("Clone consent to become enabled", timeout: 15) {
+                        VocelloUIToggle.state(of: consent) == true
+                    }
+                )
             }
             // Proactive priming is a best-effort optimization. The production
             // Generate action performs required preparation on demand.
@@ -269,6 +294,100 @@ class VocelloiOSUITestCase: XCTestCase {
                 !self.app.keyboards.firstMatch.exists
             }
         )
+    }
+
+    /// Starts a real production generation and proves that streaming has
+    /// reached both its visible live player and its genuine Cancel control.
+    func startGenerationAndWaitForLivePreview() {
+        let generate = element("textInput_generateButton")
+        let cancel = element("textInput_cancelButton")
+        let livePlayer = element("studio_livePreview_playPause")
+        let completedPlayer = element("studio_inlinePlayer_playPause")
+        let generationError = element("textInput_generationError")
+
+        XCTAssertTrue(VocelloUIWait.enabled(generate, timeout: 60))
+        XCTAssertFalse(completedPlayer.exists, "Cancellation proof must start without a completed player")
+        XCTAssertFalse(generationError.exists, "Cancellation proof must not begin from an error state")
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: generate, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.condition("streaming generation to expose live player and Cancel", timeout: 120) {
+                cancel.exists && cancel.isHittable && livePlayer.exists && !generationError.exists
+            }
+        )
+    }
+
+    /// Cancels through the visible production control and proves the composer
+    /// has reached a terminal, reusable state without retaining either player.
+    func cancelActiveGenerationAndAssertTerminalUI() {
+        let generate = element("textInput_generateButton")
+        let cancel = element("textInput_cancelButton")
+        let livePlayer = element("studio_livePreview_playPause")
+        let completedPlayer = element("studio_inlinePlayer_playPause")
+        let generationError = element("textInput_generationError")
+
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: cancel, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.condition("cancelled generation to return to reusable terminal UI", timeout: 60) {
+                !cancel.exists
+                    && !livePlayer.exists
+                    && !completedPlayer.exists
+                    && generate.exists
+                    && generate.isEnabled
+                    && !generationError.exists
+            }
+        )
+    }
+
+    /// Starts a real production generation and waits for the runtime memory
+    /// policy to cancel it. Typed cause and cancel-before-unload ordering are
+    /// validated from pulled device diagnostics by `scripts/ui_test.sh`.
+    func startGenerationAndWaitForAutomaticMemoryPressureTerminal() {
+        let generate = element("textInput_generateButton")
+        let cancel = element("textInput_cancelButton")
+        let livePlayer = element("studio_livePreview_playPause")
+        let completedPlayer = element("studio_inlinePlayer_playPause")
+        let generationError = element("textInput_generationError")
+
+        XCTAssertTrue(VocelloUIWait.enabled(generate, timeout: 60))
+        XCTAssertFalse(completedPlayer.exists)
+        XCTAssertFalse(generationError.exists)
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: generate, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.condition("memory-pressure generation to visibly start", timeout: 20) {
+                cancel.exists || livePlayer.exists || !generate.exists || !generate.isEnabled
+            }
+        )
+        XCTAssertTrue(
+            VocelloUIWait.condition("memory-pressure generation to reach a terminal state", timeout: 120) {
+                generationError.exists || (
+                    !cancel.exists
+                        && !livePlayer.exists
+                        && !completedPlayer.exists
+                        && generate.exists
+                        && generate.isEnabled
+                )
+            }
+        )
+        XCTAssertFalse(generationError.exists, "Memory-pressure cancellation must be a clean terminal outcome")
+        XCTAssertFalse(completedPlayer.exists, "Memory-pressure cancellation must not surface an output")
+        XCTAssertTrue(VocelloUIWait.enabled(generate, timeout: 10))
+    }
+
+    func replaceHistorySearch(with query: String) {
+        select(tab: .history)
+        let searchField = element("historySearchField")
+        XCTAssertTrue(VocelloUIWait.exists(searchField, timeout: 30))
+        XCTAssertTrue(VocelloUITextEntry.replace(in: searchField, with: query, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.condition("History search to match the requested token", timeout: 15) {
+                (searchField.value as? String) == query
+            }
+        )
+    }
+
+    func historyRows() -> XCUIElementQuery {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "historyRow_"))
     }
 
     /// Uses only visible production state: enabled Generate before the action,
@@ -370,5 +489,21 @@ class VocelloiOSUITestCase: XCTestCase {
         case .design: return "studioChip_voiceBrief"
         case .clone: return "studioChip_reference"
         }
+    }
+
+    /// These pure checks run inside every selected physical-device lane, so a
+    /// platform bridging change cannot silently turn an unknown value into a tap.
+    private func assertToggleNormalizerContract() {
+        XCTAssertEqual(VocelloUIToggle.state(from: true), true)
+        XCTAssertEqual(VocelloUIToggle.state(from: false), false)
+        XCTAssertEqual(VocelloUIToggle.state(from: NSNumber(value: 1)), true)
+        XCTAssertEqual(VocelloUIToggle.state(from: NSNumber(value: 0)), false)
+        XCTAssertEqual(VocelloUIToggle.state(from: "1"), true)
+        XCTAssertEqual(VocelloUIToggle.state(from: "0"), false)
+        XCTAssertNil(VocelloUIToggle.state(from: "Activé"))
+        XCTAssertNil(
+            VocelloUIToggle.mutationRequired(currentValue: "Activé", desiredState: true),
+            "An unknown localized value must never authorize a mutation"
+        )
     }
 }

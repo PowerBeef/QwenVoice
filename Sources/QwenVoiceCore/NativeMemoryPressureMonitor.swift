@@ -1,5 +1,99 @@
 import Foundation
 
+/// Defines the ordering required when the kernel asks the native runtime to
+/// shed memory.
+///
+/// A warning-level soft trim only clears reclaimable caches. It intentionally
+/// does not interrupt useful generation work. A critical hard trim can clear
+/// state that an in-flight generation is still using, so it must first cancel
+/// that generation with the typed memory-pressure reason and wait for its
+/// terminal barrier. `fullUnload` is not emitted by
+/// `NativeMemoryPressureMonitor` and retains its existing caller-owned policy.
+struct NativeMemoryPressureResponsePolicy: Sendable {
+    enum Preparation: Equatable, Sendable {
+        case none
+        case cancelActiveGeneration(GenerationCancellationReason)
+    }
+
+    func preparation(before level: NativeMemoryTrimLevel) -> Preparation {
+        switch level {
+        case .softTrim, .fullUnload:
+            return .none
+        case .hardTrim:
+            return .cancelActiveGeneration(.memoryPressure)
+        }
+    }
+}
+
+/// Serializes kernel-pressure responses and makes their side effects
+/// injectable for deterministic tests.
+///
+/// The cancellation handler is the terminal barrier: it must not return until
+/// the registered generation task has actually stopped. Consequently the trim
+/// handler can never run concurrently with active model compute for a critical
+/// event.
+actor NativeMemoryPressureResponseExecutor {
+    typealias ObservationHandler = @Sendable (NativeMemoryTrimLevel) async -> Void
+    typealias CancellationHandler = @Sendable (GenerationCancellationReason) async -> Void
+    typealias TrimHandler = @Sendable (NativeMemoryTrimLevel, String) async -> Void
+
+    private let policy: NativeMemoryPressureResponsePolicy
+    private let recordObservation: ObservationHandler
+    private let cancelActiveGeneration: CancellationHandler
+    private let trim: TrimHandler
+    private var responseInFlight = false
+    private var responseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(
+        policy: NativeMemoryPressureResponsePolicy = NativeMemoryPressureResponsePolicy(),
+        recordObservation: @escaping ObservationHandler,
+        cancelActiveGeneration: @escaping CancellationHandler,
+        trim: @escaping TrimHandler
+    ) {
+        self.policy = policy
+        self.recordObservation = recordObservation
+        self.cancelActiveGeneration = cancelActiveGeneration
+        self.trim = trim
+    }
+
+    func execute(level: NativeMemoryTrimLevel, reason: String) async {
+        await acquireResponseSlot()
+        defer { releaseResponseSlot() }
+
+        // Preserve the raw signal even if cancellation takes long enough that
+        // the later trim mark misses the active generation's telemetry window.
+        await recordObservation(level)
+
+        switch policy.preparation(before: level) {
+        case .none:
+            break
+        case .cancelActiveGeneration(let cancellationReason):
+            await cancelActiveGeneration(cancellationReason)
+        }
+
+        await trim(level, reason)
+    }
+
+    private func acquireResponseSlot() async {
+        guard responseInFlight else {
+            responseInFlight = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            responseWaiters.append(continuation)
+        }
+    }
+
+    private func releaseResponseSlot() {
+        guard !responseWaiters.isEmpty else {
+            responseInFlight = false
+            return
+        }
+        let next = responseWaiters.removeFirst()
+        next.resume()
+    }
+}
+
 /// Subscribes to kernel memory-pressure events and publishes the translated
 /// `NativeMemoryTrimLevel` to interested consumers. macOS uses it for the
 /// XPC engine process on 8 GB and 16 GB Macs; iOS uses it in the app process

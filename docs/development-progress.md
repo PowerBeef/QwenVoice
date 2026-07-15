@@ -13,6 +13,12 @@
   XCTest bundle for the generic physical-device SDK. It covers catalog/ledger, memory policy,
   cancellation, storage-path gating, and diagnostic redaction without a phone; execution through
   `scripts/ios_device.sh logic-test` remains explicit and physical-device-only.
+- The physical-iPhone smoke contract now covers two distinct cancellation paths. It first cancels
+  one active stream through the genuine visible Cancel control, then relaunches with the registered
+  one-shot critical-memory diagnostic, requires typed `memory_pressure` cancellation to complete
+  before `fullUnload`, and proves the same engine surface can complete a subsequent generation.
+  Pulled run-scoped diagnostics own the pressure-event ordering verdict; unknown toggle values fail
+  closed and are never tapped. The first fresh PASS for this expanded smoke contract remains pending.
 - Generation ownership is now explicit across all hosts. Both platform streams are bounded
   (`bufferingNewest(256)` on macOS, `bufferingNewest(96)` on iOS) and every yield outcome is
   measured. `ActiveGenerationCoordinator` admits one active task, carries typed user,
@@ -30,6 +36,12 @@
   not a second app driver.
 - The iOS diagnostic Clone path requires the exact prepared voice ID. The canonical fixture is a
   transcript-backed Voice Design reference; a Custom Voice output is not an acceptable substitute.
+- A compile-gated `scripts/ios_device.sh clone-conditioning` acceptance lane now runs exactly two
+  clone takes in one physical-iPhone app/engine process: the canonical transcript-backed saved
+  voice followed by an exact sidecar-free audio copy using genuine x-vector-only conditioning. It
+  validates distinct prompt identities, typed runtime flags, output/ASR, telemetry-v8 memory, app
+  correlation, crash delta, and scratch cleanup, then writes local evidence only. The first fresh
+  on-device PASS for the current overhaul remains pending.
 - No preview/browser-mirror route, invisible accessibility state marker, alternate UI driver,
   coordinate bridge, or hidden UI bootstrap belongs in the shippable app.
 - Model delivery uses one shared integrity/atomic-install implementation. iPhone now owns one
@@ -203,7 +215,7 @@ explicit macOS fixture repair/bootstrap step.
   proportionate fresh evidence rather than reuse of local raw artifacts.
 - The records above remain valid for their recorded commits; they do not prove the current runtime
   overhaul. Fresh physical-iPhone/live-model evidence remains deferred for typed cancellation
-  (including memory-pressure cancellation), transcript-backed and audio-only clone conditioning,
+  (including memory-pressure cancellation), the new two-take clone-conditioning acceptance lane,
   the redirect-enforced model route after catalog completion, and the fresh full 19-cell language
   run. These explicit quality tasks remain nonblocking for deterministic source publication,
   packaging, and release artifact preservation.

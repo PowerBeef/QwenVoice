@@ -29,6 +29,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
 
     private let modelAssetStore: LocalModelAssetStore?
     private let modelManager: ModelManagerViewModel
+    private let backgroundSessionIdentifier: String
     private var coordinator: IOSModelDownloadCoordinator?
     private var lastAcceptedGeneration: [String: UInt64] = [:]
 
@@ -41,6 +42,8 @@ final class IOSModelInstallerViewModel: ObservableObject {
     ) {
         self.modelAssetStore = modelAssetStore
         self.modelManager = modelManager
+        let deliveryConfiguration = IOSModelDeliveryConfiguration.default()
+        self.backgroundSessionIdentifier = deliveryConfiguration.backgroundSessionIdentifier
 
         guard let modelAssetStore else {
             return
@@ -48,6 +51,7 @@ final class IOSModelInstallerViewModel: ObservableObject {
 
         let coordinator = IOSModelDownloadCoordinator(
             modelAssetStore: modelAssetStore,
+            configuration: deliveryConfiguration,
             snapshotSink: { [weak self] snapshot in
                 self?.apply(snapshot)
             }
@@ -173,15 +177,28 @@ final class IOSModelInstallerViewModel: ObservableObject {
         }
     }
 
-    func handleBackgroundEventsCompletion(_ identifier: String, _ completionHandler: @escaping () -> Void) {
-        IOSModelDeliveryBackgroundEventRelay.store(completionHandler, forSessionIdentifier: identifier)
+    @discardableResult
+    func handleBackgroundEventsCompletion(
+        _ identifier: String,
+        _ completionHandler: @escaping () -> Void
+    ) -> Bool {
+        guard IOSModelDeliveryBackgroundEventRelay.store(
+            completionHandler,
+            forSessionIdentifier: identifier,
+            ownedSessionIdentifier: backgroundSessionIdentifier
+        ) else {
+            return false
+        }
         guard let coordinator else {
-            IOSModelDeliveryBackgroundEventRelay.completeOrphans(keeping: [])
-            return
+            IOSModelDeliveryBackgroundEventRelay.complete(
+                forOwnedSessionIdentifier: backgroundSessionIdentifier
+            )
+            return true
         }
         Task {
             await coordinator.resumeBackgroundEventsIfNeeded()
         }
+        return true
     }
 
     private func apply(_ snapshot: IOSModelDeliverySnapshot) {

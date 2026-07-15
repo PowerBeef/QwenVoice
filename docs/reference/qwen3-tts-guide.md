@@ -243,6 +243,14 @@ This is the recommended way to create a reusable, styled character voice:
 
 Vocello caches the resulting clone prompt on disk and in memory to avoid recomputing it for every generation.
 
+For a focused physical-device semantic check, `scripts/ios_device.sh clone-conditioning` runs the
+canonical saved reference twice in one process: first with its explicit transcript and prepared
+voice identity, then through an exact purpose-owned audio copy with no sidecar and no prepared voice
+identity. The compile-gated runner requires `transcript_backed` and `x_vector_only` runtime flags,
+distinct prompt-assembly digests, exact output/telemetry evidence, and cleanup of the temporary
+audio-only copy. This local acceptance command does not publish benchmark history and does not
+replace the XCUITest UI path for the visible saved-voice workflow.
+
 ---
 
 ## 6. Delivery / emotion presets

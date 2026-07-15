@@ -58,13 +58,16 @@ the iPhone lane never bypasses its user-facing script limit.
 
 | Lane | Scope |
 | --- | --- |
-| Smoke | Exact app launch, Studio mode and tab navigation, visible model and clone-reference readiness, one real Custom generation, completed player, and History |
+| Smoke | Exact app launch, Studio mode and tab navigation, visible model and clone-reference readiness, one visible user cancellation, one run-scoped critical-memory cancellation with cancel-before-unload diagnostics, post-pressure engine reuse, no cancelled History rows, and one real completed Custom History row |
 | Benchmark | Ordered, configurable Studio matrix with pulled telemetry, readable audio, audio QC, thermal and timing evidence; the default is exactly 29 takes |
 | Model delivery | One isolated Custom Speed install; background/process relaunch adoption, monotonic progress, integrity, and visible cleanup |
 
 Every lane uses the paired physical-device destination. Tests use stable accessibility identifiers,
 condition-based waits, XCTest activities, screenshots, and failure attachments. Coordinate tables,
 OCR taps, alternate UI drivers, and fixed sleeps are not supported.
+The smoke runner pulls its exact diagnostics and fails unless the one-shot event sequence is
+`debug_force_critical_once` → `critical_memory_action` → typed `memory_pressure` cancellation →
+`fullUnload`, followed by a successful generation from the same relaunched app process.
 
 Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
 runs; invoking the command without filters is the canonical 29-take matrix on the tracked iPhone 17
@@ -120,8 +123,9 @@ History/database correlation, readable WAV validation, audio QC, crash deltas, t
 matrix ordering, and take counts. The app mints the generation UUID across Custom, Design, and Clone
 and writes its frontend row durably before only the matching run rows/verbose sidecars are mirrored.
 The 150-character boundary case remains explicitly `long`; no prompt-length inference is used.
-Smoke asserts visible completion and History plus the runner's device/crash checks; it
-does not claim the benchmark's per-take telemetry matrix. Headless `bench`, `lang-bench`, `profile`,
+Smoke asserts visible active-cancellation recovery, absence of a cancelled History row, subsequent
+completion and History persistence, plus the runner's device/crash checks. It does not claim the
+benchmark's per-take telemetry matrix or synthesize an operating-system pressure event. Headless `bench`, `lang-bench`, `profile`,
 `crashes`, logs, and console operations remain supported physical-device diagnostics.
 
 Profile commands launch or attach to the exact target PID, record CPU Profiler and `os_signpost`
@@ -170,6 +174,20 @@ Policy `retained-memory-v1` compares first-to-last retained-take footprint growt
 at most 5% of physical RAM; cross-mode residency is diagnostic because different models are
 intentionally loaded. A PASS creates `memory-qualification`, while any generation, memory,
 retention, output, or crash failure leaves tracked history unchanged.
+
+### Clone-conditioning semantic acceptance
+
+```sh
+scripts/ios_device.sh clone-conditioning --label focused-clone-proof
+```
+
+This compile-gated physical-device lane runs exactly two Clone Speed generations in one app/engine
+process. It verifies the canonical saved Voice Design reference and transcript digests, then uses an
+exact purpose-owned copy without a `.txt` sidecar or prepared voice ID for the x-vector-only take.
+Both takes must pass typed conditioning flags, distinct prompt identities, strict output/ASR,
+telemetry-v8 memory coverage, app/engine correlation, crash delta, and interruption checks. The
+runner removes the audio-only scratch copy before PASS. It writes only local untracked validation
+evidence and never creates or repairs benchmark history; XCUITest remains the visible UI proof.
 
 MetricKit supplies a complementary delayed field view, not per-take benchmark attribution. After a
 normal explicit pull, summarize only the already-local privacy-reduced aggregate with:

@@ -68,7 +68,7 @@
       "gateRequired": false,
       "compileCondition": "QVOICE_DEVICE_DIAGNOSTICS",
       "releaseBehavior": "unavailable-without-diagnostics-compilation-condition",
-      "purpose": "Physical-device, model, memory, language, and Speech-asset diagnostic specifications owned by repository scripts.",
+      "purpose": "Physical-device, model, memory, language, clone-conditioning, and Speech-asset diagnostic specifications owned by repository scripts.",
       "keys": [
         "QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID",
         "QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST",
@@ -79,6 +79,9 @@
         "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC",
         "QVOICE_IOS_DEVICE_DIAGNOSTICS_VARIATION",
         "QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT",
+        "QVOICE_IOS_DEVICE_CLONE_CONDITIONING_ACCEPTANCE",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_AUDIO_SHA256",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_EXPECTED_CLONE_TRANSCRIPT_SHA256",
         "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC",
         "QVOICE_IOS_DEVICE_RUN_ID",
         "QVOICE_IOS_SPEECH_ASSET_LOCALES"

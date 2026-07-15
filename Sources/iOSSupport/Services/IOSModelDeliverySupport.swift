@@ -1,5 +1,36 @@
+import CryptoKit
 import Foundation
 import QwenVoiceCore
+
+/// Owns UIKit background-session completion handlers without allowing one model-delivery
+/// namespace to consume another. Canonical and debug-isolated app processes use distinct
+/// session identifiers, so every store and completion operation must name the same exact owner.
+@MainActor
+final class IOSModelDeliveryBackgroundEventHandlerStore {
+    private var pendingBySession: [String: [() -> Void]] = [:]
+
+    /// Returns `false` without retaining or invoking the handler when the delivered identifier
+    /// does not belong to this coordinator.
+    @discardableResult
+    func store(
+        _ completionHandler: @escaping () -> Void,
+        forDeliveredSessionIdentifier deliveredIdentifier: String,
+        ownedSessionIdentifier: String
+    ) -> Bool {
+        guard deliveredIdentifier == ownedSessionIdentifier else { return false }
+        pendingBySession[ownedSessionIdentifier, default: []].append(completionHandler)
+        return true
+    }
+
+    /// Completes only handlers for the explicitly owned session and returns the number invoked.
+    /// Removing before invocation keeps reentrant delivery from consuming the new handler.
+    @discardableResult
+    func completeOwnedSession(_ ownedSessionIdentifier: String) -> Int {
+        let handlers = pendingBySession.removeValue(forKey: ownedSessionIdentifier) ?? []
+        handlers.forEach { $0() }
+        return handlers.count
+    }
+}
 
 struct IOSModelDeliveryConfiguration: Sendable {
     static let catalogURLEnvironmentKey = "QVOICE_IOS_MODEL_CATALOG_URL"
@@ -30,8 +61,10 @@ struct IOSModelDeliveryConfiguration: Sendable {
         self.allowsInsecureTransport = allowsInsecureTransport
     }
 
-    static func `default`(bundle: Bundle = .main) -> IOSModelDeliveryConfiguration {
-        let environment = ProcessInfo.processInfo.environment
+    static func `default`(
+        bundle: Bundle = .main,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> IOSModelDeliveryConfiguration {
         let rawOverride = RuntimeDebugGate.value(
             for: catalogURLEnvironmentKey,
             environment: environment
@@ -57,7 +90,10 @@ struct IOSModelDeliveryConfiguration: Sendable {
             defaultHost = Set([catalogURL.host].compactMap { $0?.lowercased() })
         }
         let bundleIdentifier = bundle.bundleIdentifier ?? "com.patricedery.vocello"
-        let backgroundIdentifier = "\(backgroundSessionIdentifierPrefix).\(bundleIdentifier)"
+        let backgroundIdentifier = backgroundSessionIdentifier(
+            bundleIdentifier: bundleIdentifier,
+            environment: environment
+        )
         return IOSModelDeliveryConfiguration(
             catalogURL: catalogURL,
             allowedHosts: defaultHost.union(overrideHosts),
@@ -65,6 +101,28 @@ struct IOSModelDeliveryConfiguration: Sendable {
             backgroundSessionIdentifier: backgroundIdentifier,
             allowsInsecureTransport: false
         )
+    }
+
+    /// Production keeps its historical identifier exactly. A debug-gated,
+    /// managed relative support root receives a stable isolated identifier so
+    /// its tasks can never be adopted by the canonical model store. The raw
+    /// root is hashed rather than exposed through URLSession diagnostics.
+    static func backgroundSessionIdentifier(
+        bundleIdentifier: String,
+        environment: [String: String]
+    ) -> String {
+        let canonical = "\(backgroundSessionIdentifierPrefix).\(bundleIdentifier)"
+        guard let isolatedRoot = AppPaths.isolatedModelDeliverySupportRoot(
+            environment: environment
+        ) else {
+            return canonical
+        }
+
+        let digest = SHA256.hash(data: Data(isolatedRoot.utf8))
+            .prefix(12)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "\(canonical).isolated.\(digest)"
     }
 
     private static func normalizedCatalogOverrideString(_ raw: String) -> String {

@@ -225,8 +225,7 @@ struct QVoiceiOSApp: App {
                 : nil
             if cancelActiveGeneration {
                 performMemoryPressureReliefAfterCancellingGeneration(
-                    reason: executeReason,
-                    forcedTrimLevel: forcedTrimLevel
+                    reason: executeReason
                 )
             } else {
                 performMemoryPressureRelief(
@@ -250,23 +249,25 @@ struct QVoiceiOSApp: App {
     }
 
     private func performMemoryPressureReliefAfterCancellingGeneration(
-        reason: String,
-        forcedTrimLevel: NativeMemoryTrimLevel? = nil
+        reason: String
     ) {
         guard let engine = deps.engine else {
-            performMemoryPressureRelief(reason: reason, forcedTrimLevel: forcedTrimLevel)
+            performMemoryPressureRelief(reason: reason, forcedTrimLevel: .fullUnload)
             return
         }
 
         Task { @MainActor in
-            do {
-                try await engine.cancelActiveGeneration()
-            } catch {
+            let outcome = await engine.performCriticalMemoryPressureRelief(reason: reason)
+            switch outcome {
+            case .completed, .alreadyInFlight:
+                audioPlayer.abortLivePreviewIfNeeded()
+            case .cancellationFailed:
+                // Stopping audible preview is safe, but engine state and MLX
+                // ownership remain intact when the terminal barrier failed.
+                // A later pressure observation may retry cancellation.
+                audioPlayer.abortLivePreviewIfNeeded()
                 engine.clearVisibleError()
             }
-            audioPlayer.abortLivePreviewIfNeeded()
-            engine.clearGenerationActivity()
-            performMemoryPressureRelief(reason: reason, forcedTrimLevel: forcedTrimLevel)
         }
     }
 
@@ -280,19 +281,31 @@ struct QVoiceiOSApp: App {
         }
 
         Task { @MainActor in
-            let context = await engine.refreshMemoryContext(reason: reason, source: "app_pressure")
-            let trimLevel = forcedTrimLevel ?? memoryBudgetPolicy.trimLevelForPressureEvent(
-                context: context,
-                isBackgroundTransition: false
+            await applyMemoryPressureRelief(
+                engine: engine,
+                reason: reason,
+                forcedTrimLevel: forcedTrimLevel
             )
-            await engine.trimMemory(level: trimLevel, reason: reason)
-            if trimLevel == .fullUnload {
-                audioPlayer.abortLivePreviewIfNeeded()
-                engine.clearGenerationActivity()
-            }
-            if TelemetryGate.resolvedEnabled {
-                print("[QVoiceiOSApp] Applied \(trimLevel.rawValue) due to \(reason)")
-            }
+        }
+    }
+
+    private func applyMemoryPressureRelief(
+        engine: TTSEngineStore,
+        reason: String,
+        forcedTrimLevel: NativeMemoryTrimLevel? = nil
+    ) async {
+        let context = await engine.refreshMemoryContext(reason: reason, source: "app_pressure")
+        let trimLevel = forcedTrimLevel ?? memoryBudgetPolicy.trimLevelForPressureEvent(
+            context: context,
+            isBackgroundTransition: false
+        )
+        await engine.trimMemory(level: trimLevel, reason: reason)
+        if trimLevel == .fullUnload {
+            audioPlayer.abortLivePreviewIfNeeded()
+            engine.clearGenerationActivity()
+        }
+        if TelemetryGate.resolvedEnabled {
+            print("[QVoiceiOSApp] Applied \(trimLevel.rawValue) due to \(reason)")
         }
     }
 

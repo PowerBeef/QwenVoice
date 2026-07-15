@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -269,14 +270,23 @@ class VendorRuntimeContractTests(unittest.TestCase):
         records = MODULE.benchmark_records(ROOT)
         eligible = [record for record in records.values() if MODULE.benchmark_record_is_eligible(record)]
         self.assertTrue(eligible)
-        self.assertFalse(
-            MODULE.benchmark_record_matches_sources(
-                ROOT,
-                runtime,
-                ["Sources/MLXAudioCore/ModelUtils.swift"],
-                eligible[0],
+        git_blob = MODULE.git_blob
+
+        def blob_with_dependency_drift(repo_root: Path, commit: str, path: Path) -> bytes | None:
+            blob = git_blob(repo_root, commit, path)
+            if path.name == "Package.resolved" and blob is not None:
+                return blob + b"\n"
+            return blob
+
+        with mock.patch.object(MODULE, "git_blob", side_effect=blob_with_dependency_drift):
+            self.assertFalse(
+                MODULE.benchmark_record_matches_sources(
+                    ROOT,
+                    runtime,
+                    ["Sources/MLXAudioCore/ModelUtils.swift"],
+                    eligible[0],
+                )
             )
-        )
 
     def test_contract_references_cannot_escape_the_runtime_root(self) -> None:
         runtime = ROOT / MODULE.RUNTIME_RELATIVE
