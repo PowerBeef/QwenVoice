@@ -495,6 +495,20 @@ validate_ios_smoke() {
     --run-id "$run_id" | tee "$out/smoke-gate.txt"
 }
 
+preserve_ios_ui_dsym() {
+  local products="$IOS_DERIVED/Build/Products/Release-iphoneos"
+  local app="$products/Vocello.app"
+  local source="$products/Vocello.app.dSYM"
+  local destination="$QVOICE_SYMBOLS_IOS/Vocello.app.dSYM"
+  [[ -f "$app/Vocello" && -d "$source" ]] || {
+    warn "iOS UI build did not produce a symbol-preservable app/dSYM pair"
+    return 1
+  }
+  preserve_ios_dsym "$source" "$destination" "$app/Vocello" || return 1
+  /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Info.plist" \
+    > "$(dirname "$destination")/build-version.txt" 2>/dev/null || true
+}
+
 if [[ "$platform" == "macos" ]]; then
   terminate_macos_app
   if [[ "$lane" == "smoke" ]]; then
@@ -575,6 +589,8 @@ else
     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
     SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "physical-iPhone XCUITest failed (see $out/xcodebuild.log)"
+  preserve_ios_ui_dsym \
+    || die "physical-iPhone XCUITest passed, but its current dSYM could not be preserved"
 
   if [[ "$lane" == "model-download" ]]; then
     required_step_run "$step_ledger" model-download-diagnostics \

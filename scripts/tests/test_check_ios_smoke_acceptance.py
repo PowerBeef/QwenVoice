@@ -226,6 +226,67 @@ class IOSSmokeAcceptanceTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertNotIn(directory, completed.stderr)
 
+    def test_xcode_runner_environment_uses_the_stripped_name(self) -> None:
+        runner = (ROOT / "scripts" / "ui_test.sh").read_text(encoding="utf-8")
+        smoke = (
+            ROOT / "Tests" / "VocelloiOSUITests" / "VocelloiOSSmokeUITests.swift"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            'export TEST_RUNNER_QVOICE_IOS_SMOKE_RUN_ID="$run_id"',
+            runner,
+        )
+        self.assertIn(
+            'runnerEnvironment["QVOICE_IOS_SMOKE_RUN_ID"]',
+            smoke,
+        )
+        self.assertNotIn(
+            'runnerEnvironment["TEST_RUNNER_QVOICE_IOS_SMOKE_RUN_ID"]',
+            smoke,
+        )
+
+    def test_successful_ios_ui_build_preserves_matching_symbols(self) -> None:
+        runner = (ROOT / "scripts" / "ui_test.sh").read_text(encoding="utf-8")
+        test_start = runner.rindex(
+            'required_step_run "$step_ledger" xcuitest run_xcodebuild xcb_run test'
+        )
+        preserve_index = runner.index("\n  preserve_ios_ui_dsym", test_start)
+        crash_delta_index = runner.index(
+            "\n  required_step_run \"$step_ledger\" crash-delta",
+            preserve_index,
+        )
+        self.assertLess(test_start, preserve_index)
+        self.assertLess(preserve_index, crash_delta_index)
+        self.assertIn(
+            'preserve_ios_dsym "$source" "$destination" "$app/Vocello"',
+            runner,
+        )
+
+    def test_ui_runner_transport_names_are_exact_and_benchmarks_fail_closed(self) -> None:
+        runner = (ROOT / "scripts" / "ui_test.sh").read_text(encoding="utf-8")
+        suites = {
+            "MAC": (
+                ROOT / "Tests" / "VocelloMacUITests" / "VocelloMacBenchmarkUITests.swift"
+            ).read_text(encoding="utf-8"),
+            "IOS": (
+                ROOT / "Tests" / "VocelloiOSUITests" / "VocelloiOSBenchmarkUITests.swift"
+            ).read_text(encoding="utf-8"),
+        }
+        for platform, source in suites.items():
+            for suffix in ("RUN_ID", "MODES", "LENGTHS", "WARM", "LABEL"):
+                consumer = f"QVOICE_{platform}_BENCH_{suffix}"
+                self.assertIn(f"TEST_RUNNER_{consumer}", runner)
+                self.assertIn(f'"{consumer}"', source)
+            self.assertNotIn("?? \"mac-xcui-benchmark-", source)
+            self.assertNotIn("?? \"ios-xcui-benchmark-", source)
+
+        for path in (ROOT / "Tests").glob("*UITests/*.swift"):
+            self.assertNotIn(
+                'environment["TEST_RUNNER_',
+                path.read_text(encoding="utf-8"),
+                f"{path.name} must consume Xcode's stripped runner variable name",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,17 +11,25 @@ final class VocelloMacBenchmarkUITests: VocelloMacUITestCase {
         defer { endSession() }
 
         let processEnvironment = ProcessInfo.processInfo.environment
+        for key in [
+            "QVOICE_MAC_BENCH_RUN_ID",
+            "QVOICE_MAC_BENCH_MODES",
+            "QVOICE_MAC_BENCH_LENGTHS",
+            "QVOICE_MAC_BENCH_WARM",
+            "QVOICE_MAC_BENCH_LABEL",
+        ] {
+            _ = try XCTUnwrap(
+                processEnvironment[key].flatMap { $0.isEmpty ? nil : $0 },
+                "macOS benchmark requires runner environment value \(key)"
+            )
+        }
         let configuration = try VocelloUIBenchMatrix.Configuration(
             environment: processEnvironment,
             keyPrefix: "QVOICE_MAC_BENCH"
         )
         let takes = VocelloUIBenchMatrix.takes(configuration: configuration)
-        let runID = processEnvironment["QVOICE_MAC_BENCH_RUN_ID"]
-            .flatMap { $0.isEmpty ? nil : $0 }
-            ?? "mac-xcui-benchmark-\(UUID().uuidString.lowercased())"
-        let label = processEnvironment["QVOICE_MAC_BENCH_LABEL"]
-            .flatMap { $0.isEmpty ? nil : $0 }
-            ?? runID
+        let runID = try XCTUnwrap(processEnvironment["QVOICE_MAC_BENCH_RUN_ID"])
+        let label = try XCTUnwrap(processEnvironment["QVOICE_MAC_BENCH_LABEL"])
 
         XCTAssertFalse(takes.isEmpty)
         if configuration == VocelloUIBenchMatrix.defaultConfiguration {

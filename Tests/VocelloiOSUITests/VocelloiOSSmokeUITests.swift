@@ -7,7 +7,9 @@ import XCTest
 final class VocelloiOSSmokeUITests: VocelloiOSUITestCase {
     func testPhysicalDeviceSmokeJourney() {
         let runnerEnvironment = ProcessInfo.processInfo.environment
-        guard let runID = runnerEnvironment["TEST_RUNNER_QVOICE_IOS_SMOKE_RUN_ID"],
+        // Xcode forwards inherited TEST_RUNNER_* variables to the remote test
+        // runner after removing that transport prefix.
+        guard let runID = runnerEnvironment["QVOICE_IOS_SMOKE_RUN_ID"],
               !runID.isEmpty else {
             XCTFail("Physical-device smoke requires a run-scoped diagnostics identity")
             return
