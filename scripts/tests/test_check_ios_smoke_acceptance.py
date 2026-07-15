@@ -311,6 +311,20 @@ class IOSSmokeAcceptanceTests(unittest.TestCase):
             self.assertIn(".buttonStyle(.plain)", button_contract)
             self.assertNotIn(".onTapGesture", button_contract)
 
+    def test_history_search_targets_the_editable_control(self) -> None:
+        test_case = (
+            ROOT / "Tests" / "VocelloiOSUITests" / "VocelloiOSUITestCase.swift"
+        ).read_text(encoding="utf-8")
+        search_start = test_case.index("func replaceHistorySearch(with query: String)")
+        search_end = test_case.index("func historyRows()", search_start)
+        search_contract = test_case[search_start:search_end]
+
+        self.assertIn(
+            'app.textFields["historySearchField"].firstMatch',
+            search_contract,
+        )
+        self.assertNotIn('element("historySearchField")', search_contract)
+
     def test_ui_runner_transport_names_are_exact_and_benchmarks_fail_closed(self) -> None:
         runner = (ROOT / "scripts" / "ui_test.sh").read_text(encoding="utf-8")
         suites = {
